@@ -1,12 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
-#include <beebium/Memory.hpp>
+#include <beebium/ModelBMemory.hpp>
 #include <array>
 #include <cstring>
 
 using namespace beebium;
 
-TEST_CASE("Memory initialization", "[memory][init]") {
-    Memory mem;
+TEST_CASE("ModelBMemory initialization", "[memory][init]") {
+    ModelBMemory mem;
 
     SECTION("RAM is zeroed on reset") {
         for (uint16_t addr = 0x0000; addr < 0x8000; ++addr) {
@@ -31,8 +31,8 @@ TEST_CASE("Memory initialization", "[memory][init]") {
     }
 }
 
-TEST_CASE("Memory RAM read/write", "[memory][ram]") {
-    Memory mem;
+TEST_CASE("ModelBMemory RAM read/write", "[memory][ram]") {
+    ModelBMemory mem;
 
     SECTION("Write and read back single byte") {
         mem.write(0x1234, 0xAB);
@@ -63,8 +63,8 @@ TEST_CASE("Memory RAM read/write", "[memory][ram]") {
     }
 }
 
-TEST_CASE("Memory ROM is read-only", "[memory][rom]") {
-    Memory mem;
+TEST_CASE("ModelBMemory ROM is read-only", "[memory][rom]") {
+    ModelBMemory mem;
 
     // Load some test data into MOS
     std::array<uint8_t, 16384> mos_data;
@@ -97,8 +97,8 @@ TEST_CASE("Memory ROM is read-only", "[memory][rom]") {
     }
 }
 
-TEST_CASE("Memory ROM bank switching", "[memory][rom][banking]") {
-    Memory mem;
+TEST_CASE("ModelBMemory ROM bank switching", "[memory][rom][banking]") {
+    ModelBMemory mem;
 
     // Load different data into different ROM banks
     std::array<uint8_t, 16384> bank0_data, bank1_data, bank15_data;
@@ -138,8 +138,8 @@ TEST_CASE("Memory ROM bank switching", "[memory][rom][banking]") {
     }
 }
 
-TEST_CASE("Memory I/O address handling", "[memory][io]") {
-    Memory mem;
+TEST_CASE("ModelBMemory I/O address handling", "[memory][io]") {
+    ModelBMemory mem;
 
     SECTION("I/O reads return 0xFF by default") {
         REQUIRE(mem.read(0xFE00) == 0xFF);
@@ -181,8 +181,8 @@ TEST_CASE("Memory I/O address handling", "[memory][io]") {
     }
 }
 
-TEST_CASE("Memory page access", "[memory][pages]") {
-    Memory mem;
+TEST_CASE("ModelBMemory page access", "[memory][pages]") {
+    ModelBMemory mem;
 
     SECTION("Page count is correct") {
         REQUIRE(kNumPages == 16);
@@ -207,8 +207,8 @@ TEST_CASE("Memory page access", "[memory][pages]") {
     }
 }
 
-TEST_CASE("Memory reset", "[memory][reset]") {
-    Memory mem;
+TEST_CASE("ModelBMemory reset", "[memory][reset]") {
+    ModelBMemory mem;
 
     // Write some data
     mem.write(0x1000, 0x42);

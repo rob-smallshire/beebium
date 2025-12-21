@@ -15,3 +15,8 @@ catch_discover_tests(test_6502)
 add_executable(test_memory test_memory.cpp)
 target_link_libraries(test_memory PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_memory)
+
+# Machine tests
+add_executable(test_machine test_machine.cpp)
+target_link_libraries(test_machine PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_machine)

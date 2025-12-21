@@ -1,5 +1,5 @@
-#ifndef BEEBIUM_MEMORY_HPP
-#define BEEBIUM_MEMORY_HPP
+#ifndef BEEBIUM_MODEL_B_MEMORY_HPP
+#define BEEBIUM_MODEL_B_MEMORY_HPP
 
 #include "Types.hpp"
 #include <array>
@@ -22,17 +22,23 @@ using IoReadCallback = std::function<uint8_t(uint16_t addr)>;
 // Callback for memory-mapped I/O writes
 using IoWriteCallback = std::function<void(uint16_t addr, uint8_t value)>;
 
-// BBC Model B memory system.
-// Implements the standard memory map with ROM paging.
-class Memory {
+// BBC Model B memory policy.
+// Implements the standard Model B memory map:
+//   0x0000-0x7FFF: 32KB RAM
+//   0x8000-0xBFFF: Paged ROM (16 banks, selected via ROMSEL)
+//   0xC000-0xFFFF: MOS ROM
+//   0xFE00-0xFEFF: SHEILA (memory-mapped I/O)
+//
+class ModelBMemory {
 public:
-    Memory();
+    ModelBMemory();
 
-    // Core memory access
+    // Required policy interface
     uint8_t read(uint16_t addr) const;
     void write(uint16_t addr, uint8_t value);
+    void reset();
 
-    // Fast page-based access (for 6502 integration)
+    // Fast page-based access (for future optimization)
     const Page& page(PageIndex idx) const { return pages_[idx.value]; }
 
     // ROM loading
@@ -47,12 +53,9 @@ public:
     uint8_t* ram_ptr() { return ram_.data(); }
     const uint8_t* ram_ptr() const { return ram_.data(); }
 
-    // I/O callbacks (optional, for peripheral integration)
+    // I/O callbacks (for peripheral integration)
     void set_io_read_callback(IoReadCallback callback);
     void set_io_write_callback(IoWriteCallback callback);
-
-    // Reset to initial state
-    void reset();
 
 private:
     void update_page_tables();
@@ -77,17 +80,10 @@ private:
     IoReadCallback io_read_callback_;
     IoWriteCallback io_write_callback_;
 
-    // Buffer for unmapped reads (returns 0xFF)
-    static constexpr std::array<uint8_t, kPageSizeBytes> kUnmappedReads = []() {
-        std::array<uint8_t, kPageSizeBytes> arr{};
-        for (auto& b : arr) b = 0xFF;
-        return arr;
-    }();
-
     // Buffer for writes to read-only memory (discarded)
     static inline std::array<uint8_t, kPageSizeBytes> discard_buffer_{};
 };
 
 } // namespace beebium
 
-#endif // BEEBIUM_MEMORY_HPP
+#endif // BEEBIUM_MODEL_B_MEMORY_HPP

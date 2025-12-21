@@ -1,14 +1,14 @@
-#include "beebium/Memory.hpp"
+#include "beebium/ModelBMemory.hpp"
 #include <algorithm>
 #include <cstring>
 
 namespace beebium {
 
-Memory::Memory() {
+ModelBMemory::ModelBMemory() {
     reset();
 }
 
-void Memory::reset() {
+void ModelBMemory::reset() {
     // Clear RAM
     std::fill(ram_.begin(), ram_.end(), 0);
 
@@ -25,7 +25,7 @@ void Memory::reset() {
     update_page_tables();
 }
 
-void Memory::update_page_tables() {
+void ModelBMemory::update_page_tables() {
     // Pages 0-7 (0x0000-0x7FFF): RAM
     for (uint8_t i = 0; i < 8; ++i) {
         pages_[i].index = PageIndex{i};
@@ -50,11 +50,11 @@ void Memory::update_page_tables() {
     }
 }
 
-bool Memory::is_io_address(uint16_t addr) const {
+bool ModelBMemory::is_io_address(uint16_t addr) const {
     return addr >= kSheilaStart && addr <= kSheilaEnd;
 }
 
-uint8_t Memory::read(uint16_t addr) const {
+uint8_t ModelBMemory::read(uint16_t addr) const {
     // Check for I/O addresses first
     if (is_io_address(addr)) {
         if (io_read_callback_) {
@@ -74,7 +74,7 @@ uint8_t Memory::read(uint16_t addr) const {
     return 0xFF;  // Unmapped
 }
 
-void Memory::write(uint16_t addr, uint8_t value) {
+void ModelBMemory::write(uint16_t addr, uint8_t value) {
     // Check for I/O addresses first
     if (is_io_address(addr)) {
         // Handle ROMSEL specially
@@ -98,13 +98,13 @@ void Memory::write(uint16_t addr, uint8_t value) {
     // Writes to read-only memory or unmapped regions are silently discarded
 }
 
-void Memory::load_mos(const uint8_t* data, size_t size) {
+void ModelBMemory::load_mos(const uint8_t* data, size_t size) {
     size_t copy_size = std::min(size, mos_.size());
     std::memcpy(mos_.data(), data, copy_size);
     update_page_tables();
 }
 
-void Memory::load_rom_bank(RomBankIndex bank, const uint8_t* data, size_t size) {
+void ModelBMemory::load_rom_bank(RomBankIndex bank, const uint8_t* data, size_t size) {
     size_t copy_size = std::min(size, rom_banks_[bank.value].size());
     std::memcpy(rom_banks_[bank.value].data(), data, copy_size);
 
@@ -114,18 +114,18 @@ void Memory::load_rom_bank(RomBankIndex bank, const uint8_t* data, size_t size) 
     }
 }
 
-void Memory::set_rom_bank(RomBankIndex bank) {
+void ModelBMemory::set_rom_bank(RomBankIndex bank) {
     if (bank.value != current_rom_bank_.value) {
         current_rom_bank_ = bank;
         update_page_tables();
     }
 }
 
-void Memory::set_io_read_callback(IoReadCallback callback) {
+void ModelBMemory::set_io_read_callback(IoReadCallback callback) {
     io_read_callback_ = std::move(callback);
 }
 
-void Memory::set_io_write_callback(IoWriteCallback callback) {
+void ModelBMemory::set_io_write_callback(IoWriteCallback callback) {
     io_write_callback_ = std::move(callback);
 }
 

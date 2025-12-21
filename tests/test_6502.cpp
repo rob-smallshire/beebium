@@ -94,7 +94,7 @@ std::vector<uint8_t> load_test_binary(const std::string& filename) {
 
 TEST_CASE("6502 Klaus functional test - NMOS", "[6502][klaus]") {
     auto data = load_test_binary("6502.bin");
-    REQUIRE(!data.empty());6502
+    REQUIRE(!data.empty());
 
     bool result = run_klaus_test(data, 0, 0x400, &M6502_nmos6502_config);
     REQUIRE(result);

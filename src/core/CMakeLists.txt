@@ -2,13 +2,12 @@
 # Headless BBC Micro emulator core
 
 add_library(beebium_core STATIC
-    src/Memory.cpp
-    src/BeebiumState.cpp
-    src/Beebium.cpp
+    src/ModelBMemory.cpp
     include/beebium/Types.hpp
-    include/beebium/Memory.hpp
-    include/beebium/BeebiumState.hpp
-    include/beebium/Beebium.hpp
+    include/beebium/CpuPolicy.hpp
+    include/beebium/ModelBMemory.hpp
+    include/beebium/Machine.hpp
+    include/beebium/Machines.hpp
 )
 
 target_include_directories(beebium_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
