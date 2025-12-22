@@ -1,11 +1,58 @@
 #ifndef BEEBIUM_MACHINE_HPP
 #define BEEBIUM_MACHINE_HPP
 
+#include "Types.hpp"
+
 #include <6502/6502.h>
-#include <cstdint>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <type_traits>
+#include <vector>
 
 namespace beebium {
+
+// Watchpoint callback: addr, value, is_write, cycle
+using WatchCallback = std::function<void(uint16_t addr, uint8_t value, bool is_write, uint64_t cycle)>;
+
+// PC callback: called before each instruction executes
+using InstructionCallback = std::function<bool(uint16_t pc, uint64_t cycle)>;  // return false to stop
+
+// Simple watchpoint structure
+struct Watchpoint {
+    uint32_t start_addr;
+    uint32_t end_addr;  // exclusive, allows 0x10000 for full address space
+    WatchType type;
+    WatchCallback callback;
+
+    Watchpoint(uint32_t start, uint32_t end, WatchType t, WatchCallback cb)
+        : start_addr(start), end_addr(end), type(t), callback(std::move(cb))
+    {
+        assert(start_addr <= 0xFFFF && "start_addr must fit in 16-bit address space");
+        assert(end_addr <= 0x10000 && "end_addr must be <= 0x10000");
+        assert(start_addr < end_addr && "start_addr must be less than end_addr");
+    }
+
+    bool matches(uint16_t addr, bool is_write) const {
+        if (addr < start_addr || addr >= end_addr) return false;
+        if (is_write && (type & WATCH_WRITE)) return true;
+        if (!is_write && (type & WATCH_READ)) return true;
+        return false;
+    }
+};
+
+// Type trait to detect if MemoryPolicy has tick_peripherals method
+template<typename T, typename = void>
+struct has_tick_peripherals : std::false_type {};
+
+template<typename T>
+struct has_tick_peripherals<T,
+    std::void_t<decltype(std::declval<T>().tick_peripherals(uint64_t{}))>
+> : std::true_type {};
+
+template<typename T>
+inline constexpr bool has_tick_peripherals_v = has_tick_peripherals<T>::value;
 
 // Machine state that can be serialized/deserialized.
 // Parameterized by MemoryPolicy to include memory state.
@@ -55,10 +102,30 @@ public:
     void step() {
         (*state_.cpu.tfn)(&state_.cpu);
 
-        if (state_.cpu.read) {
-            state_.cpu.dbus = state_.memory.read(state_.cpu.abus.w);
+        const uint16_t addr = state_.cpu.abus.w;
+        const bool is_read = state_.cpu.read;
+
+        if (is_read) {
+            state_.cpu.dbus = state_.memory.read(addr);
         } else {
-            state_.memory.write(state_.cpu.abus.w, state_.cpu.dbus);
+            state_.memory.write(addr, state_.cpu.dbus);
+        }
+
+        // Fire watchpoints
+        if (!watchpoints_.empty()) {
+            for (const auto& wp : watchpoints_) {
+                if (wp.matches(addr, !is_read)) {
+                    wp.callback(addr, state_.cpu.dbus, !is_read, state_.cycle_count);
+                }
+            }
+        }
+
+        // Update peripherals if supported by the memory policy
+        if constexpr (has_tick_peripherals_v<MemoryPolicy>) {
+            uint8_t irq_mask = state_.memory.tick_peripherals(state_.cycle_count);
+            // Set IRQ line based on VIA pending flags
+            // Device bit 0 = System VIA, bit 1 = User VIA
+            M6502_SetDeviceIRQ(&state_.cpu, 0x03, irq_mask ? 1 : 0);
         }
 
         ++state_.cycle_count;
@@ -98,11 +165,43 @@ public:
     uint64_t cycle_count() const { return state_.cycle_count; }
 
     // Direct memory access (convenience)
-    uint8_t read(uint16_t addr) const { return state_.memory.read(addr); }
+    // Note: read() is non-const because some devices have read side effects (e.g., VIA interrupt flags)
+    uint8_t read(uint16_t addr) { return state_.memory.read(addr); }
     void write(uint16_t addr, uint8_t value) { state_.memory.write(addr, value); }
+
+    // Watchpoint management
+    void add_watchpoint(uint32_t addr, uint32_t length, WatchType type, WatchCallback callback) {
+        watchpoints_.emplace_back(addr, addr + length, type, std::move(callback));
+    }
+
+    void clear_watchpoints() { watchpoints_.clear(); }
+
+    const std::vector<Watchpoint>& watchpoints() const { return watchpoints_; }
+
+    // Instruction callback
+    void set_instruction_callback(InstructionCallback cb) { on_instruction_ = std::move(cb); }
+
+    void clear_callbacks() {
+        on_instruction_ = nullptr;
+        watchpoints_.clear();
+    }
+
+    // Execute one complete instruction with optional callback
+    // Returns false if callback requested stop, true otherwise
+    bool step_instruction_debug() {
+        if (on_instruction_) {
+            if (!on_instruction_(state_.cpu.pc.w, state_.cycle_count)) {
+                return false;  // Callback requested stop
+            }
+        }
+        step_instruction();
+        return true;
+    }
 
 private:
     State state_;
+    std::vector<Watchpoint> watchpoints_;
+    InstructionCallback on_instruction_;
 };
 
 } // namespace beebium
