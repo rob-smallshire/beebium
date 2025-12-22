@@ -81,10 +81,18 @@ public:
 
     void update_control_lines(uint8_t& ca1, uint8_t& ca2,
                               uint8_t& cb1, uint8_t& cb2) override {
-        (void)ca1;
+        (void)ca1;  // Don't modify CA1 - let VIA keep its default behavior
         (void)ca2;
         (void)cb1;
         (void)cb2;
+
+        // CA1: VSYNC from CRTC (directly connected)
+        // Only modify if video output is actively being used
+        // For now, we let the caller (ModelBHardware::tick_video) handle this
+        // by calling set_vsync() which stores state but doesn't directly affect VIA
+        // until video output is integrated.
+        //
+        // TODO: Once video output is fully integrated, pass vsync_ to ca1 here.
 
         // CA2: Directly connected to keyboard matrix for interrupt generation
         // When a key in the currently selected column is pressed, CA2 goes low
@@ -93,6 +101,13 @@ public:
         // CB1: ADC end of conversion - not implemented
         // CB2: Light pen strobe - directly connected to CRTC
     }
+
+    // Set VSYNC state (called by video hardware)
+    void set_vsync(bool active) {
+        vsync_ = active;
+    }
+
+    bool vsync() const { return vsync_; }
 
     // Accessor for testing/debugging
     AddressableLatch& latch() { return latch_; }
@@ -104,6 +119,7 @@ private:
     AddressableLatch& latch_;
     uint8_t keyboard_column_ = 0;
     uint8_t last_scanned_key_ = 0;
+    bool vsync_ = false;
 
     // Future: keyboard matrix state
     // uint8_t key_matrix_[16] = {};  // 16 columns, 8 rows each

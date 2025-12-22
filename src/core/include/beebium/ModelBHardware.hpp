@@ -3,14 +3,17 @@
 #include "AddressableLatch.hpp"
 #include "BankBinding.hpp"
 #include "MemoryMap.hpp"
+#include "OutputQueue.hpp"
 #include "SystemViaPeripheral.hpp"
 #include "Via6522.hpp"
+#include "PixelBatch.hpp"
 #include "devices/BankedMemory.hpp"
 #include "devices/Crtc6845.hpp"
 #include "devices/Ram.hpp"
 #include "devices/Rom.hpp"
 #include "devices/VideoUla.hpp"
 #include <cstdint>
+#include <optional>
 
 namespace beebium {
 
@@ -72,9 +75,13 @@ public:
     Via6522 system_via;
     Via6522 user_via;
 
-    // Video hardware (stubs for boot)
+    // Video hardware
     Crtc6845 crtc;
     VideoUla video_ula;
+
+    // Video output queue (optional - only created if video output is enabled)
+    // Call enable_video_output() to activate
+    std::optional<OutputQueue<PixelBatch>> video_output;
 
     // System VIA peripherals
     AddressableLatch addressable_latch;
@@ -143,6 +150,21 @@ public:
         sideways.select_bank(0);
     }
 
+    // Enable video output with optional custom queue capacity
+    void enable_video_output(size_t capacity = OutputQueue<PixelBatch>::DEFAULT_CAPACITY) {
+        video_output.emplace(capacity);
+    }
+
+    // Disable video output and free queue memory
+    void disable_video_output() {
+        video_output.reset();
+    }
+
+    // Check if video output is enabled
+    bool video_output_enabled() const {
+        return video_output.has_value();
+    }
+
     // Clock peripherals (called from Machine::step)
     // Returns IRQ mask (bit 0 = system VIA, bit 1 = user VIA)
     uint8_t tick_peripherals(uint64_t cycle) {
@@ -156,9 +178,87 @@ public:
             if (system_via.update_phi2_trailing_edge()) irq_mask |= 0x01;
             if (user_via.update_phi2_trailing_edge()) irq_mask |= 0x02;
         }
+
+        // Clock video hardware (if enabled) at 1MHz or 2MHz based on ULA setting
+        // The CRTC is clocked at 1MHz (every other 2MHz cycle) or 2MHz (fast mode)
+        bool clock_crtc = video_ula.fast_clock() || (cycle & 1) == 0;
+
+        if (clock_crtc && video_output.has_value()) {
+            tick_video();
+        }
+
         return irq_mask;
     }
 
+private:
+    // Clock video hardware and produce PixelBatch
+    void tick_video() {
+        // Tick CRTC to advance state
+        auto crtc_output = crtc.tick();
+
+        // Read screen memory byte at CRTC address
+        // Address is 14-bit, needs translation to BBC memory map
+        uint16_t screen_addr = translate_screen_address(crtc_output.address);
+        uint8_t screen_byte = crtc_output.display ? main_ram.read(screen_addr) : 0;
+
+        // Feed byte to Video ULA
+        video_ula.byte(screen_byte, crtc_output.cursor != 0);
+
+        // Generate PixelBatch
+        PixelBatch batch;
+        if (crtc_output.display) {
+            video_ula.emit_pixels(batch);
+        } else {
+            video_ula.emit_blank(batch);
+        }
+
+        // Set sync flags
+        uint8_t flags = VIDEO_FLAG_NONE;
+        if (crtc_output.hsync) flags |= VIDEO_FLAG_HSYNC;
+        if (crtc_output.vsync) flags |= VIDEO_FLAG_VSYNC;
+        if (crtc_output.display) flags |= VIDEO_FLAG_DISPLAY;
+        batch.set_flags(flags);
+
+        // Push to output queue
+        video_output->push(batch);
+
+        // Update VSYNC state in system VIA peripheral
+        // The peripheral will pass this to the VIA's CA1 line
+        system_via_peripheral.set_vsync(crtc_output.vsync != 0);
+    }
+
+    // Translate CRTC address to BBC memory address
+    // The CRTC outputs a 14-bit address (MA0-MA13)
+    // This needs to be combined with screen base from addressable latch
+    uint16_t translate_screen_address(uint16_t crtc_addr) const {
+        // Screen base from addressable latch bits 4-5
+        // This selects which 8KB bank of screen memory to use
+        uint8_t screen_base_bits = addressable_latch.screen_base();
+
+        // Mode 7 uses different addressing (address bit 13 = 1 selects 0x7C00-0x7FFF)
+        if (video_ula.teletext_mode()) {
+            // Mode 7: Screen at 0x7C00-0x7FFF (1KB)
+            return 0x7C00 | (crtc_addr & 0x03FF);
+        }
+
+        // Graphics modes: Screen base determines start address
+        // Bits 4-5 of latch: 00=0x3000, 01=0x4000, 10=0x5800, 11=0x6000
+        // Actually more complex in real hardware, but this is common config
+        uint16_t base;
+        switch (screen_base_bits) {
+            case 0: base = 0x3000; break;  // 12KB from base
+            case 1: base = 0x4000; break;  // 20KB mode
+            case 2: base = 0x5800; break;  // 10KB mode
+            case 3: base = 0x6000; break;  // Default (Mode 0/1/2)
+            default: base = 0x3000; break;
+        }
+
+        // Combine base with CRTC address
+        // CRTC address wraps within the available screen memory
+        return base + (crtc_addr & 0x3FFF);
+    }
+
+public:
     // ROM loading - directly access the owned ROM devices
     void load_mos(const uint8_t* data, size_t size) {
         mos_rom.load(data, size);
