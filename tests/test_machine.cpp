@@ -78,8 +78,7 @@ TEST_CASE("Machine memory access", "[machine][memory]") {
     }
 
     SECTION("Access memory policy directly") {
-        machine.memory().load_mos(nullptr, 0);  // Just verify it compiles
-        REQUIRE(machine.memory().rom_bank().value == 0);
+        REQUIRE(machine.memory().sideways.selected_bank() == 0);
     }
 }
 

@@ -31,6 +31,11 @@ add_executable(test_via6522 test_via6522.cpp)
 target_link_libraries(test_via6522 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_via6522)
 
+# Memory map tests
+add_executable(test_memory_map test_memory_map.cpp)
+target_link_libraries(test_memory_map PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_memory_map)
+
 # Tests requiring ROM files
 set(BEEBIUM_ROM_DIR "/Users/rjs/Code/b2/etc/roms" CACHE PATH "Directory containing BBC Micro ROMs")
 

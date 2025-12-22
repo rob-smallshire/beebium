@@ -3,18 +3,18 @@
 
 #include "Machine.hpp"
 #include "CpuPolicy.hpp"
-#include "ModelBMemory.hpp"
+#include "ModelBHardware.hpp"
 
 namespace beebium {
 
 // Convenience type aliases for common machine configurations.
 // New configurations can be created by composing policies.
 
-// BBC Model B: NMOS 6502 + standard Model B memory
-using ModelB = Machine<Nmos6502, ModelBMemory>;
+// BBC Model B: NMOS 6502 + Model B hardware
+using ModelB = Machine<Nmos6502, ModelBHardware>;
 
-// BBC Model B with CMOS upgrade (e.g., for testing)
-using ModelBCmos = Machine<Cmos65C02, ModelBMemory>;
+// BBC Model B with CMOS 65C02 upgrade
+using ModelBCmos = Machine<Cmos65C02, ModelBHardware>;
 
 } // namespace beebium
 
