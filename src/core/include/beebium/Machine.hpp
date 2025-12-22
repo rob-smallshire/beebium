@@ -1,6 +1,7 @@
 #ifndef BEEBIUM_MACHINE_HPP
 #define BEEBIUM_MACHINE_HPP
 
+#include "ProgramCounterHistogram.hpp"
 #include "Types.hpp"
 
 #include <6502/6502.h>
@@ -100,6 +101,11 @@ public:
 
     // Execute one CPU cycle
     void step() {
+        // Record PC histogram at instruction boundaries (minimal overhead when disabled)
+        if (pc_histogram_ && M6502_IsAboutToExecute(&state_.cpu)) {
+            pc_histogram_->record(state_.cpu.pc.w);
+        }
+
         (*state_.cpu.tfn)(&state_.cpu);
 
         const uint16_t addr = state_.cpu.abus.w;
@@ -184,7 +190,12 @@ public:
     void clear_callbacks() {
         on_instruction_ = nullptr;
         watchpoints_.clear();
+        pc_histogram_ = nullptr;
     }
+
+    // PC histogram for instruction execution profiling
+    void set_pc_histogram(ProgramCounterHistogram* histogram) { pc_histogram_ = histogram; }
+    ProgramCounterHistogram* pc_histogram() const { return pc_histogram_; }
 
     // Execute one complete instruction with optional callback
     // Returns false if callback requested stop, true otherwise
@@ -202,6 +213,7 @@ private:
     State state_;
     std::vector<Watchpoint> watchpoints_;
     InstructionCallback on_instruction_;
+    ProgramCounterHistogram* pc_histogram_ = nullptr;
 };
 
 } // namespace beebium

@@ -25,3 +25,22 @@ catch_discover_tests(test_memory_histogram)
 add_executable(test_machine test_machine.cpp)
 target_link_libraries(test_machine PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_machine)
+
+# Tests requiring ROM files
+set(BEEBIUM_ROM_DIR "/Users/rjs/Code/b2/etc/roms" CACHE PATH "Directory containing BBC Micro ROMs")
+
+# Boot trace tests (uses ProgramCounterHistogram for instruction profiling)
+add_executable(test_boot_trace test_boot_trace.cpp)
+target_link_libraries(test_boot_trace PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_boot_trace PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_boot_trace)
+
+# clearRAM debug test (uses ProgramCounterHistogram for loop detection)
+add_executable(test_clearram_debug test_clearram_debug.cpp)
+target_link_libraries(test_clearram_debug PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_clearram_debug PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_clearram_debug)
