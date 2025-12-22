@@ -54,3 +54,27 @@ target_compile_definitions(test_clearram_debug PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
 )
 catch_discover_tests(test_clearram_debug)
+
+# Boot tests
+add_executable(test_boot test_boot.cpp)
+target_link_libraries(test_boot PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_boot PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_boot)
+
+# Boot sequence test (TDD-style boot progression)
+add_executable(test_boot_sequence test_boot_sequence.cpp)
+target_link_libraries(test_boot_sequence PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_boot_sequence PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_boot_sequence)
+
+# clearRAM test
+add_executable(test_clearram test_clearram.cpp)
+target_link_libraries(test_clearram PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_clearram PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_clearram)
