@@ -50,12 +50,12 @@ option(BEEBIUM_BUILD_TESTS "Build tests" ON)
 if(BEEBIUM_BUILD_TESTS)
     enable_testing()
 
-    # Fetch Catch2
+    # Fetch Catch2 (archive download, no git clone)
     include(FetchContent)
     FetchContent_Declare(
         Catch2
-        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.5.0
+        URL https://github.com/catchorg/Catch2/archive/refs/tags/v3.5.0.tar.gz
+        URL_HASH SHA256=f6d4f8d78a9b59ec72a81d49f58d18eb317372ac07f8d9432710a079e69fd66a
     )
     FetchContent_MakeAvailable(Catch2)
 
