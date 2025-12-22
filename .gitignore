@@ -26,6 +26,10 @@ _deps/
 *.exe
 *.out
 
+# AI assistant configuration (user-specific)
+.claude/
+CLAUDE.md
+
 # IDE and editor files
 .vscode/
 .idea/
