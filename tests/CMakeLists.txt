@@ -74,4 +74,12 @@ catch_discover_tests(test_clearram)
 # Video output tests
 add_executable(test_video test_video.cpp)
 target_link_libraries(test_video PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_video PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
 catch_discover_tests(test_video)
+
+# SAA5050 teletext chip tests
+add_executable(test_saa5050 test_saa5050.cpp)
+target_link_libraries(test_saa5050 PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_saa5050)

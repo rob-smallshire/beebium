@@ -6,8 +6,69 @@
 #include <beebium/FrameRenderer.hpp>
 #include <beebium/devices/Crtc6845.hpp>
 #include <beebium/devices/VideoUla.hpp>
+#include <beebium/Machines.hpp>
+#include <filesystem>
+#include <fstream>
 
 using namespace beebium;
+
+// ============================================================================
+// PPM writer utility
+// ============================================================================
+
+namespace {
+
+// Write BGRA32 framebuffer to PPM file
+bool write_ppm(const std::filesystem::path& filepath,
+               const uint32_t* pixels,
+               size_t width, size_t height) {
+    std::ofstream file(filepath, std::ios::binary);
+    if (!file) return false;
+
+    // PPM header (P6 = binary RGB)
+    file << "P6\n" << width << " " << height << "\n255\n";
+
+    // Convert BGRA32 to RGB bytes
+    for (size_t i = 0; i < width * height; ++i) {
+        uint32_t pixel = pixels[i];
+        uint8_t b = (pixel >> 0) & 0xFF;
+        uint8_t g = (pixel >> 8) & 0xFF;
+        uint8_t r = (pixel >> 16) & 0xFF;
+        file.put(static_cast<char>(r));
+        file.put(static_cast<char>(g));
+        file.put(static_cast<char>(b));
+    }
+
+    return file.good();
+}
+
+// Load a ROM file into a vector
+std::vector<uint8_t> load_rom(const std::filesystem::path& filepath) {
+    std::ifstream file(filepath, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Failed to open ROM: " + filepath.string());
+    }
+
+    file.seekg(0, std::ios::end);
+    auto size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> data(static_cast<size_t>(size));
+    file.read(reinterpret_cast<char*>(data.data()), size);
+
+    return data;
+}
+
+#ifdef BEEBIUM_ROM_DIR
+// Check if ROM files exist
+bool roms_available() {
+    const auto rom_dirpath = std::filesystem::path(BEEBIUM_ROM_DIR);
+    return std::filesystem::exists(rom_dirpath / "OS12.ROM") &&
+           std::filesystem::exists(rom_dirpath / "BASIC2.ROM");
+}
+#endif
+
+} // anonymous namespace
 
 // ============================================================================
 // PixelBatch tests
@@ -540,3 +601,129 @@ TEST_CASE("Video pipeline integration", "[video][integration]") {
         CHECK(rendered == 8);
     }
 }
+
+// ============================================================================
+// Boot screenshot test
+// ============================================================================
+
+#ifdef BEEBIUM_ROM_DIR
+
+TEST_CASE("Boot screenshot capture", "[video][boot][integration]") {
+    REQUIRE(roms_available());
+
+    // Load ROMs
+    const auto rom_dirpath = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos_rom = load_rom(rom_dirpath / "OS12.ROM");
+    auto basic_rom = load_rom(rom_dirpath / "BASIC2.ROM");
+
+    // Create machine with video output
+    ModelB machine;
+    machine.memory().load_mos(mos_rom.data(), mos_rom.size());
+    machine.memory().load_basic(basic_rom.data(), basic_rom.size());
+    machine.memory().enable_video_output();
+    machine.reset();
+
+    // Create video pipeline
+    HeapFrameAllocator allocator;
+    FrameBuffer fb(&allocator, 640, 512);  // Full PAL resolution
+    FrameRenderer renderer(&fb);
+    fb.clear(0);
+
+    // Boot detection: look for "BBC Computer" at screen address 0x7C28
+    // This is Mode 7 screen memory (0x7C00 base + offset)
+    const uint16_t check_addr = 0x7C28;
+    const char* expected_str = "BBC Computer";
+    const size_t expected_len = 12;
+
+    // Run boot sequence with periodic video drain
+    constexpr uint64_t max_cycles = 3'000'000;  // ~1.5 seconds at 2MHz
+    constexpr uint64_t drain_interval = 10'000;
+
+    bool boot_complete = false;
+    uint64_t drain_counter = 0;
+
+    while (machine.cycle_count() < max_cycles && !boot_complete) {
+        machine.step();
+        ++drain_counter;
+
+        // Periodically drain video queue to renderer
+        if (drain_counter >= drain_interval) {
+            drain_counter = 0;
+            if (machine.memory().video_output.has_value()) {
+                renderer.process(machine.memory().video_output.value());
+            }
+        }
+
+        // Check for boot completion
+        bool matches = true;
+        for (size_t i = 0; i < expected_len && matches; ++i) {
+            if (machine.read(check_addr + i) != static_cast<uint8_t>(expected_str[i])) {
+                matches = false;
+            }
+        }
+        boot_complete = matches;
+    }
+
+    REQUIRE(boot_complete);
+    INFO("Boot completed at cycle " << machine.cycle_count());
+
+    // After boot completes, create a fresh framebuffer and renderer
+    HeapFrameAllocator fresh_allocator;
+    FrameBuffer fresh_fb(&fresh_allocator, 640, 512);
+    FrameRenderer fresh_renderer(&fresh_fb);
+
+    // Drain current queue into fresh renderer
+    if (machine.memory().video_output.has_value()) {
+        fresh_renderer.process(machine.memory().video_output.value());
+    }
+
+    // Run enough cycles for 2 full frames to ensure we capture a complete one
+    for (int i = 0; i < 80'000; ++i) {
+        machine.step();
+        if (machine.memory().video_output.has_value()) {
+            fresh_renderer.process(machine.memory().video_output.value());
+        }
+    }
+
+    // Force swap to ensure rendered frame is in read buffer
+    fresh_fb.swap();
+
+    // Use the fresh framebuffer for the screenshot
+    auto& fb_for_screenshot = fresh_fb;
+
+    // Create output directory
+    auto output_dirpath = std::filesystem::path("test_output");
+    std::filesystem::create_directories(output_dirpath);
+
+    // Save screenshot
+    auto frame = fb_for_screenshot.read_frame();
+    auto output_filepath = output_dirpath / "boot_screenshot.ppm";
+    bool saved = write_ppm(output_filepath, frame.data(), fb_for_screenshot.width(), fb_for_screenshot.height());
+
+    REQUIRE(saved);
+    INFO("Screenshot saved to " << output_filepath.string());
+
+    // Verify file was created
+    CHECK(std::filesystem::exists(output_filepath));
+    CHECK(std::filesystem::file_size(output_filepath) > 0);
+
+    // Verify Mode 7 is active
+    CHECK(machine.memory().video_ula.teletext_mode());
+
+    // Count non-black pixels in framebuffer to verify rendering worked
+    size_t non_black_count = 0;
+    for (size_t i = 0; i < fb_for_screenshot.width() * fb_for_screenshot.height(); ++i) {
+        uint32_t pixel = frame[i];
+        uint8_t r = (pixel >> 16) & 0xFF;
+        uint8_t g = (pixel >> 8) & 0xFF;
+        uint8_t b = pixel & 0xFF;
+        if (r != 0 || g != 0 || b != 0) {
+            ++non_black_count;
+        }
+    }
+
+    // The boot screen should have visible text (non-black pixels)
+    CHECK(non_black_count > 0);
+}
+
+#endif // BEEBIUM_ROM_DIR

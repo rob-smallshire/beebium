@@ -4,6 +4,7 @@
 #include "BankBinding.hpp"
 #include "MemoryMap.hpp"
 #include "OutputQueue.hpp"
+#include "Saa5050.hpp"
 #include "SystemViaPeripheral.hpp"
 #include "Via6522.hpp"
 #include "PixelBatch.hpp"
@@ -78,6 +79,7 @@ public:
     // Video hardware
     Crtc6845 crtc;
     VideoUla video_ula;
+    Saa5050 saa5050;
 
     // Video output queue (optional - only created if video output is enabled)
     // Call enable_video_output() to activate
@@ -146,8 +148,12 @@ public:
         user_via.reset();
         crtc.reset();
         video_ula.reset();
+        saa5050.reset();
         addressable_latch.reset();
         sideways.select_bank(0);
+        last_hsync_ = false;
+        last_vsync_ = false;
+        teletext_column_ = 0;
     }
 
     // Enable video output with optional custom queue capacity
@@ -191,6 +197,11 @@ public:
     }
 
 private:
+    // Teletext state tracking
+    bool last_hsync_ = false;
+    bool last_vsync_ = false;
+    uint8_t teletext_column_ = 0;
+
     // Clock video hardware and produce PixelBatch
     void tick_video() {
         // Tick CRTC to advance state
@@ -201,15 +212,50 @@ private:
         uint16_t screen_addr = translate_screen_address(crtc_output.address);
         uint8_t screen_byte = crtc_output.display ? main_ram.read(screen_addr) : 0;
 
-        // Feed byte to Video ULA
-        video_ula.byte(screen_byte, crtc_output.cursor != 0);
-
         // Generate PixelBatch
         PixelBatch batch;
-        if (crtc_output.display) {
-            video_ula.emit_pixels(batch);
+
+        if (video_ula.teletext_mode()) {
+            // Teletext mode - use SAA5050
+            // Handle VSYNC rising edge
+            if (crtc_output.vsync && !last_vsync_) {
+                saa5050.vsync();
+            }
+
+            // Handle HSYNC rising edge (end of scanline)
+            // Only advance raster if we actually displayed characters on this line
+            // This prevents raster advancement during vertical blanking
+            if (crtc_output.hsync && !last_hsync_) {
+                if (teletext_column_ > 0) {
+                    saa5050.end_of_line();
+                }
+                teletext_column_ = 0;
+            }
+
+            // Start of display area - reset per-line state
+            if (crtc_output.display && teletext_column_ == 0) {
+                saa5050.start_of_line();
+            }
+
+            // Feed byte to SAA5050
+            saa5050.byte(screen_byte, crtc_output.display ? 1 : 0);
+            saa5050.emit_pixels(batch, bbc_colors::PALETTE);
+
+            if (crtc_output.display) {
+                ++teletext_column_;
+            }
+
+            last_hsync_ = crtc_output.hsync;
+            last_vsync_ = crtc_output.vsync;
         } else {
-            video_ula.emit_blank(batch);
+            // Bitmap modes - use VideoUla
+            video_ula.byte(screen_byte, crtc_output.cursor != 0);
+
+            if (crtc_output.display) {
+                video_ula.emit_pixels(batch);
+            } else {
+                video_ula.emit_blank(batch);
+            }
         }
 
         // Set sync flags
