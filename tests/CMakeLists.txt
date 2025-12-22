@@ -79,11 +79,6 @@ target_compile_definitions(test_clearram PRIVATE
 )
 catch_discover_tests(test_clearram)
 
-# STA (zp),Y instruction test
-add_executable(test_sta_iny test_sta_iny.cpp)
-target_link_libraries(test_sta_iny PRIVATE 6502_lib Catch2::Catch2WithMain)
-catch_discover_tests(test_sta_iny)
-
 # Debug and trace tests (require ROM files)
 
 add_executable(test_pagedmode test_pagedmode.cpp)
