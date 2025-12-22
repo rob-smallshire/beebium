@@ -153,6 +153,7 @@ public:
         sideways.select_bank(0);
         last_hsync_ = false;
         last_vsync_ = false;
+        last_display_ = false;
         teletext_column_ = 0;
     }
 
@@ -200,6 +201,7 @@ private:
     // Teletext state tracking
     bool last_hsync_ = false;
     bool last_vsync_ = false;
+    bool last_display_ = false;
     uint8_t teletext_column_ = 0;
 
     // Clock video hardware and produce PixelBatch
@@ -220,17 +222,12 @@ private:
             // Handle VSYNC rising edge
             if (crtc_output.vsync && !last_vsync_) {
                 saa5050.vsync();
-            }
-
-            // Handle HSYNC rising edge (end of scanline)
-            // Only advance raster if we actually displayed characters on this line
-            // This prevents raster advancement during vertical blanking
-            if (crtc_output.hsync && !last_hsync_) {
-                if (teletext_column_ > 0) {
-                    saa5050.end_of_line();
-                }
                 teletext_column_ = 0;
             }
+
+            // Pass CRTC raster to SAA5050 (synchronizes scanline within character row)
+            // CRTC raster is 0-18 for Mode 7 (R9=18), maps to font rows 0-9
+            saa5050.set_raster(crtc_output.raster);
 
             // Start of display area - reset per-line state
             if (crtc_output.display && teletext_column_ == 0) {
@@ -245,6 +242,13 @@ private:
                 ++teletext_column_;
             }
 
+            // Reset column counter when leaving display area
+            if (!crtc_output.display && last_display_ && teletext_column_ > 0) {
+                saa5050.end_of_line();
+                teletext_column_ = 0;
+            }
+
+            last_display_ = crtc_output.display;
             last_hsync_ = crtc_output.hsync;
             last_vsync_ = crtc_output.vsync;
         } else {

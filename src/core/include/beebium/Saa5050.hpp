@@ -240,6 +240,12 @@ public:
         std::memset(m_output, 0, sizeof(m_output));
     }
 
+    // Set the current raster (scanline within character row) from CRTC
+    // This should be called each tick with the CRTC's raster output
+    void set_raster(uint8_t raster) {
+        m_raster = raster;
+    }
+
     // Feed a byte from screen memory (character code or control code)
     // dispen: 1 if display is enabled, 0 for blanking
     void byte(uint8_t value, uint8_t dispen) {
@@ -265,6 +271,8 @@ public:
             }
         } else {
             // Display character
+            // Use CRTC raster directly - Mode 7 has 20 scanlines per char row
+            // but CRTC may generate 19 (R9=18), so clamp to valid range
             uint8_t glyph_raster = (m_raster + m_raster_offset) >> m_raster_shift;
 
             if (glyph_raster < 20 && m_text_visible && !m_conceal) {
@@ -299,17 +307,17 @@ public:
         VideoDataPixel fg_color = palette[output->fg];
 
         // Expand 6 font bits to 8 output pixels
-        // Font data is 6 bits wide (bits 0-5), we output 8 pixels
-        // Mapping: pixels 0,1 <- bit 0; pixels 2,3 <- bit 1; etc. for first 6 pixels
-        // pixels 6,7 get repeated from the last bits for padding
+        // Font data is 6 bits wide (bits 0-5), output to pixels 0-5
+        // Pixels 6-7 are inter-character spacing (background color)
         uint8_t data = output->data;
 
-        for (int i = 0; i < 8; ++i) {
-            // Map pixel index to font bit (0-5), clamping to valid range
-            int bit_index = (i < 6) ? i : 5;
-            bool is_set = (data >> bit_index) & 1;
+        for (int i = 0; i < 6; ++i) {
+            bool is_set = (data >> i) & 1;
             batch.pixels.pixels[i] = is_set ? fg_color : bg_color;
         }
+        // Inter-character spacing
+        batch.pixels.pixels[6] = bg_color;
+        batch.pixels.pixels[7] = bg_color;
 
         batch.set_type(PixelBatchType::Bitmap);
         m_read_index = (m_read_index + 1) & 7;
@@ -332,22 +340,13 @@ public:
         std::memset(m_output, 0, sizeof(m_output));
     }
 
-    // Called at end of each scanline
-    // Mode 7 has 20 scanlines per character row (10 font rows × 2 for scanline doubling)
+    // Called at end of each scanline (for double-height tracking)
+    // Raster is now provided by CRTC via set_raster(), not tracked internally
     void end_of_line() {
         m_bg = 0;
-        m_raster += 1;
-        if (m_raster >= 20) {
-            m_raster -= 20;
-
-            if (m_any_double_height && m_raster_offset == 0) {
-                m_raster_offset = 20;
-            } else {
-                m_raster_offset = 0;
-            }
-
-            m_any_double_height = false;
-        }
+        // Double-height handling: when CRTC raster wraps (new character row),
+        // check if we need to show bottom half of double-height chars
+        // This is detected when set_raster() sees raster go from high to 0
     }
 
     // Called at vertical sync

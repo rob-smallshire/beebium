@@ -82,28 +82,20 @@ TEST_CASE("SAA5050 line management", "[saa5050]") {
         CHECK(chip.charset() == TeletextCharset::Alpha);
     }
 
-    SECTION("end_of_line advances raster") {
+    SECTION("set_raster updates raster") {
         chip.start_of_line();
         CHECK(chip.raster() == 0);
 
-        chip.end_of_line();
-        CHECK(chip.raster() == 1);  // Advances by 1 (20 scanlines per char row)
+        chip.set_raster(5);
+        CHECK(chip.raster() == 5);
 
-        chip.end_of_line();
-        CHECK(chip.raster() == 2);
-    }
-
-    SECTION("raster wraps after 20 scanlines") {
-        for (int i = 0; i < 20; ++i) {
-            chip.end_of_line();
-        }
-        CHECK(chip.raster() == 0);  // Wrapped back to 0
+        chip.set_raster(18);
+        CHECK(chip.raster() == 18);
     }
 
     SECTION("vsync resets raster to 0") {
-        chip.end_of_line();
-        chip.end_of_line();
-        CHECK(chip.raster() == 2);
+        chip.set_raster(10);
+        CHECK(chip.raster() == 10);
 
         chip.vsync();
         CHECK(chip.raster() == 0);
@@ -149,8 +141,7 @@ TEST_CASE("SAA5050 renders alpha character A", "[saa5050][render]") {
 
     // Test at font row 1 where 'A' has pixels (row 0 is blank for most characters)
     // Need raster=2 or 3 for font_row = raster/2 = 1
-    chip.end_of_line();  // raster = 1
-    chip.end_of_line();  // raster = 2 (font row 1)
+    chip.set_raster(2);  // raster = 2 (font row 1)
     chip.start_of_line();
 
     // Feed 'A' character - writes to index 4
@@ -206,8 +197,8 @@ TEST_CASE("SAA5050 emit_pixels basic output", "[saa5050][render]") {
     // After emit: read_index = 1 (reads entry 0, which was pre-filled with 0)
     // After emit: read_index = 2 (reads entry 1)
 
-    // Let me test end_of_line first to make sure raster advances
+    // Test set_raster to verify it updates raster value
     CHECK(chip.raster() == 0);
-    chip.end_of_line();
-    CHECK(chip.raster() == 1);  // Advances by 1 per scanline
+    chip.set_raster(5);
+    CHECK(chip.raster() == 5);
 }
