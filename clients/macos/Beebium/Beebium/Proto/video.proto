@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package beebium;
+
+// Video frame streaming service
+service VideoService {
+    // Stream frames as they complete (at VSYNC)
+    rpc SubscribeFrames(SubscribeFramesRequest) returns (stream Frame);
+
+    // Get current video configuration
+    rpc GetConfig(GetConfigRequest) returns (VideoConfig);
+}
+
+message SubscribeFramesRequest {
+    // Future: format preferences, scaling options
+}
+
+message Frame {
+    uint64 frame_number = 1;
+    uint64 cycle_count = 2;
+    uint32 width = 3;
+    uint32 height = 4;
+    bytes pixels = 5;  // BGRA32 pixel data
+}
+
+message GetConfigRequest {}
+
+message VideoConfig {
+    uint32 width = 1;         // 640 for Mode 0-6, 480 for Mode 7
+    uint32 height = 2;        // 256 typical
+    uint32 framerate_hz = 3;  // 50Hz PAL
+}

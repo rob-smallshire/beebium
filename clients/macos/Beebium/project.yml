@@ -1,0 +1,53 @@
+name: Beebium
+options:
+  bundleIdPrefix: com.beebium
+  deploymentTarget:
+    macOS: "12.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  grpc-swift:
+    url: https://github.com/grpc/grpc-swift
+    from: "1.23.0"
+  swift-protobuf:
+    url: https://github.com/apple/swift-protobuf
+    from: "1.28.0"
+
+targets:
+  Beebium:
+    type: application
+    platform: macOS
+    sources:
+      - path: Beebium
+        excludes:
+          - "**/*.xcassets"
+      - path: Beebium/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.beebium.Beebium
+        INFOPLIST_GENERATION_MODE: GeneratedFile
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"
+    dependencies:
+      - package: grpc-swift
+        product: GRPC
+      - package: swift-protobuf
+        product: SwiftProtobuf
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+
+  BeebiumTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: BeebiumTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.beebium.BeebiumTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"
+    dependencies:
+      - target: Beebium
