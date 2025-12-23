@@ -83,3 +83,28 @@ catch_discover_tests(test_video)
 add_executable(test_saa5050 test_saa5050.cpp)
 target_link_libraries(test_saa5050 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_saa5050)
+
+# gRPC service tests (only if service layer is built)
+if(BEEBIUM_BUILD_SERVICE)
+    # Video service tests
+    add_executable(test_grpc_video test_grpc_video.cpp)
+    target_link_libraries(test_grpc_video PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_grpc_video PRIVATE
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    )
+    catch_discover_tests(test_grpc_video)
+
+    # Keyboard service tests
+    add_executable(test_grpc_keyboard test_grpc_keyboard.cpp)
+    target_link_libraries(test_grpc_keyboard PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_grpc_keyboard PRIVATE
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    )
+    catch_discover_tests(test_grpc_keyboard)
+endif()
