@@ -235,7 +235,8 @@ private:
             }
 
             // Feed byte to SAA5050 (writes 2 Output entries for left/right halves)
-            saa5050.byte(screen_byte, crtc_output.display ? 1 : 0);
+            // Pass cursor state for Mode 7 cursor XOR (same as VideoUla does for bitmap modes)
+            saa5050.byte(screen_byte, crtc_output.display ? 1 : 0, crtc_output.cursor != 0);
 
             // Emit first batch (left half of character - 8 pixels from 6 font bits)
             saa5050.emit_pixels(batch, bbc_colors::PALETTE);

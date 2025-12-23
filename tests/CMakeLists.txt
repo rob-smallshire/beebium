@@ -84,6 +84,14 @@ add_executable(test_saa5050 test_saa5050.cpp)
 target_link_libraries(test_saa5050 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_saa5050)
 
+# Cursor blink tests
+add_executable(test_cursor test_cursor.cpp)
+target_link_libraries(test_cursor PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_cursor PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_cursor)
+
 # gRPC service tests (only if service layer is built)
 if(BEEBIUM_BUILD_SERVICE)
     # Video service tests

@@ -405,8 +405,9 @@ public:
 
     // Feed a byte from screen memory (character code or control code)
     // dispen: 1 if display is enabled, 0 for blanking
+    // cursor: true if cursor is active at this position (from CRTC)
     // Writes 2 Output entries (left and right halves of the 12-bit expanded font row)
-    void byte(uint8_t value, uint8_t dispen) {
+    void byte(uint8_t value, uint8_t dispen, bool cursor = false) {
         value &= 0x7F;
 
         uint16_t data;  // 12-bit expanded font row
@@ -456,6 +457,7 @@ public:
         output->fg = m_fg;
         output->bg = m_bg;
         output->data = static_cast<uint8_t>(data & 0x3F);  // Left 6 bits
+        output->cursor = cursor;
 
         m_write_index = (m_write_index + 1) & 7;
 
@@ -463,6 +465,7 @@ public:
         output->fg = m_fg;
         output->bg = m_bg;
         output->data = static_cast<uint8_t>((data >> 6) & 0x3F);  // Right 6 bits
+        output->cursor = cursor;
 
         m_write_index = (m_write_index + 1) & 7;
     }
@@ -503,6 +506,13 @@ public:
         batch.pixels.pixels[5] = blend(p[3], p[4]); // 1/3 p3 + 2/3 p4
         batch.pixels.pixels[6] = blend(p[5], p[4]); // 1/3 p5 + 2/3 p4
         batch.pixels.pixels[7] = p[5];           // Pure pixel 5
+
+        // Apply cursor XOR if active (inverts RGB, same as VideoUla)
+        if (output->cursor) {
+            for (int i = 0; i < 8; ++i) {
+                batch.pixels.pixels[i].value ^= 0x0FFF;  // Invert RGB (12-bit)
+            }
+        }
 
         batch.set_type(PixelBatchType::Teletext);
         m_read_index = (m_read_index + 1) & 7;
@@ -554,12 +564,13 @@ public:
     bool is_flash_enabled() const { return !m_text_visible; }
 
 private:
-    // Output entry stores 6 bits of font data plus colors
+    // Output entry stores 6 bits of font data plus colors and cursor state
     // Each character produces 2 Output entries (left half and right half)
     struct Output {
-        uint8_t fg;    // Foreground color index (0-7)
-        uint8_t bg;    // Background color index (0-7)
-        uint8_t data;  // 6 bits of expanded font row
+        uint8_t fg;     // Foreground color index (0-7)
+        uint8_t bg;     // Background color index (0-7)
+        uint8_t data;   // 6 bits of expanded font row
+        bool cursor;    // Cursor active for this half-character
     };
 
     void process_control_code(uint8_t code, uint8_t& data) {
