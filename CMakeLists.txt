@@ -64,9 +64,31 @@ if(BEEBIUM_BUILD_TESTS)
     include(Catch)
 endif()
 
+# gRPC Service Layer
+option(BEEBIUM_BUILD_SERVICE "Build gRPC service layer" ON)
+option(BEEBIUM_BUILD_SERVER "Build beebium-server executable" ON)
+
+if(BEEBIUM_BUILD_SERVICE)
+    # Find gRPC and Protobuf (installed via brew or system package manager)
+    find_package(Protobuf CONFIG REQUIRED)
+    find_package(gRPC CONFIG REQUIRED)
+
+    # Get the protoc and grpc_cpp_plugin executables
+    get_target_property(PROTOC_EXECUTABLE protobuf::protoc LOCATION)
+    get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
+endif()
+
 # Subdirectories
 add_subdirectory(src/6502)
 add_subdirectory(src/core)
+
+if(BEEBIUM_BUILD_SERVICE)
+    add_subdirectory(src/service)
+endif()
+
+if(BEEBIUM_BUILD_SERVER)
+    add_subdirectory(src/server)
+endif()
 
 if(BEEBIUM_BUILD_TESTS)
     add_subdirectory(tests)

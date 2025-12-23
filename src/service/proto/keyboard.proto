@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package beebium;
+
+// BBC keyboard matrix input service
+service KeyboardService {
+    // Press/release by matrix position
+    rpc KeyDown(KeyRequest) returns (KeyResponse);
+    rpc KeyUp(KeyRequest) returns (KeyResponse);
+
+    // Type a string (auto press/release with timing)
+    rpc TypeText(TypeTextRequest) returns (TypeTextResponse);
+
+    // Query current pressed keys
+    rpc GetState(GetStateRequest) returns (KeyboardState);
+}
+
+message KeyRequest {
+    // BBC keyboard matrix: row 0-9, column 0-9
+    uint32 row = 1;
+    uint32 column = 2;
+}
+
+message KeyResponse {
+    bool accepted = 1;
+}
+
+message TypeTextRequest {
+    string text = 1;
+    uint32 inter_key_delay_ms = 2;  // Default: 50ms
+}
+
+message TypeTextResponse {
+    bool started = 1;
+}
+
+message GetStateRequest {}
+
+message KeyboardState {
+    // Bitmap of pressed keys (10 rows)
+    repeated uint32 pressed_rows = 1;
+}
