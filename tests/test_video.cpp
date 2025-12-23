@@ -710,20 +710,124 @@ TEST_CASE("Boot screenshot capture", "[video][boot][integration]") {
     // Verify Mode 7 is active
     CHECK(machine.memory().video_ula.teletext_mode());
 
-    // Count non-black pixels in framebuffer to verify rendering worked
-    size_t non_black_count = 0;
+    // Count pixel types in framebuffer to verify rendering worked correctly
+    size_t white_count = 0;
+    size_t grey_count = 0;
+    size_t black_count = 0;
+
     for (size_t i = 0; i < fb_for_screenshot.width() * fb_for_screenshot.height(); ++i) {
         uint32_t pixel = frame[i];
         uint8_t r = (pixel >> 16) & 0xFF;
         uint8_t g = (pixel >> 8) & 0xFF;
         uint8_t b = pixel & 0xFF;
-        if (r != 0 || g != 0 || b != 0) {
-            ++non_black_count;
+
+        if (r == 255 && g == 255 && b == 255) {
+            ++white_count;
+        } else if (r == 0 && g == 0 && b == 0) {
+            ++black_count;
+        } else if (r == g && g == b && r > 0) {
+            // Grey pixel (from gamma blending)
+            ++grey_count;
         }
     }
 
-    // The boot screen should have visible text (non-black pixels)
-    CHECK(non_black_count > 0);
+    // The boot screen should have visible text
+    CHECK(white_count > 500);   // At least 500 white pixels for "BBC Computer 32K" text
+    CHECK(black_count > 10000); // Mostly black background
+
+    // With gamma blending enabled, we should have grey pixels at character edges
+    // This verifies the SAA5050 antialiasing and 6→8 pixel expansion is working
+    CHECK(grey_count > 100);    // At least 100 grey pixels from blending
+}
+
+TEST_CASE("Teletext rendering produces blended pixels", "[video][boot][teletext]") {
+    REQUIRE(roms_available());
+
+    // Load ROMs
+    const auto rom_dirpath = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos_rom = load_rom(rom_dirpath / "OS12.ROM");
+    auto basic_rom = load_rom(rom_dirpath / "BASIC2.ROM");
+
+    // Create machine with video output
+    ModelB machine;
+    machine.memory().load_mos(mos_rom.data(), mos_rom.size());
+    machine.memory().load_basic(basic_rom.data(), basic_rom.size());
+    machine.memory().enable_video_output();
+    machine.reset();
+
+    // Boot until "BBC Computer" appears
+    const uint16_t check_addr = 0x7C28;
+    const char* expected_str = "BBC Computer";
+    bool boot_complete = false;
+
+    for (uint64_t i = 0; i < 3'000'000 && !boot_complete; ++i) {
+        machine.step();
+
+        bool matches = true;
+        for (size_t j = 0; expected_str[j] && matches; ++j) {
+            if (machine.read(check_addr + j) != static_cast<uint8_t>(expected_str[j])) {
+                matches = false;
+            }
+        }
+        boot_complete = matches;
+    }
+    REQUIRE(boot_complete);
+    REQUIRE(machine.memory().video_ula.teletext_mode());
+
+    // Verify screen memory contains expected "BBC Computer" text
+    CHECK(machine.read(0x7C28) == 'B');
+    CHECK(machine.read(0x7C29) == 'B');
+    CHECK(machine.read(0x7C2A) == 'C');
+
+    // Drain old queue data and run more cycles to get fresh video
+    auto& queue = machine.memory().video_output.value();
+    queue.consume(queue.size());  // Clear stale data
+
+    // Run enough cycles for 2 full frames (~80,000 steps at 2MHz = ~1 frame at 50Hz)
+    for (int i = 0; i < 80'000; ++i) {
+        machine.step();
+    }
+
+    // Get video queue and count pixel types
+    REQUIRE(machine.memory().video_output.has_value());
+
+    auto buffers = queue.get_consumer_buffer();
+    REQUIRE(buffers.total() > 0);
+
+    size_t white_count = 0;
+    size_t black_count = 0;
+    size_t grey_count = 0;
+    size_t display_batches = 0;
+
+    auto count_pixels = [&](const PixelBatch& batch) {
+        if (!(batch.flags() & VIDEO_FLAG_DISPLAY)) return;
+        ++display_batches;
+
+        for (int p = 0; p < 8; ++p) {
+            const auto& pixel = batch.pixels.pixels[p];
+            bool is_white = pixel.bits.r == 15 && pixel.bits.g == 15 && pixel.bits.b == 15;
+            bool is_black = pixel.bits.r == 0 && pixel.bits.g == 0 && pixel.bits.b == 0;
+
+            if (is_white) ++white_count;
+            else if (is_black) ++black_count;
+            else ++grey_count;
+        }
+    };
+
+    for (size_t i = 0; i < buffers.a.size(); ++i) {
+        count_pixels(buffers.a[i]);
+    }
+    for (size_t i = 0; i < buffers.b.size(); ++i) {
+        count_pixels(buffers.b[i]);
+    }
+
+    // Verify we have some text (white pixels on black background)
+    CHECK(white_count > 0);
+    CHECK(black_count > 0);
+
+    // With gamma blending, we should have grey pixels at text edges
+    // This verifies the SAA5050 6→8 pixel expansion is working correctly
+    CHECK(grey_count > 0);
 }
 
 #endif // BEEBIUM_ROM_DIR

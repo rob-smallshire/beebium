@@ -234,9 +234,29 @@ private:
                 saa5050.start_of_line();
             }
 
-            // Feed byte to SAA5050
+            // Feed byte to SAA5050 (writes 2 Output entries for left/right halves)
             saa5050.byte(screen_byte, crtc_output.display ? 1 : 0);
+
+            // Emit first batch (left half of character - 8 pixels from 6 font bits)
             saa5050.emit_pixels(batch, bbc_colors::PALETTE);
+
+            // Set sync flags
+            uint8_t flags = VIDEO_FLAG_NONE;
+            if (crtc_output.hsync) flags |= VIDEO_FLAG_HSYNC;
+            if (crtc_output.vsync) flags |= VIDEO_FLAG_VSYNC;
+            if (crtc_output.display) flags |= VIDEO_FLAG_DISPLAY;
+            batch.set_flags(flags);
+
+            // Push first batch
+            video_output->push(batch);
+
+            // Emit second batch (right half of character - 8 pixels from 6 font bits)
+            PixelBatch batch2;
+            saa5050.emit_pixels(batch2, bbc_colors::PALETTE);
+            batch2.set_flags(flags);
+
+            // Push second batch
+            video_output->push(batch2);
 
             if (crtc_output.display) {
                 ++teletext_column_;
@@ -251,6 +271,10 @@ private:
             last_display_ = crtc_output.display;
             last_hsync_ = crtc_output.hsync;
             last_vsync_ = crtc_output.vsync;
+
+            // Update VSYNC state in system VIA peripheral
+            system_via_peripheral.set_vsync(crtc_output.vsync != 0);
+            return;  // Already pushed, skip common path
         } else {
             // Bitmap modes - use VideoUla
             video_ula.byte(screen_byte, crtc_output.cursor != 0);

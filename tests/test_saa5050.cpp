@@ -11,7 +11,7 @@ using namespace beebium;
 TEST_CASE("Teletext font data validity", "[saa5050][font]") {
     SECTION("space character (0x20) is blank") {
         for (int row = 0; row < 10; ++row) {
-            CHECK(TELETEXT_FONT[0][row] == 0);
+            CHECK(TELETEXT_FONT_RAW[0][row] == 0);
         }
     }
 
@@ -20,12 +20,12 @@ TEST_CASE("Teletext font data validity", "[saa5050][font]") {
         constexpr int A_index = 'A' - 0x20;
 
         // Row 0 should be blank (top of character)
-        CHECK(TELETEXT_FONT[A_index][0] == 0);
+        CHECK(TELETEXT_FONT_RAW[A_index][0] == 0);
 
         // Middle rows should have pixels
         bool has_pixels = false;
         for (int row = 1; row < 8; ++row) {
-            if (TELETEXT_FONT[A_index][row] != 0) {
+            if (TELETEXT_FONT_RAW[A_index][row] != 0) {
                 has_pixels = true;
                 break;
             }
@@ -39,7 +39,7 @@ TEST_CASE("Teletext font data validity", "[saa5050][font]") {
 
         bool has_pixels = false;
         for (int row = 0; row < 10; ++row) {
-            if (TELETEXT_FONT[pound_index][row] != 0) {
+            if (TELETEXT_FONT_RAW[pound_index][row] != 0) {
                 has_pixels = true;
                 break;
             }
@@ -110,22 +110,17 @@ TEST_CASE("SAA5050 renders space character", "[saa5050][render]") {
     Saa5050 chip;
     chip.start_of_line();
 
-    // Fill the delay buffer with spaces
-    // byte() writes 1 slot, need 4 slots to fill from write_index=4 to wrap around
-    chip.byte(0x20, 1);  // index 4
-    chip.byte(0x20, 1);  // index 5
-    chip.byte(0x20, 1);  // index 6
-    chip.byte(0x20, 1);  // index 7 (wraps to 0)
+    // New format: each byte() writes 2 entries (left and right halves)
+    // write_index starts at 4, read_index starts at 0
+    // After 4 byte() calls: write_index wraps around and fills all 8 slots
+    chip.byte(0x20, 1);  // writes indices 4, 5
+    chip.byte(0x20, 1);  // writes indices 6, 7
+    chip.byte(0x20, 1);  // writes indices 0, 1
+    chip.byte(0x20, 1);  // writes indices 2, 3
 
-    // Now advance read_index to index 4 where first space was written
+    // Now all 8 slots have space data; read any one
     PixelBatch batch;
     chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 0
-    chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 1
-    chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 2
-    chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 3
-
-    // Read index 4 (first space we wrote)
-    chip.emit_pixels(batch, bbc_colors::PALETTE);
 
     // All pixels should be background (black) for space character
     // Compare RGB only (ignore metadata in x field)
@@ -144,28 +139,29 @@ TEST_CASE("SAA5050 renders alpha character A", "[saa5050][render]") {
     chip.set_raster(2);  // raster = 2 (font row 1)
     chip.start_of_line();
 
-    // Feed 'A' character - writes to index 4
-    chip.byte('A', 1);
+    // New format: each byte() writes 2 entries (left half, right half)
+    // byte('A') writes to indices 4 (left half) and 5 (right half)
+    chip.byte('A', 1);  // writes indices 4, 5
 
-    // Fill the delay buffer: need to write indices 5,6,7 (3 more byte calls)
-    chip.byte(0x20, 1);  // index 5
-    chip.byte(0x20, 1);  // index 6
-    chip.byte(0x20, 1);  // index 7
+    // Fill remaining slots with spaces
+    chip.byte(0x20, 1);  // writes indices 6, 7
+    chip.byte(0x20, 1);  // writes indices 0, 1
+    chip.byte(0x20, 1);  // writes indices 2, 3
 
-    // Now emit_pixels() to advance read_index to where 'A' was written (index 4)
-    // read_index starts at 0, we need to read 4 slots (indices 0,1,2,3)
+    // Read through indices 0-3, then read indices 4 and 5 for 'A'
     PixelBatch batch;
     chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 0
     chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 1
     chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 2
     chip.emit_pixels(batch, bbc_colors::PALETTE);  // reads index 3
 
-    // Now read index 4 where 'A' was written
-    chip.emit_pixels(batch, bbc_colors::PALETTE);
-
-    // At row 1 (raster 2), 'A' should have pixel at center (top of A triangle)
-    // Check we have at least one white pixel
+    // Read both halves of 'A' and check for white pixels in either
+    // 'A' at row 1 = 0x08 (bit 3 set), doubled to bits 6-7 in 12-bit value
+    // This means the left half (bits 0-5) may be empty, right half (bits 6-11) has pixels
     bool has_white = false;
+
+    // Left half (index 4)
+    chip.emit_pixels(batch, bbc_colors::PALETTE);
     for (int i = 0; i < 8; ++i) {
         if (batch.pixels.pixels[i].bits.r == 15 &&
             batch.pixels.pixels[i].bits.g == 15 &&
@@ -173,14 +169,26 @@ TEST_CASE("SAA5050 renders alpha character A", "[saa5050][render]") {
             has_white = true;
         }
     }
+
+    // Right half (index 5)
+    PixelBatch batch2;
+    chip.emit_pixels(batch2, bbc_colors::PALETTE);
+    for (int i = 0; i < 8; ++i) {
+        if (batch2.pixels.pixels[i].bits.r == 15 &&
+            batch2.pixels.pixels[i].bits.g == 15 &&
+            batch2.pixels.pixels[i].bits.b == 15) {
+            has_white = true;
+        }
+    }
+
     CHECK(has_white);
 }
 
 TEST_CASE("SAA5050 font row 1 of 'A' has pixels", "[saa5050][font]") {
     // Verify font data for 'A' at row 1 is non-zero
     constexpr int A_index = 'A' - 0x20;
-    CHECK(TELETEXT_FONT[A_index][1] != 0);  // Row 1 should have pixels
-    INFO("Font row 1 of 'A' = " << static_cast<int>(TELETEXT_FONT[A_index][1]));
+    CHECK(TELETEXT_FONT_RAW[A_index][1] != 0);  // Row 1 should have pixels
+    INFO("Font row 1 of 'A' = " << static_cast<int>(TELETEXT_FONT_RAW[A_index][1]));
 }
 
 TEST_CASE("SAA5050 emit_pixels basic output", "[saa5050][render]") {
@@ -188,14 +196,8 @@ TEST_CASE("SAA5050 emit_pixels basic output", "[saa5050][render]") {
     chip.start_of_line();
 
     // The delay buffer starts with write_index=4, read_index=0
-    // So we need to fill 4 entries before reading gets valid data
-
-    // Feed 4 'B' characters (each byte() writes 2 entries, so need 2 calls)
-    // Actually, let's trace through what happens:
-    // After byte('B'): write_index = 6
-    // After byte('B'): write_index = 0
-    // After emit: read_index = 1 (reads entry 0, which was pre-filled with 0)
-    // After emit: read_index = 2 (reads entry 1)
+    // Each byte() writes 2 entries (left and right halves)
+    // So 2 byte() calls fill 4 entries, and 4 byte() calls fill all 8
 
     // Test set_raster to verify it updates raster value
     CHECK(chip.raster() == 0);
