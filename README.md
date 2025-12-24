@@ -4,17 +4,15 @@
 
 # Beebium
 
-A BBC Micro emulator built for developers.
+A different take on a BBC Micro emulator, with a Chromium-inspired architecture.
 
 ## Overview
 
-Different emulators serve different purposes. Some prioritise nostalgia and game compatibility. Others focus on accuracy or preservation. **Beebium's primary goal is to serve as a foundation for tools that help developers create new software for the BBC Micro.**
+Different emulators serve different purposes. Some prioritise nostalgia and game compatibility. Others focus on accuracy or preservation. **Beebium's primary goal is to serve as a foundation for tools for creating new software for the BBC Micro and its coprocessors.**
 
-Whether you're writing 6502 assembly or building modern toolchains that target vintage hardware, Beebium aims to provide the debugging, inspection, and automation capabilities that development workflows demand.
+The architecture reflects this goal: a headless emulation core that runs as a server, with frontends connecting via gRPC. This separation will enable integration with IDEs, test harnesses, continuous integration pipelines, and custom development tools, not just standalone GUI emulators.
 
-The architecture reflects this goal: a headless emulation core that runs as a server, with frontends connecting via gRPC. This separation enables integration with IDEs, test harnesses, continuous integration pipelines, and custom development tools, not just standalone GUI applications.
-
-This architecture also facilitates native GUIs with first-class host platform integration, rather than the compromises required by cross-platform graphics toolkits. The macOS frontend uses Swift and Metal. A Windows frontend can use WinUI 3 and Direct3D. A Linux frontend can use GTK or Qt. Each platform's code remains clean and idiomatic, unencumbered by the complexity of accommodating other platforms.
+Moreover, this architecture also facilitates native GUIs with first-class host platform integration, rather than the compromises required by cross-platform graphics toolkits. The macOS frontend uses Swift and Metal. A Windows frontend can use WinUI 3 and Direct3D. A Linux frontend can use GTK or Qt. Each platform's code remains clean and idiomatic, unencumbered by the complexity of accommodating other platforms.
 
 ### Key Features
 
