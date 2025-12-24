@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/MemoryMap.hpp>
 #include <beebium/BankBinding.hpp>
+#include <beebium/ClockConcepts.hpp>
 #include <beebium/devices/Ram.hpp>
 #include <beebium/devices/Rom.hpp>
 #include <beebium/devices/EmptySlot.hpp>
@@ -70,8 +71,8 @@ TEST_CASE("MemoryMappedDevice concept", "[memory_map][concepts]") {
     STATIC_REQUIRE(MemoryMappedDevice<Via6522>);
 }
 
-TEST_CASE("ClockableDevice concept", "[memory_map][concepts]") {
-    STATIC_REQUIRE(ClockableDevice<Via6522>);
+TEST_CASE("ClockSubscriber concept", "[memory_map][concepts]") {
+    STATIC_REQUIRE(ClockSubscriber<Via6522>);
 }
 
 TEST_CASE("Region binding", "[memory_map][region]") {

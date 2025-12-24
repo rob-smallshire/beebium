@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ClockTypes.hpp"
 #include <array>
 #include <cstdint>
 
@@ -18,6 +19,20 @@ namespace beebium {
 //
 class Crtc6845 {
 public:
+    // Clock subscription: falling edge only, dynamic rate (1MHz/2MHz)
+    static constexpr ClockEdge clock_edges = ClockEdge::Falling;
+
+    // Dynamic clock rate - depends on video mode
+    ClockRate clock_rate() const {
+        return fast_clock_ ? ClockRate::Rate_2MHz : ClockRate::Rate_1MHz;
+    }
+
+    void set_fast_clock(bool fast) { fast_clock_ = fast; }
+    bool fast_clock() const { return fast_clock_; }
+
+    // Clock subscriber interface
+    void tick_falling() { tick(); }
+
     // Register indices
     static constexpr uint8_t R0_HTOTAL          = 0;   // Horizontal total (chars - 1)
     static constexpr uint8_t R1_HDISPLAYED      = 1;   // Horizontal displayed (chars)
@@ -218,6 +233,7 @@ public:
         had_vsync_this_row_ = false;
         frame_count_ = 0;
         prev_lightpen_ = false;
+        fast_clock_ = false;
     }
 
 private:
@@ -340,6 +356,9 @@ private:
 
     // Light pen
     bool prev_lightpen_ = false;
+
+    // Clock rate (set by video ULA)
+    bool fast_clock_ = false;
 };
 
 } // namespace beebium

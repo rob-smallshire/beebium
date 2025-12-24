@@ -14,12 +14,6 @@ concept MemoryMappedDevice = requires(T& device, uint16_t offset, uint8_t value)
     { device.write(offset, value) } -> std::same_as<void>;
 };
 
-// Concept for devices that need clocking (optional extension)
-template<typename T>
-concept ClockableDevice = MemoryMappedDevice<T> && requires(T& device, bool phi2_rising) {
-    { device.tick(phi2_rising) } -> std::same_as<void>;
-};
-
 // Mirror policies for address decoding
 
 struct NoMirror {

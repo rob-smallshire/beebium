@@ -187,6 +187,7 @@ public:
     // Accessor for testing/debugging
     AddressableLatch& latch() { return latch_; }
     const AddressableLatch& latch() const { return latch_; }
+    uint8_t keyboard_column() const { return auto_scan_column_; }
 
 private:
     AddressableLatch& latch_;
