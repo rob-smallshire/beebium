@@ -125,6 +125,11 @@ target_compile_definitions(test_keyboard_input PRIVATE
 )
 catch_discover_tests(test_keyboard_input)
 
+# Keyboard thread safety tests
+add_executable(test_keyboard_race test_keyboard_race.cpp)
+target_link_libraries(test_keyboard_race PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_keyboard_race)
+
 # gRPC service tests (only if service layer is built)
 if(BEEBIUM_BUILD_SERVICE)
     # Video service tests
