@@ -94,6 +94,9 @@ public:
         reset();
     }
 
+    // Note: VideoBinding is now explicitly constructed, taking Hardware by reference.
+    // It internally owns a VideoRenderer for pixel generation.
+
     ~Machine() {
         M6502_Destroy(&state_.cpu);
     }
@@ -107,6 +110,7 @@ public:
         M6502_Init(&state_.cpu, CpuPolicy::config);
         M6502_Reset(&state_.cpu);
         state_.memory.reset();
+        video_binding_.reset();
         state_.cycle_count = 0;
     }
 

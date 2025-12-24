@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ClockTypes.hpp"
+#include "VideoRenderer.hpp"
 
 namespace beebium {
 
@@ -16,27 +17,37 @@ namespace beebium {
 //
 template<typename Hardware>
 struct VideoBinding {
-    Hardware& hw;
+    Hardware& hardware;
+    VideoRenderer<decltype(hardware.main_ram)> renderer;
+
+    explicit VideoBinding(Hardware& hw)
+        : hardware(hw)
+        , renderer(hw.main_ram, hw.addressable_latch, hw.video_ula, hw.saa5050, hw.video_output)
+    {}
 
     static constexpr ClockEdge clock_edges = ClockEdge::Falling;
 
     // Dynamic rate from CRTC
-    ClockRate clock_rate() const { return hw.crtc.clock_rate(); }
+    ClockRate clock_rate() const { return hardware.crtc.clock_rate(); }
 
     void tick_falling() {
         // Set CRTC clock rate based on video ULA mode
-        hw.crtc.set_fast_clock(hw.video_ula.fast_clock());
+        hardware.crtc.set_fast_clock(hardware.video_ula.fast_clock());
 
         // Tick CRTC to advance timing state
-        auto output = hw.crtc.tick();
+        auto output = hardware.crtc.tick();
 
         // Always update VSYNC for system VIA timing (CA1 line)
-        hw.system_via_peripheral.set_vsync(output.vsync != 0);
+        hardware.system_via_peripheral.set_vsync(output.vsync != 0);
 
         // Render pixels only if video output enabled
-        if (hw.video_output.has_value()) {
-            hw.render_video(output);
+        if (hardware.video_output.has_value()) {
+            renderer.render(output);
         }
+    }
+
+    void reset() {
+        renderer.reset();
     }
 };
 
