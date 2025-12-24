@@ -92,6 +92,14 @@ target_compile_definitions(test_cursor PRIVATE
 )
 catch_discover_tests(test_cursor)
 
+# Keyboard input tests
+add_executable(test_keyboard_input test_keyboard_input.cpp)
+target_link_libraries(test_keyboard_input PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_keyboard_input PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_keyboard_input)
+
 # gRPC service tests (only if service layer is built)
 if(BEEBIUM_BUILD_SERVICE)
     # Video service tests
