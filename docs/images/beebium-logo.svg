@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="86.933 88.826 322.334 359.809">
+  <rect x="101.159" y="102.523" width="296" height="336" style="stroke-width: 4px;" stroke="black" fill="none" rx="14.535" ry="14.535"/>
+  <text style="white-space: pre; stroke-width: 1; font-size: 20px; text-anchor: end;" x="152.044" y="138.955" font-size="20" font-family="Helvetica, Arial, sans-serif" fill="black">32</text>
+  <text style="white-space: pre; stroke-width: 1; font-size: 20px; text-anchor: end;" x="152.044" y="164.995" font-size="20" font-family="Helvetica, Arial, sans-serif" fill="black">64</text>
+  <text style="white-space: pre; stroke-width: 1; font-size: 20px; text-anchor: end;" x="152.044" y="192.524" font-size="20" font-family="Helvetica, Arial, sans-serif" fill="black">128</text>
+  <text style="font-family: Arial; font-size: 120px; font-weight: 700; text-anchor: middle; white-space: pre;" x="249.318" y="311.242">Bb</text>
+  <text style="font-family: Helvetica, Arial, sans-serif; font-size: 24px; text-anchor: middle; white-space: pre;" x="248.098" y="364.109">Beebium</text>
+  <text style="white-space: pre; stroke-width: 1; font-size: 20px;" x="246.996" y="199.837" text-anchor="middle" font-size="20" font-family="Helvetica, Arial, sans-serif" fill="black">6502</text>
+  <text style="white-space: pre; stroke-width: 1; font-size: 20px; text-anchor: end;" x="378.206" y="417.902" font-size="20" font-family="Helvetica, Arial, sans-serif" fill="black">2 MHz</text>
+</svg>

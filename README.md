@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/beebium-logo.svg" alt="Beebium logo" width="200">
+</p>
+
 # Beebium
 
 A BBC Micro emulator with a modern multi-process architecture.
