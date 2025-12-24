@@ -2,8 +2,6 @@
 
 #include "AddressableLatch.hpp"
 #include "BankBinding.hpp"
-#include "Clock.hpp"
-#include "ClockBinding.hpp"
 #include "IrqAggregator.hpp"
 #include "MemoryMap.hpp"
 #include "OutputQueue.hpp"
@@ -79,12 +77,6 @@ public:
     Via6522 system_via;
     Via6522 user_via;
 
-    // Peripheral clock type - ticks VIAs on clock edges
-    using PeripheralClockType = Clock<
-        ClockBinding<Via6522>,   // System VIA
-        ClockBinding<Via6522>    // User VIA
-    >;
-
     // IRQ aggregator type - polls VIAs for IRQ status
     using IrqAggregatorType = IrqAggregator<
         IrqBinding<Via6522, 0>,  // System VIA → bit 0
@@ -135,7 +127,6 @@ public:
         : system_via()
         , user_via()
         , memory_map_(make_memory_map())
-        , peripheral_clock_(make_peripheral_clock())
         , irq_aggregator_(make_irq_aggregator())
     {
         // Connect internal peripheral to system VIA
@@ -147,7 +138,6 @@ public:
         : system_via(system_peripheral)
         , user_via(user_peripheral)
         , memory_map_(make_memory_map())
-        , peripheral_clock_(make_peripheral_clock())
         , irq_aggregator_(make_irq_aggregator())
     {}
 
@@ -191,22 +181,9 @@ public:
         return video_output.has_value();
     }
 
-    // Clock peripherals (called from Machine::step)
+    // Poll IRQ status from VIAs (called from Machine::step after clock tick)
     // Returns IRQ mask (bit 0 = system VIA, bit 1 = user VIA)
-    uint8_t tick_peripherals(uint64_t cycle) {
-        // Tick peripheral clock (dispatches to VIAs based on edge/rate)
-        peripheral_clock_.tick(cycle);
-
-        // Clock video hardware (if enabled) at 1MHz or 2MHz based on ULA setting
-        // CRTC clocked manually since tick_video needs its output
-        crtc.set_fast_clock(video_ula.fast_clock());
-        bool clock_crtc = crtc.clock_rate() == ClockRate::Rate_2MHz || (cycle & 1) == 0;
-
-        if (clock_crtc && video_output.has_value()) {
-            tick_video();
-        }
-
-        // Aggregate IRQ status (compile-time unrolled)
+    uint8_t poll_irq() {
         return irq_aggregator_.poll();
     }
 
@@ -217,11 +194,10 @@ private:
     bool last_display_ = false;
     uint8_t teletext_column_ = 0;
 
-    // Clock video hardware and produce PixelBatch
-    void tick_video() {
-        // Tick CRTC to advance state
-        auto crtc_output = crtc.tick();
-
+public:
+    // Render video output from CRTC state (called from VideoBinding)
+    // CRTC is ticked by VideoBinding before calling this
+    void render_video(const Crtc6845::Output& crtc_output) {
         // Read screen memory byte at CRTC address
         // Address is 14-bit, needs translation to BBC memory map
         uint16_t screen_addr = translate_screen_address(crtc_output.address);
@@ -286,8 +262,7 @@ private:
             last_hsync_ = crtc_output.hsync;
             last_vsync_ = crtc_output.vsync;
 
-            // Update VSYNC state in system VIA peripheral
-            system_via_peripheral.set_vsync(crtc_output.vsync != 0);
+            // VSYNC update is handled by VideoBinding
             return;  // Already pushed, skip common path
         } else {
             // Bitmap modes - use VideoUla
@@ -310,9 +285,7 @@ private:
         // Push to output queue
         video_output->push(batch);
 
-        // Update VSYNC state in system VIA peripheral
-        // The peripheral will pass this to the VIA's CA1 line
-        system_via_peripheral.set_vsync(crtc_output.vsync != 0);
+        // VSYNC update is handled by VideoBinding
     }
 
     // Translate CRTC address to BBC memory address
@@ -362,15 +335,7 @@ public:
 
 private:
     MemoryMapType memory_map_;
-    PeripheralClockType peripheral_clock_;
     IrqAggregatorType irq_aggregator_;
-
-    PeripheralClockType make_peripheral_clock() {
-        return make_clock(
-            make_clock_binding(system_via),
-            make_clock_binding(user_via)
-        );
-    }
 
     IrqAggregatorType make_irq_aggregator() {
         return beebium::make_irq_aggregator(

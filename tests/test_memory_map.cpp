@@ -501,11 +501,15 @@ TEST_CASE("ModelBHardware", "[memory_map][integration]") {
         REQUIRE(hw.sideways.selected_bank() == 0);
     }
 
-    SECTION("tick_peripherals updates VIAs") {
+    SECTION("poll_irq aggregates VIA IRQs") {
         // Just verify it doesn't crash and returns something
-        uint8_t irq0 = hw.tick_peripherals(0);  // Trailing edge
-        uint8_t irq1 = hw.tick_peripherals(1);  // Leading edge
+        uint8_t irq0 = hw.poll_irq();
         (void)irq0;
+
+        // VIAs can be ticked directly for testing
+        hw.system_via.tick_falling();
+        hw.user_via.tick_falling();
+        uint8_t irq1 = hw.poll_irq();
         (void)irq1;
     }
 }

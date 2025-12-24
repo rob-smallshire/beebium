@@ -1,8 +1,13 @@
 #ifndef BEEBIUM_MACHINE_HPP
 #define BEEBIUM_MACHINE_HPP
 
+#include "Clock.hpp"
+#include "ClockBinding.hpp"
+#include "CpuBinding.hpp"
 #include "ProgramCounterHistogram.hpp"
 #include "Types.hpp"
+#include "Via6522.hpp"
+#include "VideoBinding.hpp"
 
 #include <6502/6502.h>
 #include <cassert>
@@ -43,18 +48,6 @@ struct Watchpoint {
     }
 };
 
-// Type trait to detect if MemoryPolicy has tick_peripherals method
-template<typename T, typename = void>
-struct has_tick_peripherals : std::false_type {};
-
-template<typename T>
-struct has_tick_peripherals<T,
-    std::void_t<decltype(std::declval<T>().tick_peripherals(uint64_t{}))>
-> : std::true_type {};
-
-template<typename T>
-inline constexpr bool has_tick_peripherals_v = has_tick_peripherals<T>::value;
-
 // Machine state that can be serialized/deserialized.
 // Parameterized by MemoryPolicy to include memory state.
 template<typename MemoryPolicy>
@@ -73,13 +66,31 @@ struct MachineState {
 //   - uint8_t read(uint16_t addr) const
 //   - void write(uint16_t addr, uint8_t value)
 //   - void reset()
+//   - system_via, user_via members (Via6522)
+//   - irq_aggregator() method returning aggregator with poll()
 //
 template<typename CpuPolicy, typename MemoryPolicy>
 class Machine {
 public:
     using State = MachineState<MemoryPolicy>;
+    using CpuBindingType = CpuBinding<MemoryPolicy>;
+    using VideoBindingType = VideoBinding<MemoryPolicy>;
 
-    Machine() {
+    // System clock type: CPU, VIAs, and video all subscribe
+    using SystemClockType = Clock<
+        ClockBinding<CpuBindingType>,
+        ClockBinding<Via6522>,
+        ClockBinding<Via6522>,
+        ClockBinding<VideoBindingType>
+    >;
+
+    Machine()
+        : state_()
+        , cpu_binding_(state_.cpu, state_.memory)
+        , video_binding_(state_.memory)
+        , system_clock_(make_system_clock())
+    {
+        setup_callbacks();
         reset();
     }
 
@@ -101,38 +112,12 @@ public:
 
     // Execute one CPU cycle
     void step() {
-        // Record PC histogram at instruction boundaries (minimal overhead when disabled)
-        if (pc_histogram_ && M6502_IsAboutToExecute(&state_.cpu)) {
-            pc_histogram_->record(state_.cpu.pc.w);
-        }
+        // Tick the system clock - dispatches to CPU, VIAs, and video
+        system_clock_.tick(state_.cycle_count);
 
-        (*state_.cpu.tfn)(&state_.cpu);
-
-        const uint16_t addr = state_.cpu.abus.w;
-        const bool is_read = state_.cpu.read;
-
-        if (is_read) {
-            state_.cpu.dbus = state_.memory.read(addr);
-        } else {
-            state_.memory.write(addr, state_.cpu.dbus);
-        }
-
-        // Fire watchpoints
-        if (!watchpoints_.empty()) {
-            for (const auto& wp : watchpoints_) {
-                if (wp.matches(addr, !is_read)) {
-                    wp.callback(addr, state_.cpu.dbus, !is_read, state_.cycle_count);
-                }
-            }
-        }
-
-        // Update peripherals if supported by the memory policy
-        if constexpr (has_tick_peripherals_v<MemoryPolicy>) {
-            uint8_t irq_mask = state_.memory.tick_peripherals(state_.cycle_count);
-            // Set IRQ line based on VIA pending flags
-            // Device bit 0 = System VIA, bit 1 = User VIA
-            M6502_SetDeviceIRQ(&state_.cpu, 0x03, irq_mask ? 1 : 0);
-        }
+        // IRQ handling - poll aggregator and set CPU IRQ line
+        uint8_t irq_mask = state_.memory.poll_irq();
+        M6502_SetDeviceIRQ(&state_.cpu, 0x03, irq_mask ? 1 : 0);
 
         ++state_.cycle_count;
     }
@@ -209,11 +194,54 @@ public:
         return true;
     }
 
+    // Access to bindings for testing/debugging
+    CpuBindingType& cpu_binding() { return cpu_binding_; }
+    VideoBindingType& video_binding() { return video_binding_; }
+
 private:
     State state_;
+    CpuBindingType cpu_binding_;
+    VideoBindingType video_binding_;
+    SystemClockType system_clock_;
+
     std::vector<Watchpoint> watchpoints_;
     InstructionCallback on_instruction_;
     ProgramCounterHistogram* pc_histogram_ = nullptr;
+
+    SystemClockType make_system_clock() {
+        return make_clock(
+            make_clock_binding(cpu_binding_),
+            make_clock_binding(state_.memory.system_via),
+            make_clock_binding(state_.memory.user_via),
+            make_clock_binding(video_binding_)
+        );
+    }
+
+    void setup_callbacks() {
+        // Wire CpuBinding callbacks to Machine's debugging infrastructure
+
+        // Watchpoint callback - dispatches to watchpoints vector
+        cpu_binding_.set_watchpoint_callback(
+            [this](uint16_t addr, uint8_t value, bool is_write) {
+                if (!watchpoints_.empty()) {
+                    for (const auto& wp : watchpoints_) {
+                        if (wp.matches(addr, is_write)) {
+                            wp.callback(addr, value, is_write, state_.cycle_count);
+                        }
+                    }
+                }
+            }
+        );
+
+        // Instruction callback - records PC histogram
+        cpu_binding_.set_instruction_callback(
+            [this](uint16_t pc) {
+                if (pc_histogram_) {
+                    pc_histogram_->record(pc);
+                }
+            }
+        );
+    }
 };
 
 } // namespace beebium
