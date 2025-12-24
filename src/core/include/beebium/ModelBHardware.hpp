@@ -2,6 +2,9 @@
 
 #include "AddressableLatch.hpp"
 #include "BankBinding.hpp"
+#include "Clock.hpp"
+#include "ClockBinding.hpp"
+#include "IrqAggregator.hpp"
 #include "MemoryMap.hpp"
 #include "OutputQueue.hpp"
 #include "Saa5050.hpp"
@@ -76,6 +79,18 @@ public:
     Via6522 system_via;
     Via6522 user_via;
 
+    // Peripheral clock type - ticks VIAs on clock edges
+    using PeripheralClockType = Clock<
+        ClockBinding<Via6522>,   // System VIA
+        ClockBinding<Via6522>    // User VIA
+    >;
+
+    // IRQ aggregator type - polls VIAs for IRQ status
+    using IrqAggregatorType = IrqAggregator<
+        IrqBinding<Via6522, 0>,  // System VIA → bit 0
+        IrqBinding<Via6522, 1>   // User VIA → bit 1
+    >;
+
     // Video hardware
     Crtc6845 crtc;
     VideoUla video_ula;
@@ -120,6 +135,8 @@ public:
         : system_via()
         , user_via()
         , memory_map_(make_memory_map())
+        , peripheral_clock_(make_peripheral_clock())
+        , irq_aggregator_(make_irq_aggregator())
     {
         // Connect internal peripheral to system VIA
         system_via.set_peripheral(&system_via_peripheral);
@@ -130,6 +147,8 @@ public:
         : system_via(system_peripheral)
         , user_via(user_peripheral)
         , memory_map_(make_memory_map())
+        , peripheral_clock_(make_peripheral_clock())
+        , irq_aggregator_(make_irq_aggregator())
     {}
 
     // MemoryMappedDevice interface (delegates to memory_map)
@@ -175,26 +194,20 @@ public:
     // Clock peripherals (called from Machine::step)
     // Returns IRQ mask (bit 0 = system VIA, bit 1 = user VIA)
     uint8_t tick_peripherals(uint64_t cycle) {
-        bool phi2_rising = (cycle & 1) != 0;
-
-        uint8_t irq_mask = 0;
-        if (phi2_rising) {
-            if (system_via.update_phi2_leading_edge()) irq_mask |= 0x01;
-            if (user_via.update_phi2_leading_edge()) irq_mask |= 0x02;
-        } else {
-            if (system_via.update_phi2_trailing_edge()) irq_mask |= 0x01;
-            if (user_via.update_phi2_trailing_edge()) irq_mask |= 0x02;
-        }
+        // Tick peripheral clock (dispatches to VIAs based on edge/rate)
+        peripheral_clock_.tick(cycle);
 
         // Clock video hardware (if enabled) at 1MHz or 2MHz based on ULA setting
-        // The CRTC is clocked at 1MHz (every other 2MHz cycle) or 2MHz (fast mode)
-        bool clock_crtc = video_ula.fast_clock() || (cycle & 1) == 0;
+        // CRTC clocked manually since tick_video needs its output
+        crtc.set_fast_clock(video_ula.fast_clock());
+        bool clock_crtc = crtc.clock_rate() == ClockRate::Rate_2MHz || (cycle & 1) == 0;
 
         if (clock_crtc && video_output.has_value()) {
             tick_video();
         }
 
-        return irq_mask;
+        // Aggregate IRQ status (compile-time unrolled)
+        return irq_aggregator_.poll();
     }
 
 private:
@@ -349,6 +362,22 @@ public:
 
 private:
     MemoryMapType memory_map_;
+    PeripheralClockType peripheral_clock_;
+    IrqAggregatorType irq_aggregator_;
+
+    PeripheralClockType make_peripheral_clock() {
+        return make_clock(
+            make_clock_binding(system_via),
+            make_clock_binding(user_via)
+        );
+    }
+
+    IrqAggregatorType make_irq_aggregator() {
+        return beebium::make_irq_aggregator(
+            make_irq_binding<0>(system_via),
+            make_irq_binding<1>(user_via)
+        );
+    }
 
     MemoryMapType make_memory_map() {
         // Order matters: first match wins
