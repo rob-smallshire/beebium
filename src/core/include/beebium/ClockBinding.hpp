@@ -7,6 +7,21 @@ namespace beebium {
 
 // ClockBinding wraps a device reference and provides clock edge dispatch
 // The binding knows the device's edge requirements at compile time
+//
+// PHI2 Clock Model:
+// The BBC Micro runs on a 2MHz master clock. The 6502 CPU uses a two-phase
+// clock (PHI1/PHI2). Peripherals can run at either 2MHz or 1MHz:
+//
+// - 2MHz devices (e.g., CPU): tick every cycle
+// - 1MHz devices (e.g., VIAs): tick every other cycle (on even cycle numbers)
+//
+// Cycle numbering: The cycle counter starts at 0 and increments each 2MHz tick.
+// 1MHz devices tick when (cycle & 1) == 0, which corresponds to:
+//   cycle 0, 2, 4, 6, ... -> 1MHz tick
+//   cycle 1, 3, 5, 7, ... -> no 1MHz tick
+//
+// This models the BBC Micro's 1MHz bus, where slower peripherals (VIA, CRTC
+// at 1MHz) are clocked at half the CPU rate.
 template<typename Device>
     requires ClockSubscriber<Device>
 struct ClockBinding {
