@@ -99,6 +99,11 @@ add_executable(test_addressable_latch test_addressable_latch.cpp)
 target_link_libraries(test_addressable_latch PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_addressable_latch)
 
+# CRTC 6845 tests
+add_executable(test_crtc6845 test_crtc6845.cpp)
+target_link_libraries(test_crtc6845 PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_crtc6845)
+
 # Cursor blink tests
 add_executable(test_cursor test_cursor.cpp)
 target_link_libraries(test_cursor PRIVATE beebium_core Catch2::Catch2WithMain)
