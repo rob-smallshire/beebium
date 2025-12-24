@@ -232,9 +232,12 @@ TEST_CASE("ModelBHardware direct device access", "[memory][devices]") {
 TEST_CASE("ModelBHardware peripheral clocking", "[memory][peripherals]") {
     ModelBHardware hw;
 
-    SECTION("tick_peripherals runs without crash") {
+    SECTION("poll_irq runs without crash") {
+        // Tick VIAs directly and poll IRQ
         for (uint64_t cycle = 0; cycle < 100; ++cycle) {
-            hw.tick_peripherals(cycle);
+            hw.system_via.tick_falling();
+            hw.user_via.tick_falling();
+            hw.poll_irq();
         }
     }
 
@@ -244,9 +247,9 @@ TEST_CASE("ModelBHardware peripheral clocking", "[memory][peripherals]") {
         hw.system_via.write(Via6522::REG_T1LH, 0x00);
         hw.system_via.write(Via6522::REG_T1CH, 0x00);  // Start timer at 0x00FF
 
-        // Run some cycles
-        for (uint64_t cycle = 0; cycle < 10; ++cycle) {
-            hw.tick_peripherals(cycle);
+        // Run some cycles - tick VIA directly
+        for (int cycle = 0; cycle < 10; ++cycle) {
+            hw.system_via.tick_falling();
         }
 
         // Timer should have decremented

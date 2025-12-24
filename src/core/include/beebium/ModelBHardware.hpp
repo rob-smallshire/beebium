@@ -2,6 +2,7 @@
 
 #include "AddressableLatch.hpp"
 #include "BankBinding.hpp"
+#include "IrqAggregator.hpp"
 #include "MemoryMap.hpp"
 #include "OutputQueue.hpp"
 #include "Saa5050.hpp"
@@ -76,6 +77,12 @@ public:
     Via6522 system_via;
     Via6522 user_via;
 
+    // IRQ aggregator type - polls VIAs for IRQ status
+    using IrqAggregatorType = IrqAggregator<
+        IrqBinding<Via6522, 0>,  // System VIA → bit 0
+        IrqBinding<Via6522, 1>   // User VIA → bit 1
+    >;
+
     // Video hardware
     Crtc6845 crtc;
     VideoUla video_ula;
@@ -120,6 +127,7 @@ public:
         : system_via()
         , user_via()
         , memory_map_(make_memory_map())
+        , irq_aggregator_(make_irq_aggregator())
     {
         // Connect internal peripheral to system VIA
         system_via.set_peripheral(&system_via_peripheral);
@@ -130,6 +138,7 @@ public:
         : system_via(system_peripheral)
         , user_via(user_peripheral)
         , memory_map_(make_memory_map())
+        , irq_aggregator_(make_irq_aggregator())
     {}
 
     // MemoryMappedDevice interface (delegates to memory_map)
@@ -172,29 +181,10 @@ public:
         return video_output.has_value();
     }
 
-    // Clock peripherals (called from Machine::step)
+    // Poll IRQ status from VIAs (called from Machine::step after clock tick)
     // Returns IRQ mask (bit 0 = system VIA, bit 1 = user VIA)
-    uint8_t tick_peripherals(uint64_t cycle) {
-        bool phi2_rising = (cycle & 1) != 0;
-
-        uint8_t irq_mask = 0;
-        if (phi2_rising) {
-            if (system_via.update_phi2_leading_edge()) irq_mask |= 0x01;
-            if (user_via.update_phi2_leading_edge()) irq_mask |= 0x02;
-        } else {
-            if (system_via.update_phi2_trailing_edge()) irq_mask |= 0x01;
-            if (user_via.update_phi2_trailing_edge()) irq_mask |= 0x02;
-        }
-
-        // Clock video hardware (if enabled) at 1MHz or 2MHz based on ULA setting
-        // The CRTC is clocked at 1MHz (every other 2MHz cycle) or 2MHz (fast mode)
-        bool clock_crtc = video_ula.fast_clock() || (cycle & 1) == 0;
-
-        if (clock_crtc && video_output.has_value()) {
-            tick_video();
-        }
-
-        return irq_mask;
+    uint8_t poll_irq() {
+        return irq_aggregator_.poll();
     }
 
 private:
@@ -204,11 +194,10 @@ private:
     bool last_display_ = false;
     uint8_t teletext_column_ = 0;
 
-    // Clock video hardware and produce PixelBatch
-    void tick_video() {
-        // Tick CRTC to advance state
-        auto crtc_output = crtc.tick();
-
+public:
+    // Render video output from CRTC state (called from VideoBinding)
+    // CRTC is ticked by VideoBinding before calling this
+    void render_video(const Crtc6845::Output& crtc_output) {
         // Read screen memory byte at CRTC address
         // Address is 14-bit, needs translation to BBC memory map
         uint16_t screen_addr = translate_screen_address(crtc_output.address);
@@ -273,8 +262,7 @@ private:
             last_hsync_ = crtc_output.hsync;
             last_vsync_ = crtc_output.vsync;
 
-            // Update VSYNC state in system VIA peripheral
-            system_via_peripheral.set_vsync(crtc_output.vsync != 0);
+            // VSYNC update is handled by VideoBinding
             return;  // Already pushed, skip common path
         } else {
             // Bitmap modes - use VideoUla
@@ -297,9 +285,7 @@ private:
         // Push to output queue
         video_output->push(batch);
 
-        // Update VSYNC state in system VIA peripheral
-        // The peripheral will pass this to the VIA's CA1 line
-        system_via_peripheral.set_vsync(crtc_output.vsync != 0);
+        // VSYNC update is handled by VideoBinding
     }
 
     // Translate CRTC address to BBC memory address
@@ -349,6 +335,14 @@ public:
 
 private:
     MemoryMapType memory_map_;
+    IrqAggregatorType irq_aggregator_;
+
+    IrqAggregatorType make_irq_aggregator() {
+        return beebium::make_irq_aggregator(
+            make_irq_binding<0>(system_via),
+            make_irq_binding<1>(user_via)
+        );
+    }
 
     MemoryMapType make_memory_map() {
         // Order matters: first match wins

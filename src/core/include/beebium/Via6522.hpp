@@ -2,6 +2,7 @@
 #define BEEBIUM_VIA6522_HPP
 
 #include "Via6522Types.hpp"
+#include "ClockTypes.hpp"
 #include <cstdint>
 
 namespace beebium {
@@ -48,6 +49,11 @@ public:
 //
 class Via6522 {
 public:
+    // Clock subscription: 2MHz, both edges (for timers on trailing, IRQ on leading)
+    // Note: VIA internal timing is 1MHz but we tick on every 2MHz edge
+    static constexpr ClockEdge clock_edges = ClockEdge::Both;
+    static constexpr ClockRate clock_rate = ClockRate::Rate_2MHz;
+
     // Default constructor (no peripheral attached)
     Via6522();
 
@@ -71,15 +77,9 @@ public:
     uint8_t update_phi2_leading_edge();
     uint8_t update_phi2_trailing_edge();
 
-    // Simplified tick interface for ClockableDevice concept
-    // phi2_rising=true calls leading edge, phi2_rising=false calls trailing edge
-    void tick(bool phi2_rising) {
-        if (phi2_rising) {
-            update_phi2_leading_edge();
-        } else {
-            update_phi2_trailing_edge();
-        }
-    }
+    // Clock subscriber interface
+    void tick_rising() { update_phi2_leading_edge(); }
+    void tick_falling() { update_phi2_trailing_edge(); }
 
     // State access for serialization
     const Via6522State& state() const { return state_; }
