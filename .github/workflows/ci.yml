@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  server:
+    name: Build and Test Server
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake grpc protobuf
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBEEBIUM_BUILD_TESTS=ON \
+            -DBEEBIUM_BUILD_SERVICE=ON \
+            -DBEEBIUM_BUILD_SERVER=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure --parallel
+
+  client:
+    name: Build and Test macOS Client
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: clients/macos/Beebium
+        run: xcodegen generate
+
+      - name: Build client
+        working-directory: clients/macos/Beebium
+        run: |
+          xcodebuild build \
+            -scheme Beebium \
+            -destination 'platform=macOS' \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run client tests
+        working-directory: clients/macos/Beebium
+        run: |
+          xcodebuild test \
+            -scheme BeebiumTests \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
