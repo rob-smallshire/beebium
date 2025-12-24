@@ -47,7 +47,7 @@ target_link_libraries(test_irq_aggregator PRIVATE beebium_core Catch2::Catch2Wit
 catch_discover_tests(test_irq_aggregator)
 
 # Tests requiring ROM files
-set(BEEBIUM_ROM_DIR "/Users/rjs/Code/b2/etc/roms" CACHE PATH "Directory containing BBC Micro ROMs")
+set(BEEBIUM_ROM_DIR "${CMAKE_SOURCE_DIR}/roms" CACHE PATH "Directory containing BBC Micro ROMs")
 
 # Boot trace tests (uses ProgramCounterHistogram for instruction profiling)
 add_executable(test_boot_trace test_boot_trace.cpp)
