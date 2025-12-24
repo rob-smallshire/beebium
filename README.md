@@ -12,7 +12,7 @@ Different emulators serve different purposes. Some prioritise nostalgia and game
 
 Whether you're writing 6502 assembly or building modern toolchains that target vintage hardware, Beebium aims to provide the debugging, inspection, and automation capabilities that development workflows demand.
 
-The architecture reflects this goal: a headless emulation core that runs as a server, with frontends connecting via gRPC. This separation enables integration with IDEs, test harnesses, continuous integration pipelines, and custom development tools—not just standalone GUI applications.
+The architecture reflects this goal: a headless emulation core that runs as a server, with frontends connecting via gRPC. This separation enables integration with IDEs, test harnesses, continuous integration pipelines, and custom development tools, not just standalone GUI applications.
 
 This architecture also facilitates native GUIs with first-class host platform integration, rather than the compromises required by cross-platform graphics toolkits. The macOS frontend uses Swift and Metal. A Windows frontend can use WinUI 3 and Direct3D. A Linux frontend can use GTK or Qt. Each platform's code remains clean and idiomatic, unencumbered by the complexity of accommodating other platforms.
 
@@ -21,7 +21,7 @@ This architecture also facilitates native GUIs with first-class host platform in
 - **Cycle-accurate 6502 emulation** - NMOS and CMOS variants supported
 - **Headless core** - Deterministic, UI-free emulation server
 - **Process separation** - Core and frontends communicate via gRPC
-- **Platform-native frontends** - Native UI using Cocoa, Win32, etc. (no SDL/cross-platform libraries)
+- **Platform-native frontends** - Native UI using Cocoa, WinUI, etc. (no SDL/cross-platform libraries)
 - **Pluggable peripherals** - Consistent interface for emulated hardware
 
 ### Current Status
