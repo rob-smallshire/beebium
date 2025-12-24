@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AddressableLatch.hpp"
+#include "KeyboardMatrix.hpp"
 #include "Via6522.hpp"
 #include <cstdint>
 
@@ -24,8 +25,12 @@ namespace beebium {
 //
 class SystemViaPeripheral : public ViaPeripheral {
 public:
+    SystemViaPeripheral(AddressableLatch& latch, KeyboardMatrix& keyboard)
+        : latch_(latch), keyboard_(keyboard) {}
+
+    // Legacy constructor for backward compatibility (uses internal keyboard)
     explicit SystemViaPeripheral(AddressableLatch& latch)
-        : latch_(latch) {}
+        : latch_(latch), keyboard_(internal_keyboard_) {}
 
     uint8_t update_port_a(uint8_t output, uint8_t ddr) override {
         (void)ddr;
@@ -52,10 +57,7 @@ public:
         uint8_t row = (key_number >> 4) & 0x07;
 
         // Check if key is pressed in our matrix
-        bool pressed = false;
-        if (column < 10 && row < 10) {
-            pressed = (key_matrix_[column] & (1 << row)) != 0;
-        }
+        bool pressed = keyboard_.is_key_pressed(row, column);
 
         // Return the key number with bit 7 set if pressed
         if (pressed) {
@@ -108,20 +110,14 @@ public:
         if (latch_.keyboard_enabled()) {
             // Manual scan mode (KB_WRITE=0) - CA2 based on current scan result
             uint8_t column = port_a_output_ & 0x0F;
-            bool key_pressed = false;
-            if (column < 10) {
-                key_pressed = (key_matrix_[column] & 0x3FE) != 0;
-            }
+            bool key_pressed = keyboard_.any_key_in_column(column, true);  // Exclude row 0
             if (!key_pressed) {
                 ca2 = 0;
             }
         } else {
             // Auto-scan mode (KB_WRITE=1) - cycle through columns
             // Check if any key (rows 1-9) pressed in current auto-scan column
-            bool key_pressed = false;
-            if (auto_scan_column_ < 10) {
-                key_pressed = (key_matrix_[auto_scan_column_] & 0x3FE) != 0;
-            }
+            bool key_pressed = keyboard_.any_key_in_column(auto_scan_column_, true);
 
             if (!key_pressed) {
                 ca2 = 0;
@@ -143,46 +139,30 @@ public:
 
     bool vsync() const { return vsync_; }
 
-    // Keyboard input control
-    // Row: 0-9, Column: 0-9 (BBC keyboard matrix)
+    // Keyboard input control - delegates to KeyboardMatrix
     void key_down(uint8_t row, uint8_t column) {
-        if (row < 10 && column < 10) {
-            key_matrix_[column] |= (1 << row);
-        }
+        keyboard_.key_down(row, column);
     }
 
     void key_up(uint8_t row, uint8_t column) {
-        if (row < 10 && column < 10) {
-            key_matrix_[column] &= ~(1 << row);
-        }
+        keyboard_.key_up(row, column);
     }
 
-    // Check if a specific key is pressed
     bool is_key_pressed(uint8_t row, uint8_t column) const {
-        if (row < 10 && column < 10) {
-            return (key_matrix_[column] & (1 << row)) != 0;
-        }
-        return false;
+        return keyboard_.is_key_pressed(row, column);
     }
 
-    // Get the pressed state of all keys in a row (bit per column)
     uint16_t get_row_state(uint8_t row) const {
-        if (row >= 10) return 0;
-        uint16_t state = 0;
-        for (int col = 0; col < 10; ++col) {
-            if (key_matrix_[col] & (1 << row)) {
-                state |= (1 << col);
-            }
-        }
-        return state;
+        return keyboard_.get_row_state(row);
     }
 
-    // Clear all pressed keys
     void clear_all_keys() {
-        for (auto& col : key_matrix_) {
-            col = 0;
-        }
+        keyboard_.clear();
     }
+
+    // Access to keyboard matrix (for direct manipulation if needed)
+    KeyboardMatrix& keyboard() { return keyboard_; }
+    const KeyboardMatrix& keyboard() const { return keyboard_; }
 
     // Accessor for testing/debugging
     AddressableLatch& latch() { return latch_; }
@@ -191,13 +171,12 @@ public:
 
 private:
     AddressableLatch& latch_;
+    KeyboardMatrix& keyboard_;
+    KeyboardMatrix internal_keyboard_;  // Used when no external keyboard provided
+
     uint8_t port_a_output_ = 0;     // Last Port A output (key number for manual scan)
     uint8_t auto_scan_column_ = 0;  // Hardware auto-scan column counter (0-15)
     bool vsync_ = false;
-
-    // Keyboard matrix state: 10 columns, 10 rows
-    // Each element is a bitmask of rows pressed in that column
-    uint16_t key_matrix_[10] = {};
 };
 
 } // namespace beebium
