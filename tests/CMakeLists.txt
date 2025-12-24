@@ -104,6 +104,11 @@ add_executable(test_crtc6845 test_crtc6845.cpp)
 target_link_libraries(test_crtc6845 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_crtc6845)
 
+# Video ULA tests
+add_executable(test_video_ula test_video_ula.cpp)
+target_link_libraries(test_video_ula PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_video_ula)
+
 # Cursor blink tests
 add_executable(test_cursor test_cursor.cpp)
 target_link_libraries(test_cursor PRIVATE beebium_core Catch2::Catch2WithMain)
