@@ -3,11 +3,12 @@ import SwiftUI
 /// Main content view displaying the emulator output
 struct ContentView: View {
     @StateObject private var videoClient = VideoClient()
+    @StateObject private var keyboardClient = KeyboardClient()
 
     var body: some View {
         ZStack {
             // Emulator display (receives frames directly via videoClient.renderer)
-            EmulatorView(videoClient: videoClient)
+            EmulatorView(videoClient: videoClient, keyboardClient: keyboardClient)
 
             // Status overlay when not connected
             if videoClient.connectionState != .connected {
@@ -25,7 +26,18 @@ struct ContentView: View {
             videoClient.connect()
         }
         .onDisappear {
+            keyboardClient.disconnect()
             videoClient.disconnect()
+        }
+        .onChange(of: videoClient.connectionState) { newState in
+            // Connect keyboard client when video client connects
+            if case .connected = newState, let channel = videoClient.channel {
+                keyboardClient.connect(channel: channel)
+            } else if case .disconnected = newState {
+                keyboardClient.disconnect()
+            } else if case .error = newState {
+                keyboardClient.disconnect()
+            }
         }
     }
 

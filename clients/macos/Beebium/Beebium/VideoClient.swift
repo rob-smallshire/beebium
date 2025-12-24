@@ -28,7 +28,7 @@ final class VideoClient: ObservableObject {
     @Published private(set) var frameCount: UInt64 = 0
 
     private var group: EventLoopGroup?
-    private var channel: GRPCChannel?
+    private var _channel: GRPCChannel?
     private var streamTask: Task<Void, Never>?
 
     private let host: String
@@ -36,6 +36,9 @@ final class VideoClient: ObservableObject {
 
     /// Metal renderer for direct frame updates (bypasses SwiftUI update batching)
     weak var renderer: MetalRenderer?
+
+    /// Expose the gRPC channel for other clients (e.g., KeyboardClient) to share
+    var channel: GRPCChannel? { _channel }
 
     init(host: String = "127.0.0.1", port: Int = 50051) {
         self.host = host
@@ -58,7 +61,7 @@ final class VideoClient: ObservableObject {
         streamTask?.cancel()
         streamTask = nil
 
-        let channelToClose = channel
+        let channelToClose = _channel
         let groupToShutdown = group
 
         // Close channel and shutdown event loop group on background thread
@@ -67,7 +70,7 @@ final class VideoClient: ObservableObject {
             try? groupToShutdown?.syncShutdownGracefully()
         }
 
-        channel = nil
+        _channel = nil
         group = nil
         connectionState = .disconnected
     }
@@ -84,7 +87,7 @@ final class VideoClient: ObservableObject {
 
             await MainActor.run {
                 self.group = eventLoopGroup
-                self.channel = grpcChannel
+                self._channel = grpcChannel
             }
 
             // Get video config first

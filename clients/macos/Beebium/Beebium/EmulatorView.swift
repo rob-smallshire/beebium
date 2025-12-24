@@ -1,13 +1,17 @@
 import SwiftUI
 import MetalKit
 
-/// SwiftUI wrapper for MTKView that displays emulator video frames
+/// SwiftUI wrapper for KeyboardMTKView that displays emulator video frames
+/// and handles keyboard input
 struct EmulatorView: NSViewRepresentable {
     /// Video client to wire up for direct frame updates
     @ObservedObject var videoClient: VideoClient
 
-    func makeNSView(context: Context) -> MTKView {
-        let mtkView = MTKView()
+    /// Keyboard client for sending key events to server
+    @ObservedObject var keyboardClient: KeyboardClient
+
+    func makeNSView(context: Context) -> KeyboardMTKView {
+        let mtkView = KeyboardMTKView()
 
         // Get the default Metal device
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -27,6 +31,9 @@ struct EmulatorView: NSViewRepresentable {
             videoClient.renderer = renderer
         }
 
+        // Wire up keyboard client for key events
+        mtkView.keyboardClient = keyboardClient
+
         // Enable display link for smooth updates
         mtkView.isPaused = false
         mtkView.enableSetNeedsDisplay = false
@@ -35,9 +42,9 @@ struct EmulatorView: NSViewRepresentable {
         return mtkView
     }
 
-    func updateNSView(_ nsView: MTKView, context: Context) {
+    func updateNSView(_ nsView: KeyboardMTKView, context: Context) {
         // Frame updates now happen directly via VideoClient -> MetalRenderer
-        // This method is kept for potential future use (e.g., resize handling)
+        // Keyboard client reference is stable, no update needed
     }
 
     func makeCoordinator() -> Coordinator {
@@ -52,7 +59,7 @@ struct EmulatorView: NSViewRepresentable {
 #if DEBUG
 struct EmulatorView_Previews: PreviewProvider {
     static var previews: some View {
-        EmulatorView(videoClient: VideoClient())
+        EmulatorView(videoClient: VideoClient(), keyboardClient: KeyboardClient())
             .frame(width: 736, height: 576)
     }
 }
