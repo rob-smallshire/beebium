@@ -1,0 +1,29 @@
+#!/bin/bash
+#
+# Install git hooks for the Beebium repository.
+#
+# Run this script after cloning to set up the pre-commit hook.
+
+set -e
+
+# Find repository root
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$repo_root" ]; then
+    echo "ERROR: Not in a git repository"
+    exit 1
+fi
+
+scripts_dir="$repo_root/scripts"
+hooks_dir="$repo_root/.git/hooks"
+
+# Install pre-commit hook
+if [ -f "$scripts_dir/pre-commit" ]; then
+    cp "$scripts_dir/pre-commit" "$hooks_dir/pre-commit"
+    chmod +x "$hooks_dir/pre-commit"
+    echo "Installed pre-commit hook"
+else
+    echo "ERROR: pre-commit script not found at $scripts_dir/pre-commit"
+    exit 1
+fi
+
+echo "Git hooks installed successfully"

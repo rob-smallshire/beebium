@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+# Pre-commit hook to verify Beebium copyright notices are present in source files.
+#
+# Checks staged .swift, .h, .c, .hpp, .cpp files for the required copyright notice.
+
+# Get current year for the example notice
+current_year=$(date +%Y)
+
+# Get list of staged files (excluding deleted files)
+staged_files=$(git diff --cached --name-only --diff-filter=d)
+
+# Track files missing copyright
+missing_copyright=()
+
+for file in $staged_files; do
+    # Check file extension
+    case "$file" in
+        *.swift|*.h|*.c|*.hpp|*.cpp)
+            # Skip generated protobuf files
+            if [[ "$file" == *"/Generated/"* ]]; then
+                continue
+            fi
+
+            # Check for Beebium copyright notice
+            if ! grep -q "This file is part of Beebium" "$file" 2>/dev/null; then
+                missing_copyright+=("$file")
+            fi
+            ;;
+    esac
+done
+
+# Report and fail if any files are missing copyright
+if [ ${#missing_copyright[@]} -ne 0 ]; then
+    echo "ERROR: The following files are missing the Beebium copyright notice:"
+    echo ""
+    for file in "${missing_copyright[@]}"; do
+        echo "  $file"
+    done
+    echo ""
+    echo "Please add the following notice at the top of each file:"
+    echo ""
+    echo "  // Copyright © $current_year Robert Smallshire <robert@smallshire.org.uk>"
+    echo "  //"
+    echo "  // This file is part of Beebium."
+    echo "  //"
+    echo "  // Beebium is free software: you can redistribute it and/or modify it under the terms of the"
+    echo "  // GNU General Public License as published by the Free Software Foundation, either version 3 of the"
+    echo "  // License, or (at your option) any later version. Beebium is distributed in the hope that it will"
+    echo "  // be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or"
+    echo "  // FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details."
+    echo "  // You should have received a copy of the GNU General Public License along with Beebium."
+    echo "  // If not, see <https://www.gnu.org/licenses/>."
+    echo ""
+    exit 1
+fi
+
+exit 0
