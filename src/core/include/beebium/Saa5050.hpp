@@ -374,11 +374,11 @@ public:
     }
 
     // State accessors
-    uint8_t foreground() const { return m_fg; }
-    uint8_t background() const { return m_bg; }
-    uint8_t raster() const { return m_raster; }
-    TeletextCharset charset() const { return m_charset; }
-    bool is_flash_enabled() const { return !m_text_visible; }
+    [[nodiscard]] uint8_t foreground() const { return m_fg; }
+    [[nodiscard]] uint8_t background() const { return m_bg; }
+    [[nodiscard]] uint8_t raster() const { return m_raster; }
+    [[nodiscard]] TeletextCharset charset() const { return m_charset; }
+    [[nodiscard]] bool is_flash_enabled() const { return !m_text_visible; }
 
 private:
     // Output entry stores 6 bits of font data plus colors and cursor state
