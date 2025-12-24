@@ -14,7 +14,7 @@ Whether you're writing 6502 assembly or building modern toolchains that target v
 
 The architecture reflects this goal: a headless emulation core that runs as a server, with frontends connecting via gRPC. This separation enables integration with IDEs, test harnesses, continuous integration pipelines, and custom development tools—not just standalone GUI applications.
 
-This architecture also facilitates native GUIs with first-class host platform integration, rather than the compromises required by cross-platform graphics toolkits. The macOS frontend uses Swift and Metal. A Windows frontend can use Win32 and Direct3D. Each platform's code remains clean and idiomatic, unencumbered by the complexity of accommodating other platforms.
+This architecture also facilitates native GUIs with first-class host platform integration, rather than the compromises required by cross-platform graphics toolkits. The macOS frontend uses Swift and Metal. A Windows frontend can use WinUI 3 and Direct3D. Each platform's code remains clean and idiomatic, unencumbered by the complexity of accommodating other platforms.
 
 ### Key Features
 
