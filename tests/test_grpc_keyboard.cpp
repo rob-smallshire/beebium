@@ -48,8 +48,8 @@ public:
     KeyboardTestFixture() {
         // Load ROMs
 #ifdef BEEBIUM_ROM_DIR
-        auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/os12.rom");
-        auto basic = load_rom(std::string(BEEBIUM_ROM_DIR) + "/basic2.rom");
+        auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/OS12.ROM");
+        auto basic = load_rom(std::string(BEEBIUM_ROM_DIR) + "/BASIC2.ROM");
         std::copy(mos.begin(), mos.end(), machine_.state().memory.mos_rom.data());
         std::copy(basic.begin(), basic.end(), machine_.state().memory.basic_rom.data());
 #endif
