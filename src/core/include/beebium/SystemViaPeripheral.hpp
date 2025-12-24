@@ -18,10 +18,9 @@ namespace beebium {
 // - CB1: ADC end of conversion
 // - CB2: Light pen strobe
 //
-// This minimal implementation:
-// - Returns "no keys pressed" for all keyboard scans
-// - Handles addressable latch writes via Port B
-// - Returns joystick fire buttons as unpressed
+// Keyboard scanning modes:
+// 1. Auto-scan (KB_WRITE=1): Hardware cycles through columns, CA2 interrupts on keypress
+// 2. Manual scan (KB_WRITE=0): MOS writes key number to Port A to check specific key
 //
 class SystemViaPeripheral : public ViaPeripheral {
 public:
@@ -45,9 +44,7 @@ public:
         // even though the physical hardware is active-low.
 
         uint8_t key_number = output & 0x7F;
-
-        // Store for debugging
-        last_scanned_key_ = key_number;
+        port_a_output_ = key_number;  // Store for CA2 calculation in manual scan mode
 
         // Extract row and column from key number
         // Standard BBC keyboard scanning: column = bits 0-3, row = bits 4-6
@@ -78,10 +75,6 @@ public:
         bool latch_data = (output & 0x08) != 0;
         latch_.write(latch_addr, latch_data);
 
-        // Store keyboard column for future matrix scanning
-        // (The slow data bus uses Port A value when KB_WRITE is low)
-        keyboard_column_ = output & 0x0F;
-
         // Port B input bits:
         // Bit 4: Joystick 0 fire (active low) - return 1 = not pressed
         // Bit 5: Joystick 1 fire (active low) - return 1 = not pressed
@@ -92,25 +85,55 @@ public:
 
     void update_control_lines(uint8_t& ca1, uint8_t& ca2,
                               uint8_t& cb1, uint8_t& cb2) override {
-        (void)ca1;  // Don't modify CA1 - let VIA keep its default behavior
-        (void)ca2;
         (void)cb1;
         (void)cb2;
 
         // CA1: VSYNC from CRTC (directly connected)
-        // Only modify if video output is actively being used
-        // For now, we let the caller (ModelBHardware::tick_video) handle this
-        // by calling set_vsync() which stores state but doesn't directly affect VIA
-        // until video output is integrated.
-        //
-        // TODO: Once video output is fully integrated, pass vsync_ to ca1 here.
+        // Pass through the VSYNC state we've stored
+        ca1 = vsync_ ? 0 : 1;  // Active low
 
-        // CA2: Directly connected to keyboard matrix for interrupt generation
-        // When a key in the currently selected column is pressed, CA2 goes low
-        // For minimal boot: no keys pressed, so CA2 stays high (no change)
+        // CA2: Keyboard matrix interrupt
+        // The MOS configures CA2 for POSITIVE edge detection (PCR bits 1-3 = 0b010).
+        // This means the interrupt fires on a LOW→HIGH transition.
+        //
+        // BBC Keyboard scanning has two modes:
+        // 1. Auto-scan (KB_WRITE=1): Hardware cycles through columns automatically
+        // 2. Manual scan (KB_WRITE=0): CPU writes key number to Port A to check
+        //
+        // In auto-scan mode (matching B2 emulator):
+        // - Hardware cycles through columns 0-15
+        // - CA2 = 0 when NO key pressed in current column
+        // - CA2 = 1 when a key IS pressed in current column (triggers interrupt)
+        //
+        if (latch_.keyboard_enabled()) {
+            // Manual scan mode (KB_WRITE=0) - CA2 based on current scan result
+            uint8_t column = port_a_output_ & 0x0F;
+            bool key_pressed = false;
+            if (column < 10) {
+                key_pressed = (key_matrix_[column] & 0x3FE) != 0;
+            }
+            if (!key_pressed) {
+                ca2 = 0;
+            }
+        } else {
+            // Auto-scan mode (KB_WRITE=1) - cycle through columns
+            // Check if any key (rows 1-9) pressed in current auto-scan column
+            bool key_pressed = false;
+            if (auto_scan_column_ < 10) {
+                key_pressed = (key_matrix_[auto_scan_column_] & 0x3FE) != 0;
+            }
+
+            if (!key_pressed) {
+                ca2 = 0;
+            }
+            // If key IS pressed, leave ca2 = 1 (VIA's default), triggering positive edge
+
+            // Advance auto-scan column for next update
+            auto_scan_column_ = (auto_scan_column_ + 1) & 0x0F;
+        }
 
         // CB1: ADC end of conversion - not implemented
-        // CB2: Light pen strobe - directly connected to CRTC
+        // CB2: Light pen strobe - not implemented
     }
 
     // Set VSYNC state (called by video hardware)
@@ -164,13 +187,11 @@ public:
     // Accessor for testing/debugging
     AddressableLatch& latch() { return latch_; }
     const AddressableLatch& latch() const { return latch_; }
-    uint8_t keyboard_column() const { return keyboard_column_; }
-    uint8_t last_scanned_key() const { return last_scanned_key_; }
 
 private:
     AddressableLatch& latch_;
-    uint8_t keyboard_column_ = 0;
-    uint8_t last_scanned_key_ = 0;
+    uint8_t port_a_output_ = 0;     // Last Port A output (key number for manual scan)
+    uint8_t auto_scan_column_ = 0;  // Hardware auto-scan column counter (0-15)
     bool vsync_ = false;
 
     // Keyboard matrix state: 10 columns, 10 rows

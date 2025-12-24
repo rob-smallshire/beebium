@@ -304,6 +304,10 @@ uint8_t Via6522::update_phi2_leading_edge() {
 }
 
 uint8_t Via6522::update_phi2_trailing_edge() {
+    // Update port pins from peripheral BEFORE edge detection
+    // This allows peripherals to update control lines (e.g., keyboard CA2)
+    update_port_pins();
+
     // CA1/CA2 control line handling
     tick_control_phi2_trailing_edge(
         state_.port_a,
