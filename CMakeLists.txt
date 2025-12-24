@@ -45,6 +45,15 @@ if(BEEBIUM_ENABLE_SANITIZERS)
     endif()
 endif()
 
+# Code coverage (use as guidance, not a target)
+option(BEEBIUM_ENABLE_COVERAGE "Enable code coverage reporting" OFF)
+if(BEEBIUM_ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
+        add_link_options(--coverage)
+    endif()
+endif()
+
 # Testing
 option(BEEBIUM_BUILD_TESTS "Build tests" ON)
 if(BEEBIUM_BUILD_TESTS)
