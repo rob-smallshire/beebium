@@ -4,11 +4,15 @@
 
 # Beebium
 
-A BBC Micro emulator with a modern multi-process architecture.
+A BBC Micro emulator built for developers.
 
 ## Overview
 
-Beebium is a BBC Micro emulator designed with clean separation between the emulation core and user interface. Inspired by Chromium's multi-process architecture, the emulator core runs as a headless server while frontends connect via gRPC for video, audio, and input.
+Different emulators serve different purposes. Some prioritise nostalgia and game compatibility. Others focus on accuracy or preservation. **Beebium's primary goal is to serve as a foundation for tools that help developers create new software for the BBC Micro and its coprocessors.**
+
+Whether you're writing 6502 assembly, developing for the Z80 or ARM coprocessors via the Tube interface, or building modern toolchains that target vintage hardware, Beebium aims to provide the debugging, inspection, and automation capabilities that development workflows demand.
+
+The architecture reflects this goal: a headless emulation core that runs as a server, with frontends connecting via gRPC. This separation enables integration with IDEs, test harnesses, continuous integration pipelines, and custom development tools—not just standalone GUI applications.
 
 ### Key Features
 
