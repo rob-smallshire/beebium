@@ -109,8 +109,12 @@ struct Via6522State {
     uint8_t sr = 0;      // Shift register
 
     // Timer 1
-    uint8_t t1ll = 250;       // T1 latch low (default: 51962 = ~52ms at 1MHz)
-    uint8_t t1lh = 202;       // T1 latch high
+    // Default latch values: 51962 cycles = ~52ms at 1MHz (~19.2Hz)
+    // These are arbitrary power-on defaults - the MOS will immediately
+    // reprogram Timer 1 during initialization. The values are chosen
+    // to be non-zero to avoid immediate timeout before MOS sets them.
+    uint8_t t1ll = 250;       // T1 latch low  (0xFA)
+    uint8_t t1lh = 202;       // T1 latch high (0xCA) -> 0xCAFA = 51962
     uint16_t t1  = 0;         // T1 counter
     bool t1_reload  = false;  // T1 needs reload
     bool t1_pending = false;  // T1 is active and can generate IRQ
