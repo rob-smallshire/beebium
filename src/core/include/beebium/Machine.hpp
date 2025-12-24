@@ -19,6 +19,11 @@
 
 namespace beebium {
 
+// IRQ device mask for M6502_SetDeviceIRQ
+// The 6502 library supports multiple IRQ sources; we use mask 0x03 for VIA IRQs
+// Bit 0: System VIA IRQ, Bit 1: User VIA IRQ
+constexpr uint8_t kViaIrqDeviceMask = 0x03;
+
 // Watchpoint callback: addr, value, is_write, cycle
 using WatchCallback = std::function<void(uint16_t addr, uint8_t value, bool is_write, uint64_t cycle)>;
 
@@ -121,7 +126,7 @@ public:
 
         // IRQ handling - poll aggregator and set CPU IRQ line
         uint8_t irq_mask = state_.memory.poll_irq();
-        M6502_SetDeviceIRQ(&state_.cpu, 0x03, irq_mask ? 1 : 0);
+        M6502_SetDeviceIRQ(&state_.cpu, kViaIrqDeviceMask, irq_mask ? 1 : 0);
 
         ++state_.cycle_count;
     }
