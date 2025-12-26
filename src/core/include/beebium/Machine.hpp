@@ -22,10 +22,13 @@
 #include "VideoBinding.hpp"
 
 #include <6502/6502.h>
+#include <atomic>
 #include <cassert>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <type_traits>
 #include <vector>
 
@@ -129,6 +132,7 @@ public:
         state_.memory.reset();
         video_binding_.reset();
         state_.cycle_count = 0;
+        ++sequence_;
     }
 
     // Execute one CPU cycle
@@ -141,6 +145,7 @@ public:
         M6502_SetDeviceIRQ(&state_.cpu, kViaIrqDeviceMask, irq_mask ? 1 : 0);
 
         ++state_.cycle_count;
+        ++sequence_;
     }
 
     // Execute for the given number of cycles
@@ -176,6 +181,34 @@ public:
     // Cycle counter
     uint64_t cycle_count() const { return state_.cycle_count; }
 
+    // Sequence counter (increments on any mutation, for change detection)
+    uint64_t sequence() const { return sequence_.load(); }
+
+    // Debug pause/resume for debugger integration
+    bool is_paused() const { return paused_.load(); }
+
+    void pause() {
+        paused_.store(true);
+        ++sequence_;
+    }
+
+    void resume() {
+        {
+            std::lock_guard<std::mutex> lock(debug_mutex_);
+            paused_.store(false);
+        }
+        debug_cv_.notify_all();
+        ++sequence_;
+    }
+
+    // Block until not paused - call from emulation loop
+    void wait_if_paused() {
+        if (paused_.load()) {
+            std::unique_lock<std::mutex> lock(debug_mutex_);
+            debug_cv_.wait(lock, [this] { return !paused_.load(); });
+        }
+    }
+
     // CPU register accessors (debugger convenience)
     uint8_t a() const { return state_.cpu.a; }
     uint8_t x() const { return state_.cpu.x; }
@@ -184,18 +217,18 @@ public:
     uint16_t pc() const { return state_.cpu.pc.w; }
     uint8_t p() const { return state_.cpu.p.value; }
 
-    // CPU register setters (for debugger)
-    void set_a(uint8_t value) { state_.cpu.a = value; }
-    void set_x(uint8_t value) { state_.cpu.x = value; }
-    void set_y(uint8_t value) { state_.cpu.y = value; }
-    void set_sp(uint8_t value) { state_.cpu.s.b.l = value; }
-    void set_pc(uint16_t value) { state_.cpu.pc.w = value; }
-    void set_p(uint8_t value) { state_.cpu.p.value = value; }
+    // CPU register setters (for debugger) - each increments sequence_
+    void set_a(uint8_t value) { state_.cpu.a = value; ++sequence_; }
+    void set_x(uint8_t value) { state_.cpu.x = value; ++sequence_; }
+    void set_y(uint8_t value) { state_.cpu.y = value; ++sequence_; }
+    void set_sp(uint8_t value) { state_.cpu.s.b.l = value; ++sequence_; }
+    void set_pc(uint16_t value) { state_.cpu.pc.w = value; ++sequence_; }
+    void set_p(uint8_t value) { state_.cpu.p.value = value; ++sequence_; }
 
     // Direct memory access (convenience)
     // Note: read() is non-const because some devices have read side effects (e.g., VIA interrupt flags)
     uint8_t read(uint16_t addr) { return state_.memory.read(addr); }
-    void write(uint16_t addr, uint8_t value) { state_.memory.write(addr, value); }
+    void write(uint16_t addr, uint8_t value) { state_.memory.write(addr, value); ++sequence_; }
 
     // Side-effect-free read for debugger inspection
     uint8_t peek(uint16_t addr) const { return state_.memory.peek(addr); }
@@ -247,6 +280,12 @@ private:
     std::vector<Watchpoint> watchpoints_;
     InstructionCallback on_instruction_;
     ProgramCounterHistogram* pc_histogram_ = nullptr;
+
+    // Debug pause/resume state (for debugger attach)
+    mutable std::mutex debug_mutex_;
+    std::condition_variable debug_cv_;
+    std::atomic<bool> paused_{false};
+    std::atomic<uint64_t> sequence_{0};  // Increments on any mutation
 
     SystemClockType make_system_clock() {
         return make_clock(
