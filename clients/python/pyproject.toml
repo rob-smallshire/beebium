@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "beebium"
+version = "0.1.0"
+description = "Python client for the Beebium BBC Micro emulator"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+authors = [
+    { name = "Robert Smallshire", email = "robert@smallshire.org.uk" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Emulators",
+]
+dependencies = [
+    "grpcio>=1.60.0",
+    "protobuf>=4.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.60.0",
+    "pytest>=7.0.0",
+    "pytest-timeout>=2.0.0",
+]
+imaging = [
+    "Pillow>=10.0.0",
+]
+
+[project.entry-points.pytest11]
+beebium = "beebium.pytest_plugin"
+
+[project.urls]
+Homepage = "https://github.com/rob-smallshire/beebium"
+Repository = "https://github.com/rob-smallshire/beebium"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/beebium"]
