@@ -40,6 +40,7 @@ beebium-server (C++)
     +-- gRPC + shared memory
     |
     +-- macOS Frontend (Swift/Metal)
+    +-- Python Client (pytest integration)
     +-- Debugger (planned)
 ```
 
@@ -57,6 +58,11 @@ The core maintains double-buffered framebuffers and publishes frames via shared 
 - Xcode 15+
 - Swift 5.9+
 - grpc-swift package
+
+### Python Client
+
+- Python 3.12+
+- grpcio, protobuf
 
 ## Building
 
@@ -83,6 +89,12 @@ xcodegen generate  # If using XcodeGen
 open Beebium.xcodeproj
 ```
 
+### Python Client
+
+```bash
+pip install -e clients/python
+```
+
 ## Usage
 
 1. Start the emulator server:
@@ -91,6 +103,19 @@ open Beebium.xcodeproj
    ```
 
 2. Launch the macOS frontend and connect to `localhost:50051`
+
+### Python Client
+
+The Python client (`clients/python`) enables programmatic control of the emulator for testing and automation. Useful for integration testing BBC Micro software in CI pipelines.
+
+```python
+from beebium import Beebium
+
+with Beebium.connect() as bbc:
+    bbc.debugger.stop()
+    bbc.keyboard.type("PRINT 2+2\r")
+    print(bbc.memory.peek[0x7C00:0x7C20])  # Read screen memory
+```
 
 ## Project Structure
 
@@ -102,7 +127,8 @@ beebium/
 │   ├── service/        # gRPC service implementations
 │   └── server/         # Standalone server executable
 ├── clients/
-│   └── macos/          # Native macOS frontend (Swift)
+│   ├── macos/          # Native macOS frontend (Swift)
+│   └── python/         # Python client library
 ├── tests/              # Catch2 test suite
 ├── docs/               # Documentation
 └── scripts/            # Development scripts
