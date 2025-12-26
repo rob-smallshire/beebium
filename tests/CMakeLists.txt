@@ -153,4 +153,15 @@ if(BEEBIUM_BUILD_SERVICE)
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     )
     catch_discover_tests(test_grpc_keyboard)
+
+    # Debugger service tests
+    add_executable(test_grpc_debugger test_grpc_debugger.cpp)
+    target_link_libraries(test_grpc_debugger PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    target_compile_definitions(test_grpc_debugger PRIVATE
+        BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    )
+    catch_discover_tests(test_grpc_debugger)
 endif()
