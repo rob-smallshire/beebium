@@ -4,6 +4,7 @@
 set(PROTO_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/video.proto
     ${CMAKE_CURRENT_SOURCE_DIR}/proto/keyboard.proto
+    ${CMAKE_CURRENT_SOURCE_DIR}/proto/debugger.proto
 )
 
 # Output directories for generated code

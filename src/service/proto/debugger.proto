@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package beebium;
+
+// Generic debugger service (CPU-agnostic, stateless)
+service DebuggerControl {
+    // Execution control
+    rpc GetState(Empty) returns (MachineState);
+    rpc Run(Empty) returns (RunResponse);
+    rpc Stop(Empty) returns (StopResponse);
+    rpc Reset(Empty) returns (ResetResponse);
+    rpc StepInstruction(StepRequest) returns (StepResponse);
+    rpc StepCycle(StepRequest) returns (StepResponse);
+
+    // Memory access
+    rpc ReadMemory(ReadMemoryRequest) returns (ReadMemoryResponse);
+    rpc WriteMemory(WriteMemoryRequest) returns (WriteMemoryResponse);
+    rpc PeekMemory(PeekMemoryRequest) returns (PeekMemoryResponse);
+
+    // Breakpoints (shared list)
+    rpc AddBreakpoint(AddBreakpointRequest) returns (AddBreakpointResponse);
+    rpc RemoveBreakpoint(RemoveBreakpointRequest) returns (RemoveBreakpointResponse);
+    rpc ListBreakpoints(Empty) returns (ListBreakpointsResponse);
+    rpc ClearBreakpoints(Empty) returns (ClearBreakpointsResponse);
+}
+
+// 6502-specific debugger service
+service Debugger6502 {
+    rpc ReadRegisters(Empty) returns (Registers6502);
+    rpc WriteRegisters(WriteRegisters6502Request) returns (WriteRegistersResponse);
+}
+
+message Empty {}
+
+message MachineState {
+    bool is_running = 1;
+    uint64 cycle_count = 2;
+    string halt_reason = 3;
+    uint64 sequence = 4;
+}
+
+message RunResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message StopResponse {
+    bool success = 1;
+    MachineState state = 2;
+}
+
+message ResetResponse {
+    bool success = 1;
+}
+
+message StepRequest {
+    uint32 count = 1;
+}
+
+message StepResponse {
+    bool success = 1;
+    string error = 2;
+    uint32 instructions_executed = 3;
+    uint64 cycles_executed = 4;
+    MachineState state = 5;
+}
+
+message ReadMemoryRequest {
+    uint32 address = 1;
+    uint32 length = 2;
+}
+
+message ReadMemoryResponse {
+    bytes data = 1;
+}
+
+message PeekMemoryRequest {
+    uint32 address = 1;
+    uint32 length = 2;
+}
+
+message PeekMemoryResponse {
+    bytes data = 1;
+}
+
+message WriteMemoryRequest {
+    uint32 address = 1;
+    bytes data = 2;
+}
+
+message WriteMemoryResponse {
+    bool success = 1;
+}
+
+message AddBreakpointRequest {
+    uint32 address = 1;
+}
+
+message AddBreakpointResponse {
+    bool success = 1;
+    uint32 id = 2;
+}
+
+message RemoveBreakpointRequest {
+    uint32 id = 1;
+}
+
+message RemoveBreakpointResponse {
+    bool success = 1;
+}
+
+message ListBreakpointsResponse {
+    repeated Breakpoint breakpoints = 1;
+}
+
+message Breakpoint {
+    uint32 id = 1;
+    uint32 address = 2;
+}
+
+message ClearBreakpointsResponse {
+    uint32 count_removed = 1;
+}
+
+message Registers6502 {
+    uint32 a = 1;
+    uint32 x = 2;
+    uint32 y = 3;
+    uint32 sp = 4;
+    uint32 pc = 5;
+    uint32 p = 6;
+}
+
+message WriteRegisters6502Request {
+    optional uint32 a = 1;
+    optional uint32 x = 2;
+    optional uint32 y = 3;
+    optional uint32 sp = 4;
+    optional uint32 pc = 5;
+    optional uint32 p = 6;
+}
+
+message WriteRegistersResponse {
+    bool success = 1;
+}
