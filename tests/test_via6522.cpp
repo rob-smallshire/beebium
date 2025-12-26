@@ -448,3 +448,85 @@ TEST_CASE("Via6522 timer latches", "[via][timer]") {
         REQUIRE(via.state().t1_reload);
     }
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// peek() side-effect-free read tests
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("Via6522 peek does not clear interrupt flags", "[via][peek]") {
+    Via6522 via;
+
+    SECTION("peek T1CL does not clear T1 interrupt flag") {
+        // Set up timer to fire immediately
+        via.write(Via6522::REG_T1LL, 0x01);
+        via.write(Via6522::REG_T1LH, 0x00);
+        via.write(Via6522::REG_T1CH, 0x00);  // Start timer with counter = 0x0001
+
+        // Tick until timer fires
+        for (int i = 0; i < 10; ++i) {
+            via.tick_rising();
+            via.tick_falling();
+        }
+
+        // Enable T1 interrupt
+        via.write(Via6522::REG_IER, 0xC0);  // Set bit 6 (T1) with bit 7 high
+
+        // Verify T1 interrupt is set
+        REQUIRE((via.read(Via6522::REG_IFR) & 0x40) == 0x40);
+
+        // peek should return same value as read but NOT clear the flag
+        uint8_t peek_value = via.peek(Via6522::REG_T1CL);
+        (void)peek_value;  // Suppress unused warning
+
+        // IFR should still have T1 flag set
+        REQUIRE((via.peek(Via6522::REG_IFR) & 0x40) == 0x40);
+
+        // Now read() should clear it
+        (void)via.read(Via6522::REG_T1CL);
+        REQUIRE((via.peek(Via6522::REG_IFR) & 0x40) == 0x00);
+    }
+
+    SECTION("peek T2CL does not clear T2 interrupt flag") {
+        // Set up T2 timer to fire immediately
+        via.write(Via6522::REG_T2CL, 0x01);
+        via.write(Via6522::REG_T2CH, 0x00);  // Start timer with counter = 0x0001
+
+        // Tick until timer fires
+        for (int i = 0; i < 10; ++i) {
+            via.tick_rising();
+            via.tick_falling();
+        }
+
+        // Enable T2 interrupt
+        via.write(Via6522::REG_IER, 0xA0);  // Set bit 5 (T2) with bit 7 high
+
+        // Verify T2 interrupt is set
+        REQUIRE((via.read(Via6522::REG_IFR) & 0x20) == 0x20);
+
+        // peek should NOT clear the flag
+        uint8_t peek_value = via.peek(Via6522::REG_T2CL);
+        (void)peek_value;
+        REQUIRE((via.peek(Via6522::REG_IFR) & 0x20) == 0x20);
+
+        // read() should clear it
+        (void)via.read(Via6522::REG_T2CL);
+        REQUIRE((via.peek(Via6522::REG_IFR) & 0x20) == 0x00);
+    }
+
+    SECTION("peek returns same register values as read") {
+        // Write some values
+        via.write(Via6522::REG_DDRA, 0x55);
+        via.write(Via6522::REG_DDRB, 0xAA);
+        via.write(Via6522::REG_ACR, 0x12);
+        via.write(Via6522::REG_PCR, 0x34);
+
+        // peek should return same values
+        REQUIRE(via.peek(Via6522::REG_DDRA) == 0x55);
+        REQUIRE(via.peek(Via6522::REG_DDRB) == 0xAA);
+        REQUIRE(via.peek(Via6522::REG_ACR) == 0x12);
+        REQUIRE(via.peek(Via6522::REG_PCR) == 0x34);
+
+        // IER bit 7 always reads as 1
+        REQUIRE((via.peek(Via6522::REG_IER) & 0x80) == 0x80);
+    }
+}

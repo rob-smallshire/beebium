@@ -162,6 +162,20 @@ public:
         memory_map_.write(addr, value);
     }
 
+    // Side-effect-free read for debugger inspection.
+    // Uses peek() for VIAs to avoid clearing interrupt flags.
+    uint8_t peek(uint16_t addr) const {
+        // VIA regions need special handling to avoid side effects
+        if (addr >= 0xFE40 && addr <= 0xFE5F) {
+            return system_via.peek(addr & 0x0F);
+        }
+        if (addr >= 0xFE60 && addr <= 0xFE7F) {
+            return user_via.peek(addr & 0x0F);
+        }
+        // All other regions have no read side effects
+        return memory_map_.read(addr);
+    }
+
     // Reset all devices
     void reset() {
         main_ram.clear();

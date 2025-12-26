@@ -181,6 +181,9 @@ public:
     uint8_t read(uint16_t addr) { return state_.memory.read(addr); }
     void write(uint16_t addr, uint8_t value) { state_.memory.write(addr, value); }
 
+    // Side-effect-free read for debugger inspection
+    uint8_t peek(uint16_t addr) const { return state_.memory.peek(addr); }
+
     // Watchpoint management
     void add_watchpoint(uint32_t addr, uint32_t length, WatchType type, WatchCallback callback) {
         watchpoints_.emplace_back(addr, addr + length, type, std::move(callback));

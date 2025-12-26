@@ -478,4 +478,81 @@ void Via6522::update_port_pins() {
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// Side-effect-free register reads (for debugger)
+//////////////////////////////////////////////////////////////////////////////
+
+uint8_t Via6522::peek(uint16_t offset) const {
+    switch (offset & 0x0F) {
+    case REG_ORB: {  // IRB - Input Register B (no IRQ flag clearing)
+        uint8_t value = state_.port_b.or_ & state_.port_b.ddr;
+        if (state_.acr.bits.pb_latching) {
+            value |= state_.port_b.p_latch & ~state_.port_b.ddr;
+        } else {
+            value |= state_.port_b.p & ~state_.port_b.ddr;
+        }
+        if (state_.acr.bits.t1_output_pb7) {
+            value &= 0x7F;
+            value |= state_.t1_pb7;
+        }
+        return value;
+    }
+
+    case REG_ORA:    // IRA with handshake - same as no-handshake for peek
+    case REG_ORA_NH: // IRA without handshake
+        if (state_.acr.bits.pa_latching) {
+            return state_.port_a.p_latch;
+        } else {
+            return state_.port_a.p;
+        }
+
+    case REG_DDRB:
+        return state_.port_b.ddr;
+
+    case REG_DDRA:
+        return state_.port_a.ddr;
+
+    case REG_T1CL:  // Timer 1 Counter Low (no IRQ flag clearing)
+        return static_cast<uint8_t>(state_.t1);
+
+    case REG_T1CH:  // Timer 1 Counter High
+        return static_cast<uint8_t>(state_.t1 >> 8);
+
+    case REG_T1LL:  // Timer 1 Latch Low
+        return state_.t1ll;
+
+    case REG_T1LH:  // Timer 1 Latch High
+        return state_.t1lh;
+
+    case REG_T2CL:  // Timer 2 Counter Low (no IRQ flag clearing)
+        return static_cast<uint8_t>(state_.t2);
+
+    case REG_T2CH:  // Timer 2 Counter High
+        return static_cast<uint8_t>(state_.t2 >> 8);
+
+    case REG_SR:  // Shift Register
+        return state_.sr;
+
+    case REG_ACR:  // Auxiliary Control Register
+        return state_.acr.value;
+
+    case REG_PCR:  // Peripheral Control Register
+        return state_.pcr.value;
+
+    case REG_IFR: {  // Interrupt Flag Register
+        uint8_t value = state_.ifr.value & 0x7F;
+        if (state_.ier.value & state_.ifr.value & 0x7F) {
+            value |= 0x80;
+        }
+        return value;
+    }
+
+    case REG_IER:  // Interrupt Enable Register
+        return state_.ier.value | 0x80;
+
+    default:
+        return 0xFF;
+    }
+}
+
 } // namespace beebium

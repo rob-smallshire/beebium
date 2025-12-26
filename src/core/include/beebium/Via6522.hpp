@@ -81,6 +81,11 @@ public:
     uint8_t read(uint16_t offset);
     void write(uint16_t offset, uint8_t value);
 
+    // Side-effect-free read for debugger inspection.
+    // Returns the same value as read() but doesn't clear interrupt flags
+    // or trigger handshake signals.
+    uint8_t peek(uint16_t offset) const;
+
     // Two-phase 1MHz clock updates.
     // Call these on alternate 2MHz cycles:
     //   Even cycles: update_phi2_trailing_edge()
