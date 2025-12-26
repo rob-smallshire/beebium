@@ -65,6 +65,8 @@ public:
     void clear_watchpoint_callback() { watchpoint_callback_ = nullptr; }
     void clear_instruction_callback() { instruction_callback_ = nullptr; }
 
+    const CpuInstructionCallback& instruction_callback() const { return instruction_callback_; }
+
 private:
     CpuWatchpointCallback watchpoint_callback_;
     CpuInstructionCallback instruction_callback_;

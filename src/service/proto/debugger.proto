@@ -5,7 +5,7 @@ package beebium;
 // Generic debugger service (CPU-agnostic, stateless)
 service DebuggerControl {
     // Execution control
-    rpc GetState(Empty) returns (MachineState);
+    rpc GetState(Empty) returns (ExecutionState);
     rpc Run(Empty) returns (RunResponse);
     rpc Stop(Empty) returns (StopResponse);
     rpc Reset(Empty) returns (ResetResponse);
@@ -32,7 +32,7 @@ service Debugger6502 {
 
 message Empty {}
 
-message MachineState {
+message ExecutionState {
     bool is_running = 1;
     uint64 cycle_count = 2;
     string halt_reason = 3;
@@ -46,7 +46,7 @@ message RunResponse {
 
 message StopResponse {
     bool success = 1;
-    MachineState state = 2;
+    ExecutionState state = 2;
 }
 
 message ResetResponse {
@@ -62,7 +62,7 @@ message StepResponse {
     string error = 2;
     uint32 instructions_executed = 3;
     uint64 cycles_executed = 4;
-    MachineState state = 5;
+    ExecutionState state = 5;
 }
 
 message ReadMemoryRequest {

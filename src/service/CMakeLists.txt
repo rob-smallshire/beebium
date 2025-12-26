@@ -47,6 +47,7 @@ set(SERVICE_SOURCES
     src/Server.cpp
     src/VideoService.cpp
     src/KeyboardService.cpp
+    src/DebuggerService.cpp
 )
 
 # Create the library
