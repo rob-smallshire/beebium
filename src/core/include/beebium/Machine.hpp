@@ -176,6 +176,22 @@ public:
     // Cycle counter
     uint64_t cycle_count() const { return state_.cycle_count; }
 
+    // CPU register accessors (debugger convenience)
+    uint8_t a() const { return state_.cpu.a; }
+    uint8_t x() const { return state_.cpu.x; }
+    uint8_t y() const { return state_.cpu.y; }
+    uint8_t sp() const { return state_.cpu.s.b.l; }
+    uint16_t pc() const { return state_.cpu.pc.w; }
+    uint8_t p() const { return state_.cpu.p.value; }
+
+    // CPU register setters (for debugger)
+    void set_a(uint8_t value) { state_.cpu.a = value; }
+    void set_x(uint8_t value) { state_.cpu.x = value; }
+    void set_y(uint8_t value) { state_.cpu.y = value; }
+    void set_sp(uint8_t value) { state_.cpu.s.b.l = value; }
+    void set_pc(uint16_t value) { state_.cpu.pc.w = value; }
+    void set_p(uint8_t value) { state_.cpu.p.value = value; }
+
     // Direct memory access (convenience)
     // Note: read() is non-const because some devices have read side effects (e.g., VIA interrupt flags)
     uint8_t read(uint16_t addr) { return state_.memory.read(addr); }
