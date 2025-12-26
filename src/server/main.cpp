@@ -139,6 +139,9 @@ int main(int argc, char* argv[]) {
         // Main emulation loop
         constexpr uint64_t cycles_per_frame = 40000;  // ~50Hz at 2MHz
         while (g_running) {
+            // Block if debugger has paused execution
+            machine.wait_if_paused();
+
             machine.run(cycles_per_frame);
 
             // Process any frame rendering
