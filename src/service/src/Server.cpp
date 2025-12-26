@@ -13,6 +13,7 @@
 #include "beebium/service/Server.hpp"
 #include "beebium/service/VideoService.hpp"
 #include "beebium/service/KeyboardService.hpp"
+#include "beebium/service/DebuggerService.hpp"
 #include "beebium/Machines.hpp"
 #include "beebium/FrameBuffer.hpp"
 #include "beebium/FrameRenderer.hpp"
@@ -34,6 +35,8 @@ struct Server::Impl {
 
     std::unique_ptr<VideoServiceImpl> video_service;
     std::unique_ptr<KeyboardServiceImpl> keyboard_service;
+    std::unique_ptr<DebuggerControlServiceImpl> debugger_control_service;
+    std::unique_ptr<Debugger6502ServiceImpl> debugger_6502_service;
     std::unique_ptr<grpc::Server> grpc_server;
 
     std::atomic<bool> running{false};
@@ -81,6 +84,12 @@ void Server::start() {
     impl_->keyboard_service = std::make_unique<KeyboardServiceImpl>(
         impl_->machine.state().memory.system_via_peripheral);
 
+    impl_->debugger_control_service = std::make_unique<DebuggerControlServiceImpl>(
+        impl_->machine);
+
+    impl_->debugger_6502_service = std::make_unique<Debugger6502ServiceImpl>(
+        impl_->machine);
+
     // Build server address
     std::ostringstream addr_stream;
     addr_stream << impl_->address << ":" << impl_->port;
@@ -91,6 +100,8 @@ void Server::start() {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(impl_->video_service.get());
     builder.RegisterService(impl_->keyboard_service.get());
+    builder.RegisterService(impl_->debugger_control_service.get());
+    builder.RegisterService(impl_->debugger_6502_service.get());
 
     impl_->grpc_server = builder.BuildAndStart();
     impl_->running = true;
@@ -118,6 +129,8 @@ void Server::stop() {
 
     impl_->video_service.reset();
     impl_->keyboard_service.reset();
+    impl_->debugger_control_service.reset();
+    impl_->debugger_6502_service.reset();
 }
 
 bool Server::is_running() const {

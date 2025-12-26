@@ -25,6 +25,8 @@ namespace service {
 
 class VideoServiceImpl;
 class KeyboardServiceImpl;
+class DebuggerControlServiceImpl;
+class Debugger6502ServiceImpl;
 
 /// gRPC server hosting Beebium services
 class Server {
