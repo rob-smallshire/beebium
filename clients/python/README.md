@@ -92,41 +92,64 @@ if regs.zero:
 
 ### Memory Access
 
-Memory access is explicit about side effects:
+Memory access is explicit about side effects and supports both flat address space and named region access.
 
-- `bbc.memory.bus` - side-effecting access (through memory bus like real hardware)
-- `bbc.memory.peek` - side-effect-free access (read-only)
+#### Address Space Access (16-bit flat addressing)
 
 ```python
-# Single byte read/write (through memory bus)
-value = bbc.memory.bus[0x1000]
-bbc.memory.bus[0x2000] = 0x42
+# Side-effecting access (through memory bus like real hardware)
+value = bbc.memory.address.bus[0x1000]
+bbc.memory.address.bus[0x2000] = 0x42
 
 # Range read (returns bytes)
-data = bbc.memory.bus[0x1000:0x1010]
+data = bbc.memory.address.bus[0x1000:0x1010]
 
 # Range write
-bbc.memory.bus[0x2000:0x2010] = bytes([0x00] * 16)
+bbc.memory.address.bus[0x2000:0x2010] = bytes([0x00] * 16)
 
 # Side-effect-free peek (for I/O addresses)
-value = bbc.memory.peek[0xFE4D]
-data = bbc.memory.peek[0xFE40:0xFE50]
+value = bbc.memory.address.peek[0xFE4D]
+data = bbc.memory.address.peek[0xFE40:0xFE50]
 
 # Sequential read/write
-data = bbc.memory.bus.read(0x1000, 16)
-bbc.memory.bus.write(0x2000, b"HELLO")
+data = bbc.memory.address.bus.read(0x1000, 16)
+bbc.memory.address.bus.write(0x2000, b"HELLO")
 
 # Typed access using struct format strings
-word = bbc.memory.bus.cast("<H")[0x0070]       # Read 16-bit little-endian
-bbc.memory.bus.cast("<H")[0x0070] = 0x1234     # Write 16-bit little-endian
-words = bbc.memory.bus.cast("<H")[0x70:0x78]   # Read 4 words as tuple
+word = bbc.memory.address.bus.cast("<H")[0x0070]       # Read 16-bit little-endian
+bbc.memory.address.bus.cast("<H")[0x0070] = 0x1234     # Write 16-bit little-endian
+words = bbc.memory.address.bus.cast("<H")[0x70:0x78]   # Read 4 words as tuple
 
 # Load/save binary files
-bbc.memory.load(0x1900, "mygame.bin")
-bbc.memory.save(0x1900, 0x1000, "dump.bin")
+bbc.memory.address.bus.load(0x1900, "mygame.bin")
+bbc.memory.address.bus.save(0x1900, 0x1000, "dump.bin")
 
 # Fill memory range
-bbc.memory.fill(0x1000, 0x2000, 0x00)
+bbc.memory.address.bus.fill(0x1000, 0x2000, 0x00)
+```
+
+#### Region-Based Access (named memory regions)
+
+Access memory regions directly, bypassing bank switching:
+
+```python
+# Access main RAM
+main = bbc.memory.region("main_ram")
+value = main.bus[0x1234]
+
+# Access sideways banks (uses absolute addresses at 0x8000)
+bank4 = bbc.memory.region("bank_4")
+data = bank4.peek[0x8000:0x8100]
+
+# Access Model B+ shadow RAM
+shadow = bbc.memory.region("shadow_ram")
+shadow.bus[0x3000:0x3100] = bytes(256)
+
+# Region discovery
+for region in bbc.memory.regions:
+    print(f"{region.name}: base=0x{region.base_address:04X}, size={region.size}")
+
+print(f"Machine: {bbc.memory.machine_type}")
 ```
 
 
@@ -204,8 +227,8 @@ def test_basic_print(bbc):
 
 def test_memory_access(stopped_bbc):
     """Test starts with emulator stopped."""
-    stopped_bbc.memory[0x1000] = 0x42
-    assert stopped_bbc.memory[0x1000] == 0x42
+    stopped_bbc.memory.address.bus[0x1000] = 0x42
+    assert stopped_bbc.memory.address.bus[0x1000] == 0x42
 ```
 
 ### Available Fixtures

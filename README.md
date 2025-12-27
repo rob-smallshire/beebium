@@ -114,7 +114,7 @@ from beebium import Beebium
 with Beebium.connect() as bbc:
     bbc.debugger.stop()
     bbc.keyboard.type("PRINT 2+2\r")
-    print(bbc.memory.peek[0x7C00:0x7C20])  # Read screen memory
+    print(bbc.memory.address.peek[0x7C00:0x7C20])  # Read screen memory
 ```
 
 ## Project Structure
