@@ -47,8 +47,8 @@ std::vector<uint8_t> load_rom(const std::filesystem::path& filepath) {
 bool roms_available() {
 #ifdef BEEBIUM_ROM_DIR
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    return std::filesystem::exists(rom_dir / "OS12.ROM") &&
-           std::filesystem::exists(rom_dir / "BASIC2.ROM");
+    return std::filesystem::exists(rom_dir / "acorn-mos_1_20.rom") &&
+           std::filesystem::exists(rom_dir / "bbc-basic_2.rom");
 #else
     return false;
 #endif
@@ -131,8 +131,8 @@ TEST_CASE("Keyboard input appears in screen memory after boot", "[keyboard][boot
     ModelB machine;
 
     // Load ROMs
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     std::copy(mos.begin(), mos.end(), machine.state().memory.mos_rom.data());
     std::copy(basic.begin(), basic.end(), machine.state().memory.basic_rom.data());
 
@@ -180,8 +180,8 @@ TEST_CASE("Verify key is detected by MOS keyboard scan", "[keyboard][boot]") {
     ModelB machine;
 
     // Load ROMs
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     std::copy(mos.begin(), mos.end(), machine.state().memory.mos_rom.data());
     std::copy(basic.begin(), basic.end(), machine.state().memory.basic_rom.data());
 

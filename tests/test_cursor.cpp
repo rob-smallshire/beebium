@@ -44,8 +44,8 @@ std::vector<uint8_t> load_rom(const std::filesystem::path& filepath) {
 // Check if ROM files exist
 bool roms_available() {
     const auto rom_dirpath = std::filesystem::path(BEEBIUM_ROM_DIR);
-    return std::filesystem::exists(rom_dirpath / "OS12.ROM") &&
-           std::filesystem::exists(rom_dirpath / "BASIC2.ROM");
+    return std::filesystem::exists(rom_dirpath / "acorn-mos_1_20.rom") &&
+           std::filesystem::exists(rom_dirpath / "bbc-basic_2.rom");
 }
 #endif
 
@@ -75,8 +75,8 @@ TEST_CASE("Mode 7 cursor blinks", "[video][cursor][integration]") {
 
     // Load ROMs
     const auto rom_dirpath = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos_rom = load_rom(rom_dirpath / "OS12.ROM");
-    auto basic_rom = load_rom(rom_dirpath / "BASIC2.ROM");
+    auto mos_rom = load_rom(rom_dirpath / "acorn-mos_1_20.rom");
+    auto basic_rom = load_rom(rom_dirpath / "bbc-basic_2.rom");
 
     // Create machine with video output
     ModelB machine;
@@ -218,8 +218,8 @@ TEST_CASE("CRTC cursor signal is generated", "[video][cursor]") {
 
     // Load ROMs
     const auto rom_dirpath = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos_rom = load_rom(rom_dirpath / "OS12.ROM");
-    auto basic_rom = load_rom(rom_dirpath / "BASIC2.ROM");
+    auto mos_rom = load_rom(rom_dirpath / "acorn-mos_1_20.rom");
+    auto basic_rom = load_rom(rom_dirpath / "bbc-basic_2.rom");
 
     // Create machine with video output
     ModelB machine;

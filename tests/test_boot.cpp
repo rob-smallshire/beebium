@@ -43,8 +43,8 @@ std::vector<uint8_t> load_rom(const std::filesystem::path& filepath) {
 // Check if ROM files exist
 bool roms_available() {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    return std::filesystem::exists(rom_dir / "OS12.ROM") &&
-           std::filesystem::exists(rom_dir / "BASIC2.ROM");
+    return std::filesystem::exists(rom_dir / "acorn-mos_1_20.rom") &&
+           std::filesystem::exists(rom_dir / "bbc-basic_2.rom");
 }
 
 // ===========================================================================
@@ -170,8 +170,8 @@ TEST_CASE("6502 reset vector timing", "[boot][deterministic][reset]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -209,7 +209,7 @@ TEST_CASE("6502 reset vector timing", "[boot][deterministic][reset]") {
 // ===========================================================================
 // Test: First Instruction Execution (LDA #$40)
 // ===========================================================================
-// OS12.ROM reset entry point at $D9CD:
+// acorn-mos_1_20.rom reset entry point at $D9CD:
 //   D9CD: A9 40     LDA #$40
 // LDA immediate takes 2 cycles:
 //   Cycle 1: Fetch operand
@@ -225,8 +225,8 @@ TEST_CASE("First instruction LDA #$40 execution", "[boot][deterministic][instruc
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -282,8 +282,8 @@ TEST_CASE("STA $0D00 writes RTI opcode", "[boot][deterministic][instruction]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -343,8 +343,8 @@ TEST_CASE("SEI and CLD set processor flags", "[boot][deterministic][instruction]
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -396,8 +396,8 @@ TEST_CASE("LDX #$FF and TXS set up stack", "[boot][deterministic][instruction]")
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -457,8 +457,8 @@ TEST_CASE("Boot initialization sequence complete", "[boot][deterministic][sequen
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -546,8 +546,8 @@ TEST_CASE("ROM verification", "[boot][rom]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
 
     REQUIRE(mos.size() == 16384);
     REQUIRE(basic.size() == 16384);

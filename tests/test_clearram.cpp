@@ -36,8 +36,8 @@ TEST_CASE("Trace clearRAM loop execution", "[debug]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -126,8 +126,8 @@ TEST_CASE("Cycle-by-cycle STA ($00),Y execution", "[debug]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 

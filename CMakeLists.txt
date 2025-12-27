@@ -54,6 +54,9 @@ if(BEEBIUM_ENABLE_COVERAGE)
     endif()
 endif()
 
+# ROM directory for development and installation
+set(BEEBIUM_ROM_DIR "${CMAKE_SOURCE_DIR}/roms" CACHE PATH "Source ROM directory")
+
 # Testing
 option(BEEBIUM_BUILD_TESTS "Build tests" ON)
 if(BEEBIUM_BUILD_TESTS)

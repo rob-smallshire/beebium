@@ -40,8 +40,8 @@ std::vector<uint8_t> load_rom(const std::filesystem::path& filepath) {
 
 bool roms_available() {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    return std::filesystem::exists(rom_dir / "OS12.ROM") &&
-           std::filesystem::exists(rom_dir / "BASIC2.ROM");
+    return std::filesystem::exists(rom_dir / "acorn-mos_1_20.rom") &&
+           std::filesystem::exists(rom_dir / "bbc-basic_2.rom");
 }
 
 // Helper to disassemble a single opcode (simplified)
@@ -77,8 +77,8 @@ TEST_CASE("MOS boot trace - detect infinite loop", "[boot][trace]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -259,8 +259,8 @@ TEST_CASE("Watchpoint trace of boot", "[boot][watchpoint]") {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 
@@ -348,8 +348,8 @@ TEST_CASE("Trace first 100 instructions of boot", "[boot][trace][.detailed]") { 
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
     ModelB machine;
 
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
 

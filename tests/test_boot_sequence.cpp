@@ -43,14 +43,14 @@ std::vector<uint8_t> load_rom(const std::filesystem::path& filepath) {
 
 bool roms_available() {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    return std::filesystem::exists(rom_dir / "OS12.ROM") &&
-           std::filesystem::exists(rom_dir / "BASIC2.ROM");
+    return std::filesystem::exists(rom_dir / "acorn-mos_1_20.rom") &&
+           std::filesystem::exists(rom_dir / "bbc-basic_2.rom");
 }
 
 bool bplus_roms_available() {
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    return std::filesystem::exists(rom_dir / "BPMOS.ROM") &&
-           std::filesystem::exists(rom_dir / "BASIC2.ROM");
+    return std::filesystem::exists(rom_dir / "acorn-mos_2_0.rom") &&
+           std::filesystem::exists(rom_dir / "bbc-basic_2.rom");
 }
 
 } // namespace
@@ -69,8 +69,8 @@ TEST_CASE("MOS 1.20 complete boot sequence", "[boot]") {
     // =========================================================================
     ModelB machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "OS12.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_1_20.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -706,8 +706,8 @@ TEST_CASE("Model B+ boots to BASIC prompt", "[boot][bplus]") {
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -799,8 +799,8 @@ TEST_CASE("Model B+ ACCCON register controls shadow RAM", "[bplus][memory]") {
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -856,8 +856,8 @@ TEST_CASE("Model B+ ROMSEL bit 7 controls ANDY private RAM", "[bplus][memory]") 
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -916,8 +916,8 @@ TEST_CASE("Model B+ VDU driver code detection", "[bplus][shadow][vdu]") {
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -969,8 +969,8 @@ TEST_CASE("Model B+ MOS code accesses shadow RAM", "[bplus][shadow][vdu]") {
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -1009,8 +1009,8 @@ TEST_CASE("Model B+ paged RAM code accesses shadow RAM", "[bplus][shadow][vdu]")
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -1054,8 +1054,8 @@ TEST_CASE("Model B+ sideways ROM code does NOT access shadow RAM", "[bplus][shad
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -1103,8 +1103,8 @@ TEST_CASE("Model B+ user code never accesses shadow RAM", "[bplus][shadow][vdu]"
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
@@ -1146,8 +1146,8 @@ TEST_CASE("Model B+ shadow routing only affects 0x3000-0x7FFF", "[bplus][shadow]
 
     ModelBPlus machine;
     const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
-    auto mos = load_rom(rom_dir / "BPMOS.ROM");
-    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    auto mos = load_rom(rom_dir / "acorn-mos_2_0.rom");
+    auto basic = load_rom(rom_dir / "bbc-basic_2.rom");
     machine.memory().load_mos(mos.data(), mos.size());
     machine.memory().load_basic(basic.data(), basic.size());
     machine.reset();
