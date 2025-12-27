@@ -156,12 +156,13 @@ message GetMemoryRegionsRequest {}
 
 message MemoryRegionInfo {
     string name = 1;           // Region identifier (e.g., "main_ram", "bank_0")
-    uint32 size = 2;           // Size in bytes
-    bool readable = 3;         // Can be read
-    bool writable = 4;         // Can be written
-    bool has_side_effects = 5; // read() may differ from peek()
-    bool populated = 6;        // Has content (for optional banks)
-    bool active = 7;           // Currently selected (for banks)
+    uint32 base_address = 2;   // Base address in CPU address space
+    uint32 size = 3;           // Size in bytes
+    bool readable = 4;         // Can be read
+    bool writable = 5;         // Can be written
+    bool has_side_effects = 6; // read() may differ from peek()
+    bool populated = 7;        // Has content (for optional banks)
+    bool active = 8;           // Currently selected (for banks)
 }
 
 message GetMemoryRegionsResponse {
@@ -171,7 +172,7 @@ message GetMemoryRegionsResponse {
 
 message RegionAccessRequest {
     string region_name = 1;  // Region to access
-    uint32 offset = 2;       // Offset within region
+    uint32 address = 2;      // Absolute address (must be within region bounds)
     uint32 length = 3;       // Number of bytes to read
 }
 
@@ -181,7 +182,7 @@ message RegionAccessResponse {
 
 message WriteRegionRequest {
     string region_name = 1;
-    uint32 offset = 2;
+    uint32 address = 2;      // Absolute address (must be within region bounds)
     bytes data = 3;
 }
 

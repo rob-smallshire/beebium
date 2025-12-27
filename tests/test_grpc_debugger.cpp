@@ -667,11 +667,11 @@ TEST_CASE("DebuggerControl PeekRegion reads from main_ram", "[grpc][debugger][re
         fixture.debugger().WriteMemory(&context, request, &response);
     }
 
-    // Read back using PeekRegion
+    // Read back using PeekRegion (absolute address)
     grpc::ClientContext context;
     beebium::RegionAccessRequest request;
     request.set_region_name("main_ram");
-    request.set_offset(0x1234);
+    request.set_address(0x1234);  // Absolute address (main_ram base is 0x0000)
     request.set_length(4);
     beebium::RegionAccessResponse response;
 
@@ -688,12 +688,12 @@ TEST_CASE("DebuggerControl PeekRegion reads from main_ram", "[grpc][debugger][re
 TEST_CASE("DebuggerControl WriteRegion writes to main_ram", "[grpc][debugger][regions]") {
     DebuggerTestFixture fixture;
 
-    // Write using WriteRegion
+    // Write using WriteRegion (absolute address)
     {
         grpc::ClientContext context;
         beebium::WriteRegionRequest request;
         request.set_region_name("main_ram");
-        request.set_offset(0x5678);
+        request.set_address(0x5678);  // Absolute address (main_ram base is 0x0000)
         request.set_data(std::string("\xCA\xFE\xBA\xBE", 4));
         beebium::WriteRegionResponse response;
 
@@ -723,11 +723,11 @@ TEST_CASE("DebuggerControl WriteRegion writes to main_ram", "[grpc][debugger][re
 TEST_CASE("DebuggerControl PeekRegion can access sideways bank", "[grpc][debugger][regions]") {
     DebuggerTestFixture fixture;
 
-    // Bank 0 should contain BASIC ROM
+    // Bank 0 should contain BASIC ROM (mapped at 0x8000-0xBFFF)
     grpc::ClientContext context;
     beebium::RegionAccessRequest request;
     request.set_region_name("bank_0");
-    request.set_offset(0);
+    request.set_address(0x8000);  // Absolute address (banks are mapped at 0x8000)
     request.set_length(4);
     beebium::RegionAccessResponse response;
 

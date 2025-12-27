@@ -241,21 +241,23 @@ public:
     std::vector<MemoryRegionDescriptor> get_memory_regions() const {
         std::vector<MemoryRegionDescriptor> regions;
 
-        // Main RAM
+        // Main RAM (0x0000-0x7FFF)
         regions.push_back({
             REGION_MAIN_RAM,
+            0x0000,  // base_address
             32768,
             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
         });
 
-        // MOS ROM
+        // MOS ROM (0xC000-0xFFFF)
         regions.push_back({
             REGION_MOS_ROM,
+            0xC000,  // base_address
             16384,
             RegionFlags::Readable | RegionFlags::Populated
         });
 
-        // Sideways banks (bank_0 through bank_15)
+        // Sideways banks (bank_0 through bank_15, all mapped at 0x8000-0xBFFF)
         for (uint8_t bank = 0; bank < 16; ++bank) {
             RegionFlags flags = RegionFlags::Readable | RegionFlags::Writable;
             if (sideways.is_bank_populated(bank)) {
@@ -268,6 +270,7 @@ public:
             // We use a static array for the string_views
             regions.push_back({
                 bank_names_[bank],
+                0x8000,  // base_address (all banks share same address range)
                 16384,
                 flags
             });
@@ -276,47 +279,64 @@ public:
         return regions;
     }
 
-    // Region access - side-effect free read
-    uint8_t peek_region(std::string_view name, uint32_t offset) const {
+    // Region access - side-effect free read (uses absolute address)
+    uint8_t peek_region(std::string_view name, uint32_t address) const {
         if (name == REGION_MAIN_RAM) {
-            return (offset < 32768) ? main_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
+            // Main RAM: 0x0000-0x7FFF
+            if (address < 0x8000) {
+                return main_ram.read(static_cast<uint16_t>(address));
+            }
+            return 0xFF;
         }
         if (name == REGION_MOS_ROM) {
-            return (offset < 16384) ? mos_rom.read(static_cast<uint16_t>(offset)) : 0xFF;
+            // MOS ROM: 0xC000-0xFFFF
+            if (address >= 0xC000) {
+                return mos_rom.read(static_cast<uint16_t>(address - 0xC000));
+            }
+            return 0xFF;
         }
-        // Check for bank_N pattern
+        // Check for bank_N pattern (0x8000-0xBFFF)
         if (name.substr(0, 5) == "bank_" && name.size() <= 7) {
             uint8_t bank = parse_bank_number(name);
-            if (bank < 16) {
-                return sideways.peek_bank(bank, static_cast<uint16_t>(offset & 0x3FFF));
+            if (bank < 16 && address >= 0x8000 && address < 0xC000) {
+                return sideways.peek_bank(bank, static_cast<uint16_t>(address - 0x8000));
             }
         }
         return 0xFF;
     }
 
-    // Region access - normal read (may have side effects)
-    uint8_t read_region(std::string_view name, uint32_t offset) {
+    // Region access - normal read (may have side effects, uses absolute address)
+    uint8_t read_region(std::string_view name, uint32_t address) {
         if (name == REGION_MAIN_RAM) {
-            return (offset < 32768) ? main_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
+            // Main RAM: 0x0000-0x7FFF
+            if (address < 0x8000) {
+                return main_ram.read(static_cast<uint16_t>(address));
+            }
+            return 0xFF;
         }
         if (name == REGION_MOS_ROM) {
-            return (offset < 16384) ? mos_rom.read(static_cast<uint16_t>(offset)) : 0xFF;
+            // MOS ROM: 0xC000-0xFFFF
+            if (address >= 0xC000) {
+                return mos_rom.read(static_cast<uint16_t>(address - 0xC000));
+            }
+            return 0xFF;
         }
-        // Check for bank_N pattern
+        // Check for bank_N pattern (0x8000-0xBFFF)
         if (name.substr(0, 5) == "bank_" && name.size() <= 7) {
             uint8_t bank = parse_bank_number(name);
-            if (bank < 16) {
-                return sideways.read_bank(bank, static_cast<uint16_t>(offset & 0x3FFF));
+            if (bank < 16 && address >= 0x8000 && address < 0xC000) {
+                return sideways.read_bank(bank, static_cast<uint16_t>(address - 0x8000));
             }
         }
         return 0xFF;
     }
 
-    // Region access - write
-    void write_region(std::string_view name, uint32_t offset, uint8_t value) {
+    // Region access - write (uses absolute address)
+    void write_region(std::string_view name, uint32_t address, uint8_t value) {
         if (name == REGION_MAIN_RAM) {
-            if (offset < 32768) {
-                main_ram.write(static_cast<uint16_t>(offset), value);
+            // Main RAM: 0x0000-0x7FFF
+            if (address < 0x8000) {
+                main_ram.write(static_cast<uint16_t>(address), value);
             }
             return;
         }
@@ -324,11 +344,11 @@ public:
         if (name == REGION_MOS_ROM) {
             return;
         }
-        // Check for bank_N pattern
+        // Check for bank_N pattern (0x8000-0xBFFF)
         if (name.substr(0, 5) == "bank_" && name.size() <= 7) {
             uint8_t bank = parse_bank_number(name);
-            if (bank < 16) {
-                sideways.write_bank(bank, static_cast<uint16_t>(offset & 0x3FFF), value);
+            if (bank < 16 && address >= 0x8000 && address < 0xC000) {
+                sideways.write_bank(bank, static_cast<uint16_t>(address - 0x8000), value);
             }
         }
     }

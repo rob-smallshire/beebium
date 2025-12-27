@@ -46,6 +46,7 @@ inline bool has_flag(RegionFlags flags, RegionFlags flag) {
 // Named "Descriptor" to avoid collision with protobuf-generated MemoryRegionInfo.
 struct MemoryRegionDescriptor {
     std::string_view name;  // Region identifier (e.g., "main_ram", "bank_0")
+    uint32_t base_address;  // Base address in CPU address space
     uint32_t size;          // Size in bytes
     RegionFlags flags;      // Capability flags
 };

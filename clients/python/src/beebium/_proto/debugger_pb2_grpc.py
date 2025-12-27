@@ -80,6 +80,26 @@ class DebuggerControlStub(object):
                 request_serializer=debugger__pb2.PeekMemoryRequest.SerializeToString,
                 response_deserializer=debugger__pb2.PeekMemoryResponse.FromString,
                 _registered_method=True)
+        self.GetMemoryRegions = channel.unary_unary(
+                '/beebium.DebuggerControl/GetMemoryRegions',
+                request_serializer=debugger__pb2.GetMemoryRegionsRequest.SerializeToString,
+                response_deserializer=debugger__pb2.GetMemoryRegionsResponse.FromString,
+                _registered_method=True)
+        self.PeekRegion = channel.unary_unary(
+                '/beebium.DebuggerControl/PeekRegion',
+                request_serializer=debugger__pb2.RegionAccessRequest.SerializeToString,
+                response_deserializer=debugger__pb2.RegionAccessResponse.FromString,
+                _registered_method=True)
+        self.ReadRegion = channel.unary_unary(
+                '/beebium.DebuggerControl/ReadRegion',
+                request_serializer=debugger__pb2.RegionAccessRequest.SerializeToString,
+                response_deserializer=debugger__pb2.RegionAccessResponse.FromString,
+                _registered_method=True)
+        self.WriteRegion = channel.unary_unary(
+                '/beebium.DebuggerControl/WriteRegion',
+                request_serializer=debugger__pb2.WriteRegionRequest.SerializeToString,
+                response_deserializer=debugger__pb2.WriteRegionResponse.FromString,
+                _registered_method=True)
         self.AddBreakpoint = channel.unary_unary(
                 '/beebium.DebuggerControl/AddBreakpoint',
                 request_serializer=debugger__pb2.AddBreakpointRequest.SerializeToString,
@@ -144,7 +164,7 @@ class DebuggerControlServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def ReadMemory(self, request, context):
-        """Memory access
+        """Memory access (16-bit address space)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -157,6 +177,31 @@ class DebuggerControlServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def PeekMemory(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetMemoryRegions(self, request, context):
+        """Memory region access (named regions: shadow RAM, ANDY, banks, etc.)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PeekRegion(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReadRegion(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WriteRegion(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -234,6 +279,26 @@ def add_DebuggerControlServicer_to_server(servicer, server):
                     servicer.PeekMemory,
                     request_deserializer=debugger__pb2.PeekMemoryRequest.FromString,
                     response_serializer=debugger__pb2.PeekMemoryResponse.SerializeToString,
+            ),
+            'GetMemoryRegions': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetMemoryRegions,
+                    request_deserializer=debugger__pb2.GetMemoryRegionsRequest.FromString,
+                    response_serializer=debugger__pb2.GetMemoryRegionsResponse.SerializeToString,
+            ),
+            'PeekRegion': grpc.unary_unary_rpc_method_handler(
+                    servicer.PeekRegion,
+                    request_deserializer=debugger__pb2.RegionAccessRequest.FromString,
+                    response_serializer=debugger__pb2.RegionAccessResponse.SerializeToString,
+            ),
+            'ReadRegion': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReadRegion,
+                    request_deserializer=debugger__pb2.RegionAccessRequest.FromString,
+                    response_serializer=debugger__pb2.RegionAccessResponse.SerializeToString,
+            ),
+            'WriteRegion': grpc.unary_unary_rpc_method_handler(
+                    servicer.WriteRegion,
+                    request_deserializer=debugger__pb2.WriteRegionRequest.FromString,
+                    response_serializer=debugger__pb2.WriteRegionResponse.SerializeToString,
             ),
             'AddBreakpoint': grpc.unary_unary_rpc_method_handler(
                     servicer.AddBreakpoint,
@@ -500,6 +565,114 @@ class DebuggerControl(object):
             '/beebium.DebuggerControl/PeekMemory',
             debugger__pb2.PeekMemoryRequest.SerializeToString,
             debugger__pb2.PeekMemoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetMemoryRegions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/GetMemoryRegions',
+            debugger__pb2.GetMemoryRegionsRequest.SerializeToString,
+            debugger__pb2.GetMemoryRegionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PeekRegion(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/PeekRegion',
+            debugger__pb2.RegionAccessRequest.SerializeToString,
+            debugger__pb2.RegionAccessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReadRegion(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/ReadRegion',
+            debugger__pb2.RegionAccessRequest.SerializeToString,
+            debugger__pb2.RegionAccessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WriteRegion(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/WriteRegion',
+            debugger__pb2.WriteRegionRequest.SerializeToString,
+            debugger__pb2.WriteRegionResponse.FromString,
             options,
             channel_credentials,
             insecure,

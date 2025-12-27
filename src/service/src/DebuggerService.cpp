@@ -249,6 +249,7 @@ grpc::Status DebuggerControlServiceImpl::GetMemoryRegions(
     for (const auto& region : regions) {
         auto* pb_region = response->add_regions();
         pb_region->set_name(std::string(region.name));
+        pb_region->set_base_address(region.base_address);
         pb_region->set_size(region.size);
         pb_region->set_readable(beebium::has_flag(region.flags, beebium::RegionFlags::Readable));
         pb_region->set_writable(beebium::has_flag(region.flags, beebium::RegionFlags::Writable));
@@ -268,7 +269,7 @@ grpc::Status DebuggerControlServiceImpl::PeekRegion(
     std::lock_guard<std::mutex> lock(mutex_);
 
     const std::string& region_name = request->region_name();
-    uint32_t offset = request->offset();
+    uint32_t address = request->address();
     uint32_t length = request->length();
 
     std::string data;
@@ -276,7 +277,7 @@ grpc::Status DebuggerControlServiceImpl::PeekRegion(
 
     for (uint32_t i = 0; i < length; ++i) {
         data.push_back(static_cast<char>(
-            machine_.memory().peek_region(region_name, offset + i)));
+            machine_.memory().peek_region(region_name, address + i)));
     }
 
     response->set_data(std::move(data));
@@ -291,7 +292,7 @@ grpc::Status DebuggerControlServiceImpl::ReadRegion(
     std::lock_guard<std::mutex> lock(mutex_);
 
     const std::string& region_name = request->region_name();
-    uint32_t offset = request->offset();
+    uint32_t address = request->address();
     uint32_t length = request->length();
 
     std::string data;
@@ -299,7 +300,7 @@ grpc::Status DebuggerControlServiceImpl::ReadRegion(
 
     for (uint32_t i = 0; i < length; ++i) {
         data.push_back(static_cast<char>(
-            machine_.memory().read_region(region_name, offset + i)));
+            machine_.memory().read_region(region_name, address + i)));
     }
 
     response->set_data(std::move(data));
@@ -314,11 +315,11 @@ grpc::Status DebuggerControlServiceImpl::WriteRegion(
     std::lock_guard<std::mutex> lock(mutex_);
 
     const std::string& region_name = request->region_name();
-    uint32_t offset = request->offset();
+    uint32_t address = request->address();
     const std::string& data = request->data();
 
     for (size_t i = 0; i < data.size(); ++i) {
-        machine_.memory().write_region(region_name, offset + static_cast<uint32_t>(i),
+        machine_.memory().write_region(region_name, address + static_cast<uint32_t>(i),
             static_cast<uint8_t>(data[i]));
     }
 
