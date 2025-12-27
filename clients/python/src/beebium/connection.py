@@ -30,7 +30,7 @@ class Connection:
         """Create a connection to a beebium server.
 
         Args:
-            target: The gRPC target string (e.g., "localhost:50051").
+            target: The gRPC target string (e.g., "localhost:48875").
             timeout: Connection timeout in seconds.
 
         Raises:

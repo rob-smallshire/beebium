@@ -17,12 +17,12 @@ Usage:
     from beebium import Beebium
 
     # Connect to an existing server
-    with Beebium.connect("localhost:50051") as bbc:
+    with Beebium.connect() as bbc:
         bbc.debugger.stop()
         print(f"PC = ${bbc.cpu.pc:04X}")
 
     # Launch and manage a server
-    with Beebium.launch(mos_filepath="OS12.ROM") as bbc:
+    with Beebium.launch(mos_filepath="acorn-mos_1_20.rom") as bbc:
         bbc.keyboard.type("PRINT 42")
         bbc.keyboard.press_return()
 """
@@ -40,11 +40,15 @@ from beebium.exceptions import (
 
 __version__ = "0.1.0"
 
+# Default gRPC port for beebium servers (0xBEEB = 48875)
+DEFAULT_GRPC_PORT = 0xBEEB
+
 __all__ = [
     "Beebium",
     "BeebiumError",
     "ConnectionError",
     "DebuggerError",
+    "DEFAULT_GRPC_PORT",
     "MemoryAccessError",
     "ServerNotFoundError",
     "ServerStartupError",

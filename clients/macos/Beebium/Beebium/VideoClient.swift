@@ -52,7 +52,7 @@ final class VideoClient: ObservableObject {
     /// Expose the gRPC channel for other clients (e.g., KeyboardClient) to share
     var channel: GRPCChannel? { _channel }
 
-    init(host: String = "127.0.0.1", port: Int = 50051) {
+    init(host: String = "127.0.0.1", port: Int = 0xBEEB) {  // 48875
         self.host = host
         self.port = port
     }

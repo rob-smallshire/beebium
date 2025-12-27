@@ -23,13 +23,13 @@ pip install beebium[imaging]
 ```python
 from beebium import Beebium
 
-# Connect to an existing server
-with Beebium.connect("localhost:50051") as bbc:
+# Connect to an existing server (default port 48875 / 0xBEEB)
+with Beebium.connect() as bbc:
     bbc.debugger.stop()
     print(f"PC = ${bbc.cpu.pc:04X}")
 
 # Launch and manage a server
-with Beebium.launch(mos_filepath="OS12.ROM", basic_filepath="BASIC2.ROM") as bbc:
+with Beebium.launch(mos_filepath="acorn-mos_1_20.rom", basic_filepath="bbc-basic_2.rom") as bbc:
     bbc.keyboard.type("PRINT 42")
     bbc.keyboard.press_return()
 ```
@@ -40,11 +40,11 @@ with Beebium.launch(mos_filepath="OS12.ROM", basic_filepath="BASIC2.ROM") as bbc
 
 ```python
 # Auto-allocate a free port
-with Beebium.launch(mos_filepath="OS12.ROM") as bbc:
+with Beebium.launch(mos_filepath="acorn-mos_1_20.rom") as bbc:
     print(f"Server running on {bbc.target}")
 
 # Specify a port
-with Beebium.launch(mos_filepath="OS12.ROM", port=50052) as bbc:
+with Beebium.launch(mos_filepath="acorn-mos_1_20.rom", port=48876) as bbc:
     ...
 ```
 

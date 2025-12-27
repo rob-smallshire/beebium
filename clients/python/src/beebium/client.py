@@ -18,6 +18,7 @@ import contextlib
 from collections.abc import Iterator
 from pathlib import Path
 
+import beebium
 from beebium.basic import Basic
 from beebium.connection import Connection
 from beebium.cpu import CPU
@@ -35,12 +36,12 @@ class Beebium:
 
     Usage:
         # Connect to existing server
-        with Beebium.connect("localhost:50051") as bbc:
+        with Beebium.connect() as bbc:
             bbc.debugger.stop()
             bbc.memory[0x1000] = 0x42
 
         # Start and manage server
-        with Beebium.launch(mos_filepath="/path/to/OS12.ROM") as bbc:
+        with Beebium.launch(mos_filepath="/path/to/acorn-mos_1_20.rom") as bbc:
             bbc.keyboard.type("PRINT 42")
             bbc.keyboard.press_return()
     """
@@ -68,11 +69,12 @@ class Beebium:
         self._basic: Basic | None = None
 
     @classmethod
-    def connect(cls, target: str = "localhost:50051", timeout: float = 5.0) -> Beebium:
+    def connect(cls, target: str | None = None, timeout: float = 5.0) -> Beebium:
         """Connect to an already-running beebium-server.
 
         Args:
-            target: The gRPC target string (e.g., "localhost:50051").
+            target: The gRPC target string (e.g., "localhost:48875").
+                   Defaults to localhost on DEFAULT_GRPC_PORT (48875).
             timeout: Connection timeout in seconds.
 
         Returns:
@@ -81,6 +83,8 @@ class Beebium:
         Raises:
             ConnectionError: If the connection cannot be established.
         """
+        if target is None:
+            target = f"localhost:{beebium.DEFAULT_GRPC_PORT}"
         connection = Connection(target, timeout=timeout)
         return cls(connection)
 

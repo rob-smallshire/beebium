@@ -33,7 +33,7 @@ class ServerProcess:
     Handles startup, port allocation, health checking, and graceful shutdown.
 
     Usage:
-        with ServerProcess(mos_filepath="OS12.ROM") as server:
+        with ServerProcess(mos_filepath="acorn-mos_1_20.rom") as server:
             # server is now running
             print(f"Server running on port {server.port}")
             # ... do work ...

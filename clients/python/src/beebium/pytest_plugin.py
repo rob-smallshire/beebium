@@ -102,7 +102,7 @@ def mos_filepath(beebium_roms_dirpath: Path) -> Path:
 
     Tries common MOS ROM filenames in the ROM directory.
     """
-    candidates = ["OS12.ROM", "os12.rom", "MOS.ROM", "mos.rom", "OS1.2.ROM"]
+    candidates = ["acorn-mos_1_20.rom", "OS12.ROM", "os12.rom", "MOS.ROM", "mos.rom", "OS1.2.ROM"]
     for name in candidates:
         path = beebium_roms_dirpath / name
         if path.exists():
@@ -121,7 +121,7 @@ def basic_filepath(beebium_roms_dirpath: Path) -> Path | None:
     Tries common BASIC ROM filenames in the ROM directory.
     Returns None (does not skip) if not found - BASIC is optional.
     """
-    candidates = ["BASIC2.ROM", "basic2.rom", "BASIC.ROM", "basic.rom"]
+    candidates = ["bbc-basic_2.rom", "BASIC2.ROM", "basic2.rom", "BASIC.ROM", "basic.rom"]
     for name in candidates:
         path = beebium_roms_dirpath / name
         if path.exists():
