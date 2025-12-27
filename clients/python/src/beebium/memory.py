@@ -20,6 +20,10 @@ Address space access (16-bit flat address space):
     bbc.memory.address.peek[0xFE4D]       # Side-effect-free read
     bbc.memory.address.bus[0x1000] = 0x42 # Write through bus
 
+PC-context access (for B+ shadow RAM routing):
+    bbc.memory.address.bus.with_pc(0xD000)[0x5000]   # What MOS code would see
+    bbc.memory.address.peek.with_pc(0xD000)[0x5000]  # Side-effect-free, MOS view
+
 Region-based access (by named memory region, absolute addresses):
     bbc.memory.region("main_ram").bus[0x1234]       # Read from main RAM
     bbc.memory.region("shadow_ram").peek[0x3000]    # Peek shadow RAM
@@ -309,6 +313,25 @@ class PeekMemoryAccessor(MemoryReader):
         response = self._stub.PeekMemory(request)
         return response.data
 
+    def with_pc(self, pc: int) -> "PCContextReader":
+        """Return a PC-context accessor for B+ shadow RAM routing.
+
+        On BBC Model B+, memory access to 0x3000-0x7FFF is routed differently
+        depending on where the executing code resides:
+        - MOS code (0xC000-0xDFFF) sees shadow RAM
+        - Paged RAM code (0xA000-0xAFFF when enabled) sees shadow RAM
+        - All other code sees main RAM
+
+        This method returns an accessor that simulates access from the given PC.
+
+        Args:
+            pc: The simulated program counter (0x0000-0xFFFF).
+
+        Returns:
+            A PCContextReader that routes memory access based on the PC.
+        """
+        return PCContextReader(self._stub, pc)
+
 
 class BusMemoryAccessor(MemoryReader, MemoryWriter):
     """Side-effecting memory access (through memory bus).
@@ -330,6 +353,93 @@ class BusMemoryAccessor(MemoryReader, MemoryWriter):
         response = self._stub.WriteMemory(request)
         if not response.success:
             raise MemoryAccessError(f"Failed to write {len(data)} bytes at ${address:04X}")
+
+    def cast(self, fmt: str) -> TypedMemoryAccessor:
+        """Return a typed view of memory using a struct format string.
+
+        Args:
+            fmt: A struct format string (e.g., "<H" for little-endian uint16).
+
+        Returns:
+            A TypedMemoryAccessor for typed read+write access.
+        """
+        return TypedMemoryAccessor(self, fmt)
+
+    def with_pc(self, pc: int) -> "PCContextAccessor":
+        """Return a PC-context accessor for B+ shadow RAM routing.
+
+        On BBC Model B+, memory access to 0x3000-0x7FFF is routed differently
+        depending on where the executing code resides:
+        - MOS code (0xC000-0xDFFF) sees shadow RAM
+        - Paged RAM code (0xA000-0xAFFF when enabled) sees shadow RAM
+        - All other code sees main RAM
+
+        This method returns an accessor that simulates access from the given PC.
+
+        Args:
+            pc: The simulated program counter (0x0000-0xFFFF).
+
+        Returns:
+            A PCContextAccessor that routes memory access based on the PC.
+        """
+        return PCContextAccessor(self._stub, pc)
+
+
+# =============================================================================
+# PC-Context Accessors (for B+ shadow RAM routing)
+# =============================================================================
+
+class PCContextReader(MemoryReader):
+    """Side-effect-free memory access with simulated PC context.
+
+    On BBC Model B+, memory access to 0x3000-0x7FFF is routed based on the
+    program counter of the executing code. This accessor simulates access
+    from a specified PC address.
+
+    For Model B (no shadow RAM), this behaves identically to PeekMemoryAccessor.
+    """
+
+    def __init__(self, stub: debugger_pb2_grpc.DebuggerControlStub, pc: int):
+        super().__init__(stub)
+        self._pc = pc
+
+    def _read_bytes(self, address: int, length: int) -> bytes:
+        """Read bytes using PeekMemory RPC with simulated PC."""
+        request = debugger_pb2.PeekMemoryRequest(
+            address=address, length=length, simulated_pc=self._pc
+        )
+        response = self._stub.PeekMemory(request)
+        return response.data
+
+
+class PCContextAccessor(PCContextReader, MemoryWriter):
+    """Side-effecting memory access with simulated PC context.
+
+    On BBC Model B+, memory access to 0x3000-0x7FFF is routed based on the
+    program counter of the executing code. This accessor simulates access
+    from a specified PC address.
+
+    For Model B (no shadow RAM), this behaves identically to BusMemoryAccessor.
+    """
+
+    def _read_bytes(self, address: int, length: int) -> bytes:
+        """Read bytes using ReadMemory RPC with simulated PC."""
+        request = debugger_pb2.ReadMemoryRequest(
+            address=address, length=length, simulated_pc=self._pc
+        )
+        response = self._stub.ReadMemory(request)
+        return response.data
+
+    def _write_bytes(self, address: int, data: bytes) -> None:
+        """Write bytes using WriteMemory RPC with simulated PC."""
+        request = debugger_pb2.WriteMemoryRequest(
+            address=address, data=data, simulated_pc=self._pc
+        )
+        response = self._stub.WriteMemory(request)
+        if not response.success:
+            raise MemoryAccessError(
+                f"Failed to write {len(data)} bytes at ${address:04X} with PC=${self._pc:04X}"
+            )
 
     def cast(self, fmt: str) -> TypedMemoryAccessor:
         """Return a typed view of memory using a struct format string.

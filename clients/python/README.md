@@ -128,6 +128,27 @@ bbc.memory.address.bus.save(0x1900, 0x1000, "dump.bin")
 bbc.memory.address.bus.fill(0x1000, 0x2000, 0x00)
 ```
 
+#### PC-Context Access (for B+ shadow RAM)
+
+On BBC Model B+, memory access at 0x3000-0x7FFF is routed based on the program counter of the executing code. Use `with_pc()` to query what code at a given PC would see:
+
+```python
+# What MOS code (at 0xD000) would see at address 0x5000
+mos_view = bbc.memory.address.peek.with_pc(0xD000)[0x5000]
+
+# What user code (at 0x1000) would see at the same address
+user_view = bbc.memory.address.peek.with_pc(0x1000)[0x5000]
+
+# Works with both bus and peek access modes
+bbc.memory.address.bus.with_pc(0xD000)[0x5000]   # Side-effecting
+bbc.memory.address.peek.with_pc(0xD000)[0x5000]  # Side-effect-free
+
+# Typed access is supported
+word = bbc.memory.address.peek.with_pc(0xD000).cast("<H")[0x5000]
+```
+
+On Model B (no shadow RAM), `with_pc()` has no effect.
+
 #### Region-Based Access (named memory regions)
 
 Access memory regions directly, bypassing bank switching:

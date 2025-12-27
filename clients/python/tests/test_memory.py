@@ -23,6 +23,8 @@ from beebium.memory import (
     MemoryReader,
     MemoryRegionInfo,
     MemoryWriter,
+    PCContextAccessor,
+    PCContextReader,
     PeekMemoryAccessor,
     Region,
     RegionBusAccessor,
@@ -473,3 +475,130 @@ class TestMemoryRegionInfo:
         regions = memory.regions
         with pytest.raises(AttributeError):
             regions[0].name = "modified"
+
+
+class TestPCContextAccess:
+    """Tests for PC-aware memory access (B+ shadow RAM routing)."""
+
+    def test_peek_with_pc_returns_pc_context_reader(self, memory):
+        """peek.with_pc() returns a PCContextReader."""
+        accessor = memory.address.peek.with_pc(0xD000)
+        assert isinstance(accessor, PCContextReader)
+
+    def test_bus_with_pc_returns_pc_context_accessor(self, memory):
+        """bus.with_pc() returns a PCContextAccessor."""
+        accessor = memory.address.bus.with_pc(0xD000)
+        assert isinstance(accessor, PCContextAccessor)
+
+    def test_pc_context_reader_single_byte_read(self, memory, mock_stub):
+        """PCContextReader reads single byte with simulated_pc."""
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x55")
+        result = memory.address.peek.with_pc(0xD000)[0x5000]
+        assert result == 0x55
+        mock_stub.PeekMemory.assert_called_once()
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].address == 0x5000
+        assert call_args[0][0].length == 1
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_reader_slice_read(self, memory, mock_stub):
+        """PCContextReader reads slice with simulated_pc."""
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x01\x02\x03\x04")
+        result = memory.address.peek.with_pc(0xD000)[0x5000:0x5004]
+        assert result == b"\x01\x02\x03\x04"
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_accessor_single_byte_read(self, memory, mock_stub):
+        """PCContextAccessor reads single byte with simulated_pc via ReadMemory."""
+        mock_stub.ReadMemory.return_value = MockResponse(data=b"\xAA")
+        result = memory.address.bus.with_pc(0xD000)[0x5000]
+        assert result == 0xAA
+        mock_stub.ReadMemory.assert_called_once()
+        call_args = mock_stub.ReadMemory.call_args
+        assert call_args[0][0].address == 0x5000
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_accessor_single_byte_write(self, memory, mock_stub):
+        """PCContextAccessor writes single byte with simulated_pc."""
+        memory.address.bus.with_pc(0xD000)[0x5000] = 0x42
+        mock_stub.WriteMemory.assert_called_once()
+        call_args = mock_stub.WriteMemory.call_args
+        assert call_args[0][0].address == 0x5000
+        assert call_args[0][0].data == b"\x42"
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_accessor_slice_write(self, memory, mock_stub):
+        """PCContextAccessor writes slice with simulated_pc."""
+        memory.address.bus.with_pc(0xD000)[0x5000:0x5004] = b"\x01\x02\x03\x04"
+        mock_stub.WriteMemory.assert_called_once()
+        call_args = mock_stub.WriteMemory.call_args
+        assert call_args[0][0].address == 0x5000
+        assert call_args[0][0].data == b"\x01\x02\x03\x04"
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_reader_cast(self, memory, mock_stub):
+        """PCContextReader supports cast() for typed access."""
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x34\x12")
+        result = memory.address.peek.with_pc(0xD000).cast("<H")[0x5000]
+        assert result == 0x1234
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_accessor_cast(self, memory, mock_stub):
+        """PCContextAccessor supports cast() for typed access."""
+        mock_stub.ReadMemory.return_value = MockResponse(data=b"\x34\x12")
+        result = memory.address.bus.with_pc(0xD000).cast("<H")[0x5000]
+        assert result == 0x1234
+        call_args = mock_stub.ReadMemory.call_args
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_accessor_cast_write(self, memory, mock_stub):
+        """PCContextAccessor cast() supports write."""
+        memory.address.bus.with_pc(0xD000).cast("<H")[0x5000] = 0x1234
+        mock_stub.WriteMemory.assert_called_once()
+        call_args = mock_stub.WriteMemory.call_args
+        assert call_args[0][0].address == 0x5000
+        assert call_args[0][0].data == b"\x34\x12"
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_reader_read_method(self, memory, mock_stub):
+        """PCContextReader.read() method works with simulated_pc."""
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x01\x02\x03\x04")
+        result = memory.address.peek.with_pc(0xD000).read(0x5000, 4)
+        assert result == b"\x01\x02\x03\x04"
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_pc_context_accessor_write_method(self, memory, mock_stub):
+        """PCContextAccessor.write() method works with simulated_pc."""
+        memory.address.bus.with_pc(0xD000).write(0x5000, b"\x01\x02\x03\x04")
+        mock_stub.WriteMemory.assert_called_once()
+        call_args = mock_stub.WriteMemory.call_args
+        assert call_args[0][0].address == 0x5000
+        assert call_args[0][0].data == b"\x01\x02\x03\x04"
+        assert call_args[0][0].simulated_pc == 0xD000
+
+    def test_different_pc_values(self, memory, mock_stub):
+        """Different PC values are passed correctly to RPC."""
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x42")
+        # User code PC (0x1000) - should see main RAM on B+
+        _ = memory.address.peek.with_pc(0x1000)[0x5000]
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].simulated_pc == 0x1000
+
+        mock_stub.reset_mock()
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x42")
+
+        # MOS code PC (0xD000) - should see shadow RAM on B+
+        _ = memory.address.peek.with_pc(0xD000)[0x5000]
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].simulated_pc == 0xD000
+
+        mock_stub.reset_mock()
+        mock_stub.PeekMemory.return_value = MockResponse(data=b"\x42")
+
+        # Paged RAM PC (0xA000) - should see shadow RAM on B+ when paged RAM enabled
+        _ = memory.address.peek.with_pc(0xA000)[0x5000]
+        call_args = mock_stub.PeekMemory.call_args
+        assert call_args[0][0].simulated_pc == 0xA000
