@@ -901,3 +901,283 @@ TEST_CASE("Model B+ ROMSEL bit 7 controls ANDY private RAM", "[bplus][memory]") 
     // ROM should be visible again at $8000
     REQUIRE(machine.read(0x8000) == rom_byte);
 }
+
+// =============================================================================
+// BBC Model B+ VDU Driver Code Shadow RAM Routing Tests
+// =============================================================================
+// Per B+ Service Manual Section 5.4.3:
+// - Code at 0xC000-0xDFFF (MOS) is always VDU driver
+// - Code at 0xA000-0xAFFF is VDU driver ONLY when paged RAM is selected
+// - "This special attribute is not available to any other sideways memory, ROM or RAM"
+// - "Any code executing between &0000-&9FFF in shadow mode will always access normal RAM"
+
+TEST_CASE("Model B+ VDU driver code detection", "[bplus][shadow][vdu]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    // Test is_vdu_driver_code() helper directly
+    auto& hw = machine.memory();
+
+    // MOS code at 0xC000-0xDFFF is always VDU driver
+    REQUIRE(hw.is_vdu_driver_code(0xC000) == true);
+    REQUIRE(hw.is_vdu_driver_code(0xD000) == true);
+    REQUIRE(hw.is_vdu_driver_code(0xDFFF) == true);
+
+    // Upper MOS at 0xE000-0xFFFF is NOT VDU driver
+    REQUIRE(hw.is_vdu_driver_code(0xE000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0xF000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0xFFFF) == false);
+
+    // User code at 0x0000-0x9FFF is never VDU driver
+    REQUIRE(hw.is_vdu_driver_code(0x0000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0x1000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0x5000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0x9FFF) == false);
+
+    // Sideways ROM/RAM at 0x8000-0x9FFF is never VDU driver
+    REQUIRE(hw.is_vdu_driver_code(0x8000) == false);
+
+    // Code at 0xA000-0xAFFF depends on paged RAM selection
+    // With paged RAM disabled, not VDU driver
+    hw.romsel_reg.write(0, 0x00);  // Disable paged RAM
+    REQUIRE(hw.paged_ram_enabled() == false);
+    REQUIRE(hw.is_vdu_driver_code(0xA000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0xA500) == false);
+    REQUIRE(hw.is_vdu_driver_code(0xAFFF) == false);
+
+    // With paged RAM enabled, 0xA000-0xAFFF is VDU driver
+    hw.romsel_reg.write(0, 0x80);  // Enable paged RAM
+    REQUIRE(hw.paged_ram_enabled() == true);
+    REQUIRE(hw.is_vdu_driver_code(0xA000) == true);
+    REQUIRE(hw.is_vdu_driver_code(0xA500) == true);
+    REQUIRE(hw.is_vdu_driver_code(0xAFFF) == true);
+
+    // 0xB000-0xBFFF is never VDU driver (even with paged RAM enabled)
+    REQUIRE(hw.is_vdu_driver_code(0xB000) == false);
+    REQUIRE(hw.is_vdu_driver_code(0xBFFF) == false);
+}
+
+TEST_CASE("Model B+ MOS code accesses shadow RAM", "[bplus][shadow][vdu]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    auto& hw = machine.memory();
+
+    // Set up distinct values in main RAM and shadow RAM
+    hw.main_ram.write(0x3000, 0xAA);      // Main RAM
+    hw.shadow_ram.write(0x0000, 0x55);    // Shadow RAM (offset 0 = address 0x3000)
+
+    // Enable shadow mode
+    hw.acccon_reg.write(0, 0x80);
+    REQUIRE(hw.shadow_enabled() == true);
+
+    // Test read_with_pc: MOS code (0xD000) should see shadow RAM
+    uint8_t from_mos = hw.read_with_pc(0x3000, 0xD000);
+    REQUIRE(from_mos == 0x55);  // Shadow RAM value
+
+    // Test read_with_pc: User code (0x1000) should see main RAM
+    uint8_t from_user = hw.read_with_pc(0x3000, 0x1000);
+    REQUIRE(from_user == 0xAA);  // Main RAM value
+
+    // Test write_with_pc: MOS code writes to shadow RAM
+    hw.write_with_pc(0x3000, 0x77, 0xD000);
+    REQUIRE(hw.shadow_ram.read(0x0000) == 0x77);  // Shadow was modified
+    REQUIRE(hw.main_ram.read(0x3000) == 0xAA);    // Main is unchanged
+
+    // Test write_with_pc: User code writes to main RAM
+    hw.write_with_pc(0x3000, 0x88, 0x1000);
+    REQUIRE(hw.shadow_ram.read(0x0000) == 0x77);  // Shadow unchanged
+    REQUIRE(hw.main_ram.read(0x3000) == 0x88);    // Main was modified
+}
+
+TEST_CASE("Model B+ paged RAM code accesses shadow RAM", "[bplus][shadow][vdu]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    auto& hw = machine.memory();
+
+    // Set up distinct values in main RAM and shadow RAM at 0x5000
+    hw.main_ram.write(0x5000, 0xBB);      // Main RAM
+    hw.shadow_ram.write(0x2000, 0x66);    // Shadow RAM (offset 0x2000 = address 0x5000)
+
+    // Enable shadow mode
+    hw.acccon_reg.write(0, 0x80);
+    REQUIRE(hw.shadow_enabled() == true);
+
+    // Enable paged RAM (ANDY)
+    hw.romsel_reg.write(0, 0x80);
+    REQUIRE(hw.paged_ram_enabled() == true);
+
+    // Code at 0xA000 (paged RAM top 4K) should see shadow RAM
+    uint8_t from_andy = hw.read_with_pc(0x5000, 0xA500);
+    REQUIRE(from_andy == 0x66);  // Shadow RAM value
+
+    // Write from paged RAM code goes to shadow RAM
+    hw.write_with_pc(0x5000, 0x99, 0xA500);
+    REQUIRE(hw.shadow_ram.read(0x2000) == 0x99);  // Shadow was modified
+    REQUIRE(hw.main_ram.read(0x5000) == 0xBB);    // Main is unchanged
+
+    // Disable paged RAM - code at 0xA000 is now sideways ROM, NOT VDU driver
+    hw.romsel_reg.write(0, 0x00);
+    REQUIRE(hw.paged_ram_enabled() == false);
+
+    // Same address (0xA500) now reads from main RAM (no longer VDU driver)
+    uint8_t from_rom = hw.read_with_pc(0x5000, 0xA500);
+    REQUIRE(from_rom == 0xBB);  // Main RAM value
+}
+
+TEST_CASE("Model B+ sideways ROM code does NOT access shadow RAM", "[bplus][shadow][vdu]") {
+    // Per B+ Service Manual: "This special attribute is not available to
+    // any other sideways memory, ROM or RAM"
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    auto& hw = machine.memory();
+
+    // Set up distinct values in main RAM and shadow RAM
+    hw.main_ram.write(0x6000, 0xDD);      // Main RAM
+    hw.shadow_ram.write(0x3000, 0x44);    // Shadow RAM (offset 0x3000 = address 0x6000)
+
+    // Enable shadow mode
+    hw.acccon_reg.write(0, 0x80);
+    REQUIRE(hw.shadow_enabled() == true);
+
+    // Ensure paged RAM is DISABLED - we're testing sideways ROM behavior
+    hw.romsel_reg.write(0, 0x00);  // Bank 0 (BASIC), no paged RAM
+    REQUIRE(hw.paged_ram_enabled() == false);
+
+    // Code at 0xA000-0xAFFF when paged RAM is disabled is sideways ROM
+    // It should NOT have VDU driver status
+    REQUIRE(hw.is_vdu_driver_code(0xA500) == false);
+
+    // Code executing from sideways ROM (0xA500) sees MAIN RAM
+    uint8_t from_sw_rom = hw.read_with_pc(0x6000, 0xA500);
+    REQUIRE(from_sw_rom == 0xDD);  // Main RAM, NOT shadow
+
+    // Write from sideways ROM code goes to main RAM
+    hw.write_with_pc(0x6000, 0xEE, 0xA500);
+    REQUIRE(hw.main_ram.read(0x6000) == 0xEE);     // Main was modified
+    REQUIRE(hw.shadow_ram.read(0x3000) == 0x44);  // Shadow unchanged
+
+    // Also test code from lower sideways area (0x8000-0x9FFF)
+    uint8_t from_sw_lower = hw.read_with_pc(0x6000, 0x8500);
+    REQUIRE(from_sw_lower == 0xEE);  // Main RAM
+
+    // And 0xB000-0xBFFF (always ROM, never VDU driver)
+    uint8_t from_bxxx = hw.read_with_pc(0x6000, 0xB500);
+    REQUIRE(from_bxxx == 0xEE);  // Main RAM
+}
+
+TEST_CASE("Model B+ user code never accesses shadow RAM", "[bplus][shadow][vdu]") {
+    // Per B+ Service Manual: "Any code executing between &0000-&9FFF
+    // in shadow mode will always access normal RAM"
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    auto& hw = machine.memory();
+
+    // Set up distinct values across the shadow region
+    hw.main_ram.write(0x3000, 0x11);
+    hw.main_ram.write(0x5000, 0x22);
+    hw.main_ram.write(0x7FFF, 0x33);
+    hw.shadow_ram.write(0x0000, 0xAA);  // 0x3000
+    hw.shadow_ram.write(0x2000, 0xBB);  // 0x5000
+    hw.shadow_ram.write(0x4FFF, 0xCC);  // 0x7FFF
+
+    // Enable shadow mode
+    hw.acccon_reg.write(0, 0x80);
+    REQUIRE(hw.shadow_enabled() == true);
+
+    // Code from various user addresses should all see main RAM
+    std::vector<uint16_t> user_pcs = {0x0000, 0x0400, 0x1000, 0x2000, 0x3500,
+                                       0x5000, 0x7000, 0x9FFF};
+
+    for (uint16_t pc : user_pcs) {
+        INFO("Testing PC=$" << std::hex << pc);
+        REQUIRE(hw.is_vdu_driver_code(pc) == false);
+        REQUIRE(hw.read_with_pc(0x3000, pc) == 0x11);
+        REQUIRE(hw.read_with_pc(0x5000, pc) == 0x22);
+        REQUIRE(hw.read_with_pc(0x7FFF, pc) == 0x33);
+    }
+
+    // Writes from user code go to main RAM
+    hw.write_with_pc(0x4000, 0x99, 0x1234);
+    REQUIRE(hw.main_ram.read(0x4000) == 0x99);
+    REQUIRE(hw.shadow_ram.read(0x1000) == 0x00);  // Shadow untouched
+}
+
+TEST_CASE("Model B+ shadow routing only affects 0x3000-0x7FFF", "[bplus][shadow][vdu]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    auto& hw = machine.memory();
+
+    // Enable shadow mode
+    hw.acccon_reg.write(0, 0x80);
+    REQUIRE(hw.shadow_enabled() == true);
+
+    // Write to addresses outside shadow region from MOS code
+    // These should NOT be affected by shadow routing
+    hw.main_ram.write(0x1000, 0xAA);
+    hw.main_ram.write(0x2FFF, 0xBB);
+
+    // MOS code reading outside shadow region sees main RAM
+    REQUIRE(hw.read_with_pc(0x1000, 0xD000) == 0xAA);
+    REQUIRE(hw.read_with_pc(0x2FFF, 0xD000) == 0xBB);
+
+    // MOS code writing outside shadow region modifies main RAM
+    hw.write_with_pc(0x1000, 0x11, 0xD000);
+    hw.write_with_pc(0x2FFF, 0x22, 0xD000);
+    REQUIRE(hw.main_ram.read(0x1000) == 0x11);
+    REQUIRE(hw.main_ram.read(0x2FFF) == 0x22);
+
+    // Boundary test: 0x2FFF is main RAM, 0x3000 is shadow
+    hw.main_ram.write(0x2FFF, 0x55);
+    hw.main_ram.write(0x3000, 0x66);
+    hw.shadow_ram.write(0x0000, 0x77);  // Shadow at 0x3000
+
+    REQUIRE(hw.read_with_pc(0x2FFF, 0xD000) == 0x55);  // Main (outside shadow)
+    REQUIRE(hw.read_with_pc(0x3000, 0xD000) == 0x77);  // Shadow (inside region)
+}

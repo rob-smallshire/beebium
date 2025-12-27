@@ -14,9 +14,19 @@
 
 #include "ClockTypes.hpp"
 #include <6502/6502.h>
+#include <concepts>
 #include <functional>
 
 namespace beebium {
+
+// Concept to detect if a memory policy has PC-aware read/write methods.
+// These are required for BBC Model B+ VDU driver code shadow RAM routing,
+// where the hardware routes memory access based on the program counter.
+template<typename T>
+concept HasPcAwareMemory = requires(T& m, uint16_t addr, uint16_t pc, uint8_t val) {
+    { m.read_with_pc(addr, pc) } -> std::same_as<uint8_t>;
+    { m.write_with_pc(addr, val, pc) } -> std::same_as<void>;
+};
 
 // Callback types for CpuBinding debugging hooks
 using CpuWatchpointCallback = std::function<void(uint16_t addr, uint8_t value, bool is_write)>;
@@ -80,15 +90,28 @@ private:
         // Execute one CPU cycle
         (*cpu.tfn)(&cpu);
 
-        // Memory access
+        // Memory access - use PC-aware methods if available (for B+ shadow RAM routing)
         const uint16_t addr = cpu.abus.w;
         uint8_t value;
-        if (cpu.read) {
-            value = memory.read(addr);
-            cpu.dbus = value;
+        if constexpr (HasPcAwareMemory<MemoryPolicy>) {
+            // B+ and other machines with PC-dependent memory routing
+            const uint16_t pc = cpu.pc.w;
+            if (cpu.read) {
+                value = memory.read_with_pc(addr, pc);
+                cpu.dbus = value;
+            } else {
+                value = cpu.dbus;
+                memory.write_with_pc(addr, value, pc);
+            }
         } else {
-            value = cpu.dbus;
-            memory.write(addr, value);
+            // Model B and other machines with simple memory mapping
+            if (cpu.read) {
+                value = memory.read(addr);
+                cpu.dbus = value;
+            } else {
+                value = cpu.dbus;
+                memory.write(addr, value);
+            }
         }
 
         // Watchpoint callback (if set, caller handles address filtering)

@@ -210,6 +210,40 @@ public:
         memory_map_.write(addr, value);
     }
 
+    // PC-aware read for VDU driver code shadow RAM routing.
+    // Per B+ Service Manual Section 5.4.3:
+    // When shadow is enabled (ACCCON bit 7 = 1) and address is 0x3000-0x7FFF,
+    // VDU driver code (MOS 0xC000-0xDFFF, or paged RAM 0xA000-0xAFFF) reads shadow RAM,
+    // while all other code reads main RAM.
+    uint8_t read_with_pc(uint16_t addr, uint16_t pc) {
+        // Shadow RAM routing for VDU driver code
+        if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
+            if (is_vdu_driver_code(pc)) {
+                return shadow_ram.read(addr - 0x3000);
+            }
+            // Non-VDU code sees main RAM
+            return main_ram.read(addr);
+        }
+        // All other addresses use normal handling
+        return read(addr);
+    }
+
+    // PC-aware write for VDU driver code shadow RAM routing.
+    void write_with_pc(uint16_t addr, uint8_t value, uint16_t pc) {
+        // Shadow RAM routing for VDU driver code
+        if (shadow_enabled() && addr >= 0x3000 && addr < 0x8000) {
+            if (is_vdu_driver_code(pc)) {
+                shadow_ram.write(addr - 0x3000, value);
+                return;
+            }
+            // Non-VDU code writes to main RAM
+            main_ram.write(addr, value);
+            return;
+        }
+        // All other addresses use normal handling
+        write(addr, value);
+    }
+
     // Side-effect-free read for debugger inspection.
     // Always reads from main RAM (not shadow).
     uint8_t peek(uint16_t addr) const {
@@ -294,7 +328,25 @@ public:
     uint8_t romsel() const { return romsel_; }
     uint8_t acccon() const { return acccon_; }
     bool andy_enabled() const { return (romsel_ & 0x80) != 0; }
+    bool paged_ram_enabled() const { return (romsel_ & 0x80) != 0; }  // Official Acorn terminology
     bool shadow_enabled() const { return (acccon_ & 0x80) != 0; }
+
+    // Per B+ Service Manual Section 5.4.3:
+    // VDU driver code detection determines which code can access shadow RAM.
+    // - Code at 0xC000-0xDFFF (lower 8K of MOS) is always VDU driver
+    // - Code at 0xA000-0xAFFF is VDU driver ONLY when paged RAM is selected
+    // - "This special attribute is not available to any other sideways memory, ROM or RAM"
+    bool is_vdu_driver_code(uint16_t pc) const {
+        // Lower 8K of MOS ROM (0xC000-0xDFFF) - always VDU driver
+        if (pc >= 0xC000 && pc < 0xE000) return true;
+
+        // Top 4K at 0xA000-0xAFFF - VDU driver ONLY when paged RAM is selected
+        // Per service manual: sideways ROMs at same address do NOT get VDU status
+        if (pc >= 0xA000 && pc < 0xB000 && paged_ram_enabled()) return true;
+
+        // Code at 0x0000-0x9FFF or 0xE000-0xFFFF never has VDU driver status
+        return false;
+    }
 
 public:
     // ROM loading - directly access the owned ROM devices
