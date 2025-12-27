@@ -737,3 +737,119 @@ TEST_CASE("DebuggerControl PeekRegion can access sideways bank", "[grpc][debugge
     REQUIRE(response.data().size() == 4);
     // BASIC ROM should have some content
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// PC-Context Memory Access Tests (for B+ shadow RAM routing)
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("DebuggerControl PeekMemory accepts simulated_pc field", "[grpc][debugger][pc-context]") {
+    DebuggerTestFixture fixture;
+
+    // Write some known data
+    fixture.machine().write(0x5000, 0x42);
+
+    // PeekMemory with simulated_pc should work
+    grpc::ClientContext context;
+    beebium::PeekMemoryRequest request;
+    request.set_address(0x5000);
+    request.set_length(1);
+    request.set_simulated_pc(0xD000);  // MOS code PC
+    beebium::PeekMemoryResponse response;
+
+    auto status = fixture.debugger().PeekMemory(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.data().size() == 1);
+    CHECK(static_cast<uint8_t>(response.data()[0]) == 0x42);
+}
+
+TEST_CASE("DebuggerControl ReadMemory accepts simulated_pc field", "[grpc][debugger][pc-context]") {
+    DebuggerTestFixture fixture;
+
+    // Write some known data
+    fixture.machine().write(0x5000, 0xAA);
+
+    // ReadMemory with simulated_pc should work
+    grpc::ClientContext context;
+    beebium::ReadMemoryRequest request;
+    request.set_address(0x5000);
+    request.set_length(1);
+    request.set_simulated_pc(0xD000);  // MOS code PC
+    beebium::ReadMemoryResponse response;
+
+    auto status = fixture.debugger().ReadMemory(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.data().size() == 1);
+    CHECK(static_cast<uint8_t>(response.data()[0]) == 0xAA);
+}
+
+TEST_CASE("DebuggerControl WriteMemory accepts simulated_pc field", "[grpc][debugger][pc-context]") {
+    DebuggerTestFixture fixture;
+
+    // WriteMemory with simulated_pc should work
+    grpc::ClientContext context;
+    beebium::WriteMemoryRequest request;
+    request.set_address(0x5000);
+    request.set_data(std::string("\x55", 1));
+    request.set_simulated_pc(0xD000);  // MOS code PC
+    beebium::WriteMemoryResponse response;
+
+    auto status = fixture.debugger().WriteMemory(&context, request, &response);
+
+    REQUIRE(status.ok());
+    CHECK(response.success());
+
+    // Verify data was written
+    CHECK(fixture.machine().peek(0x5000) == 0x55);
+}
+
+TEST_CASE("Model B ignores simulated_pc (no shadow RAM)", "[grpc][debugger][pc-context]") {
+    DebuggerTestFixture fixture;
+
+    // Write known data at 0x5000 in RAM
+    fixture.machine().write(0x5000, 0x42);
+
+    // Reading with user code PC (would see main RAM on B+)
+    grpc::ClientContext ctx1;
+    beebium::PeekMemoryRequest req1;
+    req1.set_address(0x5000);
+    req1.set_length(1);
+    req1.set_simulated_pc(0x1000);  // User code PC
+    beebium::PeekMemoryResponse resp1;
+    fixture.debugger().PeekMemory(&ctx1, req1, &resp1);
+
+    // Reading with MOS code PC (would see shadow RAM on B+)
+    grpc::ClientContext ctx2;
+    beebium::PeekMemoryRequest req2;
+    req2.set_address(0x5000);
+    req2.set_length(1);
+    req2.set_simulated_pc(0xD000);  // MOS code PC
+    beebium::PeekMemoryResponse resp2;
+    fixture.debugger().PeekMemory(&ctx2, req2, &resp2);
+
+    // On Model B, both should return the same value (no shadow RAM)
+    CHECK(static_cast<uint8_t>(resp1.data()[0]) == 0x42);
+    CHECK(static_cast<uint8_t>(resp2.data()[0]) == 0x42);
+}
+
+TEST_CASE("PeekMemory without simulated_pc still works", "[grpc][debugger][pc-context]") {
+    DebuggerTestFixture fixture;
+
+    // Write known data
+    fixture.machine().write(0x5000, 0xBB);
+
+    // PeekMemory without simulated_pc (backward compatible)
+    grpc::ClientContext context;
+    beebium::PeekMemoryRequest request;
+    request.set_address(0x5000);
+    request.set_length(1);
+    // NOT setting simulated_pc - using default behavior
+    beebium::PeekMemoryResponse response;
+
+    auto status = fixture.debugger().PeekMemory(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.data().size() == 1);
+    CHECK(static_cast<uint8_t>(response.data()[0]) == 0xBB);
+}

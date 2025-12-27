@@ -13,8 +13,51 @@
 #include "beebium/service/DebuggerService.hpp"
 #include <sstream>
 #include <iomanip>
+#include <concepts>
 
 namespace beebium::service {
+
+// Concept to detect if a memory type has PC-aware access methods
+template<typename T>
+concept HasPcAwareMemory = requires(T& m, uint16_t addr, uint16_t pc, uint8_t val) {
+    { m.read_with_pc(addr, pc) } -> std::same_as<uint8_t>;
+    { m.write_with_pc(addr, val, pc) } -> std::same_as<void>;
+};
+
+// Helper to read with PC context when available, otherwise use regular read
+template<typename Machine>
+uint8_t read_with_optional_pc(Machine& machine, uint16_t addr, bool has_pc, uint16_t pc) {
+    if constexpr (HasPcAwareMemory<decltype(machine.memory())>) {
+        if (has_pc) {
+            return machine.memory().read_with_pc(addr, pc);
+        }
+    }
+    return machine.read(addr);
+}
+
+// Helper to peek with PC context when available, otherwise use regular peek
+template<typename Machine>
+uint8_t peek_with_optional_pc(Machine& machine, uint16_t addr, bool has_pc, uint16_t pc) {
+    if constexpr (HasPcAwareMemory<decltype(machine.memory())>) {
+        if (has_pc) {
+            // For peek with PC, we use the PC-aware read (side-effect-free routing)
+            return machine.memory().read_with_pc(addr, pc);
+        }
+    }
+    return machine.peek(addr);
+}
+
+// Helper to write with PC context when available, otherwise use regular write
+template<typename Machine>
+void write_with_optional_pc(Machine& machine, uint16_t addr, uint8_t val, bool has_pc, uint16_t pc) {
+    if constexpr (HasPcAwareMemory<decltype(machine.memory())>) {
+        if (has_pc) {
+            machine.memory().write_with_pc(addr, val, pc);
+            return;
+        }
+    }
+    machine.write(addr, val);
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // DebuggerControlServiceImpl
@@ -183,12 +226,16 @@ grpc::Status DebuggerControlServiceImpl::ReadMemory(
 
     uint32_t address = request->address();
     uint32_t length = request->length();
+    bool has_pc = request->has_simulated_pc();
+    uint16_t pc = has_pc ? static_cast<uint16_t>(request->simulated_pc()) : 0;
 
     std::string data;
     data.reserve(length);
 
     for (uint32_t i = 0; i < length && (address + i) <= 0xFFFF; ++i) {
-        data.push_back(static_cast<char>(machine_.read(static_cast<uint16_t>(address + i))));
+        uint16_t addr = static_cast<uint16_t>(address + i);
+        data.push_back(static_cast<char>(
+            read_with_optional_pc(machine_, addr, has_pc, pc)));
     }
 
     response->set_data(std::move(data));
@@ -204,9 +251,12 @@ grpc::Status DebuggerControlServiceImpl::WriteMemory(
 
     uint32_t address = request->address();
     const std::string& data = request->data();
+    bool has_pc = request->has_simulated_pc();
+    uint16_t pc = has_pc ? static_cast<uint16_t>(request->simulated_pc()) : 0;
 
     for (size_t i = 0; i < data.size() && (address + i) <= 0xFFFF; ++i) {
-        machine_.write(static_cast<uint16_t>(address + i), static_cast<uint8_t>(data[i]));
+        uint16_t addr = static_cast<uint16_t>(address + i);
+        write_with_optional_pc(machine_, addr, static_cast<uint8_t>(data[i]), has_pc, pc);
     }
 
     response->set_success(true);
@@ -222,12 +272,16 @@ grpc::Status DebuggerControlServiceImpl::PeekMemory(
 
     uint32_t address = request->address();
     uint32_t length = request->length();
+    bool has_pc = request->has_simulated_pc();
+    uint16_t pc = has_pc ? static_cast<uint16_t>(request->simulated_pc()) : 0;
 
     std::string data;
     data.reserve(length);
 
     for (uint32_t i = 0; i < length && (address + i) <= 0xFFFF; ++i) {
-        data.push_back(static_cast<char>(machine_.peek(static_cast<uint16_t>(address + i))));
+        uint16_t addr = static_cast<uint16_t>(address + i);
+        data.push_back(static_cast<char>(
+            peek_with_optional_pc(machine_, addr, has_pc, pc)));
     }
 
     response->set_data(std::move(data));

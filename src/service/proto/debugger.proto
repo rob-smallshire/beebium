@@ -74,6 +74,11 @@ message StepResponse {
 message ReadMemoryRequest {
     uint32 address = 1;
     uint32 length = 2;
+    // Simulated PC for B+ shadow RAM routing. When set, memory access is
+    // routed as if code at this PC were executing. On Model B+ with shadow
+    // enabled, VDU driver code (0xC000-0xDFFF or paged RAM 0xA000-0xAFFF)
+    // sees shadow RAM at 0x3000-0x7FFF; other code sees main RAM.
+    optional uint32 simulated_pc = 3;
 }
 
 message ReadMemoryResponse {
@@ -83,6 +88,8 @@ message ReadMemoryResponse {
 message PeekMemoryRequest {
     uint32 address = 1;
     uint32 length = 2;
+    // Simulated PC for B+ shadow RAM routing. See ReadMemoryRequest.
+    optional uint32 simulated_pc = 3;
 }
 
 message PeekMemoryResponse {
@@ -92,6 +99,8 @@ message PeekMemoryResponse {
 message WriteMemoryRequest {
     uint32 address = 1;
     bytes data = 2;
+    // Simulated PC for B+ shadow RAM routing. See ReadMemoryRequest.
+    optional uint32 simulated_pc = 3;
 }
 
 message WriteMemoryResponse {
