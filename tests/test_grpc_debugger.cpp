@@ -596,3 +596,144 @@ TEST_CASE("Sequence counter increments on register write", "[grpc][debugger]") {
 
     CHECK(seq2 > seq1);
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// Memory Region Access Tests
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("DebuggerControl GetMemoryRegions returns regions for ModelB", "[grpc][debugger][regions]") {
+    DebuggerTestFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::GetMemoryRegionsRequest request;
+    beebium::GetMemoryRegionsResponse response;
+
+    auto status = fixture.debugger().GetMemoryRegions(&context, request, &response);
+
+    REQUIRE(status.ok());
+    CHECK(response.machine_type() == "ModelB");
+
+    // ModelB should have: main_ram, mos_rom, bank_0 through bank_15
+    REQUIRE(response.regions_size() >= 18);
+
+    // Check main_ram region
+    bool found_main_ram = false;
+    for (const auto& region : response.regions()) {
+        if (region.name() == "main_ram") {
+            found_main_ram = true;
+            CHECK(region.size() == 32768);
+            CHECK(region.readable());
+            CHECK(region.writable());
+            CHECK(region.populated());
+        }
+    }
+    CHECK(found_main_ram);
+
+    // Check mos_rom region
+    bool found_mos_rom = false;
+    for (const auto& region : response.regions()) {
+        if (region.name() == "mos_rom") {
+            found_mos_rom = true;
+            CHECK(region.size() == 16384);
+            CHECK(region.readable());
+            CHECK_FALSE(region.writable());  // ROM is not writable
+            CHECK(region.populated());
+        }
+    }
+    CHECK(found_mos_rom);
+
+    // Check that bank_0 exists and is active (default bank)
+    bool found_bank_0 = false;
+    for (const auto& region : response.regions()) {
+        if (region.name() == "bank_0") {
+            found_bank_0 = true;
+            CHECK(region.size() == 16384);
+            CHECK(region.active());  // Bank 0 is selected by default
+        }
+    }
+    CHECK(found_bank_0);
+}
+
+TEST_CASE("DebuggerControl PeekRegion reads from main_ram", "[grpc][debugger][regions]") {
+    DebuggerTestFixture fixture;
+
+    // Write known data to main RAM using WriteMemory
+    {
+        grpc::ClientContext context;
+        beebium::WriteMemoryRequest request;
+        request.set_address(0x1234);
+        request.set_data(std::string("\xDE\xAD\xBE\xEF", 4));
+        beebium::WriteMemoryResponse response;
+        fixture.debugger().WriteMemory(&context, request, &response);
+    }
+
+    // Read back using PeekRegion
+    grpc::ClientContext context;
+    beebium::RegionAccessRequest request;
+    request.set_region_name("main_ram");
+    request.set_offset(0x1234);
+    request.set_length(4);
+    beebium::RegionAccessResponse response;
+
+    auto status = fixture.debugger().PeekRegion(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.data().size() == 4);
+    CHECK(static_cast<uint8_t>(response.data()[0]) == 0xDE);
+    CHECK(static_cast<uint8_t>(response.data()[1]) == 0xAD);
+    CHECK(static_cast<uint8_t>(response.data()[2]) == 0xBE);
+    CHECK(static_cast<uint8_t>(response.data()[3]) == 0xEF);
+}
+
+TEST_CASE("DebuggerControl WriteRegion writes to main_ram", "[grpc][debugger][regions]") {
+    DebuggerTestFixture fixture;
+
+    // Write using WriteRegion
+    {
+        grpc::ClientContext context;
+        beebium::WriteRegionRequest request;
+        request.set_region_name("main_ram");
+        request.set_offset(0x5678);
+        request.set_data(std::string("\xCA\xFE\xBA\xBE", 4));
+        beebium::WriteRegionResponse response;
+
+        auto status = fixture.debugger().WriteRegion(&context, request, &response);
+
+        REQUIRE(status.ok());
+        CHECK(response.success());
+    }
+
+    // Read back using PeekMemory (at address 0x5678)
+    grpc::ClientContext context;
+    beebium::PeekMemoryRequest request;
+    request.set_address(0x5678);
+    request.set_length(4);
+    beebium::PeekMemoryResponse response;
+
+    auto status = fixture.debugger().PeekMemory(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.data().size() == 4);
+    CHECK(static_cast<uint8_t>(response.data()[0]) == 0xCA);
+    CHECK(static_cast<uint8_t>(response.data()[1]) == 0xFE);
+    CHECK(static_cast<uint8_t>(response.data()[2]) == 0xBA);
+    CHECK(static_cast<uint8_t>(response.data()[3]) == 0xBE);
+}
+
+TEST_CASE("DebuggerControl PeekRegion can access sideways bank", "[grpc][debugger][regions]") {
+    DebuggerTestFixture fixture;
+
+    // Bank 0 should contain BASIC ROM
+    grpc::ClientContext context;
+    beebium::RegionAccessRequest request;
+    request.set_region_name("bank_0");
+    request.set_offset(0);
+    request.set_length(4);
+    beebium::RegionAccessResponse response;
+
+    auto status = fixture.debugger().PeekRegion(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.data().size() == 4);
+    // BASIC ROM should have some content
+}

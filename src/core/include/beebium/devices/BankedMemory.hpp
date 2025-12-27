@@ -103,6 +103,24 @@ public:
         return bank < 16 && device_ptrs_[bank] != nullptr;
     }
 
+    // Direct bank access for debugger - side-effect free read
+    uint8_t peek_bank(uint8_t bank, uint16_t offset) const {
+        if (bank >= 16 || device_ptrs_[bank] == nullptr) return 0xFF;
+        return read_table_[bank](device_ptrs_[bank], offset);
+    }
+
+    // Direct bank access - normal read (may have side effects for exotic devices)
+    uint8_t read_bank(uint8_t bank, uint16_t offset) {
+        if (bank >= 16 || device_ptrs_[bank] == nullptr) return 0xFF;
+        return read_table_[bank](device_ptrs_[bank], offset);
+    }
+
+    // Direct bank access - write
+    void write_bank(uint8_t bank, uint16_t offset, uint8_t value) {
+        if (bank >= 16 || device_ptrs_[bank] == nullptr) return;
+        write_table_[bank](device_ptrs_[bank], offset, value);
+    }
+
 private:
     template<size_t... Is>
     void init_banks(std::index_sequence<Is...>) {

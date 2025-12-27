@@ -234,6 +234,98 @@ grpc::Status DebuggerControlServiceImpl::PeekMemory(
     return grpc::Status::OK;
 }
 
+grpc::Status DebuggerControlServiceImpl::GetMemoryRegions(
+    grpc::ServerContext* /*context*/,
+    const GetMemoryRegionsRequest* /*request*/,
+    GetMemoryRegionsResponse* response) {
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // Get machine type from hardware
+    response->set_machine_type(std::string(machine_.memory().MACHINE_TYPE));
+
+    // Get regions from hardware
+    auto regions = machine_.memory().get_memory_regions();
+    for (const auto& region : regions) {
+        auto* pb_region = response->add_regions();
+        pb_region->set_name(std::string(region.name));
+        pb_region->set_size(region.size);
+        pb_region->set_readable(beebium::has_flag(region.flags, beebium::RegionFlags::Readable));
+        pb_region->set_writable(beebium::has_flag(region.flags, beebium::RegionFlags::Writable));
+        pb_region->set_has_side_effects(beebium::has_flag(region.flags, beebium::RegionFlags::HasSideEffects));
+        pb_region->set_populated(beebium::has_flag(region.flags, beebium::RegionFlags::Populated));
+        pb_region->set_active(beebium::has_flag(region.flags, beebium::RegionFlags::Active));
+    }
+
+    return grpc::Status::OK;
+}
+
+grpc::Status DebuggerControlServiceImpl::PeekRegion(
+    grpc::ServerContext* /*context*/,
+    const RegionAccessRequest* request,
+    RegionAccessResponse* response) {
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const std::string& region_name = request->region_name();
+    uint32_t offset = request->offset();
+    uint32_t length = request->length();
+
+    std::string data;
+    data.reserve(length);
+
+    for (uint32_t i = 0; i < length; ++i) {
+        data.push_back(static_cast<char>(
+            machine_.memory().peek_region(region_name, offset + i)));
+    }
+
+    response->set_data(std::move(data));
+    return grpc::Status::OK;
+}
+
+grpc::Status DebuggerControlServiceImpl::ReadRegion(
+    grpc::ServerContext* /*context*/,
+    const RegionAccessRequest* request,
+    RegionAccessResponse* response) {
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const std::string& region_name = request->region_name();
+    uint32_t offset = request->offset();
+    uint32_t length = request->length();
+
+    std::string data;
+    data.reserve(length);
+
+    for (uint32_t i = 0; i < length; ++i) {
+        data.push_back(static_cast<char>(
+            machine_.memory().read_region(region_name, offset + i)));
+    }
+
+    response->set_data(std::move(data));
+    return grpc::Status::OK;
+}
+
+grpc::Status DebuggerControlServiceImpl::WriteRegion(
+    grpc::ServerContext* /*context*/,
+    const WriteRegionRequest* request,
+    WriteRegionResponse* response) {
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const std::string& region_name = request->region_name();
+    uint32_t offset = request->offset();
+    const std::string& data = request->data();
+
+    for (size_t i = 0; i < data.size(); ++i) {
+        machine_.memory().write_region(region_name, offset + static_cast<uint32_t>(i),
+            static_cast<uint8_t>(data[i]));
+    }
+
+    response->set_success(true);
+    return grpc::Status::OK;
+}
+
 grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
     grpc::ServerContext* /*context*/,
     const AddBreakpointRequest* request,

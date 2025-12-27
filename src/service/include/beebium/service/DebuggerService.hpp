@@ -85,6 +85,27 @@ public:
         const PeekMemoryRequest* request,
         PeekMemoryResponse* response) override;
 
+    // Memory region access
+    grpc::Status GetMemoryRegions(
+        grpc::ServerContext* context,
+        const GetMemoryRegionsRequest* request,
+        GetMemoryRegionsResponse* response) override;
+
+    grpc::Status PeekRegion(
+        grpc::ServerContext* context,
+        const RegionAccessRequest* request,
+        RegionAccessResponse* response) override;
+
+    grpc::Status ReadRegion(
+        grpc::ServerContext* context,
+        const RegionAccessRequest* request,
+        RegionAccessResponse* response) override;
+
+    grpc::Status WriteRegion(
+        grpc::ServerContext* context,
+        const WriteRegionRequest* request,
+        WriteRegionResponse* response) override;
+
     // Breakpoints
     grpc::Status AddBreakpoint(
         grpc::ServerContext* context,
