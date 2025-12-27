@@ -1,6 +1,15 @@
-# beebium-server gRPC Interface
+# Beebium gRPC Server Interface
 
-The `beebium-server` executable runs the BBC Micro emulator as a headless server, exposing video output and keyboard input via gRPC.
+Beebium provides model-specific server executables that run the BBC Micro emulator as a headless server, exposing video output, keyboard input, and debugging via gRPC.
+
+## Available Executables
+
+| Executable | Machine | MOS ROM | Description |
+|------------|---------|---------|-------------|
+| `beebium-model-b` | BBC Model B | MOS 1.20 | Original 32K BBC Micro |
+| `beebium-model-b-plus` | BBC Model B+ 64K | MOS 2.0 | Enhanced 64K model |
+
+Each executable contains only the hardware emulation needed for that machine type.
 
 ## Building
 
@@ -18,30 +27,65 @@ brew install grpc protobuf  # macOS
 ## Running the Server
 
 ```bash
-./src/server/beebium-server --mos <path/to/os12.rom> [options]
+./src/server/beebium-model-b [options]
 ```
 
-### Required Arguments
+All arguments are optional. By default, the server loads the appropriate MOS ROM and BBC BASIC II for the machine type.
 
-| Argument | Description |
-|----------|-------------|
-| `--mos <filepath>` | Path to MOS ROM (e.g., os12.rom) |
-
-### Optional Arguments
+### Arguments
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--basic <filepath>` | - | Path to BASIC ROM (e.g., basic2.rom) |
-| `--port <port>` | 50051 | gRPC server port |
+| `--mos <filepath>` | Machine-specific | Path to MOS ROM |
+| `--rom <slot>:<filepath>` | Slot 15: bbc-basic_2.rom | Load ROM into sideways slot (0-15) |
+| `--rom-dir <dirpath>` | Auto-detected | ROM directory path |
+| `--port <port>` | 48875 | gRPC server port |
+| `--info` | - | Print machine info as JSON and exit |
 | `--help` | - | Show usage |
 
-### Example
+### Examples
 
 ```bash
-./beebium-server --mos /path/to/os12.rom --basic /path/to/basic2.rom --port 50051
+# Use all defaults (recommended)
+./beebium-model-b
+
+# Replace BASIC with Forth in slot 15
+./beebium-model-b --rom 15:forth.rom
+
+# Add DFS in slot 14
+./beebium-model-b --rom 14:dfs.rom
+
+# Multiple ROMs
+./beebium-model-b --rom 14:dfs.rom --rom 13:viewsheet.rom
+
+# Override ROM directory
+./beebium-model-b --rom-dir /my/roms
+
+# Machine discovery
+./beebium-model-b --info
 ```
 
 The server runs until interrupted with Ctrl+C.
+
+### Machine Discovery
+
+The `--info` flag outputs machine information as JSON:
+
+```json
+{
+  "executable": "beebium-model-b",
+  "machine_type": "ModelB",
+  "display_name": "BBC Model B",
+  "version": "0.1.0",
+  "default_mos_rom": "acorn-mos_1_20.rom",
+  "default_language_rom": "bbc-basic_2.rom",
+  "default_language_slot": 15
+}
+```
+
+Frontends can use this to enumerate available machine types.
+
+See [deployment.md](deployment.md) for ROM discovery and installation details.
 
 ## gRPC Services
 
@@ -58,7 +102,7 @@ Returns video configuration.
 ```bash
 grpcurl -plaintext \
   -import-path src/service/proto -proto video.proto \
-  localhost:50051 beebium.VideoService/GetConfig
+  localhost:48875 beebium.VideoService/GetConfig
 ```
 
 Response:
@@ -77,7 +121,7 @@ Streams frames as they complete (at VSYNC, ~50Hz).
 ```bash
 grpcurl -plaintext \
   -import-path src/service/proto -proto video.proto \
-  localhost:50051 beebium.VideoService/SubscribeFrames
+  localhost:48875 beebium.VideoService/SubscribeFrames
 ```
 
 Each frame contains:
@@ -100,13 +144,13 @@ Press or release a key by matrix position.
 grpcurl -plaintext \
   -import-path src/service/proto -proto keyboard.proto \
   -d '{"row": 4, "column": 1}' \
-  localhost:50051 beebium.KeyboardService/KeyDown
+  localhost:48875 beebium.KeyboardService/KeyDown
 
 # Release the key
 grpcurl -plaintext \
   -import-path src/service/proto -proto keyboard.proto \
   -d '{"row": 4, "column": 1}' \
-  localhost:50051 beebium.KeyboardService/KeyUp
+  localhost:48875 beebium.KeyboardService/KeyUp
 ```
 
 #### GetState
@@ -116,7 +160,7 @@ Returns the current keyboard matrix state.
 ```bash
 grpcurl -plaintext \
   -import-path src/service/proto -proto keyboard.proto \
-  localhost:50051 beebium.KeyboardService/GetState
+  localhost:48875 beebium.KeyboardService/GetState
 ```
 
 Response:
@@ -173,7 +217,7 @@ import grpc
 import video_pb2
 import video_pb2_grpc
 
-channel = grpc.insecure_channel('localhost:50051')
+channel = grpc.insecure_channel('localhost:48875')
 stub = video_pb2_grpc.VideoServiceStub(channel)
 
 # Get config
@@ -193,19 +237,21 @@ EOF
 ┌─────────────────────────────────────────────────┐
 │  Client (grpcurl, Python, Swift, etc.)          │
 └─────────────────────────────────────────────────┘
-                      │ gRPC (port 50051)
+                      │ gRPC (port 48875)
                       ▼
 ┌─────────────────────────────────────────────────┐
-│  beebium-server                                 │
-│  ├── VideoService (frame streaming)             │
-│  ├── KeyboardService (input handling)           │
+│  beebium-model-b / beebium-model-b-plus         │
+│  ├── Server<MachineType>                        │
+│  │   ├── VideoService (frame streaming)         │
+│  │   ├── KeyboardService (input handling)       │
+│  │   └── DebuggerService (memory, breakpoints)  │
 │  └── Render thread (PixelBatch → FrameBuffer)   │
 └─────────────────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────┐
 │  beebium_core                                   │
-│  ├── Machine<ModelB> (emulation loop)           │
+│  ├── Machine<CpuPolicy, MemoryPolicy>           │
 │  ├── OutputQueue<PixelBatch> (video pipeline)   │
 │  └── SystemViaPeripheral (keyboard matrix)      │
 └─────────────────────────────────────────────────┘
