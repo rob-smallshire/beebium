@@ -43,11 +43,10 @@ foreach(PROTO_FILE ${PROTO_FILES})
 endforeach()
 
 # Service implementation sources
+# Note: Server.hpp and DebuggerService.hpp are now header-only templates
 set(SERVICE_SOURCES
-    src/Server.cpp
     src/VideoService.cpp
     src/KeyboardService.cpp
-    src/DebuggerService.cpp
 )
 
 # Create the library

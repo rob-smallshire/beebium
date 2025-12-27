@@ -74,10 +74,16 @@ class ModelBPlusHardware {
 public:
     // Machine identification and region names (compile-time constants)
     static constexpr std::string_view MACHINE_TYPE = "ModelBPlus";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B+ 64K";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_SHADOW_RAM = "shadow_ram";
     static constexpr std::string_view REGION_ANDY_RAM = "andy_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";
+
+    // Default ROM filenames for this machine
+    static constexpr std::string_view DEFAULT_MOS_ROM = "acorn-mos_2_0.rom";
+    static constexpr std::string_view DEFAULT_LANGUAGE_ROM = "bbc-basic_2.rom";
+    static constexpr uint8_t DEFAULT_LANGUAGE_SLOT = 15;
 
     // Hardware devices (owned by this struct)
     Ram<32768> main_ram;           // Main RAM 0x0000-0x7FFF

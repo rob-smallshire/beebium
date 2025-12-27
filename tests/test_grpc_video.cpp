@@ -50,8 +50,8 @@ public:
     VideoTestFixture() {
         // Load ROMs
 #ifdef BEEBIUM_ROM_DIR
-        auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/OS12.ROM");
-        auto basic = load_rom(std::string(BEEBIUM_ROM_DIR) + "/BASIC2.ROM");
+        auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/acorn-mos_1_20.rom");
+        auto basic = load_rom(std::string(BEEBIUM_ROM_DIR) + "/bbc-basic_2.rom");
         std::copy(mos.begin(), mos.end(), machine_.state().memory.mos_rom.data());
         std::copy(basic.begin(), basic.end(), machine_.state().memory.basic_rom.data());
 #endif
@@ -61,10 +61,10 @@ public:
         machine_.reset();
 
         // Start server on a random available port
-        server_ = std::make_unique<beebium::service::Server>(machine_, "127.0.0.1", 0);
+        server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(machine_, "127.0.0.1", 0);
         // Note: Port 0 would need special handling to get actual port
         // For now, use a fixed test port
-        server_ = std::make_unique<beebium::service::Server>(machine_, "127.0.0.1", 50052);
+        server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(machine_, "127.0.0.1", 50052);
         server_->start();
 
         // Create client channel
@@ -86,7 +86,7 @@ public:
 
 private:
     beebium::ModelB machine_;
-    std::unique_ptr<beebium::service::Server> server_;
+    std::unique_ptr<beebium::service::Server<beebium::ModelB>> server_;
     std::shared_ptr<grpc::Channel> channel_;
     std::unique_ptr<beebium::VideoService::Stub> stub_;
 };

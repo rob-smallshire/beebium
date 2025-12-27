@@ -92,6 +92,10 @@ struct MachineState {
 template<typename CpuPolicy, typename MemoryPolicy>
 class Machine {
 public:
+    // Policy type aliases for external access
+    using Cpu = CpuPolicy;
+    using Memory = MemoryPolicy;
+
     using State = MachineState<MemoryPolicy>;
     using CpuBindingType = CpuBinding<MemoryPolicy>;
     using VideoBindingType = VideoBinding<MemoryPolicy>;

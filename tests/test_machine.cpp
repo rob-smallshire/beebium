@@ -22,8 +22,8 @@ TEST_CASE("Machine template instantiation", "[machine][init]") {
         REQUIRE(machine.cycle_count() == 0);
     }
 
-    SECTION("ModelBCmos can be instantiated") {
-        ModelBCmos machine;
+    SECTION("ModelBPlus can be instantiated") {
+        ModelBPlus machine;
         REQUIRE(machine.cycle_count() == 0);
     }
 }

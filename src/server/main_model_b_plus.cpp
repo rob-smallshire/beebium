@@ -10,25 +10,9 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef BEEBIUM_MACHINES_HPP
-#define BEEBIUM_MACHINES_HPP
+#include "beebium/server/ServerMain.hpp"
+#include "beebium/Machines.hpp"
 
-#include "Machine.hpp"
-#include "CpuPolicy.hpp"
-#include "ModelBHardware.hpp"
-#include "ModelBPlusHardware.hpp"
-
-namespace beebium {
-
-// Convenience type aliases for common machine configurations.
-// New configurations can be created by composing policies.
-
-// BBC Model B: NMOS 6502 + Model B hardware (32KB RAM)
-using ModelB = Machine<Nmos6502, ModelBHardware>;
-
-// BBC Model B+ 64K: NMOS 6502 + Model B+ hardware (64KB RAM with shadow/ANDY)
-using ModelBPlus = Machine<Nmos6502, ModelBPlusHardware>;
-
-} // namespace beebium
-
-#endif // BEEBIUM_MACHINES_HPP
+int main(int argc, char* argv[]) {
+    return beebium::server::server_main<beebium::ModelBPlus>(argc, argv);
+}

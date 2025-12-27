@@ -68,8 +68,14 @@ class ModelBHardware {
 public:
     // Machine identification and region names (compile-time constants)
     static constexpr std::string_view MACHINE_TYPE = "ModelB";
+    static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";
+
+    // Default ROM filenames for this machine
+    static constexpr std::string_view DEFAULT_MOS_ROM = "acorn-mos_1_20.rom";
+    static constexpr std::string_view DEFAULT_LANGUAGE_ROM = "bbc-basic_2.rom";
+    static constexpr uint8_t DEFAULT_LANGUAGE_SLOT = 15;
 
     // Hardware devices (owned by this struct)
     Ram<32768> main_ram;
