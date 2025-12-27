@@ -47,6 +47,12 @@ bool roms_available() {
            std::filesystem::exists(rom_dir / "BASIC2.ROM");
 }
 
+bool bplus_roms_available() {
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    return std::filesystem::exists(rom_dir / "BPMOS.ROM") &&
+           std::filesystem::exists(rom_dir / "BASIC2.ROM");
+}
+
 } // namespace
 
 // =============================================================================
@@ -689,4 +695,209 @@ TEST_CASE("MOS 1.20 complete boot sequence", "[boot]") {
 
     // CRTC R0 = 63 for Mode 7
     REQUIRE(machine.memory().crtc.reg(0) == 63);
+}
+
+// =============================================================================
+// BBC Model B+ 64K Boot Sequence Tests
+// =============================================================================
+
+TEST_CASE("Model B+ boots to BASIC prompt", "[boot][bplus]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    // Verify ROM loaded correctly
+    // B+ MOS reset vector
+    uint16_t reset_vector = machine.read(0xFFFC) | (machine.read(0xFFFD) << 8);
+    INFO("Reset vector: $" << std::hex << reset_vector);
+    REQUIRE(reset_vector >= 0xC000);  // Should be in MOS ROM space
+
+    // Complete reset sequence
+    while (!M6502_IsAboutToExecute(&machine.cpu())) {
+        machine.step();
+    }
+
+    // Helper to step one instruction
+    auto step = [&]() { machine.step_instruction(); };
+
+    // Run boot sequence (2M instructions should be plenty)
+    for (int i = 0; i < 2000000; ++i) {
+        step();
+    }
+
+    // Should be in Mode 7
+    uint8_t current_mode = machine.read(0x0355);
+    INFO("Current screen mode: " << (int)current_mode);
+    REQUIRE(current_mode == 7);
+
+    // Video ULA should be in teletext mode
+    REQUIRE((machine.memory().video_ula.control() & 0x02) != 0);
+
+    // Dump first few rows of screen memory for debugging
+    std::string screen_dump;
+    for (int row = 0; row < 5; ++row) {
+        screen_dump += "Row " + std::to_string(row) + ": [";
+        for (int col = 0; col < 40; ++col) {
+            uint8_t ch = machine.read(0x7C00 + row * 40 + col);
+            if (ch >= 0x20 && ch < 0x7F) {
+                screen_dump += static_cast<char>(ch);
+            } else {
+                screen_dump += '.';
+            }
+        }
+        screen_dump += "]\n";
+    }
+    INFO("Screen memory:\n" << screen_dump);
+
+    // Search for "Acorn OS" in screen memory to find boot message
+    // B+ MOS displays "Acorn OS 64K" instead of "BBC Computer 32K"
+    bool found_acorn = false;
+    uint16_t acorn_addr = 0;
+    for (uint16_t addr = 0x7C00; addr < 0x7FFF - 7; ++addr) {
+        if (machine.read(addr) == 'A' &&
+            machine.read(addr + 1) == 'c' &&
+            machine.read(addr + 2) == 'o' &&
+            machine.read(addr + 3) == 'r' &&
+            machine.read(addr + 4) == 'n' &&
+            machine.read(addr + 5) == ' ' &&
+            machine.read(addr + 6) == 'O' &&
+            machine.read(addr + 7) == 'S') {
+            found_acorn = true;
+            acorn_addr = addr;
+            break;
+        }
+    }
+    INFO("Found 'Acorn OS' at: $" << std::hex << acorn_addr);
+    REQUIRE(found_acorn);
+
+    // Search for "BASIC" in screen memory
+    bool found_basic = false;
+    uint16_t basic_addr = 0;
+    for (uint16_t addr = 0x7C00; addr < 0x7FFF - 4; ++addr) {
+        if (machine.read(addr) == 'B' &&
+            machine.read(addr + 1) == 'A' &&
+            machine.read(addr + 2) == 'S' &&
+            machine.read(addr + 3) == 'I' &&
+            machine.read(addr + 4) == 'C') {
+            found_basic = true;
+            basic_addr = addr;
+            break;
+        }
+    }
+    INFO("Found 'BASIC' at: $" << std::hex << basic_addr);
+    REQUIRE(found_basic);
+}
+
+TEST_CASE("Model B+ ACCCON register controls shadow RAM", "[bplus][memory]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    // ACCCON at $FE34 - bit 7 controls shadow RAM
+    // Initially shadow should be disabled
+    REQUIRE(machine.memory().shadow_enabled() == false);
+
+    // Write test pattern to main RAM in shadow region
+    machine.write(0x3000, 0xAA);
+    machine.write(0x5000, 0xBB);
+    machine.write(0x7000, 0xCC);
+
+    // Write different pattern to shadow RAM directly
+    machine.memory().write_shadow(0x3000, 0x11);
+    machine.memory().write_shadow(0x5000, 0x22);
+    machine.memory().write_shadow(0x7000, 0x33);
+
+    // With shadow disabled, CPU reads from main RAM
+    REQUIRE(machine.read(0x3000) == 0xAA);
+    REQUIRE(machine.read(0x5000) == 0xBB);
+    REQUIRE(machine.read(0x7000) == 0xCC);
+
+    // peek_video() reads from main RAM when shadow disabled
+    REQUIRE(machine.memory().peek_video(0x3000) == 0xAA);
+    REQUIRE(machine.memory().peek_video(0x5000) == 0xBB);
+    REQUIRE(machine.memory().peek_video(0x7000) == 0xCC);
+
+    // Enable shadow RAM via ACCCON
+    machine.write(0xFE34, 0x80);
+    REQUIRE(machine.memory().shadow_enabled() == true);
+
+    // CPU still reads from main RAM (shadow is for MOS/video only)
+    REQUIRE(machine.read(0x3000) == 0xAA);
+    REQUIRE(machine.read(0x5000) == 0xBB);
+    REQUIRE(machine.read(0x7000) == 0xCC);
+
+    // But peek_video() now reads from shadow RAM
+    REQUIRE(machine.memory().peek_video(0x3000) == 0x11);
+    REQUIRE(machine.memory().peek_video(0x5000) == 0x22);
+    REQUIRE(machine.memory().peek_video(0x7000) == 0x33);
+
+    // Disable shadow RAM
+    machine.write(0xFE34, 0x00);
+    REQUIRE(machine.memory().shadow_enabled() == false);
+
+    // peek_video() returns to reading main RAM
+    REQUIRE(machine.memory().peek_video(0x3000) == 0xAA);
+}
+
+TEST_CASE("Model B+ ROMSEL bit 7 controls ANDY private RAM", "[bplus][memory]") {
+    if (!bplus_roms_available()) SKIP("B+ ROMs not available");
+
+    ModelBPlus machine;
+    const auto rom_dir = std::filesystem::path(BEEBIUM_ROM_DIR);
+    auto mos = load_rom(rom_dir / "BPMOS.ROM");
+    auto basic = load_rom(rom_dir / "BASIC2.ROM");
+    machine.memory().load_mos(mos.data(), mos.size());
+    machine.memory().load_basic(basic.data(), basic.size());
+    machine.reset();
+
+    // Initially ANDY should be disabled
+    REQUIRE(machine.memory().andy_enabled() == false);
+
+    // Read from ROM space - should get ROM data
+    uint8_t rom_byte = machine.read(0x8000);
+
+    // Enable ANDY via ROMSEL bit 7 (while keeping bank 0 selected)
+    machine.write(0xFE30, 0x80);
+    REQUIRE(machine.memory().andy_enabled() == true);
+
+    // Now reads from $8000-$AFFF should come from ANDY RAM
+    // Initially ANDY RAM is cleared to 0
+    REQUIRE(machine.read(0x8000) == 0x00);
+    REQUIRE(machine.read(0x9000) == 0x00);
+    REQUIRE(machine.read(0xA000) == 0x00);
+
+    // Writes should go to ANDY RAM
+    machine.write(0x8000, 0x42);
+    machine.write(0x9000, 0x43);
+    machine.write(0xA000, 0x44);
+
+    REQUIRE(machine.read(0x8000) == 0x42);
+    REQUIRE(machine.read(0x9000) == 0x43);
+    REQUIRE(machine.read(0xA000) == 0x44);
+
+    // $B000-$BFFF should still be ROM (top 4KB of bank)
+    // Just verify it's not reading from ANDY by checking we get non-zero ROM data
+    // or at least different data than ANDY
+    uint8_t bxxx_byte = machine.read(0xB000);
+    INFO("$B000 = $" << std::hex << (int)bxxx_byte);
+    // (This is ROM data, not ANDY)
+
+    // Disable ANDY - reads should return to ROM
+    machine.write(0xFE30, 0x00);
+    REQUIRE(machine.memory().andy_enabled() == false);
+
+    // ROM should be visible again at $8000
+    REQUIRE(machine.read(0x8000) == rom_byte);
 }

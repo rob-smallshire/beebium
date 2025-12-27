@@ -34,33 +34,30 @@ namespace beebium {
 // - ModelBHardware: Device ownership and memory map
 // - VideoRenderer: Pixel generation and screen addressing
 //
-template<typename RamType>
+// The Hardware template parameter must provide:
+// - peek_video(uint16_t addr) const -> uint8_t: Read video memory
+// - addressable_latch: AddressableLatch reference for screen base
+// - video_ula: VideoUla reference for mode info and pixel generation
+// - saa5050: Saa5050 reference for teletext rendering
+// - video_output: optional OutputQueue<PixelBatch> for output
+//
+template<typename Hardware>
 class VideoRenderer {
 public:
-    VideoRenderer(
-        const RamType& ram,
-        const AddressableLatch& latch,
-        VideoUla& video_ula,
-        Saa5050& saa5050,
-        std::optional<OutputQueue<PixelBatch>>& output
-    )
-        : ram_(ram)
-        , latch_(latch)
-        , video_ula_(video_ula)
-        , saa5050_(saa5050)
-        , output_(output)
+    explicit VideoRenderer(Hardware& hardware)
+        : hardware_(hardware)
     {}
 
     // Render video output from CRTC state
     void render(const Crtc6845::Output& crtc_output) {
-        // Read screen memory byte at CRTC address
+        // Read screen memory byte at CRTC address using peek_video() for shadow RAM support
         uint16_t screen_addr = translate_screen_address(crtc_output.address);
-        uint8_t screen_byte = crtc_output.display ? ram_.read(screen_addr) : 0;
+        uint8_t screen_byte = crtc_output.display ? hardware_.peek_video(screen_addr) : 0;
 
         // Generate PixelBatch
         PixelBatch batch;
 
-        if (video_ula_.teletext_mode()) {
+        if (hardware_.video_ula.teletext_mode()) {
             render_teletext(batch, crtc_output, screen_byte);
             return;  // Teletext pushes its own batches
         } else {
@@ -75,7 +72,7 @@ public:
         batch.set_flags(flags);
 
         // Push to output queue
-        output_->push(batch);
+        hardware_.video_output->push(batch);
     }
 
     // Reset renderer state
@@ -89,10 +86,10 @@ public:
     // Translate CRTC address to BBC memory address
     uint16_t translate_screen_address(uint16_t crtc_addr) const {
         // Screen base from addressable latch bits 4-5
-        uint8_t screen_base_bits = latch_.screen_base();
+        uint8_t screen_base_bits = hardware_.addressable_latch.screen_base();
 
         // Mode 7 uses different addressing
-        if (video_ula_.teletext_mode()) {
+        if (hardware_.video_ula.teletext_mode()) {
             // Mode 7: Screen at 0x7C00-0x7FFF (1KB)
             return 0x7C00 | (crtc_addr & 0x03FF);
         }
@@ -115,23 +112,23 @@ private:
     void render_teletext(PixelBatch& batch, const Crtc6845::Output& crtc_output, uint8_t screen_byte) {
         // Handle VSYNC rising edge
         if (crtc_output.vsync && !last_vsync_) {
-            saa5050_.vsync();
+            hardware_.saa5050.vsync();
             teletext_column_ = 0;
         }
 
         // Pass CRTC raster to SAA5050
-        saa5050_.set_raster(crtc_output.raster);
+        hardware_.saa5050.set_raster(crtc_output.raster);
 
         // Start of display area - reset per-line state
         if (crtc_output.display && teletext_column_ == 0) {
-            saa5050_.start_of_line();
+            hardware_.saa5050.start_of_line();
         }
 
         // Feed byte to SAA5050
-        saa5050_.byte(screen_byte, crtc_output.display ? 1 : 0, crtc_output.cursor != 0);
+        hardware_.saa5050.byte(screen_byte, crtc_output.display ? 1 : 0, crtc_output.cursor != 0);
 
         // Emit first batch (left half of character)
-        saa5050_.emit_pixels(batch, bbc_colors::PALETTE);
+        hardware_.saa5050.emit_pixels(batch, bbc_colors::PALETTE);
 
         // Set sync flags
         uint8_t flags = VIDEO_FLAG_NONE;
@@ -140,13 +137,13 @@ private:
         if (crtc_output.display) flags |= VIDEO_FLAG_DISPLAY;
         batch.set_flags(flags);
 
-        output_->push(batch);
+        hardware_.video_output->push(batch);
 
         // Emit second batch (right half of character)
         PixelBatch batch2;
-        saa5050_.emit_pixels(batch2, bbc_colors::PALETTE);
+        hardware_.saa5050.emit_pixels(batch2, bbc_colors::PALETTE);
         batch2.set_flags(flags);
-        output_->push(batch2);
+        hardware_.video_output->push(batch2);
 
         if (crtc_output.display) {
             ++teletext_column_;
@@ -154,7 +151,7 @@ private:
 
         // Reset column counter when leaving display area
         if (!crtc_output.display && last_display_ && teletext_column_ > 0) {
-            saa5050_.end_of_line();
+            hardware_.saa5050.end_of_line();
             teletext_column_ = 0;
         }
 
@@ -164,20 +161,16 @@ private:
     }
 
     void render_bitmap(PixelBatch& batch, const Crtc6845::Output& crtc_output, uint8_t screen_byte) {
-        video_ula_.byte(screen_byte, crtc_output.cursor != 0);
+        hardware_.video_ula.byte(screen_byte, crtc_output.cursor != 0);
 
         if (crtc_output.display) {
-            video_ula_.emit_pixels(batch);
+            hardware_.video_ula.emit_pixels(batch);
         } else {
-            video_ula_.emit_blank(batch);
+            hardware_.video_ula.emit_blank(batch);
         }
     }
 
-    const RamType& ram_;
-    const AddressableLatch& latch_;
-    VideoUla& video_ula_;
-    Saa5050& saa5050_;
-    std::optional<OutputQueue<PixelBatch>>& output_;
+    Hardware& hardware_;
 
     // Teletext state tracking
     bool last_hsync_ = false;
@@ -187,15 +180,9 @@ private:
 };
 
 // Factory function to create VideoRenderer with type deduction
-template<typename RamType>
-auto make_video_renderer(
-    const RamType& ram,
-    const AddressableLatch& latch,
-    VideoUla& video_ula,
-    Saa5050& saa5050,
-    std::optional<OutputQueue<PixelBatch>>& output
-) {
-    return VideoRenderer<RamType>(ram, latch, video_ula, saa5050, output);
+template<typename Hardware>
+auto make_video_renderer(Hardware& hardware) {
+    return VideoRenderer<Hardware>(hardware);
 }
 
 } // namespace beebium

@@ -33,16 +33,18 @@
 
 namespace beebium {
 
-// BBC Model B hardware configuration using the new MemoryMap infrastructure.
+// BBC Model B+ 64K hardware configuration.
 //
-// This struct holds all hardware devices and provides:
-// - Memory-mapped access via the memory_map
-// - Direct access to devices for clocking and configuration
-// - Dependency injection for VIA peripherals
+// The B+ extends the Model B with:
+// - 64KB total RAM (32KB main + 20KB shadow + 12KB private/ANDY)
+// - ACCCON register at 0xFE34 controlling shadow RAM
+// - Extended ROMSEL (0xFE30) bit 7 controlling private RAM (ANDY)
 //
 // Memory Map:
-//   0x0000-0x7FFF: 32KB RAM
-//   0x8000-0xBFFF: 16KB Paged ROM (16 banks, selected via ROMSEL at 0xFE30)
+//   0x0000-0x7FFF: 32KB Main RAM
+//   0x3000-0x7FFF: (also) 20KB Shadow RAM (when ACCCON bit 7 = 1, for MOS)
+//   0x8000-0xAFFF: 12KB Private RAM (ANDY) or ROM bank (controlled by ROMSEL bit 7)
+//   0xB000-0xBFFF: 4KB ROM bank (top 4KB of selected sideways ROM)
 //   0xC000-0xFBFF: 16KB MOS ROM (minus I/O region)
 //   0xFC00-0xFDFF: Reserved / External I/O (FRED/JIM)
 //   0xFE00-0xFEFF: SHEILA (I/O devices)
@@ -50,37 +52,45 @@ namespace beebium {
 //     0xFE08-0xFE0F: Serial ACIA
 //     0xFE10-0xFE1F: Serial ULA
 //     0xFE20-0xFE2F: Video ULA
-//     0xFE30-0xFE3F: Paging registers (ROMSEL)
+//     0xFE30-0xFE33: ROMSEL (extended with bit 7 for ANDY)
+//     0xFE34-0xFE37: ACCCON (shadow control, bit 7)
 //     0xFE40-0xFE5F: System VIA (16 regs, mirrored)
 //     0xFE60-0xFE7F: User VIA (16 regs, mirrored)
-//     0xFE80-0xFE9F: Disc controller
+//     0xFE80-0xFE9F: 1770 Disc controller (built-in on B+)
 //     0xFEA0-0xFEBF: Econet
 //     0xFEC0-0xFEDF: A/D converter
 //     0xFEE0-0xFEFF: Tube
 //
-// Sideways ROM/RAM Configuration:
-//   Bank 0: ROM (typically BASIC)
-//   Bank 1: ROM (typically DFS or other language)
-//   Bank 4: Sideways RAM (for testing/user programs)
-//   Banks 2-3, 5-15: Empty (return 0xFF)
+// Shadow RAM Behavior:
+//   When ACCCON bit 7 = 1, MOS code (executing from 0xC000-0xFFFF) sees
+//   shadow RAM at 0x3000-0x7FFF. User code always sees main RAM.
+//   Video always reads from shadow RAM when enabled.
 //
-class ModelBHardware {
+// Private RAM (ANDY) Behavior:
+//   When ROMSEL bit 7 = 1, addresses 0x8000-0xAFFF map to 12KB ANDY RAM
+//   instead of the ROM bank. 0xB000-0xBFFF still comes from ROM.
+//
+class ModelBPlusHardware {
 public:
     // Machine identification and region names (compile-time constants)
-    static constexpr std::string_view MACHINE_TYPE = "ModelB";
+    static constexpr std::string_view MACHINE_TYPE = "ModelBPlus";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
+    static constexpr std::string_view REGION_SHADOW_RAM = "shadow_ram";
+    static constexpr std::string_view REGION_ANDY_RAM = "andy_ram";
     static constexpr std::string_view REGION_MOS_ROM = "mos_rom";
 
     // Hardware devices (owned by this struct)
-    Ram<32768> main_ram;
-    Rom<16384> mos_rom;
+    Ram<32768> main_ram;           // Main RAM 0x0000-0x7FFF
+    Ram<20480> shadow_ram;         // Shadow screen memory (20KB for 0x3000-0x7FFF)
+    Ram<12288> andy_ram;           // Private RAM (ANDY) 0x8000-0xAFFF
+    Rom<16384> mos_rom;            // MOS ROM
 
     // Sideways ROM/RAM devices (owned, bound to BankedMemory)
-    Rom<16384> basic_rom;      // Bank 0
-    Rom<16384> dfs_rom;        // Bank 1
-    Ram<16384> sideways_ram;   // Bank 4
+    Rom<16384> basic_rom;          // Bank 0
+    Rom<16384> dfs_rom;            // Bank 1
+    Ram<16384> sideways_ram;       // Bank 4
 
-    // Sideways banks type
+    // Sideways banks type (same as Model B)
     using SidewaysType = BankedMemory<
         decltype(make_bank<0>(std::declval<Rom<16384>&>())),
         decltype(make_bank<1>(std::declval<Rom<16384>&>())),
@@ -108,33 +118,53 @@ public:
     Saa5050 saa5050;
 
     // Video output queue (optional - only created if video output is enabled)
-    // Call enable_video_output() to activate
     std::optional<OutputQueue<PixelBatch>> video_output;
 
     // System VIA peripherals
     AddressableLatch addressable_latch;
     SystemViaPeripheral system_via_peripheral{addressable_latch};
 
-    // ROMSEL register wrapper - handles bank switching and returns 0xFF on read
-    struct RomselRegister {
+private:
+    // B+ specific paging registers
+    uint8_t romsel_ = 0;    // Bits 0-3: bank, Bit 7: ANDY enable
+    uint8_t acccon_ = 0;    // Bit 7: shadow enable
+
+    // ROMSEL register wrapper for B+ - handles bank switching and ANDY control
+    struct BPlusRomselRegister {
         SidewaysType& sideways;
+        uint8_t& romsel;
 
         uint8_t read(uint16_t) { return 0xFF; }  // Write-only register
         void write(uint16_t, uint8_t value) {
+            romsel = value & 0x8F;  // Only bits 0-3 and 7 are writable
             sideways.select_bank(value & 0x0F);
         }
     };
 
-    RomselRegister romsel{sideways};
+    // ACCCON register wrapper for B+ - controls shadow RAM
+    struct AccconRegister {
+        uint8_t& acccon;
 
-    // Memory map type (deduced from make_memory_map)
+        uint8_t read(uint16_t) { return acccon; }  // Readable on B+
+        void write(uint16_t, uint8_t value) {
+            acccon = value & 0x80;  // Only bit 7 is writable on B+ 64K
+        }
+    };
+
+public:
+    BPlusRomselRegister romsel_reg{sideways, romsel_};
+    AccconRegister acccon_reg{acccon_};
+
+    // Memory map type - note: I/O regions handled first, then RAM/ROM
+    // For B+, we need custom read/write that handles paging
     using MemoryMapType = decltype(
         MemoryMap{
             make_region<0xFE00, 0xFE07, Mirror<0x07>>(std::declval<Crtc6845&>()),
             make_region<0xFE20, 0xFE2F, Mirror<0x01>>(std::declval<VideoUla&>()),
             make_region<0xFE40, 0xFE5F, Mirror<0x0F>>(std::declval<Via6522&>()),
             make_region<0xFE60, 0xFE7F, Mirror<0x0F>>(std::declval<Via6522&>()),
-            make_region<0xFE30, 0xFE3F, Mirror<0x0F>>(std::declval<RomselRegister&>()),
+            make_region<0xFE30, 0xFE33, Mirror<0x03>>(std::declval<BPlusRomselRegister&>()),
+            make_region<0xFE34, 0xFE37, Mirror<0x03>>(std::declval<AccconRegister&>()),
             make_region<0x0000, 0x7FFF>(std::declval<Ram<32768>&>()),
             make_region<0x8000, 0xBFFF>(std::declval<SidewaysType&>()),
             make_region<0xC000, 0xFFFF>(std::declval<Rom<16384>&>())
@@ -142,7 +172,7 @@ public:
     );
 
     // Default constructor - uses internal system_via_peripheral
-    ModelBHardware()
+    ModelBPlusHardware()
         : system_via()
         , user_via()
         , memory_map_(make_memory_map())
@@ -153,24 +183,35 @@ public:
     }
 
     // Constructor with custom peripherals (for testing or alternative configurations)
-    ModelBHardware(ViaPeripheral& system_peripheral, ViaPeripheral& user_peripheral)
+    ModelBPlusHardware(ViaPeripheral& system_peripheral, ViaPeripheral& user_peripheral)
         : system_via(system_peripheral)
         , user_via(user_peripheral)
         , memory_map_(make_memory_map())
         , irq_aggregator_(make_irq_aggregator())
     {}
 
-    // MemoryMappedDevice interface (delegates to memory_map)
+    // MemoryMappedDevice interface with B+ paging logic
     uint8_t read(uint16_t addr) {
+        // Handle ANDY RAM region (0x8000-0xAFFF) when ROMSEL bit 7 is set
+        if (addr >= 0x8000 && addr < 0xB000 && (romsel_ & 0x80)) {
+            return andy_ram.read(addr - 0x8000);
+        }
+        // Default to normal memory map
         return memory_map_.read(addr);
     }
 
     void write(uint16_t addr, uint8_t value) {
+        // Handle ANDY RAM region (0x8000-0xAFFF) when ROMSEL bit 7 is set
+        if (addr >= 0x8000 && addr < 0xB000 && (romsel_ & 0x80)) {
+            andy_ram.write(addr - 0x8000, value);
+            return;
+        }
+        // Default to normal memory map
         memory_map_.write(addr, value);
     }
 
     // Side-effect-free read for debugger inspection.
-    // Uses peek() for VIAs to avoid clearing interrupt flags.
+    // Always reads from main RAM (not shadow).
     uint8_t peek(uint16_t addr) const {
         // VIA regions need special handling to avoid side effects
         if (addr >= 0xFE40 && addr <= 0xFE5F) {
@@ -179,20 +220,45 @@ public:
         if (addr >= 0xFE60 && addr <= 0xFE7F) {
             return user_via.peek(addr & 0x0F);
         }
-        // All other regions have no read side effects
+        // Handle ANDY RAM for debugger
+        if (addr >= 0x8000 && addr < 0xB000 && (romsel_ & 0x80)) {
+            return andy_ram.read(addr - 0x8000);
+        }
+        // All other regions - use main memory map
         return memory_map_.read(addr);
     }
 
     // Video memory access - reads from currently configured video RAM.
-    // For Model B, this is always main RAM (no shadow RAM).
+    // When ACCCON bit 7 = 1, video reads from shadow RAM at 0x3000-0x7FFF.
+    // Otherwise, video reads from main RAM.
     // Used by VideoBinding for screen rendering.
     uint8_t peek_video(uint16_t addr) const {
+        if (addr >= 0x3000 && addr < 0x8000 && (acccon_ & 0x80)) {
+            return shadow_ram.read(addr - 0x3000);
+        }
         return main_ram.read(addr);
+    }
+
+    // Direct shadow RAM access for testing/debugging
+    uint8_t peek_shadow(uint16_t addr) const {
+        if (addr >= 0x3000 && addr < 0x8000) {
+            return shadow_ram.read(addr - 0x3000);
+        }
+        return 0xFF;  // Outside shadow RAM range
+    }
+
+    // Write to shadow RAM directly (for testing)
+    void write_shadow(uint16_t addr, uint8_t value) {
+        if (addr >= 0x3000 && addr < 0x8000) {
+            shadow_ram.write(addr - 0x3000, value);
+        }
     }
 
     // Reset all devices
     void reset() {
         main_ram.clear();
+        shadow_ram.clear();
+        andy_ram.clear();
         system_via.reset();
         user_via.reset();
         crtc.reset();
@@ -200,6 +266,8 @@ public:
         saa5050.reset();
         addressable_latch.reset();
         sideways.select_bank(0);
+        romsel_ = 0;
+        acccon_ = 0;
     }
 
     // Enable video output with optional custom queue capacity
@@ -218,10 +286,15 @@ public:
     }
 
     // Poll IRQ status from VIAs (called from Machine::step after clock tick)
-    // Returns IRQ mask (bit 0 = system VIA, bit 1 = user VIA)
     uint8_t poll_irq() {
         return irq_aggregator_.poll();
     }
+
+    // Paging register accessors for testing
+    uint8_t romsel() const { return romsel_; }
+    uint8_t acccon() const { return acccon_; }
+    bool andy_enabled() const { return (romsel_ & 0x80) != 0; }
+    bool shadow_enabled() const { return (acccon_ & 0x80) != 0; }
 
 public:
     // ROM loading - directly access the owned ROM devices
@@ -248,6 +321,20 @@ public:
             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
         });
 
+        // Shadow RAM (B+ specific)
+        regions.push_back({
+            REGION_SHADOW_RAM,
+            20480,
+            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
+        });
+
+        // ANDY private RAM (B+ specific)
+        regions.push_back({
+            REGION_ANDY_RAM,
+            12288,
+            RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated
+        });
+
         // MOS ROM
         regions.push_back({
             REGION_MOS_ROM,
@@ -264,8 +351,6 @@ public:
             if (bank == sideways.selected_bank()) {
                 flags = flags | RegionFlags::Active;
             }
-            // Bank names are generated as "bank_0", "bank_1", etc.
-            // We use a static array for the string_views
             regions.push_back({
                 bank_names_[bank],
                 16384,
@@ -280,6 +365,12 @@ public:
     uint8_t peek_region(std::string_view name, uint32_t offset) const {
         if (name == REGION_MAIN_RAM) {
             return (offset < 32768) ? main_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
+        }
+        if (name == REGION_SHADOW_RAM) {
+            return (offset < 20480) ? shadow_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
+        }
+        if (name == REGION_ANDY_RAM) {
+            return (offset < 12288) ? andy_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
         }
         if (name == REGION_MOS_ROM) {
             return (offset < 16384) ? mos_rom.read(static_cast<uint16_t>(offset)) : 0xFF;
@@ -299,6 +390,12 @@ public:
         if (name == REGION_MAIN_RAM) {
             return (offset < 32768) ? main_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
         }
+        if (name == REGION_SHADOW_RAM) {
+            return (offset < 20480) ? shadow_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
+        }
+        if (name == REGION_ANDY_RAM) {
+            return (offset < 12288) ? andy_ram.read(static_cast<uint16_t>(offset)) : 0xFF;
+        }
         if (name == REGION_MOS_ROM) {
             return (offset < 16384) ? mos_rom.read(static_cast<uint16_t>(offset)) : 0xFF;
         }
@@ -317,6 +414,18 @@ public:
         if (name == REGION_MAIN_RAM) {
             if (offset < 32768) {
                 main_ram.write(static_cast<uint16_t>(offset), value);
+            }
+            return;
+        }
+        if (name == REGION_SHADOW_RAM) {
+            if (offset < 20480) {
+                shadow_ram.write(static_cast<uint16_t>(offset), value);
+            }
+            return;
+        }
+        if (name == REGION_ANDY_RAM) {
+            if (offset < 12288) {
+                andy_ram.write(static_cast<uint16_t>(offset), value);
             }
             return;
         }
@@ -378,7 +487,8 @@ private:
             make_region<0xFE20, 0xFE2F, Mirror<0x01>>(video_ula),
             make_region<0xFE40, 0xFE5F, Mirror<0x0F>>(system_via),
             make_region<0xFE60, 0xFE7F, Mirror<0x0F>>(user_via),
-            make_region<0xFE30, 0xFE3F, Mirror<0x0F>>(romsel),
+            make_region<0xFE30, 0xFE33, Mirror<0x03>>(romsel_reg),
+            make_region<0xFE34, 0xFE37, Mirror<0x03>>(acccon_reg),
             make_region<0x0000, 0x7FFF>(main_ram),
             make_region<0x8000, 0xBFFF>(sideways),
             make_region<0xC000, 0xFFFF>(mos_rom)

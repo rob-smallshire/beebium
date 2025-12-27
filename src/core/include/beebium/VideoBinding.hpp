@@ -27,14 +27,20 @@ namespace beebium {
 // - VSYNC is always updated to system VIA peripheral
 // - Pixel rendering only occurs if video_output is enabled
 //
+// The Hardware type must provide:
+// - peek_video(addr): Read from currently configured video RAM
+// - crtc, video_ula, saa5050, addressable_latch: Video device references
+// - video_output: Optional output queue
+// - system_via_peripheral: For VSYNC signaling
+//
 template<typename Hardware>
 struct VideoBinding {
     Hardware& hardware;
-    VideoRenderer<decltype(hardware.main_ram)> renderer;
+    VideoRenderer<Hardware> renderer;
 
     explicit VideoBinding(Hardware& hw)
         : hardware(hw)
-        , renderer(hw.main_ram, hw.addressable_latch, hw.video_ula, hw.saa5050, hw.video_output)
+        , renderer(hw)
     {}
 
     static constexpr ClockEdge clock_edges = ClockEdge::Falling;
