@@ -10,7 +10,7 @@ Beebium is a BBC Micro emulator with a radically different architecture inspired
 
 ### Test-First Development
 
-Write tests before implementation. The test suite is comprehensive, spanning three languages: ~200 C++ (Catch2) files under `tests/`, plus the Python (`clients/beebium-python-client/tests`) and TypeScript (`clients/typescript/tests`) client suites — several thousand test cases in total, covering 6502 instructions, VIA timing, disc operations, sound chip behaviour, video rendering, keyboard input, and gRPC services. Rather than quoting a total here (it rots), count them: `ctest --test-dir build --show-only=json-v1` for C++, `pytest --collect-only -q` in `clients/beebium-python-client`, and `npx vitest list` in `clients/typescript`. When adding new functionality:
+Write tests before implementation. The test suite is comprehensive, spanning three languages: ~200 C++ (Catch2) files under `tests/`, plus the Python (`clients/beebium-python-client/tests`) and TypeScript (`clients/beebium-typescript-client/tests`) client suites — several thousand test cases in total, covering 6502 instructions, VIA timing, disc operations, sound chip behaviour, video rendering, keyboard input, and gRPC services. Rather than quoting a total here (it rots), count them: `ctest --test-dir build --show-only=json-v1` for C++, `pytest --collect-only -q` in `clients/beebium-python-client`, and `npx vitest list` in `clients/beebium-typescript-client`. When adding new functionality:
 
 1. Write a failing test that specifies the expected behaviour
 2. Implement the minimum code to pass the test

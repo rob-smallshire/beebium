@@ -1,6 +1,6 @@
 // Consumer-side smoke test for the packed npm tarball.
 //
-// Run from a directory where `beebium` has been installed from `npm pack`
+// Run from a directory where `@beebium/client` has been installed from `npm pack`
 // output with --omit=dev. Everything here goes through the package name, so
 // resolution follows package.json's "main" and the declared dependencies --
 // not this repo's node_modules, and not a bundler.
@@ -28,7 +28,7 @@ const check = async (what, fn) => {
 
 // The entry point named by "main". Importing it pulls in the generated stubs
 // transitively, and with them protobufjs and long.
-const pkg = await import("beebium");
+const pkg = await import("@beebium/client");
 
 await check("entry point exports its client classes", () => {
     const expected = ["Beebium", "Connection", "CPU", "Memory", "System", "Video", "Keyboard"];
@@ -42,7 +42,7 @@ await check("entry point exports its client classes", () => {
 // imports protobufjs/minimal. Resolving it is necessary but not sufficient:
 // round-trip a message so the dependency is exercised, not merely present.
 await check("generated stub round-trips a message through protobufjs", async () => {
-    const { VideoConfig } = await import("beebium/dist/generated/video.js");
+    const { VideoConfig } = await import("@beebium/client/dist/generated/video.js");
     const encoded = VideoConfig.encode(VideoConfig.fromPartial({})).finish();
     const decoded = VideoConfig.decode(encoded);
     if (typeof decoded !== "object" || decoded === null) {

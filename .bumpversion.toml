@@ -32,8 +32,8 @@ message = "Release v{new_version}"
 # (the name-anchored regex below may leave non-canonical indentation; json.tool
 # normalises it). Writes via a temp file so the input is not truncated mid-read.
 pre_commit_hooks = [
-    "python3 -m json.tool --indent=2 clients/typescript/package.json clients/typescript/.bump.tmp && mv clients/typescript/.bump.tmp clients/typescript/package.json",
-    "python3 -m json.tool --indent=2 clients/typescript/package-lock.json clients/typescript/.bump.tmp && mv clients/typescript/.bump.tmp clients/typescript/package-lock.json",
+    "python3 -m json.tool --indent=2 clients/beebium-typescript-client/package.json clients/beebium-typescript-client/.bump.tmp && mv clients/beebium-typescript-client/.bump.tmp clients/beebium-typescript-client/package.json",
+    "python3 -m json.tool --indent=2 clients/beebium-typescript-client/package-lock.json clients/beebium-typescript-client/.bump.tmp && mv clients/beebium-typescript-client/.bump.tmp clients/beebium-typescript-client/package-lock.json",
 ]
 
 # --- Server / core (C++) ---------------------------------------------------
@@ -61,14 +61,14 @@ replace = '__version__ = "{new_version}"'
 # Runtime version (single source; index.ts re-exports it, server-process.ts
 # uses it for the provenance default).
 [[tool.bumpversion.files]]
-filename = "clients/typescript/src/version.ts"
+filename = "clients/beebium-typescript-client/src/version.ts"
 regex = true
 search = 'export const VERSION = "{current_version}"'
 replace = 'export const VERSION = "{new_version}"'
 
 # npm package version (the one root "version" key).
 [[tool.bumpversion.files]]
-filename = "clients/typescript/package.json"
+filename = "clients/beebium-typescript-client/package.json"
 regex = true
 search = '"version": "{current_version}"'
 replace = '"version": "{new_version}"'
@@ -76,11 +76,13 @@ replace = '"version": "{new_version}"'
 # Lockfile: anchor on the package name so only beebium's OWN version nodes
 # (root + packages[""]) match -- never a dependency that happens to share the
 # version. json.tool (pre_commit_hook) re-canonicalises the file afterwards.
+# The name must track package.json's: it is the anchor, so a stale one here
+# matches nothing and the lockfile silently stops being bumped.
 [[tool.bumpversion.files]]
-filename = "clients/typescript/package-lock.json"
+filename = "clients/beebium-typescript-client/package-lock.json"
 regex = true
-search = '"name": "beebium",\s*"version": "{current_version}",'
-replace = '"name": "beebium",\n  "version": "{new_version}",'
+search = '"name": "@beebium/client",\s*"version": "{current_version}",'
+replace = '"name": "@beebium/client",\n  "version": "{new_version}",'
 
 # --- macOS GUI client (scenario 1, deferred -- kept in lockstep anyway) -----
 [[tool.bumpversion.files]]

@@ -425,7 +425,7 @@ is one more of those, parameterised by `extension_id`.
 ### TypeScript
 
 Same structure. Stock `protoc` + `ts-proto` (already used,
-`clients/typescript`, `npm run generate-protos`) generates the messages; the
+`clients/beebium-typescript-client`, `npm run generate-protos`) generates the messages; the
 generated stub wraps the `ExtensionRpc` client:
 
 ```ts

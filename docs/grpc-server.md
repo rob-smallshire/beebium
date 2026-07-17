@@ -450,7 +450,7 @@ python -m pytest tests/test_debugger.py -v
 The TypeScript client has integration tests for all services:
 
 ```bash
-cd clients/typescript
+cd clients/beebium-typescript-client
 npx vitest run tests/integration.test.ts           # 48 general integration tests
 npx vitest run tests/debugger-integration.test.ts   # 24 debugger-specific tests
 ```

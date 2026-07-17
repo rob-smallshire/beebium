@@ -37,7 +37,7 @@ A single version lives in nine places; the config keeps them equal:
 |----------|---------|
 | Server (C++) | `CMakeLists.txt` `project(VERSION)` → compiled in as `BEEBIUM_VERSION`; `vcpkg.json` |
 | Python client | `clients/beebium-python-client/pyproject.toml`; `clients/beebium-python-client/src/beebium/__init__.py` (`__version__`) |
-| TypeScript client | `clients/typescript/src/version.ts`; `package.json`; `package-lock.json` |
+| TypeScript client | `clients/beebium-typescript-client/src/version.ts`; `package.json`; `package-lock.json` |
 | macOS GUI | `clients/macos/Beebium/project.yml` and the generated `project.pbxproj` |
 
 The runtime version is a single source per client (`__version__`,
@@ -49,8 +49,10 @@ literal.
 `package-lock.json` embeds the version in two of *its own* nodes (root and
 `packages[""]`) plus once per dependency. A blind text replace could clobber a
 dependency that shares the version, so the config anchors on the package name
-(`"name": "beebium", "version": …`) to match only Beebium's own nodes, and a
-`json.tool` pre-commit hook re-canonicalises the JSON afterwards.
+(`"name": "@beebium/client", "version": …`) to match only Beebium's own nodes,
+and a `json.tool` pre-commit hook re-canonicalises the JSON afterwards. The
+anchor must track `package.json`'s `name`: a stale one matches nothing, and the
+lockfile then silently stops being bumped.
 
 ### Do not add `[skip ci]` to the bump commit
 
@@ -98,7 +100,7 @@ writes the *identical* constant into three committed files:
 
 - `src/service/include/beebium/service/ProtocolFingerprint.hpp` (server)
 - `clients/beebium-python-client/src/beebium/_proto/protocol_fingerprint.py`
-- `clients/typescript/src/protocol_fingerprint.ts`
+- `clients/beebium-typescript-client/src/protocol_fingerprint.ts`
 
 These are generated-and-committed like the proto stubs. When a `.proto` changes,
 regenerate the stubs and run `python scripts/sync_protocol_fingerprint.py`, then

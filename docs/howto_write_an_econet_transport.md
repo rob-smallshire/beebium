@@ -164,7 +164,7 @@ safe either way.)
 Identical to a peripheral extension:
 
 - **Client wrappers** tunnel through `ExtensionChannel`
-  (`clients/beebium-python-client/src/beebium/aun.py`, `clients/typescript/src/aun.ts`). They
+  (`clients/beebium-python-client/src/beebium/aun.py`, `clients/beebium-typescript-client/src/aun.ts`). They
   expose the transport API and are reached via
   `bbc.aun` / `bbc.piconet` once the transport is active. Check
   `bbc.transport.active` first — the RPC returns an error / empty state when the
@@ -176,7 +176,7 @@ Identical to a peripheral extension:
   unavailable-state path and the error cases
   (`tests/test_piconet_dispatcher.cpp`).
 - **Client unit tests** mock the channel with real serialized protobuf
-  (`tests/test_aun.py`, `clients/typescript/tests/aun.test.ts`).
+  (`tests/test_aun.py`, `clients/beebium-typescript-client/tests/aun.test.ts`).
 
 ## Checklist
 

@@ -278,7 +278,7 @@ beebium_finalize_plugin(TARGET beebium_ext_my_plugin NAME my-extension)
 
 Add the proto to the client codegen scripts so the messages reach the clients:
 `clients/beebium-python-client/scripts/generate_proto.sh` and
-`clients/typescript/scripts/generate-protos.sh`.
+`clients/beebium-typescript-client/scripts/generate-protos.sh`.
 
 ## Step 6: consume it from a client
 
@@ -308,7 +308,7 @@ Wire it in `Client` via `MyExtensionClient(ExtensionChannel(self._connection.ext
 A non-OK `RpcStatus` surfaces as the `grpc.RpcError` it maps to.
 
 TypeScript is the same shape with `ExtensionChannel` from
-`clients/typescript/src/extension_rpc.ts` and ts-proto `encode`/`decode`
+`clients/beebium-typescript-client/src/extension_rpc.ts` and ts-proto `encode`/`decode`
 (remember `Msg.encode(Msg.fromPartial({...})).finish()` — `encode` on a bare
 partial throws on unset string fields). Swift consumes the same generated
 messages over the same channel.
@@ -328,7 +328,7 @@ Two complementary levels, both cheap:
 
 Client wrappers get a unit test that mocks the channel and asserts the tunnelled
 request decodes to the right fields (`tests/test_aun.py`,
-`clients/typescript/tests/aun.test.ts`).
+`clients/beebium-typescript-client/tests/aun.test.ts`).
 
 ## Gotchas checklist
 

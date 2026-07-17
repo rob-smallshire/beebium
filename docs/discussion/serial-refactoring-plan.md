@@ -75,7 +75,7 @@ Client suites (run when a phase touches a client or the proto):
 # Python
 cd clients/beebium-python-client && uv run --with pytest python -m pytest tests/ -v
 # TypeScript (once a serial client exists)
-cd clients/typescript && npm ci && npm run generate-protos && npx tsc --noEmit && npm run test:unit
+cd clients/beebium-typescript-client && npm ci && npm run generate-protos && npx tsc --noEmit && npm run test:unit
 # macOS GUI (once a serial panel exists)
 xcodebuild test -scheme BeebiumTests -destination 'platform=macOS'
 ```

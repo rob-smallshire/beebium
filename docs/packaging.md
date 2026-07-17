@@ -17,12 +17,12 @@ the macOS `.app`, see [macOS App Packaging](macos-app-packaging.md).
 | Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap publish is manual |
 | Server (Windows) | Self-contained `.zip` (built + smoke-tested in CI, attached to the release) + Scoop bucket + WinGet | **Done** (`.zip` in CI/release); Scoop bucket + WinGet pending |
 | Python client | PyPI (`beebium`) | Planned |
-| TypeScript client | npm (`beebium`) | Planned |
+| TypeScript client | npm (`@beebium/client`) | Planned |
 
 The server and the clients are deliberately distributed through **different**
 channels (system package manager for the server, language ecosystems for the
 clients). A user installs the server one way and `pip install beebium` /
-`npm install beebium` separately; that is expected and fine.
+`npm install @beebium/client` separately; that is expected and fine.
 
 ## Repositories and where things live
 

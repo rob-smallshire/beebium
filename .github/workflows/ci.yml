@@ -796,19 +796,19 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install dependencies
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm ci
 
       - name: Generate proto stubs
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run generate-protos
 
       - name: Type-check
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npx tsc --noEmit
 
       - name: Run unit tests
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run test:unit
 
       # Enumerates test cases without running any, covering the unit and
@@ -825,7 +825,7 @@ jobs:
       # default exclude set rather than extending it, which lets discovery walk
       # outside the client directory and silently inflate the count.
       - name: Count tests
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: |
           npx vitest list --json > list.json
           python3 -c "
@@ -841,7 +841,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-count-typescript
-          path: clients/typescript/typescript.count
+          path: clients/beebium-typescript-client/typescript.count
           retention-days: 1
 
   typescript-integration-linux:
@@ -875,15 +875,15 @@ jobs:
           node-version: '24'
 
       - name: Install dependencies
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm ci
 
       - name: Generate proto stubs
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run generate-protos
 
       - name: Run integration tests
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/tests/assets/roms
@@ -918,15 +918,15 @@ jobs:
         run: brew install protobuf
 
       - name: Install dependencies
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm ci
 
       - name: Generate proto stubs
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run generate-protos
 
       - name: Run integration tests
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/tests/assets/roms
@@ -961,15 +961,15 @@ jobs:
         run: brew install protobuf
 
       - name: Install dependencies
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm ci
 
       - name: Generate proto stubs
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run generate-protos
 
       - name: Run integration tests
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/tests/assets/roms
@@ -1214,19 +1214,19 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install dependencies
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm ci
 
       - name: Generate proto stubs
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run generate-protos
 
       - name: Build dist
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: npm run build
 
       - name: Pack tarball
-        working-directory: clients/typescript
+        working-directory: clients/beebium-typescript-client
         run: |
           TARBALL=$(npm pack --pack-destination "$RUNNER_TEMP" | tail -1)
           echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
@@ -1248,7 +1248,7 @@ jobs:
         run: |
           set -euo pipefail
           CLEANROOM="$RUNNER_TEMP/cleanroom"
-          cp "$GITHUB_WORKSPACE/clients/typescript/scripts/package-smoke.mjs" "$CLEANROOM/"
+          cp "$GITHUB_WORKSPACE/clients/beebium-typescript-client/scripts/package-smoke.mjs" "$CLEANROOM/"
           cd "$CLEANROOM"
           node package-smoke.mjs
 

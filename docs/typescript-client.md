@@ -62,7 +62,7 @@ lifetime of the connection.
 ### Source layout
 
 ```
-clients/typescript/
+clients/beebium-typescript-client/
   package.json              NPM package definition
   tsconfig.json             TypeScript 5+ strict mode, ESM
   vitest.config.ts          Test runner configuration
@@ -128,7 +128,7 @@ subsystem classes listed above:
 ## Setup
 
 ```bash
-cd clients/typescript
+cd clients/beebium-typescript-client
 npm install
 npm run generate-protos   # requires protoc on PATH
 npm run build             # TypeScript compilation (optional -- vitest handles .ts directly)
@@ -147,7 +147,7 @@ If a beebium server is already running (e.g. started from the command line
 or by the macOS GUI), connect to it by target address:
 
 ```typescript
-import { Beebium } from "beebium";
+import { Beebium } from "@beebium/client";
 
 // Connect to the default port (0xBEEB = 48875)
 const bbc = await Beebium.connect();
@@ -175,7 +175,7 @@ The client can spawn and manage a server process. The server is
 automatically stopped when the client is closed.
 
 ```typescript
-import { Beebium } from "beebium";
+import { Beebium } from "@beebium/client";
 
 const bbc = await Beebium.launch({ model: "B" });
 
@@ -277,7 +277,7 @@ await bbc.cpu.setA(0x42);
 await bbc.cpu.setRegisters({ a: 0x11, x: 0x22, y: 0x33 });
 
 // Flag accessors (pure functions operating on the P register value)
-import { carry, zero, negative } from "beebium";
+import { carry, zero, negative } from "@beebium/client";
 if (carry(regs.p)) console.log("Carry set");
 if (zero(regs.p))  console.log("Zero set");
 ```
@@ -434,7 +434,7 @@ console.log(`IFR: 0x${sysVia.ifr.toString(16)}, IER: 0x${sysVia.ier.toString(16)
 const usrVia = await bbc.userVia.getState();
 
 // ACR/IFR flag helpers (pure functions)
-import { t1Continuous, ifrT1 } from "beebium";
+import { t1Continuous, ifrT1 } from "@beebium/client";
 if (t1Continuous(sysVia.acr)) console.log("T1 free-running");
 if (ifrT1(sysVia.ifr)) console.log("T1 interrupt pending");
 ```
@@ -448,7 +448,7 @@ console.log(`Screen start: 0x${crtc.screenStart.toString(16)}`);
 console.log(`VSync: ${crtc.inVsync}, HSync: ${crtc.inHsync}`);
 
 // Register accessor helpers
-import { htotal, vsyncWidth, isInterlaced } from "beebium";
+import { htotal, vsyncWidth, isInterlaced } from "@beebium/client";
 console.log(`H total: ${htotal(crtc)}`);
 console.log(`V sync width: ${vsyncWidth(crtc)}`);
 ```
@@ -486,7 +486,7 @@ for await (const event of bbc.system.watchStatus()) {
 }
 
 // Shutdown
-import { ShutdownMode } from "beebium";
+import { ShutdownMode } from "@beebium/client";
 const response = await bbc.system.requestShutdown(ShutdownMode.GRACEFUL);
 ```
 
@@ -545,7 +545,7 @@ const himem = await bbc.basic.getHimem();
 Functions for encoding and decoding strings in BBC Micro memory formats:
 
 ```typescript
-import { cStr, parseCStr, pascalStr, parsePascalStr, paddedStr, parsePaddedStr } from "beebium";
+import { cStr, parseCStr, pascalStr, parsePascalStr, paddedStr, parsePaddedStr } from "@beebium/client";
 
 // Null-terminated (C-style)
 await bbc.memory.address.bus.write(0x1000, cStr("HELLO"));
@@ -576,7 +576,7 @@ All errors extend `BeebiumError`:
 | `EconetError` | Econet operation failed |
 
 ```typescript
-import { BeebiumError, TimeoutError } from "beebium";
+import { BeebiumError, TimeoutError } from "@beebium/client";
 
 try {
     const bbc = await Beebium.connect("localhost:99999", 2000);
@@ -623,5 +623,5 @@ The `oracle/` directory contains an earlier, partial TypeScript client used
 for differential testing against jsbeeb. The oracle client covers only
 DebuggerControl and SystemService, and includes jsbeeb-specific
 normalization (PC-1 adjustment, VIA timer doubling) that is not appropriate
-for a general-purpose client. The `clients/typescript/` client is a clean,
+for a general-purpose client. The `clients/beebium-typescript-client/` client is a clean,
 complete replacement that should be used for all new TypeScript work.
