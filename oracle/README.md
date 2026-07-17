@@ -134,7 +134,9 @@ about execution progress. Latent, since nothing calls it.
   -- so &FE20 comes up holding whatever its latches settled to, and no manual
   gives it a reset value because there is none to give. Five emulators model a
   defined power-on state for a device that has none, and split two-two over it.
-  jsbeeb was never ground truth here; there was nothing to be right about.
+  jsbeeb was never ground truth here -- no manual documents the value, so
+  differential testing against jsbeeb cannot settle it. (What the real hardware
+  does at power-on is open and testable; see #58.)
 
 The pattern is worth carrying forward: **the harness pays off where the two
 disagree about something the hardware defines, and misleads where it does not.**

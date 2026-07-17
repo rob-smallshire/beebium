@@ -487,8 +487,15 @@ does not define it**.
 Advanced User Guide §19.1 (`docs/manuals_text/Advanced_User_Guide/19_19._The_video_ULA.md`):
 SHEILA &20 is **WRITE ONLY**, bit 4 is `6845 CLOCK RATE SELECT`, and the chapter
 specifies **no reset or power-on value**. Neither does the Master AUG's video
-hardware chapter, nor any other transcribed manual. A write-only register with
-no documented reset value is *indeterminate at power-on on real hardware*.
+hardware chapter, nor any other transcribed manual. Combined with the pinout
+(below), we know reset does not *force* this register to any value.
+
+Careful with the wording: undocumented and unforced-by-reset is **not** the same
+as indeterminate. The power-on state could be perfectly consistent on a given
+chip, settled by circuit-level asymmetries and merely uncharacterised, or it
+could be genuinely variable. The pinout and the manuals cannot tell these apart.
+Claim only that nothing documents or forces the value, not that it is random.
+Whether the hardware has a consistent answer is open and testable (#58).
 
 That reframes the survey in §5. This:
 
@@ -496,12 +503,12 @@ That reframes the survey in §5. This:
 |---|---|
 | Beebium, b2, B-Em | jsbeeb, BeebEm-mac |
 
-is not a 2-2 split over a fact. It is four emulators each picking a defined
-value for something the hardware leaves undefined, and splitting evenly because
-there is nothing to be right about. **jsbeeb is not ground truth here**, and no
-amount of differential testing against it will settle the question -- which is
-why the "For Oracle Testing" recommendation (do not assert on cycle counts) is
-the correct one and should stand.
+is not a 2-2 split over a documented fact. It is four emulators each picking a
+value for something no manual specifies. That makes **jsbeeb not ground truth
+here**, and means no amount of differential testing against it will settle the
+question -- which is why the "For Oracle Testing" recommendation (do not assert
+on cycle counts) is correct and should stand. What the real hardware actually
+does at power-on is a separate, open, and testable question (#58).
 
 MOS writes the register (via the `*FX154` path) before any of this is
 observable, so the divergence is unreachable by real software.
@@ -609,3 +616,58 @@ informed choice, not a measurement of the original uncommitted-logic-array's
 power-on behaviour. Whether the real Ferranti die is deterministic at all remains
 for #58. (gertk64/BBC_Video_ULA is the third reimplementation but is PALASM split
 across several PALs with no clean power-on statement.)
+
+### The mechanism that derailed this, and how to test it on real hardware (2026-07-18)
+
+Two facts from later work close the loop on why the clock-rate disagreement was
+so damaging, and turn the open question into an experiment.
+
+**1. MOS writes &FE20 only from the vsync handler.** Traced on a live boot
+(watchpoint on &FE20, from the reset vector at D9CD to the prompt): every write
+to &FE20 during boot comes from one address, EA05 -- the 50Hz vertical-sync
+interrupt handler. MOS mode-set updates only a RAM soft copy of the register;
+the vsync handler pushes that copy to the hardware every frame, toggling bit 0
+for the flashing colours (AUG 19.1.1: bit 0 "is continually changed by the
+operating system"). The per-mode ULA values live in a table at MOS 0xC3F7
+(9C D8 F4 9C 88 C4 88 4B for modes 0-7).
+
+**2. So the first vsync is clocked at the power-on rate.** EA05 cannot run until
+a vsync interrupt has fired, and that interrupt is what triggers the first &FE20
+write. Therefore the CRTC generates its first frame clocked at whatever bit 4
+was at power-on -- the disputed value. A frame is a fixed number of character
+clocks, and the character clock IS the ULA clock, so the frame period in CPU
+cycles scales directly with it: 2MHz reaches vsync in about half the cycles of
+1MHz. The first vsync interrupt therefore lands at a different CPU cycle
+depending purely on the power-on clock-select bit. This doc already measured the
+effect from the other side: forcing jsbeeb to 1MHz moved its first CA1 from
+cycle 19 to cycle 254.
+
+That is precisely what wrecks instruction-lockstep differential testing. The
+harness steps by instruction; a vsync interrupt is cycle-timed. If one emulator
+takes the first vsync after N1 instructions and the other after N2 > N1, then
+between them one is inside the handler and the other is not -- total state
+divergence, unrecoverable by instruction-stepping, both emulators correct.
+
+**The experiment (Ken Lowe's suggestion).** &FE20 is write-only, so software
+cannot read the power-on value -- but the clock it selects is externally
+observable: ULA pin 28 (CRTC CLK) == 6845 pin 21 (CLK), the same net. Put a
+logic analyser / counter on it, trigger on the RESET line, and measure the CRTC
+clock frequency in the window between reset and the first vsync (mark the window
+with VS on 6845 pin 40). 1MHz vs 2MHz reads out directly. Controls that matter:
+
+- **Power-cycle, not BREAK.** BREAK retains the register (no reset pin), so it
+  reflects the last mode, not the power-on state. The power rails must actually
+  drop and settle.
+- **Repeat, and vary conditions.** A latch's power-on state can depend on supply
+  rise-time, residual charge and temperature. Consistency across many cold
+  starts (and varied ramp/temperature) is evidence of a real settled value;
+  variation is evidence of a marginal/metastable bit.
+- **More machines over time** raises confidence in any "consistent" finding, and
+  a single machine that comes up the other way refutes universality.
+
+Falsification, not proof: observing the value *vary* would decisively establish
+non-determinism; observing it *stable* can only corroborate consistency, never
+prove it, and remains open to the next machine. Either outcome is more than we
+have now, and none of it changes Beebium's behaviour -- MOS overwrites &FE20
+within the first frame, so the power-on value is unobservable to software beyond
+the first ~20ms regardless.
