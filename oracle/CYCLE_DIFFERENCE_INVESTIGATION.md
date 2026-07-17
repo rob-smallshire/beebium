@@ -586,3 +586,26 @@ reset, but a real divergence and now a documented one -- see the comment in
 
 What remains open is only whether the power-up state is *stable* per chip or
 genuinely random, which the pinout cannot answer. Tracked as issue #58.
+
+### CPLD/FPGA reimplementations corroborate 1MHz (2026-07-17)
+
+Ken Lowe's Video ULA CPLD project (Stardot t=33291) links three reimplementations.
+The two in VHDL both power up at 1MHz:
+
+- **mikestir/fpga-bbc** `vidproc.vhd`: `if nRESET = '0' then ... r0_crtc_2mhz <= '0'`
+- **jonsole/bbc-vidproc-cpld** `ula.vhd`: `signal r0_crtc_2mhz : std_logic := '0'`
+
+jonsole's is the telling one. It is a drop-in replacement whose entity ports are
+exactly the real pinout -- CLK_16M in, 8/4/2/1M out, CLK_CRTC, nCS, A, D[7:0],
+nINVERT/DISEN/CURSOR -- and it has **no reset port**, independently confirming
+that the real ULA has none. It sets the power-on state through the CPLD's
+configuration-time initializer.
+
+This upgrades the 1MHz side of the survey from "three emulators zero-initialised
+a struct" to "the people who reimplemented the part pin-for-pin also chose 1MHz",
+which is real weight, and Beebium already matches it. It does **not** close the
+open question: a CPLD always powers up deterministically, so `:= '0'` is an
+informed choice, not a measurement of the original uncommitted-logic-array's
+power-on behaviour. Whether the real Ferranti die is deterministic at all remains
+for #58. (gertk64/BBC_Video_ULA is the third reimplementation but is PALASM split
+across several PALs with no clean power-on statement.)

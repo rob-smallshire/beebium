@@ -215,11 +215,16 @@ public:
     // to at power-on (no manual gives it a reset value) and BREAK cannot
     // disturb it, since BREAK asserts the same notRS as power-on.
     //
-    // Two consequences. The state we come up in is invented, and bit 4 decides
-    // whether the 6845 is clocked at 1 or 2MHz, which is why emulators disagree
-    // about reset-state CRTC timing and why none of them is right: see
-    // oracle/CYCLE_DIFFERENCE_INVESTIGATION.md and issue #58. And clearing this
-    // on reset diverges from the hardware, which would hold the value. Both are
+    // Two consequences. First, the state we come up in is a choice, not a
+    // hardware fact -- and bit 4 of it decides whether the 6845 is clocked at 1
+    // or 2MHz, which is why emulators disagree about reset-state CRTC timing.
+    // Clearing bit 4 here (1MHz) matches b2 and B-Em, and both VHDL CPLD/FPGA
+    // reimplementations of the ULA (mikestir, jonsole) also power up at 1MHz, so
+    // it is the well-supported choice among people who understand the part --
+    // though whether the real Ferranti die is even deterministic at power-on is
+    // still unconfirmed (issue #58; oracle/CYCLE_DIFFERENCE_INVESTIGATION.md).
+    // Second, clearing the register on reset diverges from the hardware, which
+    // has no reset pin and would hold the value across BREAK. Both effects are
     // unobservable -- the MOS writes the register during reset before anything
     // can see it -- so this stays as it is rather than modelling indeterminacy
     // for no gain.
