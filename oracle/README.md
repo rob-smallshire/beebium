@@ -128,10 +128,13 @@ about execution progress. Latent, since nothing calls it.
 - **A genuine defect in b2**, found while cross-checking the CE2023 hang, sent
   upstream as tom-seddon/b2 PR #569.
 - **The limits of the oracle premise** -- see `CYCLE_DIFFERENCE_INVESTIGATION.md`.
-  The 6845 clock rate at reset differs between the two, but SHEILA &20 is
-  write-only with *no reset value defined in any hardware manual*, so it is
-  indeterminate on real hardware and jsbeeb is not ground truth for it. Four
-  emulators split two-two, because there is nothing to be right about.
+  The 6845 clock rate at reset differs between the two. Chasing it down ended at
+  the circuit diagram: **the Video ULA has no reset pin** -- all 28 are power,
+  A0, chip select, the data bus, the clock divider, RGB and four control signals
+  -- so &FE20 comes up holding whatever its latches settled to, and no manual
+  gives it a reset value because there is none to give. Five emulators model a
+  defined power-on state for a device that has none, and split two-two over it.
+  jsbeeb was never ground truth here; there was nothing to be right about.
 
 The pattern is worth carrying forward: **the harness pays off where the two
 disagree about something the hardware defines, and misleads where it does not.**

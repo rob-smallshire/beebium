@@ -544,3 +544,45 @@ The pattern is worth noting: the harness was most valuable where the two
 emulators disagreed about something the hardware *does* define (data delivered
 through a Tube register), and least valuable where they disagreed about
 something it does not (state of a write-only register at power-on).
+
+### Settled: the ULA has no reset input (2026-07-17)
+
+The Model B circuit diagram closes the question the section above left as
+"undefined by the documentation". It is stronger than that: **the Video ULA has
+no reset pin at all.** All 28 of IC6's pins are accounted for --
+
+| Pin(s) | Function |
+|---|---|
+| 1, 15, 16 | GND, V2, V1 |
+| 2 | A0 |
+| 3 | /CS (`/VIDPROC`) |
+| 4, 5, 6, 7 | 1MHz, 2MHz, 4MHz, 8MHz out |
+| 8 | 16MHz in |
+| 9-14 | RGB in, RGB out |
+| 17-24 | D0-D7 |
+| 25-28 | CURSOR, DISEN, INVERT, CRTC CLK |
+
+-- pins 4-8 from the service manual's §9.3 ("8MHz, 4MHz, 2MHz, and 1MHz are
+available from pins 7, 6, 5, and 4 respectively... 16MHz is available at pin 8"),
+the rest read off the schematic. Power, one address line, chip select, the data
+bus, the clock divider, RGB, four control signals. **There is nowhere for a
+reset to arrive**, which is why the service manual routes notRS only to the CPU
+(pin 40, IC42) and the 1MHz bus and TUBE connectors.
+
+So the register's power-on value is whatever its latches settle to, and no
+manual states one because there is nothing to state. This retires the survey in
+§5 as a way of deciding the question: the two-two split is five emulators
+inventing a defined state for a device that has none. The 1MHz "majority"
+(Beebium, b2, B-Em) is three C++ zero-initialisers agreeing with each other, not
+three claims about hardware.
+
+It also means **&FE20 survives BREAK on real hardware** -- BREAK asserts the same
+notRS as power-on (§5.3: one 555, both events; the separate RC network on the
+system VIA exists purely so software can tell them apart), and notRS never
+reaches the ULA. Beebium's `VideoUla::reset()` zeroes `control_`, so we clear a
+register the hardware would hold. Unobservable, since the MOS rewrites it during
+reset, but a real divergence and now a documented one -- see the comment in
+`VideoUla::reset()`.
+
+What remains open is only whether the power-up state is *stable* per chip or
+genuinely random, which the pinout cannot answer. Tracked as issue #58.

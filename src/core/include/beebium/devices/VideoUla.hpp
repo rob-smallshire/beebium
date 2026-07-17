@@ -206,6 +206,23 @@ public:
 
     uint8_t control() const { return control_; }
 
+    // Zeroing here is a convention, not a model of the hardware: the real
+    // Video ULA has no reset input. Its 28 pins are power, A0, chip select,
+    // the data bus, the 16MHz-in/8-4-2-1MHz-out divider, RGB in and out, and
+    // CURSOR/DISEN/INVERT/CRTC CLK -- there is nowhere for a reset to arrive,
+    // and the service manual routes notRS only to the CPU and the expansion
+    // connectors. So on real hardware &FE20 holds whatever its latches settled
+    // to at power-on (no manual gives it a reset value) and BREAK cannot
+    // disturb it, since BREAK asserts the same notRS as power-on.
+    //
+    // Two consequences. The state we come up in is invented, and bit 4 decides
+    // whether the 6845 is clocked at 1 or 2MHz, which is why emulators disagree
+    // about reset-state CRTC timing and why none of them is right: see
+    // oracle/CYCLE_DIFFERENCE_INVESTIGATION.md and issue #58. And clearing this
+    // on reset diverges from the hardware, which would hold the value. Both are
+    // unobservable -- the MOS writes the register during reset before anything
+    // can see it -- so this stays as it is rather than modelling indeterminacy
+    // for no gain.
     void reset() {
         control_ = 0;
         palette_.fill(0);
