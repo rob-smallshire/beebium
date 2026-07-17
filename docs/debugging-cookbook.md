@@ -195,6 +195,30 @@ enabling byte-for-byte comparison.
 as the B and unused flags may differ between implementations without
 indicating a real divergence.
 
+**Know where the oracle premise stops holding.** jsbeeb is a *source of truth*
+only where the hardware defines the behaviour in question. Where it does not,
+each emulator has picked a defensible value and a divergence proves nothing
+about either. The worked example is the 6845 clock rate at reset: jsbeeb runs it
+at 2MHz, Beebium at 1MHz, and SHEILA &20 turns out to be write-only with **no
+reset value defined in any hardware manual** -- so the state is indeterminate on
+real hardware, and the four emulators surveyed split two-two because there is
+nothing to be right about. Hours went into that divergence before the manuals
+settled that it was not a defect.
+
+Before treating a divergence as a Beebium bug, ask what the hardware
+documentation says. If it is silent, the disagreement is undefined behaviour
+and the only question worth asking is whether real software can reach the state
+(usually it cannot -- MOS initialises the hardware first). This is also why the
+harness compares cycle counts but never asserts on them.
+
+The corollary is where to point it: differential testing pays off on questions
+the hardware *does* define -- was this byte delivered through this register? --
+and misleads on initial state and cycle-exact timing. Its real catch was a Tube
+data-loss bug, a data-path question.
+
+See `oracle/README.md` for the harness's capabilities and current state, and
+`oracle/CYCLE_DIFFERENCE_INVESTIGATION.md` for the full analysis.
+
 ## Register Trace Analysis
 
 **Problem**: Transfer counter totals match, but the data stream is corrupted.

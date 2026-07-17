@@ -472,3 +472,75 @@ The `option-b` branch has:
 3. **Compare tick-by-tick vsync timing**: Detailed comparison between master and option-b to find exactly where the timing diverges.
 
 4. **Hybrid approach**: Use latching only during degenerate state (R0=0 or R4=0), revert to direct comparison for normal operation.
+
+---
+
+## Verdict: Divergence, Not Defect (2026-07-17)
+
+Reviewed on picking the harness up again. The question this document left open
+-- *which* emulator is right about the 6845 clock rate at reset -- is answered
+by the hardware documentation, and the answer is **neither, because the hardware
+does not define it**.
+
+### The ULA control register has no reset state
+
+Advanced User Guide §19.1 (`docs/manuals_text/Advanced_User_Guide/19_19._The_video_ULA.md`):
+SHEILA &20 is **WRITE ONLY**, bit 4 is `6845 CLOCK RATE SELECT`, and the chapter
+specifies **no reset or power-on value**. Neither does the Master AUG's video
+hardware chapter, nor any other transcribed manual. A write-only register with
+no documented reset value is *indeterminate at power-on on real hardware*.
+
+That reframes the survey in §5. This:
+
+| 1MHz at reset | 2MHz at reset |
+|---|---|
+| Beebium, b2, B-Em | jsbeeb, BeebEm-mac |
+
+is not a 2-2 split over a fact. It is four emulators each picking a defined
+value for something the hardware leaves undefined, and splitting evenly because
+there is nothing to be right about. **jsbeeb is not ground truth here**, and no
+amount of differential testing against it will settle the question -- which is
+why the "For Oracle Testing" recommendation (do not assert on cycle counts) is
+the correct one and should stand.
+
+MOS writes the register (via the `*FX154` path) before any of this is
+observable, so the divergence is unreachable by real software.
+
+### Nothing here is a Beebium bug
+
+Assessed against real hardware rather than against jsbeeb:
+
+| Finding | Verdict |
+|---|---|
+| §1 Reset sequence (7 cycles) | **Beebium more correct.** jsbeeb sets PC in 0 cycles; the real 6502 takes 7. |
+| §2 1MHz bus stretching | Divergence; Beebium models the stretch, jsbeeb does not. |
+| §3 VSync width, R3=0 | Not a defect -- already concluded functionally equivalent. Beebium follows the Hitachi datasheet (0 -> 16). |
+| §4 Degenerate CRTC at reset | Undefined; all registers zero cannot occur once MOS has initialised. |
+| §5 ULA clock rate at reset | **Undefined on hardware** (above). No defect on either side. |
+| §6 CA1 never falling | Only reachable in the degenerate state of §4, so not reachable by real software. |
+
+So no GitHub issue is warranted. What §6 *does* expose is a **latent modelling
+gap** worth recording: Beebium cannot presently satisfy CA1-in-degenerate-state
+and correct MODE 0-6 display at the same time ("The Fixes Are Mutually
+Exclusive", above). Both behaviours are individually reachable; the fact that
+they are mutually exclusive says the frame-end/vsync model diverges from the
+real 6845 somewhere that a faithful model would not. It is invisible to real
+software and carries no user-facing symptom, which is why "accept degenerate
+case divergence" remains the right call -- but if the CRTC is ever reworked,
+this is the constraint to test against, and satisfying both would be evidence
+the rework is more faithful than what it replaced.
+
+### What the harness did find
+
+For balance -- the tool earned its keep on defects that were real and are fixed:
+
+- **`bus_stretch_cancel` data loss** on Tube R1/R3/R4 host writes (`47955495`),
+  exposed here and by a C++ test, since fixed and verified: *"All deltas zero.
+  Every byte written was read"* (`docs/discussion/chuckie-egg-2023-tube-hang.md`).
+- A genuine defect in **b2**, found while cross-checking the CE2023 hang and
+  sent upstream as tom-seddon/b2 PR #569.
+
+The pattern is worth noting: the harness was most valuable where the two
+emulators disagreed about something the hardware *does* define (data delivered
+through a Tube register), and least valuable where they disagreed about
+something it does not (state of a write-only register at power-on).
