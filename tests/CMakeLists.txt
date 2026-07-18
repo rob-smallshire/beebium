@@ -934,6 +934,14 @@ add_executable(test_keyboard_race test_keyboard_race.cpp)
 target_link_libraries(test_keyboard_race PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_keyboard_race)
 
+# Teletext cell capture tests
+add_executable(test_teletext_grid test_teletext_grid.cpp)
+target_link_libraries(test_teletext_grid PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_teletext_grid PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_teletext_grid)
+
 # SAA5050 held-graphics tests (GitHub issue #57)
 add_executable(test_saa5050_hold_graphics test_saa5050_hold_graphics.cpp)
 target_link_libraries(test_saa5050_hold_graphics PRIVATE beebium_core Catch2::Catch2WithMain)

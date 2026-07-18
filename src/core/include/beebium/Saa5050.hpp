@@ -15,6 +15,8 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+
+#include <beebium/TeletextGrid.hpp>
 #include <cmath>
 #include "PixelBatch.hpp"
 #include "TeletextFont.hpp"
@@ -209,6 +211,9 @@ public:
         m_raster_shift = 0;
         m_raster_offset = 0;
         m_last_graphics_data = 0;
+        m_last_graphics_char = 0;
+        m_capture_row = 0;
+        m_capture_column = 0;
         m_write_index = 0;  // No pipeline delay - output immediately
         m_read_index = 0;
         std::memset(m_output, 0, sizeof(m_output));
@@ -222,6 +227,10 @@ public:
         // Threshold of 10 detects the wrap reliably
         if (m_raster >= 10 && raster < 10) {
             // We've completed a character row - handle double-height transition
+            // A character row has completed, so subsequent cells belong to the
+            // next row of the grid.
+            ++m_capture_row;
+
             if (m_any_double_height) {
                 if (m_raster_offset == 0) {
                     // Transition from top half to bottom half
@@ -275,6 +284,7 @@ public:
             if ((value & 0x20) && m_charset != TeletextCharset::Alpha) {
                 if (!m_conceal) {
                     m_last_graphics_data = data;
+                    m_last_graphics_char = value;
                 }
             }
         }
@@ -282,6 +292,8 @@ public:
         if (!dispen) {
             data = 0;
         }
+
+        capture_cell(value, dispen, cursor);
 
         // Write 2 Output entries: left 6 bits and right 6 bits
         Output* output = &m_output[m_write_index & 7];
@@ -351,12 +363,14 @@ public:
 
     // Called at start of each scanline
     void start_of_line() {
+        m_capture_column = 0;
         m_conceal = false;
         m_fg = 7;
         m_bg = 0;
         m_graphics_charset = TeletextCharset::ContiguousGraphics;
         m_charset = TeletextCharset::Alpha;
         m_last_graphics_data = 0;
+        m_last_graphics_char = 0;
         m_hold = false;
         m_text_visible = true;
         m_raster_shift = 0;
@@ -374,6 +388,10 @@ public:
 
     // Called at vertical sync
     void vsync() {
+        if (m_teletext_grid) {
+            m_teletext_grid->swap();
+        }
+        m_capture_row = 0;
         m_raster = 0;
         ++m_frame;
         if (m_frame >= 64) {
@@ -383,6 +401,15 @@ public:
         m_any_double_height = false;
         m_raster_offset = 0;
     }
+
+    // Attach a grid to capture displayed cells into, or nullptr to stop.
+    //
+    // Capture is a parallel path: it records what each cell displayed after
+    // control codes have been resolved, and does not touch the pixel output.
+    // When no grid is attached the cost is one null check per character.
+    void set_teletext_grid(TeletextGrid* grid) { m_teletext_grid = grid; }
+
+    [[nodiscard]] TeletextGrid* teletext_grid() const { return m_teletext_grid; }
 
     // State accessors
     [[nodiscard]] uint8_t foreground() const { return m_fg; }
@@ -400,6 +427,64 @@ private:
         uint8_t data;   // 6 bits of expanded font row
         bool cursor;    // Cursor active for this half-character
     };
+
+    // Record what this cell displayed, into the attached grid.
+    //
+    // Called after control-code processing, so the attributes are the ones in
+    // effect at this cell. For a control code the cell records the code itself
+    // plus is_control_code, and for one displaying held graphics the character
+    // is the held graphics code -- what a reader sees is what was on screen.
+    //
+    // Runs on every scanline of a character row, overwriting the same cell with
+    // identical values each time. Capturing only the first scanline would be
+    // cheaper, but "first" is not a fixed raster number: interlaced fields
+    // start at different rasters, so a raster == 0 guard would silently capture
+    // nothing on alternate fields. Correctness first; the writes are small and
+    // land in cache.
+    void capture_cell(uint8_t value, uint8_t dispen, bool cursor) {
+        if (!m_teletext_grid || !dispen) {
+            return;
+        }
+
+        TeletextCell cell;
+        cell.fg = m_fg;
+        cell.bg = m_bg;
+        cell.concealed = m_conceal;
+        cell.flashing = !m_text_visible;
+        cell.cursor = cursor;
+        cell.double_height_top = (m_raster_shift == 1 && m_raster_offset == 0);
+        cell.double_height_bottom = (m_raster_shift == 1 && m_raster_offset != 0);
+
+        if (value < 32) {
+            cell.is_control_code = true;
+            if (m_hold) {
+                // Displaying the held graphics character rather than a space.
+                cell.character = m_last_graphics_char;
+                cell.charset = to_cell_charset(m_graphics_charset);
+            } else {
+                cell.character = value;
+                cell.charset = to_cell_charset(m_charset);
+            }
+        } else {
+            cell.character = value;
+            cell.charset = to_cell_charset(m_charset);
+        }
+
+        m_teletext_grid->set_cell(m_capture_row, m_capture_column, cell);
+        ++m_capture_column;
+    }
+
+    static TeletextCellCharset to_cell_charset(TeletextCharset charset) {
+        switch (charset) {
+            case TeletextCharset::ContiguousGraphics:
+                return TeletextCellCharset::ContiguousGraphics;
+            case TeletextCharset::SeparatedGraphics:
+                return TeletextCellCharset::SeparatedGraphics;
+            case TeletextCharset::Alpha:
+            default:
+                return TeletextCellCharset::Alpha;
+        }
+    }
 
     void process_control_code(uint8_t code, uint16_t& data) {
         switch (code) {
@@ -558,6 +643,11 @@ private:
 
     // Graphics hold state
     uint16_t m_last_graphics_data = 0;  // 12-bit expanded font row
+    uint8_t m_last_graphics_char = 0;   // the code that produced that row
+
+    TeletextGrid* m_teletext_grid = nullptr;
+    uint8_t m_capture_row = 0;
+    uint8_t m_capture_column = 0;
 
     // Double height state
     uint8_t m_raster_shift = 0;
