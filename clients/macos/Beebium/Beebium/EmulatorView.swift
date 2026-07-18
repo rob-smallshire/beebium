@@ -32,6 +32,9 @@ struct EmulatorView: NSViewRepresentable {
     /// BBC key cache for Touch Bar key lookups
     var bbcKeyCache: BBCKeyCache?
 
+    /// Types pasted text on the emulated keyboard.
+    var pasteCoordinator: PasteCoordinator?
+
     func makeNSView(context: Context) -> KeyboardMTKView {
         let mtkView = KeyboardMTKView()
 
@@ -58,6 +61,7 @@ struct EmulatorView: NSViewRepresentable {
 
         // Wire up keyboard client for key events
         mtkView.keyboardClient = keyboardClient
+        mtkView.pasteCoordinator = pasteCoordinator
 
         // Wire up indicator client and Touch Bar manager
         mtkView.indicatorClient = indicatorClient

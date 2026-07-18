@@ -29,6 +29,9 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
     /// Touch Bar manager for creating and managing the Touch Bar
     var touchBarManager: BeebiumTouchBarManager?
 
+    /// Types pasted text on the emulated keyboard
+    weak var pasteCoordinator: PasteCoordinator?
+
     /// Track previous modifier flags for change detection
     private var lastModifiers: NSEvent.ModifierFlags = []
 
@@ -207,14 +210,14 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
         guard !text.isEmpty else { return }
 
-        guard let keyboardClient = keyboardClient else {
-            print("[KeyboardMTKView] paste: no keyboard client, ignoring")
+        guard let pasteCoordinator = pasteCoordinator else {
+            print("[KeyboardMTKView] paste: no paste coordinator, ignoring")
             NSSound.beep()
             return
         }
 
         Task { @MainActor in
-            if let reason = await keyboardClient.typeQuickly(text) {
+            if let reason = await pasteCoordinator.paste(text) {
                 presentPasteFailure(reason)
             }
         }
@@ -229,7 +232,7 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         if menuItem.action == #selector(paste(_:)) {
             let hasText = NSPasteboard.general.canReadObject(
                 forClasses: [NSString.self], options: nil)
-            return hasText && keyboardClient != nil
+            return hasText && pasteCoordinator != nil
         }
         // Anything else reaching this view is not ours to judge. Menu items
         // with no validator default to enabled, which is AppKit's behaviour

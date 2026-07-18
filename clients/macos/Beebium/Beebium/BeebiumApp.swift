@@ -58,6 +58,47 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
                 item.isHidden = true
             }
         }
+
+        // SwiftUI can only place a command group before or after a whole
+        // standard group, and .pasteboard is all of Cut/Copy/Paste/Delete/
+        // Select All -- so "Paste at Full Speed" lands after Select All,
+        // stranded from the Paste it belongs with. Replacing .pasteboard
+        // outright would put it in the right place but cost Cut, Copy, Delete
+        // and Select All their AppKit validation, which they need in the app's
+        // text fields. Moving the one item afterwards is the smaller price.
+        NotificationCenter.default.addObserver(
+            forName: NSMenu.didAddItemNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let menu = notification.object as? NSMenu else { return }
+            Self.placeFullSpeedPasteBelowPaste(in: menu)
+        }
+    }
+
+    /// Guards against the reordering below re-entering through the very
+    /// notification that triggered it.
+    private static var isReorderingPasteItems = false
+
+    private static func placeFullSpeedPasteBelowPaste(in menu: NSMenu) {
+        guard !isReorderingPasteItems else { return }
+
+        // Our own item is matched by title because we set it and never
+        // localise it; Paste is matched by selector so it survives any
+        // localisation.
+        guard let fullSpeedIndex = menu.items.firstIndex(
+                  where: { $0.title == "Paste at Full Speed" }),
+              let pasteIndex = menu.items.firstIndex(
+                  where: { $0.action == #selector(NSText.paste(_:)) }),
+              fullSpeedIndex != pasteIndex + 1
+        else { return }
+
+        isReorderingPasteItems = true
+        defer { isReorderingPasteItems = false }
+
+        let item = menu.items[fullSpeedIndex]
+        menu.removeItem(at: fullSpeedIndex)
+        menu.insertItem(item, at: pasteIndex + 1)
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -82,6 +123,7 @@ struct BeebiumApp: App {
     @FocusedBinding(\.showSidebar) private var showSidebar
     @FocusedBinding(\.sidebarMode) private var sidebarMode
     @FocusedBinding(\.isImmersive) private var isImmersive
+    @FocusedValue(\.pasteCoordinator) private var pasteCoordinator
     @StateObject private var keyboardMappingManager = KeyboardMappingManager()
     @StateObject private var connectWindowState = ConnectWindowState.shared
 
@@ -140,6 +182,29 @@ struct BeebiumApp: App {
             // Select All, Spelling and Substitutions all genuinely work.
             // AppKit already greys them out per first responder, which is
             // exactly the wanted behaviour, so there is nothing to remove.
+
+            // Sits next to the stock Paste, following the same pattern as
+            // "Paste and Match Style": a paste variant with its own item and
+            // its own modifier. Kept permanently visible rather than revealed
+            // by Option, because nobody goes looking for a feature they do not
+            // know exists -- they paste a long listing, watch it crawl, and
+            // conclude that pasting is slow.
+            CommandGroup(after: .pasteboard) {
+                Button("Paste at Full Speed") {
+                    guard let coordinator = pasteCoordinator,
+                          let text = NSPasteboard.general.string(forType: .string),
+                          !text.isEmpty else { return }
+                    Task { @MainActor in
+                        await coordinator.paste(text, pace: .fullSpeed)
+                    }
+                }
+                .keyboardShortcut("v", modifiers: [.option, .command])
+                .disabled(pasteCoordinator?.canPasteAtFullSpeed != true)
+                .help(pasteCoordinator?.fullSpeedUnavailableReason
+                      ?? "Run the machine as fast as it will go until the "
+                       + "pasted text has all been typed.")
+            }
+
             CommandGroup(after: .textEditing) {
                 Divider()
                 if let target = keyboardMappingManager.toggleTargetMapping {

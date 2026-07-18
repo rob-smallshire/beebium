@@ -529,6 +529,37 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// Whether the server has finished typing everything it was given.
+    ///
+    /// Returns nil if the status could not be read, which the caller must treat
+    /// as "unknown" rather than "finished" -- concluding a paste is done when it
+    /// is not would restore the emulation speed mid-paste.
+    func isTypingComplete() async -> Bool? {
+        guard let client = client else { return nil }
+        do {
+            let response = try await client.getTypingStatus(
+                Beebium_GetTypingStatusRequest()).response.get()
+            return response.idle
+        } catch {
+            print("[KeyboardClient] getTypingStatus failed: \(error)")
+            return nil
+        }
+    }
+
+    /// Discard whatever is still queued to be typed, returning the count dropped.
+    @discardableResult
+    func clearTyping() async -> Int {
+        guard let client = client else { return 0 }
+        do {
+            let response = try await client.clearTyping(
+                Beebium_ClearTypingRequest()).response.get()
+            return Int(response.charactersCleared)
+        } catch {
+            print("[KeyboardClient] clearTyping failed: \(error)")
+            return 0
+        }
+    }
+
     // MARK: - Touch Bar Support
 
     /// Send a key down event directly by ikNumber (bypasses mapping system).

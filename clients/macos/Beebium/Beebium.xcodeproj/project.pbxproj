@@ -41,6 +41,7 @@
 		3A5F2C41B8468DD7E63EC414 /* audio.proto in Resources */ = {isa = PBXBuildFile; fileRef = A16BD17340EC98E2C5EF1127 /* audio.proto */; };
 		3B3122E1626E09ABEAC4315B /* ConfigurationSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */; };
 		3E893BDCD15B92A2A29AD7EB /* VideoSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16524154FADCB403497AFB1F /* VideoSettingsTests.swift */; };
+		406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */; };
 		40F2A089FF91784C67231853 /* IndicatorClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */; };
 		42072CC836ABE4A92B2EF2AC /* BeebiumApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E7A0E6AF52A2C316C7C419 /* BeebiumApp.swift */; };
 		4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */; };
@@ -89,6 +90,7 @@
 		94C93812FC0975970E7C7230 /* KeyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6041795434C164F849A27B /* KeyInput.swift */; };
 		987BD71FBAD1D69713DD3995 /* KeyboardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */; };
 		9A8754B2F1CB725F4A296CDF /* SerialClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60AB5DB41408CC531369DC47 /* SerialClient.swift */; };
+		9BD942F6034AE7F95F5D4B88 /* PasteCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */; };
 		9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */; };
 		A005244A2347799984C194E6 /* audio.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0CD29C9A89B375C692C019 /* audio.pb.swift */; };
 		A218ADC630D92D0A18D300CF /* PeripheralsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */; };
@@ -257,6 +259,7 @@
 		92BF9F9BD423BAC0EBD291A4 /* disc.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = disc.pb.swift; sourceTree = "<group>"; };
 		93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveCoordinator.swift; sourceTree = "<group>"; };
 		94057CD054785189D20ACE11 /* sideways.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = sideways.pb.swift; sourceTree = "<group>"; };
+		941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteCoordinator.swift; sourceTree = "<group>"; };
 		9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSchemaSection.swift; sourceTree = "<group>"; };
 		94EE5C7867F0B72F92C0F032 /* ResettableControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResettableControls.swift; sourceTree = "<group>"; };
 		94EE9DCF3D01CE98B029C0C3 /* AudioClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioClient.swift; sourceTree = "<group>"; };
@@ -294,6 +297,7 @@
 		D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelShape.swift; sourceTree = "<group>"; };
 		D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryClient.swift; sourceTree = "<group>"; };
 		D6020BCD62F9F79F3019AB3D /* econet_transport.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet_transport.pb.swift; sourceTree = "<group>"; };
+		D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteCoordinatorTests.swift; sourceTree = "<group>"; };
 		D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorySectionView.swift; sourceTree = "<group>"; };
 		D969BBA00E4077B69BBCACAF /* econet.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet.pb.swift; sourceTree = "<group>"; };
 		DA0CF5589888F672F43B52FD /* aun.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.pb.swift; sourceTree = "<group>"; };
@@ -517,6 +521,7 @@
 				76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */,
 				91EE41147FA34459F83B3130 /* ModalEditorView.swift */,
 				028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */,
+				941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */,
 				757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */,
 				F4F91689B09CACC55C956BA2 /* PeripheralsModeView.swift */,
 				5B4E1CC9ABAFFA92C4A74F5B /* PeripheralTree.swift */,
@@ -570,6 +575,7 @@
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
 				BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */,
+				D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */,
 				4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */,
 				2D1D75896DF179CEC420018F /* PixelShapeTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
@@ -713,6 +719,7 @@
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
 				D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */,
+				406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */,
 				934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */,
 				A994E213FE38477C0CF26811 /* PixelShapeTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
@@ -786,6 +793,7 @@
 				D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */,
 				DA2A617393E4BA1C28E528F7 /* ModalEditorView.swift in Sources */,
 				1AE92C3076119A47291BD4D7 /* NewMachineDialog.swift in Sources */,
+				9BD942F6034AE7F95F5D4B88 /* PasteCoordinator.swift in Sources */,
 				7519FD97BF5579394E98C4DA /* PeripheralTree.swift in Sources */,
 				A218ADC630D92D0A18D300CF /* PeripheralsClient.swift in Sources */,
 				394059FE9C2A8CC58886CC50 /* PeripheralsModeView.swift in Sources */,

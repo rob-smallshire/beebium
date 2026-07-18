@@ -74,6 +74,7 @@ struct ContentView: View {
     @StateObject private var sidewaysClient = SidewaysClient()
     @StateObject private var videoSettings = VideoSettings.loadFromUserDefaults()
     @StateObject private var speedModel = SpeedControlModel()
+    @StateObject private var pasteCoordinator = PasteCoordinator()
     let initialTarget: ConnectionTarget
     let initialNeedsRun: Bool
     let initialProvenanceUUID: String?
@@ -137,7 +138,8 @@ struct ContentView: View {
             keyboardClient: keyboardClient,
             indicatorClient: indicatorClient,
             videoSettings: videoSettings,
-            bbcKeyCache: keyboardMappingManager.bbcKeyCache
+            bbcKeyCache: keyboardMappingManager.bbcKeyCache,
+            pasteCoordinator: pasteCoordinator
         )
     }
 
@@ -233,6 +235,15 @@ struct ContentView: View {
             Button("OK", role: .cancel) { systemClient.protocolMismatchMessage = nil }
         } message: { message in
             Text(message)
+        }
+        .focusedValue(\.pasteCoordinator, pasteCoordinator)
+        .onAppear {
+            // The coordinator holds these weakly; ContentView owns them for
+            // the window's lifetime.
+            pasteCoordinator.typist = keyboardClient
+            pasteCoordinator.speedControl = speedModel
+            pasteCoordinator.audioMute = audioMixerState
+            pasteCoordinator.realTimeTransportActive = { econetClient.requiresRealTime }
         }
         .focusedValue(\.sidebarMode, $sidebarMode)
         .focusedValue(\.showSidebar, $showSidebar)
