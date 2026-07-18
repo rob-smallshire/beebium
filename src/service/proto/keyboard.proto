@@ -208,6 +208,15 @@ message TypeQuicklyRequest {
     string text = 1;              // UTF-8 string to type
     // No timing knob: the server paces keystrokes reliably on its own.
     // For deliberate custom timing, drive KeyDown/KeyUp directly instead.
+
+    // Translate host text conventions into what the BBC keyboard can type:
+    // line endings normalised to CR, typographic punctuation folded to ASCII,
+    // and SAA5050 teletext glyphs mapped back to the codes that produce them.
+    //
+    // Defaults to true when unset, which is what interactive pasting wants.
+    // Set false to type the text exactly as given, and note that CRLF then
+    // presses Return twice because both CR and LF are Return.
+    optional bool translate = 2;
 }
 
 message TypeQuicklyResponse {

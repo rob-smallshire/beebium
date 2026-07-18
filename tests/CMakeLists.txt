@@ -934,6 +934,11 @@ add_executable(test_keyboard_race test_keyboard_race.cpp)
 target_link_libraries(test_keyboard_race PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_keyboard_race)
 
+# Clipboard text translation tests
+add_executable(test_text_translation test_text_translation.cpp)
+target_link_libraries(test_text_translation PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_text_translation)
+
 # MODE 7 teletext comprehensive tests
 add_executable(test_mode7 test_mode7.cpp)
 target_link_libraries(test_mode7 PRIVATE beebium_core Catch2::Catch2WithMain)

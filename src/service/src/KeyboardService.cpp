@@ -13,7 +13,10 @@
 #include "beebium/service/KeyboardService.hpp"
 #include "beebium/KeyboardMapping.hpp"
 #include "beebium/SystemViaPeripheral.hpp"
+#include "beebium/TextTranslation.hpp"
 #include "beebium/TypeAheadQueue.hpp"
+
+#include <sstream>
 
 namespace beebium::service {
 
@@ -183,12 +186,38 @@ grpc::Status KeyboardServiceImpl::GetStartupAutoBoot(
 // Type-ahead (TypeQuickly)
 // =============================================================================
 
+namespace {
+
+// Describe why text could not be typed, naming the character at fault.
+//
+// Rejecting a whole paste because of one character is unhelpful unless the
+// client can say which character it was, so the message carries the codepoint.
+std::string describe_untypeable(std::string_view text) {
+    const auto offender = first_untypeable(text);
+    if (!offender) {
+        // enqueue() declined for some reason other than an untypeable
+        // character. Say so rather than inventing a cause.
+        return "Text was not accepted for typing";
+    }
+
+    std::ostringstream message;
+    message << "Text contains a character the BBC keyboard cannot type: U+"
+            << std::hex << std::uppercase << static_cast<uint32_t>(*offender);
+    return message.str();
+}
+
+} // namespace
+
 grpc::Status KeyboardServiceImpl::TypeQuickly(
     grpc::ServerContext* /*context*/,
     const TypeQuicklyRequest* request,
     TypeQuicklyResponse* response) {
 
-    const std::string& text = request->text();
+    // Translation defaults on: interactive pasting wants characters, not
+    // bytes. Clients type text verbatim by setting translate to false.
+    const bool translate = request->has_translate() ? request->translate() : true;
+    const std::string text = translate ? translate_for_typing(request->text())
+                                       : request->text();
 
     // Pacing is the server's responsibility; the queue applies its reliable
     // default hold/gap. Clients needing custom timing use KeyDown/KeyUp.
@@ -196,7 +225,7 @@ grpc::Status KeyboardServiceImpl::TypeQuickly(
 
     if (!accepted) {
         response->set_accepted(false);
-        response->set_error("Text contains unmappable characters");
+        response->set_error(describe_untypeable(text));
         response->set_pending_characters(
             static_cast<uint32_t>(keyboard_.type_ahead().pending_characters()));
         return grpc::Status::OK;
