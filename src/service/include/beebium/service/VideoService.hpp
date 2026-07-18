@@ -21,13 +21,14 @@
 namespace beebium {
 
 class FrameBuffer;
+class TeletextGrid;
 
 namespace service {
 
 /// gRPC service implementation for video frame streaming
 class VideoServiceImpl final : public VideoService::Service {
 public:
-    explicit VideoServiceImpl(FrameBuffer& frame_buffer);
+    VideoServiceImpl(FrameBuffer& frame_buffer, TeletextGrid& teletext_grid);
     ~VideoServiceImpl() override;
 
     // Non-copyable
@@ -44,8 +45,14 @@ public:
         const GetConfigRequest* request,
         VideoConfig* response) override;
 
+    grpc::Status GetTeletextScreen(
+        grpc::ServerContext* context,
+        const GetTeletextScreenRequest* request,
+        TeletextScreen* response) override;
+
 private:
     FrameBuffer& frame_buffer_;
+    TeletextGrid& teletext_grid_;
 };
 
 } // namespace service

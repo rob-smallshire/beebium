@@ -12,11 +12,88 @@
 
 #include "beebium/service/VideoService.hpp"
 #include "beebium/FrameBuffer.hpp"
+#include "beebium/TeletextText.hpp"
+
+#include <algorithm>
 
 namespace beebium::service {
 
-VideoServiceImpl::VideoServiceImpl(FrameBuffer& frame_buffer)
-    : frame_buffer_(frame_buffer) {
+VideoServiceImpl::VideoServiceImpl(FrameBuffer& frame_buffer,
+                                   TeletextGrid& teletext_grid)
+    : frame_buffer_(frame_buffer)
+    , teletext_grid_(teletext_grid) {
+}
+
+namespace {
+
+TeletextCharacterSet to_proto_charset(beebium::TeletextCellCharset charset) {
+    switch (charset) {
+        case beebium::TeletextCellCharset::ContiguousGraphics:
+            return TELETEXT_CONTIGUOUS_GRAPHICS;
+        case beebium::TeletextCellCharset::SeparatedGraphics:
+            return TELETEXT_SEPARATED_GRAPHICS;
+        case beebium::TeletextCellCharset::Alpha:
+        default:
+            return TELETEXT_ALPHA;
+    }
+}
+
+} // namespace
+
+grpc::Status VideoServiceImpl::GetTeletextScreen(
+    grpc::ServerContext* /*context*/,
+    const GetTeletextScreenRequest* request,
+    TeletextScreen* response) {
+
+    // One consistent frame, taken without stalling the emulation thread for
+    // longer than a single buffer copy.
+    const auto screen = teletext_grid_.snapshot();
+
+    beebium::TeletextRegion region = beebium::TeletextRegion::whole_screen();
+    if (request->has_region()) {
+        region.row = request->region().row();
+        region.column = request->region().column();
+        region.rows = request->region().rows();
+        region.columns = request->region().columns();
+    }
+
+    // Clip to the grid, so the reported dimensions describe what is actually
+    // returned rather than what was asked for.
+    const size_t first_row = std::min<size_t>(region.row, TeletextGrid::ROWS);
+    const size_t first_column = std::min<size_t>(region.column, TeletextGrid::COLUMNS);
+    const size_t last_row =
+        std::min<size_t>(first_row + region.rows, TeletextGrid::ROWS);
+    const size_t last_column =
+        std::min<size_t>(first_column + region.columns, TeletextGrid::COLUMNS);
+
+    response->set_active(screen.active);
+    response->set_frame_number(screen.frame_number);
+    response->set_rows(static_cast<uint32_t>(last_row - first_row));
+    response->set_columns(static_cast<uint32_t>(last_column - first_column));
+
+    for (size_t row = first_row; row < last_row; ++row) {
+        for (size_t column = first_column; column < last_column; ++column) {
+            const auto& cell = screen.cell(row, column);
+            auto* out = response->add_cells();
+            out->set_character(cell.character);
+            out->set_fg(cell.fg);
+            out->set_bg(cell.bg);
+            out->set_charset(to_proto_charset(cell.charset));
+            out->set_double_height_top(cell.double_height_top);
+            out->set_double_height_bottom(cell.double_height_bottom);
+            out->set_concealed(cell.concealed);
+            out->set_flashing(cell.flashing);
+            out->set_cursor(cell.cursor);
+            out->set_is_control_code(cell.is_control_code);
+        }
+    }
+
+    const auto layout = request->layout() == TELETEXT_LAYOUT_FLOWED
+                            ? beebium::TeletextLinearisation::Flowed
+                            : beebium::TeletextLinearisation::Rows;
+    response->set_text(teletext_text(screen, region, layout));
+
+    return grpc::Status::OK;
 }
 
 VideoServiceImpl::~VideoServiceImpl() = default;

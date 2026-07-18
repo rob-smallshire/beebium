@@ -68,6 +68,12 @@ std::string teletext_text(const TeletextGrid& grid,
                           const TeletextRegion& region = TeletextRegion::whole_screen(),
                           TeletextLinearisation linearisation = TeletextLinearisation::Rows);
 
+// As above, for a snapshot taken off the emulation thread. Any reader outside
+// that thread holds a snapshot rather than the live grid.
+std::string teletext_text(const TeletextGrid::Snapshot& snapshot,
+                          const TeletextRegion& region = TeletextRegion::whole_screen(),
+                          TeletextLinearisation linearisation = TeletextLinearisation::Rows);
+
 // The Unicode codepoint a MODE 7 alpha character displays as.
 //
 // The SAA5050's UK repertoire is ASCII except for a handful of positions, so

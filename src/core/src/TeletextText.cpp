@@ -76,9 +76,13 @@ char32_t teletext_alpha_codepoint(uint8_t character) {
     return 0;
 }
 
-std::string teletext_text(const TeletextGrid& grid,
-                          const TeletextRegion& region,
-                          TeletextLinearisation linearisation) {
+namespace {
+
+// Shared by the live grid and a snapshot: both expose cell(row, column).
+template <typename Source>
+std::string convert(const Source& grid,
+                    const TeletextRegion& region,
+                    TeletextLinearisation linearisation) {
     const size_t first_row = std::min(region.row, TeletextGrid::ROWS);
     const size_t first_column = std::min(region.column, TeletextGrid::COLUMNS);
     const size_t last_row = std::min(first_row + region.rows, TeletextGrid::ROWS);
@@ -144,6 +148,20 @@ std::string teletext_text(const TeletextGrid& grid,
     }
 
     return text;
+}
+
+} // namespace
+
+std::string teletext_text(const TeletextGrid& grid,
+                          const TeletextRegion& region,
+                          TeletextLinearisation linearisation) {
+    return convert(grid, region, linearisation);
+}
+
+std::string teletext_text(const TeletextGrid::Snapshot& snapshot,
+                          const TeletextRegion& region,
+                          TeletextLinearisation linearisation) {
+    return convert(snapshot, region, linearisation);
 }
 
 } // namespace beebium

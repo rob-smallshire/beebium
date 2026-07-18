@@ -57,6 +57,11 @@ class VideoServiceStub(object):
                 request_serializer=video__pb2.GetConfigRequest.SerializeToString,
                 response_deserializer=video__pb2.VideoConfig.FromString,
                 _registered_method=True)
+        self.GetTeletextScreen = channel.unary_unary(
+                '/beebium.VideoService/GetTeletextScreen',
+                request_serializer=video__pb2.GetTeletextScreenRequest.SerializeToString,
+                response_deserializer=video__pb2.TeletextScreen.FromString,
+                _registered_method=True)
 
 
 class VideoServiceServicer(object):
@@ -77,6 +82,20 @@ class VideoServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetTeletextScreen(self, request, context):
+        """Read the MODE 7 screen as characters rather than pixels.
+
+        A snapshot rather than a stream: a caller wants one screen when it asks
+        -- a copy command, or a script reading the display -- and pushing 8 KB
+        of cell data per frame to every client on the chance that someone might
+        copy would be absurd. A future vector renderer needs every frame aligned
+        with the pixels it replaces, and that is a separate transport from the
+        same capture; see docs/discussion/teletext-cell-capture.md.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_VideoServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -89,6 +108,11 @@ def add_VideoServiceServicer_to_server(servicer, server):
                     servicer.GetConfig,
                     request_deserializer=video__pb2.GetConfigRequest.FromString,
                     response_serializer=video__pb2.VideoConfig.SerializeToString,
+            ),
+            'GetTeletextScreen': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTeletextScreen,
+                    request_deserializer=video__pb2.GetTeletextScreenRequest.FromString,
+                    response_serializer=video__pb2.TeletextScreen.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -146,6 +170,33 @@ class VideoService(object):
             '/beebium.VideoService/GetConfig',
             video__pb2.GetConfigRequest.SerializeToString,
             video__pb2.VideoConfig.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTeletextScreen(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/GetTeletextScreen',
+            video__pb2.GetTeletextScreenRequest.SerializeToString,
+            video__pb2.TeletextScreen.FromString,
             options,
             channel_credentials,
             insecure,

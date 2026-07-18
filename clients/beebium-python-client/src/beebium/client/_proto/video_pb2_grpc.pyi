@@ -49,6 +49,16 @@ class VideoServiceStub:
     """Stream frames as they complete (at VSYNC)"""
     GetConfig: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetConfigRequest, _video_pb2.VideoConfig]
     """Get current video configuration"""
+    GetTeletextScreen: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetTeletextScreenRequest, _video_pb2.TeletextScreen]
+    """Read the MODE 7 screen as characters rather than pixels.
+
+    A snapshot rather than a stream: a caller wants one screen when it asks
+    -- a copy command, or a script reading the display -- and pushing 8 KB
+    of cell data per frame to every client on the chance that someone might
+    copy would be absurd. A future vector renderer needs every frame aligned
+    with the pixels it replaces, and that is a separate transport from the
+    same capture; see docs/discussion/teletext-cell-capture.md.
+    """
 
 @_typing.type_check_only
 class VideoServiceAsyncStub(VideoServiceStub):
@@ -59,6 +69,16 @@ class VideoServiceAsyncStub(VideoServiceStub):
     """Stream frames as they complete (at VSYNC)"""
     GetConfig: _aio.UnaryUnaryMultiCallable[_video_pb2.GetConfigRequest, _video_pb2.VideoConfig]  # type: ignore[assignment]
     """Get current video configuration"""
+    GetTeletextScreen: _aio.UnaryUnaryMultiCallable[_video_pb2.GetTeletextScreenRequest, _video_pb2.TeletextScreen]  # type: ignore[assignment]
+    """Read the MODE 7 screen as characters rather than pixels.
+
+    A snapshot rather than a stream: a caller wants one screen when it asks
+    -- a copy command, or a script reading the display -- and pushing 8 KB
+    of cell data per frame to every client on the chance that someone might
+    copy would be absurd. A future vector renderer needs every frame aligned
+    with the pixels it replaces, and that is a separate transport from the
+    same capture; see docs/discussion/teletext-cell-capture.md.
+    """
 
 class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
     """Video frame streaming service"""
@@ -78,5 +98,21 @@ class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_video_pb2.VideoConfig, _abc.Awaitable[_video_pb2.VideoConfig]]:
         """Get current video configuration"""
+
+    @_abc_1.abstractmethod
+    def GetTeletextScreen(
+        self,
+        request: _video_pb2.GetTeletextScreenRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.TeletextScreen, _abc.Awaitable[_video_pb2.TeletextScreen]]:
+        """Read the MODE 7 screen as characters rather than pixels.
+
+        A snapshot rather than a stream: a caller wants one screen when it asks
+        -- a copy command, or a script reading the display -- and pushing 8 KB
+        of cell data per frame to every client on the chance that someone might
+        copy would be absurd. A future vector renderer needs every frame aligned
+        with the pixels it replaces, and that is a separate transport from the
+        same capture; see docs/discussion/teletext-cell-capture.md.
+        """
 
 def add_VideoServiceServicer_to_server(servicer: VideoServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -36,15 +36,19 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bvideo.proto\x12\x07\x62\x65\x65\x62ium\"\x18\n\x16SubscribeFramesRequest\"\xb9\x02\n\x05\x46rame\x12\x14\n\x0c\x66rame_number\x18\x01 \x01(\x04\x12\x13\n\x0b\x63ycle_count\x18\x02 \x01(\x04\x12\r\n\x05width\x18\x03 \x01(\r\x12\x0e\n\x06height\x18\x04 \x01(\r\x12\x0e\n\x06pixels\x18\x05 \x01(\x0c\x12(\n\x0b\x66ield_order\x18\x06 \x01(\x0e\x32\x13.beebium.FieldOrder\x12\x13\n\x0bleft_border\x18\x07 \x01(\r\x12\x14\n\x0cright_border\x18\x08 \x01(\r\x12\x12\n\ntop_border\x18\t \x01(\r\x12\x15\n\rbottom_border\x18\n \x01(\r\x12\x15\n\rdisplay_width\x18\x0b \x01(\r\x12\x16\n\x0e\x64isplay_height\x18\x0c \x01(\r\x12\'\n\x07regions\x18\r \x03(\x0b\x32\x16.beebium.DisplayRegion\"J\n\rDisplayRegion\x12\x12\n\nstart_line\x18\x01 \x01(\r\x12\x10\n\x08\x65nd_line\x18\x02 \x01(\r\x12\x13\n\x0bpixel_width\x18\x03 \x01(\r\"\x12\n\x10GetConfigRequest\"B\n\x0bVideoConfig\x12\r\n\x05width\x18\x01 \x01(\r\x12\x0e\n\x06height\x18\x02 \x01(\r\x12\x14\n\x0c\x66ramerate_hz\x18\x03 \x01(\r*<\n\nFieldOrder\x12\x0f\n\x0bPROGRESSIVE\x10\x00\x12\x0e\n\nEVEN_FIRST\x10\x01\x12\r\n\tODD_FIRST\x10\x02\x32\x92\x01\n\x0cVideoService\x12\x44\n\x0fSubscribeFrames\x12\x1f.beebium.SubscribeFramesRequest\x1a\x0e.beebium.Frame0\x01\x12<\n\tGetConfig\x12\x19.beebium.GetConfigRequest\x1a\x14.beebium.VideoConfigb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bvideo.proto\x12\x07\x62\x65\x65\x62ium\"\x18\n\x16SubscribeFramesRequest\"\xb9\x02\n\x05\x46rame\x12\x14\n\x0c\x66rame_number\x18\x01 \x01(\x04\x12\x13\n\x0b\x63ycle_count\x18\x02 \x01(\x04\x12\r\n\x05width\x18\x03 \x01(\r\x12\x0e\n\x06height\x18\x04 \x01(\r\x12\x0e\n\x06pixels\x18\x05 \x01(\x0c\x12(\n\x0b\x66ield_order\x18\x06 \x01(\x0e\x32\x13.beebium.FieldOrder\x12\x13\n\x0bleft_border\x18\x07 \x01(\r\x12\x14\n\x0cright_border\x18\x08 \x01(\r\x12\x12\n\ntop_border\x18\t \x01(\r\x12\x15\n\rbottom_border\x18\n \x01(\r\x12\x15\n\rdisplay_width\x18\x0b \x01(\r\x12\x16\n\x0e\x64isplay_height\x18\x0c \x01(\r\x12\'\n\x07regions\x18\r \x03(\x0b\x32\x16.beebium.DisplayRegion\"J\n\rDisplayRegion\x12\x12\n\nstart_line\x18\x01 \x01(\r\x12\x10\n\x08\x65nd_line\x18\x02 \x01(\r\x12\x13\n\x0bpixel_width\x18\x03 \x01(\r\"\x12\n\x10GetConfigRequest\"B\n\x0bVideoConfig\x12\r\n\x05width\x18\x01 \x01(\r\x12\x0e\n\x06height\x18\x02 \x01(\r\x12\x14\n\x0c\x66ramerate_hz\x18\x03 \x01(\r\"R\n\x14TeletextScreenRegion\x12\x0b\n\x03row\x18\x01 \x01(\r\x12\x0e\n\x06\x63olumn\x18\x02 \x01(\r\x12\x0c\n\x04rows\x18\x03 \x01(\r\x12\x0f\n\x07\x63olumns\x18\x04 \x01(\r\"\x86\x01\n\x18GetTeletextScreenRequest\x12\x32\n\x06region\x18\x01 \x01(\x0b\x32\x1d.beebium.TeletextScreenRegionH\x00\x88\x01\x01\x12+\n\x06layout\x18\x02 \x01(\x0e\x32\x1b.beebium.TeletextTextLayoutB\t\n\x07_region\"\xf6\x01\n\x12TeletextScreenCell\x12\x11\n\tcharacter\x18\x01 \x01(\r\x12\n\n\x02\x66g\x18\x02 \x01(\r\x12\n\n\x02\x62g\x18\x03 \x01(\r\x12.\n\x07\x63harset\x18\x04 \x01(\x0e\x32\x1d.beebium.TeletextCharacterSet\x12\x19\n\x11\x64ouble_height_top\x18\x05 \x01(\x08\x12\x1c\n\x14\x64ouble_height_bottom\x18\x06 \x01(\x08\x12\x11\n\tconcealed\x18\x07 \x01(\x08\x12\x10\n\x08\x66lashing\x18\x08 \x01(\x08\x12\x0e\n\x06\x63ursor\x18\t \x01(\x08\x12\x17\n\x0fis_control_code\x18\n \x01(\x08\"\x8f\x01\n\x0eTeletextScreen\x12\x0e\n\x06\x61\x63tive\x18\x01 \x01(\x08\x12\x0c\n\x04rows\x18\x02 \x01(\r\x12\x0f\n\x07\x63olumns\x18\x03 \x01(\r\x12*\n\x05\x63\x65lls\x18\x04 \x03(\x0b\x32\x1b.beebium.TeletextScreenCell\x12\x0c\n\x04text\x18\x05 \x01(\t\x12\x14\n\x0c\x66rame_number\x18\x06 \x01(\x04*<\n\nFieldOrder\x12\x0f\n\x0bPROGRESSIVE\x10\x00\x12\x0e\n\nEVEN_FIRST\x10\x01\x12\r\n\tODD_FIRST\x10\x02*m\n\x14TeletextCharacterSet\x12\x12\n\x0eTELETEXT_ALPHA\x10\x00\x12 \n\x1cTELETEXT_CONTIGUOUS_GRAPHICS\x10\x01\x12\x1f\n\x1bTELETEXT_SEPARATED_GRAPHICS\x10\x02*J\n\x12TeletextTextLayout\x12\x18\n\x14TELETEXT_LAYOUT_ROWS\x10\x00\x12\x1a\n\x16TELETEXT_LAYOUT_FLOWED\x10\x01\x32\xe3\x01\n\x0cVideoService\x12\x44\n\x0fSubscribeFrames\x12\x1f.beebium.SubscribeFramesRequest\x1a\x0e.beebium.Frame0\x01\x12<\n\tGetConfig\x12\x19.beebium.GetConfigRequest\x1a\x14.beebium.VideoConfig\x12O\n\x11GetTeletextScreen\x12!.beebium.GetTeletextScreenRequest\x1a\x17.beebium.TeletextScreenb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'video_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_FIELDORDER']._serialized_start=530
-  _globals['_FIELDORDER']._serialized_end=590
+  _globals['_FIELDORDER']._serialized_start=1146
+  _globals['_FIELDORDER']._serialized_end=1206
+  _globals['_TELETEXTCHARACTERSET']._serialized_start=1208
+  _globals['_TELETEXTCHARACTERSET']._serialized_end=1317
+  _globals['_TELETEXTTEXTLAYOUT']._serialized_start=1319
+  _globals['_TELETEXTTEXTLAYOUT']._serialized_end=1393
   _globals['_SUBSCRIBEFRAMESREQUEST']._serialized_start=24
   _globals['_SUBSCRIBEFRAMESREQUEST']._serialized_end=48
   _globals['_FRAME']._serialized_start=51
@@ -55,6 +59,14 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETCONFIGREQUEST']._serialized_end=460
   _globals['_VIDEOCONFIG']._serialized_start=462
   _globals['_VIDEOCONFIG']._serialized_end=528
-  _globals['_VIDEOSERVICE']._serialized_start=593
-  _globals['_VIDEOSERVICE']._serialized_end=739
+  _globals['_TELETEXTSCREENREGION']._serialized_start=530
+  _globals['_TELETEXTSCREENREGION']._serialized_end=612
+  _globals['_GETTELETEXTSCREENREQUEST']._serialized_start=615
+  _globals['_GETTELETEXTSCREENREQUEST']._serialized_end=749
+  _globals['_TELETEXTSCREENCELL']._serialized_start=752
+  _globals['_TELETEXTSCREENCELL']._serialized_end=998
+  _globals['_TELETEXTSCREEN']._serialized_start=1001
+  _globals['_TELETEXTSCREEN']._serialized_end=1144
+  _globals['_VIDEOSERVICE']._serialized_start=1396
+  _globals['_VIDEOSERVICE']._serialized_end=1623
 # @@protoc_insertion_point(module_scope)

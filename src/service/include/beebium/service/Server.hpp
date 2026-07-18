@@ -32,6 +32,7 @@
 #include "beebium/service/ShutdownPolicy.hpp"
 #include <beebium/discovery/Advertiser.hpp>
 #include "beebium/FrameBuffer.hpp"
+#include "beebium/TeletextGrid.hpp"
 #include "beebium/FrameRenderer.hpp"
 
 #include <grpcpp/grpcpp.h>
@@ -142,6 +143,7 @@ private:
         // Connection tracking (must be declared before services that use it)
         ConnectionTracker connection_tracker;
 
+        TeletextGrid teletext_grid;
         std::unique_ptr<VideoServiceImpl> video_service;
         std::unique_ptr<KeyboardServiceImpl> keyboard_service;
         std::unique_ptr<DebuggerControlServiceImpl<MachineType>> debugger_control_service;
@@ -221,7 +223,13 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     std::string provenance_type = provenance.type;
 
     // Create services
-    impl_->video_service = std::make_unique<VideoServiceImpl>(impl_->frame_buffer);
+    // The SAA5050 fills the grid as it renders, so a client can read the MODE 7
+    // screen as characters. Attached for the server's lifetime; the grid
+    // outlives the machine's use of it because both are owned here.
+    impl_->machine.state().memory.saa5050.set_teletext_grid(&impl_->teletext_grid);
+
+    impl_->video_service = std::make_unique<VideoServiceImpl>(
+        impl_->frame_buffer, impl_->teletext_grid);
 
     // Create break callbacks that call Machine methods
     BreakCallbacks break_callbacks{

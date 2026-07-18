@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 
 namespace beebium {
 
@@ -52,13 +53,24 @@ struct TeletextCell {
 // Double-buffered to match the pixel framebuffer, so a reader always sees a
 // whole frame rather than one being written. The back buffer is filled as the
 // CRTC walks the display and swapped at VSYNC.
+//
+// Threading: the emulation thread fills the back buffer and swaps; any other
+// thread reads through snapshot(). The swap and the snapshot are serialised by
+// a mutex -- held for a single 25x40 struct copy, tens of microseconds at most,
+// fifty times a second -- because a reader must see one whole frame and the
+// alternative lock-free schemes trade that guarantee for a saving this does
+// not need. set_cell() is called from the emulation thread only and is
+// deliberately outside the lock, since it runs per character.
 class TeletextGrid {
 public:
     static constexpr size_t COLUMNS = 40;
     static constexpr size_t ROWS = 25;
 
-    // The frame most recently completed. Safe to read while the next is being
-    // captured into the back buffer.
+    // The frame most recently completed.
+    //
+    // For single-threaded use -- tests, and the emulation thread itself. Any
+    // other thread must use snapshot(), which cannot observe a swap in
+    // progress.
     [[nodiscard]] const TeletextCell& cell(size_t row, size_t column) const {
         return m_front[row][column];
     }
@@ -86,6 +98,7 @@ public:
 
     // Publish the captured frame and begin the next.
     void swap() {
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_front = m_back;
         m_active = m_captured_any;
         ++m_frame_number;
@@ -96,7 +109,28 @@ public:
         m_captured_any = false;
     }
 
+    // A whole completed frame, taken atomically with respect to the swap.
+    struct Snapshot {
+        std::array<std::array<TeletextCell, COLUMNS>, ROWS> cells{};
+        uint64_t frame_number = 0;
+        bool active = false;
+
+        [[nodiscard]] const TeletextCell& cell(size_t row, size_t column) const {
+            return cells[row][column];
+        }
+    };
+
+    [[nodiscard]] Snapshot snapshot() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        Snapshot taken;
+        taken.cells = m_front;
+        taken.frame_number = m_frame_number;
+        taken.active = m_active;
+        return taken;
+    }
+
     void reset() {
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_front = {};
         m_back = {};
         m_frame_number = 0;
@@ -107,6 +141,7 @@ public:
 private:
     using Buffer = std::array<std::array<TeletextCell, COLUMNS>, ROWS>;
 
+    mutable std::mutex m_mutex;
     Buffer m_front{};
     Buffer m_back{};
     uint64_t m_frame_number = 0;

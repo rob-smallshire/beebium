@@ -57,6 +57,57 @@ ODD_FIRST: FieldOrder.ValueType  # 2
 """Odd lines (1,3,5...) rendered first temporally"""
 Global___FieldOrder: _TypeAlias = FieldOrder  # noqa: Y015
 
+class _TeletextCharacterSet:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _TeletextCharacterSetEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_TeletextCharacterSet.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    TELETEXT_ALPHA: _TeletextCharacterSet.ValueType  # 0
+    TELETEXT_CONTIGUOUS_GRAPHICS: _TeletextCharacterSet.ValueType  # 1
+    TELETEXT_SEPARATED_GRAPHICS: _TeletextCharacterSet.ValueType  # 2
+
+class TeletextCharacterSet(_TeletextCharacterSet, metaclass=_TeletextCharacterSetEnumTypeWrapper):
+    """============================================================================
+    MODE 7 screen as characters
+    ============================================================================
+
+    Which character set a cell was displayed with.
+    """
+
+TELETEXT_ALPHA: TeletextCharacterSet.ValueType  # 0
+TELETEXT_CONTIGUOUS_GRAPHICS: TeletextCharacterSet.ValueType  # 1
+TELETEXT_SEPARATED_GRAPHICS: TeletextCharacterSet.ValueType  # 2
+Global___TeletextCharacterSet: _TypeAlias = TeletextCharacterSet  # noqa: Y015
+
+class _TeletextTextLayout:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _TeletextTextLayoutEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_TeletextTextLayout.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    TELETEXT_LAYOUT_ROWS: _TeletextTextLayout.ValueType  # 0
+    """Each row of the region is its own line, preserving the shape of the
+    selection. The default, and what a column of figures wants.
+    """
+    TELETEXT_LAYOUT_FLOWED: _TeletextTextLayout.ValueType  # 1
+    """A row filled to the region's right edge wrapped, so it continues into
+    the next without a break. What a sentence spanning rows wants.
+    """
+
+class TeletextTextLayout(_TeletextTextLayout, metaclass=_TeletextTextLayoutEnumTypeWrapper):
+    """How a region of cells becomes a run of text."""
+
+TELETEXT_LAYOUT_ROWS: TeletextTextLayout.ValueType  # 0
+"""Each row of the region is its own line, preserving the shape of the
+selection. The default, and what a column of figures wants.
+"""
+TELETEXT_LAYOUT_FLOWED: TeletextTextLayout.ValueType  # 1
+"""A row filled to the region's right edge wrapped, so it continues into
+the next without a break. What a sentence spanning rows wants.
+"""
+Global___TeletextTextLayout: _TypeAlias = TeletextTextLayout  # noqa: Y015
+
 @_typing.final
 class SubscribeFramesRequest(_message.Message):
     """Future: format preferences, scaling options"""
@@ -231,3 +282,163 @@ class VideoConfig(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___VideoConfig: _TypeAlias = VideoConfig  # noqa: Y015
+
+@_typing.final
+class TeletextScreenRegion(_message.Message):
+    """A rectangle of cells, in grid coordinates. Absent means the whole screen."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ROW_FIELD_NUMBER: _builtins.int
+    COLUMN_FIELD_NUMBER: _builtins.int
+    ROWS_FIELD_NUMBER: _builtins.int
+    COLUMNS_FIELD_NUMBER: _builtins.int
+    row: _builtins.int
+    column: _builtins.int
+    rows: _builtins.int
+    columns: _builtins.int
+    def __init__(
+        self,
+        *,
+        row: _builtins.int = ...,
+        column: _builtins.int = ...,
+        rows: _builtins.int = ...,
+        columns: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["column", b"column", "columns", b"columns", "row", b"row", "rows", b"rows"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___TeletextScreenRegion: _TypeAlias = TeletextScreenRegion  # noqa: Y015
+
+@_typing.final
+class GetTeletextScreenRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    REGION_FIELD_NUMBER: _builtins.int
+    LAYOUT_FIELD_NUMBER: _builtins.int
+    layout: Global___TeletextTextLayout.ValueType
+    """How to join the region's rows into `text`."""
+    @_builtins.property
+    def region(self) -> Global___TeletextScreenRegion:
+        """The part of the screen to read. Whole screen when unset."""
+
+    def __init__(
+        self,
+        *,
+        region: Global___TeletextScreenRegion | None = ...,
+        layout: Global___TeletextTextLayout.ValueType = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "region", b"region"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "layout", b"layout", "region", b"region"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__region: _TypeAlias = _typing.Literal["region"]  # noqa: Y015
+    _WhichOneofArgType__region: _TypeAlias = _typing.Literal["_region", b"_region"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__region) -> _WhichOneofReturnType__region | None: ...
+
+Global___GetTeletextScreenRequest: _TypeAlias = GetTeletextScreenRequest  # noqa: Y015
+
+@_typing.final
+class TeletextScreenCell(_message.Message):
+    """One character cell, as it was displayed: the attributes here are the ones in
+    effect at this cell after control codes were resolved, not something the
+    caller has to re-derive.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    CHARACTER_FIELD_NUMBER: _builtins.int
+    FG_FIELD_NUMBER: _builtins.int
+    BG_FIELD_NUMBER: _builtins.int
+    CHARSET_FIELD_NUMBER: _builtins.int
+    DOUBLE_HEIGHT_TOP_FIELD_NUMBER: _builtins.int
+    DOUBLE_HEIGHT_BOTTOM_FIELD_NUMBER: _builtins.int
+    CONCEALED_FIELD_NUMBER: _builtins.int
+    FLASHING_FIELD_NUMBER: _builtins.int
+    CURSOR_FIELD_NUMBER: _builtins.int
+    IS_CONTROL_CODE_FIELD_NUMBER: _builtins.int
+    character: _builtins.int
+    """7-bit SAA5050 code"""
+    fg: _builtins.int
+    """Colour index 0-7"""
+    bg: _builtins.int
+    """Colour index 0-7"""
+    charset: Global___TeletextCharacterSet.ValueType
+    double_height_top: _builtins.bool
+    double_height_bottom: _builtins.bool
+    concealed: _builtins.bool
+    flashing: _builtins.bool
+    cursor: _builtins.bool
+    is_control_code: _builtins.bool
+    def __init__(
+        self,
+        *,
+        character: _builtins.int = ...,
+        fg: _builtins.int = ...,
+        bg: _builtins.int = ...,
+        charset: Global___TeletextCharacterSet.ValueType = ...,
+        double_height_top: _builtins.bool = ...,
+        double_height_bottom: _builtins.bool = ...,
+        concealed: _builtins.bool = ...,
+        flashing: _builtins.bool = ...,
+        cursor: _builtins.bool = ...,
+        is_control_code: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bg", b"bg", "character", b"character", "charset", b"charset", "concealed", b"concealed", "cursor", b"cursor", "double_height_bottom", b"double_height_bottom", "double_height_top", b"double_height_top", "fg", b"fg", "flashing", b"flashing", "is_control_code", b"is_control_code"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___TeletextScreenCell: _TypeAlias = TeletextScreenCell  # noqa: Y015
+
+@_typing.final
+class TeletextScreen(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ACTIVE_FIELD_NUMBER: _builtins.int
+    ROWS_FIELD_NUMBER: _builtins.int
+    COLUMNS_FIELD_NUMBER: _builtins.int
+    CELLS_FIELD_NUMBER: _builtins.int
+    TEXT_FIELD_NUMBER: _builtins.int
+    FRAME_NUMBER_FIELD_NUMBER: _builtins.int
+    active: _builtins.bool
+    """False when the display is not MODE 7. The cells then describe whatever
+    was last shown in MODE 7 rather than anything current, so a caller must
+    check this before using them.
+    """
+    rows: _builtins.int
+    """Dimensions of the returned region, not of the screen."""
+    columns: _builtins.int
+    text: _builtins.str
+    """The region as text, converted server-side so every client agrees on what
+    graphics, control codes, concealed cells and double-height rows copy as.
+    Lines are joined with LF; converting to a platform-native ending is the
+    client's business, since the server cannot know the client's platform.
+    """
+    frame_number: _builtins.int
+    """Increments once per captured frame."""
+    @_builtins.property
+    def cells(self) -> _containers.RepeatedCompositeFieldContainer[Global___TeletextScreenCell]:
+        """Row-major, rows * columns entries."""
+
+    def __init__(
+        self,
+        *,
+        active: _builtins.bool = ...,
+        rows: _builtins.int = ...,
+        columns: _builtins.int = ...,
+        cells: _abc.Iterable[Global___TeletextScreenCell] | None = ...,
+        text: _builtins.str = ...,
+        frame_number: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["active", b"active", "cells", b"cells", "columns", b"columns", "frame_number", b"frame_number", "rows", b"rows", "text", b"text"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___TeletextScreen: _TypeAlias = TeletextScreen  # noqa: Y015

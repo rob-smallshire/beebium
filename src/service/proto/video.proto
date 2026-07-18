@@ -9,6 +9,16 @@ service VideoService {
 
     // Get current video configuration
     rpc GetConfig(GetConfigRequest) returns (VideoConfig);
+
+    // Read the MODE 7 screen as characters rather than pixels.
+    //
+    // A snapshot rather than a stream: a caller wants one screen when it asks
+    // -- a copy command, or a script reading the display -- and pushing 8 KB
+    // of cell data per frame to every client on the chance that someone might
+    // copy would be absurd. A future vector renderer needs every frame aligned
+    // with the pixels it replaces, and that is a separate transport from the
+    // same capture; see docs/discussion/teletext-cell-capture.md.
+    rpc GetTeletextScreen(GetTeletextScreenRequest) returns (TeletextScreen);
 }
 
 message SubscribeFramesRequest {
@@ -69,4 +79,80 @@ message VideoConfig {
     uint32 width = 1;         // 640 for Mode 0-6, 480 for Mode 7
     uint32 height = 2;        // 256 typical
     uint32 framerate_hz = 3;  // 50Hz PAL
+}
+
+// ============================================================================
+// MODE 7 screen as characters
+// ============================================================================
+
+// Which character set a cell was displayed with.
+enum TeletextCharacterSet {
+    TELETEXT_ALPHA = 0;
+    TELETEXT_CONTIGUOUS_GRAPHICS = 1;
+    TELETEXT_SEPARATED_GRAPHICS = 2;
+}
+
+// How a region of cells becomes a run of text.
+enum TeletextTextLayout {
+    // Each row of the region is its own line, preserving the shape of the
+    // selection. The default, and what a column of figures wants.
+    TELETEXT_LAYOUT_ROWS = 0;
+    // A row filled to the region's right edge wrapped, so it continues into
+    // the next without a break. What a sentence spanning rows wants.
+    TELETEXT_LAYOUT_FLOWED = 1;
+}
+
+// A rectangle of cells, in grid coordinates. Absent means the whole screen.
+message TeletextScreenRegion {
+    uint32 row = 1;
+    uint32 column = 2;
+    uint32 rows = 3;
+    uint32 columns = 4;
+}
+
+message GetTeletextScreenRequest {
+    // The part of the screen to read. Whole screen when unset.
+    optional TeletextScreenRegion region = 1;
+
+    // How to join the region's rows into `text`.
+    TeletextTextLayout layout = 2;
+}
+
+// One character cell, as it was displayed: the attributes here are the ones in
+// effect at this cell after control codes were resolved, not something the
+// caller has to re-derive.
+message TeletextScreenCell {
+    uint32 character = 1;           // 7-bit SAA5050 code
+    uint32 fg = 2;                  // Colour index 0-7
+    uint32 bg = 3;                  // Colour index 0-7
+    TeletextCharacterSet charset = 4;
+    bool double_height_top = 5;
+    bool double_height_bottom = 6;
+    bool concealed = 7;
+    bool flashing = 8;
+    bool cursor = 9;
+    bool is_control_code = 10;
+}
+
+message TeletextScreen {
+    // False when the display is not MODE 7. The cells then describe whatever
+    // was last shown in MODE 7 rather than anything current, so a caller must
+    // check this before using them.
+    bool active = 1;
+
+    // Dimensions of the returned region, not of the screen.
+    uint32 rows = 2;
+    uint32 columns = 3;
+
+    // Row-major, rows * columns entries.
+    repeated TeletextScreenCell cells = 4;
+
+    // The region as text, converted server-side so every client agrees on what
+    // graphics, control codes, concealed cells and double-height rows copy as.
+    // Lines are joined with LF; converting to a platform-native ending is the
+    // client's business, since the server cannot know the client's platform.
+    string text = 5;
+
+    // Increments once per captured frame.
+    uint64 frame_number = 6;
 }
