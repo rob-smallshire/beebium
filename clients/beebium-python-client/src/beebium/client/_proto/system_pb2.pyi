@@ -240,12 +240,26 @@ class SystemInfo(_message.Message):
     CONNECTIONS_FIELD_NUMBER: _builtins.int
     CLOCK_SPEED_HZ_FIELD_NUMBER: _builtins.int
     PROTOCOL_FINGERPRINT_FIELD_NUMBER: _builtins.int
+    EXECUTABLE_PATH_FIELD_NUMBER: _builtins.int
     clock_speed_hz: _builtins.int
     """Nominal CPU clock frequency in Hz (e.g. 2000000 for 2 MHz)."""
     protocol_fingerprint: _builtins.str
     """Fingerprint of the wire protocol the server was built against (a hash of
     the normalised proto contract). Clients compare this to their own
     compiled-in fingerprint at connect and refuse to proceed on a mismatch.
+    """
+    executable_path: _builtins.str
+    """Filesystem path of the running server executable, as resolved from the
+    OS rather than argv[0], so a PATH symlink reports its real target.
+
+    This exists to make a protocol_fingerprint mismatch diagnosable. The
+    question a mismatch raises is "which binary am I actually talking to?",
+    and comparing two hashes cannot answer it: a stale server left running,
+    a system-wide install shadowing a development build, or one variant of
+    a multi-server bundle rebuilt while its siblings were not all look
+    identical from the client. The path answers it directly.
+
+    Empty if the path cannot be determined.
     """
     @_builtins.property
     def provenance(self) -> Global___LaunchProvenance:
@@ -267,10 +281,11 @@ class SystemInfo(_message.Message):
         connections: Global___ConnectionInfo | None = ...,
         clock_speed_hz: _builtins.int = ...,
         protocol_fingerprint: _builtins.str = ...,
+        executable_path: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["connections", b"connections", "identity", b"identity", "provenance", b"provenance"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["clock_speed_hz", b"clock_speed_hz", "connections", b"connections", "identity", b"identity", "protocol_fingerprint", b"protocol_fingerprint", "provenance", b"provenance"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["clock_speed_hz", b"clock_speed_hz", "connections", b"connections", "executable_path", b"executable_path", "identity", b"identity", "protocol_fingerprint", b"protocol_fingerprint", "provenance", b"provenance"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

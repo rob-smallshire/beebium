@@ -327,7 +327,9 @@ final class SystemClient: ObservableObject, Disconnectable {
                 let response = try await client.getSystemInfo(request).response.get()
 
                 await MainActor.run {
-                    self?.checkProtocolFingerprint(response.protocolFingerprint)
+                    self?.checkProtocolFingerprint(
+                        response.protocolFingerprint,
+                        executablePath: response.executablePath)
                     self?.updateIdentity(response.identity)
                     self?.clientCount = Int(response.connections.clientCount)
                     self?.isLoaded = true
@@ -353,18 +355,30 @@ final class SystemClient: ObservableObject, Disconnectable {
     /// Compare the server's protocol fingerprint against this app's and surface
     /// any mismatch loudly. An empty server fingerprint means a server too old
     /// to report one, which is also a mismatch.
-    private func checkProtocolFingerprint(_ serverFingerprint: String) {
+    private func checkProtocolFingerprint(_ serverFingerprint: String,
+                                          executablePath: String) {
         guard serverFingerprint != ProtocolFingerprint.value else {
             protocolMismatchMessage = nil
             return
         }
         let reported = serverFingerprint.isEmpty ? "(none reported)" : serverFingerprint
-        Self.log.fault(
-            "protocol fingerprint mismatch: server=\(reported, privacy: .public) app=\(ProtocolFingerprint.value, privacy: .public)")
+        // Name the binary, not just the hashes. The question a mismatch raises
+        // is which server is actually being talked to -- a stale one left
+        // running, an installed one shadowing a development build, or one
+        // variant of the bundle rebuilt while its siblings were not (the app
+        // embeds four). Two hex strings cannot answer that; a path can.
+        let which = executablePath.isEmpty
+            ? "The connected server"
+            : "The server at \(executablePath)"
+        Self.log.fault("""
+            protocol fingerprint mismatch: server=\(reported, privacy: .public) \
+            app=\(ProtocolFingerprint.value, privacy: .public) \
+            path=\(executablePath.isEmpty ? "(unknown)" : executablePath, privacy: .public)
+            """)
         protocolMismatchMessage = """
-            The connected server is a different build from this app \
+            \(which) is a different build from this app \
             (protocol fingerprint \(reported) vs \(ProtocolFingerprint.value)). \
-            Rebuild the bundled server so the two match -- e.g. run \
+            Rebuild the bundled servers so the two match -- e.g. run \
             scripts/build-macos-app.sh. Until then some features may not work.
             """
     }

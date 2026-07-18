@@ -232,10 +232,17 @@ class Beebium:
         server_fingerprint = self.system.protocol_fingerprint
         if server_fingerprint != PROTOCOL_FINGERPRINT:
             reported = server_fingerprint or "(none reported)"
+            # Name the binary, not just the hashes. The question a mismatch
+            # raises is which server is actually being talked to -- a stale
+            # one left running, an installed one shadowing a development
+            # build, or one variant of a bundle rebuilt while its siblings
+            # were not. Two hex strings cannot answer that; a path can.
+            executable = self.system.executable_path
+            where = f" at {executable}" if executable else f" on {self.target}"
             raise ProtocolMismatchError(
-                f"Server protocol fingerprint {reported} does not match this "
-                f"client's {PROTOCOL_FINGERPRINT}. Install a server and client "
-                f"built from the same protocol."
+                f"Server{where} has protocol fingerprint {reported}, which "
+                f"does not match this client's {PROTOCOL_FINGERPRINT}. "
+                f"Install a server and client built from the same protocol."
             )
 
     @property

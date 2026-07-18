@@ -65,7 +65,7 @@ inline std::optional<std::string> get_env(const char* name) {
 #endif
 }
 
-// Cross-platform path to the directory containing the running executable.
+// Cross-platform path to the running executable itself.
 //
 // Resolves the real on-disk location, following symlinks on POSIX, so it is
 // robust to a bare argv[0]: when a binary is invoked through a PATH-resolved
@@ -73,12 +73,12 @@ inline std::optional<std::string> get_env(const char* name) {
 // passes only the command name as argv[0], which canonical(argv0) cannot
 // resolve. Reading the executable path from the OS avoids depending on argv[0]
 // at all. Returns nullopt if the path cannot be determined.
-inline std::optional<std::filesystem::path> executable_directory() {
+inline std::optional<std::filesystem::path> executable_path() {
 #if defined(_WIN32)
     wchar_t path[MAX_PATH];
     DWORD len = GetModuleFileNameW(nullptr, path, MAX_PATH);
     if (len > 0 && len < MAX_PATH) {
-        return std::filesystem::path(path).parent_path();
+        return std::filesystem::path(path);
     }
     return std::nullopt;
 #elif defined(__APPLE__)
@@ -92,19 +92,28 @@ inline std::optional<std::filesystem::path> executable_directory() {
         std::error_code ec;
         auto resolved = std::filesystem::canonical(buffer.c_str(), ec);
         if (!ec) {
-            return resolved.parent_path();
+            return resolved;
         }
-        return std::filesystem::path(buffer.c_str()).parent_path();
+        return std::filesystem::path(buffer.c_str());
     }
     return std::nullopt;
 #else
     std::error_code ec;
     auto self = std::filesystem::read_symlink("/proc/self/exe", ec);
     if (!ec) {
-        return self.parent_path();
+        return self;
     }
     return std::nullopt;
 #endif
+}
+
+// Cross-platform path to the directory containing the running executable.
+// See executable_path() for why this does not consult argv[0].
+inline std::optional<std::filesystem::path> executable_directory() {
+    if (auto path = executable_path()) {
+        return path->parent_path();
+    }
+    return std::nullopt;
 }
 
 // Best-effort flush of a file's contents from the OS cache to the storage

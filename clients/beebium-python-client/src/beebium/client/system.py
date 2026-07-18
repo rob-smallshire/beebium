@@ -342,6 +342,21 @@ class System:
         return response.protocol_fingerprint
 
     @property
+    def executable_path(self) -> str:
+        """Filesystem path of the running server executable.
+
+        Resolved by the server from the OS rather than argv[0], so a server
+        started through a PATH symlink reports its real target. Use this to
+        identify which binary a connection actually reached -- notably when
+        diagnosing a protocol fingerprint mismatch.
+
+        Empty if the server cannot determine its own path.
+        """
+        request = system_pb2.GetSystemInfoRequest()
+        response = self._stub.GetSystemInfo(request)
+        return response.executable_path
+
+    @property
     def client_count(self) -> int:
         """Number of clients with active WatchServerStatus streams.
 

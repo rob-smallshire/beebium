@@ -244,6 +244,19 @@ struct Beebium_SystemInfo: Sendable {
   /// compiled-in fingerprint at connect and refuse to proceed on a mismatch.
   var protocolFingerprint: String = String()
 
+  /// Filesystem path of the running server executable, as resolved from the
+  /// OS rather than argv[0], so a PATH symlink reports its real target.
+  ///
+  /// This exists to make a protocol_fingerprint mismatch diagnosable. The
+  /// question a mismatch raises is "which binary am I actually talking to?",
+  /// and comparing two hashes cannot answer it: a stale server left running,
+  /// a system-wide install shadowing a development build, or one variant of
+  /// a multi-server bundle rebuilt while its siblings were not all look
+  /// identical from the client. The path answers it directly.
+  ///
+  /// Empty if the path cannot be determined.
+  var executablePath: String = String()
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -732,7 +745,7 @@ extension Beebium_ConnectionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
 extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SystemInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{3}executable_path\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -745,6 +758,7 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       case 5: try { try decoder.decodeSingularMessageField(value: &self._connections) }()
       case 6: try { try decoder.decodeSingularUInt32Field(value: &self.clockSpeedHz) }()
       case 7: try { try decoder.decodeSingularStringField(value: &self.protocolFingerprint) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self.executablePath) }()
       default: break
       }
     }
@@ -770,6 +784,9 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if !self.protocolFingerprint.isEmpty {
       try visitor.visitSingularStringField(value: self.protocolFingerprint, fieldNumber: 7)
     }
+    if !self.executablePath.isEmpty {
+      try visitor.visitSingularStringField(value: self.executablePath, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -779,6 +796,7 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if lhs._connections != rhs._connections {return false}
     if lhs.clockSpeedHz != rhs.clockSpeedHz {return false}
     if lhs.protocolFingerprint != rhs.protocolFingerprint {return false}
+    if lhs.executablePath != rhs.executablePath {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

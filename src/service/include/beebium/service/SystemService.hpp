@@ -15,6 +15,7 @@
 
 #include "system.grpc.pb.h"
 #include "beebium/PacingClock.hpp"
+#include "beebium/PlatformUtils.hpp"
 #include "beebium/service/ConnectionTracker.hpp"
 #include "beebium/service/ProtocolFingerprint.hpp"
 #include "beebium/service/ShutdownPolicy.hpp"
@@ -254,8 +255,12 @@ grpc::Status SystemServiceImpl<MachineType>::GetSystemInfo(
     response->set_clock_speed_hz(clock_speed_hz_);
 
     // Report the wire-protocol fingerprint the server was built against, so a
-    // connecting client can refuse to proceed on a contract mismatch.
+    // connecting client can refuse to proceed on a contract mismatch, and the
+    // path of this executable so the client can say which binary that was.
     response->set_protocol_fingerprint(std::string(PROTOCOL_FINGERPRINT));
+    if (auto exe_path = beebium::platform::executable_path()) {
+        response->set_executable_path(exe_path->string());
+    }
 
     return grpc::Status::OK;
 }

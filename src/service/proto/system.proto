@@ -106,6 +106,19 @@ message SystemInfo {
     // compiled-in fingerprint at connect and refuse to proceed on a mismatch.
     string protocol_fingerprint = 7;
 
+    // Filesystem path of the running server executable, as resolved from the
+    // OS rather than argv[0], so a PATH symlink reports its real target.
+    //
+    // This exists to make a protocol_fingerprint mismatch diagnosable. The
+    // question a mismatch raises is "which binary am I actually talking to?",
+    // and comparing two hashes cannot answer it: a stale server left running,
+    // a system-wide install shadowing a development build, or one variant of
+    // a multi-server bundle rebuilt while its siblings were not all look
+    // identical from the client. The path answers it directly.
+    //
+    // Empty if the path cannot be determined.
+    string executable_path = 8;
+
     // Future expansion:
     // string cpu_type = 8;          // Primary CPU (e.g., "6502", "65C02")
     // string coprocessor_type = 9;  // Second processor if present (e.g., "Z80", "32016")

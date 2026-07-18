@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -58,3 +59,43 @@ def test_mismatched_client_is_rejected_at_connect(
                 pass
     except ServerNotFoundError as e:
         pytest.skip(str(e))
+
+
+def test_server_reports_its_executable_path(bbc: Beebium) -> None:
+    """The server names its own binary, so a mismatch can be diagnosed."""
+    executable = bbc.system.executable_path
+    assert executable, "server did not report an executable path"
+    assert Path(executable).is_file()
+    assert Path(executable).name.startswith("beebium-model-b")
+
+
+def test_mismatch_message_names_the_server_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+) -> None:
+    """The refusal says which binary it reached, not merely two hashes.
+
+    Comparing hex strings cannot distinguish a stale server left running, an
+    installed server shadowing a development build, or one variant of a
+    multi-server bundle rebuilt while its siblings were not. The path can.
+    """
+    monkeypatch.setattr(
+        beebium.client.client, "PROTOCOL_FINGERPRINT", "mismatched-fingerprint"
+    )
+    try:
+        with pytest.raises(ProtocolMismatchError) as excinfo:
+            with Beebium.launch(
+                mos_filepath=mos_filepath,
+                basic_filepath=basic_filepath,
+                server_filepath=beebium_server_filepath,
+            ):
+                pass
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+    message = str(excinfo.value)
+    assert "beebium-model-b" in message
+    # The path, not just the executable name.
+    assert os.sep in message

@@ -36,17 +36,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0csystem.proto\x12\x07\x62\x65\x65\x62ium\"\x16\n\x14GetSystemInfoRequest\"[\n\x10LaunchProvenance\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x15\n\rinstance_uuid\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x11\n\ttimestamp\x18\x04 \x01(\x03\"U\n\x0fMachineIdentity\x12\x0c\n\x04uuid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\nmodel_type\x18\x03 \x01(\t\x12\x12\n\nmodel_name\x18\x04 \x01(\t\"&\n\x0e\x43onnectionInfo\x12\x14\n\x0c\x63lient_count\x18\x01 \x01(\x05\"\xfb\x01\n\nSystemInfo\x12-\n\nprovenance\x18\x03 \x01(\x0b\x32\x19.beebium.LaunchProvenance\x12*\n\x08identity\x18\x04 \x01(\x0b\x32\x18.beebium.MachineIdentity\x12,\n\x0b\x63onnections\x18\x05 \x01(\x0b\x32\x17.beebium.ConnectionInfo\x12\x16\n\x0e\x63lock_speed_hz\x18\x06 \x01(\r\x12\x1c\n\x14protocol_fingerprint\x18\x07 \x01(\tJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03R\x0cmachine_typeR\x14machine_display_name\"%\n\x15SetMachineNameRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"D\n\x16SetMachineNameResponse\x12*\n\x08identity\x18\x01 \x01(\x0b\x32\x18.beebium.MachineIdentity\"O\n\x0fShutdownRequest\x12#\n\x04mode\x18\x01 \x01(\x0e\x32\x15.beebium.ShutdownMode\x12\x17\n\x0fgrace_period_ms\x18\x02 \x01(\x05\"5\n\x10ShutdownResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"^\n\x17ShutdownConditionStatus\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05ready\x18\x02 \x01(\x08\x12\x12\n\nelapsed_ms\x18\x03 \x01(\x05\x12\x12\n\ntimeout_ms\x18\x04 \x01(\x05\"\x1a\n\x18WatchServerStatusRequest\"\xd5\x01\n\x11ServerStatusEvent\x12)\n\x06status\x18\x01 \x01(\x0e\x32\x19.beebium.ServerStatusType\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x19\n\x11shutdown_grace_ms\x18\x03 \x01(\r\x12*\n\x08identity\x18\x04 \x01(\x0b\x32\x18.beebium.MachineIdentity\x12=\n\x13shutdown_conditions\x18\x05 \x03(\x0b\x32 .beebium.ShutdownConditionStatus\"Q\n\x12\x41\x64vertisementState\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\x12\x11\n\tavailable\x18\x02 \x01(\x08\x12\x17\n\x0f\x61\x64vertised_name\x18\x03 \x01(\t\"\x1e\n\x1cGetAdvertisementStateRequest\"K\n\x1dGetAdvertisementStateResponse\x12*\n\x05state\x18\x01 \x01(\x0b\x32\x1b.beebium.AdvertisementState\"*\n\x17SetAdvertisementRequest\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"F\n\x18SetAdvertisementResponse\x12*\n\x05state\x18\x01 \x01(\x0b\x32\x1b.beebium.AdvertisementState\"\x17\n\x15GetPacingStatsRequest\".\n\x17WatchPacingStatsRequest\x12\x13\n\x0binterval_ms\x18\x01 \x01(\r\"5\n\x19SetSpeedMultiplierRequest\x12\x18\n\x10speed_multiplier\x18\x01 \x01(\x01\"6\n\x1aSetSpeedMultiplierResponse\x12\x18\n\x10speed_multiplier\x18\x01 \x01(\x01\"\xc7\x02\n\x0bPacingStats\x12\x16\n\x0eticks_executed\x18\x01 \x01(\x04\x12\x15\n\rticks_skipped\x18\x02 \x01(\x04\x12\x18\n\x10ticks_io_skipped\x18\x03 \x01(\x04\x12\x18\n\x10\x61vg_overshoot_us\x18\x04 \x01(\x01\x12\x1f\n\x17max_recent_overshoot_us\x18\x05 \x01(\x01\x12\x18\n\x10safety_margin_us\x18\x06 \x01(\x01\x12\x18\n\x10\x63ontroller_drift\x18\x07 \x01(\x01\x12\x1b\n\x13\x63ontroller_integral\x18\x08 \x01(\x01\x12\x18\n\x10speed_multiplier\x18\t \x01(\x01\x12!\n\x19\x61\x63hieved_speed_multiplier\x18\n \x01(\x01\x12&\n\x1e\x65stimated_max_speed_multiplier\x18\x0b \x01(\x01*=\n\x0cShutdownMode\x12\x15\n\x11SHUTDOWN_GRACEFUL\x10\x00\x12\x16\n\x12SHUTDOWN_IMMEDIATE\x10\x01*\xb2\x01\n\x10ServerStatusType\x12\x17\n\x13SERVER_STATUS_READY\x10\x00\x12\x1f\n\x1bSERVER_STATUS_SHUTTING_DOWN\x10\x01\x12\"\n\x1eSERVER_STATUS_IDENTITY_CHANGED\x10\x02\x12#\n\x1fSERVER_STATUS_SHUTDOWN_PROGRESS\x10\x03\x12\x1b\n\x17SERVER_STATUS_HEARTBEAT\x10\x04\x32\xfb\x05\n\rSystemService\x12\x43\n\rGetSystemInfo\x12\x1d.beebium.GetSystemInfoRequest\x1a\x13.beebium.SystemInfo\x12Q\n\x0eSetMachineName\x12\x1e.beebium.SetMachineNameRequest\x1a\x1f.beebium.SetMachineNameResponse\x12T\n\x11WatchServerStatus\x12!.beebium.WatchServerStatusRequest\x1a\x1a.beebium.ServerStatusEvent0\x01\x12\x46\n\x0fRequestShutdown\x12\x18.beebium.ShutdownRequest\x1a\x19.beebium.ShutdownResponse\x12\x66\n\x15GetAdvertisementState\x12%.beebium.GetAdvertisementStateRequest\x1a&.beebium.GetAdvertisementStateResponse\x12W\n\x10SetAdvertisement\x12 .beebium.SetAdvertisementRequest\x1a!.beebium.SetAdvertisementResponse\x12\x46\n\x0eGetPacingStats\x12\x1e.beebium.GetPacingStatsRequest\x1a\x14.beebium.PacingStats\x12L\n\x10WatchPacingStats\x12 .beebium.WatchPacingStatsRequest\x1a\x14.beebium.PacingStats0\x01\x12]\n\x12SetSpeedMultiplier\x12\".beebium.SetSpeedMultiplierRequest\x1a#.beebium.SetSpeedMultiplierResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0csystem.proto\x12\x07\x62\x65\x65\x62ium\"\x16\n\x14GetSystemInfoRequest\"[\n\x10LaunchProvenance\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x15\n\rinstance_uuid\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x11\n\ttimestamp\x18\x04 \x01(\x03\"U\n\x0fMachineIdentity\x12\x0c\n\x04uuid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\nmodel_type\x18\x03 \x01(\t\x12\x12\n\nmodel_name\x18\x04 \x01(\t\"&\n\x0e\x43onnectionInfo\x12\x14\n\x0c\x63lient_count\x18\x01 \x01(\x05\"\x94\x02\n\nSystemInfo\x12-\n\nprovenance\x18\x03 \x01(\x0b\x32\x19.beebium.LaunchProvenance\x12*\n\x08identity\x18\x04 \x01(\x0b\x32\x18.beebium.MachineIdentity\x12,\n\x0b\x63onnections\x18\x05 \x01(\x0b\x32\x17.beebium.ConnectionInfo\x12\x16\n\x0e\x63lock_speed_hz\x18\x06 \x01(\r\x12\x1c\n\x14protocol_fingerprint\x18\x07 \x01(\t\x12\x17\n\x0f\x65xecutable_path\x18\x08 \x01(\tJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03R\x0cmachine_typeR\x14machine_display_name\"%\n\x15SetMachineNameRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"D\n\x16SetMachineNameResponse\x12*\n\x08identity\x18\x01 \x01(\x0b\x32\x18.beebium.MachineIdentity\"O\n\x0fShutdownRequest\x12#\n\x04mode\x18\x01 \x01(\x0e\x32\x15.beebium.ShutdownMode\x12\x17\n\x0fgrace_period_ms\x18\x02 \x01(\x05\"5\n\x10ShutdownResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"^\n\x17ShutdownConditionStatus\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05ready\x18\x02 \x01(\x08\x12\x12\n\nelapsed_ms\x18\x03 \x01(\x05\x12\x12\n\ntimeout_ms\x18\x04 \x01(\x05\"\x1a\n\x18WatchServerStatusRequest\"\xd5\x01\n\x11ServerStatusEvent\x12)\n\x06status\x18\x01 \x01(\x0e\x32\x19.beebium.ServerStatusType\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x19\n\x11shutdown_grace_ms\x18\x03 \x01(\r\x12*\n\x08identity\x18\x04 \x01(\x0b\x32\x18.beebium.MachineIdentity\x12=\n\x13shutdown_conditions\x18\x05 \x03(\x0b\x32 .beebium.ShutdownConditionStatus\"Q\n\x12\x41\x64vertisementState\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\x12\x11\n\tavailable\x18\x02 \x01(\x08\x12\x17\n\x0f\x61\x64vertised_name\x18\x03 \x01(\t\"\x1e\n\x1cGetAdvertisementStateRequest\"K\n\x1dGetAdvertisementStateResponse\x12*\n\x05state\x18\x01 \x01(\x0b\x32\x1b.beebium.AdvertisementState\"*\n\x17SetAdvertisementRequest\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"F\n\x18SetAdvertisementResponse\x12*\n\x05state\x18\x01 \x01(\x0b\x32\x1b.beebium.AdvertisementState\"\x17\n\x15GetPacingStatsRequest\".\n\x17WatchPacingStatsRequest\x12\x13\n\x0binterval_ms\x18\x01 \x01(\r\"5\n\x19SetSpeedMultiplierRequest\x12\x18\n\x10speed_multiplier\x18\x01 \x01(\x01\"6\n\x1aSetSpeedMultiplierResponse\x12\x18\n\x10speed_multiplier\x18\x01 \x01(\x01\"\xc7\x02\n\x0bPacingStats\x12\x16\n\x0eticks_executed\x18\x01 \x01(\x04\x12\x15\n\rticks_skipped\x18\x02 \x01(\x04\x12\x18\n\x10ticks_io_skipped\x18\x03 \x01(\x04\x12\x18\n\x10\x61vg_overshoot_us\x18\x04 \x01(\x01\x12\x1f\n\x17max_recent_overshoot_us\x18\x05 \x01(\x01\x12\x18\n\x10safety_margin_us\x18\x06 \x01(\x01\x12\x18\n\x10\x63ontroller_drift\x18\x07 \x01(\x01\x12\x1b\n\x13\x63ontroller_integral\x18\x08 \x01(\x01\x12\x18\n\x10speed_multiplier\x18\t \x01(\x01\x12!\n\x19\x61\x63hieved_speed_multiplier\x18\n \x01(\x01\x12&\n\x1e\x65stimated_max_speed_multiplier\x18\x0b \x01(\x01*=\n\x0cShutdownMode\x12\x15\n\x11SHUTDOWN_GRACEFUL\x10\x00\x12\x16\n\x12SHUTDOWN_IMMEDIATE\x10\x01*\xb2\x01\n\x10ServerStatusType\x12\x17\n\x13SERVER_STATUS_READY\x10\x00\x12\x1f\n\x1bSERVER_STATUS_SHUTTING_DOWN\x10\x01\x12\"\n\x1eSERVER_STATUS_IDENTITY_CHANGED\x10\x02\x12#\n\x1fSERVER_STATUS_SHUTDOWN_PROGRESS\x10\x03\x12\x1b\n\x17SERVER_STATUS_HEARTBEAT\x10\x04\x32\xfb\x05\n\rSystemService\x12\x43\n\rGetSystemInfo\x12\x1d.beebium.GetSystemInfoRequest\x1a\x13.beebium.SystemInfo\x12Q\n\x0eSetMachineName\x12\x1e.beebium.SetMachineNameRequest\x1a\x1f.beebium.SetMachineNameResponse\x12T\n\x11WatchServerStatus\x12!.beebium.WatchServerStatusRequest\x1a\x1a.beebium.ServerStatusEvent0\x01\x12\x46\n\x0fRequestShutdown\x12\x18.beebium.ShutdownRequest\x1a\x19.beebium.ShutdownResponse\x12\x66\n\x15GetAdvertisementState\x12%.beebium.GetAdvertisementStateRequest\x1a&.beebium.GetAdvertisementStateResponse\x12W\n\x10SetAdvertisement\x12 .beebium.SetAdvertisementRequest\x1a!.beebium.SetAdvertisementResponse\x12\x46\n\x0eGetPacingStats\x12\x1e.beebium.GetPacingStatsRequest\x1a\x14.beebium.PacingStats\x12L\n\x10WatchPacingStats\x12 .beebium.WatchPacingStatsRequest\x1a\x14.beebium.PacingStats0\x01\x12]\n\x12SetSpeedMultiplier\x12\".beebium.SetSpeedMultiplierRequest\x1a#.beebium.SetSpeedMultiplierResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'system_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SHUTDOWNMODE']._serialized_start=1930
-  _globals['_SHUTDOWNMODE']._serialized_end=1991
-  _globals['_SERVERSTATUSTYPE']._serialized_start=1994
-  _globals['_SERVERSTATUSTYPE']._serialized_end=2172
+  _globals['_SHUTDOWNMODE']._serialized_start=1955
+  _globals['_SHUTDOWNMODE']._serialized_end=2016
+  _globals['_SERVERSTATUSTYPE']._serialized_start=2019
+  _globals['_SERVERSTATUSTYPE']._serialized_end=2197
   _globals['_GETSYSTEMINFOREQUEST']._serialized_start=25
   _globals['_GETSYSTEMINFOREQUEST']._serialized_end=47
   _globals['_LAUNCHPROVENANCE']._serialized_start=49
@@ -56,41 +56,41 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CONNECTIONINFO']._serialized_start=229
   _globals['_CONNECTIONINFO']._serialized_end=267
   _globals['_SYSTEMINFO']._serialized_start=270
-  _globals['_SYSTEMINFO']._serialized_end=521
-  _globals['_SETMACHINENAMEREQUEST']._serialized_start=523
-  _globals['_SETMACHINENAMEREQUEST']._serialized_end=560
-  _globals['_SETMACHINENAMERESPONSE']._serialized_start=562
-  _globals['_SETMACHINENAMERESPONSE']._serialized_end=630
-  _globals['_SHUTDOWNREQUEST']._serialized_start=632
-  _globals['_SHUTDOWNREQUEST']._serialized_end=711
-  _globals['_SHUTDOWNRESPONSE']._serialized_start=713
-  _globals['_SHUTDOWNRESPONSE']._serialized_end=766
-  _globals['_SHUTDOWNCONDITIONSTATUS']._serialized_start=768
-  _globals['_SHUTDOWNCONDITIONSTATUS']._serialized_end=862
-  _globals['_WATCHSERVERSTATUSREQUEST']._serialized_start=864
-  _globals['_WATCHSERVERSTATUSREQUEST']._serialized_end=890
-  _globals['_SERVERSTATUSEVENT']._serialized_start=893
-  _globals['_SERVERSTATUSEVENT']._serialized_end=1106
-  _globals['_ADVERTISEMENTSTATE']._serialized_start=1108
-  _globals['_ADVERTISEMENTSTATE']._serialized_end=1189
-  _globals['_GETADVERTISEMENTSTATEREQUEST']._serialized_start=1191
-  _globals['_GETADVERTISEMENTSTATEREQUEST']._serialized_end=1221
-  _globals['_GETADVERTISEMENTSTATERESPONSE']._serialized_start=1223
-  _globals['_GETADVERTISEMENTSTATERESPONSE']._serialized_end=1298
-  _globals['_SETADVERTISEMENTREQUEST']._serialized_start=1300
-  _globals['_SETADVERTISEMENTREQUEST']._serialized_end=1342
-  _globals['_SETADVERTISEMENTRESPONSE']._serialized_start=1344
-  _globals['_SETADVERTISEMENTRESPONSE']._serialized_end=1414
-  _globals['_GETPACINGSTATSREQUEST']._serialized_start=1416
-  _globals['_GETPACINGSTATSREQUEST']._serialized_end=1439
-  _globals['_WATCHPACINGSTATSREQUEST']._serialized_start=1441
-  _globals['_WATCHPACINGSTATSREQUEST']._serialized_end=1487
-  _globals['_SETSPEEDMULTIPLIERREQUEST']._serialized_start=1489
-  _globals['_SETSPEEDMULTIPLIERREQUEST']._serialized_end=1542
-  _globals['_SETSPEEDMULTIPLIERRESPONSE']._serialized_start=1544
-  _globals['_SETSPEEDMULTIPLIERRESPONSE']._serialized_end=1598
-  _globals['_PACINGSTATS']._serialized_start=1601
-  _globals['_PACINGSTATS']._serialized_end=1928
-  _globals['_SYSTEMSERVICE']._serialized_start=2175
-  _globals['_SYSTEMSERVICE']._serialized_end=2938
+  _globals['_SYSTEMINFO']._serialized_end=546
+  _globals['_SETMACHINENAMEREQUEST']._serialized_start=548
+  _globals['_SETMACHINENAMEREQUEST']._serialized_end=585
+  _globals['_SETMACHINENAMERESPONSE']._serialized_start=587
+  _globals['_SETMACHINENAMERESPONSE']._serialized_end=655
+  _globals['_SHUTDOWNREQUEST']._serialized_start=657
+  _globals['_SHUTDOWNREQUEST']._serialized_end=736
+  _globals['_SHUTDOWNRESPONSE']._serialized_start=738
+  _globals['_SHUTDOWNRESPONSE']._serialized_end=791
+  _globals['_SHUTDOWNCONDITIONSTATUS']._serialized_start=793
+  _globals['_SHUTDOWNCONDITIONSTATUS']._serialized_end=887
+  _globals['_WATCHSERVERSTATUSREQUEST']._serialized_start=889
+  _globals['_WATCHSERVERSTATUSREQUEST']._serialized_end=915
+  _globals['_SERVERSTATUSEVENT']._serialized_start=918
+  _globals['_SERVERSTATUSEVENT']._serialized_end=1131
+  _globals['_ADVERTISEMENTSTATE']._serialized_start=1133
+  _globals['_ADVERTISEMENTSTATE']._serialized_end=1214
+  _globals['_GETADVERTISEMENTSTATEREQUEST']._serialized_start=1216
+  _globals['_GETADVERTISEMENTSTATEREQUEST']._serialized_end=1246
+  _globals['_GETADVERTISEMENTSTATERESPONSE']._serialized_start=1248
+  _globals['_GETADVERTISEMENTSTATERESPONSE']._serialized_end=1323
+  _globals['_SETADVERTISEMENTREQUEST']._serialized_start=1325
+  _globals['_SETADVERTISEMENTREQUEST']._serialized_end=1367
+  _globals['_SETADVERTISEMENTRESPONSE']._serialized_start=1369
+  _globals['_SETADVERTISEMENTRESPONSE']._serialized_end=1439
+  _globals['_GETPACINGSTATSREQUEST']._serialized_start=1441
+  _globals['_GETPACINGSTATSREQUEST']._serialized_end=1464
+  _globals['_WATCHPACINGSTATSREQUEST']._serialized_start=1466
+  _globals['_WATCHPACINGSTATSREQUEST']._serialized_end=1512
+  _globals['_SETSPEEDMULTIPLIERREQUEST']._serialized_start=1514
+  _globals['_SETSPEEDMULTIPLIERREQUEST']._serialized_end=1567
+  _globals['_SETSPEEDMULTIPLIERRESPONSE']._serialized_start=1569
+  _globals['_SETSPEEDMULTIPLIERRESPONSE']._serialized_end=1623
+  _globals['_PACINGSTATS']._serialized_start=1626
+  _globals['_PACINGSTATS']._serialized_end=1953
+  _globals['_SYSTEMSERVICE']._serialized_start=2200
+  _globals['_SYSTEMSERVICE']._serialized_end=2963
 # @@protoc_insertion_point(module_scope)

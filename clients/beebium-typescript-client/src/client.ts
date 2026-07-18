@@ -149,10 +149,20 @@ export class Beebium {
         const serverFingerprint = await this.system.getProtocolFingerprint();
         if (serverFingerprint !== PROTOCOL_FINGERPRINT) {
             const reported = serverFingerprint || "(none reported)";
+            // Name the binary, not just the hashes. The question a mismatch
+            // raises is which server is actually being talked to -- a stale
+            // one left running, an installed one shadowing a development
+            // build, or one variant of a bundle rebuilt while its siblings
+            // were not. Two hex strings cannot answer that; a path can.
+            // Fetched only on this path, so a matching connect stays one call.
+            const executablePath = await this.system.getExecutablePath();
+            const where = executablePath
+                ? ` at ${executablePath}`
+                : ` on ${this.target}`;
             throw new ProtocolMismatchError(
-                `Server protocol fingerprint ${reported} does not match this ` +
-                `client's ${PROTOCOL_FINGERPRINT}. Install a server and client ` +
-                `built from the same protocol.`,
+                `Server${where} has protocol fingerprint ${reported}, which ` +
+                `does not match this client's ${PROTOCOL_FINGERPRINT}. ` +
+                `Install a server and client built from the same protocol.`,
             );
         }
     }

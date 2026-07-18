@@ -284,6 +284,21 @@ export class System {
         return info.protocolFingerprint;
     }
 
+    /**
+     * Filesystem path of the running server executable.
+     *
+     * Resolved by the server from the OS rather than argv[0], so a server
+     * started through a PATH symlink reports its real target. Use this to
+     * identify which binary a connection actually reached -- notably when
+     * diagnosing a protocol fingerprint mismatch.
+     *
+     * Empty if the server cannot determine its own path.
+     */
+    async getExecutablePath(): Promise<string> {
+        const info = await this.getSystemInfo();
+        return info.executablePath;
+    }
+
     /** Get the number of connected clients. */
     async getClientCount(): Promise<number> {
         const info = await this.getSystemInfo();
