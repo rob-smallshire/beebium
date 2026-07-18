@@ -159,16 +159,33 @@ export class Keyboard {
      * timing knob to tune. For deliberate custom timing, drive
      * `keyDown` / `keyUp` directly.
      *
+     * By default the server translates host text conventions into what the
+     * BBC keyboard can type: every line-ending convention becomes a single
+     * `\r`, typographic punctuation folds to ASCII, and the SAA5050 teletext
+     * glyphs map back to the codes that produce them. So `\n` and `\r\n` both
+     * mean RETURN once, not twice.
+     *
+     * Pass `translate: false` to type the text exactly as given. Note that
+     * `\r\n` then presses RETURN twice, because both CR and LF are RETURN.
+     *
      * @param text - The text to type.
+     * @param options - Optional settings.
+     * @param options.translate - Whether the server should translate host text
+     *     conventions. Defaults to true.
      * @returns Total pending characters in queue after enqueue.
-     * @throws Error if text contains unmappable characters.
+     * @throws Error if text contains characters that cannot be typed on the
+     *     BBC keyboard. The message names the first such character.
      */
-    async type(text: string): Promise<number> {
+    async type(
+        text: string,
+        options?: { translate?: boolean },
+    ): Promise<number> {
         const response = await promisify<
-            { text: string },
+            { text: string; translate?: boolean },
             TypeQuicklyResponse
         >(this._stub as unknown as Record<string, Function>, "typeQuickly", {
             text,
+            translate: options?.translate,
         });
         if (!response.accepted) {
             throw new Error(`Text rejected: ${response.error}`);

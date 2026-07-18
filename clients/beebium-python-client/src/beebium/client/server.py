@@ -305,41 +305,12 @@ class ServerProcess:
             return name + ".exe"
         return name
 
-    def _find_server(self, path: str | Path | None) -> Path:
-        """Find the beebium-model-b executable.
+    def _find_in_repo_build(self, exe_name: str) -> Path | None:
+        """Find the server in a build directory of the surrounding checkout.
 
-        Search order:
-        1. Explicit path argument
-        2. BEEBIUM_SERVER environment variable
-        3. PATH lookup for 'beebium-model-b'
-        4. Common build locations relative to this package
+        Returns None when this package is not sitting in a source checkout with
+        a build directory, which is the case for an installed wheel.
         """
-        # 1. Explicit path
-        if path is not None:
-            explicit = Path(path)
-            if self._is_executable(explicit):
-                return explicit
-            raise ServerNotFoundError(f"Server not found at specified path: {path}")
-
-        # 2. Environment variable
-        env_path = os.environ.get("BEEBIUM_SERVER")
-        if env_path:
-            env_server = Path(env_path)
-            if self._is_executable(env_server):
-                return env_server
-            raise ServerNotFoundError(f"BEEBIUM_SERVER points to invalid path: {env_path}")
-
-        # 3. PATH lookup
-        exe_name = self._exe_name("beebium-model-b")
-        which_result = shutil.which(exe_name)
-        if which_result:
-            return Path(which_result)
-
-        # 4. Common build locations
-        # Try to find relative to the Python package (assumes in-repo development)
-        package_dirpath = Path(__file__).parent
-        repo_root = package_dirpath.parent.parent.parent.parent
-
         # Build directory candidates (Unix and Windows)
         build_dirs = [
             "build",
@@ -356,20 +327,72 @@ class ServerProcess:
                 ]
             )
 
-        for build_dir in build_dirs:
-            # On Windows with MSVC, executables are in Release/Debug subdirectories
-            if sys.platform == "win32":
-                for config in ["Release", "Debug", ""]:
-                    if config:
-                        candidate = repo_root / build_dir / "src" / "server" / config / exe_name
-                    else:
-                        candidate = repo_root / build_dir / "src" / "server" / exe_name
+        # Walk up from this file rather than counting parents to a fixed depth.
+        # A previous fixed count silently stopped one level short of the repo
+        # root, so this search never matched and PATH always won -- which is
+        # exactly the failure this function exists to prevent. Searching every
+        # ancestor cannot go stale when a directory is renamed or moved.
+        for ancestor in Path(__file__).resolve().parents:
+            for build_dir in build_dirs:
+                server_dirpath = ancestor / build_dir / "src" / "server"
+                if sys.platform == "win32":
+                    # With MSVC the executable lands in a per-config subdirectory.
+                    for config in ["Release", "Debug", ""]:
+                        candidate = server_dirpath / config / exe_name if config \
+                            else server_dirpath / exe_name
+                        if self._is_executable(candidate):
+                            return candidate
+                else:
+                    candidate = server_dirpath / exe_name
                     if self._is_executable(candidate):
                         return candidate
-            else:
-                candidate = repo_root / build_dir / "src" / "server" / exe_name
-                if self._is_executable(candidate):
-                    return candidate
+
+        return None
+
+    def _find_server(self, path: str | Path | None) -> Path:
+        """Find the beebium-model-b executable.
+
+        Search order:
+        1. Explicit path argument
+        2. BEEBIUM_SERVER environment variable
+        3. A build directory in the surrounding source checkout
+        4. PATH lookup for 'beebium-model-b'
+
+        The in-repo build deliberately outranks PATH. A developer with a
+        release of Beebium installed system-wide would otherwise test their
+        working tree's client against the installed server, which silently
+        pairs a client and server built from different protocols -- the
+        fingerprint handshake then fails at connect with no hint that the wrong
+        binary was chosen. A build directory only exists in a checkout, so
+        preferring it cannot affect an installed wheel, where step 3 finds
+        nothing and PATH is used as before.
+        """
+        # 1. Explicit path
+        if path is not None:
+            explicit = Path(path)
+            if self._is_executable(explicit):
+                return explicit
+            raise ServerNotFoundError(f"Server not found at specified path: {path}")
+
+        # 2. Environment variable
+        env_path = os.environ.get("BEEBIUM_SERVER")
+        if env_path:
+            env_server = Path(env_path)
+            if self._is_executable(env_server):
+                return env_server
+            raise ServerNotFoundError(f"BEEBIUM_SERVER points to invalid path: {env_path}")
+
+        exe_name = self._exe_name("beebium-model-b")
+
+        # 3. A build directory in the surrounding source checkout
+        in_repo = self._find_in_repo_build(exe_name)
+        if in_repo is not None:
+            return in_repo
+
+        # 4. PATH lookup
+        which_result = shutil.which(exe_name)
+        if which_result:
+            return Path(which_result)
 
         raise ServerNotFoundError(
             "beebium-model-b not found. Set BEEBIUM_SERVER environment variable or add beebium-model-b to PATH."

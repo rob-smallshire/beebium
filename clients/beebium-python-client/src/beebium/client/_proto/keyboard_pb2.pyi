@@ -509,18 +509,34 @@ class TypeQuicklyRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     TEXT_FIELD_NUMBER: _builtins.int
+    TRANSLATE_FIELD_NUMBER: _builtins.int
     text: _builtins.str
     """UTF-8 string to type"""
+    translate: _builtins.bool
+    """No timing knob: the server paces keystrokes reliably on its own.
+    For deliberate custom timing, drive KeyDown/KeyUp directly instead.
+
+    Translate host text conventions into what the BBC keyboard can type:
+    line endings normalised to CR, typographic punctuation folded to ASCII,
+    and SAA5050 teletext glyphs mapped back to the codes that produce them.
+
+    Defaults to true when unset, which is what interactive pasting wants.
+    Set false to type the text exactly as given, and note that CRLF then
+    presses Return twice because both CR and LF are Return.
+    """
     def __init__(
         self,
         *,
         text: _builtins.str = ...,
+        translate: _builtins.bool | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_translate", b"_translate", "translate", b"translate"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["text", b"text"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_translate", b"_translate", "text", b"text", "translate", b"translate"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    def WhichOneof(self, oneof_group: _Never) -> None: ...
+    _WhichOneofReturnType__translate: _TypeAlias = _typing.Literal["translate"]  # noqa: Y015
+    _WhichOneofArgType__translate: _TypeAlias = _typing.Literal["_translate", b"_translate"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__translate) -> _WhichOneofReturnType__translate | None: ...
 
 Global___TypeQuicklyRequest: _TypeAlias = TypeQuicklyRequest  # noqa: Y015
 

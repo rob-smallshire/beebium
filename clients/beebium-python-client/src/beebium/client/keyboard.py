@@ -130,7 +130,7 @@ class Keyboard:
 
     # High-level text input (cycle-paced via server-side TypeAheadQueue)
 
-    def type(self, text: str) -> int:
+    def type(self, text: str, *, translate: bool = True) -> int:
         """Type a string of text, paced reliably by the server.
 
         The text is enqueued and typed character-by-character as the
@@ -143,16 +143,30 @@ class Keyboard:
         timing knob to tune. For deliberate custom timing, drive
         :meth:`key_down` / :meth:`key_up` directly.
 
+        By default the server translates host text conventions into what
+        the BBC keyboard can type: every line-ending convention becomes a
+        single ``\\r``, typographic punctuation folds to ASCII, and the
+        SAA5050 teletext glyphs map back to the codes that produce them.
+        So ``\\n`` and ``\\r\\n`` both mean RETURN once, not twice.
+
+        Pass ``translate=False`` to type the text exactly as given. Note
+        that ``\\r\\n`` then presses RETURN twice, because both CR and LF
+        are the RETURN key.
+
         Args:
             text: The text to type.
+            translate: Whether the server should translate host text
+                conventions. Defaults to True.
 
         Returns:
             Total pending characters in queue after enqueue.
 
         Raises:
-            ValueError: If text contains unmappable characters.
+            ValueError: If text contains characters that cannot be typed
+                on the BBC keyboard. The message names the first such
+                character.
         """
-        request = keyboard_pb2.TypeQuicklyRequest(text=text)
+        request = keyboard_pb2.TypeQuicklyRequest(text=text, translate=translate)
         response = self._stub.TypeQuickly(request)
         if not response.accepted:
             raise ValueError(f"Text rejected: {response.error}")

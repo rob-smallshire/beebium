@@ -116,6 +116,54 @@ class TestType:
         assert pending >= 0
 
 
+class TestTypeTranslation:
+    """Tests for host text translation on Keyboard.type()."""
+
+    def test_crlf_presses_return_once(self, bbc: Beebium) -> None:
+        """CRLF is one line ending, not two RETURN presses."""
+        _run_for_emulated_seconds(bbc, 2.0)
+        bbc.debugger.stop()
+        bbc.keyboard.clear_typing()
+        pending = bbc.keyboard.type("AB\r\nCD")
+        # A, B, RETURN, C, D
+        assert pending == 5
+
+    def test_untranslated_crlf_presses_return_twice(self, bbc: Beebium) -> None:
+        """Without translation CR and LF are separate RETURN presses."""
+        _run_for_emulated_seconds(bbc, 2.0)
+        bbc.debugger.stop()
+        bbc.keyboard.clear_typing()
+        pending = bbc.keyboard.type("AB\r\nCD", translate=False)
+        # A, B, RETURN, RETURN, C, D
+        assert pending == 6
+
+    def test_lone_newline_is_return(self, bbc: Beebium) -> None:
+        """A UNIX line ending types RETURN, so host text needs no fixing up."""
+        _run_for_emulated_seconds(bbc, 2.0)
+        bbc.debugger.stop()
+        bbc.debugger.run()
+        bbc.keyboard.type("PRINT 6*7\n")
+        assert _wait_for_screen(bbc, "42")
+
+    def test_typographic_quotes_are_translated(self, bbc: Beebium) -> None:
+        """Smart quotes from a web page or word processor become ASCII."""
+        _run_for_emulated_seconds(bbc, 2.0)
+        bbc.debugger.stop()
+        bbc.debugger.run()
+        bbc.keyboard.type("PRINT “HI”\r")
+        assert _wait_for_screen(bbc, "HI")
+
+    def test_untranslated_typographic_quotes_are_rejected(self, bbc: Beebium) -> None:
+        """Without translation a smart quote cannot be typed at all."""
+        with pytest.raises(ValueError):
+            bbc.keyboard.type("“HI”", translate=False)
+
+    def test_rejection_names_the_offending_character(self, bbc: Beebium) -> None:
+        """A refusal says which character was at fault."""
+        with pytest.raises(ValueError, match=r"U\+2603"):
+            bbc.keyboard.type("AB☃CD")
+
+
 class TestPressReturn:
     """Tests for Keyboard.press_return()."""
 
