@@ -100,6 +100,11 @@ public:
         const GetTypingStatusRequest* request,
         TypingStatus* response) override;
 
+    grpc::Status WatchTypingStatus(
+        grpc::ServerContext* context,
+        const WatchTypingStatusRequest* request,
+        grpc::ServerWriter<TypingStatus>* writer) override;
+
     grpc::Status ClearTyping(
         grpc::ServerContext* context,
         const ClearTypingRequest* request,

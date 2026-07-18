@@ -66,6 +66,19 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
             return
         }
 
+        // Escape stops a paste that is still being typed, and is swallowed
+        // rather than passed on: while text is arriving, Escape means "stop
+        // this", not "interrupt whatever the machine is running". With no
+        // paste in flight it reaches the BBC as usual.
+        //
+        // Characters already typed stay where they are -- the queue is what is
+        // discarded, not the keystrokes the machine has already seen.
+        if event.keyCode == MacKeyCode.escape, let coordinator = pasteCoordinator,
+           coordinator.isPasting {
+            Task { @MainActor in await coordinator.cancel() }
+            return
+        }
+
         let input = KeyInput(event: event, source: .physicalKeyboard)
         print("[KBD][in.keyDown] keyCode=\(event.keyCode)"
               + " chars=\(quotedDebug(input.characters))"

@@ -25,8 +25,11 @@ bool TypeAheadQueue::enqueue(std::string_view text, size_t hold_cycles, size_t g
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    queue_.push(QueueEntry{std::string(text), hold_cycles, gap_cycles});
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push(QueueEntry{std::string(text), hold_cycles, gap_cycles});
+    }
+    note_status_change();
     return true;
 }
 
@@ -47,6 +50,7 @@ void TypeAheadQueue::tick() {
             }
             current_index_ = 0;
             cycle_count_ = 0;
+            note_status_change();
 
             // Start typing first character
             if (current_index_ < current_text_.size()) {
@@ -72,6 +76,10 @@ void TypeAheadQueue::tick() {
                 // Move to next character after the key-up gap time
                 current_index_++;
                 cycle_count_ = 0;
+
+                // A character has been consumed, and the string may have
+                // finished. Either way a watcher has something to report.
+                note_status_change();
 
                 if (current_index_ < current_text_.size()) {
                     advance_to_next_char();
@@ -144,6 +152,7 @@ size_t TypeAheadQueue::clear() {
     current_index_ = 0;
     cycle_count_ = 0;
 
+    note_status_change();
     return count;
 }
 

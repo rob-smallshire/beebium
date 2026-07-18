@@ -16,7 +16,9 @@
 #include "beebium/TextTranslation.hpp"
 #include "beebium/TypeAheadQueue.hpp"
 
+#include <chrono>
 #include <sstream>
+#include <thread>
 
 namespace beebium::service {
 
@@ -247,6 +249,54 @@ grpc::Status KeyboardServiceImpl::GetTypingStatus(
         static_cast<uint32_t>(keyboard_.type_ahead().pending_characters()));
     response->set_strings_queued(
         static_cast<uint32_t>(keyboard_.type_ahead().strings_queued()));
+    return grpc::Status::OK;
+}
+
+grpc::Status KeyboardServiceImpl::WatchTypingStatus(
+    grpc::ServerContext* context,
+    const WatchTypingStatusRequest* request,
+    grpc::ServerWriter<TypingStatus>* writer) {
+
+    const auto interval = std::chrono::milliseconds(
+        request->min_interval_ms() > 0 ? request->min_interval_ms() : 20);
+
+    auto snapshot = [this](TypingStatus& status) {
+        auto& type_ahead = keyboard_.type_ahead();
+        status.set_idle(type_ahead.empty());
+        status.set_pending_characters(
+            static_cast<uint32_t>(type_ahead.pending_characters()));
+        status.set_strings_queued(
+            static_cast<uint32_t>(type_ahead.strings_queued()));
+    };
+
+    // Send a snapshot immediately, so a client that subscribes after the queue
+    // has already drained is told so rather than waiting for a change that
+    // will never come.
+    uint64_t last_sequence = keyboard_.type_ahead().status_sequence();
+    {
+        TypingStatus status;
+        snapshot(status);
+        if (!writer->Write(status)) {
+            return grpc::Status::OK;  // Client went away during the first push.
+        }
+    }
+
+    while (!context->IsCancelled()) {
+        std::this_thread::sleep_for(interval);
+
+        const uint64_t sequence = keyboard_.type_ahead().status_sequence();
+        if (sequence == last_sequence) {
+            continue;
+        }
+        last_sequence = sequence;
+
+        TypingStatus status;
+        snapshot(status);
+        if (!writer->Write(status)) {
+            break;  // Client disconnected.
+        }
+    }
+
     return grpc::Status::OK;
 }
 

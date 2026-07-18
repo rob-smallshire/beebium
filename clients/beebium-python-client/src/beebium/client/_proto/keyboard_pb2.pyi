@@ -586,6 +586,29 @@ class GetTypingStatusRequest(_message.Message):
 Global___GetTypingStatusRequest: _TypeAlias = GetTypingStatusRequest  # noqa: Y015
 
 @_typing.final
+class WatchTypingStatusRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MIN_INTERVAL_MS_FIELD_NUMBER: _builtins.int
+    min_interval_ms: _builtins.int
+    """Minimum interval between pushes in milliseconds (optional, default 20).
+    The server pushes only when the status actually changes, so this caps
+    the update rate rather than forcing periodic traffic.
+    """
+    def __init__(
+        self,
+        *,
+        min_interval_ms: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["min_interval_ms", b"min_interval_ms"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___WatchTypingStatusRequest: _TypeAlias = WatchTypingStatusRequest  # noqa: Y015
+
+@_typing.final
 class TypingStatus(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

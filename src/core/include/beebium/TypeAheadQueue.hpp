@@ -15,6 +15,7 @@
 #include "KeyboardMatrix.hpp"
 
 #include <cstddef>
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <queue>
@@ -84,6 +85,14 @@ public:
     // Returns number of characters that were pending.
     size_t clear();
 
+    // Monotonic counter bumped whenever the typing status changes: a character
+    // consumed, a string started or finished, text enqueued, or the queue
+    // cleared. A watcher compares successive values to know when there is
+    // something new to report, without polling the status itself.
+    uint64_t status_sequence() const {
+        return status_sequence_.load(std::memory_order_acquire);
+    }
+
 private:
     // State machine states
     enum class State {
@@ -118,6 +127,16 @@ private:
     size_t current_hold_cycles_ = DEFAULT_HOLD_CYCLES;
     size_t current_gap_cycles_ = DEFAULT_GAP_CYCLES;
     size_t cycle_count_ = 0;
+
+    // Bumped on every observable change; see status_sequence(). Atomic rather
+    // than mutex-protected so a watcher can check for changes without
+    // contending with the emulation thread on every poll.
+    std::atomic<uint64_t> status_sequence_{0};
+
+    // Record that the observable status changed.
+    void note_status_change() {
+        status_sequence_.fetch_add(1, std::memory_order_release);
+    }
 
     // Current key state
     uint8_t current_ik_number_ = 0;

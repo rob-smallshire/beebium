@@ -23,8 +23,8 @@ import SwiftUI
 protocol PasteTypist: AnyObject {
     /// Returns nil on success, or a message describing the refusal.
     func typeQuickly(_ text: String) async -> String?
-    /// True when everything queued has been typed; nil if it cannot be read.
-    func isTypingComplete() async -> Bool?
+    /// Returns once the server says nothing is left to type.
+    func waitUntilTypingComplete() async
     /// Discards anything still queued, returning the count dropped.
     @discardableResult func clearTyping() async -> Int
 }
@@ -106,19 +106,7 @@ final class PasteCoordinator: ObservableObject {
 
     var canPasteAtFullSpeed: Bool { fullSpeedUnavailableReason == nil }
 
-    /// How often to ask the server whether the typing queue has drained. The
-    /// poll is wall-clock, so a slowed machine simply needs more polls.
-    private let pollInterval: Duration
-    private let drainTimeout: Duration
-    private let sleeper: (Duration) async -> Void
-
-    init(pollInterval: Duration = .milliseconds(50),
-         drainTimeout: Duration = .seconds(120),
-         sleeper: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
-        self.pollInterval = pollInterval
-        self.drainTimeout = drainTimeout
-        self.sleeper = sleeper
-    }
+    init() {}
 
     /// Type text on the emulated keyboard.
     ///
@@ -134,7 +122,14 @@ final class PasteCoordinator: ObservableObject {
         defer { isPasting = false }
 
         guard pace == .fullSpeed else {
-            return await typist.typeQuickly(text)
+            // Wait for the queue to drain even at machine speed. The RPC
+            // returns as soon as the text is enqueued, but the machine types
+            // on for as long as it takes -- so isPasting has to mean "text is
+            // still arriving", not "the call is in flight", or Escape would
+            // have nothing to cancel a second after the paste began.
+            if let failure = await typist.typeQuickly(text) { return failure }
+            await typist.waitUntilTypingComplete()
+            return nil
         }
         if let reason = fullSpeedUnavailableReason { return reason }
 
@@ -142,7 +137,7 @@ final class PasteCoordinator: ObservableObject {
         defer { endFullSpeed(boost) }
 
         if let failure = await typist.typeQuickly(text) { return failure }
-        await waitForTypingToDrain(typist)
+        await typist.waitUntilTypingComplete()
         return nil
     }
 
@@ -200,23 +195,6 @@ final class PasteCoordinator: ObservableObject {
         }
     }
 
-    /// Wait until the server reports the typing queue empty.
-    ///
-    /// Bounded rather than indefinite because this runs inside a speed boost: a
-    /// server that stops answering must not leave the machine running unlimited
-    /// and silent forever.
-    private func waitForTypingToDrain(_ typist: PasteTypist) async {
-        let deadline = ContinuousClock.now.advanced(by: drainTimeout)
-        while ContinuousClock.now < deadline {
-            guard let complete = await typist.isTypingComplete() else {
-                // Status unreadable: the connection is in trouble. Stop waiting
-                // so speed and audio are restored.
-                return
-            }
-            if complete { return }
-            await sleeper(pollInterval)
-        }
-    }
 }
 
 // MARK: - Menu plumbing

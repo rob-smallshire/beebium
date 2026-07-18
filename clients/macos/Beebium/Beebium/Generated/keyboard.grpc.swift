@@ -93,6 +93,12 @@ internal protocol Beebium_KeyboardServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetTypingStatusRequest, Beebium_TypingStatus>
 
+  func watchTypingStatus(
+    _ request: Beebium_WatchTypingStatusRequest,
+    callOptions: CallOptions?,
+    handler: @escaping (Beebium_TypingStatus) -> Void
+  ) -> ServerStreamingCall<Beebium_WatchTypingStatusRequest, Beebium_TypingStatus>
+
   func clearTyping(
     _ request: Beebium_ClearTypingRequest,
     callOptions: CallOptions?
@@ -391,6 +397,34 @@ extension Beebium_KeyboardServiceClientProtocol {
     )
   }
 
+  /// Stream typing status until the client stops listening.
+  ///
+  /// A client that needs to know when a paste has finished should watch this
+  /// rather than poll GetTypingStatus. The server is the only party that
+  /// knows when the queue drains; polling forces the client to infer it, and
+  /// any inference needs a timeout, which is guaranteed to be wrong for some
+  /// paste. Typing throughput depends on how fast the host emulates and on
+  /// the text itself, since every capital costs an extra SHIFT press.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to WatchTypingStatus.
+  ///   - callOptions: Call options.
+  ///   - handler: A closure called when each response is received from the server.
+  /// - Returns: A `ServerStreamingCall` with futures for the metadata and status.
+  internal func watchTypingStatus(
+    _ request: Beebium_WatchTypingStatusRequest,
+    callOptions: CallOptions? = nil,
+    handler: @escaping (Beebium_TypingStatus) -> Void
+  ) -> ServerStreamingCall<Beebium_WatchTypingStatusRequest, Beebium_TypingStatus> {
+    return self.makeServerStreamingCall(
+      path: Beebium_KeyboardServiceClientMetadata.Methods.watchTypingStatus.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchTypingStatusInterceptors() ?? [],
+      handler: handler
+    )
+  }
+
   /// Clear pending typing
   ///
   /// - Parameters:
@@ -583,6 +617,11 @@ internal protocol Beebium_KeyboardServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetTypingStatusRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetTypingStatusRequest, Beebium_TypingStatus>
+
+  func makeWatchTypingStatusCall(
+    _ request: Beebium_WatchTypingStatusRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncServerStreamingCall<Beebium_WatchTypingStatusRequest, Beebium_TypingStatus>
 
   func makeClearTypingCall(
     _ request: Beebium_ClearTypingRequest,
@@ -787,6 +826,18 @@ extension Beebium_KeyboardServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTypingStatusInterceptors() ?? []
+    )
+  }
+
+  internal func makeWatchTypingStatusCall(
+    _ request: Beebium_WatchTypingStatusRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncServerStreamingCall<Beebium_WatchTypingStatusRequest, Beebium_TypingStatus> {
+    return self.makeAsyncServerStreamingCall(
+      path: Beebium_KeyboardServiceClientMetadata.Methods.watchTypingStatus.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchTypingStatusInterceptors() ?? []
     )
   }
 
@@ -1009,6 +1060,18 @@ extension Beebium_KeyboardServiceAsyncClientProtocol {
     )
   }
 
+  internal func watchTypingStatus(
+    _ request: Beebium_WatchTypingStatusRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncResponseStream<Beebium_TypingStatus> {
+    return self.performAsyncServerStreamingCall(
+      path: Beebium_KeyboardServiceClientMetadata.Methods.watchTypingStatus.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchTypingStatusInterceptors() ?? []
+    )
+  }
+
   internal func clearTyping(
     _ request: Beebium_ClearTypingRequest,
     callOptions: CallOptions? = nil
@@ -1110,6 +1173,9 @@ internal protocol Beebium_KeyboardServiceClientInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when invoking 'getTypingStatus'.
   func makeGetTypingStatusInterceptors() -> [ClientInterceptor<Beebium_GetTypingStatusRequest, Beebium_TypingStatus>]
 
+  /// - Returns: Interceptors to use when invoking 'watchTypingStatus'.
+  func makeWatchTypingStatusInterceptors() -> [ClientInterceptor<Beebium_WatchTypingStatusRequest, Beebium_TypingStatus>]
+
   /// - Returns: Interceptors to use when invoking 'clearTyping'.
   func makeClearTypingInterceptors() -> [ClientInterceptor<Beebium_ClearTypingRequest, Beebium_ClearTypingResponse>]
 
@@ -1140,6 +1206,7 @@ internal enum Beebium_KeyboardServiceClientMetadata {
       Beebium_KeyboardServiceClientMetadata.Methods.getLockState,
       Beebium_KeyboardServiceClientMetadata.Methods.typeQuickly,
       Beebium_KeyboardServiceClientMetadata.Methods.getTypingStatus,
+      Beebium_KeyboardServiceClientMetadata.Methods.watchTypingStatus,
       Beebium_KeyboardServiceClientMetadata.Methods.clearTyping,
       Beebium_KeyboardServiceClientMetadata.Methods.getKeyMapping,
       Beebium_KeyboardServiceClientMetadata.Methods.getAllKeyMappings,
@@ -1237,6 +1304,12 @@ internal enum Beebium_KeyboardServiceClientMetadata {
       type: GRPCCallType.unary
     )
 
+    internal static let watchTypingStatus = GRPCMethodDescriptor(
+      name: "WatchTypingStatus",
+      path: "/beebium.KeyboardService/WatchTypingStatus",
+      type: GRPCCallType.serverStreaming
+    )
+
     internal static let clearTyping = GRPCMethodDescriptor(
       name: "ClearTyping",
       path: "/beebium.KeyboardService/ClearTyping",
@@ -1309,6 +1382,16 @@ internal protocol Beebium_KeyboardServiceProvider: CallHandlerProvider {
 
   /// Query typing status
   func getTypingStatus(request: Beebium_GetTypingStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TypingStatus>
+
+  /// Stream typing status until the client stops listening.
+  ///
+  /// A client that needs to know when a paste has finished should watch this
+  /// rather than poll GetTypingStatus. The server is the only party that
+  /// knows when the queue drains; polling forces the client to infer it, and
+  /// any inference needs a timeout, which is guaranteed to be wrong for some
+  /// paste. Typing throughput depends on how fast the host emulates and on
+  /// the text itself, since every capital costs an extra SHIFT press.
+  func watchTypingStatus(request: Beebium_WatchTypingStatusRequest, context: StreamingResponseCallContext<Beebium_TypingStatus>) -> EventLoopFuture<GRPCStatus>
 
   /// Clear pending typing
   func clearTyping(request: Beebium_ClearTypingRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ClearTypingResponse>
@@ -1467,6 +1550,15 @@ extension Beebium_KeyboardServiceProvider {
         userFunction: self.getTypingStatus(request:context:)
       )
 
+    case "WatchTypingStatus":
+      return ServerStreamingServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WatchTypingStatusRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TypingStatus>(),
+        interceptors: self.interceptors?.makeWatchTypingStatusInterceptors() ?? [],
+        userFunction: self.watchTypingStatus(request:context:)
+      )
+
     case "ClearTyping":
       return UnaryServerHandler(
         context: context,
@@ -1599,6 +1691,20 @@ internal protocol Beebium_KeyboardServiceAsyncProvider: CallHandlerProvider, Sen
     request: Beebium_GetTypingStatusRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_TypingStatus
+
+  /// Stream typing status until the client stops listening.
+  ///
+  /// A client that needs to know when a paste has finished should watch this
+  /// rather than poll GetTypingStatus. The server is the only party that
+  /// knows when the queue drains; polling forces the client to infer it, and
+  /// any inference needs a timeout, which is guaranteed to be wrong for some
+  /// paste. Typing throughput depends on how fast the host emulates and on
+  /// the text itself, since every capital costs an extra SHIFT press.
+  func watchTypingStatus(
+    request: Beebium_WatchTypingStatusRequest,
+    responseStream: GRPCAsyncResponseStreamWriter<Beebium_TypingStatus>,
+    context: GRPCAsyncServerCallContext
+  ) async throws
 
   /// Clear pending typing
   func clearTyping(
@@ -1773,6 +1879,15 @@ extension Beebium_KeyboardServiceAsyncProvider {
         wrapping: { try await self.getTypingStatus(request: $0, context: $1) }
       )
 
+    case "WatchTypingStatus":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WatchTypingStatusRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TypingStatus>(),
+        interceptors: self.interceptors?.makeWatchTypingStatusInterceptors() ?? [],
+        wrapping: { try await self.watchTypingStatus(request: $0, responseStream: $1, context: $2) }
+      )
+
     case "ClearTyping":
       return GRPCAsyncServerHandler(
         context: context,
@@ -1868,6 +1983,10 @@ internal protocol Beebium_KeyboardServiceServerInterceptorFactoryProtocol: Senda
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetTypingStatusInterceptors() -> [ServerInterceptor<Beebium_GetTypingStatusRequest, Beebium_TypingStatus>]
 
+  /// - Returns: Interceptors to use when handling 'watchTypingStatus'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeWatchTypingStatusInterceptors() -> [ServerInterceptor<Beebium_WatchTypingStatusRequest, Beebium_TypingStatus>]
+
   /// - Returns: Interceptors to use when handling 'clearTyping'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeClearTypingInterceptors() -> [ServerInterceptor<Beebium_ClearTypingRequest, Beebium_ClearTypingResponse>]
@@ -1901,6 +2020,7 @@ internal enum Beebium_KeyboardServiceServerMetadata {
       Beebium_KeyboardServiceServerMetadata.Methods.getLockState,
       Beebium_KeyboardServiceServerMetadata.Methods.typeQuickly,
       Beebium_KeyboardServiceServerMetadata.Methods.getTypingStatus,
+      Beebium_KeyboardServiceServerMetadata.Methods.watchTypingStatus,
       Beebium_KeyboardServiceServerMetadata.Methods.clearTyping,
       Beebium_KeyboardServiceServerMetadata.Methods.getKeyMapping,
       Beebium_KeyboardServiceServerMetadata.Methods.getAllKeyMappings,
@@ -1996,6 +2116,12 @@ internal enum Beebium_KeyboardServiceServerMetadata {
       name: "GetTypingStatus",
       path: "/beebium.KeyboardService/GetTypingStatus",
       type: GRPCCallType.unary
+    )
+
+    internal static let watchTypingStatus = GRPCMethodDescriptor(
+      name: "WatchTypingStatus",
+      path: "/beebium.KeyboardService/WatchTypingStatus",
+      type: GRPCCallType.serverStreaming
     )
 
     internal static let clearTyping = GRPCMethodDescriptor(

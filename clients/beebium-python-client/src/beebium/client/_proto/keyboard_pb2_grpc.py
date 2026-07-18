@@ -122,6 +122,11 @@ class KeyboardServiceStub(object):
                 request_serializer=keyboard__pb2.GetTypingStatusRequest.SerializeToString,
                 response_deserializer=keyboard__pb2.TypingStatus.FromString,
                 _registered_method=True)
+        self.WatchTypingStatus = channel.unary_stream(
+                '/beebium.KeyboardService/WatchTypingStatus',
+                request_serializer=keyboard__pb2.WatchTypingStatusRequest.SerializeToString,
+                response_deserializer=keyboard__pb2.TypingStatus.FromString,
+                _registered_method=True)
         self.ClearTyping = channel.unary_unary(
                 '/beebium.KeyboardService/ClearTyping',
                 request_serializer=keyboard__pb2.ClearTypingRequest.SerializeToString,
@@ -274,6 +279,20 @@ class KeyboardServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def WatchTypingStatus(self, request, context):
+        """Stream typing status until the client stops listening.
+
+        A client that needs to know when a paste has finished should watch this
+        rather than poll GetTypingStatus. The server is the only party that
+        knows when the queue drains; polling forces the client to infer it, and
+        any inference needs a timeout, which is guaranteed to be wrong for some
+        paste. Typing throughput depends on how fast the host emulates and on
+        the text itself, since every capital costs an extra SHIFT press.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ClearTyping(self, request, context):
         """Clear pending typing
         """
@@ -376,6 +395,11 @@ def add_KeyboardServiceServicer_to_server(servicer, server):
             'GetTypingStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetTypingStatus,
                     request_deserializer=keyboard__pb2.GetTypingStatusRequest.FromString,
+                    response_serializer=keyboard__pb2.TypingStatus.SerializeToString,
+            ),
+            'WatchTypingStatus': grpc.unary_stream_rpc_method_handler(
+                    servicer.WatchTypingStatus,
+                    request_deserializer=keyboard__pb2.WatchTypingStatusRequest.FromString,
                     response_serializer=keyboard__pb2.TypingStatus.SerializeToString,
             ),
             'ClearTyping': grpc.unary_unary_rpc_method_handler(
@@ -799,6 +823,33 @@ class KeyboardService(object):
             target,
             '/beebium.KeyboardService/GetTypingStatus',
             keyboard__pb2.GetTypingStatusRequest.SerializeToString,
+            keyboard__pb2.TypingStatus.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WatchTypingStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/beebium.KeyboardService/WatchTypingStatus',
+            keyboard__pb2.WatchTypingStatusRequest.SerializeToString,
             keyboard__pb2.TypingStatus.FromString,
             options,
             channel_credentials,

@@ -105,6 +105,16 @@ class KeyboardServiceStub:
     """
     GetTypingStatus: _grpc.UnaryUnaryMultiCallable[_keyboard_pb2.GetTypingStatusRequest, _keyboard_pb2.TypingStatus]
     """Query typing status"""
+    WatchTypingStatus: _grpc.UnaryStreamMultiCallable[_keyboard_pb2.WatchTypingStatusRequest, _keyboard_pb2.TypingStatus]
+    """Stream typing status until the client stops listening.
+
+    A client that needs to know when a paste has finished should watch this
+    rather than poll GetTypingStatus. The server is the only party that
+    knows when the queue drains; polling forces the client to infer it, and
+    any inference needs a timeout, which is guaranteed to be wrong for some
+    paste. Typing throughput depends on how fast the host emulates and on
+    the text itself, since every capital costs an extra SHIFT press.
+    """
     ClearTyping: _grpc.UnaryUnaryMultiCallable[_keyboard_pb2.ClearTypingRequest, _keyboard_pb2.ClearTypingResponse]
     """Clear pending typing"""
     GetKeyMapping: _grpc.UnaryUnaryMultiCallable[_keyboard_pb2.GetKeyMappingRequest, _keyboard_pb2.KeyMappingEntry]
@@ -183,6 +193,16 @@ class KeyboardServiceAsyncStub(KeyboardServiceStub):
     """
     GetTypingStatus: _aio.UnaryUnaryMultiCallable[_keyboard_pb2.GetTypingStatusRequest, _keyboard_pb2.TypingStatus]  # type: ignore[assignment]
     """Query typing status"""
+    WatchTypingStatus: _aio.UnaryStreamMultiCallable[_keyboard_pb2.WatchTypingStatusRequest, _keyboard_pb2.TypingStatus]  # type: ignore[assignment]
+    """Stream typing status until the client stops listening.
+
+    A client that needs to know when a paste has finished should watch this
+    rather than poll GetTypingStatus. The server is the only party that
+    knows when the queue drains; polling forces the client to infer it, and
+    any inference needs a timeout, which is guaranteed to be wrong for some
+    paste. Typing throughput depends on how fast the host emulates and on
+    the text itself, since every capital costs an extra SHIFT press.
+    """
     ClearTyping: _aio.UnaryUnaryMultiCallable[_keyboard_pb2.ClearTypingRequest, _keyboard_pb2.ClearTypingResponse]  # type: ignore[assignment]
     """Clear pending typing"""
     GetKeyMapping: _aio.UnaryUnaryMultiCallable[_keyboard_pb2.GetKeyMappingRequest, _keyboard_pb2.KeyMappingEntry]  # type: ignore[assignment]
@@ -348,6 +368,22 @@ class KeyboardServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_keyboard_pb2.TypingStatus, _abc.Awaitable[_keyboard_pb2.TypingStatus]]:
         """Query typing status"""
+
+    @_abc_1.abstractmethod
+    def WatchTypingStatus(
+        self,
+        request: _keyboard_pb2.WatchTypingStatusRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_abc.Iterator[_keyboard_pb2.TypingStatus], _abc.AsyncIterator[_keyboard_pb2.TypingStatus]]:
+        """Stream typing status until the client stops listening.
+
+        A client that needs to know when a paste has finished should watch this
+        rather than poll GetTypingStatus. The server is the only party that
+        knows when the queue drains; polling forces the client to infer it, and
+        any inference needs a timeout, which is guaranteed to be wrong for some
+        paste. Typing throughput depends on how fast the host emulates and on
+        the text itself, since every capital costs an extra SHIFT press.
+        """
 
     @_abc_1.abstractmethod
     def ClearTyping(

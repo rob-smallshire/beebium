@@ -560,6 +560,41 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// Wait until the server reports that everything queued has been typed.
+    ///
+    /// The server is the only party that knows when the queue drains, so it
+    /// says so on a stream rather than the client polling and inferring it.
+    /// Any inference would need a timeout, and no timeout is right for every
+    /// paste: throughput depends on how fast the host emulates and on the text
+    /// itself, since every capital costs an extra SHIFT press.
+    ///
+    /// Returns when the queue is empty, or when the stream ends for any other
+    /// reason -- a cancelled paste, a lost connection, a stopped server. The
+    /// caller cannot distinguish those and should not need to: in every case
+    /// there is nothing more to wait for.
+    func waitUntilTypingComplete() async {
+        guard let client = client else { return }
+
+        await withCheckedContinuation { continuation in
+            // Resumed exactly once, by whichever comes first: the server
+            // reporting an empty queue, or the stream ending.
+            let hasResumed = ResumeOnce(continuation)
+
+            let call = client.watchTypingStatus(Beebium_WatchTypingStatusRequest()) { status in
+                if status.idle { hasResumed.resume() }
+            }
+
+            call.status.whenComplete { _ in
+                // Covers a cancelled paste, a dropped connection and a stopped
+                // server alike. The caller cannot tell those apart and does not
+                // need to: in every case there is nothing left to wait for.
+                hasResumed.resume()
+            }
+
+            hasResumed.onResume = { call.cancel(promise: nil) }
+        }
+    }
+
     // MARK: - Touch Bar Support
 
     /// Send a key down event directly by ikNumber (bypasses mapping system).
@@ -695,5 +730,45 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         if disabledKeySoundID != 0 {
             AudioServicesPlaySystemSound(disabledKeySoundID)
         }
+    }
+}
+
+/// Resumes a continuation exactly once, however many callers race to do it.
+///
+/// A watched stream can finish two ways at nearly the same moment -- the
+/// server reports the queue empty, and the call then completes -- and resuming
+/// a continuation twice traps.
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var pendingOnResume: (() -> Void)?
+    private var alreadyResumed = false
+
+    init(_ continuation: CheckedContinuation<Void, Never>) {
+        self.continuation = continuation
+    }
+
+    /// Run when the wait ends, whichever way it ends.
+    var onResume: (() -> Void)? {
+        get { lock.withLock { pendingOnResume } }
+        set {
+            let runNow: Bool = lock.withLock {
+                pendingOnResume = newValue
+                return alreadyResumed
+            }
+            if runNow { newValue?() }
+        }
+    }
+
+    func resume() {
+        let (toResume, cleanup): (CheckedContinuation<Void, Never>?, (() -> Void)?) = lock.withLock {
+            guard !alreadyResumed else { return (nil, nil) }
+            alreadyResumed = true
+            let c = continuation
+            continuation = nil
+            return (c, pendingOnResume)
+        }
+        toResume?.resume()
+        cleanup?()
     }
 }

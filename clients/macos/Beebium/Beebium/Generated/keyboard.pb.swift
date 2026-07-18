@@ -323,9 +323,27 @@ struct Beebium_TypeQuicklyRequest: Sendable {
   /// UTF-8 string to type
   var text: String = String()
 
+  /// Translate host text conventions into what the BBC keyboard can type:
+  /// line endings normalised to CR, typographic punctuation folded to ASCII,
+  /// and SAA5050 teletext glyphs mapped back to the codes that produce them.
+  ///
+  /// Defaults to true when unset, which is what interactive pasting wants.
+  /// Set false to type the text exactly as given, and note that CRLF then
+  /// presses Return twice because both CR and LF are Return.
+  var translate: Bool {
+    get {return _translate ?? false}
+    set {_translate = newValue}
+  }
+  /// Returns true if `translate` has been explicitly set.
+  var hasTranslate: Bool {return self._translate != nil}
+  /// Clears the value of `translate`. Subsequent reads from it will return its default value.
+  mutating func clearTranslate() {self._translate = nil}
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
+
+  fileprivate var _translate: Bool? = nil
 }
 
 struct Beebium_TypeQuicklyResponse: Sendable {
@@ -352,6 +370,21 @@ struct Beebium_GetTypingStatusRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_WatchTypingStatusRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Minimum interval between pushes in milliseconds (optional, default 20).
+  /// The server pushes only when the status actually changes, so this caps
+  /// the update rate rather than forcing periodic traffic.
+  var minIntervalMs: UInt32 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1122,7 +1155,7 @@ extension Beebium_LockKeyState: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Beebium_TypeQuicklyRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".TypeQuicklyRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{1}translate\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1131,20 +1164,29 @@ extension Beebium_TypeQuicklyRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self._translate) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.text.isEmpty {
       try visitor.visitSingularStringField(value: self.text, fieldNumber: 1)
     }
+    try { if let v = self._translate {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 2)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_TypeQuicklyRequest, rhs: Beebium_TypeQuicklyRequest) -> Bool {
     if lhs.text != rhs.text {return false}
+    if lhs._translate != rhs._translate {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1204,6 +1246,36 @@ extension Beebium_GetTypingStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 
   static func ==(lhs: Beebium_GetTypingStatusRequest, rhs: Beebium_GetTypingStatusRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_WatchTypingStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".WatchTypingStatusRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}min_interval_ms\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.minIntervalMs) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.minIntervalMs != 0 {
+      try visitor.visitSingularUInt32Field(value: self.minIntervalMs, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_WatchTypingStatusRequest, rhs: Beebium_WatchTypingStatusRequest) -> Bool {
+    if lhs.minIntervalMs != rhs.minIntervalMs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

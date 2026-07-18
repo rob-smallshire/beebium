@@ -21,13 +21,10 @@ final class PasteCoordinatorTests: XCTestCase {
     final class FakeTypist: PasteTypist {
         var typed: [String] = []
         var refusal: String?
-        /// Number of isTypingComplete() calls that report "still typing".
-        var busyPolls = 0
-        var polls = 0
-        var statusReadable = true
+        var didWait = false
         var cleared = 0
-        /// Called with the poll count, so a test can act mid-drain.
-        var onPoll: ((Int) -> Void)?
+        /// Called while the paste is draining, so a test can act mid-paste.
+        var onWait: (() -> Void)?
 
         func typeQuickly(_ text: String) async -> String? {
             if let refusal { return refusal }
@@ -35,11 +32,9 @@ final class PasteCoordinatorTests: XCTestCase {
             return nil
         }
 
-        func isTypingComplete() async -> Bool? {
-            polls += 1
-            onPoll?(polls)
-            guard statusReadable else { return nil }
-            return polls > busyPolls
+        func waitUntilTypingComplete() async {
+            didWait = true
+            onWait?()
         }
 
         @discardableResult
@@ -83,8 +78,7 @@ final class PasteCoordinatorTests: XCTestCase {
         retained.append(speed)
         retained.append(audio)
 
-        // No sleeping: the drain loop is driven by the fake's poll count.
-        let coordinator = PasteCoordinator(sleeper: { _ in })
+        let coordinator = PasteCoordinator()
         coordinator.typist = typist
         coordinator.speedControl = speed
         coordinator.audioMute = audio
@@ -124,11 +118,35 @@ final class PasteCoordinatorTests: XCTestCase {
         XCTAssertEqual(failure, "cannot type U+2603")
     }
 
+    // MARK: - Waiting for the server rather than guessing
+
+    func testMachineSpeedPasteWaitsForTheServerToSayItFinished() async {
+        // The RPC returns as soon as the text is enqueued, but the machine
+        // types on. Without waiting, isPasting would be false a moment later
+        // and Escape would have nothing to cancel.
+        let (coordinator, typist, _, _) = makeCoordinator()
+        await coordinator.paste("LONG TEXT")
+        XCTAssertEqual(typist?.didWait, true)
+    }
+
+    func testIsPastingIsTrueWhileWaitingAndFalseAfter() async {
+        let (coordinator, typist, _, _) = makeCoordinator()
+        var pastingWhileDraining: Bool?
+        typist?.onWait = { [weak coordinator] in
+            pastingWhileDraining = coordinator?.isPasting
+        }
+
+        XCTAssertFalse(coordinator.isPasting)
+        await coordinator.paste("TEXT")
+
+        XCTAssertEqual(pastingWhileDraining, true)
+        XCTAssertFalse(coordinator.isPasting, "cleared afterwards")
+    }
+
     // MARK: - Full-speed paste
 
     func testFullSpeedRaisesSpeedMutesAudioAndRestoresBoth() async {
         let (coordinator, typist, speed, audio) = makeCoordinator()
-        typist?.busyPolls = 3
 
         let failure = await coordinator.paste("LONG TEXT", pace: .fullSpeed)
 
@@ -136,7 +154,7 @@ final class PasteCoordinatorTests: XCTestCase {
         XCTAssertEqual(speed?.changes, [true, false], "speed raised then restored")
         XCTAssertEqual(speed?.isUnlimited, false)
         XCTAssertEqual(audio?.isMuted, false, "audio unmuted again")
-        XCTAssertGreaterThan(typist?.polls ?? 0, 3, "waited for the queue to drain")
+        XCTAssertEqual(typist?.didWait, true, "waited for the server to say it had finished")
     }
 
     func testFullSpeedRestoresAfterARefusal() async {
@@ -150,11 +168,11 @@ final class PasteCoordinatorTests: XCTestCase {
         XCTAssertEqual(audio?.isMuted, false)
     }
 
-    func testFullSpeedStopsWaitingWhenStatusCannotBeRead() async {
-        // A server that stops answering must not strand the machine at
-        // unlimited speed with the audio muted.
-        let (coordinator, typist, speed, audio) = makeCoordinator()
-        typist?.statusReadable = false
+    func testSpeedIsRestoredHoweverTheWaitEnds() async {
+        // The wait ends when the server says the queue is empty, but also when
+        // the stream breaks -- a cancelled paste, a lost connection, a stopped
+        // server. The machine must never be left at unlimited speed and muted.
+        let (coordinator, _, speed, audio) = makeCoordinator()
 
         await coordinator.paste("TEXT", pace: .fullSpeed)
 
@@ -184,10 +202,7 @@ final class PasteCoordinatorTests: XCTestCase {
     func testSpeedChangedByTheUserMidPasteIsNotStomped() async {
         // The user reaching for the speed control during a paste means it.
         let (coordinator, typist, speed, _) = makeCoordinator()
-        typist?.busyPolls = 2
-        typist?.onPoll = { [weak speed] count in
-            if count == 1 { speed?.setUnlimited(false) }
-        }
+        typist?.onWait = { [weak speed] in speed?.setUnlimited(false) }
 
         await coordinator.paste("TEXT", pace: .fullSpeed)
 

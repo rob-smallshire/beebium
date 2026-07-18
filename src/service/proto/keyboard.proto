@@ -70,6 +70,16 @@ service KeyboardService {
     // Query typing status
     rpc GetTypingStatus(GetTypingStatusRequest) returns (TypingStatus);
 
+    // Stream typing status until the client stops listening.
+    //
+    // A client that needs to know when a paste has finished should watch this
+    // rather than poll GetTypingStatus. The server is the only party that
+    // knows when the queue drains; polling forces the client to infer it, and
+    // any inference needs a timeout, which is guaranteed to be wrong for some
+    // paste. Typing throughput depends on how fast the host emulates and on
+    // the text itself, since every capital costs an extra SHIFT press.
+    rpc WatchTypingStatus(WatchTypingStatusRequest) returns (stream TypingStatus);
+
     // Clear pending typing
     rpc ClearTyping(ClearTypingRequest) returns (ClearTypingResponse);
 
@@ -227,6 +237,13 @@ message TypeQuicklyResponse {
 
 // Query typing status
 message GetTypingStatusRequest {}
+
+message WatchTypingStatusRequest {
+    // Minimum interval between pushes in milliseconds (optional, default 20).
+    // The server pushes only when the status actually changes, so this caps
+    // the update rate rather than forcing periodic traffic.
+    uint32 min_interval_ms = 1;
+}
 
 message TypingStatus {
     bool idle = 1;                // True if queue is empty (all typing complete)
