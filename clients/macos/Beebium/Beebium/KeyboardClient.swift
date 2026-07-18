@@ -488,6 +488,47 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
+    // MARK: - Typing Text
+
+    /// Type a string on the emulated keyboard, one key at a time.
+    ///
+    /// The server paces the keystrokes so the MOS reliably scans each one, and
+    /// translates host text conventions (line endings, typographic punctuation,
+    /// teletext glyphs) into what the BBC keyboard can type. Translation is the
+    /// server's default and this client never asks for anything else: pasting
+    /// moves characters, not bytes.
+    ///
+    /// Returns nil on success, or a message describing why the text was
+    /// refused. The caller is expected to show that to the user -- a paste
+    /// that silently does nothing is worse than one that explains itself.
+    @discardableResult
+    func typeQuickly(_ text: String) async -> String? {
+        guard let client = client else {
+            print("[KeyboardClient] typeQuickly: no client!")
+            return "Not connected to a machine"
+        }
+
+        var request = Beebium_TypeQuicklyRequest()
+        request.text = text
+
+        do {
+            let response = try await client.typeQuickly(request).response.get()
+            if !response.accepted {
+                // The server declined the whole string; it names the character
+                // at fault when there is one.
+                let reason = response.error.isEmpty
+                    ? "The machine would not accept the text"
+                    : response.error
+                print("[KeyboardClient] typeQuickly refused: \(reason)")
+                return reason
+            }
+            return nil
+        } catch {
+            print("[KeyboardClient] typeQuickly failed: \(error)")
+            return "Could not send the text to the machine"
+        }
+    }
+
     // MARK: - Touch Bar Support
 
     /// Send a key down event directly by ikNumber (bypasses mapping system).

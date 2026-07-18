@@ -18,7 +18,7 @@ import MetalKit
 /// MTKView doesn't accept keyboard input by default. This subclass overrides
 /// the necessary methods to receive and process keyboard events, forwarding
 /// them to the KeyboardClient for transmission to the emulator.
-final class KeyboardMTKView: MTKView {
+final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
     /// Keyboard client for sending key events to the server
     weak var keyboardClient: KeyboardClient?
@@ -184,6 +184,72 @@ final class KeyboardMTKView: MTKView {
     /// Reset modifier tracking to current state (call on window focus gain)
     func resetModifierTracking() {
         lastModifiers = NSEvent.modifierFlags
+    }
+
+    // MARK: - Edit Menu
+
+    /// Type the clipboard's text on the emulated keyboard.
+    ///
+    /// The emulator has no text cursor to insert at, so pasting means typing:
+    /// the characters go through the keyboard matrix exactly as if they had
+    /// been typed by hand. That works wherever typing works -- in BASIC, in a
+    /// text editor, at a game's name prompt -- rather than only where the
+    /// operating system happens to be reading a line.
+    ///
+    /// Long pastes take a while, because the machine can only accept keys as
+    /// fast as the MOS scans them. That is the machine's speed, not ours.
+    @objc func paste(_ sender: Any?) {
+        guard let text = NSPasteboard.general.string(forType: .string) else {
+            // Non-text contents (an image, a file promise). Nothing to type.
+            NSSound.beep()
+            return
+        }
+
+        guard !text.isEmpty else { return }
+
+        guard let keyboardClient = keyboardClient else {
+            print("[KeyboardMTKView] paste: no keyboard client, ignoring")
+            NSSound.beep()
+            return
+        }
+
+        Task { @MainActor in
+            if let reason = await keyboardClient.typeQuickly(text) {
+                presentPasteFailure(reason)
+            }
+        }
+    }
+
+    /// Enable Paste only when there is text to paste and somewhere to put it.
+    ///
+    /// Without this the Edit menu's Paste item is enabled whenever this view is
+    /// first responder, which is always, and choosing it when disconnected
+    /// would do nothing with no explanation.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(paste(_:)) {
+            let hasText = NSPasteboard.general.canReadObject(
+                forClasses: [NSString.self], options: nil)
+            return hasText && keyboardClient != nil
+        }
+        // Anything else reaching this view is not ours to judge. Menu items
+        // with no validator default to enabled, which is AppKit's behaviour
+        // for a responder that does not implement validation at all.
+        return true
+    }
+
+    @MainActor
+    private func presentPasteFailure(_ reason: String) {
+        guard let window = window else {
+            print("[KeyboardMTKView] paste failed with no window: \(reason)")
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Could not paste"
+        alert.informativeText = reason
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window, completionHandler: nil)
     }
 
     // MARK: - Focus Handling
