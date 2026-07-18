@@ -1,5 +1,26 @@
 # Vector MODE 7: Resolution-Independent Teletext Display
 
+> **Scope note (July 2026).** This document originally described one feature
+> spanning three layers: capturing teletext cell data, transporting it, and
+> rendering it with a vector font. The capture layer turned out to serve a
+> second, independent feature -- copying the screen as text -- which needs no
+> rendering work whatsoever.
+>
+> The shared capture layer and the copy feature are now described in
+> `teletext-cell-capture.md`. **This document is the rendering proposal**, and
+> it consumes that capture rather than owning it.
+>
+> The two features also want different transports from the same data source: a
+> snapshot RPC for copy, which needs one grid on demand, and a per-frame field
+> for rendering, which needs every frame aligned with the pixels it replaces.
+> That is a deliberate split, not duplication -- see "Two transports, one
+> source" in the companion document, and the revised Open Question 1 below.
+>
+> Nothing in the analysis below has changed. What has changed is that the
+> capture sections describe a foundation this document shares rather than
+> introduces, and that rendering is understood to be the larger and more
+> optional of the two consumers.
+
 ## Motivation
 
 MODE 7 on the BBC Micro is fundamentally a text-based display: 40 columns by 25 rows of 7-bit character codes, rendered into pixels by the SAA5050 teletext character generator. The SAA5050 uses a fixed 5x9 pixel matrix per character, expanded with horizontal and vertical doubling, resulting in a ~480x500 rasterised output.
@@ -307,11 +328,16 @@ The SAA5050 uses a 64-frame counter: characters with flash enabled are visible o
 
 ## Scope of Changes
 
+Rows marked *shared* belong to the capture layer in
+`teletext-cell-capture.md` and are needed by copy-as-text too, so they are not
+costs attributable to rendering alone. Rendering's own cost is the Unicode
+mapping and the client rasteriser.
+
 | Component | Estimated Change |
 |-----------|-----------------|
-| `Saa5050.hpp` | ~30 lines: cell capture, held character code, grid pointer |
-| `VideoRenderer.hpp` | ~10 lines: row tracking, grid lifecycle |
-| New `TeletextGrid.hpp` | ~80 lines: double-buffered cell array |
+| `Saa5050.hpp` | *shared* -- ~30 lines: cell capture, held character code, grid pointer |
+| `VideoRenderer.hpp` | *shared* -- ~10 lines: row tracking, grid lifecycle |
+| New `TeletextGrid.hpp` | *shared* -- ~80 lines: double-buffered cell array |
 | New `teletext.proto` | ~40 lines: service and message definitions |
 | New `TeletextService.cpp` | ~60 lines: gRPC stream implementation |
 | Unicode mapping table | ~50 lines: static lookup table |
@@ -411,9 +437,17 @@ return `true`. Not needed for the first cut.
 ### Reconsidering Open Question 1 in light of the per-window subscription model
 
 The original Open Question above asks whether vector MODE 7 should ride on a
-separate `TeletextService` or extend `VideoService`. With the Display Style
-architecture in place, the case for **extending `VideoService`** has
-strengthened:
+separate `TeletextService` or extend `VideoService`.
+
+Note first that the question is narrower than it looks, because it is only
+about the *rendering* transport. Copy-as-text reads the same grid through a
+snapshot RPC (`teletext-cell-capture.md`), and that decision is independent:
+the answer below does not constrain it, and it does not constrain the answer
+below. The framing "one data source, two transports" replaces the original
+assumption that one stream had to serve every consumer.
+
+For rendering specifically, with the Display Style architecture in place, the
+case for **extending `VideoService`** has strengthened:
 
 - Each emulator window already owns one `VideoClient` and one
   `SubscribeFrames` stream. Adding a parallel `TeletextService` subscription
