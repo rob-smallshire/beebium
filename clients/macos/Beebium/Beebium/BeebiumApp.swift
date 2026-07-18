@@ -133,6 +133,17 @@ struct BeebiumApp: App {
                     .disabled(sidebarMode == nil)
                 }
             }
+            // The Edit menu's stock groups assume an editable text view, which
+            // a machine window never has. Undo and Redo have nothing to undo:
+            // the emulated machine's history is not ours to rewind. Find,
+            // Spelling, Substitutions, Transformations and Speech are all
+            // NSTextView features that can only ever appear greyed out here.
+            //
+            // Paste survives, in the .pasteboard group, because KeyboardMTKView
+            // implements it by typing the text on the emulated keyboard.
+            CommandGroup(replacing: .undoRedo) { }
+            CommandGroup(replacing: .textEditing) { }
+
             CommandGroup(after: .textEditing) {
                 Divider()
                 if let target = keyboardMappingManager.toggleTargetMapping {
