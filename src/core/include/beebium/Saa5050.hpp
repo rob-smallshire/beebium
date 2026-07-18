@@ -254,9 +254,7 @@ public:
             }
 
             // Process control code (may modify data for hold graphics)
-            uint8_t temp_data = static_cast<uint8_t>(data);
-            process_control_code(value, temp_data);
-            data = temp_data;
+            process_control_code(value, data);
 
             if (!m_hold) {
                 m_last_graphics_data = 0;
@@ -276,7 +274,7 @@ public:
             // Store graphics data for hold mode
             if ((value & 0x20) && m_charset != TeletextCharset::Alpha) {
                 if (!m_conceal) {
-                    m_last_graphics_data = static_cast<uint8_t>(data);
+                    m_last_graphics_data = data;
                 }
             }
         }
@@ -403,7 +401,7 @@ private:
         bool cursor;    // Cursor active for this half-character
     };
 
-    void process_control_code(uint8_t code, uint8_t& data) {
+    void process_control_code(uint8_t code, uint16_t& data) {
         switch (code) {
             case 0x01: case 0x02: case 0x03:
             case 0x04: case 0x05: case 0x06: case 0x07:
@@ -559,7 +557,7 @@ private:
     TeletextCharset m_graphics_charset = TeletextCharset::ContiguousGraphics;
 
     // Graphics hold state
-    uint8_t m_last_graphics_data = 0;
+    uint16_t m_last_graphics_data = 0;  // 12-bit expanded font row
 
     // Double height state
     uint8_t m_raster_shift = 0;
