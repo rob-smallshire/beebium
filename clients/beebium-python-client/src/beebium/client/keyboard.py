@@ -92,6 +92,17 @@ class LockState(NamedTuple):
     shift_lock: bool
 
 
+class TypingStatus(NamedTuple):
+    """State of the server's type-ahead queue.
+
+    A NamedTuple so it still unpacks as ``(idle, pending, queued)``.
+    """
+
+    idle: bool
+    pending_characters: int
+    strings_queued: int
+
+
 class Keyboard:
     """Keyboard input interface.
 
@@ -496,15 +507,65 @@ class Keyboard:
 
     # Type-ahead status
 
-    def typing_status(self) -> tuple[bool, int, int]:
+    def typing_status(self) -> TypingStatus:
         """Get type-ahead queue status.
 
+        For waiting on a paste, prefer :meth:`wait_until_typing_complete`,
+        which the server drives, over polling this.
+
         Returns:
-            Tuple of (idle, pending_characters, strings_queued).
+            TypingStatus, which still unpacks as
+            (idle, pending_characters, strings_queued).
         """
         request = keyboard_pb2.GetTypingStatusRequest()
         response = self._stub.GetTypingStatus(request)
-        return (response.idle, response.pending_characters, response.strings_queued)
+        return TypingStatus(
+            idle=response.idle,
+            pending_characters=response.pending_characters,
+            strings_queued=response.strings_queued,
+        )
+
+    def watch_typing_status(self, *, min_interval_ms: int = 0) -> Iterator[TypingStatus]:
+        """Stream type-ahead status, pushed by the server on change.
+
+        Yields an initial snapshot immediately, then a fresh one whenever the
+        queue changes -- a character consumed, a string started or finished,
+        text enqueued, or the queue cleared. The stream stays open until the
+        iterator is closed or the connection drops.
+
+        Prefer this over polling :meth:`typing_status`. The server is the only
+        party that knows when the queue drains; polling forces the caller to
+        infer it, and any inference needs a timeout that is wrong for some
+        paste. Typing throughput depends on how fast the host can emulate and
+        on the text itself, since every capital costs an extra SHIFT press.
+
+        Args:
+            min_interval_ms: Minimum interval between change checks (0 = server
+                default of 20ms).
+        """
+        request = keyboard_pb2.WatchTypingStatusRequest(min_interval_ms=min_interval_ms)
+        for response in self._stub.WatchTypingStatus(request):
+            yield TypingStatus(
+                idle=response.idle,
+                pending_characters=response.pending_characters,
+                strings_queued=response.strings_queued,
+            )
+
+    def wait_until_typing_complete(self, *, min_interval_ms: int = 0) -> None:
+        """Block until the server reports nothing left to type.
+
+        Returns as soon as the queue is empty, including immediately if it
+        already was. Also returns if the stream ends for any other reason -- a
+        cleared queue, a dropped connection, a stopped server -- because in
+        every case there is nothing further to wait for.
+
+        There is deliberately no timeout. Use the underlying channel's
+        cancellation, or :meth:`clear_typing` from another thread, to stop
+        waiting early.
+        """
+        for status in self.watch_typing_status(min_interval_ms=min_interval_ms):
+            if status.idle:
+                return
 
     def clear_typing(self) -> int:
         """Clear the type-ahead queue.

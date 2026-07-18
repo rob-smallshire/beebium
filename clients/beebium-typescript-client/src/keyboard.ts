@@ -3,6 +3,7 @@
  */
 
 import { promisify } from "./call-utils.js";
+import { toAsyncIterable } from "./stream-utils.js";
 import {
     CTRL_KEY,
     DELETE_KEY,
@@ -602,17 +603,53 @@ export class Keyboard {
     }
 
     /**
-     * Wait until the type-ahead queue is empty.
+     * Stream type-ahead status, pushed by the server on change.
      *
-     * @param pollIntervalMs - Milliseconds between status checks (default 10).
+     * Yields an initial snapshot immediately, then a fresh one whenever the
+     * queue changes -- a character consumed, a string started or finished,
+     * text enqueued, or the queue cleared. The stream stays open until the
+     * iteration ends or the connection drops.
+     *
+     * Prefer this over polling `typingStatus()`. The server is the only party
+     * that knows when the queue drains; polling forces the caller to infer it,
+     * and any inference needs a timeout that is wrong for some paste. Typing
+     * throughput depends on how fast the host can emulate and on the text
+     * itself, since every capital costs an extra SHIFT press.
+     *
+     * @param options.minIntervalMs Minimum interval between change checks
+     *     (0 = server default of 20ms).
      */
-    async waitForTyping(pollIntervalMs: number = 10): Promise<void> {
-        while (true) {
-            const status = await this.typingStatus();
+    async *watchTypingStatus(
+        options?: { minIntervalMs?: number },
+    ): AsyncIterable<{ idle: boolean; pendingCharacters: number; stringsQueued: number }> {
+        const stream = this._stub.watchTypingStatus({
+            minIntervalMs: options?.minIntervalMs ?? 0,
+        });
+        for await (const proto of toAsyncIterable(stream)) {
+            yield {
+                idle: proto.idle,
+                pendingCharacters: proto.pendingCharacters,
+                stringsQueued: proto.stringsQueued,
+            };
+        }
+    }
+
+    /**
+     * Wait until the server reports nothing left to type.
+     *
+     * Returns as soon as the queue is empty, including immediately if it
+     * already was. Also returns if the stream ends for any other reason -- a
+     * cleared queue, a dropped connection, a stopped server -- because in
+     * every case there is nothing further to wait for.
+     *
+     * There is deliberately no timeout, and no polling interval: the server
+     * says when it has finished rather than the caller guessing.
+     */
+    async waitForTyping(): Promise<void> {
+        for await (const status of this.watchTypingStatus()) {
             if (status.idle) {
                 return;
             }
-            await new Promise(r => setTimeout(r, pollIntervalMs));
         }
     }
 
