@@ -181,7 +181,100 @@ report **what it could not read** instead of silently blanking it; extract an
 over the display**. All three BBC emulators route mouse input into emulation
 and none has any selection interaction at all.
 
+## Architecture: a separate library
+
+Text recognition should not live inside the emulator.
+
+The work divides cleanly. Knowing *where the characters are and what font is in
+use* requires the running machine: the CRTC and ULA state per band, the palette,
+the font explode level, whatever `VDU 23` has redefined. Deciding *which
+character a bitmap is* requires none of that -- it is an image problem.
+
+So: **a standalone library that turns images into text, given a set of glyphs.**
+
+```
+     Beebium server                       screen-text library
+  ---------------------                 ----------------------
+  per-band geometry                     glyph set (built-in Acorn,
+  palette                     ------>    plus any supplied)
+  font from RAM/ROM                     image region
+  selection rectangle                   selection rectangle
+                              <------   semi-structured text
+```
+
+The library knows nothing about BBC Micros beyond a built-in Acorn glyph set,
+which callers can extend or replace. Beebium reads `VDU 23` redefinitions out of
+RAM and passes them in as additional glyphs; another caller passes in something
+else entirely.
+
+### Why separate
+
+- **It can be tested on its own**, against image fixtures, with no emulator, no
+  ROMs and no timing. Recognition bugs are then reproducible from a PNG rather
+  than from a machine state.
+- **It has uses outside the emulator.** An offline image-to-text pipeline could
+  read on-screen instructions from screenshots -- assembling a catalogue of key
+  bindings for BBC games, say -- with no emulator involved at all.
+- **It could become its own project**, which is much harder if it is entangled
+  with the emulation core.
+
+### Linked or shelled out
+
+Both should work. The library builds as a linkable component and as a CLI
+executable over the same interface.
+
+Copying text is a low-frequency, user-initiated action -- once every few
+minutes at most, never in a loop -- so the cost of spawning a process is
+irrelevant next to the isolation it buys. Shelling out keeps recognition code,
+and any future dependency it acquires, out of the emulation process entirely.
+Linking stays available for anyone who wants it in-process.
+
+That choice can be made later without changing either side, which is the point
+of specifying the interface first.
+
+### The library's interface
+
+Deliberately image-shaped, with no emulator concepts in it.
+
+**In:**
+
+- **An image.** Logical pixels, as the framebuffer holds them. Any sensible
+  format for the CLI; the linked form takes a buffer.
+- **Bands.** For each horizontal band of the image: the character cell size
+  (8x8 for every BBC mode, but not assumed), where the grid starts, and how
+  many colours a pixel can take. A single-band call covers the ordinary case.
+- **A selection rectangle**, in image pixels. Optional; whole image otherwise.
+- **Glyph sets.** Zero or more, each a list of (character code, 8-byte
+  bitmap). Built-in Acorn sets are available by name; supplied sets are added
+  to or replace them. This is how `VDU 23` redefinitions arrive, and how a
+  caller with an entirely different machine's font uses the same tool.
+- **Options.** Whether to try inverted glyphs, what to do with cells that
+  match nothing, whether to search sub-cell offsets.
+
+**Out: semi-structured text.** Not a bare string -- the caller needs to know
+what was uncertain and where things were:
+
+- The text itself, for the common case of wanting to paste it.
+- Per run: the characters, the rectangle they occupied, and which glyph set
+  matched.
+- Per cell where it matters: unmatched, or matched inverted, or matched at a
+  sub-cell offset.
+
+A caller that only wants text ignores everything else. A caller building a
+catalogue of on-screen instructions from thousands of screenshots wants the
+uncertainty, because it decides what to review by hand.
+
+### MODE 7 does not go through it
+
+Teletext characters are known exactly, before pixels exist. Sending them
+through image recognition would be converting information into a picture in
+order to guess it back. The teletext strategy stays in the emulator and never
+calls the library -- the special case the interface hides.
+
 ## The interface
+
+This is the emulator-facing interface, used by clients. The library's own
+interface is separate and described above.
 
 The client selects **in pixels** and the server returns **text plus where it
 found it**. That is the whole idea: a pixel rectangle is something a client can
@@ -259,6 +352,14 @@ zero.
 
 ### Bitmap modes, cell-aligned text
 
+Delegated to the library described above; what follows is what the emulator
+must supply and what the library then does.
+
+Beebium supplies: the image band in logical pixels, the cell geometry and grid
+origin from the CRTC, the palette so foreground can be told from background,
+and the glyph set assembled from the OS ROM plus whatever `VDU 23` has
+redefined at the current explode level.
+
 Not OCR. Text written through the VDU drivers uses font glyphs unmodified at
 cell-aligned positions, so a cell either matches a known glyph exactly or does
 not match at all:
@@ -283,10 +384,19 @@ glyph. Following ZEsarUX, compare against both the glyph and its complement,
 and record which matched -- a run of inverse text is worth knowing about even
 if it copies as ordinary characters.
 
-**Low-resolution modes need decimating first.** In MODE 2 a logical pixel
-occupies several physical ones, so a cell must be reduced back to an 8x8
-monochrome bitmap before matching, and the character grid is narrower. The
-per-band record has to carry enough to do that.
+**Decimation is not needed here**, although ZEsarUX requires it. Beebium's
+framebuffer holds *logical* pixels and the client stretches them to physical
+ones -- that is what `DisplayRegion.pixel_width` records, 320 for Elite's upper
+band and 160 for its lower. So a matcher never sees a stretched pixel.
+
+That leaves a strong invariant: **in logical pixel space a BBC character cell
+is 8x8 in every mode.** MODE 0 is 640 pixels over 80 columns, MODE 2 is 160
+over 20, MODE 5 is 160 over 20 -- eight pixels per character throughout. The
+glyph to match is always an 8x8 bitmap, and only the cell's colour depth and
+the grid width vary.
+
+A glyph straddling a band boundary is not matched. Text written across the seam
+of a split screen is rare enough not to pay for.
 
 ### Text at the graphics cursor
 
@@ -379,13 +489,28 @@ should be treated the same way: useful now, not a commitment.
 
 ## Suggested sequencing
 
-1. Specify and add `GetScreenText` with the teletext strategy only, delegating
-   to the existing capture. Behaviour in MODE 7 is unchanged; behaviour
-   elsewhere becomes an honest "nothing found" rather than stale cells.
+The emulator side and the library are independent and can proceed in either
+order, or at once.
+
+**Emulator side:**
+
+1. Add `GetScreenText` with the teletext strategy only, delegating to the
+   existing capture. Behaviour in MODE 7 is unchanged; behaviour elsewhere
+   becomes an honest "nothing found" rather than stale cells.
 2. Move macOS Copy onto it, and remove the MODE 7 wording from the UI.
 3. Drag-to-select against this interface, in pixels.
-4. Add the bitmap-mode glyph-matching strategy, ROM font first, soft font
-   after.
+4. Widen the per-scanline record to carry what a band needs, and assemble the
+   glyph set from ROM plus soft font.
 5. Retire the teletext-specific RPC and the client-side screen scrapers.
 
-`VDU 5` text, if ever, comes last and changes nothing about the contract.
+**Library:**
+
+1. The interface, an Acorn glyph set, and exact matching of aligned cells --
+   testable immediately against image fixtures.
+2. Inverted matching.
+3. Supplied glyph sets.
+4. Sub-cell offset search, for `VDU 5` text and for offline images that were
+   never grid-aligned to begin with.
+
+They meet when the emulator has a band to hand over and the library can read
+it. Neither blocks the other before then.
