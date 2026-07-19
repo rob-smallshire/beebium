@@ -79,10 +79,16 @@ struct TeletextCell {
 };
 ```
 
-The capture is guarded on `m_raster == 0` so each cell is written once per
-character row rather than twice per scanline, and the whole thing is behind a
-null pointer check so the cost when nothing is watching is one test per
-character.
+The whole thing is behind a null pointer check, so the cost when nothing is
+watching is one test per character.
+
+The original proposal guarded capture on `m_raster == 0`, to write each cell
+once per character row. **That does not work**: "the first scanline" is not a
+fixed raster number, because interlaced fields start at different rasters, so
+the guard captures nothing at all on alternate fields. The implementation
+instead captures on every scanline, overwriting the same cell with identical
+values -- the attribute state is re-resolved per scanline and comes out the
+same. Correctness first; the writes are small and land in cache.
 
 Note the one addition the original proposal identifies: held graphics are
 currently kept as pixel data (`m_last_graphics_data`), so the SAA5050 needs to
