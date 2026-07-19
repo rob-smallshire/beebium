@@ -55,6 +55,23 @@ void append_cell(std::string& out, const Cell& cell)
         out += buffer;
         out += ",\"glyph_set\":";
         out += json_string(cell.glyph_set);
+
+        // Reported only when there is a choice, so that its presence in the
+        // output means something rather than being noise on every cell.
+        if (cell.ambiguous()) {
+            out += ",\"alternatives\":[";
+            for (std::size_t index = 0; index < cell.alternatives.size();
+                 ++index) {
+                if (index > 0) {
+                    out += ",";
+                }
+                char buffer[32];
+                std::snprintf(buffer, sizeof(buffer), "%u",
+                              static_cast<unsigned>(cell.alternatives[index]));
+                out += buffer;
+            }
+            out += "]";
+        }
     }
 
     out += ",\"offset\":";
@@ -110,6 +127,8 @@ std::string to_json(const Result& result)
     append_number(out, result.total_cells);
     out += ",\n  \"unmatched_cells\": ";
     append_number(out, result.unmatched_cells);
+    out += ",\n  \"ambiguous_cells\": ";
+    append_number(out, result.ambiguous_cells);
 
     out += ",\n  \"runs\": [";
     for (std::size_t index = 0; index < result.runs.size(); ++index) {
@@ -122,6 +141,8 @@ std::string to_json(const Result& result)
         append_rect(out, run.bounds);
         out += ", \"unmatched_cells\": ";
         append_number(out, run.unmatched_cells());
+        out += ", \"ambiguous_cells\": ";
+        append_number(out, run.ambiguous_cells());
 
         out += ", \"cells\": [";
         for (std::size_t cell_index = 0; cell_index < run.cells.size();

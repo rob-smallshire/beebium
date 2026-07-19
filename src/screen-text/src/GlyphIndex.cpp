@@ -12,6 +12,8 @@
 
 #include "GlyphIndex.hpp"
 
+#include <algorithm>
+
 namespace screentext {
 
 GlyphIndex::GlyphIndex(const std::vector<GlyphSet>& sets)
@@ -28,12 +30,28 @@ GlyphIndex::GlyphIndex(const std::vector<GlyphSet>& sets)
                 continue;
             }
 
+            const auto existing = glyphs_.find(glyph.bitmap);
+            if (existing != glyphs_.end() && owners_[glyph.bitmap] == index) {
+                // Another glyph of the same set has this bitmap. Neither
+                // overrides the other; keep both, lowest codepoint reported.
+                Match& match = existing->second;
+                std::vector<char32_t> all = match.alternatives;
+                all.push_back(match.codepoint);
+                all.push_back(glyph.codepoint);
+                std::sort(all.begin(), all.end());
+                all.erase(std::unique(all.begin(), all.end()), all.end());
+
+                match.codepoint = all.front();
+                match.alternatives.assign(all.begin() + 1, all.end());
+                continue;
+            }
+
+            // A new bitmap, or one from an earlier set being overridden.
             Match match;
             match.codepoint = glyph.codepoint;
             match.glyph_set = &names_[index];
-
-            // insert_or_assign, so a later set displaces an earlier one.
             glyphs_.insert_or_assign(glyph.bitmap, match);
+            owners_[glyph.bitmap] = index;
         }
     }
 }

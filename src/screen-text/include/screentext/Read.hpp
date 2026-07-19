@@ -64,6 +64,17 @@ struct Cell {
     std::uint8_t foreground = 0;
     std::uint8_t background = 0;
 
+    // The other characters this cell could equally be, lowest first, empty in
+    // the ordinary case. Fonts collide -- '0' with 'O', 'l' with '|', and in
+    // one real font 'I', 'l' and '|' all at once -- and when they do, the
+    // pixels simply do not say which was meant.
+    //
+    // `codepoint` still holds one of them, so the text remains usable, but a
+    // caller is told it was a choice rather than a reading. Silently picking
+    // one and saying nothing is the same mistake as turning an unreadable
+    // cell into a space.
+    std::vector<char32_t> alternatives;
+
     // Matched away from the character grid. Never set while offset search is
     // unimplemented.
     bool offset = false;
@@ -76,6 +87,10 @@ struct Cell {
     // contributes a space to `Run::text`, so columns stay aligned, but says
     // here that it was unread.
     bool matched() const { return codepoint != 0; }
+
+    // True when the glyph set does not distinguish this bitmap from some
+    // other character's.
+    bool ambiguous() const { return !alternatives.empty(); }
 };
 
 // A contiguous run of cells on one character row.
@@ -90,6 +105,9 @@ struct Run {
 
     // Cells in this run that matched nothing.
     std::size_t unmatched_cells() const;
+
+    // Cells whose bitmap could equally be some other character.
+    std::size_t ambiguous_cells() const;
 };
 
 struct Result {
@@ -97,6 +115,12 @@ struct Result {
 
     // Over every cell read, including those outside any run.
     std::size_t unmatched_cells = 0;
+
+    // Cells that matched, but whose bitmap the glyph sets do not distinguish
+    // from some other character's. Read alongside `unmatched_cells`: one
+    // counts what could not be read, the other what could not be pinned down.
+    std::size_t ambiguous_cells = 0;
+
     std::size_t total_cells = 0;
 
     // The runs joined with newlines, for a caller that only wants the text.

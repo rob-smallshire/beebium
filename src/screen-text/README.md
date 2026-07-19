@@ -122,6 +122,22 @@ B-Em's `textsave.c` silently turns unmatched cells into spaces, which makes "I
 could not read this" indistinguishable from "this was blank". That distinction
 is what the whole design rests on, so it is tested directly rather than assumed.
 
+The same applies one level up. Fonts collide: of sixty-eight period BBC fonts
+surveyed, seventeen draw two or more characters with identical pixels -- `'0'`
+with `'O'`, `'l'` with `'|'`, `'('` with `'['`, even `'5'` with `'S'`, and in
+one font `'I'`, `'l'` and `'|'` all at once. Nothing can separate those from an
+image, because the difference is not in the image.
+
+So a cell whose bitmap fits more than one character carries the others in
+`Cell::alternatives`, counted by `Result::ambiguous_cells`. `codepoint` still
+holds one of them -- the lowest, chosen by value so that rearranging a font
+file cannot change what a screen says -- and the text stays usable, but a
+caller is told which characters were a choice rather than a reading.
+
+Two *sets* disagreeing is a different thing entirely: that is an override, how
+a `VDU 23` redefinition arrives, and is not ambiguous. Only a set colliding
+with itself leaves a cell undecidable.
+
 ### Geometry is an input
 
 Cell sizes, grid pitches, grid origins, band boundaries and the background value
@@ -228,6 +244,10 @@ MODE 2 screen carrying a different foreground and background pair in every one
 of its cells. Every cell of every one of them is matched, and the text is
 reconstructed exactly from an independently computed expectation. See the
 README there.
+
+`tests/fixtures/fonts/` holds five period BBC fonts, chosen by rendering
+sixty-eight of them to a full screen and keeping the ones that showed something
+the others did not. See the README there.
 
 Colour is covered twice over, because the two say different things. The
 captured screen proves a real machine produces what is expected of it; a

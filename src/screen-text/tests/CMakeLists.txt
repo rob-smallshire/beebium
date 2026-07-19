@@ -17,6 +17,8 @@ catch_discover_tests(test_screentext_glyphs)
 add_executable(test_screentext_read test_read.cpp)
 target_link_libraries(test_screentext_read PRIVATE screentext Catch2::Catch2WithMain)
 target_include_directories(test_screentext_read PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(test_screentext_read PRIVATE
+    SCREENTEXT_TEST_FIXTURES_DIR="${SCREENTEXT_TEST_FIXTURES_DIR}")
 catch_discover_tests(test_screentext_read)
 
 # The CLI is exercised through its own interface -- run as a process, with its

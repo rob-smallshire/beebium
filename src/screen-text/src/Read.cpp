@@ -227,6 +227,17 @@ std::size_t Run::unmatched_cells() const
     return count;
 }
 
+std::size_t Run::ambiguous_cells() const
+{
+    std::size_t count = 0;
+    for (const Cell& cell : cells) {
+        if (cell.ambiguous()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 std::string Result::text() const
 {
     std::string text;
@@ -312,7 +323,11 @@ Result read(const Image& image,
                 if (match != nullptr) {
                     cell.codepoint = match->codepoint;
                     cell.glyph_set = *match->glyph_set;
+                    cell.alternatives = match->alternatives;
                     cell.background = background;
+                    if (!match->alternatives.empty()) {
+                        ++result.ambiguous_cells;
+                    }
 
                     // A blank cell has one colour and no glyph to have the
                     // other, so both are reported the same.

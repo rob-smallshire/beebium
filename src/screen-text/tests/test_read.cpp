@@ -14,14 +14,18 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Canvas.hpp"
+#include "GlyphFile.hpp"
 #include "screentext/ScreenText.hpp"
 
 using namespace screentext;
 using screentext::testing::Canvas;
+using screentext::testing::load_glyph_file;
 using screentext::testing::whole_image_band;
 
 namespace {
@@ -1009,4 +1013,303 @@ TEST_CASE("A full screen of colour pairs is read the same way twice")
 
     CHECK(first.unmatched_cells == 0);
     CHECK(first.text() == second.text());
+}
+
+// Characters a font does not distinguish.
+//
+// Real fonts collide. Of sixty-eight period BBC fonts surveyed, seventeen
+// contain two or more characters drawn with exactly the same pixels: '0' with
+// 'O', 'l' with '|', '(' with '[', even '5' with 'S'. Nothing can separate
+// those from an image, because the difference is not in the image.
+//
+// Reporting one of them and saying nothing would be the same mistake as
+// turning an unreadable cell into a space: a plausible answer where the truth
+// is unknowable, with no way for a caller to tell.
+
+namespace {
+
+// Two glyphs, deliberately identical, as a colliding font has them.
+GlyphSet colliding_set(std::initializer_list<char32_t> codepoints)
+{
+    GlyphSet set;
+    set.name = "colliding";
+    const Bitmap shared
+        = Bitmap::from_rows({0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00});
+    for (const char32_t codepoint : codepoints) {
+        set.glyphs.push_back(Glyph(codepoint, shared));
+    }
+    return set;
+}
+
+} // namespace
+
+TEST_CASE("A cell a font cannot pin down reports what else it might be")
+{
+    const GlyphSet set = colliding_set({U'O', U'0'});
+
+    Canvas canvas(8, 8);
+    canvas.stamp(0, 0, set.glyphs[0].bitmap);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               {set});
+
+    REQUIRE(result.runs.size() == 1);
+    REQUIRE(result.runs[0].cells.size() == 1);
+    const Cell& cell = result.runs[0].cells[0];
+
+    CHECK(cell.matched());
+    CHECK(cell.ambiguous());
+    CHECK(cell.codepoint == U'0'); // the lower of the two
+    CHECK(cell.alternatives == std::vector<char32_t>{U'O'});
+
+    // Counted apart from unmatched cells: one says what could not be read,
+    // the other what could not be pinned down.
+    CHECK(result.unmatched_cells == 0);
+    CHECK(result.ambiguous_cells == 1);
+    CHECK(result.runs[0].ambiguous_cells() == 1);
+}
+
+TEST_CASE("Three characters sharing one bitmap are all reported")
+{
+    // One of the surveyed fonts draws 'I', 'l' and '|' identically.
+    const GlyphSet set = colliding_set({U'l', U'|', U'I'});
+
+    Canvas canvas(8, 8);
+    canvas.stamp(0, 0, set.glyphs[0].bitmap);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               {set});
+
+    REQUIRE(result.runs.size() == 1);
+    const Cell& cell = result.runs[0].cells[0];
+    CHECK(cell.codepoint == U'I'); // U+0049, the lowest of the three
+    CHECK(cell.alternatives == std::vector<char32_t>{U'l', U'|'});
+}
+
+TEST_CASE("Which character is reported does not depend on the order listed")
+{
+    // Chosen by value rather than by position, so that rearranging a font
+    // file cannot change what a screen says.
+    Canvas canvas(8, 8);
+    canvas.stamp(0, 0, colliding_set({U'O'}).glyphs[0].bitmap);
+
+    const Result forwards = read(canvas.image(),
+                                 {whole_image_band(canvas.image())},
+                                 {colliding_set({U'O', U'0'})});
+    const Result backwards = read(canvas.image(),
+                                  {whole_image_band(canvas.image())},
+                                  {colliding_set({U'0', U'O'})});
+
+    CHECK(forwards.runs[0].cells[0].codepoint
+          == backwards.runs[0].cells[0].codepoint);
+    CHECK(forwards.runs[0].cells[0].alternatives
+          == backwards.runs[0].cells[0].alternatives);
+}
+
+TEST_CASE("An override from a later set is not an ambiguity")
+{
+    // Two sets disagreeing is a caller replacing a character deliberately --
+    // how a VDU 23 redefinition arrives. Only a set colliding with itself
+    // leaves a cell genuinely undecidable.
+    const GlyphSet original = colliding_set({U'O'});
+    GlyphSet redefined;
+    redefined.name = "redefined";
+    redefined.glyphs.push_back(Glyph(U'Q', original.glyphs[0].bitmap));
+
+    Canvas canvas(8, 8);
+    canvas.stamp(0, 0, original.glyphs[0].bitmap);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               {original, redefined});
+
+    REQUIRE(result.runs.size() == 1);
+    const Cell& cell = result.runs[0].cells[0];
+    CHECK(cell.codepoint == U'Q');
+    CHECK_FALSE(cell.ambiguous());
+    CHECK(cell.glyph_set == "redefined");
+    CHECK(result.ambiguous_cells == 0);
+}
+
+TEST_CASE("An ordinary cell carries no alternatives")
+{
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp_text(0, 0, "ABC", acorn());
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    CHECK(result.ambiguous_cells == 0);
+    for (const Cell& cell : result.runs[0].cells) {
+        CHECK(cell.alternatives.empty());
+        CHECK_FALSE(cell.ambiguous());
+    }
+}
+
+// Period BBC fonts, as they were actually drawn.
+//
+// Five from a collection of sixty-eight, kept because each showed something
+// the others did not. See tests/fixtures/fonts/README.md.
+
+namespace {
+
+GlyphSet font(const std::string& name)
+{
+    return load_glyph_file(
+        std::string(SCREENTEXT_TEST_FIXTURES_DIR) + "/fonts/" + name
+            + ".glyphs",
+        name);
+}
+
+// Stamp every glyph of a set onto a grid and read it back, which is the whole
+// of what a font has to survive.
+Result round_trip(const GlyphSet& set, std::vector<char32_t>& expected)
+{
+    const std::size_t columns = 16;
+    const std::size_t rows = (set.glyphs.size() + columns - 1) / columns;
+
+    Canvas canvas(columns * 8, rows * 8);
+    expected.clear();
+    for (std::size_t index = 0; index < set.glyphs.size(); ++index) {
+        const std::size_t x = (index % columns) * 8;
+        const std::size_t y = (index / columns) * 8;
+        canvas.stamp(x, y, set.glyphs[index].bitmap);
+        expected.push_back(set.glyphs[index].codepoint);
+    }
+    return read(canvas.image(), {whole_image_band(canvas.image())}, {set});
+}
+
+} // namespace
+
+TEST_CASE("A font nothing like the ROM's reads perfectly")
+{
+    // Broadway differs from the MOS font in ninety-four of its ninety-five
+    // glyphs, and no two of them are alike. Nothing about matching depends on
+    // the shapes being familiar.
+    const GlyphSet set = font("broadway");
+    CHECK(set.glyphs.size() == 95);
+
+    std::vector<char32_t> expected;
+    const Result result = round_trip(set, expected);
+
+    CHECK(result.unmatched_cells == 0);
+    CHECK(result.ambiguous_cells == 0);
+}
+
+TEST_CASE("A font that draws two characters alike says so")
+{
+    // FeltPen draws '0' and 'O' with the same pixels, and 'l' and '|' too.
+    const GlyphSet set = font("feltpen");
+
+    std::vector<char32_t> expected;
+    const Result result = round_trip(set, expected);
+
+    // FeltPen defines no space, alone among these fonts, so the cells left
+    // over at the end of the grid are blank and match nothing. Honest: with
+    // no space in the set, a blank cell really is unreadable.
+    CHECK(set.glyphs.size() == 94);
+    CHECK(result.unmatched_cells == 2);
+
+    CHECK(result.ambiguous_cells == 4); // two pairs, both cells of each
+
+    std::vector<std::vector<char32_t>> groups;
+    for (const Run& run : result.runs) {
+        for (const Cell& cell : run.cells) {
+            if (!cell.ambiguous()) {
+                continue;
+            }
+            std::vector<char32_t> group{cell.codepoint};
+            group.insert(group.end(), cell.alternatives.begin(),
+                         cell.alternatives.end());
+            if (std::find(groups.begin(), groups.end(), group) == groups.end()) {
+                groups.push_back(group);
+            }
+        }
+    }
+
+    REQUIRE(groups.size() == 2);
+    CHECK(groups[0] == std::vector<char32_t>{U'0', U'O'});
+    CHECK(groups[1] == std::vector<char32_t>{U'l', U'|'});
+}
+
+TEST_CASE("A font can make three characters indistinguishable")
+{
+    // chocolate1 draws 'I', 'l' and '|' identically, so each of those cells
+    // could equally be any of the three.
+    const GlyphSet set = font("chocolate1");
+
+    std::vector<char32_t> expected;
+    const Result result = round_trip(set, expected);
+
+    CHECK(result.unmatched_cells == 0);
+
+    bool found = false;
+    for (const Run& run : result.runs) {
+        for (const Cell& cell : run.cells) {
+            if (cell.codepoint == U'I' && cell.ambiguous()) {
+                CHECK(cell.alternatives == std::vector<char32_t>{U'l', U'|'});
+                found = true;
+            }
+        }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("Characters no one would think to check can collide")
+{
+    // Futura draws '5' and 'S' alike; TrekFont draws '(' like '[' and ')'
+    // like ']'. Worth stating outright, because a reader scanning output for
+    // plausibility would never question any of them.
+    for (const auto& [name, expected] :
+         std::vector<std::pair<std::string, std::vector<char32_t>>>{
+             {"futura", {U'5', U'S'}},
+             {"trekfont", {U'(', U'['}},
+         }) {
+        INFO(name);
+        const GlyphSet set = font(name);
+        std::vector<char32_t> ignored;
+        const Result result = round_trip(set, ignored);
+
+        bool found = false;
+        for (const Run& run : result.runs) {
+            for (const Cell& cell : run.cells) {
+                if (cell.codepoint == expected[0] && cell.ambiguous()) {
+                    CHECK(cell.alternatives
+                          == std::vector<char32_t>{expected[1]});
+                    found = true;
+                }
+            }
+        }
+        CHECK(found);
+    }
+}
+
+TEST_CASE("A screen in one font is not readable with another")
+{
+    // The reason a caller supplies a font at all. Read with the ROM set, a
+    // Broadway screen is mostly unreadable -- and reported as such rather
+    // than coming back as plausible nonsense.
+    const GlyphSet broadway = font("broadway");
+
+    std::vector<char32_t> expected;
+    round_trip(broadway, expected);
+
+    Canvas canvas(16 * 8, ((broadway.glyphs.size() + 15) / 16) * 8);
+    for (std::size_t index = 0; index < broadway.glyphs.size(); ++index) {
+        canvas.stamp((index % 16) * 8, (index / 16) * 8,
+                     broadway.glyphs[index].bitmap);
+    }
+
+    const Result wrong = read(canvas.image(),
+                              {whole_image_band(canvas.image())},
+                              acorn_only());
+    const Result right = read(canvas.image(),
+                              {whole_image_band(canvas.image())},
+                              {broadway});
+
+    CHECK(right.unmatched_cells == 0);
+    CHECK(wrong.unmatched_cells > broadway.glyphs.size() / 2);
 }

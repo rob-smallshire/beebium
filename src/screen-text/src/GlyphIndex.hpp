@@ -34,12 +34,24 @@ public:
     struct Match {
         char32_t codepoint = 0;
         const std::string* glyph_set = nullptr;
+
+        // The other characters this exact bitmap could equally be, lowest
+        // first, empty in the ordinary case. Real fonts collide: '0' with
+        // 'O', 'l' with '|', and in one of them 'I', 'l' and '|' all at once.
+        // Nothing can separate those from the pixels, so the alternatives
+        // are carried rather than quietly discarded.
+        std::vector<char32_t> alternatives;
     };
 
     // Later sets take precedence over earlier ones, so a caller can override
-    // individual characters. Within one set, a later glyph likewise displaces
-    // an earlier one with the same bitmap, so the outcome never depends on
-    // iteration order.
+    // individual characters: an override replaces what an earlier set said
+    // rather than competing with it.
+    //
+    // Two glyphs of one set sharing a bitmap is a different matter. Neither
+    // overrides the other and no reader can separate them, so both are kept:
+    // the lowest codepoint is reported and the rest become alternatives. The
+    // choice is by value rather than by position, so it does not depend on
+    // the order glyphs were listed in.
     explicit GlyphIndex(const std::vector<GlyphSet>& sets);
 
     // Null when the bitmap is not a glyph. Exact equality, nothing else.
@@ -53,6 +65,10 @@ private:
     // even after the caller's sets have gone.
     std::vector<std::string> names_;
     std::unordered_map<Bitmap, Match> glyphs_;
+
+    // Which set each bitmap came from, so that a second glyph from the same
+    // set is recognised as an ambiguity rather than an override.
+    std::unordered_map<Bitmap, std::size_t> owners_;
 };
 
 } // namespace screentext
