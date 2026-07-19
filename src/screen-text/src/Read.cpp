@@ -12,6 +12,7 @@
 
 #include "screentext/Read.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 
@@ -229,14 +230,19 @@ struct OffsetCandidate {
     const GlyphIndex::Match* match = nullptr;
 };
 
-// Set a bit where the pixel is the glyph colour; everything else is
-// background, whatever colours it holds. This is "do the pixels of colour c
+// Set a bit in `bitmap` where the pixel is the glyph colour; everything else
+// is background, whatever colours it holds. This is "do the pixels of colour c
 // form a glyph, ignoring everything else" -- the question VDU 5 text needs,
 // having been painted over arbitrary graphics with no background of its own.
-Bitmap reduce_foreground(const Image& image, const Rect& bounds,
-                         std::uint8_t foreground)
+//
+// The bitmap is cleared and refilled rather than allocated afresh, so one
+// scratch bitmap serves the whole search. The gather visits every pixel of the
+// region once per colour present, and an allocation per lookup there would
+// dominate the cost.
+void reduce_foreground(const Image& image, const Rect& bounds,
+                       std::uint8_t foreground, Bitmap& bitmap)
 {
-    Bitmap bitmap(bounds.width, bounds.height);
+    bitmap.clear();
     for (std::size_t y = 0; y < bounds.height; ++y) {
         for (std::size_t x = 0; x < bounds.width; ++x) {
             if (image.pixel(bounds.x + x, bounds.y + y) == foreground) {
@@ -244,7 +250,6 @@ Bitmap reduce_foreground(const Image& image, const Rect& bounds,
             }
         }
     }
-    return bitmap;
 }
 
 // The colour covering most of a window other than the glyph's: a best-effort
@@ -285,6 +290,9 @@ std::vector<OffsetCandidate> gather_offset(const Image& image,
     const std::size_t last_x = region.right() - cell_width;
     const std::size_t last_y = region.bottom() - cell_height;
 
+    // One scratch bitmap for the whole search, refilled per lookup.
+    Bitmap scratch(cell_width, cell_height);
+
     for (std::size_t y = region.y; y <= last_y; ++y) {
         for (std::size_t x = region.x; x <= last_x; ++x) {
             const Rect bounds{x, y, cell_width, cell_height};
@@ -307,10 +315,17 @@ std::vector<OffsetCandidate> gather_offset(const Image& image,
                 }
             }
 
+            // A window of one colour has no glyph in it: reducing to that
+            // colour sets every pixel, the solid block, which is not in any
+            // set. So the flat regions a picture is mostly made of are skipped
+            // for the price of the colour scan alone.
+            if (colour_count < 2) {
+                continue;
+            }
+
             for (std::size_t k = 0; k < colour_count; ++k) {
-                const Bitmap bitmap
-                    = reduce_foreground(image, bounds, colours[k]);
-                if (const GlyphIndex::Match* match = index.find(bitmap)) {
+                reduce_foreground(image, bounds, colours[k], scratch);
+                if (const GlyphIndex::Match* match = index.find(scratch)) {
                     candidates.push_back({bounds, colours[k], match});
                 }
             }

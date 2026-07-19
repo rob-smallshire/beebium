@@ -12,6 +12,7 @@
 
 #include "screentext/Bitmap.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace screentext {
@@ -70,6 +71,11 @@ void Bitmap::set_pixel(std::size_t x, std::size_t y, bool value)
     } else {
         byte = static_cast<std::uint8_t>(byte & ~mask);
     }
+}
+
+void Bitmap::clear()
+{
+    std::fill(bytes_.begin(), bytes_.end(), std::uint8_t{0});
 }
 
 Bitmap Bitmap::inverted() const

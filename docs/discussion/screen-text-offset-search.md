@@ -4,9 +4,10 @@ The second increment of the screen-text library, specified in
 `screen-text-library-spec.md` as `Search::IncludeOffset` and deferred there to
 a sentence. This is what that sentence turns out to mean.
 
-Nothing here is built. The interface has carried `Search::IncludeOffset` and
-`Cell::offset` since the first increment, accepted and honoured by nothing, and
-a test asserts as much. This document says what should honour them.
+This is now built: `Search::IncludeOffset` is honoured and `Cell::offset` is
+set. The document is kept as the design record -- it is what the code
+productises -- and reads in the future tense it was written in; where the built
+result differs from what it anticipated, a note says so.
 
 ## What it is for
 
@@ -164,11 +165,12 @@ Sixty-four offsets times the number of colours present in each window. That is
 why it is opt-in, reached through free-form selection rather than attempted on
 every copy, and why the aligned path stays exactly as it is.
 
-Measured as a projection -- the candidate gather run in C++ from the public
-glyph set, since the search itself is not built -- this is tens of milliseconds
-on a whole screen and a few hundred at its noisy ceiling, against about a
-millisecond for the aligned reader. The numbers, on a fast and a slow machine,
-are in `docs/screen-text-library.md`; `screentext-benchmark` produces them.
+Now that it is built, the measured cost is tens of milliseconds on a whole
+screen and a few hundred at its noisy ceiling, against about a millisecond for
+the aligned reader. On the Pi 5, the platform the whole-screen-copy policy was
+decided against, it lands within about five per cent of the projection that
+decision used. The numbers, on a fast and a slow machine, are in
+`docs/screen-text-library.md`; `screentext-benchmark` produces them.
 
 ## What real screens settled
 
@@ -246,3 +248,10 @@ Both halves of the hard case have been seen, but not yet together.
 That gap is worth naming rather than waiting for. Every rule here has now been
 measured on a real screen, and none has been contradicted; the remaining risk
 is a combination, not a mechanism.
+
+Note, once built: the gap is partly closed. The off-grid search reads the
+ROM-font fragments of Loopy Loop's title over its dense dithered background --
+real characters, no ghosts. The part it does not read is the title's thickened
+non-ROM font, which is a font problem, not a background one; supplying that font
+would read it. So off-grid text on a hostile background works where the font is
+the one in hand, which is the case that was in doubt.

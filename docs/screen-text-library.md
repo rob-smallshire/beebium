@@ -7,22 +7,24 @@ a picture and some glyphs it says which characters it can see, where they are,
 what colours they were drawn in, and -- importantly -- which cells it could not
 read.
 
-It is stream 1 of `discussion/screen-text-extraction.md`, specified as a work
-order in `discussion/screen-text-library-spec.md`. This document says what
-exists and how to use it. For why it is shaped the way it is, see
-`src/screen-text/README.md`; for the design of the part not yet built, see
+It is stream 1 of `discussion/screen-text-extraction.md`, specified as work
+orders in `discussion/screen-text-library-spec.md` and
+`discussion/screen-text-offset-search-spec.md`. This document says what exists
+and how to use it. For why it is shaped the way it is, see
+`src/screen-text/README.md`; for the design of the off-grid search, see
 `discussion/screen-text-offset-search.md`.
 
 ## Status
 
-The first increment is complete and verified on macOS, Linux and Windows.
+Complete: the library reads both aligned and off-grid text, verified on macOS,
+Linux and Windows.
 
 | | |
 |---|---|
 | Library | `screentext` (static) |
 | CLI | `screentext` (target `screentext-cli`) |
 | Namespace | `screentext`, deliberately not `beebium::screentext` |
-| Tests | 107, in four binaries under `src/screen-text/tests/` |
+| Tests | in four binaries under `src/screen-text/tests/` |
 | Dependencies | none for the library; the CLI uses vendored `stb_image` |
 
 The library depends on nothing else in Beebium and must continue not to.
@@ -30,9 +32,13 @@ Dependencies point one way: Beebium may use it, never the reverse. That is what
 keeps it extractable as a separate project, which is the point of building it
 separately from the emulator.
 
-Not built: sub-cell offset search, for text that is not on the character grid.
-`Search::IncludeOffset` and `Cell::offset` exist and are accepted; nothing sets
-or honours them. See the end of this document.
+There are two searches, chosen per call and never combined. `AlignedOnly`
+walks the character grid; `IncludeOffset` searches sub-cell offsets for text
+that is not on it, the `VDU 5` output games use for scores and titles. They
+partition the screen -- one reads grid text, the other reads the rest -- so a
+caller wanting both runs `read` twice and concatenates, with nothing to
+deduplicate. `Cell::offset` says which pass a run came from. See "The two
+searches" below.
 
 ## Building
 
@@ -209,28 +215,36 @@ the widest mode has the most cells. Colour depth barely matters to the aligned
 path -- a cell of three or more colours is rejected early, so a deeper mode is
 if anything slightly cheaper. The cost tracks cell count and nothing else.
 
-The offset search is not built. Projected from its dominant cost -- the
-candidate gather, sixty-four sub-cell offsets by the colours present in each
-window -- it is far heavier, and both axes the client asked about show:
+The offset search is far heavier, sixty-four sub-cell offsets by the colours
+present in each window, and both axes matter:
 
-| Screen | Offset, M1 Max | Offset, Pi 5 |
-|---|---|---|
-| MODE 0 (640x256) | 80 ms | 168 ms |
-| MODE 1 (320x256) | 40 ms | 84 ms |
-| MODE 2 (160x256) | 22 ms | 47 ms |
-| MODE 0, 8-colour noise (ceiling) | 228 ms | 421 ms |
+| Screen | Offset, M1 Max | Offset, Pi 5 | Projected, Pi 5 |
+|---|---|---|---|
+| MODE 0 (640x256) | 95 ms | 173 ms | 168 ms |
+| MODE 1 (320x256) | 47 ms | 86 ms | 84 ms |
+| MODE 2 (160x256) | 26 ms | 49 ms | 47 ms |
+| MODE 0, 8-colour noise (ceiling) | 260 ms | 440 ms | 421 ms |
 
 Size dominates -- MODE 0 has four times MODE 2's positions -- and colour depth
 multiplies the per-position work, which the noise row pushes to its ceiling: a
 screen where almost every window carries the maximum colours, worse than any
 real display. Even that stays under half a second on the slow machine.
 
-This is comfortable because the search is opt-in and user-initiated. The design
-reaches it only through free-form selection, at most once every few minutes,
+These are the measured figures, from the built search rather than a projection.
+On the Pi 5 -- the platform the policy of running this on a whole-screen copy
+was decided against -- they land within about five per cent of the projection
+the decision used (MODE 0 173 ms against a projected 168, the ceiling 440
+against 421), so that decision holds. The M1 Max sits a little further above
+its own earlier projection, the registration, overlap and rejoin passes the
+projection omitted outweighing the per-lookup allocation it included; the
+gather now reuses one scratch bitmap and skips single-colour windows, which
+recovered most of the difference.
+
+It is comfortable in any case because the search is opt-in and user-initiated.
+It is reached only through free-form selection, at most once every few minutes,
 never in a loop, so a few hundred milliseconds on the rare copy of unaligned
-text is spent where a person is already waiting for a menu. It is also
-trivially parallel across offsets, and the gather can stop early once a region
-is claimed, neither of which the projection assumes.
+text is spent where a person is already waiting. It is also trivially parallel
+across offsets, which none of these single-threaded figures assumes.
 
 ## Testing
 
@@ -259,25 +273,52 @@ every case is exact and needs no file. Beyond that, `tests/fixtures/` holds:
 Each fixture directory has a README saying what its contents are for and what
 they showed.
 
-## What is not built
+## The two searches
 
-Sub-cell offset search, for text drawn at the graphics cursor by `VDU 5`. The
-design is written up and validated against real screens in
-`discussion/screen-text-offset-search.md`, but no code implements it.
+`read` does one search per call, chosen by `Options::search`.
 
-In short: the position is the easy part. `VDU 5` paints no background, so the
-question has to change from "does this cell reduce to a glyph" to "do the
+`Search::AlignedOnly`, the default, is the character grid walk: fast, exact,
+and what a listing or an error message needs. Every cell it returns has
+`offset` false.
+
+`Search::IncludeOffset` is the sub-cell offset search, for `VDU 5` text placed
+at arbitrary pixel positions. It returns only off-grid runs -- grid text is the
+aligned pass's to report -- and every cell it returns has `offset` true. So the
+two searches partition a screen between them: a caller wanting everything runs
+`read` once each way and concatenates the results, with nothing to deduplicate,
+and `Cell::offset` telling the two kinds of run apart.
+
+The name `IncludeOffset` is kept from the first increment, where the value
+existed but did nothing. Under the settled contract it selects the off-grid
+search exclusively rather than adding to the aligned one.
+
+A caller drives this from the CLI with `--search aligned` (the default) or
+`--search offset`.
+
+### How the off-grid search works
+
+The design and its validation against real screens are in
+`discussion/screen-text-offset-search.md`. In short: the position is the easy
+part. `VDU 5` paints no background, so the question has to change from "does
+this cell reduce to a glyph" to "do the
 pixels of colour *c* in this window form a glyph, ignoring everything else".
 A free search then finds glyph-shaped patterns that are not glyphs, handled by
 ignoring glyphs that imagery could have drawn -- those whose every row and
 column is one unbroken run -- unless they sit in registration with ones it
 could not.
 
-A prototype of that design finds all the off-grid text on Fruits, Rondo and
-Krazy Ape II, including drop-shadowed titles, with no false positives on any
-screen in the corpus.
+The search finds all the off-grid text on Fruits, Rondo and Krazy Ape II,
+including drop-shadowed titles, with no false positives on any screen in the
+corpus. It even reads the ROM-font fragments of Loopy Loop's title over its
+dense dithered background, which is the hostile-background combination the
+design named as untested -- partly, since much of that title is drawn in a
+thickened variant of the ROM font that is not the ROM font and rightly does
+not match.
 
-The acceptance target is already written down: tests over `fruits-machine.png`,
-`rondo-title.png` and `krazy-game.png` assert that the off-grid labels are
-*absent* from the current output. When offset search lands, those expectations
-invert.
+Two productisation findings are worth recording. Rejoining runs across spaces
+at first fused an off-grid label onto a grid run of the same baseline and
+colour, so the ordering was fixed: grid runs take part in overlap resolution,
+where they suppress the ghosts real text casts at neighbouring offsets, and are
+set aside only afterwards, before rejoining. And the "how much of a run must be
+distinctive" question the design left open was not forced by anything in the
+corpus: one distinctive glyph remains enough.

@@ -13,23 +13,16 @@
 // A latency benchmark for the screen-text reader, for callers that need to
 // budget for a copy.
 //
-// Two things are measured. The aligned reader is the shipped `screentext::read`
-// timed directly. The offset search is not built yet, so its dominant cost --
-// the candidate gather, sixty-four sub-cell offsets times the colours present
-// in each window -- is reproduced here from the public glyph set and labelled
-// as projected rather than measured. Registration and overlap resolution are
-// left out: they run over the handful of candidates that survive, and cost
-// nothing beside the gather.
-//
-// Worst case is deliberate. Each synthetic screen is filled with matchable
-// text, which is the most work either path can be given: a blank or purely
-// graphical screen is cheaper, not dearer.
+// Both searches are the shipped `screentext::read`, timed directly: the
+// aligned grid walk and the off-grid pass. Each is given a whole screen
+// filled with matchable text, which is the most work either can be handed --
+// a blank or purely graphical screen is cheaper, not dearer -- and the
+// off-grid pass is pushed further by a screen of colour noise, its ceiling.
 
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "screentext/ScreenText.hpp"
@@ -90,71 +83,12 @@ screentext::Image testcard(std::size_t width, std::size_t height,
     return image;
 }
 
-// The candidate gather the offset search would run: at every (dx, dy), for
-// every colour present in the 8x8 window, reduce to a bitmap and look it up.
-// This is the cost that scales with image size and colour depth, and the one
-// a caller must budget for.
-std::size_t offset_gather(const screentext::Image& image,
-                          const std::unordered_map<screentext::Bitmap, char32_t>& glyphs)
-{
-    std::size_t candidates = 0;
-    const std::size_t width = image.width;
-    const std::size_t height = image.height;
-    if (width < 8 || height < 8) {
-        return 0;
-    }
-
-    std::uint8_t present[256];
-    for (std::size_t y = 0; y + 8 <= height; ++y) {
-        for (std::size_t x = 0; x + 8 <= width; ++x) {
-            // Distinct colours in the window.
-            std::size_t colour_count = 0;
-            std::uint8_t seen[64];
-            for (std::size_t dy = 0; dy < 8; ++dy) {
-                const std::uint8_t* row = &image.pixels[(y + dy) * width + x];
-                for (std::size_t dx = 0; dx < 8; ++dx) {
-                    const std::uint8_t v = row[dx];
-                    bool known = false;
-                    for (std::size_t k = 0; k < colour_count; ++k) {
-                        if (seen[k] == v) { known = true; break; }
-                    }
-                    if (!known) { seen[colour_count++] = v; }
-                }
-            }
-
-            for (std::size_t k = 0; k < colour_count; ++k) {
-                const std::uint8_t c = seen[k];
-                screentext::Bitmap bitmap(8, 8);
-                for (std::size_t dy = 0; dy < 8; ++dy) {
-                    const std::uint8_t* row = &image.pixels[(y + dy) * width + x];
-                    for (std::size_t dx = 0; dx < 8; ++dx) {
-                        if (row[dx] == c) { bitmap.set_pixel(dx, dy, true); }
-                    }
-                }
-                if (glyphs.find(bitmap) != glyphs.end()) { ++candidates; }
-            }
-        }
-    }
-    (void)present;
-    return candidates;
-}
-
-std::unordered_map<screentext::Bitmap, char32_t> glyph_map()
-{
-    std::unordered_map<screentext::Bitmap, char32_t> map;
-    for (const screentext::Glyph& glyph : acorn().glyphs) {
-        map.emplace(glyph.bitmap, glyph.codepoint);
-    }
-    return map;
-}
 
 struct Mode {
     const char* name;
     std::size_t width;
     std::size_t height;
     unsigned colours;   // logical colours the mode allows
-    std::size_t columns;
-    std::size_t rows;
 };
 
 } // namespace
@@ -164,19 +98,17 @@ int main()
     // Every BBC bitmap mode is 8 logical pixels per column; the modes differ in
     // width and colour depth. MODE 0 is the largest, MODE 2 the deepest.
     const Mode modes[] = {
-        {"MODE 0 (640x256, 2 colour)", 640, 256, 2, 80, 32},
-        {"MODE 1 (320x256, 4 colour)", 320, 256, 4, 40, 32},
-        {"MODE 2 (160x256, 16 colour)", 160, 256, 16, 20, 32},
-        {"MODE 5 (160x256, 4 colour)", 160, 256, 4, 20, 32},
+        {"MODE 0 (640x256, 2 colour)", 640, 256, 2},
+        {"MODE 1 (320x256, 4 colour)", 320, 256, 4},
+        {"MODE 2 (160x256, 16 colour)", 160, 256, 16},
+        {"MODE 5 (160x256, 4 colour)", 160, 256, 4},
     };
 
     const std::vector<screentext::GlyphSet> sets = {acorn()};
-    const auto map = glyph_map();
 
-    std::printf("%-30s %8s %10s %8s %12s\n", "mode", "cells", "aligned",
-                "cand", "offset");
-    std::printf("%-30s %8s %10s %8s %12s\n", "", "", "ms", "", "ms (proj.)");
-    std::printf("%s\n", std::string(72, '-').c_str());
+    std::printf("%-30s %8s %10s %12s\n", "mode", "cells", "aligned", "offset");
+    std::printf("%-30s %8s %10s %12s\n", "", "", "ms", "ms");
+    std::printf("%s\n", std::string(62, '-').c_str());
 
     for (const Mode& mode : modes) {
         const screentext::Image image
@@ -187,6 +119,9 @@ int main()
         band.cell_width = 8;
         band.cell_height = 8;
 
+        screentext::Options offset_options;
+        offset_options.search = screentext::Search::IncludeOffset;
+
         std::size_t total_cells = 0;
         const double aligned = best_ms(20, [&] {
             const screentext::Result result
@@ -194,19 +129,18 @@ int main()
             total_cells = result.total_cells;
         });
 
-        std::size_t candidates = 0;
         const double offset = best_ms(5, [&] {
-            candidates = offset_gather(image, map);
+            screentext::read(image, {band}, sets, offset_options);
         });
 
-        std::printf("%-30s %8zu %10.2f %8zu %12.1f\n", mode.name, total_cells,
-                    aligned, candidates, offset);
+        std::printf("%-30s %8zu %10.2f %12.1f\n", mode.name, total_cells,
+                    aligned, offset);
     }
 
     // The offset ceiling: a full MODE 0 screen of eight-colour noise, so that
     // almost every window carries the maximum colours and the per-position
     // work is at its worst. No real screen looks like this; it is the number
-    // beyond which the gather cannot go at this size.
+    // beyond which the search cannot go at this size.
     {
         screentext::Image noise;
         noise.width = 640;
@@ -217,18 +151,21 @@ int main()
             state = state * 1664525u + 1013904223u;
             pixel = static_cast<std::uint8_t>((state >> 24) & 0x07u);
         }
-        std::size_t candidates = 0;
+        screentext::Band band;
+        band.bottom = noise.height;
+        band.cell_width = 8;
+        band.cell_height = 8;
+        screentext::Options offset_options;
+        offset_options.search = screentext::Search::IncludeOffset;
         const double offset = best_ms(5, [&] {
-            candidates = offset_gather(noise, map);
+            screentext::read(noise, {band}, sets, offset_options);
         });
-        std::printf("%-30s %8s %10s %8zu %12.1f\n",
-                    "MODE 0 8-colour noise (ceiling)", "-", "-", candidates,
-                    offset);
+        std::printf("%-30s %8s %10s %12.1f\n",
+                    "MODE 0 8-colour noise (ceiling)", "-", "-", offset);
     }
 
-    std::printf("\naligned: shipped screentext::read, worst case (every cell "
-                "matchable).\n");
-    std::printf("offset:  projected candidate-gather cost, not the shipped "
-                "reader.\n");
+    std::printf("\naligned: shipped screentext::read, Search::AlignedOnly.\n");
+    std::printf("offset:  shipped screentext::read, Search::IncludeOffset.\n");
+    std::printf("Both worst case: every cell filled with matchable text.\n");
     return 0;
 }

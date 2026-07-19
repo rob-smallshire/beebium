@@ -65,6 +65,10 @@ public:
     // writing raw bytes.
     void normalise();
 
+    // Clear every pixel, keeping the dimensions. Lets one bitmap be reused as
+    // a scratch key across many lookups without reallocating.
+    void clear();
+
     friend bool operator==(const Bitmap& lhs, const Bitmap& rhs);
     friend bool operator!=(const Bitmap& lhs, const Bitmap& rhs)
     {
