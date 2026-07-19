@@ -219,10 +219,19 @@ band, the extractor needs, for each band of scanlines: the character cell
 geometry, the pixels-per-byte from the Video ULA, the palette, and whether the
 SAA5050 was driving those lines.
 
-The pixel pipeline already tracks bands for a related reason (`DisplayRegion`
-by pixel width). Whether text extraction extends those records or keeps its own
-is an implementation question, but capturing per band rather than per frame is
-not optional.
+The pixel pipeline already does exactly this shape of bookkeeping for a
+related reason. `FrameRenderer` records a pixel width per scanline in
+`scanline_pixel_widths_`, then compresses equal runs into the
+`FrameDisplayRegion` bands the `Frame` message carries
+(`FrameRenderer.hpp:355-382`). Extraction needs the same per-scanline record
+with more in it -- character cell geometry, pixels per byte, the palette, and
+whether the SAA5050 was driving -- and the same compression into bands.
+
+So the mechanism exists and the work is to widen what it records, not to
+invent it. Whether the extra fields ride on `FrameDisplayRegion` or a parallel
+structure is open: the video path has no use for them, and `Frame` is streamed
+fifty times a second to every client, so a parallel record read only on demand
+is probably better.
 
 ## The client's part
 
