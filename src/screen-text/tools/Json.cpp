@@ -65,10 +65,10 @@ void append_cell(std::string& out, const Cell& cell)
                 if (index > 0) {
                     out += ",";
                 }
-                char buffer[32];
-                std::snprintf(buffer, sizeof(buffer), "%u",
+                char alternative[32];
+                std::snprintf(alternative, sizeof(alternative), "%u",
                               static_cast<unsigned>(cell.alternatives[index]));
-                out += buffer;
+                out += alternative;
             }
             out += "]";
         }
