@@ -124,10 +124,21 @@ cursor by exactly eight pixels per character and does not move it vertically,
 so the glyphs of a line share a baseline, a colour, and an eight-pixel lattice.
 Three coincidences at once, which noise does not supply.
 
-So candidates are grouped by baseline, colour, and position modulo eight, and
-maximal sequences eight pixels apart become runs. A run is credible when it
-holds at least one distinctive glyph; the simple glyphs in it come along, being
-vouched for by the company they keep.
+So candidates are grouped by baseline and colour, and maximal sequences about
+eight pixels apart become runs. A run is credible when it holds at least one
+distinctive glyph; the simple glyphs in it come along, being vouched for by the
+company they keep.
+
+**About eight, not exactly eight.** Krazy Ape draws `LIVES=` at x = 1, 10, 18,
+27, 35, 43 -- gaps of 9, 8, 9, 8, 8. A game placing characters by hand does not
+always place them on a perfect lattice, and requiring one split that word into
+`IV` and `ES`, losing the `L` entirely: alone on its side of the jog, and `L`
+being HV-convex, it was not credible by itself.
+
+Allowing each step to be eight give or take one reads it as `LIVES`, and costs
+nothing measurable -- the Waffle screens, the strictest negative set in the
+corpus, produce exactly the same runs and the same zero off-grid false
+positives either way.
 
 On the pure-graphics screens this reduced 1,740 raw candidates to 942 runs to
 **zero** credible runs. On a screen carrying `VDU 5` text over graphics it
@@ -185,7 +196,7 @@ and it stands alone with nothing to be in registration with.
 
 **How much of a run must be distinctive?** One glyph is the current proposal.
 A long run of simple glyphs with a single distinctive one at the end is
-admitted on thin evidence.
+admitted on thin evidence. Nothing in the corpus has yet forced the question.
 
 **The low-ink distinctive glyphs**, `"`, `:` and `=`, have a gap and so pass
 the distinctiveness test while being small enough that dithering might draw
@@ -209,6 +220,14 @@ That is the case this document exists for, and it works. The screen is in the
 corpus as `fruits-machine.png`, with the aligned reader's failure to find those
 six labels written down as a test. When this is built, those expectations
 invert: they are its acceptance target.
+
+## Flashing colours are not a special case
+
+Krazy Ape prints in a flashing colour, which alternates between two physical
+colours about once a second, so a captured frame catches one phase. It does not
+matter which. Nothing here knows what a palette is, let alone that one of its
+entries is flashing; a flashing colour is a colour, and the text reads. Worth
+recording only because it looks like it ought to be a problem.
 
 ## What is still wanted
 

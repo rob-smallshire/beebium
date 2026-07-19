@@ -790,3 +790,59 @@ TEST_CASE("Drop-shadowed text is beyond the aligned path, for two reasons")
     // The shadowed title, which offset search finds and this does not.
     CHECK(output.stdout_text.find("RONDO") == std::string::npos);
 }
+
+TEST_CASE("A MODE 6 screen from a real game reads with the row pitch")
+{
+    // Krazy Ape's loading screen: white on blue, with the two blanked
+    // scanlines between character rows that MODE 6 leaves. Read with an
+    // 8-scanline cell on a 10-scanline pitch, every one of its 1000 cells
+    // matches. Read as though the cell were ten scanlines tall, none does.
+    const std::string image = fixture_filepath("screens/krazy-loading.png");
+
+    const Output correct = run("read \"" + image + "\" --pitch 8x10 --format json");
+    CHECK(correct.status == 0);
+    CHECK(json_number(correct.stdout_text, "total_cells") == 1000);
+    CHECK(json_number(correct.stdout_text, "unmatched_cells") == 0);
+
+    const Output text = run("read \"" + image + "\" --pitch 8x10");
+    CHECK(text.stdout_text.find("LOADING CODE") != std::string::npos);
+
+    const Output naive = run("read \"" + image + "\" --cell 8x10 --format json");
+    const std::size_t total = json_number(naive.stdout_text, "total_cells");
+    CHECK(total > 0);
+    CHECK(json_number(naive.stdout_text, "unmatched_cells") == total);
+}
+
+TEST_CASE("Flashing colours are read like any other colours")
+{
+    // Krazy Ape's key-control screen prints its last two lines in a flashing
+    // colour, which alternates between two physical colours about once a
+    // second. A capture catches one phase, and it does not matter which:
+    // nothing here knows what a palette is, let alone that one is flashing.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/krazy-controls.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("Key Controls") != std::string::npos);
+    CHECK(output.stdout_text.find("SPACE ... jump") != std::string::npos);
+    CHECK(output.stdout_text.find("Press SPACE to LOAD") != std::string::npos);
+    CHECK(output.stdout_text.find("MACHINE CODE") != std::string::npos);
+
+    // The drop-shadowed title above them is not read, being three colours.
+    CHECK(output.stdout_text.find("KRAZY APE II") == std::string::npos);
+}
+
+TEST_CASE("In-game drop-shadowed labels are beyond the aligned path")
+{
+    // LIVES= and Score and BONUS are drawn shadowed and off the grid; the
+    // numbers beside them are ordinary text on the grid and read.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/krazy-game.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("000000") != std::string::npos);
+
+    CHECK(output.stdout_text.find("LIVES") == std::string::npos);
+    CHECK(output.stdout_text.find("Score") == std::string::npos);
+    CHECK(output.stdout_text.find("BONUS") == std::string::npos);
+}

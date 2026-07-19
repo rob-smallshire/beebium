@@ -18,6 +18,9 @@ being read back.
 | `fruits-wins.png` | Fruits: a win table, text among graphics |
 | `fruits-machine.png` | Fruits: the game, with labels at arbitrary pixel positions in the ROM font |
 | `rondo-title.png` | Rondo: a drop-shadowed title off the grid, over an ordinary high score table |
+| `krazy-controls.png` | Krazy Ape II: text in a flashing colour, under a drop-shadowed title |
+| `krazy-loading.png` | Krazy Ape II: MODE 6, white on blue with blanked scanlines between rows |
+| `krazy-game.png` | Krazy Ape II: in-game drop-shadowed labels, placed on an imperfect lattice |
 
 # Waffle
 
@@ -137,6 +140,30 @@ test here asserts the title's absence, so it inverts when offset search lands.
 
 The instruction screens before it are MODE 7 and interlaced, and not kept.
 
+# Krazy Ape II
+
+Three screens, each carrying something.
+
+`krazy-loading.png` is **MODE 6 in the wild** -- 320x250, white on blue, with
+the two blanked scanlines between character rows. Read with an 8-scanline cell
+on a 10-scanline pitch, all 1000 cells match and none is unread. Read as though
+the cell were ten scanlines tall, *none* matches: the gap is a third colour and
+no cell can be one glyph. That is the pitch design meeting a real screen, and
+it behaves exactly as the synthetic corpus said it would.
+
+`krazy-controls.png` prints its last two lines in a **flashing colour**, which
+alternates about once a second, so a capture catches one phase. It does not
+matter which: nothing here knows what a palette is, and the text reads. The
+drop-shadowed title above is three colours and does not.
+
+`krazy-game.png` carries the in-game labels, and turned up the one thing in the
+corpus that contradicted a rule. `LIVES=` is drawn at x = 1, 10, 18, 27, 35,
+43 -- gaps of 9, 8, 9, 8, 8 -- so a game placing characters by hand does not
+always use a perfect lattice. Registration requiring exactly eight split it
+into `IV` and `ES` and lost the `L` altogether. Allowing eight give or take one
+reads `LIVES`, and the Waffle screens produce identical results either way. The
+design was amended accordingly.
+
 # Recapturing
 
 The discs are in `discs/games/`, which is not in the repository, so this cannot
@@ -145,7 +172,9 @@ being worth recording. Loopy Loop needs no navigation, only fifteen seconds to
 finish drawing. Fruits wants a key at its MODE 7 title, another at the win
 table, and a third to reach the machine, each screen taking a few seconds.
 Rondo wants four presses of SPACE about a second apart to pass its MODE 7
-instructions, then a few seconds to settle.
+instructions, then a few seconds to settle. Krazy Ape II runs a long attract
+sequence: five instruction screens, each advanced by SPACE, then a MODE 6 load
+before the game.
 
 ```
 cd clients/beebium-python-client
