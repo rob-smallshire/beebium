@@ -18,6 +18,12 @@ export {
     type VideoConfig,
     type Frame,
     type TeletextScreen,
+    type PixelRegion,
+    type ScreenText,
+    type ScreenTextRun,
+    type ScreenTextSearchMode,
+    type ScreenGeometry,
+    type ScreenBandGeometry,
     TELETEXT_ROWS,
     TELETEXT_COLUMNS,
 } from "./video.js";

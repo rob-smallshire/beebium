@@ -211,7 +211,11 @@ std::vector<Band> bands_of(const FrameMetadata& metadata) {
             band.cell_width = TELETEXT_CELL_WIDTH;
             band.column_pitch = TELETEXT_CELL_WIDTH;
             const uint32_t height = region.end_line - region.start_line;
-            band.row_pitch = height / static_cast<uint32_t>(TeletextGrid::ROWS);
+            // A frame captured while the CRTC is being reprogrammed can be
+            // shorter than a whole screen, so the pitch is floored at one
+            // rather than allowed to reach zero and divide by it downstream.
+            band.row_pitch = std::max<uint32_t>(
+                1, height / static_cast<uint32_t>(TeletextGrid::ROWS));
             // The chip fills the whole cell; there are no blanked scanlines
             // between teletext rows.
             band.cell_height = band.row_pitch;

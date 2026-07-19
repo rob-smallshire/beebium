@@ -28,12 +28,22 @@ def _wait_for_prompt(bbc: Beebium) -> None:
     )
 
 
+# The SAA5050 draws a character twelve pixels wide; every bitmap mode uses
+# eight. That makes the cell width the reliable sign of which is driving.
+TELETEXT_CELL_WIDTH = 12
+
+
 def _switch_to_mode(bbc: Beebium, mode: int, message: str) -> bool:
     """Leave the machine in a bitmap mode with something printed on it.
 
-    Returns whether the message made it onto the screen, which is checked
-    through the frame rather than through the text API: whether that API can
-    read a bitmap mode is the very thing under test here.
+    Returns whether the mode change took, which is waited on through the
+    geometry rather than through the text API: whether that API can read a
+    bitmap mode is the very thing under test here.
+
+    The wait keys on the cell width rather than the row pitch. A frame captured
+    while the CRTC is being reprogrammed is briefly shorter than a whole
+    screen, so the pitch derived from it dips before the mode has changed and a
+    wait on the pitch returns while the display is still teletext.
     """
     _wait_for_prompt(bbc)
     bbc.keyboard.type(f'MODE {mode}\rPRINT "{message}"\r')
@@ -41,7 +51,8 @@ def _switch_to_mode(bbc: Beebium, mode: int, message: str) -> bool:
     # A stopped machine never drains the type-ahead queue, so the machine has
     # to be advanced while waiting rather than merely waited on.
     return bbc.run_until_or_timeout(
-        lambda: not bbc.video.screen_geometry().bands[0].row_pitch == 20,
+        lambda: bbc.video.screen_geometry().bands[0].cell_width
+        != TELETEXT_CELL_WIDTH,
         emulated_seconds=10.0,
     )
 

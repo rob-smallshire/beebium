@@ -11,8 +11,14 @@ import type {
     VideoConfig as ProtoVideoConfig,
     TeletextScreen as ProtoTeletextScreen,
     TeletextScreenCell,
+    ScreenText as ProtoScreenText,
+    ScreenGeometry as ProtoScreenGeometry,
 } from "./generated/video.js";
-import { TeletextTextLayout } from "./generated/video.js";
+import {
+    TeletextTextLayout,
+    ScreenTextLayout,
+    ScreenTextSearch,
+} from "./generated/video.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable, BackgroundStreamHandle } from "./stream-utils.js";
 import { TimeoutError } from "./exceptions.js";
@@ -57,6 +63,111 @@ export interface TeletextScreen {
     cell(row: number, column: number): TeletextScreenCell;
 }
 
+/**
+ * A rectangle in frame pixel coordinates.
+ *
+ * The origin is the top-left of the active area rather than of the bordered
+ * display, matching the frames the video service streams.
+ */
+export interface PixelRegion {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+/** A contiguous piece of text and where it was found. */
+export interface ScreenTextRun {
+    text: string;
+
+    /**
+     * Where the run was found, so a client can highlight exactly what it
+     * captured.
+     */
+    bounds: PixelRegion;
+
+    /**
+     * The character cell geometry the run was read with, so a selection can
+     * snap to it. Zero when the run is not cell-aligned, as text written at
+     * the graphics cursor is.
+     */
+    cellWidth: number;
+    cellHeight: number;
+}
+
+/** Text read from the display, whatever mode is producing it. */
+export interface ScreenText {
+    /**
+     * True when at least one band of the requested region had a strategy that
+     * could read it.
+     *
+     * Distinct from readable-but-empty: a graphics screen that was read and
+     * found to contain no text is supported with no runs, whereas a display
+     * this build has no strategy for is unsupported. Which displays fall in
+     * the second group narrows as strategies are added, so a caller should
+     * treat it as "not this time" rather than "not ever".
+     */
+    supported: boolean;
+
+    /**
+     * In reading order: bands top to bottom, and within a band by baseline
+     * then x.
+     */
+    runs: ScreenTextRun[];
+
+    /**
+     * The runs joined by the requested layout, for a caller that wants a
+     * string and not structure. Lines are joined with LF.
+     */
+    text: string;
+
+    /**
+     * Cells a strategy tried to read and could not identify at all. Zero for a
+     * MODE 7 display, whose cells are exact character codes.
+     */
+    unreadableCells: number;
+
+    /**
+     * Cells a strategy read but could not pin to a single character, because
+     * the font in use draws two characters identically. Also zero for MODE 7.
+     */
+    ambiguousCells: number;
+
+    frameNumber: number;
+}
+
+/** The character grid for one band of scanlines, in frame pixels. */
+export interface ScreenBandGeometry {
+    /** First scanline, inclusive. */
+    top: number;
+    /** One past the last. */
+    bottom: number;
+
+    cellWidth: number;
+    cellHeight: number;
+
+    /**
+     * Cell-to-cell step. Equal to the cell size except where a mode leaves
+     * blank scanlines between rows, as MODE 3 and MODE 6 do: an eight-scanline
+     * glyph on a ten-scanline pitch.
+     */
+    columnPitch: number;
+    rowPitch: number;
+
+    /** Where the grid starts within the band. */
+    originX: number;
+    originY: number;
+}
+
+/** The character grid the display currently implies, per band. */
+export interface ScreenGeometry {
+    bands: ScreenBandGeometry[];
+    frameNumber: number;
+}
+
+/** Which of the two searches a glyph-recognising strategy should run. */
+export type ScreenTextSearchMode = "both" | "aligned" | "offset";
+
 export interface Frame {
     frameNumber: number;
     cycleCount: number;
@@ -93,6 +204,43 @@ function toTeletextScreen(proto: ProtoTeletextScreen): TeletextScreen {
             }
             return cell;
         },
+    };
+}
+
+function toScreenText(proto: ProtoScreenText): ScreenText {
+    return {
+        supported: proto.supported,
+        runs: proto.runs.map((run) => ({
+            text: run.text,
+            bounds: {
+                x: run.bounds?.x ?? 0,
+                y: run.bounds?.y ?? 0,
+                width: run.bounds?.width ?? 0,
+                height: run.bounds?.height ?? 0,
+            },
+            cellWidth: run.cellWidth,
+            cellHeight: run.cellHeight,
+        })),
+        text: proto.text,
+        unreadableCells: proto.unreadableCells,
+        ambiguousCells: proto.ambiguousCells,
+        frameNumber: Number(proto.frameNumber),
+    };
+}
+
+function toScreenGeometry(proto: ProtoScreenGeometry): ScreenGeometry {
+    return {
+        bands: proto.bands.map((band) => ({
+            top: band.top,
+            bottom: band.bottom,
+            cellWidth: band.cellWidth,
+            cellHeight: band.cellHeight,
+            columnPitch: band.columnPitch,
+            rowPitch: band.rowPitch,
+            originX: band.originX,
+            originY: band.originY,
+        })),
+        frameNumber: Number(proto.frameNumber),
     };
 }
 
@@ -183,6 +331,84 @@ export class Video {
             request,
         );
         return toTeletextScreen(response);
+    }
+
+    /**
+     * Read text from the display, whatever mode is producing it.
+     *
+     * Prefer this to `teletextScreen()` and to the screen-memory scraper in
+     * `screen.ts`. The caller selects in pixels -- the one coordinate system
+     * every mode shares -- and the server picks a reading strategy per band of
+     * scanlines, so a split screen is read a band at a time and the caller
+     * never learns which mode produced what.
+     *
+     * A display this build has no strategy for comes back with `supported`
+     * false and no runs, rather than something stale with a flag attached.
+     *
+     * @param options.region `[x, y, width, height]` in frame pixels; the whole
+     *     display when omitted. Clipped to the display rather than rejected.
+     * @param options.search `"aligned"` reads only text on the character grid,
+     *     which is what a snapped drag wants; `"offset"` reads only text off
+     *     it; `"both"`, the default, reads both, which is what a whole screen
+     *     copy and a script want. Honoured by strategies that recognise glyphs
+     *     in pixels; a MODE 7 display is always its grid.
+     * @param options.flowed Join a run that reached the right edge to the next
+     *     without a line break, rejoining a line that wrapped. By default each
+     *     grid row is its own line, preserving the shape of the selection.
+     */
+    async screenText(options?: {
+        region?: PixelRegion;
+        search?: ScreenTextSearchMode;
+        flowed?: boolean;
+    }): Promise<ScreenText> {
+        const searches: Record<ScreenTextSearchMode, ScreenTextSearch> = {
+            both: ScreenTextSearch.SCREEN_TEXT_SEARCH_BOTH,
+            aligned: ScreenTextSearch.SCREEN_TEXT_SEARCH_ALIGNED,
+            offset: ScreenTextSearch.SCREEN_TEXT_SEARCH_OFFSET,
+        };
+        const search = options?.search ?? "both";
+        if (!(search in searches)) {
+            throw new RangeError(
+                `Unknown search ${search}; expected one of ` +
+                `${Object.keys(searches).join(", ")}`,
+            );
+        }
+
+        const request: Record<string, unknown> = {
+            search: searches[search],
+            layout: options?.flowed
+                ? ScreenTextLayout.SCREEN_TEXT_LAYOUT_FLOWED
+                : ScreenTextLayout.SCREEN_TEXT_LAYOUT_ROWS,
+        };
+        if (options?.region !== undefined) {
+            request["region"] = options.region;
+        }
+
+        const response = await promisify<Record<string, unknown>, ProtoScreenText>(
+            this.stub as unknown as Record<string, Function>,
+            "getScreenText",
+            request,
+        );
+        return toScreenText(response);
+    }
+
+    /**
+     * Report the character grid the display currently implies, per band.
+     *
+     * Separate from `screenText()` because snapping a drag has to happen while
+     * the drag is in progress, when there is nothing to send yet. One call on
+     * mouse-down is ample.
+     *
+     * Every band reports a grid, including one no strategy can read text from:
+     * where the cells are and what is in them are separate questions.
+     */
+    async screenGeometry(): Promise<ScreenGeometry> {
+        const response = await promisify<{}, ProtoScreenGeometry>(
+            this.stub as unknown as Record<string, Function>,
+            "getScreenGeometry",
+            {},
+        );
+        return toScreenGeometry(response);
     }
 
     /**
