@@ -62,6 +62,16 @@ class VideoServiceStub(object):
                 request_serializer=video__pb2.GetTeletextScreenRequest.SerializeToString,
                 response_deserializer=video__pb2.TeletextScreen.FromString,
                 _registered_method=True)
+        self.GetScreenText = channel.unary_unary(
+                '/beebium.VideoService/GetScreenText',
+                request_serializer=video__pb2.GetScreenTextRequest.SerializeToString,
+                response_deserializer=video__pb2.ScreenText.FromString,
+                _registered_method=True)
+        self.GetScreenGeometry = channel.unary_unary(
+                '/beebium.VideoService/GetScreenGeometry',
+                request_serializer=video__pb2.GetScreenGeometryRequest.SerializeToString,
+                response_deserializer=video__pb2.ScreenGeometry.FromString,
+                _registered_method=True)
 
 
 class VideoServiceServicer(object):
@@ -96,6 +106,28 @@ class VideoServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetScreenText(self, request, context):
+        """Read text from the display, whatever mode is producing it.
+
+        The caller selects in pixels and gets back text plus where it was found.
+        A pixel rectangle is something a client can produce from a drag without
+        knowing anything about modes, grids or cell sizes, and the strategy that
+        reads a given band of scanlines is the server's business.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetScreenGeometry(self, request, context):
+        """Report the character grid the display currently implies, per band.
+
+        Separate from GetScreenText because snapping a drag has to happen while
+        the drag is in progress, when the client has nothing to send yet.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_VideoServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -113,6 +145,16 @@ def add_VideoServiceServicer_to_server(servicer, server):
                     servicer.GetTeletextScreen,
                     request_deserializer=video__pb2.GetTeletextScreenRequest.FromString,
                     response_serializer=video__pb2.TeletextScreen.SerializeToString,
+            ),
+            'GetScreenText': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetScreenText,
+                    request_deserializer=video__pb2.GetScreenTextRequest.FromString,
+                    response_serializer=video__pb2.ScreenText.SerializeToString,
+            ),
+            'GetScreenGeometry': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetScreenGeometry,
+                    request_deserializer=video__pb2.GetScreenGeometryRequest.FromString,
+                    response_serializer=video__pb2.ScreenGeometry.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -197,6 +239,60 @@ class VideoService(object):
             '/beebium.VideoService/GetTeletextScreen',
             video__pb2.GetTeletextScreenRequest.SerializeToString,
             video__pb2.TeletextScreen.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetScreenText(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/GetScreenText',
+            video__pb2.GetScreenTextRequest.SerializeToString,
+            video__pb2.ScreenText.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetScreenGeometry(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/GetScreenGeometry',
+            video__pb2.GetScreenGeometryRequest.SerializeToString,
+            video__pb2.ScreenGeometry.FromString,
             options,
             channel_credentials,
             insecure,

@@ -108,6 +108,58 @@ the next without a break. What a sentence spanning rows wants.
 """
 Global___TeletextTextLayout: _TypeAlias = TeletextTextLayout  # noqa: Y015
 
+class _ScreenTextSearch:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _ScreenTextSearchEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ScreenTextSearch.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    SCREEN_TEXT_SEARCH_BOTH: _ScreenTextSearch.ValueType  # 0
+    """Whole-screen copy and scripts want everything, so the default is the
+    most inclusive. A snapped drag sets ALIGNED; a free-form drag sets BOTH.
+    """
+    SCREEN_TEXT_SEARCH_ALIGNED: _ScreenTextSearch.ValueType  # 1
+    SCREEN_TEXT_SEARCH_OFFSET: _ScreenTextSearch.ValueType  # 2
+
+class ScreenTextSearch(_ScreenTextSearch, metaclass=_ScreenTextSearchEnumTypeWrapper):
+    """Which of the two searches a strategy should run.
+
+    Honoured by strategies that recognise glyphs in pixels; the teletext
+    strategy reads the character grid and is unaffected by it.
+    """
+
+SCREEN_TEXT_SEARCH_BOTH: ScreenTextSearch.ValueType  # 0
+"""Whole-screen copy and scripts want everything, so the default is the
+most inclusive. A snapped drag sets ALIGNED; a free-form drag sets BOTH.
+"""
+SCREEN_TEXT_SEARCH_ALIGNED: ScreenTextSearch.ValueType  # 1
+SCREEN_TEXT_SEARCH_OFFSET: ScreenTextSearch.ValueType  # 2
+Global___ScreenTextSearch: _TypeAlias = ScreenTextSearch  # noqa: Y015
+
+class _ScreenTextLayout:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _ScreenTextLayoutEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ScreenTextLayout.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    SCREEN_TEXT_LAYOUT_ROWS: _ScreenTextLayout.ValueType  # 0
+    """Each grid row is its own line, preserving the shape of the selection."""
+    SCREEN_TEXT_LAYOUT_FLOWED: _ScreenTextLayout.ValueType  # 1
+    """A row filled to the region's right edge wrapped, so it continues into
+    the next without a break.
+    """
+
+class ScreenTextLayout(_ScreenTextLayout, metaclass=_ScreenTextLayoutEnumTypeWrapper):
+    """How the runs are joined into `text`."""
+
+SCREEN_TEXT_LAYOUT_ROWS: ScreenTextLayout.ValueType  # 0
+"""Each grid row is its own line, preserving the shape of the selection."""
+SCREEN_TEXT_LAYOUT_FLOWED: ScreenTextLayout.ValueType  # 1
+"""A row filled to the region's right edge wrapped, so it continues into
+the next without a break.
+"""
+Global___ScreenTextLayout: _TypeAlias = ScreenTextLayout  # noqa: Y015
+
 @_typing.final
 class SubscribeFramesRequest(_message.Message):
     """Future: format preferences, scaling options"""
@@ -442,3 +494,257 @@ class TeletextScreen(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___TeletextScreen: _TypeAlias = TeletextScreen  # noqa: Y015
+
+@_typing.final
+class PixelRegion(_message.Message):
+    """============================================================================
+    Screen text
+    ============================================================================
+
+    A rectangle in frame pixel coordinates, the origin being the top-left of the
+    active area rather than of the bordered display.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    X_FIELD_NUMBER: _builtins.int
+    Y_FIELD_NUMBER: _builtins.int
+    WIDTH_FIELD_NUMBER: _builtins.int
+    HEIGHT_FIELD_NUMBER: _builtins.int
+    x: _builtins.int
+    y: _builtins.int
+    width: _builtins.int
+    height: _builtins.int
+    def __init__(
+        self,
+        *,
+        x: _builtins.int = ...,
+        y: _builtins.int = ...,
+        width: _builtins.int = ...,
+        height: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["height", b"height", "width", b"width", "x", b"x", "y", b"y"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___PixelRegion: _TypeAlias = PixelRegion  # noqa: Y015
+
+@_typing.final
+class GetScreenTextRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    REGION_FIELD_NUMBER: _builtins.int
+    SEARCH_FIELD_NUMBER: _builtins.int
+    LAYOUT_FIELD_NUMBER: _builtins.int
+    search: Global___ScreenTextSearch.ValueType
+    layout: Global___ScreenTextLayout.ValueType
+    @_builtins.property
+    def region(self) -> Global___PixelRegion:
+        """The part of the display to read. Whole display when unset."""
+
+    def __init__(
+        self,
+        *,
+        region: Global___PixelRegion | None = ...,
+        search: Global___ScreenTextSearch.ValueType = ...,
+        layout: Global___ScreenTextLayout.ValueType = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "region", b"region"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "layout", b"layout", "region", b"region", "search", b"search"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__region: _TypeAlias = _typing.Literal["region"]  # noqa: Y015
+    _WhichOneofArgType__region: _TypeAlias = _typing.Literal["_region", b"_region"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__region) -> _WhichOneofReturnType__region | None: ...
+
+Global___GetScreenTextRequest: _TypeAlias = GetScreenTextRequest  # noqa: Y015
+
+@_typing.final
+class ScreenTextRun(_message.Message):
+    """A contiguous piece of text and where it was found, so a client can highlight
+    exactly what it captured.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TEXT_FIELD_NUMBER: _builtins.int
+    BOUNDS_FIELD_NUMBER: _builtins.int
+    CELL_WIDTH_FIELD_NUMBER: _builtins.int
+    CELL_HEIGHT_FIELD_NUMBER: _builtins.int
+    text: _builtins.str
+    cell_width: _builtins.int
+    """The character cell geometry this run was read with, so a selection can
+    snap to it. Zero when the run is not cell-aligned, as text written at
+    the graphics cursor is.
+    """
+    cell_height: _builtins.int
+    @_builtins.property
+    def bounds(self) -> Global___PixelRegion: ...
+    def __init__(
+        self,
+        *,
+        text: _builtins.str = ...,
+        bounds: Global___PixelRegion | None = ...,
+        cell_width: _builtins.int = ...,
+        cell_height: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds", "cell_height", b"cell_height", "cell_width", b"cell_width", "text", b"text"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ScreenTextRun: _TypeAlias = ScreenTextRun  # noqa: Y015
+
+@_typing.final
+class ScreenText(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUPPORTED_FIELD_NUMBER: _builtins.int
+    RUNS_FIELD_NUMBER: _builtins.int
+    TEXT_FIELD_NUMBER: _builtins.int
+    UNREADABLE_CELLS_FIELD_NUMBER: _builtins.int
+    AMBIGUOUS_CELLS_FIELD_NUMBER: _builtins.int
+    FRAME_NUMBER_FIELD_NUMBER: _builtins.int
+    supported: _builtins.bool
+    """True when at least one band in the requested region had a strategy that
+    could read it.
+
+    Distinct from readable-but-empty: a graphics screen that was read and
+    found to contain no text is supported with no runs, whereas a display
+    this build has no strategy for is unsupported. Which displays fall in
+    the second group narrows as strategies are added.
+    """
+    text: _builtins.str
+    """The runs joined into text by `layout`, for a client that wants a string
+    and not structure. Lines are joined with LF; converting to a
+    platform-native ending is the client's business, since the server cannot
+    know the client's platform.
+    """
+    unreadable_cells: _builtins.int
+    """Cells a strategy tried to read and could not identify at all. Zero for
+    the teletext strategy, whose cells are exact character codes.
+    """
+    ambiguous_cells: _builtins.int
+    """Cells a strategy read but could not pin to a single character, because
+    the font in use draws two characters identically. Also zero for
+    teletext.
+    """
+    frame_number: _builtins.int
+    @_builtins.property
+    def runs(self) -> _containers.RepeatedCompositeFieldContainer[Global___ScreenTextRun]:
+        """In reading order: bands top to bottom, and within a band by baseline
+        then x.
+        """
+
+    def __init__(
+        self,
+        *,
+        supported: _builtins.bool = ...,
+        runs: _abc.Iterable[Global___ScreenTextRun] | None = ...,
+        text: _builtins.str = ...,
+        unreadable_cells: _builtins.int = ...,
+        ambiguous_cells: _builtins.int = ...,
+        frame_number: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["ambiguous_cells", b"ambiguous_cells", "frame_number", b"frame_number", "runs", b"runs", "supported", b"supported", "text", b"text", "unreadable_cells", b"unreadable_cells"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ScreenText: _TypeAlias = ScreenText  # noqa: Y015
+
+@_typing.final
+class GetScreenGeometryRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___GetScreenGeometryRequest: _TypeAlias = GetScreenGeometryRequest  # noqa: Y015
+
+@_typing.final
+class ScreenBandGeometry(_message.Message):
+    """The character grid for one band of scanlines, in frame pixel coordinates.
+
+    Reported for every band whether or not text can be read from it: where the
+    cells are and what is in them are separate questions, and snapping needs
+    only the first.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TOP_FIELD_NUMBER: _builtins.int
+    BOTTOM_FIELD_NUMBER: _builtins.int
+    CELL_WIDTH_FIELD_NUMBER: _builtins.int
+    CELL_HEIGHT_FIELD_NUMBER: _builtins.int
+    COLUMN_PITCH_FIELD_NUMBER: _builtins.int
+    ROW_PITCH_FIELD_NUMBER: _builtins.int
+    ORIGIN_X_FIELD_NUMBER: _builtins.int
+    ORIGIN_Y_FIELD_NUMBER: _builtins.int
+    top: _builtins.int
+    """First scanline, inclusive"""
+    bottom: _builtins.int
+    """One past the last"""
+    cell_width: _builtins.int
+    cell_height: _builtins.int
+    column_pitch: _builtins.int
+    """Cell-to-cell step. Equal to the cell size except where a mode leaves
+    blank scanlines between rows, as MODE 3 and MODE 6 do: an eight-scanline
+    glyph on a ten-scanline pitch.
+    """
+    row_pitch: _builtins.int
+    origin_x: _builtins.int
+    """Where the grid starts within the band"""
+    origin_y: _builtins.int
+    def __init__(
+        self,
+        *,
+        top: _builtins.int = ...,
+        bottom: _builtins.int = ...,
+        cell_width: _builtins.int = ...,
+        cell_height: _builtins.int = ...,
+        column_pitch: _builtins.int = ...,
+        row_pitch: _builtins.int = ...,
+        origin_x: _builtins.int = ...,
+        origin_y: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bottom", b"bottom", "cell_height", b"cell_height", "cell_width", b"cell_width", "column_pitch", b"column_pitch", "origin_x", b"origin_x", "origin_y", b"origin_y", "row_pitch", b"row_pitch", "top", b"top"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ScreenBandGeometry: _TypeAlias = ScreenBandGeometry  # noqa: Y015
+
+@_typing.final
+class ScreenGeometry(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    BANDS_FIELD_NUMBER: _builtins.int
+    FRAME_NUMBER_FIELD_NUMBER: _builtins.int
+    frame_number: _builtins.int
+    @_builtins.property
+    def bands(self) -> _containers.RepeatedCompositeFieldContainer[Global___ScreenBandGeometry]: ...
+    def __init__(
+        self,
+        *,
+        bands: _abc.Iterable[Global___ScreenBandGeometry] | None = ...,
+        frame_number: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bands", b"bands", "frame_number", b"frame_number"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ScreenGeometry: _TypeAlias = ScreenGeometry  # noqa: Y015

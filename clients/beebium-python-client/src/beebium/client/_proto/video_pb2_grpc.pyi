@@ -59,6 +59,20 @@ class VideoServiceStub:
     with the pixels it replaces, and that is a separate transport from the
     same capture; see docs/discussion/teletext-cell-capture.md.
     """
+    GetScreenText: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetScreenTextRequest, _video_pb2.ScreenText]
+    """Read text from the display, whatever mode is producing it.
+
+    The caller selects in pixels and gets back text plus where it was found.
+    A pixel rectangle is something a client can produce from a drag without
+    knowing anything about modes, grids or cell sizes, and the strategy that
+    reads a given band of scanlines is the server's business.
+    """
+    GetScreenGeometry: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetScreenGeometryRequest, _video_pb2.ScreenGeometry]
+    """Report the character grid the display currently implies, per band.
+
+    Separate from GetScreenText because snapping a drag has to happen while
+    the drag is in progress, when the client has nothing to send yet.
+    """
 
 @_typing.type_check_only
 class VideoServiceAsyncStub(VideoServiceStub):
@@ -78,6 +92,20 @@ class VideoServiceAsyncStub(VideoServiceStub):
     copy would be absurd. A future vector renderer needs every frame aligned
     with the pixels it replaces, and that is a separate transport from the
     same capture; see docs/discussion/teletext-cell-capture.md.
+    """
+    GetScreenText: _aio.UnaryUnaryMultiCallable[_video_pb2.GetScreenTextRequest, _video_pb2.ScreenText]  # type: ignore[assignment]
+    """Read text from the display, whatever mode is producing it.
+
+    The caller selects in pixels and gets back text plus where it was found.
+    A pixel rectangle is something a client can produce from a drag without
+    knowing anything about modes, grids or cell sizes, and the strategy that
+    reads a given band of scanlines is the server's business.
+    """
+    GetScreenGeometry: _aio.UnaryUnaryMultiCallable[_video_pb2.GetScreenGeometryRequest, _video_pb2.ScreenGeometry]  # type: ignore[assignment]
+    """Report the character grid the display currently implies, per band.
+
+    Separate from GetScreenText because snapping a drag has to happen while
+    the drag is in progress, when the client has nothing to send yet.
     """
 
 class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -113,6 +141,32 @@ class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
         copy would be absurd. A future vector renderer needs every frame aligned
         with the pixels it replaces, and that is a separate transport from the
         same capture; see docs/discussion/teletext-cell-capture.md.
+        """
+
+    @_abc_1.abstractmethod
+    def GetScreenText(
+        self,
+        request: _video_pb2.GetScreenTextRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.ScreenText, _abc.Awaitable[_video_pb2.ScreenText]]:
+        """Read text from the display, whatever mode is producing it.
+
+        The caller selects in pixels and gets back text plus where it was found.
+        A pixel rectangle is something a client can produce from a drag without
+        knowing anything about modes, grids or cell sizes, and the strategy that
+        reads a given band of scanlines is the server's business.
+        """
+
+    @_abc_1.abstractmethod
+    def GetScreenGeometry(
+        self,
+        request: _video_pb2.GetScreenGeometryRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.ScreenGeometry, _abc.Awaitable[_video_pb2.ScreenGeometry]]:
+        """Report the character grid the display currently implies, per band.
+
+        Separate from GetScreenText because snapping a drag has to happen while
+        the drag is in progress, when the client has nothing to send yet.
         """
 
 def add_VideoServiceServicer_to_server(servicer: VideoServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

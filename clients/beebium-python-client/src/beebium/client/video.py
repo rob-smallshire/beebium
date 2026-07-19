@@ -57,6 +57,102 @@ class TeletextScreen:
 
 
 @dataclass(frozen=True)
+class PixelRegion:
+    """A rectangle in frame pixel coordinates.
+
+    The origin is the top-left of the active area rather than of the bordered
+    display, matching the frames the video service streams.
+    """
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class ScreenTextRun:
+    """A contiguous piece of text and where it was found."""
+
+    text: str
+
+    bounds: PixelRegion
+    """Where the run was found, so a client can highlight exactly what it
+    captured."""
+
+    cell_width: int
+    cell_height: int
+    """The character cell geometry the run was read with, so a selection can
+    snap to it. Zero when the run is not cell-aligned, as text written at the
+    graphics cursor is."""
+
+
+@dataclass(frozen=True)
+class ScreenText:
+    """Text read from the display, whatever mode is producing it."""
+
+    supported: bool
+    """True when at least one band of the requested region had a strategy that
+    could read it.
+
+    Distinct from readable-but-empty: a graphics screen that was read and found
+    to contain no text is supported with no runs, whereas a display this build
+    has no strategy for is unsupported. Which displays fall in the second group
+    narrows as strategies are added, so a caller should treat it as "not this
+    time" rather than "not ever"."""
+
+    runs: tuple[ScreenTextRun, ...]
+    """In reading order: bands top to bottom, and within a band by baseline
+    then x."""
+
+    text: str
+    """The runs joined by the requested layout, for a caller that wants a
+    string and not structure. Lines are joined with LF."""
+
+    unreadable_cells: int
+    """Cells a strategy tried to read and could not identify at all. Zero for a
+    MODE 7 display, whose cells are exact character codes."""
+
+    ambiguous_cells: int
+    """Cells a strategy read but could not pin to a single character, because
+    the font in use draws two characters identically. Also zero for MODE 7."""
+
+    frame_number: int
+
+
+@dataclass(frozen=True)
+class ScreenBandGeometry:
+    """The character grid for one band of scanlines, in frame pixels."""
+
+    top: int
+    """First scanline, inclusive."""
+
+    bottom: int
+    """One past the last."""
+
+    cell_width: int
+    cell_height: int
+
+    column_pitch: int
+    row_pitch: int
+    """Cell-to-cell step. Equal to the cell size except where a mode leaves
+    blank scanlines between rows, as MODE 3 and MODE 6 do: an eight-scanline
+    glyph on a ten-scanline pitch."""
+
+    origin_x: int
+    origin_y: int
+    """Where the grid starts within the band."""
+
+
+@dataclass(frozen=True)
+class ScreenGeometry:
+    """The character grid the display currently implies, per band."""
+
+    bands: tuple[ScreenBandGeometry, ...]
+    frame_number: int
+
+
+@dataclass(frozen=True)
 class VideoConfig:
     """Video configuration."""
 
@@ -254,6 +350,122 @@ class Video:
             text=response.text,
             frame_number=response.frame_number,
             cells=list(response.cells),
+        )
+
+    def screen_text(
+        self,
+        *,
+        region: tuple[int, int, int, int] | None = None,
+        search: str = "both",
+        flowed: bool = False,
+    ) -> ScreenText:
+        """Read text from the display, whatever mode is producing it.
+
+        Prefer this to ``teletext_screen`` and to reading screen memory. The
+        caller selects in pixels -- the one coordinate system every mode
+        shares -- and the server picks a reading strategy per band of
+        scanlines, so a split screen is read a band at a time and the caller
+        never learns which mode produced what.
+
+        A display this build has no strategy for comes back with ``supported``
+        False and no runs, rather than something stale with a flag attached.
+
+        Args:
+            region: ``(x, y, width, height)`` in frame pixels; the whole
+                display when None. Clipped to the display rather than
+                rejected.
+            search: ``"aligned"`` reads only text on the character grid, which
+                is what a snapped drag wants; ``"offset"`` reads only text off
+                it; ``"both"``, the default, reads both, which is what a whole
+                screen copy and a script want. Honoured by strategies that
+                recognise glyphs in pixels; a MODE 7 display is always its
+                grid.
+            flowed: Join a run that reached the right edge to the next without
+                a line break, rejoining a line that wrapped. By default each
+                grid row is its own line, preserving the shape of the
+                selection.
+
+        Returns:
+            The runs, the text they join to, and how much was uncertain.
+        """
+        searches = {
+            "both": video_pb2.SCREEN_TEXT_SEARCH_BOTH,
+            "aligned": video_pb2.SCREEN_TEXT_SEARCH_ALIGNED,
+            "offset": video_pb2.SCREEN_TEXT_SEARCH_OFFSET,
+        }
+        if search not in searches:
+            raise ValueError(
+                f"Unknown search {search!r}; expected one of "
+                f"{', '.join(sorted(searches))}"
+            )
+
+        request = video_pb2.GetScreenTextRequest(
+            search=searches[search],
+            layout=(
+                video_pb2.SCREEN_TEXT_LAYOUT_FLOWED
+                if flowed
+                else video_pb2.SCREEN_TEXT_LAYOUT_ROWS
+            ),
+        )
+        if region is not None:
+            x, y, width, height = region
+            request.region.CopyFrom(
+                video_pb2.PixelRegion(x=x, y=y, width=width, height=height)
+            )
+
+        response = self._stub.GetScreenText(request)
+        return ScreenText(
+            supported=response.supported,
+            runs=tuple(
+                ScreenTextRun(
+                    text=run.text,
+                    bounds=PixelRegion(
+                        x=run.bounds.x,
+                        y=run.bounds.y,
+                        width=run.bounds.width,
+                        height=run.bounds.height,
+                    ),
+                    cell_width=run.cell_width,
+                    cell_height=run.cell_height,
+                )
+                for run in response.runs
+            ),
+            text=response.text,
+            unreadable_cells=response.unreadable_cells,
+            ambiguous_cells=response.ambiguous_cells,
+            frame_number=response.frame_number,
+        )
+
+    def screen_geometry(self) -> ScreenGeometry:
+        """Report the character grid the display currently implies, per band.
+
+        Separate from ``screen_text`` because snapping a drag has to happen
+        while the drag is in progress, when there is nothing to send yet. One
+        call on mouse-down is ample.
+
+        Every band reports a grid, including one no strategy can read text
+        from: where the cells are and what is in them are separate questions.
+
+        Returns:
+            One band per run of scanlines sharing a character geometry. A
+            split screen has more than one.
+        """
+        response = self._stub.GetScreenGeometry(video_pb2.GetScreenGeometryRequest())
+        return ScreenGeometry(
+            bands=tuple(
+                ScreenBandGeometry(
+                    top=band.top,
+                    bottom=band.bottom,
+                    cell_width=band.cell_width,
+                    cell_height=band.cell_height,
+                    column_pitch=band.column_pitch,
+                    row_pitch=band.row_pitch,
+                    origin_x=band.origin_x,
+                    origin_y=band.origin_y,
+                )
+                for band in response.bands
+            ),
+            frame_number=response.frame_number,
         )
 
     def capture_frame(self, timeout: float = 1.0) -> Frame:
