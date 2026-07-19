@@ -566,3 +566,54 @@ TEST_CASE("In MODE 3 and MODE 6 the gap between rows must not be sampled")
         CHECK(json_number(naive.stdout_text, "unmatched_cells") == total);
     }
 }
+
+TEST_CASE("A real screen with a different colour pair in every cell is read")
+{
+    // MODE 2 with its own foreground and background per cell, unequal,
+    // captured from a running machine. Nothing on the command line says
+    // anything about colour: the two values in a cell are the glyph's and its
+    // background's, and which is which is worked out from the image.
+    //
+    // This is the case a single declared background could not express at all.
+    // Read against one, a cell of white on red reduces to all-ones -- both
+    // colours counting as glyph -- and quietly matches an inverse space.
+    const std::size_t columns = 20;
+    const std::size_t rows = 32;
+    const std::size_t printed = 639; // the last cell is left blank
+
+    std::string expected;
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::string line;
+        for (std::size_t column = 0; column < columns; ++column) {
+            const std::size_t index = row * columns + column;
+            if (index < printed) {
+                append_utf8(line, codepoint_of(32 + index % 95));
+            } else {
+                line.push_back(' ');
+            }
+        }
+        const std::size_t first = line.find_first_not_of(' ');
+        if (first == std::string::npos) {
+            continue;
+        }
+        const std::size_t last = line.find_last_not_of(' ');
+        expected += line.substr(first, last - first + 1);
+        expected.push_back('\n');
+    }
+
+    const Output output
+        = run("read \"" + corpus_filepath(2, "multicolour") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text == expected);
+}
+
+TEST_CASE("Every cell of a real multicoloured screen is read")
+{
+    const Output output
+        = run("read \"" + corpus_filepath(2, "multicolour") + "\" --format json");
+
+    CHECK(output.status == 0);
+    CHECK(json_number(output.stdout_text, "total_cells") == 20 * 32);
+    CHECK(json_number(output.stdout_text, "unmatched_cells") == 0);
+}

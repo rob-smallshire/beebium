@@ -216,9 +216,17 @@ produces are what the library expects.
 
 `tests/fixtures/corpus/` covers every bitmap mode, MODE 0 to MODE 6, in two
 variants -- a testcard filling every character cell with a cycling pattern of
-characters 32 to 126, and the same screen after `VDU 19,0,4,0,0,0`. Every cell
-of every one of them is matched, and the testcard's text is reconstructed
-exactly from an independently computed expectation. See the README there.
+characters 32 to 126, and the same screen after `VDU 19,0,4,0,0,0` -- plus a
+MODE 2 screen carrying a different foreground and background pair in every one
+of its cells. Every cell of every one of them is matched, and the text is
+reconstructed exactly from an independently computed expectation. See the
+README there.
+
+Colour is covered twice over, because the two say different things. The
+captured screen proves a real machine produces what is expected of it; a
+synthetic one covers a full screen of cells whose colours are drawn from the
+whole range of byte values rather than any machine's palette, which no capture
+could reach.
 
 ```
 cmake --build build --target test_screentext_read

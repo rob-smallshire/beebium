@@ -36,6 +36,41 @@ std::vector<GlyphSet> acorn_only()
     return {acorn()};
 }
 
+// The cycle of printable characters a testcard walks, character 96 of the
+// Acorn set being a pound sign rather than a grave accent.
+char32_t codepoint_for_testcard(std::size_t index)
+{
+    const std::size_t character = 32 + index % 95;
+    return character == 96 ? 0x00A3U : static_cast<char32_t>(character);
+}
+
+// Join expected rows the way runs are reported: blanks trimmed from each end,
+// wholly blank rows dropped, the rest joined with newlines.
+std::string trimmed_text(const std::vector<std::u32string>& rows)
+{
+    std::string text;
+    for (const std::u32string& row : rows) {
+        const std::size_t first = row.find_first_not_of(U' ');
+        if (first == std::u32string::npos) {
+            continue;
+        }
+        const std::size_t last = row.find_last_not_of(U' ');
+        if (!text.empty()) {
+            text.push_back('\n');
+        }
+        for (std::size_t index = first; index <= last; ++index) {
+            const char32_t codepoint = row[index];
+            if (codepoint < 0x80U) {
+                text.push_back(static_cast<char>(codepoint));
+            } else {
+                text.push_back(static_cast<char>(0xC0U | (codepoint >> 6)));
+                text.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+            }
+        }
+    }
+    return text;
+}
+
 } // namespace
 
 TEST_CASE("Plain text on the character grid is read back exactly")
@@ -845,3 +880,105 @@ TEST_CASE("A solid cell of a colour other than the background is an inverse spac
     CHECK(result.runs[0].cells[1].inverted);
 }
 
+
+namespace {
+
+// A deterministic pseudo-random sequence, written out rather than taken from
+// the standard library so that the same test data is generated on every
+// platform and every build. std::rand and std::mt19937 differ in the first
+// respect and the second respectively.
+class Sequence {
+public:
+    explicit Sequence(std::uint32_t seed) : state_(seed) {}
+
+    std::uint8_t next()
+    {
+        state_ = state_ * 1664525U + 1013904223U;
+        return static_cast<std::uint8_t>(state_ >> 24);
+    }
+
+private:
+    std::uint32_t state_;
+};
+
+} // namespace
+
+TEST_CASE("A full screen of text in a different colour pair per cell is read")
+{
+    // The testcard idea taken to colour: every cell holds its own foreground
+    // and its own background, unequal, drawn from the whole range of byte
+    // values rather than any machine's palette. Nothing links one cell's
+    // colours to the next's, and no colour is declared anywhere.
+    const std::size_t columns = 40;
+    const std::size_t rows = 25;
+
+    Canvas canvas(columns * 8, rows * 8);
+    Sequence colours(20260719U);
+
+    std::vector<std::u32string> expected_rows;
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::u32string expected_row;
+        for (std::size_t column = 0; column < columns; ++column) {
+            const std::uint8_t background = colours.next();
+            std::uint8_t foreground = colours.next();
+            if (foreground == background) {
+                foreground = static_cast<std::uint8_t>(background ^ 0xFFU);
+            }
+
+            const std::size_t index = row * columns + column;
+            const char32_t codepoint = codepoint_for_testcard(index);
+
+            canvas.fill(column * 8, row * 8, 8, 8, background);
+            canvas.stamp(column * 8, row * 8,
+                         Canvas::glyph_for(acorn(), codepoint), foreground);
+            expected_row.push_back(codepoint);
+        }
+        expected_rows.push_back(expected_row);
+    }
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    CHECK(result.total_cells == columns * rows);
+    CHECK(result.unmatched_cells == 0);
+    CHECK(result.text() == trimmed_text(expected_rows));
+}
+
+TEST_CASE("A full screen of colour pairs is read the same way twice")
+{
+    // Every cell here has a different background, so no value is the screen's
+    // background in any meaningful sense and the vote that picks one is
+    // deciding between near-equals. The text must not depend on how that
+    // comes out, which is the point of trying both readings of every cell.
+    const std::size_t columns = 20;
+    const std::size_t rows = 16;
+
+    Canvas canvas(columns * 8, rows * 8);
+    Sequence colours(99991U);
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (std::size_t column = 0; column < columns; ++column) {
+            const std::uint8_t background = colours.next();
+            std::uint8_t foreground = colours.next();
+            if (foreground == background) {
+                foreground = static_cast<std::uint8_t>(background ^ 0x5AU);
+            }
+            canvas.fill(column * 8, row * 8, 8, 8, background);
+            canvas.stamp(column * 8, row * 8,
+                         Canvas::glyph_for(acorn(),
+                                           codepoint_for_testcard(
+                                               row * columns + column)),
+                         foreground);
+        }
+    }
+
+    const Result first = read(canvas.image(),
+                              {whole_image_band(canvas.image())},
+                              acorn_only());
+    const Result second = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    CHECK(first.unmatched_cells == 0);
+    CHECK(first.text() == second.text());
+}

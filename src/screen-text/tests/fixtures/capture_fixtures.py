@@ -52,8 +52,34 @@ PROGRAM = [
 # BBC produces inverse text.
 INVERSE_COMMAND = 'COLOUR 129:COLOUR 0:PRINT "INVERSE TEXT"'
 
+# A testcard in colour: MODE 2 is 20x32 with sixteen logical colours, and every
+# cell gets its own foreground and background, never equal.
+#
+# Only colours 0 to 7 are used. In MODE 2 the upper eight are flashing by
+# default, and a flashing cell would make the capture depend on which half of
+# the flash the frame was grabbed in.
+#
+# The cursor is turned off rather than left to land somewhere, and the last
+# cell is left unprinted so that filling the screen cannot scroll it.
+MULTICOLOUR_PROGRAM = [
+    "10 MODE 2",
+    "20 VDU 23,1,0;0;0;0;",
+    "30 A=RND(-12345)",
+    "40 FOR I=0 TO 638",
+    "50 X=I MOD 20",
+    "60 Y=I DIV 20",
+    "70 B=RND(8)-1",
+    "80 F=RND(8)-1",
+    "90 IF F=B THEN 80",
+    "100 COLOUR F:COLOUR 128+B",
+    "110 VDU 31,X,Y,32+(I MOD 95)",
+    "120 NEXT I",
+    "130 GOTO 130",
+]
+
 TYPING_DEADLINE_SECONDS = 15.0
 SETTLE_SECONDS = 1.5
+MULTICOLOUR_RUN_SECONDS = 90.0
 
 
 def drain(bbc, deadline=TYPING_DEADLINE_SECONDS):
@@ -133,6 +159,23 @@ def main(argv=None):
         send(bbc, INVERSE_COMMAND)
         time.sleep(SETTLE_SECONDS)
         capture(bbc, args.output_dirpath / "mode4-inverse.png")
+
+        # The colour testcard goes into the corpus with the other per-mode
+        # screens rather than alongside the captured screenshots.
+        send(bbc, "MODE 7")
+        time.sleep(0.5)
+        send(bbc, "NEW")
+        for line in MULTICOLOUR_PROGRAM:
+            send(bbc, line)
+        send(bbc, "RUN")
+        # 639 cells of interpreted BASIC on a 2 MHz 6502 is not quick. The
+        # program parks in a loop when it is done, so waiting generously
+        # costs only the wait.
+        time.sleep(MULTICOLOUR_RUN_SECONDS)
+        corpus_dirpath = args.output_dirpath / "corpus"
+        corpus_dirpath.mkdir(parents=True, exist_ok=True)
+        capture(bbc, corpus_dirpath / "mode2-multicolour.png")
+        bbc.keyboard.press_escape()
 
     return 0
 

@@ -96,8 +96,19 @@ why they are copied rather than referenced.
   characters 32 to 126, so a whole screen is checked rather than a line of it.
 - `modeN-blue.png` -- the same screen after `VDU 19,0,4,0,0,0` recolours the
   background.
+- `mode2-multicolour.png` -- MODE 2, every cell with its own foreground and
+  background, never equal, captured rather than imported. Only colours 0 to 7
+  are used: in MODE 2 the upper eight flash by default, and a flashing cell
+  would make the capture depend on which half of the flash the frame was
+  grabbed in. The cursor is turned off and the last cell left unprinted, so
+  that filling the screen cannot scroll it.
 
-Every cell of all fourteen images is matched, none unread, and the testcard's
+  This is the case a single declared background could not express at all, and
+  the reason there is no longer one to declare: read against one, a cell of
+  white on red reduces to all-ones -- both colours counting as glyph -- and
+  quietly matches an inverse space.
+
+Every cell of all fifteen images is matched, none unread, and the testcard
 text is reconstructed exactly from an expectation computed independently of the
 library.
 
