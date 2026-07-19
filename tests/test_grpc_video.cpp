@@ -355,3 +355,141 @@ TEST_CASE("VideoService streams cursor blink pattern", "[grpc][video][cursor]") 
 
     server.stop();
 }
+
+// ============================================================================
+// Screen text
+// ============================================================================
+
+namespace {
+
+// Run the machine until frames have been rendered and the bands recorded.
+//
+// The renderer runs on the server's own thread, pulling batches the emulation
+// thread pushed, so both have to make progress before there is a frame to read
+// geometry from.
+// Runs the machine on its own thread for as long as it is alive.
+//
+// Paced rather than run flat out: the batch queue is bounded, and a producer
+// that gets too far ahead has its batches dropped, taking with them the sync
+// flags that end a frame. Pacing is also what lets the server's render thread
+// keep up, which it must for there to be a completed frame to read at all.
+class RunningMachine {
+public:
+    explicit RunningMachine(VideoTestFixture& fixture)
+        : thread_([this, &fixture]() {
+              while (running_) {
+                  fixture.run_cycles(20000);
+                  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+              }
+          }) {}
+
+    ~RunningMachine() {
+        running_ = false;
+        thread_.join();
+    }
+
+private:
+    std::atomic<bool> running_{true};
+    std::thread thread_;
+};
+
+// Poll until the display has produced something, or give up.
+//
+// A machine that has just been reset has not drawn anything yet, and a poll
+// beats a fixed sleep: it ends as soon as there is something to read rather
+// than always costing the worst case.
+bool wait_for_bands(VideoTestFixture& fixture,
+                    std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        grpc::ClientContext context;
+        beebium::GetScreenGeometryRequest request;
+        beebium::ScreenGeometry response;
+        if (fixture.stub().GetScreenGeometry(&context, request, &response).ok()
+            && response.bands_size() > 0) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    return false;
+}
+
+} // anonymous namespace
+
+TEST_CASE("VideoService GetScreenGeometry reports a band's character grid",
+          "[grpc][video][screen-text]") {
+    VideoTestFixture fixture;
+    RunningMachine running(fixture);
+    REQUIRE(wait_for_bands(fixture));
+
+    grpc::ClientContext context;
+    beebium::GetScreenGeometryRequest request;
+    beebium::ScreenGeometry response;
+
+    auto status = fixture.stub().GetScreenGeometry(&context, request, &response);
+
+    REQUIRE(status.ok());
+    REQUIRE(response.bands_size() >= 1);
+
+    // Whatever the mode, a band has a grid: snapping is about where the cells
+    // are, which is a separate question from what is in them.
+    for (const auto& band : response.bands()) {
+        CHECK(band.bottom() > band.top());
+        CHECK(band.cell_width() > 0);
+        CHECK(band.cell_height() > 0);
+        CHECK(band.column_pitch() >= band.cell_width());
+        CHECK(band.row_pitch() >= band.cell_height());
+    }
+}
+
+TEST_CASE("VideoService GetScreenText reads a MODE 7 boot screen",
+          "[grpc][video][screen-text]") {
+    VideoTestFixture fixture;
+    RunningMachine running(fixture);
+    REQUIRE(wait_for_bands(fixture));
+
+    grpc::ClientContext context;
+    beebium::GetScreenTextRequest request;
+    beebium::ScreenText response;
+
+    auto status = fixture.stub().GetScreenText(&context, request, &response);
+
+    REQUIRE(status.ok());
+
+    // The teletext strategy reads exact character codes, so nothing it returns
+    // can be uncertain.
+    CHECK(response.unreadable_cells() == 0);
+    CHECK(response.ambiguous_cells() == 0);
+
+    if (response.supported()) {
+        CHECK(response.runs_size() > 0);
+        // Lines are joined with LF; a platform-native ending is the client's
+        // business.
+        CHECK(response.text().find('\r') == std::string::npos);
+    }
+}
+
+TEST_CASE("VideoService GetScreenText honours a region",
+          "[grpc][video][screen-text]") {
+    VideoTestFixture fixture;
+    RunningMachine running(fixture);
+    REQUIRE(wait_for_bands(fixture));
+
+    grpc::ClientContext context;
+    beebium::GetScreenTextRequest request;
+    request.mutable_region()->set_x(0);
+    request.mutable_region()->set_y(0);
+    request.mutable_region()->set_width(120);
+    request.mutable_region()->set_height(40);
+    beebium::ScreenText response;
+
+    auto status = fixture.stub().GetScreenText(&context, request, &response);
+
+    REQUIRE(status.ok());
+
+    // Every run reported must lie inside what was asked for.
+    for (const auto& run : response.runs()) {
+        CHECK(run.bounds().x() + run.bounds().width() <= 120 + run.cell_width());
+        CHECK(run.bounds().y() < 40 + run.cell_height());
+    }
+}

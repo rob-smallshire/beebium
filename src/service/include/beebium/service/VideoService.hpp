@@ -50,6 +50,16 @@ public:
         const GetTeletextScreenRequest* request,
         TeletextScreen* response) override;
 
+    grpc::Status GetScreenText(
+        grpc::ServerContext* context,
+        const GetScreenTextRequest* request,
+        ScreenText* response) override;
+
+    grpc::Status GetScreenGeometry(
+        grpc::ServerContext* context,
+        const GetScreenGeometryRequest* request,
+        ScreenGeometry* response) override;
+
 private:
     FrameBuffer& frame_buffer_;
     TeletextGrid& teletext_grid_;

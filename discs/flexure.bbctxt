@@ -1,0 +1,84 @@
+    10MODE 1
+    30REM N          Number of grid points
+    40N% = 128
+    60REM DX         Grid spacing (m)
+    70DX = 2000.0
+    90REM RHO_LOAD   Density of load (kg/m\xb3)
+   100REM RHO_LOAD = 916.7 : REM Glacier ice
+   110RHO_LOAD = 2200.0 : REM Stratovolcano
+   130REM RHO_MANTLE Mantle density (kg/m\xb3)
+   140RHO_MANTLE = 3300.0 : REM Upper mantle olivine and pyroxene
+   160REM LITHOSPHERE PROPERTIES
+   170REM E          Young's modulus (Pa)
+   180E = 70E9
+   200REM NU         Poisson ratio
+   210NU = 0.25
+   230REM TE         Effective elastic thickness (m)
+   240TE = 10E3
+   260REM G          Gravity (9.81 m/s\xb2)
+   270G = 9.81
+   290REM MODEL EQUATIONS
+   310REM Flexural rigidity
+   320D = E * TE^3 / (12 * (1 - NU*NU))
+   340REM Flexural parameter
+   350ALPHA = (4 * D / ((RHO_MANTLE - RHO_LOAD) * G))^(0.25)
+   370DIM h(N%) : REM Load thickness (m)
+   380DIM q(N%) : REM Load per unit area (Pa)
+   390DIM w(N%) : REM Vertical deflection (m)
+   410PROCplace_stratovolcano(N% DIV 2, 3776, 15000) : REM Mount Fuji
+   420PROCcompute_load
+   430PROCcompute_deflection
+   440PROCplot
+   460END
+   480DEFPROCplace_stratovolcano(centre%, height, radius)
+   490LOCAL i%, x
+   500FOR i%=0 TO N%-1
+   510x = ABS(i%-centre%) * DX
+   520IF x < radius THEN h = 1.35*height * (1 - SQR(x/radius)) ELSE h = 0
+   530IF h > height THEN h(i%) = height ELSE h(i%) = h
+   540NEXT
+   550ENDPROC
+   570DEFPROCcompute_load
+   580LOCAL i%
+   590FOR i% = 0 TO N% - 1
+   600q(i%) = RHO_LOAD * G * h(i%)
+   610NEXT
+   620ENDPROC
+   640DEF PROCcompute_deflection
+   650FOR i% = 0 TO N% - 1
+   660PRINT TAB(0,0);i%+1;"/";N%;"        ";
+   670sum = 0
+   680FOR j% = 0 TO N% - 1
+   690r = ABS(i% - j%) * DX
+   700t = r / ALPHA
+   710kernel = EXP(-t) * (COS(t) + SIN(t))
+   720sum = sum + q(j%)*kernel * DX
+   730NEXT j%
+   740w(i%) = sum * ALPHA^3 / (8 * D)
+   750PRINT TAB(0,1);w(i%)
+   760NEXT i%
+   770ENDPROC
+   790DEFPROCplot
+   800LOCAL i%, datum_y%
+   810datum_y% = 512
+   820scale_y = 3E-2
+   830dx = 1280 / (N% - 1)
+   840GCOL 0, 128
+   850CLG
+   860REM Datum line
+   870GCOL 0, 2
+   880MOVE 0, datum_y%
+   890DRAW 1280, datum_y%
+   900REM Load height
+   910GCOL 0, 3
+   920MOVE 0, datum_y% + (h(0)-w(0))*scale_y
+   930FOR i% = 1 TO N% - 1
+   940DRAW i%*dx, datum_y% + (h(i%)- w(i%))*scale_y
+   950NEXT
+   960REM Deflection
+   970GCOL 0, 1
+   980MOVE 0, datum_y% - w(0)*scale_y
+   990FOR i% = 1 TO N% - 1
+  1000DRAW i%*dx, datum_y% - w(i%)*scale_y
+  1010NEXT
+  1020ENDPROC

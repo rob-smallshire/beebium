@@ -12,6 +12,7 @@
 
 #include "beebium/service/VideoService.hpp"
 #include "beebium/FrameBuffer.hpp"
+#include "beebium/ScreenText.hpp"
 #include "beebium/TeletextText.hpp"
 
 #include <algorithm>
@@ -38,7 +39,115 @@ TeletextCharacterSet to_proto_charset(beebium::TeletextCellCharset charset) {
     }
 }
 
+screen::Search to_screen_search(ScreenTextSearch search) {
+    switch (search) {
+        case SCREEN_TEXT_SEARCH_ALIGNED:
+            return screen::Search::Aligned;
+        case SCREEN_TEXT_SEARCH_OFFSET:
+            return screen::Search::Offset;
+        case SCREEN_TEXT_SEARCH_BOTH:
+        default:
+            return screen::Search::Both;
+    }
+}
+
+screen::Layout to_screen_layout(ScreenTextLayout layout) {
+    return layout == SCREEN_TEXT_LAYOUT_FLOWED ? screen::Layout::Flowed
+                                               : screen::Layout::Rows;
+}
+
+void to_proto_region(const screen::PixelRect& rect, PixelRegion* out) {
+    out->set_x(rect.x);
+    out->set_y(rect.y);
+    out->set_width(rect.width);
+    out->set_height(rect.height);
+}
+
 } // namespace
+
+grpc::Status VideoServiceImpl::GetScreenText(
+    grpc::ServerContext* /*context*/,
+    const GetScreenTextRequest* request,
+    ScreenText* response) {
+
+    const auto& meta = frame_buffer_.metadata();
+
+    // One consistent frame, taken without stalling the emulation thread for
+    // longer than a single buffer copy.
+    const auto teletext = teletext_grid_.snapshot();
+
+    // The whole display when the caller named no region. A caller that has not
+    // dragged anything wants everything.
+    screen::PixelRect region{0, 0, meta.width, meta.height};
+    if (request->has_region()) {
+        const screen::PixelRect asked{request->region().x(), request->region().y(),
+                                      request->region().width(),
+                                      request->region().height()};
+        // Clipped rather than rejected: a drag that ran off the edge of the
+        // display selected as far as the edge, which is what the user meant.
+        region = region.intersected(asked);
+    }
+
+    const screen::Search search = to_screen_search(request->search());
+    const screen::Layout layout = to_screen_layout(request->layout());
+
+    std::vector<screen::BandReading> readings;
+    for (const screen::Band& band : screen::bands_of(meta)) {
+        // A band the region does not touch is not part of this request at all,
+        // so it neither contributes runs nor votes on whether the request
+        // could be read.
+        const screen::PixelRect band_rect{0, band.top, meta.width,
+                                          band.bottom - band.top};
+        if (band_rect.intersected(region).empty()) {
+            continue;
+        }
+        readings.push_back(screen::read_band(band, region, search, teletext));
+    }
+
+    const screen::Reading reading = screen::merge(std::move(readings), layout);
+
+    response->set_supported(reading.supported);
+    response->set_text(reading.text);
+    response->set_unreadable_cells(reading.unreadable_cells);
+    response->set_ambiguous_cells(reading.ambiguous_cells);
+    response->set_frame_number(meta.frame_number);
+
+    for (const screen::TextRun& run : reading.runs) {
+        auto* out = response->add_runs();
+        out->set_text(run.text);
+        to_proto_region(run.bounds, out->mutable_bounds());
+        out->set_cell_width(run.cell_width);
+        out->set_cell_height(run.cell_height);
+    }
+
+    return grpc::Status::OK;
+}
+
+grpc::Status VideoServiceImpl::GetScreenGeometry(
+    grpc::ServerContext* /*context*/,
+    const GetScreenGeometryRequest* /*request*/,
+    ScreenGeometry* response) {
+
+    const auto& meta = frame_buffer_.metadata();
+
+    // Every band reports its grid, including one no strategy can read text
+    // from. Where the cells are and what is in them are separate questions,
+    // and snapping a drag needs only the first.
+    for (const screen::Band& band : screen::bands_of(meta)) {
+        auto* out = response->add_bands();
+        out->set_top(band.top);
+        out->set_bottom(band.bottom);
+        out->set_cell_width(band.cell_width);
+        out->set_cell_height(band.cell_height);
+        out->set_column_pitch(band.column_pitch);
+        out->set_row_pitch(band.row_pitch);
+        out->set_origin_x(band.origin_x);
+        out->set_origin_y(band.origin_y);
+    }
+
+    response->set_frame_number(meta.frame_number);
+    return grpc::Status::OK;
+}
 
 grpc::Status VideoServiceImpl::GetTeletextScreen(
     grpc::ServerContext* /*context*/,
