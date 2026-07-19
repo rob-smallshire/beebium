@@ -588,7 +588,7 @@ namespace {
 Options offset_options()
 {
     Options options;
-    options.search = Search::IncludeOffset;
+    options.search = Search::OffsetOnly;
     return options;
 }
 

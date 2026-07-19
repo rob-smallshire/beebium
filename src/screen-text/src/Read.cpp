@@ -220,7 +220,7 @@ void flush_run(std::vector<Cell>& cells, std::vector<Run>& runs)
 // VDU 5 draws text at the graphics cursor, at any pixel position, over
 // whatever is already there. The grid walk above misses all of it. This finds
 // it, at the cost of sixty-four sub-cell offsets times the colours in each
-// window; it is a separate pass, selected by Search::IncludeOffset, and the
+// window; it is a separate pass, selected by Search::OffsetOnly, and the
 // aligned path never runs any of it.
 
 // One glyph found at a pixel position, in one colour.
@@ -747,7 +747,7 @@ Result read(const Image& image,
     // so there is nothing to deduplicate, and Cell::offset says which pass a
     // run came from: false throughout an aligned result, true throughout an
     // off-grid one.
-    if (options.search == Search::IncludeOffset) {
+    if (options.search == Search::OffsetOnly) {
         read_offset(image, bands, index, options, result);
     } else {
         read_aligned(image, bands, index, options, result);

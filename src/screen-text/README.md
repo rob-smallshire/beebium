@@ -213,7 +213,7 @@ Codepoints may be given as `U+00A3`, `0xA3`, `&A3` or decimal.
 
 ## Off-grid text
 
-`Search::IncludeOffset` finds `VDU 5` text, written at the graphics cursor at
+`Search::OffsetOnly` finds `VDU 5` text, written at the graphics cursor at
 arbitrary pixel positions rather than on the character grid. It is a separate
 search, selected per call, and returns only off-grid runs, every cell flagged
 `Cell::offset`; the aligned pass reads grid text and the two partition the

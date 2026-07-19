@@ -33,7 +33,7 @@ keeps it extractable as a separate project, which is the point of building it
 separately from the emulator.
 
 There are two searches, chosen per call and never combined. `AlignedOnly`
-walks the character grid; `IncludeOffset` searches sub-cell offsets for text
+walks the character grid; `OffsetOnly` searches sub-cell offsets for text
 that is not on it, the `VDU 5` output games use for scores and titles. They
 partition the screen -- one reads grid text, the other reads the rest -- so a
 caller wanting both runs `read` twice and concatenates, with nothing to
@@ -281,16 +281,12 @@ they showed.
 and what a listing or an error message needs. Every cell it returns has
 `offset` false.
 
-`Search::IncludeOffset` is the sub-cell offset search, for `VDU 5` text placed
+`Search::OffsetOnly` is the sub-cell offset search, for `VDU 5` text placed
 at arbitrary pixel positions. It returns only off-grid runs -- grid text is the
 aligned pass's to report -- and every cell it returns has `offset` true. So the
 two searches partition a screen between them: a caller wanting everything runs
 `read` once each way and concatenates the results, with nothing to deduplicate,
 and `Cell::offset` telling the two kinds of run apart.
-
-The name `IncludeOffset` is kept from the first increment, where the value
-existed but did nothing. Under the settled contract it selects the off-grid
-search exclusively rather than adding to the aligned one.
 
 A caller drives this from the CLI with `--search aligned` (the default) or
 `--search offset`.

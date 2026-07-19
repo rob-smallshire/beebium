@@ -48,7 +48,6 @@ const char* const USAGE =
     "                        an 8-scanline glyph on a 10-scanline row, the\n"
     "                        gap blanked to black whatever the palette says\n"
     "  --origin X,Y          where the character grid starts (default: 0,0)\n"
-
     "  --search MODE         aligned (default), the character grid; or offset,\n"
     "                        for VDU 5 text placed off it. One or the other:\n"
     "                        offset reads only what is not on the grid\n"
@@ -257,7 +256,7 @@ int parse_arguments(const std::vector<std::string>& argv,
             if (value == "aligned") {
                 arguments.search = Search::AlignedOnly;
             } else if (value == "offset") {
-                arguments.search = Search::IncludeOffset;
+                arguments.search = Search::OffsetOnly;
             } else {
                 return fail("unknown search '" + value
                             + "'; use aligned or offset");

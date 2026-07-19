@@ -120,7 +120,7 @@ int main()
         band.cell_height = 8;
 
         screentext::Options offset_options;
-        offset_options.search = screentext::Search::IncludeOffset;
+        offset_options.search = screentext::Search::OffsetOnly;
 
         std::size_t total_cells = 0;
         const double aligned = best_ms(20, [&] {
@@ -156,7 +156,7 @@ int main()
         band.cell_width = 8;
         band.cell_height = 8;
         screentext::Options offset_options;
-        offset_options.search = screentext::Search::IncludeOffset;
+        offset_options.search = screentext::Search::OffsetOnly;
         const double offset = best_ms(5, [&] {
             screentext::read(noise, {band}, sets, offset_options);
         });
@@ -165,7 +165,7 @@ int main()
     }
 
     std::printf("\naligned: shipped screentext::read, Search::AlignedOnly.\n");
-    std::printf("offset:  shipped screentext::read, Search::IncludeOffset.\n");
+    std::printf("offset:  shipped screentext::read, Search::OffsetOnly.\n");
     std::printf("Both worst case: every cell filled with matchable text.\n");
     return 0;
 }

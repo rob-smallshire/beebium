@@ -23,23 +23,21 @@
 
 namespace screentext {
 
+// Which search a call runs. The two are exclusive and partition the screen:
+// aligned reads what sits on the character grid, offset reads what does not,
+// so a caller wanting both runs read() once each way and concatenates the
+// results. `Cell::offset` says which search a run came from.
 enum class Search {
     // The character grid only: fast, exact, well structured, and what reading
     // a listing or an error message needs. Every cell comes back with
     // `offset` false.
     AlignedOnly,
 
-    // The sub-cell offset search only, for text that is not on the grid --
-    // VDU 5 output at arbitrary pixel positions. This reads what the aligned
-    // pass cannot, and only that: grid text is left to the aligned pass, so
-    // the two partition the screen between them and a caller wanting both runs
-    // read() twice and concatenates the results. Every cell comes back with
-    // `offset` true. Slower, by the sixty-four offsets it searches.
-    //
-    // The name is kept from the first increment, where the value existed but
-    // did nothing; under the settled contract it selects the off-grid search
-    // exclusively rather than adding to the aligned one.
-    IncludeOffset,
+    // Sub-cell offsets only, for text that is not on the grid -- VDU 5 output
+    // at arbitrary pixel positions. This reads what the aligned pass cannot,
+    // and only that: grid text is left to the aligned pass. Every cell comes
+    // back with `offset` true. Slower, by the sixty-four offsets it searches.
+    OffsetOnly,
 };
 
 struct Options {

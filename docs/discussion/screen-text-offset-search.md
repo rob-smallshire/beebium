@@ -1,13 +1,12 @@
 # Reading Text That Is Not On The Grid
 
-The second increment of the screen-text library, specified in
-`screen-text-library-spec.md` as `Search::IncludeOffset` and deferred there to
-a sentence. This is what that sentence turns out to mean.
+The second increment of the screen-text library, deferred to a sentence in
+`screen-text-library-spec.md`. This is what that sentence turns out to mean.
 
-This is now built: `Search::IncludeOffset` is honoured and `Cell::offset` is
-set. The document is kept as the design record -- it is what the code
-productises -- and reads in the future tense it was written in; where the built
-result differs from what it anticipated, a note says so.
+This is now built: the off-grid search, `Search::OffsetOnly`, is honoured and
+`Cell::offset` is set. The document is kept as the design record -- it is what
+the code productises -- and reads in the future tense it was written in; where
+the built result differs from what it anticipated, a note says so.
 
 ## What it is for
 
