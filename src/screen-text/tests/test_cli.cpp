@@ -673,12 +673,12 @@ TEST_CASE("Nothing is invented from a real game's graphics")
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
         "0123456789 .,:;!?'\"()-/+=<>#*@_$%&[]{}|\\^~`";
 
-    for (const std::string& screen :
+    for (const char* const screen :
          {"waffle-title", "waffle-instructions-2", "waffle-instructions-4",
           "waffle-board"}) {
         INFO(screen);
         const Output output
-            = run("read \"" + fixture_filepath("screens/" + screen + ".png")
+            = run("read \"" + fixture_filepath(std::string("screens/") + screen + ".png")
                   + "\"");
         for (const char character : output.stdout_text) {
             if (character == '\n') {
