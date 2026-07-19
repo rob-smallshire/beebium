@@ -16,12 +16,14 @@ being read back.
 | `waffle-board.png` | The game: mostly graphics, three lines of status text |
 | `loopy-loop.png` | Loopy Loop, by A.S.Shakoor: text over a dense dithered background, and text off the character grid |
 
-MODE 1 throughout -- 320x256 logical pixels, four colours, one display region,
+# Waffle
+
+MODE 1 -- 320x256 logical pixels, four colours, one display region,
 progressive. The text is the standard Acorn font on the character grid at
 origin 0,0, which was established by sweeping all 64 grid origins and finding
 0,0 matched the most cells.
 
-## What they showed
+## What it showed
 
 **Every word read is a real word.** Across all four screens the extracted text
 contains no invented characters at all -- the game's own typo, "horzontal",
@@ -91,10 +93,13 @@ unmatched, so the line reads `to re ch next` rather than a plausible wrong
 word. Exactly the intended behaviour, and a reminder that a screen's font is
 not always the ROM's even when it looks like it.
 
-## Recapturing
+# Recapturing
 
-The disc is `discs/games/Disc165-Waffle.ssd`, and `discs/games/` is not in the
-repository, so this cannot be done from a clean checkout.
+The discs are `discs/games/Disc165-Waffle.ssd` and
+`discs/games/Disc068-LoopyLoop.ssd`, and `discs/games/` is not in the
+repository, so this cannot be done from a clean checkout. Only Waffle has a
+capture script, its navigation being worth recording; Loopy Loop needs no
+navigation at all, only fifteen seconds to finish drawing.
 
 ```
 cd clients/beebium-python-client
