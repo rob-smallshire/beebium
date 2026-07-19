@@ -401,12 +401,14 @@ of a split screen is rare enough not to pay for.
 ### Text at the graphics cursor
 
 `VDU 5` text is not cell-aligned, so the cell walk misses it. Finding it means
-searching for glyph-shaped pixel patterns at arbitrary offsets, which is a
-different and much more expensive problem.
+searching for glyph-shaped pixel patterns at arbitrary offsets: ZEsarUX brute
+-forces all sixty-four sub-cell positions, which works and costs what it
+sounds like it costs.
 
-Out of scope initially. The interface accommodates it -- such text would appear
-as runs whose bounds are not cell-aligned, with `cell_width` and `cell_height`
-zero -- so adding it later does not change the contract.
+**In scope from the outset, but opt-in.** It is reached through free-form
+selection (see below) rather than being attempted on every copy, so the cost
+falls only on callers who ask for it. Such text appears as runs whose bounds
+are not cell-aligned, with the cell geometry fields zero.
 
 ### Nothing readable
 
@@ -433,6 +435,70 @@ invent it. Whether the extra fields ride on `FrameDisplayRegion` or a parallel
 structure is open: the video path has no use for them, and `Frame` is streamed
 fifty times a second to every client, so a parallel record read only on demand
 is probably better.
+
+## Selection
+
+Selection is not only a visual affordance: **the mode the user selects in
+determines which search the server runs.** That coupling is what keeps the
+expensive search off the common path.
+
+### Snapped (the default)
+
+The dragged rectangle snaps to character cells, using the cell geometry the
+CRTC implies for the band under the pointer. Only cell-aligned glyphs are
+searched, which is the fast, exact, well-structured case, and the one that
+serves reading a BASIC listing or an error message.
+
+Within snapped selection there are two shapes, as in a text editor:
+
+- **Rows** -- the selection follows reading order. The first row runs from the
+  start point to the right edge, whole rows follow, and the last runs from the
+  left edge to the end point. What ordinary text selection does.
+- **Rectangle** -- the same column range is taken from every row, as in a
+  block or column selection. What a table of figures wants.
+
+These decide *which cells are selected*, and are distinct from how the selected
+cells are then joined into text (see layout, above). A rectangle selection
+naturally joins as separate lines; a row selection naturally flows. The two
+concepts are kept apart because they can be combined independently, even if the
+UI only ever offers sensible pairings.
+
+### Free-form
+
+The rectangle is not snapped, and the search additionally looks for text that
+is not on the character grid -- `VDU 5` output, or anything in an offline image
+that was never grid-aligned.
+
+This is slower, by up to the sixty-four sub-cell alignments a thorough search
+implies, and yields less structure: without a grid there are no rows and no
+columns, only runs at positions. Rectangle-versus-rows does not apply.
+
+Free-form is therefore **opt-in**, not because unaligned support is an
+afterthought -- it is specified from the outset and the library implements it
+early -- but because a user dragging over a BASIC listing should not pay for a
+search they do not need.
+
+### What this forces: geometry before the drag ends
+
+Snapping has to happen *during* the drag, so the client needs the cell geometry
+before it has anything to send. Returning it with the extracted text, as the
+response does, is too late.
+
+So a client needs to ask for the current grid geometry -- cell size, grid
+origin, and the bands they apply to -- when a drag begins. One call on
+mouse-down is ample; this does not want to ride on every frame.
+
+Note what this does and does not leak. The client learns that cells are a
+certain size at a certain origin, which is precisely what it needs to draw a
+snapping overlay. It still learns nothing about *which mode* produced that
+geometry, and needs no per-mode knowledge to use it.
+
+### Deferred
+
+Which modifier keys select rectangle versus rows, and how free-form is
+reached -- a modifier, a menu item, a preference -- is UI design and is not
+settled here. The requirement is that all three are reachable and that snapped
+rows is the default.
 
 ## The client's part
 
