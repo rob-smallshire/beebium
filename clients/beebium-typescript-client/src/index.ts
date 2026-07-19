@@ -13,7 +13,14 @@ export { Debugger, type ExecutionState, type ExecutionStateEvent, type Breakpoin
 export { CPU, type Registers, carry, zero, interruptDisable, decimal, breakFlag, overflow, negative, formatRegisters } from "./cpu.js";
 export { Memory, AddressSpace, BusAccessor, PeekAccessor, Region, type MemoryRegionInfo } from "./memory.js";
 export { Keyboard, type KeyboardState, type LockState } from "./keyboard.js";
-export { Video, type VideoConfig, type Frame } from "./video.js";
+export {
+    Video,
+    type VideoConfig,
+    type Frame,
+    type TeletextScreen,
+    TELETEXT_ROWS,
+    TELETEXT_COLUMNS,
+} from "./video.js";
 export { System, type Provenance, type MachineIdentity, type ServerStatusEvent, type ShutdownResponse, type ShutdownConditionStatus, type AdvertisementState, type PacingStats, ServerStatus, ShutdownMode } from "./system.js";
 export { Disc, Drive, type DiscMetadata, type DriveStatus, type DiscControllerStatus, type DiscEvent, type DiscControllerInfo, DriveState, DiscEventType } from "./disc.js";
 export { Econet, type EconetStatus, type AdlcStatus, type HandshakeStatus } from "./econet.js";

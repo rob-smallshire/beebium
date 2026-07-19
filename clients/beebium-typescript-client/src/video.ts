@@ -9,7 +9,10 @@ import type {
     VideoServiceClient,
     Frame as ProtoFrame,
     VideoConfig as ProtoVideoConfig,
+    TeletextScreen as ProtoTeletextScreen,
+    TeletextScreenCell,
 } from "./generated/video.js";
+import { TeletextTextLayout } from "./generated/video.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable, BackgroundStreamHandle } from "./stream-utils.js";
 import { TimeoutError } from "./exceptions.js";
@@ -18,6 +21,40 @@ export interface VideoConfig {
     width: number;
     height: number;
     framerateHz: number;
+}
+
+/** A MODE 7 display is always this size. */
+export const TELETEXT_ROWS = 25;
+export const TELETEXT_COLUMNS = 40;
+
+/** A MODE 7 screen, or a region of one, read as characters. */
+export interface TeletextScreen {
+    /**
+     * False when the display is not MODE 7, in which case the cells describe
+     * whatever was last shown in MODE 7 rather than anything current.
+     */
+    active: boolean;
+
+    rows: number;
+    columns: number;
+
+    /**
+     * The region as text, converted server-side so every client agrees on what
+     * graphics, control codes, concealed cells and double-height rows copy as.
+     * Lines are joined with LF.
+     */
+    text: string;
+
+    frameNumber: number;
+
+    /**
+     * Row-major, `rows * columns` entries, each with the attributes in effect
+     * at that cell.
+     */
+    cells: TeletextScreenCell[];
+
+    /** The cell at a position within the returned region. */
+    cell(row: number, column: number): TeletextScreenCell;
 }
 
 export interface Frame {
@@ -33,6 +70,29 @@ function toVideoConfig(proto: ProtoVideoConfig): VideoConfig {
         width: proto.width,
         height: proto.height,
         framerateHz: proto.framerateHz,
+    };
+}
+
+function toTeletextScreen(proto: ProtoTeletextScreen): TeletextScreen {
+    const cells = proto.cells;
+    const columns = proto.columns;
+    return {
+        active: proto.active,
+        rows: proto.rows,
+        columns,
+        text: proto.text,
+        frameNumber: Number(proto.frameNumber),
+        cells,
+        cell(row: number, column: number): TeletextScreenCell {
+            const cell = cells[row * columns + column];
+            if (cell === undefined) {
+                throw new RangeError(
+                    `No cell at row ${row}, column ${column} in a ` +
+                    `${proto.rows}x${columns} region`,
+                );
+            }
+            return cell;
+        },
     };
 }
 
@@ -67,6 +127,62 @@ export class Video {
             {},
         );
         return toVideoConfig(response);
+    }
+
+    /**
+     * Read the MODE 7 screen as characters rather than pixels.
+     *
+     * Prefer this to reading screen memory. The cells are captured after the
+     * SAA5050 has resolved the control codes, so there is no hardware-scroll
+     * offset to undo and no attribute state to re-derive -- the two failings
+     * of the screen-memory scraper in `screen.ts`, which returns a rotated
+     * grid once the display has scrolled.
+     *
+     * Only MODE 7 has characters to read. In a bitmap mode the returned screen
+     * has `active` false and describes whatever was last shown in MODE 7, so
+     * callers must check it.
+     *
+     * @param options.row First row of the region to read.
+     * @param options.column First column of the region to read.
+     * @param options.rows Number of rows; the rest of the screen when omitted.
+     * @param options.columns Number of columns; the rest when omitted.
+     * @param options.flowed Join a row that filled the region's width to the
+     *     next without a line break, rejoining a line that wrapped. By default
+     *     each row is its own line, preserving the shape of the selection.
+     */
+    async teletextScreen(options?: {
+        row?: number;
+        column?: number;
+        rows?: number;
+        columns?: number;
+        flowed?: boolean;
+    }): Promise<TeletextScreen> {
+        const wantsRegion =
+            options?.row !== undefined
+            || options?.column !== undefined
+            || options?.rows !== undefined
+            || options?.columns !== undefined;
+
+        const request: Record<string, unknown> = {
+            layout: options?.flowed
+                ? TeletextTextLayout.TELETEXT_LAYOUT_FLOWED
+                : TeletextTextLayout.TELETEXT_LAYOUT_ROWS,
+        };
+        if (wantsRegion) {
+            request["region"] = {
+                row: options?.row ?? 0,
+                column: options?.column ?? 0,
+                rows: options?.rows ?? TELETEXT_ROWS,
+                columns: options?.columns ?? TELETEXT_COLUMNS,
+            };
+        }
+
+        const response = await promisify<Record<string, unknown>, ProtoTeletextScreen>(
+            this.stub as unknown as Record<string, Function>,
+            "getTeletextScreen",
+            request,
+        );
+        return toTeletextScreen(response);
     }
 
     /**
