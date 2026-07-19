@@ -219,9 +219,16 @@ implemented. Reading is aligned either way, and no cell is ever reported as
 having matched at an offset.
 
 That search is what finds `VDU 5` text, which is written at the graphics cursor
-rather than on the character grid. ZEsarUX brute-forces all 64 sub-cell
-positions, which works and costs roughly what it sounds like, which is why it is
-opt-in rather than default.
+rather than on the character grid. It is designed but not built, and the design
+is worth reading before building it: `docs/discussion/screen-text-offset-search.md`.
+
+The short of it is that the position is the easy part. `VDU 5` paints no
+background, so the aligned rule -- two colours in a cell, tried both ways --
+rejects most of it, and the question has to become "do the pixels of colour c
+in this window form a glyph, ignoring everything else". A free search then
+finds glyph-shaped patterns that are not glyphs, which is handled by ignoring
+glyphs that imagery could have drawn (those whose every row and column is one
+unbroken run) unless they sit in registration with ones it could not.
 
 ## Testing
 
