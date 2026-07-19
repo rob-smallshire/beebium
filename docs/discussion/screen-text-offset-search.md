@@ -187,9 +187,27 @@ one. None has misfired yet, on synthetic or real screens. If one does, the fix
 is narrow: require registration for distinctive glyphs below some ink, rather
 than changing the definition.
 
-**Genuine `VDU 5` text has still not been seen.** Waffle's text is entirely
-cell-aligned, which makes it an excellent negative set and an excellent source
-of ground truth -- the aligned reader extracts all of it, so the offset search
-can be checked against a known answer -- but it does not exercise the case this
-document exists for. A game that draws text at the graphics cursor is still
-wanted.
+## Validated against text that is genuinely off the grid
+
+Fruits, a fruit machine, places its labels at arbitrary pixel positions in the
+ROM font: `GAMBLE` at y=173, `BANK` at 186, `DOUBLE` at 203, `QUITS` at 216 --
+spacings of 13, 17 and 13 -- and `MELON METER` at y=213 and 223. `COLLECT`
+above them happens to land on the grid at 160, which is what makes the screen
+such a clean test: the same panel, some of it aligned and some not.
+
+The aligned reader finds the fifteen runs on the grid and none of the six off
+it. The prototype described here finds all twenty-one, off-grid ones included,
+and **nothing else**. No false positive on a screen of 1,106 raw candidates.
+
+That is the case this document exists for, and it works. The screen is in the
+corpus as `fruits-machine.png`, with the aligned reader's failure to find those
+six labels written down as a test. When this is built, those expectations
+invert: they are its acceptance target.
+
+## What is still wanted
+
+A screen mixing off-grid text with a *hostile* background. Fruits draws on
+black, so the per-colour matching had an easy time of it; Loopy Loop has the
+dense background but draws much of its text in a thickened variant of the ROM
+font, which is not the ROM font and rightly does not match. Both halves of the
+hard case have been seen, but not yet together.

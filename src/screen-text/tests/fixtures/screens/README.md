@@ -15,6 +15,8 @@ being read back.
 | `waffle-instructions-4.png` | The same, with letters scattered in a diagram |
 | `waffle-board.png` | The game: mostly graphics, three lines of status text |
 | `loopy-loop.png` | Loopy Loop, by A.S.Shakoor: text over a dense dithered background, and text off the character grid |
+| `fruits-wins.png` | Fruits: a win table, text among graphics |
+| `fruits-machine.png` | Fruits: the game, with labels at arbitrary pixel positions in the ROM font |
 
 # Waffle
 
@@ -93,13 +95,35 @@ unmatched, so the line reads `to re ch next` rather than a plausible wrong
 word. Exactly the intended behaviour, and a reminder that a screen's font is
 not always the ROM's even when it looks like it.
 
+# Fruits
+
+MODE 1 -- 320x256. The screen the offset search was waiting for: text in the
+ROM font at arbitrary pixel positions, on black.
+
+`fruits-machine.png` places `GAMBLE` at y=173, `BANK` at 186, `DOUBLE` at 203
+and `QUITS` at 216 -- spacings of 13, 17 and 13, none of them a multiple of
+eight -- with `MELON METER` at 213 and 223. `COLLECT` above them lands on the
+grid at 160, so one panel carries both cases.
+
+The aligned reader finds the fifteen runs on the grid and none of the six off
+it, which is correct and is what the second increment is for. The prototype
+finds all twenty-one and nothing else: no false positive among 1,106 raw
+candidates.
+
+The tests here assert the current behaviour, including that the six off-grid
+labels are *absent*. When offset search lands those assertions invert, which
+makes them its acceptance target.
+
+The title screen is MODE 7 and interlaced, 640x500 -- teletext, which this
+library deliberately never sees, so it is not kept.
+
 # Recapturing
 
-The discs are `discs/games/Disc165-Waffle.ssd` and
-`discs/games/Disc068-LoopyLoop.ssd`, and `discs/games/` is not in the
-repository, so this cannot be done from a clean checkout. Only Waffle has a
-capture script, its navigation being worth recording; Loopy Loop needs no
-navigation at all, only fifteen seconds to finish drawing.
+The discs are in `discs/games/`, which is not in the repository, so this cannot
+be done from a clean checkout. Only Waffle has a capture script, its navigation
+being worth recording. Loopy Loop needs no navigation, only fifteen seconds to
+finish drawing. Fruits wants a key at its MODE 7 title, another at the win
+table, and a third to reach the machine, each screen taking a few seconds.
 
 ```
 cd clients/beebium-python-client

@@ -719,3 +719,52 @@ TEST_CASE("A redefined character is declined rather than guessed at")
     CHECK(output.stdout_text.find("to re ch next") != std::string::npos);
     CHECK(output.stdout_text.find("to reach next") == std::string::npos);
 }
+
+TEST_CASE("Text placed off the character grid is not read by the aligned path")
+{
+    // Fruits, a fruit machine. Its labels are placed at arbitrary pixel
+    // positions -- GAMBLE at y=173, BANK at 186, DOUBLE at 203, QUITS at 216,
+    // spacings of 13, 17 and 13 -- while COLLECT above them happens to land on
+    // the grid at y=160.
+    //
+    // The aligned reader finds what is on the grid and nothing else, which is
+    // correct and is the whole reason for the second increment. When sub-cell
+    // offset search lands, the four expectations below invert; they are the
+    // acceptance target for it. See
+    // docs/discussion/screen-text-offset-search.md.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/fruits-machine.png") + "\"");
+
+    CHECK(output.status == 0);
+
+    // On the grid, and found.
+    CHECK(output.stdout_text.find("COLLECT") != std::string::npos);
+    CHECK(output.stdout_text.find("PRESS 'S' TO START") != std::string::npos);
+    CHECK(output.stdout_text.find("RE-SPIN") != std::string::npos);
+
+    // Off the grid, and not found. Not guessed at either.
+    CHECK(output.stdout_text.find("GAMBLE") == std::string::npos);
+    CHECK(output.stdout_text.find("DOUBLE") == std::string::npos);
+    CHECK(output.stdout_text.find("QUITS") == std::string::npos);
+    CHECK(output.stdout_text.find("METER") == std::string::npos);
+}
+
+TEST_CASE("A pound sign on a real screen survives the round trip")
+{
+    // Character 96 of the Acorn set, read off a game that shows money.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/fruits-machine.png") + "\"");
+
+    CHECK(output.stdout_text.find("CASH  \xC2\xA3 002.50") != std::string::npos);
+    CHECK(output.stdout_text.find("STAKE \xC2\xA3 000.00") != std::string::npos);
+}
+
+TEST_CASE("A win table of text among graphics is read")
+{
+    const Output output
+        = run("read \"" + fixture_filepath("screens/fruits-wins.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("FRUITS! - WINS") != std::string::npos);
+    CHECK(output.stdout_text.find("900 P") != std::string::npos);
+}
