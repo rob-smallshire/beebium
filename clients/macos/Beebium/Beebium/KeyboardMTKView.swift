@@ -32,6 +32,9 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
     /// Types pasted text on the emulated keyboard
     weak var pasteCoordinator: PasteCoordinator?
 
+    /// Reads the MODE 7 screen for copying
+    weak var videoClient: VideoClient?
+
     /// Track previous modifier flags for change detection
     private var lastModifiers: NSEvent.ModifierFlags = []
 
@@ -236,12 +239,55 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         }
     }
 
+    /// Copy the MODE 7 screen to the clipboard as text.
+    ///
+    /// Whole screen for now; a dragged selection is the natural next step, and
+    /// the server call already takes a region for it.
+    ///
+    /// Only MODE 7 has characters to copy. In a bitmap mode the screen is
+    /// pixels, and recovering text from those means matching glyphs against
+    /// the MOS font -- a separate problem this does not attempt.
+    @objc func copy(_ sender: Any?) {
+        guard let videoClient = videoClient else {
+            NSSound.beep()
+            return
+        }
+
+        Task { @MainActor in
+            guard let text = await videoClient.teletextScreenText(), !text.isEmpty else {
+                // Not MODE 7, or nothing on screen. Say so rather than
+                // silently putting nothing on the clipboard, which would look
+                // like the command had worked.
+                presentCopyUnavailable()
+                return
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+    }
+
+    @MainActor
+    private func presentCopyUnavailable() {
+        guard let window = window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Nothing to copy"
+        alert.informativeText =
+            "The screen can only be copied as text in MODE 7, where the display "
+            + "is made of characters. In the other screen modes it is pixels."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window, completionHandler: nil)
+    }
+
     /// Enable Paste only when there is text to paste and somewhere to put it.
     ///
     /// Without this the Edit menu's Paste item is enabled whenever this view is
     /// first responder, which is always, and choosing it when disconnected
     /// would do nothing with no explanation.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(copy(_:)) {
+            return videoClient != nil
+        }
         if menuItem.action == #selector(paste(_:)) {
             let hasText = NSPasteboard.general.canReadObject(
                 forClasses: [NSString.self], options: nil)

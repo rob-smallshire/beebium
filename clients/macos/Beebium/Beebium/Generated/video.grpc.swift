@@ -28,6 +28,11 @@ internal protocol Beebium_VideoServiceClientProtocol: GRPCClient {
     _ request: Beebium_GetConfigRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetConfigRequest, Beebium_VideoConfig>
+
+  func getTeletextScreen(
+    _ request: Beebium_GetTeletextScreenRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>
 }
 
 extension Beebium_VideoServiceClientProtocol {
@@ -71,6 +76,31 @@ extension Beebium_VideoServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetConfigInterceptors() ?? []
+    )
+  }
+
+  /// Read the MODE 7 screen as characters rather than pixels.
+  ///
+  /// A snapshot rather than a stream: a caller wants one screen when it asks
+  /// -- a copy command, or a script reading the display -- and pushing 8 KB
+  /// of cell data per frame to every client on the chance that someone might
+  /// copy would be absurd. A future vector renderer needs every frame aligned
+  /// with the pixels it replaces, and that is a separate transport from the
+  /// same capture; see docs/discussion/teletext-cell-capture.md.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetTeletextScreen.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getTeletextScreen(
+    _ request: Beebium_GetTeletextScreenRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
     )
   }
 }
@@ -147,6 +177,11 @@ internal protocol Beebium_VideoServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetConfigRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetConfigRequest, Beebium_VideoConfig>
+
+  func makeGetTeletextScreenCall(
+    _ request: Beebium_GetTeletextScreenRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -182,6 +217,18 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetConfigInterceptors() ?? []
     )
   }
+
+  internal func makeGetTeletextScreenCall(
+    _ request: Beebium_GetTeletextScreenRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -207,6 +254,18 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetConfigInterceptors() ?? []
+    )
+  }
+
+  internal func getTeletextScreen(
+    _ request: Beebium_GetTeletextScreenRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_TeletextScreen {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
     )
   }
 }
@@ -235,6 +294,9 @@ internal protocol Beebium_VideoServiceClientInterceptorFactoryProtocol: Sendable
 
   /// - Returns: Interceptors to use when invoking 'getConfig'.
   func makeGetConfigInterceptors() -> [ClientInterceptor<Beebium_GetConfigRequest, Beebium_VideoConfig>]
+
+  /// - Returns: Interceptors to use when invoking 'getTeletextScreen'.
+  func makeGetTeletextScreenInterceptors() -> [ClientInterceptor<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>]
 }
 
 internal enum Beebium_VideoServiceClientMetadata {
@@ -244,6 +306,7 @@ internal enum Beebium_VideoServiceClientMetadata {
     methods: [
       Beebium_VideoServiceClientMetadata.Methods.subscribeFrames,
       Beebium_VideoServiceClientMetadata.Methods.getConfig,
+      Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen,
     ]
   )
 
@@ -257,6 +320,12 @@ internal enum Beebium_VideoServiceClientMetadata {
     internal static let getConfig = GRPCMethodDescriptor(
       name: "GetConfig",
       path: "/beebium.VideoService/GetConfig",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getTeletextScreen = GRPCMethodDescriptor(
+      name: "GetTeletextScreen",
+      path: "/beebium.VideoService/GetTeletextScreen",
       type: GRPCCallType.unary
     )
   }
@@ -273,6 +342,16 @@ internal protocol Beebium_VideoServiceProvider: CallHandlerProvider {
 
   /// Get current video configuration
   func getConfig(request: Beebium_GetConfigRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_VideoConfig>
+
+  /// Read the MODE 7 screen as characters rather than pixels.
+  ///
+  /// A snapshot rather than a stream: a caller wants one screen when it asks
+  /// -- a copy command, or a script reading the display -- and pushing 8 KB
+  /// of cell data per frame to every client on the chance that someone might
+  /// copy would be absurd. A future vector renderer needs every frame aligned
+  /// with the pixels it replaces, and that is a separate transport from the
+  /// same capture; see docs/discussion/teletext-cell-capture.md.
+  func getTeletextScreen(request: Beebium_GetTeletextScreenRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TeletextScreen>
 }
 
 extension Beebium_VideoServiceProvider {
@@ -305,6 +384,15 @@ extension Beebium_VideoServiceProvider {
         userFunction: self.getConfig(request:context:)
       )
 
+    case "GetTeletextScreen":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetTeletextScreenRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TeletextScreen>(),
+        interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? [],
+        userFunction: self.getTeletextScreen(request:context:)
+      )
+
     default:
       return nil
     }
@@ -331,6 +419,19 @@ internal protocol Beebium_VideoServiceAsyncProvider: CallHandlerProvider, Sendab
     request: Beebium_GetConfigRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_VideoConfig
+
+  /// Read the MODE 7 screen as characters rather than pixels.
+  ///
+  /// A snapshot rather than a stream: a caller wants one screen when it asks
+  /// -- a copy command, or a script reading the display -- and pushing 8 KB
+  /// of cell data per frame to every client on the chance that someone might
+  /// copy would be absurd. A future vector renderer needs every frame aligned
+  /// with the pixels it replaces, and that is a separate transport from the
+  /// same capture; see docs/discussion/teletext-cell-capture.md.
+  func getTeletextScreen(
+    request: Beebium_GetTeletextScreenRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_TeletextScreen
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -370,6 +471,15 @@ extension Beebium_VideoServiceAsyncProvider {
         wrapping: { try await self.getConfig(request: $0, context: $1) }
       )
 
+    case "GetTeletextScreen":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetTeletextScreenRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TeletextScreen>(),
+        interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? [],
+        wrapping: { try await self.getTeletextScreen(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -385,6 +495,10 @@ internal protocol Beebium_VideoServiceServerInterceptorFactoryProtocol: Sendable
   /// - Returns: Interceptors to use when handling 'getConfig'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetConfigInterceptors() -> [ServerInterceptor<Beebium_GetConfigRequest, Beebium_VideoConfig>]
+
+  /// - Returns: Interceptors to use when handling 'getTeletextScreen'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetTeletextScreenInterceptors() -> [ServerInterceptor<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>]
 }
 
 internal enum Beebium_VideoServiceServerMetadata {
@@ -394,6 +508,7 @@ internal enum Beebium_VideoServiceServerMetadata {
     methods: [
       Beebium_VideoServiceServerMetadata.Methods.subscribeFrames,
       Beebium_VideoServiceServerMetadata.Methods.getConfig,
+      Beebium_VideoServiceServerMetadata.Methods.getTeletextScreen,
     ]
   )
 
@@ -407,6 +522,12 @@ internal enum Beebium_VideoServiceServerMetadata {
     internal static let getConfig = GRPCMethodDescriptor(
       name: "GetConfig",
       path: "/beebium.VideoService/GetConfig",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getTeletextScreen = GRPCMethodDescriptor(
+      name: "GetTeletextScreen",
+      path: "/beebium.VideoService/GetTeletextScreen",
       type: GRPCCallType.unary
     )
   }

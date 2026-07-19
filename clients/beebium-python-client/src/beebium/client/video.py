@@ -24,6 +24,38 @@ from beebium.client._proto import video_pb2, video_pb2_grpc
 from beebium.client.exceptions import TimeoutError
 
 
+# A MODE 7 display is always this size.
+TELETEXT_ROWS = 25
+TELETEXT_COLUMNS = 40
+
+
+@dataclass(frozen=True)
+class TeletextScreen:
+    """A MODE 7 screen, or a region of one, read as characters."""
+
+    active: bool
+    """False when the display is not MODE 7, in which case the cells describe
+    whatever was last shown in MODE 7 rather than anything current."""
+
+    rows: int
+    columns: int
+
+    text: str
+    """The region as text, converted server-side so every client agrees on what
+    graphics, control codes, concealed cells and double-height rows copy as.
+    Lines are joined with LF."""
+
+    frame_number: int
+
+    cells: list
+    """Row-major, ``rows * columns`` entries, each with the attributes in
+    effect at that cell."""
+
+    def cell(self, row: int, column: int):
+        """The cell at a position within the returned region."""
+        return self.cells[row * self.columns + column]
+
+
 @dataclass(frozen=True)
 class VideoConfig:
     """Video configuration."""
@@ -163,6 +195,66 @@ class Video:
         if self._config is None:
             self._config = self._get_config()
         return self._config
+
+    def teletext_screen(
+        self,
+        *,
+        row: int = 0,
+        column: int = 0,
+        rows: int | None = None,
+        columns: int | None = None,
+        flowed: bool = False,
+    ) -> TeletextScreen:
+        """Read the MODE 7 screen as characters rather than pixels.
+
+        Prefer this to reading screen memory. The cells are captured after the
+        SAA5050 has resolved the control codes, so there is no hardware-scroll
+        offset to undo and no attribute state to re-derive -- the two failings
+        of the screen-memory scrapers this replaces.
+
+        Only MODE 7 has characters to read. In a bitmap mode the returned
+        screen has ``active`` False and describes whatever was last shown in
+        MODE 7, so callers must check it.
+
+        Args:
+            row: First row of the region to read.
+            column: First column of the region to read.
+            rows: Number of rows; the rest of the screen when None.
+            columns: Number of columns; the rest of the screen when None.
+            flowed: Join a row that filled the region's width to the next
+                without a line break, rejoining a line that wrapped. By
+                default each row is its own line, preserving the shape of the
+                selection.
+
+        Returns:
+            The region's cells and the text they convert to.
+        """
+        request = video_pb2.GetTeletextScreenRequest(
+            layout=(
+                video_pb2.TELETEXT_LAYOUT_FLOWED
+                if flowed
+                else video_pb2.TELETEXT_LAYOUT_ROWS
+            )
+        )
+        if row or column or rows is not None or columns is not None:
+            request.region.CopyFrom(
+                video_pb2.TeletextScreenRegion(
+                    row=row,
+                    column=column,
+                    rows=rows if rows is not None else TELETEXT_ROWS,
+                    columns=columns if columns is not None else TELETEXT_COLUMNS,
+                )
+            )
+
+        response = self._stub.GetTeletextScreen(request)
+        return TeletextScreen(
+            active=response.active,
+            rows=response.rows,
+            columns=response.columns,
+            text=response.text,
+            frame_number=response.frame_number,
+            cells=list(response.cells),
+        )
 
     def capture_frame(self, timeout: float = 1.0) -> Frame:
         """Capture a single frame.

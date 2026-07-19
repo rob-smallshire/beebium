@@ -62,6 +62,7 @@ struct EmulatorView: NSViewRepresentable {
         // Wire up keyboard client for key events
         mtkView.keyboardClient = keyboardClient
         mtkView.pasteCoordinator = pasteCoordinator
+        mtkView.videoClient = videoClient
 
         // Wire up indicator client and Touch Bar manager
         mtkView.indicatorClient = indicatorClient

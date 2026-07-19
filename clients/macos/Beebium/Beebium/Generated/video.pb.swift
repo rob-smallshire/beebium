@@ -67,6 +67,86 @@ enum Beebium_FieldOrder: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Which character set a cell was displayed with.
+enum Beebium_TeletextCharacterSet: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+  case teletextAlpha // = 0
+  case teletextContiguousGraphics // = 1
+  case teletextSeparatedGraphics // = 2
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .teletextAlpha
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .teletextAlpha
+    case 1: self = .teletextContiguousGraphics
+    case 2: self = .teletextSeparatedGraphics
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .teletextAlpha: return 0
+    case .teletextContiguousGraphics: return 1
+    case .teletextSeparatedGraphics: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_TeletextCharacterSet] = [
+    .teletextAlpha,
+    .teletextContiguousGraphics,
+    .teletextSeparatedGraphics,
+  ]
+
+}
+
+/// How a region of cells becomes a run of text.
+enum Beebium_TeletextTextLayout: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// Each row of the region is its own line, preserving the shape of the
+  /// selection. The default, and what a column of figures wants.
+  case teletextLayoutRows // = 0
+
+  /// A row filled to the region's right edge wrapped, so it continues into
+  /// the next without a break. What a sentence spanning rows wants.
+  case teletextLayoutFlowed // = 1
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .teletextLayoutRows
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .teletextLayoutRows
+    case 1: self = .teletextLayoutFlowed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .teletextLayoutRows: return 0
+    case .teletextLayoutFlowed: return 1
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_TeletextTextLayout] = [
+    .teletextLayoutRows,
+    .teletextLayoutFlowed,
+  ]
+
+}
+
 /// Future: format preferences, scaling options
 struct Beebium_SubscribeFramesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -185,12 +265,132 @@ struct Beebium_VideoConfig: Sendable {
   init() {}
 }
 
+/// A rectangle of cells, in grid coordinates. Absent means the whole screen.
+struct Beebium_TeletextScreenRegion: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var row: UInt32 = 0
+
+  var column: UInt32 = 0
+
+  var rows: UInt32 = 0
+
+  var columns: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_GetTeletextScreenRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The part of the screen to read. Whole screen when unset.
+  var region: Beebium_TeletextScreenRegion {
+    get {return _region ?? Beebium_TeletextScreenRegion()}
+    set {_region = newValue}
+  }
+  /// Returns true if `region` has been explicitly set.
+  var hasRegion: Bool {return self._region != nil}
+  /// Clears the value of `region`. Subsequent reads from it will return its default value.
+  mutating func clearRegion() {self._region = nil}
+
+  /// How to join the region's rows into `text`.
+  var layout: Beebium_TeletextTextLayout = .teletextLayoutRows
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _region: Beebium_TeletextScreenRegion? = nil
+}
+
+/// One character cell, as it was displayed: the attributes here are the ones in
+/// effect at this cell after control codes were resolved, not something the
+/// caller has to re-derive.
+struct Beebium_TeletextScreenCell: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 7-bit SAA5050 code
+  var character: UInt32 = 0
+
+  /// Colour index 0-7
+  var fg: UInt32 = 0
+
+  /// Colour index 0-7
+  var bg: UInt32 = 0
+
+  var charset: Beebium_TeletextCharacterSet = .teletextAlpha
+
+  var doubleHeightTop: Bool = false
+
+  var doubleHeightBottom: Bool = false
+
+  var concealed: Bool = false
+
+  var flashing: Bool = false
+
+  var cursor: Bool = false
+
+  var isControlCode: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_TeletextScreen: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// False when the display is not MODE 7. The cells then describe whatever
+  /// was last shown in MODE 7 rather than anything current, so a caller must
+  /// check this before using them.
+  var active: Bool = false
+
+  /// Dimensions of the returned region, not of the screen.
+  var rows: UInt32 = 0
+
+  var columns: UInt32 = 0
+
+  /// Row-major, rows * columns entries.
+  var cells: [Beebium_TeletextScreenCell] = []
+
+  /// The region as text, converted server-side so every client agrees on what
+  /// graphics, control codes, concealed cells and double-height rows copy as.
+  /// Lines are joined with LF; converting to a platform-native ending is the
+  /// client's business, since the server cannot know the client's platform.
+  var text: String = String()
+
+  /// Increments once per captured frame.
+  var frameNumber: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_FieldOrder: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0PROGRESSIVE\0\u{1}EVEN_FIRST\0\u{1}ODD_FIRST\0")
+}
+
+extension Beebium_TeletextCharacterSet: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TELETEXT_ALPHA\0\u{1}TELETEXT_CONTIGUOUS_GRAPHICS\0\u{1}TELETEXT_SEPARATED_GRAPHICS\0")
+}
+
+extension Beebium_TeletextTextLayout: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TELETEXT_LAYOUT_ROWS\0\u{1}TELETEXT_LAYOUT_FLOWED\0")
 }
 
 extension Beebium_SubscribeFramesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -396,6 +596,220 @@ extension Beebium_VideoConfig: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if lhs.width != rhs.width {return false}
     if lhs.height != rhs.height {return false}
     if lhs.framerateHz != rhs.framerateHz {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TeletextScreenRegion: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TeletextScreenRegion"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}row\0\u{1}column\0\u{1}rows\0\u{1}columns\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.row) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.column) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.rows) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.columns) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.row != 0 {
+      try visitor.visitSingularUInt32Field(value: self.row, fieldNumber: 1)
+    }
+    if self.column != 0 {
+      try visitor.visitSingularUInt32Field(value: self.column, fieldNumber: 2)
+    }
+    if self.rows != 0 {
+      try visitor.visitSingularUInt32Field(value: self.rows, fieldNumber: 3)
+    }
+    if self.columns != 0 {
+      try visitor.visitSingularUInt32Field(value: self.columns, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TeletextScreenRegion, rhs: Beebium_TeletextScreenRegion) -> Bool {
+    if lhs.row != rhs.row {return false}
+    if lhs.column != rhs.column {return false}
+    if lhs.rows != rhs.rows {return false}
+    if lhs.columns != rhs.columns {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetTeletextScreenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetTeletextScreenRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{1}layout\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._region) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.layout) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._region {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.layout != .teletextLayoutRows {
+      try visitor.visitSingularEnumField(value: self.layout, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetTeletextScreenRequest, rhs: Beebium_GetTeletextScreenRequest) -> Bool {
+    if lhs._region != rhs._region {return false}
+    if lhs.layout != rhs.layout {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TeletextScreenCell: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TeletextScreenCell"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}character\0\u{1}fg\0\u{1}bg\0\u{1}charset\0\u{3}double_height_top\0\u{3}double_height_bottom\0\u{1}concealed\0\u{1}flashing\0\u{1}cursor\0\u{3}is_control_code\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.character) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.fg) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.bg) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.charset) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.doubleHeightTop) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.doubleHeightBottom) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.concealed) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.flashing) }()
+      case 9: try { try decoder.decodeSingularBoolField(value: &self.cursor) }()
+      case 10: try { try decoder.decodeSingularBoolField(value: &self.isControlCode) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.character != 0 {
+      try visitor.visitSingularUInt32Field(value: self.character, fieldNumber: 1)
+    }
+    if self.fg != 0 {
+      try visitor.visitSingularUInt32Field(value: self.fg, fieldNumber: 2)
+    }
+    if self.bg != 0 {
+      try visitor.visitSingularUInt32Field(value: self.bg, fieldNumber: 3)
+    }
+    if self.charset != .teletextAlpha {
+      try visitor.visitSingularEnumField(value: self.charset, fieldNumber: 4)
+    }
+    if self.doubleHeightTop != false {
+      try visitor.visitSingularBoolField(value: self.doubleHeightTop, fieldNumber: 5)
+    }
+    if self.doubleHeightBottom != false {
+      try visitor.visitSingularBoolField(value: self.doubleHeightBottom, fieldNumber: 6)
+    }
+    if self.concealed != false {
+      try visitor.visitSingularBoolField(value: self.concealed, fieldNumber: 7)
+    }
+    if self.flashing != false {
+      try visitor.visitSingularBoolField(value: self.flashing, fieldNumber: 8)
+    }
+    if self.cursor != false {
+      try visitor.visitSingularBoolField(value: self.cursor, fieldNumber: 9)
+    }
+    if self.isControlCode != false {
+      try visitor.visitSingularBoolField(value: self.isControlCode, fieldNumber: 10)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TeletextScreenCell, rhs: Beebium_TeletextScreenCell) -> Bool {
+    if lhs.character != rhs.character {return false}
+    if lhs.fg != rhs.fg {return false}
+    if lhs.bg != rhs.bg {return false}
+    if lhs.charset != rhs.charset {return false}
+    if lhs.doubleHeightTop != rhs.doubleHeightTop {return false}
+    if lhs.doubleHeightBottom != rhs.doubleHeightBottom {return false}
+    if lhs.concealed != rhs.concealed {return false}
+    if lhs.flashing != rhs.flashing {return false}
+    if lhs.cursor != rhs.cursor {return false}
+    if lhs.isControlCode != rhs.isControlCode {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TeletextScreen: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TeletextScreen"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}active\0\u{1}rows\0\u{1}columns\0\u{1}cells\0\u{1}text\0\u{3}frame_number\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.active) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.rows) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.columns) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.cells) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.frameNumber) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.active != false {
+      try visitor.visitSingularBoolField(value: self.active, fieldNumber: 1)
+    }
+    if self.rows != 0 {
+      try visitor.visitSingularUInt32Field(value: self.rows, fieldNumber: 2)
+    }
+    if self.columns != 0 {
+      try visitor.visitSingularUInt32Field(value: self.columns, fieldNumber: 3)
+    }
+    if !self.cells.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.cells, fieldNumber: 4)
+    }
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 5)
+    }
+    if self.frameNumber != 0 {
+      try visitor.visitSingularUInt64Field(value: self.frameNumber, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TeletextScreen, rhs: Beebium_TeletextScreen) -> Bool {
+    if lhs.active != rhs.active {return false}
+    if lhs.rows != rhs.rows {return false}
+    if lhs.columns != rhs.columns {return false}
+    if lhs.cells != rhs.cells {return false}
+    if lhs.text != rhs.text {return false}
+    if lhs.frameNumber != rhs.frameNumber {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
