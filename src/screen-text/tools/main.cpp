@@ -49,7 +49,9 @@ const char* const USAGE =
     "                        gap blanked to black whatever the palette says\n"
     "  --origin X,Y          where the character grid starts (default: 0,0)\n"
 
-    "  --search MODE         aligned (default) or offset\n"
+    "  --search MODE         aligned (default), the character grid; or offset,\n"
+    "                        for VDU 5 text placed off it. One or the other:\n"
+    "                        offset reads only what is not on the grid\n"
     "  --format FORMAT       text (default) or json\n"
     "  --list-builtin        list the built-in glyph sets and exit\n"
     "  -h, --help            show this help and exit\n"

@@ -249,9 +249,22 @@ That gap is worth naming rather than waiting for. Every rule here has now been
 measured on a real screen, and none has been contradicted; the remaining risk
 is a combination, not a mechanism.
 
-Note, once built: the gap is partly closed. The off-grid search reads the
-ROM-font fragments of Loopy Loop's title over its dense dithered background --
-real characters, no ghosts. The part it does not read is the title's thickened
-non-ROM font, which is a font problem, not a background one; supplying that font
-would read it. So off-grid text on a hostile background works where the font is
-the one in hand, which is the case that was in doubt.
+Note, once built: the gap is largely closed, and the part that is not is a
+different problem than it first looked.
+
+The off-grid search reads the ROM-font characters of Loopy Loop's title and key
+legend -- the `'92`, and the letters and punctuation drawn in the ROM font --
+straight off its dense dithered background, with no ghosts. So off-grid text on
+a hostile background works for the font in hand, which is the combination that
+was in doubt.
+
+What it does not read is the rest of that title, which is drawn in a heavier
+face. Extraction was attempted: the face is not the ROM font thickened -- not
+by an OR-shift in any direction, nor by a two-by-two dilation, all of which were
+tried and none of which reproduces the on-screen glyphs. It is a bespoke RAM
+font that merely resembles bold, and reading it would mean transcribing its
+glyphs one by one, which is neither cheap nor the sort of hand-work this library
+exists to avoid. So that gap is left named rather than quietly filled. It is a
+font problem, not a background one: supplying any font that does match is the
+ordinary path, exercised by the five fonts in the corpus, and independent of
+the background it sits on.

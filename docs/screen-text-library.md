@@ -309,11 +309,12 @@ could not.
 
 The search finds all the off-grid text on Fruits, Rondo and Krazy Ape II,
 including drop-shadowed titles, with no false positives on any screen in the
-corpus. It even reads the ROM-font fragments of Loopy Loop's title over its
-dense dithered background, which is the hostile-background combination the
-design named as untested -- partly, since much of that title is drawn in a
-thickened variant of the ROM font that is not the ROM font and rightly does
-not match.
+corpus. It even reads the ROM-font characters of Loopy Loop's title and legend
+over its dense dithered background -- the hostile-background combination the
+design named as untested -- with no ghosts. The rest of that title is a bespoke
+heavier face, not the ROM font by any thickening tried, so it does not match;
+reading it would mean supplying that font, which is the ordinary path and a
+separate matter from the background.
 
 Two productisation findings are worth recording. Rejoining runs across spaces
 at first fused an off-grid label onto a grid run of the same baseline and

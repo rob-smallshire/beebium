@@ -211,24 +211,26 @@ U+0041 0x3C 0x66 0x66 0x7E 0x66 0x66 0x66 0x00
 
 Codepoints may be given as `U+00A3`, `0xA3`, `&A3` or decimal.
 
-## Not implemented
+## Off-grid text
 
-`Search::IncludeOffset` and `Cell::offset` exist and are accepted, so callers
-can be written against the finished interface, but sub-cell offset search is not
-implemented. Reading is aligned either way, and no cell is ever reported as
-having matched at an offset.
+`Search::IncludeOffset` finds `VDU 5` text, written at the graphics cursor at
+arbitrary pixel positions rather than on the character grid. It is a separate
+search, selected per call, and returns only off-grid runs, every cell flagged
+`Cell::offset`; the aligned pass reads grid text and the two partition the
+screen. A caller wanting both runs `read` twice and concatenates.
 
-That search is what finds `VDU 5` text, which is written at the graphics cursor
-rather than on the character grid. It is designed but not built, and the design
-is worth reading before building it: `docs/discussion/screen-text-offset-search.md`.
+The position is the easy part. `VDU 5` paints no background, so the aligned
+rule -- two colours in a cell, tried both ways -- rejects most of it, and the
+question becomes "do the pixels of colour c in this window form a glyph,
+ignoring everything else", asked once per colour present. A free search then
+finds glyph-shaped patterns that are not glyphs, handled by ignoring glyphs
+imagery could have drawn (those whose every row and column is one unbroken run)
+unless they sit in registration with ones it could not. Drop shadows fall out
+for nothing: the text colour forms the glyph, the shadow colour a crescent that
+matches nothing.
 
-The short of it is that the position is the easy part. `VDU 5` paints no
-background, so the aligned rule -- two colours in a cell, tried both ways --
-rejects most of it, and the question has to become "do the pixels of colour c
-in this window form a glyph, ignoring everything else". A free search then
-finds glyph-shaped patterns that are not glyphs, which is handled by ignoring
-glyphs that imagery could have drawn (those whose every row and column is one
-unbroken run) unless they sit in registration with ones it could not.
+The design, and its validation against five real games, is in
+`docs/discussion/screen-text-offset-search.md`.
 
 ## Testing
 
