@@ -39,12 +39,17 @@ A change that finds more text and also finds ghosts is a regression.
 
 ## Settle these while building
 
-**Time it.** Nobody has measured the off-grid pass on a whole screen, and that
-number decides policy elsewhere: whether a whole-screen copy runs the off-grid
-pass by default, or whether it stays reached only through free-form selection.
-Report milliseconds for a full screen at each colour depth, on ordinary
-hardware. This is the single most useful thing the work can produce beyond the
-feature itself.
+**Confirm the timing.** The dominant cost -- the candidate gather -- has been
+projected in C++ at tens of milliseconds per screen, with a ceiling around
+420 ms on a Pi 5 for a pathological all-noise MODE 0 screen
+(`docs/screen-text-library.md`). That projection has already settled a policy
+question: a whole-screen copy runs the off-grid pass, so the built figure needs
+to hold, not merely exist. Measure the real thing once it is built -- with
+registration, overlap resolution and early-out in place, all of which the
+projection omits and two of which only make it faster -- at each colour depth,
+on the `screentext-benchmark` target. If it comes in materially worse than the
+projection rather than better, that is a finding to report at once, because a
+decision has been made on the strength of the projection.
 
 **Rejoin runs across spaces.** The design notes that `SCORE 1000` comes back as
 two runs because a space matches nothing, and that runs sharing a baseline, a
@@ -83,8 +88,13 @@ no AI attribution in commit messages.
 ## Done means
 
 - The three inverted expectations pass, and the negative sets still yield zero.
-- A timing for a whole-screen off-grid pass, reported.
+- A measured whole-screen off-grid timing, on `screentext-benchmark`, compared
+  against the projection -- and a flag raised at once if it is materially worse.
 - Runs rejoined across spaces.
 - The hostile-background fixture added, or its absence explained.
 - A summary of what was built, anything the corpus forced you to change, and
   anything you could not verify.
+
+With this increment, stream 1 is complete: the library reads both aligned and
+off-grid text, and streams 2, 3 and 4 can be built against a finished
+capability rather than a promise.

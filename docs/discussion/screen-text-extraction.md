@@ -618,10 +618,38 @@ from the one made here, and a weaker one:
   what it costs. A screen with `VDU 5` labels on it should probably just read
   them.
 
-Settling that needs a number nobody has yet: how long the off-grid pass takes
-on a whole screen. Until then the default stays aligned-only, but the
-justification is provisional and should be revisited with timings in hand
-rather than treated as settled.
+### Settled: a whole-screen copy runs both passes
+
+The number that was missing has been taken (`docs/screen-text-library.md`).
+Aligned reading is about a millisecond for a whole MODE 0 screen on an M1 Max
+and under three on a Raspberry Pi 5, the slowest platform Beebium ships to.
+Colour depth barely registers -- a three-or-more-colour cell is rejected early,
+so the deeper modes are cheaper, not dearer, which is the opposite of the
+intuition. The off-grid pass is projected at tens of milliseconds per screen,
+with a ceiling around 420 ms on a Pi 5 for a pathological all-noise screen that
+no game produces, and it parallelises trivially across the sixty-four offsets
+if that ceiling ever needs lowering.
+
+Against that, the decision is easy. **A whole-screen copy, and a script reading
+the screen, run the aligned pass and then the off-grid pass, and merge.** "Copy
+the screen" should mean every character on it, and tens of milliseconds for a
+once-in-a-few-minutes, user-initiated action off any hot path is not a cost
+worth withholding a feature for. The pathological ceiling is a fifth of a
+second on the slowest hardware, still imperceptible for a copy.
+
+Where the user *drags* a selection, snapped versus free-form remains a real
+choice -- but for a reason that survives the timing: snapping is also about what
+the rectangle means, not only about cost. Snapped selection reads the grid;
+free-form additionally reads off it. That distinction stays.
+
+So the only place the off-grid pass is withheld is a snapped drag, where the
+user has said "the grid" by snapping. Everywhere else -- whole screen, script,
+free-form drag -- it runs.
+
+One integration question this hands to stream 2, noted so it is not
+rediscovered: grid text sits at offset (0, 0), which the off-grid search also
+visits, so text on the grid can be found by both passes. Merging must dedupe by
+position rather than concatenate, or aligned text appears twice.
 
 ## Work partition
 
