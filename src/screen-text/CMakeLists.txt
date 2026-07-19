@@ -43,6 +43,11 @@ set_target_properties(screentext-cli PROPERTIES OUTPUT_NAME screentext)
 target_link_libraries(screentext-cli PRIVATE screentext stb_image)
 target_include_directories(screentext-cli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
+# A latency benchmark, over the library's public interface. Built on request
+# rather than by default -- it is a measurement tool, not part of the product.
+add_executable(screentext-benchmark EXCLUDE_FROM_ALL tools/benchmark.cpp)
+target_link_libraries(screentext-benchmark PRIVATE screentext)
+
 if(BEEBIUM_BUILD_TESTS)
     add_subdirectory(tests)
 endif()

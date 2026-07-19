@@ -186,6 +186,52 @@ Character 96 is a pound sign, not a grave accent. Character 127 is excluded:
 `VDU 127` deletes rather than prints, so those ROM bytes never appear on screen
 as a glyph.
 
+## Performance
+
+Worst-case latencies, from `screentext-benchmark` (built with
+`cmake --build build --target screentext-benchmark`). Each synthetic screen is
+filled with matchable text, the most work either path can be given -- a blank
+or graphical screen is cheaper. Best of repeated runs, single-threaded.
+
+Two machines: an Apple M1 Max, and a Raspberry Pi 5, the slowest platform
+Beebium ships to. A whole screen is read in **around a millisecond** on the
+fast machine and **under three** on the slow one.
+
+| Mode | Cells | Aligned, M1 Max | Aligned, Pi 5 |
+|---|---|---|---|
+| MODE 0 (640x256, 2 colour) | 2560 | 1.0 ms | 2.8 ms |
+| MODE 1 (320x256, 4 colour) | 1280 | 0.5 ms | 1.4 ms |
+| MODE 2 (160x256, 16 colour) | 640 | 0.25 ms | 0.75 ms |
+| MODE 5 (160x256, 4 colour) | 640 | 0.25 ms | 0.75 ms |
+
+MODE 0 is the aligned worst case: eight logical pixels per column throughout, so
+the widest mode has the most cells. Colour depth barely matters to the aligned
+path -- a cell of three or more colours is rejected early, so a deeper mode is
+if anything slightly cheaper. The cost tracks cell count and nothing else.
+
+The offset search is not built. Projected from its dominant cost -- the
+candidate gather, sixty-four sub-cell offsets by the colours present in each
+window -- it is far heavier, and both axes the client asked about show:
+
+| Screen | Offset, M1 Max | Offset, Pi 5 |
+|---|---|---|
+| MODE 0 (640x256) | 80 ms | 168 ms |
+| MODE 1 (320x256) | 40 ms | 84 ms |
+| MODE 2 (160x256) | 22 ms | 47 ms |
+| MODE 0, 8-colour noise (ceiling) | 228 ms | 421 ms |
+
+Size dominates -- MODE 0 has four times MODE 2's positions -- and colour depth
+multiplies the per-position work, which the noise row pushes to its ceiling: a
+screen where almost every window carries the maximum colours, worse than any
+real display. Even that stays under half a second on the slow machine.
+
+This is comfortable because the search is opt-in and user-initiated. The design
+reaches it only through free-form selection, at most once every few minutes,
+never in a loop, so a few hundred milliseconds on the rare copy of unaligned
+text is spent where a person is already waiting for a menu. It is also
+trivially parallel across offsets, and the gather can stop early once a region
+is claimed, neither of which the projection assumes.
+
 ## Testing
 
 `src/screen-text/tests/`, four binaries. Run them directly rather than through

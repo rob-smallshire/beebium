@@ -164,6 +164,12 @@ Sixty-four offsets times the number of colours present in each window. That is
 why it is opt-in, reached through free-form selection rather than attempted on
 every copy, and why the aligned path stays exactly as it is.
 
+Measured as a projection -- the candidate gather run in C++ from the public
+glyph set, since the search itself is not built -- this is tens of milliseconds
+on a whole screen and a few hundred at its noisy ceiling, against about a
+millisecond for the aligned reader. The numbers, on a fast and a slow machine,
+are in `docs/screen-text-library.md`; `screentext-benchmark` produces them.
+
 ## What real screens settled
 
 Four frames from Waffle, a game by Chris Bradburne, are now in the corpus at
