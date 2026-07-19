@@ -69,6 +69,13 @@ std::string temporary_filepath(const std::string& name)
     return std::string(SCREENTEXT_TEST_SCRATCH_DIR) + "/" + name;
 }
 
+// Screenshots captured from a real machine and committed, so the library is
+// exercised against genuine output as well as its own idea of it.
+std::string fixture_filepath(const std::string& name)
+{
+    return std::string(SCREENTEXT_TEST_FIXTURES_DIR) + "/" + name;
+}
+
 // Write an image as binary PGM, which stb decodes, so a test can build its
 // input with the same Canvas the library tests use.
 void write_pgm(const std::string& filepath, const Image& image)
@@ -271,4 +278,74 @@ TEST_CASE("Cell geometry and grid origin can be set from the command line")
         = run("read \"" + filepath + "\" --origin 4,0 --cell 8x8");
     CHECK(shifted.status == 0);
     CHECK(shifted.stdout_text == "AB\n");
+}
+
+// Real screenshots, captured from a running Model B. These are the cases the
+// synthetic fixtures cannot vouch for: that the geometry a real machine
+// produces is what the library expects, and that a whole screen of genuine
+// output matches byte for byte rather than nearly.
+
+TEST_CASE("A real MODE 4 BASIC listing is read from a screenshot")
+{
+    const Output output
+        = run("read \"" + fixture_filepath("mode4-listing.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text ==
+          ">LIST\n"
+          "10 REM SCREEN TEXT\n"
+          "20 FOR I%=1 TO 3\n"
+          "30 PRINT \"LINE \";I%\n"
+          "40 NEXT I%\n"
+          "50 END\n"
+          ">_\n");
+}
+
+TEST_CASE("Every cell of a real MODE 4 screen matches, none unread")
+{
+    // The claim the whole design rests on: a character cell on a BBC screen
+    // matches its font glyph exactly. A single unmatched cell here would mean
+    // that is not true, or that the geometry is wrong.
+    const Output output = run("read \"" + fixture_filepath("mode4-listing.png")
+                              + "\" --format json");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("\"total_cells\": 1280") != std::string::npos);
+    CHECK(output.stdout_text.find("\"unmatched_cells\": 0") != std::string::npos);
+    CHECK(output.stdout_text.find("\"matched\":false") == std::string::npos);
+}
+
+TEST_CASE("Real inverse video is read, and its spaces are spaces")
+{
+    // Captured with COLOUR 129:COLOUR 0, which is how the BBC produces
+    // inverse text. The space inside "INVERSE TEXT" is a solid cell, and it
+    // must come back as a space rather than as character 127.
+    const Output output
+        = run("read \"" + fixture_filepath("mode4-inverse.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("\nINVERSE TEXT\n") != std::string::npos);
+}
+
+TEST_CASE("Turning inverse matching off leaves real inverse text unread")
+{
+    const Output output = run("read \"" + fixture_filepath("mode4-inverse.png")
+                              + "\" --no-inverted");
+
+    CHECK(output.status == 0);
+    // The line the program printed in inverse video is gone. The echo of the
+    // command that printed it survives, because that was typed in normal
+    // video, so the whole screenshot is not expected to be empty.
+    CHECK(output.stdout_text.find("\nINVERSE TEXT\n") == std::string::npos);
+    CHECK(output.stdout_text.find("PRINT \"INVERSE TEXT") != std::string::npos);
+}
+
+TEST_CASE("A selection over a real screenshot clips to the cells it covers")
+{
+    // Three cells wide, one row down: "10 " of the first listing line.
+    const Output output = run("read \"" + fixture_filepath("mode4-listing.png")
+                              + "\" --selection 24,8,24,8");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text == "10\n");
 }

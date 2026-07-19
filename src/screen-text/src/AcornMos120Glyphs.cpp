@@ -15,7 +15,7 @@
 // Source ROM:   acorn-mos_1_20.rom
 // SHA-256:      2d9fea69017864f6962704481829f95fee08446c8c3a13826d5d4e44000ac9de
 // Glyph set:    acorn-mos-1.20
-// Characters:   32-127 (96 glyphs), 8x8, MSB leftmost
+// Characters:   32-126 (95 glyphs), 8x8, MSB leftmost
 //
 // Regenerate with:
 //     python3 tools/generate_acorn_glyphs.py roms/acorn-mos_1_20.rom \
@@ -125,7 +125,6 @@ GlyphSet make_acorn_mos_1_20()
         Glyph::from_rows(0x007CU, {0x18, 0x18, 0x18, 0x00, 0x18, 0x18, 0x18, 0x00}),  // &7C '|'
         Glyph::from_rows(0x007DU, {0x30, 0x18, 0x18, 0x0E, 0x18, 0x18, 0x30, 0x00}),  // &7D '}'
         Glyph::from_rows(0x007EU, {0x31, 0x6B, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00}),  // &7E '~'
-        Glyph::from_rows(0x007FU, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}),  // &7F solid block (inverse of SPACE)
     };
     return set;
 }

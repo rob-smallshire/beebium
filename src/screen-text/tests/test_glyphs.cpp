@@ -44,10 +44,10 @@ TEST_CASE("The Acorn MOS 1.20 set is built in and named")
     CHECK(set.name == "acorn-mos-1.20");
 }
 
-TEST_CASE("The Acorn set covers characters 32 to 127")
+TEST_CASE("The Acorn set covers characters 32 to 126")
 {
     const GlyphSet& set = builtin_glyph_set("acorn-mos-1.20");
-    CHECK(set.glyphs.size() == 96);
+    CHECK(set.glyphs.size() == 95);
 
     for (const Glyph& glyph : set.glyphs) {
         CHECK(glyph.bitmap.width() == 8);
@@ -86,22 +86,24 @@ TEST_CASE("Character 96 is a pound sign, not a grave accent")
     CHECK(glyph_with(set, U'`') == nullptr);    // GRAVE ACCENT
 }
 
-TEST_CASE("Character 127 is the solid block the ROM holds")
+TEST_CASE("Character 127 is excluded, so a solid cell reads as inverse space")
 {
-    // Exactly the complement of the space glyph, so a filled cell matches
-    // both it and an inverted space. Kept faithful to the ROM rather than
-    // dropped: a caller that would rather read a filled cell as inverse space
-    // can override the set.
+    // The ROM holds eight bytes of solid block at 127, but VDU 127 deletes a
+    // character rather than printing one, so those bytes are never rendered
+    // and do not describe any text.
+    //
+    // Including them would also break the common case: a solid block is
+    // exactly the complement of a space, and an upright match beats an
+    // inverted one, so every inverse space -- most of an inverse-video
+    // line -- would come back as an invisible control code.
     const GlyphSet& set = builtin_glyph_set("acorn-mos-1.20");
 
-    const Glyph* block = glyph_with(set, 0x007FU);
-    REQUIRE(block != nullptr);
-    CHECK(block->bitmap
-          == Bitmap::from_rows({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}));
+    CHECK(glyph_with(set, 0x007FU) == nullptr);
 
     const Glyph* space = glyph_with(set, U' ');
     REQUIRE(space != nullptr);
-    CHECK(block->bitmap == space->bitmap.inverted());
+    CHECK(space->bitmap.inverted()
+          == Bitmap::from_rows({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}));
 }
 
 TEST_CASE("No two glyphs in the Acorn set share a bitmap")

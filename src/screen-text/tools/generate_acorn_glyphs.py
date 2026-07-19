@@ -22,8 +22,8 @@ file, so the same can be done for another MOS version.
 
 The font lives at ROM offset 0x0000 (address &C000), eight bytes per
 character, most significant bit leftmost, starting at character 32. Character
-c is therefore at (c - 32) * 8. The table ends after character 127; beyond
-that the ROM holds 6502 code.
+c is therefore at (c - 32) * 8. Data continues to character 127; beyond that
+the ROM holds 6502 code. See LAST_CHARACTER for where the set stops and why.
 """
 
 import argparse
@@ -33,7 +33,19 @@ import re
 import sys
 
 FIRST_CHARACTER = 32
-LAST_CHARACTER = 127
+
+# The table continues past 126 -- character 127 has eight bytes of solid
+# block -- but 127 is DELETE, which erases a character rather than printing
+# one (BBC User Guide 34, "VDU 127 has exactly the same effect"), so those
+# bytes are never rendered as a glyph and do not belong in a set that maps
+# bitmaps to text.
+#
+# Including them is also actively harmful: a solid block is exactly the
+# complement of a space, so with inverse matching on, every inverse space --
+# which is most of an inverse-video line -- would match character 127 and come
+# back as an invisible control code instead of a space.
+LAST_CHARACTER = 126
+
 BYTES_PER_GLYPH = 8
 
 # Carried into the generated file, which is committed source like any other.
@@ -61,7 +73,6 @@ CODEPOINT_OVERRIDES = {
 # Characters whose C++ character literal would be awkward or non-portable.
 LITERAL_NAMES = {
     0x20: "SPACE",
-    0x7F: "solid block (inverse of SPACE)",
 }
 
 

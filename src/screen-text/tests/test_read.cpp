@@ -123,24 +123,50 @@ TEST_CASE("Inverse matching can be turned off, leaving inverse text unread")
 
 TEST_CASE("An upright match is preferred to an inverted one")
 {
-    // The MOS font has a solid block at &7F, which is exactly the complement
-    // of the space glyph. Both match a filled cell; the upright one wins, and
-    // the choice is deterministic rather than a matter of iteration order.
-    Canvas canvas(8, 8, 0);
-    for (std::size_t y = 0; y < 8; ++y) {
-        for (std::size_t x = 0; x < 8; ++x) {
-            canvas.set_pixel(x, y, 1);
-        }
-    }
+    // A bitmap can be one glyph upright and another inverted. The upright
+    // match wins, so the answer is fixed by the rule rather than by iteration
+    // order.
+    GlyphSet ambiguous;
+    ambiguous.name = "ambiguous";
+    const Bitmap upright
+        = Bitmap::from_rows({0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0});
+    ambiguous.glyphs.push_back(Glyph(U'U', upright));
+    ambiguous.glyphs.push_back(Glyph(U'I', upright.inverted()));
+
+    Canvas canvas(8, 8);
+    canvas.stamp(0, 0, upright);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               {ambiguous});
+
+    REQUIRE(result.runs.size() == 1);
+    REQUIRE(result.runs[0].cells.size() == 1);
+    CHECK(result.runs[0].cells[0].codepoint == U'U');
+    CHECK_FALSE(result.runs[0].cells[0].inverted);
+}
+
+TEST_CASE("An inverse space reads as a space, not as a control code")
+{
+    // A solid cell is what an inverse-video space looks like, and inverse
+    // video is most of what makes solid cells. The MOS font holds a solid
+    // block at character 127, but VDU 127 deletes rather than prints, so it
+    // is excluded from the built-in set and this reads as a space.
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp_inverted(0, 0, Canvas::glyph_for(acorn(), U'A'));
+    canvas.stamp_inverted(8, 0, Canvas::glyph_for(acorn(), U' '));
+    canvas.stamp_inverted(16, 0, Canvas::glyph_for(acorn(), U'B'));
 
     const Result result = read(canvas.image(),
                                {whole_image_band(canvas.image())},
                                acorn_only());
 
     REQUIRE(result.runs.size() == 1);
-    REQUIRE(result.runs[0].cells.size() == 1);
-    CHECK(result.runs[0].cells[0].codepoint == 0x7F);
-    CHECK_FALSE(result.runs[0].cells[0].inverted);
+    CHECK(result.runs[0].text == "A B");
+    CHECK(result.unmatched_cells == 0);
+    for (const Cell& cell : result.runs[0].cells) {
+        CHECK(cell.inverted);
+    }
 }
 
 TEST_CASE("A cell that matches nothing is unmatched, never guessed")

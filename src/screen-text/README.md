@@ -78,10 +78,7 @@ there is no approximate comparison anywhere in the design.
 4. No hit means unmatched.
 
 Precedence is fixed so that the answer never depends on iteration order: later
-glyph sets beat earlier ones, and an upright match beats an inverted one. The
-second rule settles the MOS solid block at `&7F`, which is exactly an inverted
-space; it reads as `&7F`, and a caller preferring inverse-space semantics can
-override the set.
+glyph sets beat earlier ones, and an upright match beats an inverted one.
 
 ### Never guess
 
@@ -106,7 +103,7 @@ cell not wholly inside its band, the image, and any selection is not read.
 
 ## The built-in glyph set
 
-`acorn-mos-1.20` holds characters 32 to 127 of the MOS 1.20 font, generated from
+`acorn-mos-1.20` holds characters 32 to 126 of the MOS 1.20 font, generated from
 a ROM into committed source by `tools/generate_acorn_glyphs.py`. The library
 never reads a ROM at runtime and does not need one to build.
 
@@ -121,6 +118,15 @@ the script so the same can be done for another MOS version.
 Character 96 is a pound sign rather than a grave accent -- the one place the
 Acorn set departs from ASCII, verified against the glyph shapes rather than
 assumed.
+
+The ROM holds eight more bytes, a solid block, at character 127, and they are
+deliberately left out. `VDU 127` deletes a character rather than printing one,
+so those bytes never appear on screen as a glyph. Including them would also
+break the common case: a solid block is exactly the complement of a space, and
+an upright match beats an inverted one, so every inverse space -- most of an
+inverse-video line -- would come back as an invisible control code. That was
+observed on a real screenshot, not reasoned about in the abstract; see
+`tests/fixtures/README.md`.
 
 ## Supplied glyph sets
 
@@ -159,6 +165,10 @@ machine state.
 Most tests compose their input by stamping known glyphs at known positions, so
 every case is constructed exactly and needs no file. The CLI is exercised
 through its own interface, run as a process.
+
+A few real screenshots are committed under `tests/fixtures/`, for the one thing
+synthetic images cannot vouch for: that the geometry and pixel values a real
+machine produces are what the library expects. See the README there.
 
 ```
 cmake --build build --target test_screentext_read
