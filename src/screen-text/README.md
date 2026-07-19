@@ -39,7 +39,6 @@ screentext::Band band;
 band.bottom = image.height;
 band.cell_width = 8;
 band.cell_height = 8;
-band.background = 0;
 
 const screentext::Result result = screentext::read(
     image, {band}, {screentext::builtin_glyph_set("acorn-mos-1.20")});
@@ -68,9 +67,10 @@ A character cell on a BBC screen matches its font glyph byte for byte. That was
 verified against a running machine before any of this was written, and it is why
 there is no approximate comparison anywhere in the design.
 
-1. Each cell is reduced to one bit per pixel: a pixel equal to the band's
-   `background` is clear, anything else is set. This is what removes colour from
-   the problem, so the same glyph in any colour is one bitmap.
+1. Each cell is reduced to one bit per pixel. A cell drawn by the VDU drivers
+   holds exactly two values -- the glyph's colour and its background -- so the
+   pair is recovered from the cell itself. This is what removes colour from the
+   problem, so the same glyph in any colour is one bitmap.
 2. The bitmap is looked up in a hash built from the glyph sets.
 3. When `match_inverted` is set, the complement is looked up too, and the cell
    records that it matched inverted. The BBC produces inverse text routinely by
@@ -79,6 +79,33 @@ there is no approximate comparison anywhere in the design.
 
 Precedence is fixed so that the answer never depends on iteration order: later
 glyph sets beat earlier ones, and an upright match beats an inverted one.
+
+### Colour is worked out, not declared
+
+Nothing asks the caller which value is background, and there is no way to say.
+
+It is not needed. A cell holds two values, and the two ways of assigning them
+are precisely the upright and inverse readings -- both of which are tried
+anyway. Whichever is which, the character comes out the same. So a caller with
+several foreground colours, or several background colours, or both, passes them
+straight in; nothing links one cell's colours to another's.
+
+A cell of three or more values is unmatched. It is not one glyph in one colour
+on one background, and deciding which of its values were meant to be the glyph
+would be a guess.
+
+What the background *is* still matters for one thing: whether a cell reads as
+inverse video. That is not a property of a cell -- both readings are glyphs --
+but of how the cell sits against the screen around it, so it is measured. Each
+cell votes for the value covering more of it, and the winner is the screen's
+background.
+
+Cells vote, not pixels. Counting pixels lets a few solid cells outweigh a
+screenful of text, since a solid cell contributes all its pixels and a letter
+only its strokes; one cell of reverse video in four was enough to invert the
+answer while this was being built. It follows that a screen made *entirely* of
+reverse video has none: with nothing to be reverse of, dark letters on a light
+ground is simply what it is.
 
 ### Never guess
 

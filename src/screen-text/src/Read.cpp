@@ -12,6 +12,7 @@
 
 #include "screentext/Read.hpp"
 
+#include <optional>
 #include <stdexcept>
 
 #include "GlyphIndex.hpp"
@@ -40,20 +41,100 @@ void append_utf8(std::string& text, char32_t codepoint)
     }
 }
 
-// Reduce a cell of the image to one bit per pixel: a pixel equal to the
-// band's background is clear, anything else is set. This is what removes
-// colour from the problem, so the same glyph in any colour is one bitmap.
-Bitmap extract_cell(const Image& image, const Rect& bounds, std::uint8_t background)
+// What a cell reduced to: the bitmap, and which value was taken as its
+// background so that inverse video can be judged afterwards.
+struct ReducedCell {
+    Bitmap bitmap;
+    std::uint8_t background = 0;
+    bool usable = false; // false when the cell cannot be one glyph
+};
+
+// Reduce a cell to one bit per pixel against a known background: a pixel
+// equal to it is clear, anything else is set.
+ReducedCell reduce_against(const Image& image,
+                           const Rect& bounds,
+                           std::uint8_t background)
 {
-    Bitmap bitmap(bounds.width, bounds.height);
+    ReducedCell reduced;
+    reduced.bitmap = Bitmap(bounds.width, bounds.height);
+    reduced.background = background;
+    reduced.usable = true;
+
     for (std::size_t y = 0; y < bounds.height; ++y) {
         for (std::size_t x = 0; x < bounds.width; ++x) {
             if (image.pixel(bounds.x + x, bounds.y + y) != background) {
-                bitmap.set_pixel(x, y, true);
+                reduced.bitmap.set_pixel(x, y, true);
             }
         }
     }
-    return bitmap;
+    return reduced;
+}
+
+// Reduce a cell without being told which value is background.
+//
+// A character cell drawn by the VDU drivers holds exactly two values, so the
+// pair can be recovered from the cell itself. Which of the two is background
+// need not be decided correctly for matching -- the two assignments give a
+// bitmap and its complement, and both are looked up -- but it is decided
+// deterministically anyway, preferring the value the rest of the screen uses,
+// so that inverse video can be told apart from ordinary text.
+//
+// Three or more values means the cell is not one glyph in one colour on one
+// background. It is left unusable rather than guessed at.
+ReducedCell reduce_by_inspection(const Image& image,
+                                 const Rect& bounds,
+                                 std::uint8_t screen_background)
+{
+    ReducedCell reduced;
+
+    std::uint8_t values[2] = {0, 0};
+    std::size_t counts[2] = {0, 0};
+    std::size_t distinct = 0;
+
+    for (std::size_t y = 0; y < bounds.height; ++y) {
+        for (std::size_t x = 0; x < bounds.width; ++x) {
+            const std::uint8_t value = image.pixel(bounds.x + x, bounds.y + y);
+            if (distinct > 0 && value == values[0]) {
+                ++counts[0];
+            } else if (distinct > 1 && value == values[1]) {
+                ++counts[1];
+            } else if (distinct < 2) {
+                values[distinct] = value;
+                counts[distinct] = 1;
+                ++distinct;
+            } else {
+                return reduced; // a third colour: not one glyph
+            }
+        }
+    }
+
+    if (distinct == 0) {
+        return reduced;
+    }
+
+    // A cell of one value is blank, whatever that value is.
+    if (distinct == 1) {
+        reduced.bitmap = Bitmap(bounds.width, bounds.height);
+        reduced.background = values[0];
+        reduced.usable = true;
+        return reduced;
+    }
+
+    // Prefer whichever value the screen uses as its background; failing that,
+    // the one covering more of the cell, with the lower value breaking a tie
+    // so that the result never depends on scan order.
+    std::uint8_t background = 0;
+    if (values[0] == screen_background) {
+        background = values[0];
+    } else if (values[1] == screen_background) {
+        background = values[1];
+    } else if (counts[0] != counts[1]) {
+        background = counts[0] > counts[1] ? values[0] : values[1];
+    } else {
+        background = values[0] < values[1] ? values[0] : values[1];
+    }
+
+    return reduce_against(image, bounds, background);
 }
 
 void validate(const Image& image, const std::vector<Band>& bands)
@@ -108,6 +189,112 @@ bool region_for(const Image& image,
 // there is nothing worth reporting. A cell is worth reporting when it matched
 // something other than a blank glyph, or when it matched nothing at all --
 // the latter being the difference between "unreadable" and "empty".
+// The cell rectangles of a band, row by row, in reading order.
+std::vector<std::vector<Rect>> cells_of(const Band& band, const Rect& region)
+{
+    const std::size_t column_pitch = band.effective_column_pitch();
+    const std::size_t row_pitch = band.effective_row_pitch();
+
+    // Walk the grid from its origin, advancing by the pitch but taking only
+    // the cell. Where the two differ the space between cells is stepped over
+    // and never sampled. Cells before the region are skipped rather than
+    // shifted, so the grid stays where the caller put it.
+    std::vector<std::vector<Rect>> rows;
+    for (std::size_t y = band.origin_y;
+         y + band.cell_height <= region.bottom();
+         y += row_pitch) {
+        if (y < region.y) {
+            continue;
+        }
+
+        std::vector<Rect> row;
+        for (std::size_t x = band.origin_x;
+             x + band.cell_width <= region.right();
+             x += column_pitch) {
+            if (x < region.x) {
+                continue;
+            }
+            row.push_back(Rect{x, y, band.cell_width, band.cell_height});
+        }
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
+// Which value a single cell would call its background, judged only by what is
+// in the cell: the one covering more of it, with the lower value breaking a
+// tie. A cell of three or more values is not one glyph and has no opinion.
+std::optional<std::uint8_t> cell_background(const Image& image,
+                                            const Rect& bounds)
+{
+    std::uint8_t values[2] = {0, 0};
+    std::size_t counts[2] = {0, 0};
+    std::size_t distinct = 0;
+
+    for (std::size_t y = 0; y < bounds.height; ++y) {
+        for (std::size_t x = 0; x < bounds.width; ++x) {
+            const std::uint8_t value = image.pixel(bounds.x + x, bounds.y + y);
+            if (distinct > 0 && value == values[0]) {
+                ++counts[0];
+            } else if (distinct > 1 && value == values[1]) {
+                ++counts[1];
+            } else if (distinct < 2) {
+                values[distinct] = value;
+                counts[distinct] = 1;
+                ++distinct;
+            } else {
+                return std::nullopt;
+            }
+        }
+    }
+
+    if (distinct == 0) {
+        return std::nullopt;
+    }
+    if (distinct == 1) {
+        return values[0];
+    }
+    if (counts[0] != counts[1]) {
+        return counts[0] > counts[1] ? values[0] : values[1];
+    }
+    return values[0] < values[1] ? values[0] : values[1];
+}
+
+// The value the band uses as its background, by a vote of one per cell.
+//
+// This is what makes inverse video detectable without being told. Both
+// readings of a two-colour cell are glyphs, so which one is "inverse" is not
+// a property of the cell at all -- it is how the cell sits against the rest
+// of the screen, and that can be measured.
+//
+// Cells vote rather than pixels. Counting pixels lets a handful of solid
+// cells outweigh a screenful of text, because a solid cell contributes every
+// one of its pixels while a letter contributes only its strokes; one cell of
+// reverse video in four was enough to invert the answer. One cell, one vote
+// is far harder to skew, and matches what "the background of this screen"
+// means to somebody looking at it.
+std::uint8_t infer_background(const Image& image,
+                              const std::vector<std::vector<Rect>>& rows)
+{
+    std::size_t votes[256] = {};
+    for (const std::vector<Rect>& row : rows) {
+        for (const Rect& bounds : row) {
+            if (const std::optional<std::uint8_t> value
+                = cell_background(image, bounds)) {
+                ++votes[*value];
+            }
+        }
+    }
+
+    std::size_t best = 0;
+    for (std::size_t value = 1; value < 256; ++value) {
+        if (votes[value] > votes[best]) {
+            best = value;
+        }
+    }
+    return static_cast<std::uint8_t>(best);
+}
+
 void flush_run(std::vector<Cell>& cells, std::vector<Run>& runs)
 {
     const auto interesting = [](const Cell& cell) {
@@ -197,41 +384,38 @@ Result read(const Image& image,
             continue;
         }
 
-        // Walk the grid from its origin, advancing by the pitch but reading
-        // only the cell. Where the two differ the space between cells is
-        // stepped over without ever being sampled. Cells before the region
-        // are skipped rather than shifted, so the grid stays where the caller
-        // put it.
-        const std::size_t column_pitch = band.effective_column_pitch();
-        const std::size_t row_pitch = band.effective_row_pitch();
+        const std::vector<std::vector<Rect>> rows = cells_of(band, region);
+
+        // One value stands for the band's background, and it is measured
+        // rather than declared. It decides only what reads as inverse video:
+        // the text comes out the same either way, because both readings of a
+        // cell's two colours are tried.
+        const std::uint8_t screen_background = infer_background(image, rows);
 
         std::vector<Cell> row_cells;
-        for (std::size_t y = band.origin_y;
-             y + band.cell_height <= region.bottom();
-             y += row_pitch) {
-            if (y < region.y) {
-                continue;
-            }
-
+        for (const std::vector<Rect>& row : rows) {
             row_cells.clear();
-            for (std::size_t x = band.origin_x;
-                 x + band.cell_width <= region.right();
-                 x += column_pitch) {
-                if (x < region.x) {
-                    continue;
-                }
-
-                const Rect bounds{x, y, band.cell_width, band.cell_height};
-
+            for (const Rect& bounds : row) {
                 Cell cell;
                 cell.bounds = bounds;
 
-                const Bitmap bitmap
-                    = extract_cell(image, bounds, band.background);
-                if (const GlyphIndex::Match* match = index.find(bitmap)) {
+                const ReducedCell reduced
+                    = reduce_by_inspection(image, bounds, screen_background);
+
+                const GlyphIndex::Match* match
+                    = reduced.usable ? index.find(reduced.bitmap) : nullptr;
+                if (match != nullptr) {
                     cell.codepoint = match->codepoint;
-                    cell.inverted = match->inverted;
                     cell.glyph_set = *match->glyph_set;
+
+                    // Two things can make a cell inverse: the glyph matched
+                    // as a complement, or the cell's background is not the
+                    // screen's. Either alone means inverse; both together
+                    // cancel, the cell having been read the other way up
+                    // already.
+                    const bool reversed_ground
+                        = reduced.background != screen_background;
+                    cell.inverted = match->inverted != reversed_ground;
                 } else {
                     ++result.unmatched_cells;
                 }

@@ -164,8 +164,14 @@ TEST_CASE("An inverse space reads as a space, not as a control code")
     REQUIRE(result.runs.size() == 1);
     CHECK(result.runs[0].text == "A B");
     CHECK(result.unmatched_cells == 0);
+
+    // Every cell here is reverse video, so there is nothing for any of them
+    // to be reverse of: dark letters on a light ground is exactly what this
+    // is, and that is how it reads. Inverse video is a relation between a
+    // cell and the screen around it, not a property of a cell, so a screen
+    // made entirely of it has none.
     for (const Cell& cell : result.runs[0].cells) {
-        CHECK(cell.inverted);
+        CHECK_FALSE(cell.inverted);
     }
 }
 
@@ -426,44 +432,19 @@ TEST_CASE("The grid origin shifts where cells are taken from")
     CHECK(found.runs[0].text == "AB");
 }
 
-TEST_CASE("A non-zero background makes the brighter pixels the glyph")
+TEST_CASE("Neither colour need be zero, and neither need be the brighter")
 {
-    // The caller has already reduced its image to one byte per pixel; which
-    // value counts as background is its decision, not the library's.
+    // Nothing assumes background is zero, or dark, or anything else. Here
+    // the glyph is drawn darker than the ground it sits on.
     Canvas canvas(8, 8, 7);
     canvas.stamp(0, 0, Canvas::glyph_for(acorn(), U'Q'), 3);
-
-    Band band = whole_image_band(canvas.image());
-    band.background = 7;
-
-    const Result result = read(canvas.image(), {band}, acorn_only());
-
-    REQUIRE(result.runs.size() == 1);
-    CHECK(result.runs[0].text == "Q");
-}
-
-TEST_CASE("Any pixel value other than the background is foreground")
-{
-    // Colour is reduced away before the library sees it: a glyph drawn in
-    // several colours is still the same glyph.
-    Canvas canvas(8, 8);
-    const Bitmap& glyph = Canvas::glyph_for(acorn(), U'W');
-    std::uint8_t colour = 1;
-    for (std::size_t y = 0; y < 8; ++y) {
-        for (std::size_t x = 0; x < 8; ++x) {
-            if (glyph.pixel(x, y)) {
-                canvas.set_pixel(x, y, colour);
-                colour = static_cast<std::uint8_t>(colour % 15 + 1);
-            }
-        }
-    }
 
     const Result result = read(canvas.image(),
                                {whole_image_band(canvas.image())},
                                acorn_only());
 
     REQUIRE(result.runs.size() == 1);
-    CHECK(result.runs[0].text == "W");
+    CHECK(result.runs[0].text == "Q");
 }
 
 TEST_CASE("A supplied glyph set overrides a built-in character")
@@ -653,7 +634,6 @@ TEST_CASE("Pixels in the gap between rows are never read")
     band.bottom = 20;
     band.cell_height = 8;
     band.row_pitch = 10;
-    band.background = 4;
 
     const Result result = read(canvas.image(), {band}, acorn_only());
 
@@ -679,7 +659,6 @@ TEST_CASE("Sampling the gap as though it were part of the cell matches nothing")
     naive.top = 0;
     naive.bottom = 20;
     naive.cell_height = 10; // wrong: the gap is not part of the glyph
-    naive.background = 4;
 
     const Result result = read(canvas.image(), {naive}, acorn_only());
     CHECK(result.unmatched_cells > 0);
@@ -729,3 +708,140 @@ TEST_CASE("A pitch smaller than the cell is rejected, not read as overlap")
     CHECK_THROWS_AS(read(canvas.image(), {band}, acorn_only()),
                     std::invalid_argument);
 }
+
+// Colour is worked out from the image rather than declared.
+//
+// A character cell drawn by the VDU drivers holds exactly two pixel values,
+// the glyph's colour and its background, and the two ways of assigning those
+// values are precisely the upright and inverse interpretations. So which is
+// which need not be known in order to match -- and a caller often cannot say
+// any more easily than this can work it out.
+
+TEST_CASE("Text is read without any background being declared")
+{
+    Canvas canvas(8 * 3, 8, 5);
+    canvas.stamp_text(0, 0, "ABC", acorn(), 8, 2);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "ABC");
+    CHECK(result.unmatched_cells == 0);
+}
+
+TEST_CASE("Cells with different background colours are all read")
+{
+    // Each cell is a glyph on its own background. Nothing links one cell's
+    // colours to another's, so nothing global can describe them.
+    Canvas canvas(8 * 3, 8, 0);
+    const std::uint8_t backgrounds[] = {1, 9, 4};
+    const std::uint8_t foregrounds[] = {7, 2, 6};
+    const char* const letters = "XYZ";
+
+    for (std::size_t index = 0; index < 3; ++index) {
+        canvas.fill(index * 8, 0, 8, 8, backgrounds[index]);
+        canvas.stamp(index * 8, 0,
+                     Canvas::glyph_for(acorn(), static_cast<char32_t>(
+                                                    letters[index])),
+                     foregrounds[index]);
+    }
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "XYZ");
+    CHECK(result.unmatched_cells == 0);
+}
+
+TEST_CASE("Cells with different foreground colours are all read")
+{
+    Canvas canvas(8 * 3, 8, 0);
+    canvas.stamp(0, 0, Canvas::glyph_for(acorn(), U'R'), 1);
+    canvas.stamp(8, 0, Canvas::glyph_for(acorn(), U'G'), 2);
+    canvas.stamp(16, 0, Canvas::glyph_for(acorn(), U'B'), 4);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "RGB");
+    CHECK(result.unmatched_cells == 0);
+}
+
+TEST_CASE("A cell of more than two colours is unmatched, not guessed at")
+{
+    // One colour per glyph is what the VDU drivers produce. A cell holding
+    // three colours is something else -- text drawn over graphics, most
+    // likely -- and reporting it unread is the honest answer.
+    Canvas canvas(8, 8, 0);
+    canvas.stamp(0, 0, Canvas::glyph_for(acorn(), U'A'), 1);
+    canvas.set_pixel(7, 7, 9); // a third colour, from something else
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    CHECK(result.unmatched_cells == 1);
+}
+
+TEST_CASE("Two colours neither of which is the screen background still match")
+{
+    Canvas canvas(8 * 2, 8, 0);
+    canvas.fill(0, 0, 8, 8, 3);
+    canvas.stamp(0, 0, Canvas::glyph_for(acorn(), U'Q'), 6);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "Q");
+}
+
+TEST_CASE("Inverse video is judged against the background of the screen")
+{
+    // Which cell is "inverse" is not a property of the cell -- both readings
+    // of two colours are glyphs. It is a property of how the cell sits
+    // against the rest of the screen, so that is what decides it.
+    Canvas canvas(8 * 4, 8, 0);
+    canvas.stamp_text(0, 0, "AB", acorn(), 8, 7);
+    canvas.fill(16, 0, 8, 8, 7);
+    canvas.stamp(16, 0, Canvas::glyph_for(acorn(), U'C'), 0);
+    canvas.stamp(24, 0, Canvas::glyph_for(acorn(), U'D'), 7);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "ABCD");
+    REQUIRE(result.runs[0].cells.size() == 4);
+    CHECK_FALSE(result.runs[0].cells[0].inverted);
+    CHECK_FALSE(result.runs[0].cells[1].inverted);
+    CHECK(result.runs[0].cells[2].inverted);
+    CHECK_FALSE(result.runs[0].cells[3].inverted);
+}
+
+TEST_CASE("A solid cell of a colour other than the background is an inverse space")
+{
+    Canvas canvas(8 * 3, 8, 0);
+    canvas.stamp_text(0, 0, "A", acorn(), 8, 7);
+    canvas.fill(8, 0, 8, 8, 7); // solid: an inverse space
+    canvas.stamp(16, 0, Canvas::glyph_for(acorn(), U'B'), 7);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "A B");
+    CHECK(result.unmatched_cells == 0);
+    CHECK(result.runs[0].cells[1].codepoint == U' ');
+    CHECK(result.runs[0].cells[1].inverted);
+}
+

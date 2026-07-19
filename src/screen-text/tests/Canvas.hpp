@@ -40,6 +40,21 @@ public:
         image_.pixels[y * image_.width + x] = value;
     }
 
+    // Fill a rectangle with one value, for painting a cell's background
+    // before a glyph is stamped over it.
+    void fill(std::size_t x,
+              std::size_t y,
+              std::size_t width,
+              std::size_t height,
+              std::uint8_t value)
+    {
+        for (std::size_t row = 0; row < height; ++row) {
+            for (std::size_t column = 0; column < width; ++column) {
+                set_pixel(x + column, y + row, value);
+            }
+        }
+    }
+
     // Stamp a bitmap with its top-left corner at (x, y). Set bits take
     // `foreground`; clear bits are left alone, so glyphs can be drawn over
     // whatever is already there.

@@ -20,7 +20,6 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
-#include <utility>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -49,10 +48,7 @@ const char* const USAGE =
     "                        an 8-scanline glyph on a 10-scanline row, the\n"
     "                        gap blanked to black whatever the palette says\n"
     "  --origin X,Y          where the character grid starts (default: 0,0)\n"
-    "  --background N        pixel value meaning background (default: 0)\n"
-    "  --background-at X,Y   take the background value from this pixel,\n"
-    "                        for when the background is a colour rather\n"
-    "                        than a value you happen to know\n"
+
     "  --search MODE         aligned (default) or offset\n"
     "  --no-inverted         do not match inverse video\n"
     "  --format FORMAT       text (default) or json\n"
@@ -80,8 +76,6 @@ struct Arguments {
     std::size_t row_pitch = 0;
     std::size_t origin_x = 0;
     std::size_t origin_y = 0;
-    unsigned background = 0;
-    std::optional<std::pair<std::size_t, std::size_t>> background_at;
     Search search = Search::AlignedOnly;
     bool match_inverted = true;
     bool json = false;
@@ -304,17 +298,6 @@ int parse_arguments(const std::vector<std::string>& argv,
             }
             arguments.column_pitch = static_cast<std::size_t>(parts[0]);
             arguments.row_pitch = static_cast<std::size_t>(parts[1]);
-        } else if (argument == "--background-at") {
-            if (!value_for(index, "--background-at", value)) {
-                return 2;
-            }
-            std::vector<unsigned long long> parts;
-            if (!parse_size_list(value, ',', parts) || parts.size() != 2) {
-                return fail("--background-at needs X,Y");
-            }
-            arguments.background_at = std::make_pair(
-                static_cast<std::size_t>(parts[0]),
-                static_cast<std::size_t>(parts[1]));
         } else if (argument == "--origin") {
             if (!value_for(index, "--origin", value)) {
                 return 2;
@@ -325,16 +308,6 @@ int parse_arguments(const std::vector<std::string>& argv,
             }
             arguments.origin_x = static_cast<std::size_t>(parts[0]);
             arguments.origin_y = static_cast<std::size_t>(parts[1]);
-        } else if (argument == "--background") {
-            if (!value_for(index, "--background", value)) {
-                return 2;
-            }
-            std::vector<unsigned long long> parts;
-            if (!parse_size_list(value, ',', parts) || parts.size() != 1
-                || parts[0] > 0xFF) {
-                return fail("--background needs a value from 0 to 255");
-            }
-            arguments.background = static_cast<unsigned>(parts[0]);
         } else if (!argument.empty() && argument[0] == '-') {
             return fail("unknown option '" + argument + "'");
         } else if (arguments.image_filepath.empty()) {
@@ -388,14 +361,6 @@ int run_read(const std::vector<std::string>& argv)
         return fail(error);
     }
 
-    if (arguments.background_at.has_value()) {
-        const auto [x, y] = *arguments.background_at;
-        if (x >= image.width || y >= image.height) {
-            return fail("--background-at is outside the image");
-        }
-        arguments.background = image.pixel(x, y);
-    }
-
     Band band;
     band.top = 0;
     band.bottom = image.height;
@@ -405,7 +370,6 @@ int run_read(const std::vector<std::string>& argv)
     band.row_pitch = arguments.row_pitch;
     band.origin_x = arguments.origin_x;
     band.origin_y = arguments.origin_y;
-    band.background = static_cast<std::uint8_t>(arguments.background);
 
     Options options;
     options.search = arguments.search;

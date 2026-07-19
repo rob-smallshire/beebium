@@ -521,16 +521,15 @@ TEST_CASE("No cell of any mode's testcard is left unread")
 
 TEST_CASE("A recoloured background is read in every mode")
 {
-    // VDU 19,0,4,0,0,0 turns the character background blue. Nothing about
-    // matching depends on the colour: the caller says which value is
-    // background and every other value is glyph.
+    // VDU 19,0,4,0,0,0 turns the character background blue. Nothing here
+    // says so: the two values in a cell are the glyph's colour and its
+    // background, and which is which is worked out from the image.
     for (const ModeGeometry& geometry : MODES) {
         INFO("MODE " + std::to_string(geometry.mode));
 
         const Output output
             = run("read \"" + corpus_filepath(geometry.mode, "blue") + "\""
-                  + geometry_arguments(geometry)
-                  + " --background-at 0,100 --format json");
+                  + geometry_arguments(geometry) + " --format json");
 
         CHECK(output.status == 0);
         CHECK(json_number(output.stdout_text, "total_cells")
@@ -553,13 +552,15 @@ TEST_CASE("In MODE 3 and MODE 6 the gap between rows must not be sampled")
 
         const Output correct
             = run("read \"" + image + "\" --cell 8x8 --pitch 8x10"
-                  + " --background-at 0,100 --format json");
+                  + " --format json");
         CHECK(json_number(correct.stdout_text, "unmatched_cells") == 0);
 
         // The same screen read as though the glyph were ten scanlines tall.
+        // Such a cell holds three values -- the glyph, its background, and
+        // the blanked gap -- so it cannot be one glyph in one colour, and
+        // every cell says so.
         const Output naive
-            = run("read \"" + image + "\" --cell 8x10"
-                  + " --background-at 0,100 --format json");
+            = run("read \"" + image + "\" --cell 8x10 --format json");
         const std::size_t total = json_number(naive.stdout_text, "total_cells");
         CHECK(total > 0);
         CHECK(json_number(naive.stdout_text, "unmatched_cells") == total);

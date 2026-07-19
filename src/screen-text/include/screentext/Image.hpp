@@ -19,9 +19,13 @@
 
 namespace screentext {
 
-// A greyscale or paletted image, one byte per pixel. What the values mean is
-// decided by `Band::background`: the caller has already reduced whatever it
-// had to single bytes, so the library never needs a palette.
+// A greyscale or paletted image, one byte per pixel.
+//
+// The caller reduces whatever it had to single bytes; this finds glyphs in
+// them. Which value is background is not asked for and not needed: a cell
+// holds the glyph's colour and its background, and both readings of that pair
+// are tried. So the library never needs a palette, and a caller that has one
+// need not work out what to do with it.
 struct Image {
     std::size_t width = 0;
     std::size_t height = 0;
@@ -91,11 +95,6 @@ struct Band {
     // here by the pitch; those not wholly within the band are not matched.
     std::size_t origin_x = 0;
     std::size_t origin_y = 0;
-
-    // The pixel value meaning "not part of a glyph". Every other value is
-    // treated as foreground, which is what reduces a paletted cell to the one
-    // bit per pixel a glyph is expressed in.
-    std::uint8_t background = 0;
 
     std::size_t height() const { return bottom > top ? bottom - top : 0; }
 
