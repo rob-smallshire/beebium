@@ -101,6 +101,86 @@ before any pixels exist. Nothing in the other modes offers that. It is a
 special case in the implementation and should stay one -- but behind the
 interface, not in front of it.
 
+## Prior art
+
+The technique is not new, and two implementations are worth reading before
+writing any.
+
+### B-Em: `textsave.c`
+
+"Save Screen as Text" does glyph-matching extraction from BBC bitmap modes and
+ships today. `textsave_bitmap` (`textsave.c:390`) builds a 64-bit monochrome
+bitmap per character cell -- collapsing 2bpp and 4bpp pixels against the OS
+background mask -- then linearly scans a ~290-entry `charset[]` table for an
+exact match. MODE 7 is a separate path reading screen RAM directly.
+
+Its limitations are the interesting part, because they are exactly the cases
+this document sets out to handle:
+
+- **Geometry comes from the OS, not the hardware.** It reads `ram[0x34f]`
+  (bytes per char), `ram[0x355]` (mode) and `ram[0x358]` (background mask), and
+  indexes hardcoded per-mode row/column tables. That is what the MOS *thinks*
+  the screen is, which is wrong for a split screen and meaningless under custom
+  CRTC programming.
+- **The font is transcribed into the source**, not read from the machine, so
+  `VDU 23` redefinitions are invisible. The fragility shows: `textsave.c:447`
+  disambiguates one glyph by reading a single ROM byte to work out whether MOS
+  3.20 or 3.50 is running.
+- **An unmatched cell silently becomes a space**, so "I could not read this"
+  and "this was blank" are indistinguishable in the output.
+- Whole screen only, to a file rather than the clipboard.
+
+### ZEsarUX: the most complete implementation anywhere
+
+ZEsarUX does this for the ZX Spectrum and Amstrad CPC, both of which are
+always-bitmap machines with no text buffer at all -- the same problem as BBC
+MODEs 0-6. It has an answer for every hard case listed above:
+
+| Problem | ZEsarUX's approach |
+|---|---|
+| Matching | Linear scan of 96 glyphs, exact byte equality (`compare_char_tabla_step`) |
+| **Inverse video** | Second comparison against `glyph ^ 0xFF`, reported as a flag |
+| Soft fonts | Follows the system font pointer (Spectrum CHARS at 23606/7), paging-aware, with a setting to disable |
+| Colour | Reduce to 1bpp by thresholding against one colour |
+| **Wide-pixel modes** | Decimate N physical pixels per logical pixel back to a 1bpp 8x8 cell, and adapt the grid width per mode |
+| **Grid misalignment** | Brute-force all 64 sub-cell (dx, dy) offsets against the rendered framebuffer until a glyph matches |
+| Unmatched cells | Configurable: blank, `?`, or 2x2-quadrant ASCII art |
+
+Two of those change this specification and are folded into the sections above:
+inverse video, which the BBC produces routinely by swapping foreground and
+background colours, and wide-pixel decimation, which MODE 2 requires.
+
+The sub-cell offset search is also the answer to `VDU 5` text, at sixty-four
+times the cost of an aligned scan. It stays out of scope here, but it is a
+known-workable technique rather than an open research problem.
+
+Worth noting ZEsarUX also has the OS-call-trap approach (hooking `RST 10H`),
+and treats the two as complementary: traps for a running transcript, glyph
+matching for what is on screen now.
+
+### Everyone else
+
+- **BeebEm** has a screen reader (`VideoGetText`, `Video.cpp:1733`) feeding a
+  text view and text-to-speech, hard-limited to MODE 7. In any other mode it
+  emits the string "Not in text mode."
+- **VICE, DOSBox-X, Altirra, AppleWin** read hardware character buffers, which
+  their machines have and the BBC's bitmap modes do not. DOSBox-X has
+  drag-selection copy, but only over the VGA text buffer.
+- **RetroArch's AI Service** runs general OCR on a screenshot via an external
+  cloud endpoint, for game translation. No knowledge of the source font, so
+  pixel-exact recovery is impossible by construction.
+- **MAME, Fuse**: nothing.
+
+### What is actually new here
+
+Not glyph matching. What no emulator surveyed does is: choose the strategy
+**per band of scanlines** from hardware state rather than per frame from OS
+workspace; read the font **from the running machine** including redefinitions;
+report **what it could not read** instead of silently blanking it; extract an
+**arbitrary region** rather than the whole screen; and offer **drag-to-select
+over the display**. All three BBC emulators route mouse input into emulation
+and none has any selection interaction at all.
+
 ## The interface
 
 The client selects **in pixels** and the server returns **text plus where it
@@ -196,6 +276,17 @@ reported as unknown rather than as a plausible wrong character.
 Colour complicates the hash: the same glyph in different colours produces
 different pixels. The bitmap must be reduced to a foreground/background mask
 before hashing, which needs the palette in effect for that band.
+
+**Inverse video must be matched too.** The BBC routinely prints text with
+foreground and background swapped, which inverts the cell relative to the
+glyph. Following ZEsarUX, compare against both the glyph and its complement,
+and record which matched -- a run of inverse text is worth knowing about even
+if it copies as ordinary characters.
+
+**Low-resolution modes need decimating first.** In MODE 2 a logical pixel
+occupies several physical ones, so a cell must be reduced back to an 8x8
+monochrome bitmap before matching, and the character grid is narrower. The
+per-band record has to carry enough to do that.
 
 ### Text at the graphics cursor
 
