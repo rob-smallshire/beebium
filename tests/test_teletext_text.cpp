@@ -24,12 +24,17 @@
 
 #include <beebium/TeletextText.hpp>
 
+#include <vector>
+
 using namespace beebium;
 
 namespace {
 
-// Build a grid from rows of plain ASCII, one string per row.
-TeletextGrid grid_of(const std::vector<std::string>& rows) {
+// Build a screen from rows of plain ASCII, one string per row.
+//
+// Returns a snapshot rather than the grid: that is what a reader outside the
+// emulation thread holds, so the tests exercise the same path the service does.
+TeletextGrid::Snapshot grid_of(const std::vector<std::string>& rows) {
     TeletextGrid grid;
     for (size_t row = 0; row < rows.size() && row < TeletextGrid::ROWS; ++row) {
         const std::string& text = rows[row];
@@ -42,15 +47,15 @@ TeletextGrid grid_of(const std::vector<std::string>& rows) {
         }
     }
     grid.swap();
-    return grid;
+    return grid.snapshot();
 }
 
-// Place one cell, fully specified, in an otherwise empty grid.
-TeletextGrid grid_with(const TeletextCell& cell) {
+// Place one cell, fully specified, in an otherwise empty screen.
+TeletextGrid::Snapshot grid_with(const TeletextCell& cell) {
     TeletextGrid grid;
     grid.set_cell(0, 0, cell);
     grid.swap();
-    return grid;
+    return grid.snapshot();
 }
 
 } // namespace
@@ -62,7 +67,7 @@ TeletextGrid grid_with(const TeletextCell& cell) {
 TEST_CASE("An empty screen copies as nothing", "[teletext-text]") {
     TeletextGrid grid;
     grid.swap();
-    CHECK(teletext_text(grid) == "");
+    CHECK(teletext_text(grid.snapshot()) == "");
 }
 
 TEST_CASE("Rows copy as lines", "[teletext-text]") {
@@ -138,7 +143,7 @@ TEST_CASE("A double-height row copies once, not twice", "[teletext-text]") {
     grid.set_cell(1, 0, bottom);
     grid.swap();
 
-    CHECK(teletext_text(grid) == "A");
+    CHECK(teletext_text(grid.snapshot()) == "A");
 }
 
 TEST_CASE("Control codes hold their column", "[teletext-text]") {
@@ -156,7 +161,7 @@ TEST_CASE("Control codes hold their column", "[teletext-text]") {
     grid.set_cell(0, 1, letter);
     grid.swap();
 
-    CHECK(teletext_text(grid) == " A");
+    CHECK(teletext_text(grid.snapshot()) == " A");
 }
 
 // ============================================================================
