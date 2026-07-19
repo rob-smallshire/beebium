@@ -352,6 +352,12 @@ zero.
 
 ### Bitmap modes, cell-aligned text
 
+**Verified before this was specified.** A character cell on a real MODE 4
+screen matches its font glyph byte for byte, and the MOS 1.20 font sits at
+`&C000` with eight bytes per character from character 32 -- `(c - 32) * 8`
+predicts every glyph checked. So the matching is exact, and nothing in this
+design needs approximate comparison.
+
 Delegated to the library described above; what follows is what the emulator
 must supply and what the library then does.
 
@@ -571,7 +577,7 @@ Four streams. Two can start immediately and in parallel; the other two follow.
 ### 1. The library
 
 Turns images into text given glyph sets. Depends on nothing else in this
-repository.
+repository. Specified as a work order in `screen-text-library-spec.md`.
 
 Lives here for now, as its own component with its own build targets -- a
 linkable library and a CLI over the same interface. Naming can wait until there
