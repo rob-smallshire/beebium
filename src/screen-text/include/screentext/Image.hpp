@@ -67,11 +67,28 @@ struct Band {
     std::size_t top = 0;    // first image row in this band
     std::size_t bottom = 0; // one past the last
 
+    // The glyph box: the pixels a character occupies, and all that is ever
+    // compared against a glyph.
     std::size_t cell_width = 8;
     std::size_t cell_height = 8;
 
+    // The distance from one cell to the next. Zero means the cell size, which
+    // is the usual case and what `effective_*_pitch` returns for it.
+    //
+    // Pitch and cell size differ when the display leaves a gap between cells.
+    // MODE 3 and MODE 6 put an 8-scanline glyph on a 10-scanline pitch, and
+    // the two spare scanlines are blanked rather than painted with the
+    // background colour -- they stay black however the palette is programmed,
+    // which `VDU 19,0,4,0,0,0` makes plain by turning the character
+    // background blue while the gaps stay black.
+    //
+    // So the gap cannot be treated as part of the cell. Sampling it would
+    // stop every cell matching as soon as the background is not black.
+    std::size_t column_pitch = 0;
+    std::size_t row_pitch = 0;
+
     // Where the character grid starts, in image coordinates. Cells step from
-    // here by the cell size; those not wholly within the band are not matched.
+    // here by the pitch; those not wholly within the band are not matched.
     std::size_t origin_x = 0;
     std::size_t origin_y = 0;
 
@@ -81,6 +98,16 @@ struct Band {
     std::uint8_t background = 0;
 
     std::size_t height() const { return bottom > top ? bottom - top : 0; }
+
+    std::size_t effective_column_pitch() const
+    {
+        return column_pitch != 0 ? column_pitch : cell_width;
+    }
+
+    std::size_t effective_row_pitch() const
+    {
+        return row_pitch != 0 ? row_pitch : cell_height;
+    }
 };
 
 } // namespace screentext

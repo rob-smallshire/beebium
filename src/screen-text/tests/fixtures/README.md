@@ -1,7 +1,10 @@
 # Test fixtures
 
-Screenshots captured from a running machine and committed, so the library is
-exercised against genuine output as well as against images it composed itself.
+Screens from a running machine, committed, so the library is exercised against
+genuine output as well as against images it composed itself.
+
+Two sets: `corpus/`, covering every bitmap mode exhaustively, and two captured
+screenshots at the top level.
 
 The synthetic tests construct every case exactly and cover far more ground.
 These exist for the one thing synthetic images cannot vouch for: that the
@@ -81,3 +84,62 @@ wrong:
 
 If a recaptured image differs, check the geometry above before assuming the
 library is at fault: a different border or field order changes the origin.
+
+
+# corpus/
+
+Every bitmap mode, MODE 0 to MODE 6, in two variants. Imported from the
+emulator's own golden masters by `import_golden_corpus.py`; see that script for
+why they are copied rather than referenced.
+
+- `modeN-testcard.png` -- every character cell filled with a cycling pattern of
+  characters 32 to 126, so a whole screen is checked rather than a line of it.
+- `modeN-blue.png` -- the same screen after `VDU 19,0,4,0,0,0` recolours the
+  background.
+
+Every cell of all fourteen images is matched, none unread, and the testcard's
+text is reconstructed exactly from an expectation computed independently of the
+library.
+
+## Geometry
+
+Eight pixels per column in every mode, which is what lets one glyph set serve
+all of them. Rows are where they differ:
+
+| Mode | Image | Grid | Cell | Row pitch |
+|---|---|---|---|---|
+| 0 | 640x256 | 80x32 | 8x8 | 8 |
+| 1 | 320x256 | 40x32 | 8x8 | 8 |
+| 2 | 160x256 | 20x32 | 8x8 | 8 |
+| 3 | 640x250 | 80x25 | 8x8 | **10** |
+| 4 | 320x256 | 40x32 | 8x8 | 8 |
+| 5 | 160x256 | 20x32 | 8x8 | 8 |
+| 6 | 320x250 | 40x25 | 8x8 | **10** |
+
+MODE 3 and MODE 6 are 25-row text modes: an 8-scanline glyph on a 10-scanline
+pitch. The two spare scanlines are blanked rather than painted with the
+background colour, so they stay black however the palette is programmed. The
+blue variants of those two modes are the reason the library separates cell size
+from pitch at all -- read with a 10-scanline *cell*, every one of MODE 6's 1000
+cells goes unmatched.
+
+## The cursor
+
+The testcard leaves the last cell of the last row unfilled and the golden
+masters render the cursor steady, so that cell holds an underline. It appears in
+the expected text as an underline, because that is what is on the screen. The
+library does not know what a cursor is, and should not.
+
+## Re-importing
+
+```
+cd clients/beebium-python-client
+uv run --extra imaging python \
+    ../../src/screen-text/tests/fixtures/import_golden_corpus.py
+```
+
+Add `--check` to see what would be imported without writing anything. If the
+emulator's golden masters are regenerated and these are re-imported, expect the
+tests to keep passing: a change that broke them would mean the renderer had
+stopped producing glyphs that match the font, which is the emulator's bug to
+find, not this library's.

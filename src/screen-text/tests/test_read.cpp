@@ -601,3 +601,131 @@ TEST_CASE("Malformed input is rejected rather than read")
     CHECK_THROWS_AS(read(canvas.image(), {degenerate}, acorn_only()),
                     std::invalid_argument);
 }
+
+// Cell size and grid pitch are different things. A display may leave a gap
+// between character rows: MODE 3 and MODE 6 put an 8-scanline glyph on a
+// 10-scanline pitch, and the two spare scanlines are blanked to black
+// whatever the palette says. Sampling them would be wrong, and with a
+// non-black background it would stop every cell matching.
+
+TEST_CASE("A row pitch larger than the cell height skips the gap between rows")
+{
+    // Three rows of 8-pixel glyphs on a 10-pixel pitch, as MODE 6 has.
+    Canvas canvas(8 * 3, 30);
+    canvas.stamp_text(0, 0, "ABC", acorn());
+    canvas.stamp_text(0, 10, "DEF", acorn());
+    canvas.stamp_text(0, 20, "GHI", acorn());
+
+    Band band;
+    band.top = 0;
+    band.bottom = 30;
+    band.cell_height = 8;
+    band.row_pitch = 10;
+
+    const Result result = read(canvas.image(), {band}, acorn_only());
+
+    REQUIRE(result.runs.size() == 3);
+    CHECK(result.runs[0].text == "ABC");
+    CHECK(result.runs[1].text == "DEF");
+    CHECK(result.runs[2].text == "GHI");
+    CHECK(result.unmatched_cells == 0);
+}
+
+TEST_CASE("Pixels in the gap between rows are never read")
+{
+    // The blanked scanlines hold a value that is neither the background nor
+    // any part of a glyph. Reading them would corrupt every cell; skipping
+    // them leaves the text intact.
+    Canvas canvas(8 * 3, 20, 4);
+    canvas.stamp_text(0, 0, "ABC", acorn(), 8, 1);
+    canvas.stamp_text(0, 10, "DEF", acorn(), 8, 1);
+
+    // The gap scanlines are blanked to a third value, as the BBC blanks them
+    // to black while the cell background is some other colour.
+    for (std::size_t y : {8u, 9u, 18u, 19u}) {
+        for (std::size_t x = 0; x < canvas.image().width; ++x) {
+            canvas.set_pixel(x, y, 0);
+        }
+    }
+
+    Band band;
+    band.top = 0;
+    band.bottom = 20;
+    band.cell_height = 8;
+    band.row_pitch = 10;
+    band.background = 4;
+
+    const Result result = read(canvas.image(), {band}, acorn_only());
+
+    REQUIRE(result.runs.size() == 2);
+    CHECK(result.runs[0].text == "ABC");
+    CHECK(result.runs[1].text == "DEF");
+    CHECK(result.unmatched_cells == 0);
+}
+
+TEST_CASE("Sampling the gap as though it were part of the cell matches nothing")
+{
+    // The failure the pitch exists to avoid, stated as a test so that the
+    // distinction cannot quietly collapse again.
+    Canvas canvas(8, 20, 4);
+    canvas.stamp_text(0, 0, "A", acorn(), 8, 1);
+    for (std::size_t y : {8u, 9u}) {
+        for (std::size_t x = 0; x < 8; ++x) {
+            canvas.set_pixel(x, y, 0);
+        }
+    }
+
+    Band naive;
+    naive.top = 0;
+    naive.bottom = 20;
+    naive.cell_height = 10; // wrong: the gap is not part of the glyph
+    naive.background = 4;
+
+    const Result result = read(canvas.image(), {naive}, acorn_only());
+    CHECK(result.unmatched_cells > 0);
+}
+
+TEST_CASE("A column pitch larger than the cell width skips gaps between columns")
+{
+    // No BBC mode does this, but the library is not a BBC library and the
+    // two axes are treated alike.
+    Canvas canvas(30, 8);
+    canvas.stamp_text(0, 0, "A", acorn());
+    canvas.stamp(10, 0, Canvas::glyph_for(acorn(), U'B'));
+    canvas.stamp(20, 0, Canvas::glyph_for(acorn(), U'C'));
+
+    Band band;
+    band.top = 0;
+    band.bottom = 8;
+    band.cell_width = 8;
+    band.column_pitch = 10;
+
+    const Result result = read(canvas.image(), {band}, acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "ABC");
+}
+
+TEST_CASE("The pitch defaults to the cell size")
+{
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp_text(0, 0, "ABC", acorn());
+
+    Band band = whole_image_band(canvas.image());
+    CHECK(band.effective_row_pitch() == band.cell_height);
+    CHECK(band.effective_column_pitch() == band.cell_width);
+
+    const Result result = read(canvas.image(), {band}, acorn_only());
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "ABC");
+}
+
+TEST_CASE("A pitch smaller than the cell is rejected, not read as overlap")
+{
+    Canvas canvas(8 * 3, 8);
+    Band band = whole_image_band(canvas.image());
+    band.row_pitch = 4;
+
+    CHECK_THROWS_AS(read(canvas.image(), {band}, acorn_only()),
+                    std::invalid_argument);
+}

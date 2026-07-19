@@ -20,6 +20,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <utility>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -43,8 +44,15 @@ const char* const USAGE =
     "  --builtin NAME        use this built-in set instead of the default\n"
     "  --no-builtin          use only the glyph sets given with --glyphs\n"
     "  --cell WxH            character cell size in pixels (default: 8x8)\n"
+    "  --pitch WxH           cell-to-cell step (default: the cell size).\n"
+    "                        MODE 3 and MODE 6 need --cell 8x8 --pitch 8x10:\n"
+    "                        an 8-scanline glyph on a 10-scanline row, the\n"
+    "                        gap blanked to black whatever the palette says\n"
     "  --origin X,Y          where the character grid starts (default: 0,0)\n"
     "  --background N        pixel value meaning background (default: 0)\n"
+    "  --background-at X,Y   take the background value from this pixel,\n"
+    "                        for when the background is a colour rather\n"
+    "                        than a value you happen to know\n"
     "  --search MODE         aligned (default) or offset\n"
     "  --no-inverted         do not match inverse video\n"
     "  --format FORMAT       text (default) or json\n"
@@ -68,9 +76,12 @@ struct Arguments {
     bool use_builtin = true;
     std::size_t cell_width = 8;
     std::size_t cell_height = 8;
+    std::size_t column_pitch = 0;
+    std::size_t row_pitch = 0;
     std::size_t origin_x = 0;
     std::size_t origin_y = 0;
     unsigned background = 0;
+    std::optional<std::pair<std::size_t, std::size_t>> background_at;
     Search search = Search::AlignedOnly;
     bool match_inverted = true;
     bool json = false;
@@ -282,6 +293,28 @@ int parse_arguments(const std::vector<std::string>& argv,
             }
             arguments.cell_width = static_cast<std::size_t>(parts[0]);
             arguments.cell_height = static_cast<std::size_t>(parts[1]);
+        } else if (argument == "--pitch") {
+            if (!value_for(index, "--pitch", value)) {
+                return 2;
+            }
+            std::vector<unsigned long long> parts;
+            if (!parse_size_list(value, 'x', parts) || parts.size() != 2
+                || parts[0] == 0 || parts[1] == 0) {
+                return fail("--pitch needs WxH, both non-zero");
+            }
+            arguments.column_pitch = static_cast<std::size_t>(parts[0]);
+            arguments.row_pitch = static_cast<std::size_t>(parts[1]);
+        } else if (argument == "--background-at") {
+            if (!value_for(index, "--background-at", value)) {
+                return 2;
+            }
+            std::vector<unsigned long long> parts;
+            if (!parse_size_list(value, ',', parts) || parts.size() != 2) {
+                return fail("--background-at needs X,Y");
+            }
+            arguments.background_at = std::make_pair(
+                static_cast<std::size_t>(parts[0]),
+                static_cast<std::size_t>(parts[1]));
         } else if (argument == "--origin") {
             if (!value_for(index, "--origin", value)) {
                 return 2;
@@ -355,11 +388,21 @@ int run_read(const std::vector<std::string>& argv)
         return fail(error);
     }
 
+    if (arguments.background_at.has_value()) {
+        const auto [x, y] = *arguments.background_at;
+        if (x >= image.width || y >= image.height) {
+            return fail("--background-at is outside the image");
+        }
+        arguments.background = image.pixel(x, y);
+    }
+
     Band band;
     band.top = 0;
     band.bottom = image.height;
     band.cell_width = arguments.cell_width;
     band.cell_height = arguments.cell_height;
+    band.column_pitch = arguments.column_pitch;
+    band.row_pitch = arguments.row_pitch;
     band.origin_x = arguments.origin_x;
     band.origin_y = arguments.origin_y;
     band.background = static_cast<std::uint8_t>(arguments.background);

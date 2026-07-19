@@ -92,10 +92,27 @@ is what the whole design rests on, so it is tested directly rather than assumed.
 
 ### Geometry is an input
 
-Cell sizes, grid origins, band boundaries and the background value are all
-supplied by the caller. They happen to be 8x8 cells on a background of zero for
-every BBC mode, but this is not a BBC library and nothing here assumes it. Glyph
-bitmaps carry their own dimensions for the same reason.
+Cell sizes, grid pitches, grid origins, band boundaries and the background value
+are all supplied by the caller. This is not a BBC library and nothing here
+assumes any of them. Glyph bitmaps carry their own dimensions for the same
+reason.
+
+**Cell size and pitch are different things.** The cell is the glyph box, and all
+that is ever compared; the pitch is the step from one cell to the next. They are
+usually equal, and a zero pitch means "the cell size".
+
+They differ when the display leaves a gap. MODE 3 and MODE 6 are 25-row text
+modes putting an 8-scanline glyph on a 10-scanline pitch, and the two spare
+scanlines are *blanked* rather than painted with the background colour -- they
+stay black however the palette is programmed. `VDU 19,0,4,0,0,0` makes this
+plain, and famous: the character background turns blue while the gaps between
+rows stay black.
+
+So the gap cannot be treated as part of the cell. While the background is also
+black, doing so costs nothing and looks correct; the moment it is not, every
+cell on the screen stops matching at once. Reading MODE 6 with `cell_height =
+10` and a blue background leaves all 1000 cells unread, and with `cell_height =
+8, row_pitch = 10` leaves none. Both are in the tests.
 
 Bands exist because a display need not have one geometry throughout: the CRTC
 can be reprogrammed mid-frame, so the caller describes each band it found. A
@@ -166,9 +183,15 @@ Most tests compose their input by stamping known glyphs at known positions, so
 every case is constructed exactly and needs no file. The CLI is exercised
 through its own interface, run as a process.
 
-A few real screenshots are committed under `tests/fixtures/`, for the one thing
-synthetic images cannot vouch for: that the geometry and pixel values a real
-machine produces are what the library expects. See the README there.
+Real screens are committed under `tests/fixtures/`, for the one thing synthetic
+images cannot vouch for: that the geometry and pixel values a real machine
+produces are what the library expects.
+
+`tests/fixtures/corpus/` covers every bitmap mode, MODE 0 to MODE 6, in two
+variants -- a testcard filling every character cell with a cycling pattern of
+characters 32 to 126, and the same screen after `VDU 19,0,4,0,0,0`. Every cell
+of every one of them is matched, and the testcard's text is reconstructed
+exactly from an independently computed expectation. See the README there.
 
 ```
 cmake --build build --target test_screentext_read

@@ -67,6 +67,13 @@ void validate(const Image& image, const std::vector<Band>& bands)
             throw std::invalid_argument(
                 "screentext::read: band cell size must not be zero");
         }
+        // A pitch below the cell size would make cells overlap, which no grid
+        // does. Refusing it is better than silently reading pixels twice.
+        if (band.effective_column_pitch() < band.cell_width
+            || band.effective_row_pitch() < band.cell_height) {
+            throw std::invalid_argument(
+                "screentext::read: band pitch must be at least the cell size");
+        }
     }
 }
 
@@ -190,11 +197,18 @@ Result read(const Image& image,
             continue;
         }
 
-        // Walk the grid from its origin. Cells before the region are skipped
-        // rather than shifted, so the grid stays where the caller put it.
+        // Walk the grid from its origin, advancing by the pitch but reading
+        // only the cell. Where the two differ the space between cells is
+        // stepped over without ever being sampled. Cells before the region
+        // are skipped rather than shifted, so the grid stays where the caller
+        // put it.
+        const std::size_t column_pitch = band.effective_column_pitch();
+        const std::size_t row_pitch = band.effective_row_pitch();
+
         std::vector<Cell> row_cells;
-        for (std::size_t y = band.origin_y; y + band.cell_height <= region.bottom();
-             y += band.cell_height) {
+        for (std::size_t y = band.origin_y;
+             y + band.cell_height <= region.bottom();
+             y += row_pitch) {
             if (y < region.y) {
                 continue;
             }
@@ -202,7 +216,7 @@ Result read(const Image& image,
             row_cells.clear();
             for (std::size_t x = band.origin_x;
                  x + band.cell_width <= region.right();
-                 x += band.cell_width) {
+                 x += column_pitch) {
                 if (x < region.x) {
                     continue;
                 }

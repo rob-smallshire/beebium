@@ -370,3 +370,198 @@ TEST_CASE("A selection over a real screenshot clips to the cells it covers")
     CHECK(output.status == 0);
     CHECK(output.stdout_text == "10\n");
 }
+
+// The corpus: every bitmap mode, in two variants.
+//
+// Imported from the emulator's own golden masters (see
+// fixtures/import_golden_corpus.py). The testcard fills every character cell
+// with a cycling pattern of characters 32 to 126, so a whole screen is
+// checked rather than a line of it; the blue variant is the same screen after
+// VDU 19,0,4,0,0,0.
+
+namespace {
+
+struct ModeGeometry {
+    int mode;
+    std::size_t columns;
+    std::size_t rows;
+    std::size_t row_pitch; // 10 where the display leaves a gap between rows
+};
+
+// MODE 3 and MODE 6 are 25-row text modes: an 8-scanline glyph on a
+// 10-scanline pitch. Every mode is 8 pixels per column in logical pixel
+// space, which is what makes one glyph set serve all of them.
+const ModeGeometry MODES[] = {
+    {0, 80, 32, 8},  {1, 40, 32, 8},  {2, 20, 32, 8}, {3, 80, 25, 10},
+    {4, 40, 32, 8},  {5, 20, 32, 8},  {6, 40, 25, 10},
+};
+
+std::string corpus_filepath(int mode, const std::string& variant)
+{
+    return fixture_filepath("corpus/mode" + std::to_string(mode) + "-"
+                            + variant + ".png");
+}
+
+std::string geometry_arguments(const ModeGeometry& geometry)
+{
+    return " --cell 8x8 --pitch 8x" + std::to_string(geometry.row_pitch);
+}
+
+void append_utf8(std::string& text, char32_t codepoint)
+{
+    if (codepoint < 0x80U) {
+        text.push_back(static_cast<char>(codepoint));
+    } else {
+        text.push_back(static_cast<char>(0xC0U | (codepoint >> 6)));
+        text.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    }
+}
+
+// Character 96 of the Acorn set is a pound sign, and the testcard's cycle
+// runs right through it.
+char32_t codepoint_of(std::size_t character)
+{
+    return character == 96 ? 0x00A3U : static_cast<char32_t>(character);
+}
+
+// Reproduce what the testcard puts on screen, independently of the library:
+// a header row of digits, then rows that each begin with a digit and continue
+// the cycle of characters 32 to 126. The last row is one character short, so
+// that filling the screen does not scroll it.
+std::string expected_testcard(std::size_t columns, std::size_t rows)
+{
+    const std::size_t max_col = columns - 1;
+    const std::size_t max_row = rows - 1;
+
+    std::vector<std::string> lines;
+
+    std::string header;
+    for (std::size_t index = 0; index <= max_col; ++index) {
+        header.push_back(static_cast<char>('0' + index % 10));
+    }
+    lines.push_back(header);
+
+    for (std::size_t y = 1; y <= max_row; ++y) {
+        std::string line;
+        line.push_back(static_cast<char>('0' + y % 10));
+        const std::size_t count = (y == max_row) ? max_col - 1 : max_col;
+        for (std::size_t x = 1; x <= count; ++x) {
+            const std::size_t offset = ((y - 1) * max_col + (x - 1)) % 95;
+            append_utf8(line, codepoint_of(32 + offset));
+        }
+        if (y == max_row) {
+            // The cell the testcard leaves unfilled holds the cursor, which
+            // the golden masters render steady. It is an underline on screen
+            // and so it is an underline in the text: the library reads what
+            // is there and has no idea what a cursor is.
+            line.push_back('_');
+        }
+        lines.push_back(line);
+    }
+
+    // Runs are trimmed of leading and trailing blanks, so the expectation is
+    // trimmed the same way before comparing.
+    std::string text;
+    for (const std::string& line : lines) {
+        const std::size_t first = line.find_first_not_of(' ');
+        if (first == std::string::npos) {
+            continue;
+        }
+        const std::size_t last = line.find_last_not_of(' ');
+        text += line.substr(first, last - first + 1);
+        text.push_back('\n');
+    }
+    return text;
+}
+
+std::size_t json_number(const std::string& json, const std::string& key)
+{
+    const std::size_t at = json.find("\"" + key + "\": ");
+    REQUIRE(at != std::string::npos);
+    return static_cast<std::size_t>(
+        std::strtoul(json.c_str() + at + key.size() + 4, nullptr, 10));
+}
+
+} // namespace
+
+TEST_CASE("Every character cell of every mode's testcard is read")
+{
+    // The strongest statement the corpus can make: across all seven bitmap
+    // modes, every cell of a full screen matches a glyph, and the text is
+    // exactly what the testcard put there.
+    for (const ModeGeometry& geometry : MODES) {
+        const std::string label = "MODE " + std::to_string(geometry.mode);
+        INFO(label);
+
+        const Output output
+            = run("read \"" + corpus_filepath(geometry.mode, "testcard")
+                  + "\"" + geometry_arguments(geometry));
+
+        CHECK(output.status == 0);
+        CHECK(output.stdout_text == expected_testcard(geometry.columns,
+                                                      geometry.rows));
+    }
+}
+
+TEST_CASE("No cell of any mode's testcard is left unread")
+{
+    for (const ModeGeometry& geometry : MODES) {
+        INFO("MODE " + std::to_string(geometry.mode));
+
+        const Output output
+            = run("read \"" + corpus_filepath(geometry.mode, "testcard")
+                  + "\"" + geometry_arguments(geometry) + " --format json");
+
+        CHECK(output.status == 0);
+        CHECK(json_number(output.stdout_text, "total_cells")
+              == geometry.columns * geometry.rows);
+        CHECK(json_number(output.stdout_text, "unmatched_cells") == 0);
+    }
+}
+
+TEST_CASE("A recoloured background is read in every mode")
+{
+    // VDU 19,0,4,0,0,0 turns the character background blue. Nothing about
+    // matching depends on the colour: the caller says which value is
+    // background and every other value is glyph.
+    for (const ModeGeometry& geometry : MODES) {
+        INFO("MODE " + std::to_string(geometry.mode));
+
+        const Output output
+            = run("read \"" + corpus_filepath(geometry.mode, "blue") + "\""
+                  + geometry_arguments(geometry)
+                  + " --background-at 0,100 --format json");
+
+        CHECK(output.status == 0);
+        CHECK(json_number(output.stdout_text, "total_cells")
+              == geometry.columns * geometry.rows);
+        CHECK(json_number(output.stdout_text, "unmatched_cells") == 0);
+        CHECK(output.stdout_text.find("BBC Computer 32K") != std::string::npos);
+        CHECK(output.stdout_text.find("VDU 19,0,4,0,0,0") != std::string::npos);
+    }
+}
+
+TEST_CASE("In MODE 3 and MODE 6 the gap between rows must not be sampled")
+{
+    // The blanked scanlines between character rows stay black however the
+    // palette is programmed. Treating them as part of the cell costs nothing
+    // while the background is also black, and costs everything once it is
+    // not: everything on the screen stops matching at once.
+    for (const int mode : {3, 6}) {
+        INFO("MODE " + std::to_string(mode));
+        const std::string image = corpus_filepath(mode, "blue");
+
+        const Output correct
+            = run("read \"" + image + "\" --cell 8x8 --pitch 8x10"
+                  + " --background-at 0,100 --format json");
+        CHECK(json_number(correct.stdout_text, "unmatched_cells") == 0);
+
+        // The same screen read as though the glyph were ten scanlines tall.
+        const Output naive
+            = run("read \"" + image + "\" --cell 8x10"
+                  + " --background-at 0,100 --format json");
+        const std::size_t total = json_number(naive.stdout_text, "total_cells");
+        CHECK(total > 0);
+        CHECK(json_number(naive.stdout_text, "unmatched_cells") == total);
+    }
+}
