@@ -1,5 +1,16 @@
 # Teletext Cell Capture: One Data Source, Two Transports
 
+> **Status (July 2026).** The capture layer, the snapshot transport and
+> whole-screen copying are implemented. What remains from the plan below is
+> selection (step 4) and retiring the client-side scrapers (step 5). The vector
+> renderer that shares this capture is still unbuilt and still optional; see
+> `vector-mode-7.md`.
+>
+> Implemented: `TeletextGrid` filled from `Saa5050::byte()`; `teletext_text()`
+> for the cell-to-text conversion; `GetTeletextScreen` on `VideoService`,
+> taking a region and a layout; Copy in the macOS Edit menu; and
+> `Video.teletext_screen()` in the Python client.
+
 ## What this is
 
 MODE 7 is a character display. Every cell on screen is a 7-bit character code
@@ -188,12 +199,30 @@ clipboard.
 
 ## Suggested order
 
-1. `TeletextGrid` plus the `Saa5050::byte()` capture and the held-character-code
-   addition. Testable in the core with no client involvement.
-2. `GetTeletextScreen` snapshot RPC, and the copy semantics above.
-3. Copy as text in the macOS client, whole screen only.
-4. Drag-to-select in cell space, with the rectangular/row-range option.
+1. ~~`TeletextGrid` plus the `Saa5050::byte()` capture and the
+   held-character-code addition.~~ **Done.**
+2. ~~`GetTeletextScreen` snapshot RPC, and the copy semantics above.~~ **Done**,
+   with a region and layout on the request so the same call serves a selection.
+3. ~~Copy as text in the macOS client, whole screen only.~~ **Done.**
+4. Drag-to-select in cell space, with the rectangular/row-range option. The
+   server side needs nothing new: pass the selected region and the layout to
+   `GetTeletextScreen` and use the `text` it returns.
 5. Retire the Python and TypeScript scrapers in favour of the RPC, fixing the
    TypeScript scroll bug by deletion.
 
-Vector rendering can be started at any point after step 1, or never.
+Vector rendering can be started at any point, or never.
+
+## Decisions taken during implementation
+
+Two that were open in this document when it was written:
+
+- **Alpha characters copy as what is displayed.** A cell holding `0x23` copies
+  as a pound sign and `0x5F` as a hash, following the SAA5050's UK repertoire
+  -- the same rule as concealed text, and the inverse of the teletext
+  substitutions in `TextTranslation.cpp`, so a MODE 7 screen round-trips
+  through copy and paste. This differs from the Python scraper, which returns
+  the ASCII byte and so disagrees with the screen.
+- **Leading blank rows are preserved; trailing ones are dropped.** Trailing
+  rows would otherwise add two dozen empty lines to every copy. Leading rows
+  are few and carry vertical position, so they stay. The asymmetry is
+  deliberate but worth revisiting if it reads oddly in practice.
