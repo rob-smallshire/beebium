@@ -61,10 +61,35 @@ characters at the graphics cursor, at arbitrary pixel positions, and they may
 overlap each other and existing graphics. A grid-walking extractor will miss
 all of it.
 
-**Characters may not be the MOS font.** `VDU 23` redefines glyphs in RAM.
-Matching against the ROM font would then fail on text that is plainly readable
-on screen, and worse, could match the wrong character if a redefinition
-happens to collide.
+**Characters may not be the MOS font, and finding the font is itself work.**
+`VDU 23` redefines glyphs into RAM, so matching against the ROM font would fail
+on text that is plainly readable on screen -- or worse, match the wrong
+character if a redefinition collides with a ROM glyph.
+
+Which memory holds a given character's definition depends on the font
+"explode" state (Advanced User Guide 13.1.6). Imploded, the default on a Model
+B, characters `&20`-`&7F` come from the OS ROM and only `&80`-`&9F` are in RAM
+at `&C00`-`&CFF`. `OSBYTE &14` explodes the allocation in steps, moving further
+ranges into RAM from OSHWM upwards:
+
+| X | Characters | Memory |
+|---|---|---|
+| 0 | `&80`-`&9F` | `&C00`-`&CFF` (imploded default) |
+| 1 | `&A0`-`&BF` | OSHWM to OSHWM+`&FF` |
+| 2 | `&C0`-`&DF` | OSHWM+`&100` onwards |
+| 3 | `&E0`-`&FF` | OSHWM+`&200` onwards |
+| 4 | `&20`-`&3F` | OSHWM+`&300` onwards |
+| 5 | `&40`-`&5F` | OSHWM+`&400` onwards |
+| 6 | `&60`-`&7F` | OSHWM+`&500` onwards |
+
+A Master, or any machine with a second processor active, is fully exploded by
+default. So an extractor cannot assume where a glyph lives: it must read the
+explode state and OSHWM, and fall back to the ROM for ranges still imploded.
+
+`OSWORD &0A` reads a character's definition and resolves all of this correctly,
+but it is a call into the MOS, and the extractor cannot execute guest code to
+read the screen. The definitions must be assembled by reading the same memory
+the MOS would.
 
 **The screen scrolls.** Hardware scrolling changes the CRTC start address, so
 screen memory order and display order differ. Extraction that reads memory
@@ -240,10 +265,13 @@ should be treated the same way: useful now, not a commitment.
    alignment, which is why control codes copy as spaces in MODE 7. A
    placeholder would be more honest about what was not read. Alignment probably
    wins, with `unknown_fraction` carrying the honesty.
-4. **How is the soft font discovered?** The MOS keeps redefined characters in
-   RAM with a pointer at a known location; reading that is straightforward, but
-   deciding *which* font applies to a given cell when a program redefines
-   glyphs mid-screen is not.
+4. **Where is the explode state held?** The allocation table above says which
+   memory a character's definition occupies for a given explode level, but the
+   level itself and OSHWM have to be read from OS workspace, and those
+   locations need pinning down per MOS version. A program that redefines a
+   glyph part-way down the screen also defeats a single font table for the
+   frame -- the same code could legitimately mean two different characters in
+   the top and bottom halves.
 5. **Does a caller ever want the cells rather than the text?** Drag-select as
    specified does not: it sends pixels and receives text. Attribute-aware cell
    access may still be wanted by automation, and if so it should be a separate
