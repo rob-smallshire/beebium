@@ -132,6 +132,63 @@ Each frame contains:
 - `width`, `height` - Frame dimensions (736×576)
 - `pixels` - BGRA32 pixel data (~1.7MB per frame)
 
+#### GetScreenText
+
+Reads text from the display, whatever mode is producing it. The caller selects
+in pixels -- the one coordinate system every mode shares -- and the server
+chooses a reading strategy per band of scanlines, so a split screen is read a
+band at a time and the caller never learns which mode produced what.
+
+```bash
+grpcurl -plaintext \
+  -import-path src/service/proto -proto video.proto \
+  localhost:48875 beebium.VideoService/GetScreenText
+```
+
+Request fields, all optional:
+- `region` - `{x, y, width, height}` in frame pixels; the whole display when
+  unset, and clipped to it rather than rejected
+- `search` - `ALIGNED` reads only text on the character grid, which is what a
+  snapped drag wants; `OFFSET` only text off it; `BOTH`, the default, reads
+  both. Honoured by strategies that recognise glyphs in pixels
+- `layout` - `ROWS` (default) gives each grid row its own line; `FLOWED`
+  rejoins a line that wrapped at the right edge
+
+Response:
+- `supported` - whether any band of the region had a strategy that could read
+  it. Distinct from readable-but-empty: a display that was read and found to
+  hold no text is supported with no runs. **Only MODE 7 is readable today**, so
+  a bitmap display reports `supported: false` rather than returning the stale
+  MODE 7 cells that `GetTeletextScreen` does
+- `runs` - each a piece of text, its pixel bounds, and the cell geometry it was
+  read with, so a client can highlight or snap to exactly what it captured
+- `text` - the runs joined by `layout`, lines separated with LF
+- `unreadableCells`, `ambiguousCells` - cells a strategy could not identify at
+  all, and cells it read but could not pin to one character because the font
+  draws two the same. Both zero for MODE 7, whose cells are exact codes
+
+#### GetScreenGeometry
+
+Reports the character grid the display implies, per band, in frame pixels. It
+exists separately from `GetScreenText` because snapping a drag has to happen
+while the drag is in progress, when the client has nothing to send yet; one
+call on mouse-down is ample.
+
+```bash
+grpcurl -plaintext \
+  -import-path src/service/proto -proto video.proto \
+  localhost:48875 beebium.VideoService/GetScreenGeometry
+```
+
+Every band reports a grid, including one no strategy can read text from: where
+the cells are and what is in them are separate questions. Each band carries
+`top`/`bottom`, the cell size, the `columnPitch`/`rowPitch` step, and the grid
+origin. The pitch is not the cell size -- MODE 3 and MODE 6 put an
+eight-scanline glyph on a ten-scanline pitch and blank the two spare lines.
+
+Observed geometries: MODE 7 is one band of 12x20 cells over 500 scanlines;
+MODE 4 is 8x8 over 256; MODE 6 is an 8x8 cell on a `rowPitch` of 10.
+
 ### KeyboardService
 
 Controls the BBC keyboard matrix.
