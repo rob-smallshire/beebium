@@ -17,6 +17,7 @@ being read back.
 | `loopy-loop.png` | Loopy Loop, by A.S.Shakoor: text over a dense dithered background, and text off the character grid |
 | `fruits-wins.png` | Fruits: a win table, text among graphics |
 | `fruits-machine.png` | Fruits: the game, with labels at arbitrary pixel positions in the ROM font |
+| `rondo-title.png` | Rondo: a drop-shadowed title off the grid, over an ordinary high score table |
 
 # Waffle
 
@@ -117,6 +118,25 @@ makes them its acceptance target.
 The title screen is MODE 7 and interlaced, 640x500 -- teletext, which this
 library deliberately never sees, so it is not kept.
 
+# Rondo
+
+MODE 2 -- 160x256. The drop-shadow case, drawn the usual way: the title
+rendered twice a pixel apart in two colours, shadow first and text over it.
+
+The `R` of `RONDO` holds three colours. Yellow forms the ROM glyph to the
+pixel; red forms the crescent of shadow the text did not cover; black is what
+is left of the ground. Neither the red nor the black is any glyph at all.
+
+It sits at y=14, x=61, so it fails the aligned rule twice over -- three colours
+and off the grid -- and the aligned reader reads the high score table beneath
+it and not the title. The prototype reads `RONDO`, and the whole screen yields
+32 runs, every one of them real text.
+
+This is the case the design predicted would work for nothing, and it does. The
+test here asserts the title's absence, so it inverts when offset search lands.
+
+The instruction screens before it are MODE 7 and interlaced, and not kept.
+
 # Recapturing
 
 The discs are in `discs/games/`, which is not in the repository, so this cannot
@@ -124,6 +144,8 @@ be done from a clean checkout. Only Waffle has a capture script, its navigation
 being worth recording. Loopy Loop needs no navigation, only fifteen seconds to
 finish drawing. Fruits wants a key at its MODE 7 title, another at the win
 table, and a third to reach the machine, each screen taking a few seconds.
+Rondo wants four presses of SPACE about a second apart to pass its MODE 7
+instructions, then a few seconds to settle.
 
 ```
 cd clients/beebium-python-client

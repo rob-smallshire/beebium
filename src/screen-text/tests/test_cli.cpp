@@ -768,3 +768,25 @@ TEST_CASE("A win table of text among graphics is read")
     CHECK(output.stdout_text.find("FRUITS! - WINS") != std::string::npos);
     CHECK(output.stdout_text.find("900 P") != std::string::npos);
 }
+
+TEST_CASE("Drop-shadowed text is beyond the aligned path, for two reasons")
+{
+    // Rondo draws its title twice, a pixel apart in two colours, so it
+    // carries its own shadow: the 'R' window holds yellow forming the ROM
+    // glyph exactly, red forming the crescent of shadow the text did not
+    // cover, and black behind. Three colours, and at y=14 x=61, off the grid.
+    //
+    // Either reason alone would put it out of reach here: the aligned reader
+    // takes cells of two colours, on the grid. The high score table beneath
+    // it is ordinary text and reads.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/rondo-title.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("HIGH SCORES") != std::string::npos);
+    CHECK(output.stdout_text.find("MicroUser 2000") != std::string::npos);
+    CHECK(output.stdout_text.find("<SPACE>") != std::string::npos);
+
+    // The shadowed title, which offset search finds and this does not.
+    CHECK(output.stdout_text.find("RONDO") == std::string::npos);
+}

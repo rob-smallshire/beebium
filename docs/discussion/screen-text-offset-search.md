@@ -65,6 +65,12 @@ of the text colour form the glyph exactly, because the text was drawn last.
 The pixels of the shadow colour form a crescent -- the shadow minus the part
 the text covered -- which matches nothing. One reading, the right one.
 
+Confirmed on Rondo, whose title is drawn exactly this way. Its `R` holds three
+colours: yellow forming the ROM glyph to the pixel, red forming the crescent,
+black behind. The prototype reads `RONDO` from it, off the grid at y=14, x=61,
+and the aligned reader cannot -- being both off the grid and three colours, it
+fails the aligned rule twice over.
+
 ## The noise problem
 
 A free search over a graphics screen finds glyph-shaped patterns that are not
@@ -206,8 +212,12 @@ invert: they are its acceptance target.
 
 ## What is still wanted
 
-A screen mixing off-grid text with a *hostile* background. Fruits draws on
-black, so the per-colour matching had an easy time of it; Loopy Loop has the
-dense background but draws much of its text in a thickened variant of the ROM
-font, which is not the ROM font and rightly does not match. Both halves of the
-hard case have been seen, but not yet together.
+A screen mixing off-grid text with a *hostile* background. Fruits and Rondo
+draw on plain grounds, so the per-colour matching had an easy time of it;
+Loopy Loop has the dense background but draws much of its text in a thickened
+variant of the ROM font, which is not the ROM font and rightly does not match.
+Both halves of the hard case have been seen, but not yet together.
+
+That gap is worth naming rather than waiting for. Every rule here has now been
+measured on a real screen, and none has been contradicted; the remaining risk
+is a combination, not a mechanism.
