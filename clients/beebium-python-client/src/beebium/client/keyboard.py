@@ -559,9 +559,15 @@ class Keyboard:
         cleared queue, a dropped connection, a stopped server -- because in
         every case there is nothing further to wait for.
 
-        There is deliberately no timeout. Use the underlying channel's
+        There is deliberately no timeout: the server reports completion, so
+        there is nothing for the caller to infer. Use the underlying channel's
         cancellation, or :meth:`clear_typing` from another thread, to stop
         waiting early.
+
+        Note this blocks for as long as the machine is stopped, because a
+        stopped machine never drains the queue. Tests that step the emulator in
+        chunks -- :meth:`Beebium.run_until_or_timeout` leaves it stopped
+        between them -- should wait on what they expect to appear instead.
         """
         for status in self.watch_typing_status(min_interval_ms=min_interval_ms):
             if status.idle:
