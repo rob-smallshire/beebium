@@ -553,30 +553,94 @@ should be treated the same way: useful now, not a commitment.
    access may still be wanted by automation, and if so it should be a separate
    deliberate interface rather than a side effect of copy.
 
-## Suggested sequencing
+## Work partition
 
-The emulator side and the library are independent and can proceed in either
-order, or at once.
+Four streams. Two can start immediately and in parallel; the other two follow.
 
-**Emulator side:**
+```
+  (1) Library  ────────────────┐
+      independent              │
+                               ├──> (2) Integration
+  (3) Server APIs  ────────────┘         bitmap modes light up
+      teletext strategy only
+            │
+            └──> (4) macOS GUI
+                     selection + copy
+```
 
-1. Add `GetScreenText` with the teletext strategy only, delegating to the
-   existing capture. Behaviour in MODE 7 is unchanged; behaviour elsewhere
-   becomes an honest "nothing found" rather than stale cells.
-2. Move macOS Copy onto it, and remove the MODE 7 wording from the UI.
-3. Drag-to-select against this interface, in pixels.
-4. Widen the per-scanline record to carry what a band needs, and assemble the
-   glyph set from ROM plus soft font.
-5. Retire the teletext-specific RPC and the client-side screen scrapers.
+### 1. The library
 
-**Library:**
+Turns images into text given glyph sets. Depends on nothing else in this
+repository.
 
-1. The interface, an Acorn glyph set, and exact matching of aligned cells --
-   testable immediately against image fixtures.
-2. Inverted matching.
-3. Supplied glyph sets.
-4. Sub-cell offset search, for `VDU 5` text and for offline images that were
-   never grid-aligned to begin with.
+Lives here for now, as its own component with its own build targets -- a
+linkable library and a CLI over the same interface. Naming can wait until there
+is a reason to extract it.
 
-They meet when the emulator has a band to hand over and the library can read
-it. Neither blocks the other before then.
+**One constraint matters more than the rest: the library must not depend on the
+emulator core.** Dependencies point one way, Beebium to library, never back. A
+single `#include <beebium/...>` for convenience would quietly make the
+extraction this design is arranged around impossible.
+
+Order: interface and Acorn glyph set, then exact matching of aligned cells,
+then inverted matching, then supplied glyph sets, then sub-cell offset search.
+
+Tested against image fixtures -- images in, expected text out -- with no
+emulator, no ROMs and no timing. A recognition bug is then reproducible from a
+file, which is the main practical reason for the split.
+
+### 2. Integration with the servers
+
+Where bitmap modes start working. Needs the library, and needs emulator-side
+work that has nothing to do with recognition:
+
+- Widen the per-scanline record to carry what a band needs: cell geometry,
+  colour depth, palette, whether the SAA5050 was driving.
+- Assemble the glyph set from the OS ROM plus `VDU 23` redefinitions at the
+  current explode level, which means reading OSHWM and the explode state.
+- Call the library, in-process or by spawning it.
+
+Tested by booting real machines, running programs that print in MODEs 0-6, and
+asserting on the text that comes back -- the integration counterpart to the
+library's fixtures.
+
+### 3. Server APIs
+
+`GetScreenText`, and the geometry call a client needs on mouse-down to snap a
+drag.
+
+**Startable now**, with the teletext strategy only, delegating to the capture
+already built. That alone is an improvement: MODE 7 behaviour is unchanged, and
+every other mode stops returning stale cells with a disclaimer attached and
+starts returning an honest "nothing found".
+
+The design succeeds or fails on one property, worth stating as a test of it:
+**when stream 2 lands, no client changes.** `GetScreenText` starts returning
+text where it previously returned nothing -- no new API, no version
+negotiation, no client-side branching on mode. If that turns out not to hold,
+the interface is wrong, and it is better to discover that now with one strategy
+than later with two.
+
+Also in this stream: retiring `GetTeletextScreen` and its client wrappers once
+copy no longer uses them, and the Python and TypeScript screen scrapers once
+the API supersedes them.
+
+### 4. macOS front end
+
+Drag-to-select over the display, in the three modes: snapped rows (the
+default), snapped rectangle, and free-form. Copy moves onto `GetScreenText`,
+and the MODE 7 wording comes out of the UI.
+
+The selection overlay composes with any Display Style rather than being one --
+`display-styles.md` warns against a Cartesian product of options.
+
+Follows stream 3, though the overlay and its geometry can be built against a
+stub. Selection state, coordinate mapping and snapping are testable without a
+window; the drag itself needs eyeball verification, as the Display Style work
+found.
+
+### What is deliberately not partitioned
+
+`VDU 5` support is not a fifth stream. It is the last item of stream 1 and the
+free-form path of stream 4, and it arrives when both are ready rather than
+being scheduled as a project of its own.
