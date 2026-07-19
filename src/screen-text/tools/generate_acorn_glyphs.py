@@ -131,7 +131,9 @@ def generate(set_name, rom_filename, rom_bytes, glyphs, output_filename):
         ),
         "//",
         "// Regenerate with:",
-        "//     python3 tools/generate_acorn_glyphs.py roms/{} \\".format(
+        # No trailing backslash: inside a // comment GCC reads it as a line
+        # continuation and warns (-Wcomment).
+        "//     python3 tools/generate_acorn_glyphs.py roms/{}".format(
             rom_filename
         ),
         "//         --name {} --output src/{}".format(set_name, output_filename),

@@ -29,8 +29,28 @@ target_include_directories(test_screentext_cli PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 set(SCREENTEXT_TEST_SCRATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}/scratch")
 file(MAKE_DIRECTORY "${SCREENTEXT_TEST_SCRATCH_DIR}")
 
+# The path of the CLI reaches the test through a generated header holding a raw
+# string literal, rather than through a -D definition.
+#
+# On Windows $<TARGET_FILE:...> is a native path, and backslashes in a compile
+# definition arrive in the source as escape sequences: "C:\Users\..." reads \U
+# as the start of a universal character name. A raw string literal takes the
+# path verbatim whatever the separators are. The two directory definitions
+# below need no such care, being CMake variables, which are always
+# forward-slashed.
+#
+# The generated header is per-configuration, because the CLI's location is:
+# multi-config generators put Release and Debug builds in different places.
+file(GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/ScreentextCliPath.hpp"
+    CONTENT "#pragma once\ninline const char* const SCREENTEXT_CLI_PATH = R\"($<TARGET_FILE:screentext-cli>)\";\n"
+)
+
+target_include_directories(test_screentext_cli PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
+)
+
 target_compile_definitions(test_screentext_cli PRIVATE
-    SCREENTEXT_CLI_PATH="$<TARGET_FILE:screentext-cli>"
     SCREENTEXT_TEST_FIXTURES_DIR="${SCREENTEXT_TEST_FIXTURES_DIR}"
     SCREENTEXT_TEST_SCRATCH_DIR="${SCREENTEXT_TEST_SCRATCH_DIR}"
 )

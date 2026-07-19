@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "Canvas.hpp"
+#include "ScreentextCliPath.hpp"
 #include "screentext/ScreenText.hpp"
 
 using namespace screentext;
@@ -34,12 +35,31 @@ struct Output {
     int status = 0;
 };
 
+// Discard standard error, for the cases that expect the CLI to complain.
+// cmd.exe spells its null device differently from a POSIX shell.
+const char* discard_stderr()
+{
+#ifdef _WIN32
+    return " 2>NUL";
+#else
+    return " 2>/dev/null";
+#endif
+}
+
 // Run the CLI and capture its standard output. Standard error is left to the
-// terminal, so a failure is visible when a test does not expect one.
+// terminal unless a test discards it, so a failure is visible when a test does
+// not expect one.
 Output run(const std::string& arguments)
 {
-    const std::string command
+    std::string command
         = std::string("\"") + SCREENTEXT_CLI_PATH + "\" " + arguments;
+
+#ifdef _WIN32
+    // cmd.exe strips the outermost pair of quotes from the command it is
+    // given, which would unquote the executable path and break on the spaces
+    // in it. An extra enclosing pair survives that.
+    command = "\"" + command + "\"";
+#endif
 
     Output output;
 #ifdef _WIN32
@@ -234,7 +254,7 @@ TEST_CASE("The built-in glyph sets can be listed")
 
 TEST_CASE("A missing image is an error, not an empty result")
 {
-    const Output output = run("read /no/such/image.png 2>/dev/null");
+    const Output output = run(std::string("read /no/such/image.png") + discard_stderr());
     CHECK(output.status != 0);
 }
 
@@ -242,7 +262,8 @@ TEST_CASE("An unreadable glyph file is an error")
 {
     const std::string filepath = write_listing_image("needs-glyphs.pgm", {"A"});
     const Output output
-        = run("read \"" + filepath + "\" --glyphs /no/such/glyphs 2>/dev/null");
+        = run("read \"" + filepath + "\" --glyphs /no/such/glyphs"
+              + discard_stderr());
     CHECK(output.status != 0);
 }
 
@@ -250,7 +271,7 @@ TEST_CASE("An unknown option is refused rather than ignored")
 {
     const std::string filepath = write_listing_image("options.pgm", {"A"});
     const Output output
-        = run("read \"" + filepath + "\" --wat 2>/dev/null");
+        = run("read \"" + filepath + "\" --wat" + discard_stderr());
     CHECK(output.status != 0);
 }
 

@@ -18,7 +18,7 @@
 // Characters:   32-126 (95 glyphs), 8x8, MSB leftmost
 //
 // Regenerate with:
-//     python3 tools/generate_acorn_glyphs.py roms/acorn-mos_1_20.rom \
+//     python3 tools/generate_acorn_glyphs.py roms/acorn-mos_1_20.rom
 //         --name acorn-mos-1.20 --output src/AcornMos120Glyphs.cpp
 
 #include "BuiltinGlyphSets.hpp"
