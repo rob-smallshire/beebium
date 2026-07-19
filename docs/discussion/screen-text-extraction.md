@@ -705,7 +705,7 @@ library's fixtures.
 ### 3. Server APIs
 
 `GetScreenText`, and the geometry call a client needs on mouse-down to snap a
-drag.
+drag. Specified as a work order in `screen-text-server-spec.md`.
 
 **Startable now**, with the teletext strategy only, delegating to the capture
 already built. That alone is an improvement: MODE 7 behaviour is unchanged, and
