@@ -1,6 +1,15 @@
 # Teletext Cell Capture: One Data Source, Two Transports
 
-> **Status (July 2026).** The capture layer, the snapshot transport and
+> **Superseded in part (July 2026).** The copy interface described here is
+> MODE 7-specific, which makes clients care which mode the machine is in and
+> leaks the implementation into the UI. `screen-text-extraction.md` specifies
+> the polymorphic replacement; what is described below should be read as the
+> teletext *strategy* behind it, and the RPC and client wrappers as scaffolding.
+>
+> The capture layer itself -- `TeletextGrid` filled from `Saa5050::byte()` --
+> stands, and is what the teletext strategy will use.
+>
+> **Status.** The capture layer, the snapshot transport and
 > whole-screen copying are implemented. What remains from the plan below is
 > selection (step 4) and retiring the client-side scrapers (step 5). The vector
 > renderer that shares this capture is still unbuilt and still optional; see
