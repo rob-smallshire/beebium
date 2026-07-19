@@ -21,6 +21,7 @@
 #include <beebium/FrameAllocator.hpp>
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/FrameRenderer.hpp>
+#include <beebium/ScreenText.hpp>
 
 using namespace beebium;
 
@@ -41,6 +42,20 @@ PixelBatch make_batch(uint8_t flags, uint8_t pixel_count = 8) {
     batch.set_type(PixelBatchType::Bitmap);
     batch.set_flags(flags);
     batch.set_pixel_count(pixel_count);
+    return batch;
+}
+
+// As above, but for a band drawn with a stated character geometry.
+//
+// The renderer records the geometry per scanline alongside the pixel width and
+// breaks a region on a change to either, so a split screen carries one region
+// per geometry rather than one per frame.
+PixelBatch make_batch_with_geometry(uint8_t flags, uint8_t pixel_count,
+                                    uint8_t char_scanlines,
+                                    PixelBatchType type) {
+    PixelBatch batch = make_batch(flags, pixel_count);
+    batch.set_type(type);
+    batch.set_char_scanlines(char_scanlines);
     return batch;
 }
 
@@ -238,4 +253,130 @@ TEST_CASE("FrameRenderer regions: regions reset between frames", "[video][region
 
     REQUIRE(fb.metadata().regions.size() == 1);
     CHECK(fb.metadata().regions[0].pixel_width == 320);
+}
+
+// ============================================================================
+// Character geometry per band
+// ============================================================================
+
+namespace {
+
+// A scanline drawn with a stated character geometry.
+void emit_scanline_with_geometry(FrameRenderer& renderer,
+                                 OutputQueue<PixelBatch>& queue,
+                                 int num_batches, uint8_t pixel_count,
+                                 uint8_t char_scanlines,
+                                 PixelBatchType type) {
+    auto blanking = make_batch_with_geometry(0, pixel_count, char_scanlines, type);
+    queue.push(blanking);
+    renderer.process(queue);
+
+    for (int i = 0; i < num_batches; ++i) {
+        auto batch = make_batch_with_geometry(VIDEO_FLAG_DISPLAY, pixel_count,
+                                              char_scanlines, type);
+        queue.push(batch);
+        renderer.process(queue);
+    }
+
+    auto end_blank = make_batch_with_geometry(0, pixel_count, char_scanlines, type);
+    queue.push(end_blank);
+    renderer.process(queue);
+
+    auto hsync = make_batch_with_geometry(VIDEO_FLAG_HSYNC, pixel_count,
+                                          char_scanlines, type);
+    queue.push(hsync);
+    renderer.process(queue);
+
+    auto post_hsync = make_batch_with_geometry(0, pixel_count, char_scanlines, type);
+    queue.push(post_hsync);
+    renderer.process(queue);
+}
+
+} // anonymous namespace
+
+TEST_CASE("Regions carry the character geometry of their scanlines",
+          "[frame-renderer][regions][screen-text]") {
+    FrameBuffer fb(nullptr, 736, 576);
+    FrameRenderer renderer(&fb);
+    OutputQueue<PixelBatch> queue(4096);
+
+    SECTION("a ten-scanline character row is recorded as such") {
+        // MODE 3 and MODE 6 put an eight-scanline glyph on a ten-scanline
+        // pitch. The pitch cannot be recovered from the pixels afterwards, so
+        // it has to be recorded as they are drawn.
+        for (int y = 0; y < 20; ++y) {
+            emit_scanline_with_geometry(renderer, queue, 80, 8, 10,
+                                        PixelBatchType::Bitmap);
+        }
+        emit_vsync(renderer, queue);
+
+        const auto& meta = fb.metadata();
+        REQUIRE(meta.regions.size() == 1);
+        CHECK(meta.regions[0].char_scanlines == 10);
+        CHECK_FALSE(meta.regions[0].is_teletext);
+    }
+
+    SECTION("a teletext band is marked as one") {
+        for (int y = 0; y < 20; ++y) {
+            emit_scanline_with_geometry(renderer, queue, 40, 6, 19,
+                                        PixelBatchType::Teletext);
+        }
+        emit_vsync(renderer, queue);
+
+        const auto& meta = fb.metadata();
+        REQUIRE(meta.regions.size() == 1);
+        CHECK(meta.regions[0].is_teletext);
+    }
+
+    SECTION("a change of pitch alone splits a region") {
+        // Two bands of the same pixel width but different character heights
+        // are two bands: a reader cannot treat them alike, which is the whole
+        // point of the split.
+        for (int y = 0; y < 10; ++y) {
+            emit_scanline_with_geometry(renderer, queue, 80, 8, 8,
+                                        PixelBatchType::Bitmap);
+        }
+        for (int y = 0; y < 10; ++y) {
+            emit_scanline_with_geometry(renderer, queue, 80, 8, 10,
+                                        PixelBatchType::Bitmap);
+        }
+        emit_vsync(renderer, queue);
+
+        const auto& meta = fb.metadata();
+        REQUIRE(meta.regions.size() == 2);
+        CHECK(meta.regions[0].pixel_width == meta.regions[1].pixel_width);
+        CHECK(meta.regions[0].char_scanlines == 8);
+        CHECK(meta.regions[1].char_scanlines == 10);
+        CHECK(meta.regions[0].end_line == meta.regions[1].start_line);
+    }
+
+    SECTION("a split screen becomes two bands with their own geometry") {
+        // The shape Elite produces: a wider band above a narrower one, the
+        // CRTC reprogrammed part way down the frame.
+        for (int y = 0; y < 12; ++y) {
+            emit_scanline_with_geometry(renderer, queue, 40, 8, 8,
+                                        PixelBatchType::Bitmap);
+        }
+        for (int y = 0; y < 8; ++y) {
+            emit_scanline_with_geometry(renderer, queue, 20, 8, 8,
+                                        PixelBatchType::Bitmap);
+        }
+        emit_vsync(renderer, queue);
+
+        const auto& meta = fb.metadata();
+        REQUIRE(meta.regions.size() == 2);
+        CHECK(meta.regions[0].pixel_width == 320);
+        CHECK(meta.regions[1].pixel_width == 160);
+
+        // And each becomes a band a client can snap a drag to.
+        const auto bands = screen::bands_of(meta);
+        REQUIRE(bands.size() == 2);
+        CHECK(bands[0].top == meta.regions[0].start_line);
+        CHECK(bands[1].top == meta.regions[1].start_line);
+        CHECK(bands[0].bottom == bands[1].top);
+        for (const auto& band : bands) {
+            CHECK(band.cell_width == 8);
+            CHECK(band.row_pitch == 8);
+        }
+    }
 }
