@@ -615,3 +615,77 @@ TEST_CASE("Every cell of a real multicoloured screen is read")
     CHECK(json_number(output.stdout_text, "total_cells") == 20 * 32);
     CHECK(json_number(output.stdout_text, "unmatched_cells") == 0);
 }
+
+// Screens from a real game.
+//
+// Waffle, by Chris Bradburne. Its instruction screens flow text around
+// graphics in the standard Acorn font on the character grid, which makes them
+// the first test of any of this against software written by somebody else --
+// everything before was rendered by the emulator's own tests or by this
+// library's, and so shares its assumptions.
+
+TEST_CASE("Text is read from a real game's screens")
+{
+    struct Expectation {
+        const char* screen;
+        const char* line;
+    };
+
+    const Expectation expectations[] = {
+        {"waffle-title", "By Chris Bradburne"},
+        {"waffle-instructions-2", "This letter is in the correct place:"},
+        {"waffle-instructions-4", "The Funky Dingo Situation"},
+        {"waffle-board", "Swaps remaining:15"},
+    };
+
+    for (const Expectation& expectation : expectations) {
+        INFO(expectation.screen);
+        const Output output = run(
+            "read \"" + fixture_filepath(std::string("screens/")
+                                         + expectation.screen + ".png")
+            + "\"");
+        CHECK(output.status == 0);
+        CHECK(output.stdout_text.find(expectation.line) != std::string::npos);
+    }
+}
+
+TEST_CASE("A real game's graphics are reported unread, never guessed at")
+{
+    // The board is mostly graphics: coloured tiles carrying letters far larger
+    // than any 8x8 glyph, and a title in a font that is not the ROM's. All of
+    // it comes back unmatched. What matters is the other half of that -- that
+    // nothing spurious is invented from it, which the next case checks.
+    const Output output = run("read \"" + fixture_filepath("screens/waffle-board.png")
+                              + "\" --format json");
+
+    CHECK(output.status == 0);
+    CHECK(json_number(output.stdout_text, "total_cells") == 1280);
+    CHECK(json_number(output.stdout_text, "unmatched_cells") > 100);
+}
+
+TEST_CASE("Nothing is invented from a real game's graphics")
+{
+    // Every character read from these four screens, gathered up. If the
+    // matcher ever started guessing, something that is not in this alphabet
+    // would appear -- the graphics offer far more opportunity to invent a
+    // character than the text does to lose one.
+    const std::string permitted =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        "0123456789 .,:;!?'\"()-/+=<>#*@_$%&[]{}|\\^~`";
+
+    for (const std::string& screen :
+         {"waffle-title", "waffle-instructions-2", "waffle-instructions-4",
+          "waffle-board"}) {
+        INFO(screen);
+        const Output output
+            = run("read \"" + fixture_filepath("screens/" + screen + ".png")
+                  + "\"");
+        for (const char character : output.stdout_text) {
+            if (character == '\n') {
+                continue;
+            }
+            INFO("character " << static_cast<int>(character));
+            CHECK(permitted.find(character) != std::string::npos);
+        }
+    }
+}

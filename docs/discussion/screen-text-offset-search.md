@@ -147,31 +147,49 @@ Sixty-four offsets times the number of colours present in each window. That is
 why it is opt-in, reached through free-form selection rather than attempted on
 every copy, and why the aligned path stays exactly as it is.
 
-## What is not settled
+## What real screens settled
 
-**Does a lone distinctive glyph count?** A single `A` over graphics, in
-registration with nothing. The evidence says yes -- no distinctive glyph
-matched by chance in 232,128 positions -- but the residual risk sits with the
-low-ink distinctive glyphs, `"`, `:` and `=`, which have a gap and so pass the
-test while being small enough that dithering might conceivably draw one. If
-they misfire in the wild the fix is narrow: require registration for
-distinctive glyphs below some ink, rather than changing the definition.
+Four frames from Waffle, a game by Chris Bradburne, are now in the corpus at
+`src/screen-text/tests/fixtures/screens/`. Its instruction screens flow text
+around graphics, and unlike everything measured above they were drawn by
+software written by somebody else. Running the prototype over them closed two
+of the three open questions, and not as expected.
+
+**A lone distinctive glyph does count.** Waffle's diagrams scatter isolated
+letters across example tiles -- `A C O R N`, `M I C R O` -- twenty-five of them
+on one screen. Requiring a run of two or more would throw all of them away.
+
+**Overlapping candidates must be resolved, and that is what removes the last
+false positives.** Each instruction screen produced exactly one off-grid ghost:
+a lone `p` six pixels above a real line of text. The synthetic screens never
+produced anything like it, because they had no text on them to cast a shadow at
+a near-miss offset. Real text turns out to be a better source of false
+positives than graphics are.
+
+The rule: keep the longest runs, and drop any run whose cells overlap one
+already kept -- the same pixels cannot be two characters. With it, the four
+screens yield no off-grid false positives at all while keeping every genuine
+isolated letter.
+
+One honest loss to record: Waffle's spaced-out title reads `W A F F E`. The `L`
+is HV-convex, a corner being indistinguishable from what graphics are made of,
+and it stands alone with nothing to be in registration with.
+
+## What is still not settled
 
 **How much of a run must be distinctive?** One glyph is the current proposal.
 A long run of simple glyphs with a single distinctive one at the end is
 admitted on thin evidence.
 
-**Overlapping candidates.** The same pixels may match at several offsets or in
-several colours. Longer runs should win, but the rule needs writing down and
-making deterministic.
+**The low-ink distinctive glyphs**, `"`, `:` and `=`, have a gap and so pass
+the distinctiveness test while being small enough that dithering might draw
+one. None has misfired yet, on synthetic or real screens. If one does, the fix
+is narrow: require registration for distinctive glyphs below some ink, rather
+than changing the definition.
 
-## What is needed before building it
-
-Real screens. Every number above comes from synthetic graphics -- my idea of a
-busy display, not a real one's. A game's title screen has structure that random
-rectangles and discs do not, and the honest position is that the noise
-measurements are indicative rather than trustworthy until they have been
-repeated against captured frames carrying genuine `VDU 5` text.
-
-That is the next step, and it is deliberately before the implementation rather
-than after it.
+**Genuine `VDU 5` text has still not been seen.** Waffle's text is entirely
+cell-aligned, which makes it an excellent negative set and an excellent source
+of ground truth -- the aligned reader extracts all of it, so the offset search
+can be checked against a known answer -- but it does not exercise the case this
+document exists for. A game that draws text at the graphics cursor is still
+wanted.
