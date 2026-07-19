@@ -728,10 +728,8 @@ TEST_CASE("Text placed off the character grid is not read by the aligned path")
     // the grid at y=160.
     //
     // The aligned reader finds what is on the grid and nothing else, which is
-    // correct and is the whole reason for the second increment. When sub-cell
-    // offset search lands, the four expectations below invert; they are the
-    // acceptance target for it. See
-    // docs/discussion/screen-text-offset-search.md.
+    // correct: the off-grid labels are the offset pass's to find, and a test
+    // below asserts it does. The two passes partition the screen.
     const Output output
         = run("read \"" + fixture_filepath("screens/fruits-machine.png") + "\"");
 
@@ -845,4 +843,106 @@ TEST_CASE("In-game drop-shadowed labels are beyond the aligned path")
     CHECK(output.stdout_text.find("LIVES") == std::string::npos);
     CHECK(output.stdout_text.find("Score") == std::string::npos);
     CHECK(output.stdout_text.find("BONUS") == std::string::npos);
+}
+
+// The acceptance target for the off-grid search: the three fixtures whose
+// off-grid labels the aligned pass cannot see, now found under --search offset.
+// These are the inversion of the aligned-pass expectations above.
+
+TEST_CASE("The offset search reads the off-grid labels of a fruit machine")
+{
+    const Output output = run("read \"" + fixture_filepath("screens/fruits-machine.png")
+                              + "\" --search offset");
+
+    CHECK(output.status == 0);
+    for (const char* const label :
+         {"GAMBLE", "BANK", "DOUBLE", "QUITS", "MELON", "METER"}) {
+        INFO(label);
+        CHECK(output.stdout_text.find(label) != std::string::npos);
+    }
+
+    // The partition holds: grid text is the aligned pass's, not this one's.
+    CHECK(output.stdout_text.find("COLLECT") == std::string::npos);
+    CHECK(output.stdout_text.find("RE-SPIN") == std::string::npos);
+}
+
+TEST_CASE("The offset search reads a drop-shadowed title")
+{
+    const Output output = run("read \"" + fixture_filepath("screens/rondo-title.png")
+                              + "\" --search offset");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("RONDO") != std::string::npos);
+
+    // The high score table is on the grid, so it belongs to the aligned pass.
+    CHECK(output.stdout_text.find("MicroUser") == std::string::npos);
+}
+
+TEST_CASE("The offset search reads in-game drop-shadowed labels")
+{
+    const Output output = run("read \"" + fixture_filepath("screens/krazy-game.png")
+                              + "\" --search offset");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("LIVES") != std::string::npos);
+    CHECK(output.stdout_text.find("Score") != std::string::npos);
+    CHECK(output.stdout_text.find("BONUS") != std::string::npos);
+}
+
+TEST_CASE("Every off-grid cell is flagged offset in the JSON")
+{
+    const Output output = run("read \"" + fixture_filepath("screens/rondo-title.png")
+                              + "\" --search offset --format json");
+
+    CHECK(output.status == 0);
+    // Under the offset pass, matched cells carry offset:true; the aligned
+    // false never appears.
+    CHECK(output.stdout_text.find("\"offset\":true") != std::string::npos);
+    CHECK(output.stdout_text.find("\"offset\":false") == std::string::npos);
+}
+
+TEST_CASE("The offset search invents nothing on a screen with no off-grid text")
+{
+    // Waffle's text is entirely on the grid, so the off-grid pass must find
+    // nothing at all -- the negative guarantee, on a real screen.
+    for (const char* const screen :
+         {"waffle-title", "waffle-instructions-2", "waffle-instructions-4",
+          "waffle-board"}) {
+        INFO(screen);
+        const Output output
+            = run("read \"" + fixture_filepath(std::string("screens/") + screen
+                                               + ".png")
+                  + "\" --search offset");
+        CHECK(output.status == 0);
+
+        // Nothing but whitespace on standard output.
+        for (const char character : output.stdout_text) {
+            CHECK((character == '\n' || character == ' '));
+        }
+    }
+}
+
+TEST_CASE("The offset search reads real text off a hostile background")
+{
+    // Loopy Loop draws over a dense dithered pattern. Much of its text is a
+    // thickened variant of the ROM font and does not match, but the glyphs
+    // that are the ROM font are found -- and everything reported is a real
+    // character, none invented from the background.
+    const Output output = run("read \"" + fixture_filepath("screens/loopy-loop.png")
+                              + "\" --search offset");
+
+    CHECK(output.status == 0);
+
+    // Fragments of "A.S.SHAKOOR '92" and the "* ... UP / ? ... DOWN" legend.
+    CHECK(output.stdout_text.find("'92") != std::string::npos);
+
+    // Whatever is reported is drawn from the readable alphabet, not conjured
+    // from the dither: no control characters, no stray bytes.
+    const std::string permitted =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        "0123456789 .,:;!?'\"()-/+=<>#*@_$%&[]{}|\\^~`\n";
+    for (const char character : output.stdout_text) {
+        INFO("character " << static_cast<int>(character));
+        CHECK(permitted.find(character) != std::string::npos);
+    }
 }

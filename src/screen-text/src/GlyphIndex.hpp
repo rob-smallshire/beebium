@@ -41,6 +41,15 @@ public:
         // Nothing can separate those from the pixels, so the alternatives
         // are carried rather than quietly discarded.
         std::vector<char32_t> alternatives;
+
+        // Whether the glyph's shape is one that imagery does not produce by
+        // accident: not HV-convex, so some row or column of it holds more than
+        // one run of set pixels. The off-grid search needs this to tell text
+        // from the filled regions, edges, bars and blobs a picture is made
+        // of. Computed once, from the bitmap alone -- no threshold, so it
+        // holds for a font nobody has seen. Meaningless to the aligned path,
+        // which never reads it.
+        bool distinctive = false;
     };
 
     // Later sets take precedence over earlier ones, so a caller can override

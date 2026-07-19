@@ -24,12 +24,21 @@
 namespace screentext {
 
 enum class Search {
-    // Character cells only: fast, exact, well structured, and what reading a
-    // listing or an error message needs.
+    // The character grid only: fast, exact, well structured, and what reading
+    // a listing or an error message needs. Every cell comes back with
+    // `offset` false.
     AlignedOnly,
 
-    // Also search sub-cell offsets, for text that is not on the character
-    // grid. Accepted but not yet honoured; reading is aligned either way.
+    // The sub-cell offset search only, for text that is not on the grid --
+    // VDU 5 output at arbitrary pixel positions. This reads what the aligned
+    // pass cannot, and only that: grid text is left to the aligned pass, so
+    // the two partition the screen between them and a caller wanting both runs
+    // read() twice and concatenates the results. Every cell comes back with
+    // `offset` true. Slower, by the sixty-four offsets it searches.
+    //
+    // The name is kept from the first increment, where the value existed but
+    // did nothing; under the settled contract it selects the off-grid search
+    // exclusively rather than adding to the aligned one.
     IncludeOffset,
 };
 

@@ -583,27 +583,230 @@ TEST_CASE("Text is UTF-8, so a pound sign survives the round trip")
     CHECK(result.runs[0].cells[0].codepoint == 0x00A3U);
 }
 
-TEST_CASE("Offset search is accepted but changes nothing yet")
-{
-    Canvas canvas(8 * 2, 8);
-    canvas.stamp_text(4, 0, "A", acorn()); // off the grid
+namespace {
 
+Options offset_options()
+{
     Options options;
     options.search = Search::IncludeOffset;
+    return options;
+}
+
+// A word of distinctive glyphs, stamped at an off-grid position.
+Canvas off_grid_word(const std::string& word, std::size_t x, std::size_t y,
+                     std::size_t width, std::size_t height)
+{
+    Canvas canvas(width, height);
+    canvas.stamp_text(x, y, word, acorn());
+    return canvas;
+}
+
+} // namespace
+
+TEST_CASE("The offset search finds a word placed off the grid")
+{
+    // The inversion of the first increment's guard: what was asserted
+    // unfindable is now found, at its exact off-grid position.
+    Canvas canvas = off_grid_word("HELLO", 5, 3, 8 * 8, 16);
 
     const Result result = read(canvas.image(),
                                {whole_image_band(canvas.image())},
-                               acorn_only(),
-                               options);
+                               acorn_only(), offset_options());
 
-    // Aligned reading is all that happens, so the off-grid glyph is not
-    // found, and no cell claims to have been matched at an offset.
-    CHECK(result.unmatched_cells > 0);
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "HELLO");
+    CHECK(result.runs[0].bounds.x == 5);
+    CHECK(result.runs[0].bounds.y == 3);
+}
+
+TEST_CASE("Every cell of an off-grid run is flagged as an offset match")
+{
+    Canvas canvas = off_grid_word("ABC", 3, 1, 8 * 5, 16);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    REQUIRE(result.runs.size() == 1);
+    for (const Cell& cell : result.runs[0].cells) {
+        CHECK(cell.offset);
+    }
+}
+
+TEST_CASE("The aligned pass never flags a cell as an offset match")
+{
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp_text(0, 0, "ABC", acorn());
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    for (const Cell& cell : result.runs[0].cells) {
+        CHECK_FALSE(cell.offset);
+    }
+}
+
+TEST_CASE("The two passes partition text: aligned reads grid, offset reads off")
+{
+    // Grid text at (0,0) and off-grid text a few pixels down and across, on
+    // one image. Each pass sees its own and not the other's, so a caller
+    // merging them concatenates rather than deduplicates.
+    Canvas canvas(8 * 10, 8 * 4);
+    canvas.stamp_text(0, 0, "GRID", acorn());       // on the grid
+    canvas.stamp_text(3, 19, "AWAY", acorn());      // off it, y=19, x=3
+
+    const Result aligned = read(canvas.image(),
+                                {whole_image_band(canvas.image())},
+                                acorn_only());
+    const Result offset = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    CHECK(aligned.text().find("GRID") != std::string::npos);
+    CHECK(aligned.text().find("AWAY") == std::string::npos);
+
+    CHECK(offset.text().find("AWAY") != std::string::npos);
+    CHECK(offset.text().find("GRID") == std::string::npos);
+}
+
+TEST_CASE("An off-grid run is rejoined across a space")
+{
+    // A space matches nothing, so two words come back as two candidate runs;
+    // sharing a baseline, a colour and the lattice, they are rejoined with
+    // the space written back.
+    Canvas canvas(8 * 12, 16);
+    canvas.stamp_text(5, 2, "AB", acorn());
+    canvas.stamp_text(5 + 8 * 3, 2, "CD", acorn()); // one blank cell between
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "AB CD");
+}
+
+TEST_CASE("A lone distinctive glyph over graphics is found")
+{
+    // Waffle's scattered example letters are the evidence that one glyph is
+    // enough. An 'A' is not a shape graphics make by accident.
+    Canvas canvas(8 * 4, 8 * 3);
+    // A little graphics clutter that is not glyph-shaped.
+    canvas.fill(0, 0, 8 * 4, 4, 2);
+    canvas.stamp(11, 9, Canvas::glyph_for(acorn(), U'A'), 1);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    bool found_a = false;
     for (const Run& run : result.runs) {
-        for (const Cell& cell : run.cells) {
-            CHECK_FALSE(cell.offset);
+        if (run.text.find('A') != std::string::npos) {
+            found_a = true;
         }
     }
+    CHECK(found_a);
+}
+
+TEST_CASE("A lone simple glyph over graphics is not reported")
+{
+    // A full stop is HV-convex -- a blob, which graphics are made of -- so
+    // alone, in registration with nothing, it is not credible and is left
+    // out rather than guessed at.
+    Canvas canvas(8 * 4, 8 * 3);
+    canvas.stamp(11, 9, Canvas::glyph_for(acorn(), U'.'), 1);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    for (const Run& run : result.runs) {
+        CHECK(run.text.find('.') == std::string::npos);
+    }
+}
+
+TEST_CASE("Simple glyphs are read when a distinctive one vouches for the run")
+{
+    // "A." alone: the full stop rides along because the 'A' beside it, in
+    // registration, makes the run credible.
+    Canvas canvas(8 * 4, 8 * 2);
+    canvas.stamp(3, 1, Canvas::glyph_for(acorn(), U'A'), 1);
+    canvas.stamp(11, 1, Canvas::glyph_for(acorn(), U'.'), 1);
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "A.");
+}
+
+TEST_CASE("Drop-shadowed text is read from the colour drawn last")
+{
+    // Text over its own shadow: three colours in the window. The shadow goes
+    // down first, the text over it, so the text colour forms the glyph and
+    // the shadow colour a crescent that matches nothing.
+    Canvas canvas(8 * 6, 16, 0);
+    const Bitmap& letter = Canvas::glyph_for(acorn(), U'H');
+    canvas.stamp(6, 3, letter, 2); // shadow, one pixel down and right
+    canvas.stamp(5, 2, letter, 1); // text, over it
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "H");
+    CHECK(result.runs[0].cells[0].foreground == 1);
+}
+
+TEST_CASE("A run tolerates a one-pixel jog in its lattice")
+{
+    // Krazy Ape's LIVES= sits at gaps of 9, 8, 9, 8, 8. A hand-placed line
+    // need not be a perfect lattice.
+    Canvas canvas(8 * 8, 16);
+    std::size_t pen = 3;
+    const std::size_t gaps[] = {9, 8, 9, 8};
+    const char* const word = "LIVES";
+    canvas.stamp(pen, 2, Canvas::glyph_for(acorn(), U'L'), 1);
+    for (std::size_t i = 0; i < 4; ++i) {
+        pen += gaps[i];
+        canvas.stamp(pen, 2,
+                     Canvas::glyph_for(acorn(),
+                                       static_cast<char32_t>(word[i + 1])),
+                     1);
+    }
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "LIVES");
+}
+
+TEST_CASE("A pure-graphics screen yields no off-grid runs")
+{
+    // The negative guarantee: filled regions, edges and blobs form no
+    // credible run, so nothing is invented from a picture.
+    Canvas canvas(8 * 20, 8 * 20, 0);
+    for (std::size_t i = 0; i < 40; ++i) {
+        const std::uint8_t colour = static_cast<std::uint8_t>(1 + i % 3);
+        // Rectangles and diagonals, the stuff of pictures.
+        canvas.fill((i * 13) % 140, (i * 7) % 140, 10 + i % 30, 4 + i % 20,
+                    colour);
+        for (std::size_t d = 0; d < 30; ++d) {
+            canvas.set_pixel((i * 11 + d) % 155, (i * 5 + d) % 155, colour);
+        }
+    }
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), offset_options());
+
+    CHECK(result.runs.empty());
 }
 
 TEST_CASE("Reading the same input twice gives the same answer")

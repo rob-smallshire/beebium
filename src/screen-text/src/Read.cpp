@@ -214,61 +214,389 @@ void flush_run(std::vector<Cell>& cells, std::vector<Run>& runs)
     cells.clear();
 }
 
-} // namespace
+// ---- off-grid search ----------------------------------------------------
+//
+// VDU 5 draws text at the graphics cursor, at any pixel position, over
+// whatever is already there. The grid walk above misses all of it. This finds
+// it, at the cost of sixty-four sub-cell offsets times the colours in each
+// window; it is a separate pass, selected by Search::IncludeOffset, and the
+// aligned path never runs any of it.
 
-std::size_t Run::unmatched_cells() const
+// One glyph found at a pixel position, in one colour.
+struct OffsetCandidate {
+    Rect bounds;
+    std::uint8_t foreground = 0;
+    const GlyphIndex::Match* match = nullptr;
+};
+
+// Set a bit where the pixel is the glyph colour; everything else is
+// background, whatever colours it holds. This is "do the pixels of colour c
+// form a glyph, ignoring everything else" -- the question VDU 5 text needs,
+// having been painted over arbitrary graphics with no background of its own.
+Bitmap reduce_foreground(const Image& image, const Rect& bounds,
+                         std::uint8_t foreground)
 {
-    std::size_t count = 0;
-    for (const Cell& cell : cells) {
-        if (!cell.matched()) {
-            ++count;
+    Bitmap bitmap(bounds.width, bounds.height);
+    for (std::size_t y = 0; y < bounds.height; ++y) {
+        for (std::size_t x = 0; x < bounds.width; ++x) {
+            if (image.pixel(bounds.x + x, bounds.y + y) == foreground) {
+                bitmap.set_pixel(x, y, true);
+            }
         }
     }
-    return count;
+    return bitmap;
 }
 
-std::size_t Run::ambiguous_cells() const
+// The colour covering most of a window other than the glyph's: a best-effort
+// "what it sits on". Off-grid text has no single background, so this is the
+// dominant surrounding colour rather than a second ink. Stays the foreground
+// when the window holds nothing else.
+std::uint8_t dominant_other(const Image& image, const Rect& bounds,
+                            std::uint8_t foreground)
 {
-    std::size_t count = 0;
-    for (const Cell& cell : cells) {
-        if (cell.ambiguous()) {
-            ++count;
+    std::size_t counts[256] = {};
+    for (std::size_t y = 0; y < bounds.height; ++y) {
+        for (std::size_t x = 0; x < bounds.width; ++x) {
+            ++counts[image.pixel(bounds.x + x, bounds.y + y)];
         }
     }
-    return count;
-}
-
-std::string Result::text() const
-{
-    std::string text;
-    for (std::size_t index = 0; index < runs.size(); ++index) {
-        if (index > 0) {
-            text.push_back('\n');
+    std::size_t best = 0;
+    std::uint8_t value = foreground;
+    for (std::size_t c = 0; c < 256; ++c) {
+        if (c != foreground && counts[c] > best) {
+            best = counts[c];
+            value = static_cast<std::uint8_t>(c);
         }
-        text += runs[index].text;
     }
-    return text;
+    return value;
 }
 
-Result read(const Image& image,
-            const std::vector<Band>& bands,
-            const std::vector<GlyphSet>& glyph_sets,
-            const Options& options)
+// Every glyph-shaped patch of one colour, at every position in the region.
+std::vector<OffsetCandidate> gather_offset(const Image& image,
+                                           const Rect& region,
+                                           std::size_t cell_width,
+                                           std::size_t cell_height,
+                                           const GlyphIndex& index)
 {
-    validate(image, bands);
+    std::vector<OffsetCandidate> candidates;
+    if (region.width < cell_width || region.height < cell_height) {
+        return candidates;
+    }
+    const std::size_t last_x = region.right() - cell_width;
+    const std::size_t last_y = region.bottom() - cell_height;
 
-    // Search::IncludeOffset is accepted so that callers and the wire format
-    // can be written against the finished interface, but sub-cell offset
-    // search is not implemented: reading is aligned either way, and no cell
-    // is ever reported as having matched at an offset.
+    for (std::size_t y = region.y; y <= last_y; ++y) {
+        for (std::size_t x = region.x; x <= last_x; ++x) {
+            const Rect bounds{x, y, cell_width, cell_height};
 
-    const GlyphIndex index(glyph_sets);
+            // The colours present in this window, gathered once. Only these
+            // are tried, so a colour that is not here -- and in particular an
+            // empty bitmap, which would be a space -- can never match.
+            std::uint8_t colours[64];
+            std::size_t colour_count = 0;
+            for (std::size_t dy = 0; dy < cell_height; ++dy) {
+                for (std::size_t dx = 0; dx < cell_width; ++dx) {
+                    const std::uint8_t value = image.pixel(x + dx, y + dy);
+                    bool known = false;
+                    for (std::size_t k = 0; k < colour_count; ++k) {
+                        if (colours[k] == value) { known = true; break; }
+                    }
+                    if (!known && colour_count < 64) {
+                        colours[colour_count++] = value;
+                    }
+                }
+            }
 
-    Result result;
-    if (image.empty()) {
-        return result;
+            for (std::size_t k = 0; k < colour_count; ++k) {
+                const Bitmap bitmap
+                    = reduce_foreground(image, bounds, colours[k]);
+                if (const GlyphIndex::Match* match = index.find(bitmap)) {
+                    candidates.push_back({bounds, colours[k], match});
+                }
+            }
+        }
+    }
+    return candidates;
+}
+
+// Whether two steps count as one lattice step: eight give or take one, since a
+// game placing characters by hand does not always land on a perfect grid.
+bool one_step(std::size_t gap, std::size_t cell_width)
+{
+    return gap + 1 >= cell_width && gap <= cell_width + 1;
+}
+
+// Group candidates into runs: same baseline, same colour, one lattice step
+// apart. Text is regular where noise is not, which is what tells them apart.
+std::vector<std::vector<OffsetCandidate>> register_runs(
+    std::vector<OffsetCandidate> candidates, std::size_t cell_width)
+{
+    std::sort(candidates.begin(), candidates.end(),
+              [](const OffsetCandidate& a, const OffsetCandidate& b) {
+                  if (a.bounds.y != b.bounds.y) return a.bounds.y < b.bounds.y;
+                  if (a.foreground != b.foreground)
+                      return a.foreground < b.foreground;
+                  return a.bounds.x < b.bounds.x;
+              });
+
+    std::vector<std::vector<OffsetCandidate>> runs;
+    for (const OffsetCandidate& candidate : candidates) {
+        if (!runs.empty()) {
+            const OffsetCandidate& previous = runs.back().back();
+            if (previous.bounds.y == candidate.bounds.y
+                && previous.foreground == candidate.foreground) {
+                const std::size_t gap = candidate.bounds.x - previous.bounds.x;
+                if (gap == 0) {
+                    continue; // the same position and colour, already taken
+                }
+                if (one_step(gap, cell_width)) {
+                    runs.back().push_back(candidate);
+                    continue;
+                }
+            }
+        }
+        runs.push_back({candidate});
+    }
+    return runs;
+}
+
+// A run is credible when it holds at least one distinctive glyph: something
+// imagery does not draw by accident. The simple glyphs in it come along, being
+// vouched for by the company they keep.
+bool credible(const std::vector<OffsetCandidate>& run)
+{
+    for (const OffsetCandidate& candidate : run) {
+        if (candidate.match->distinctive) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Keep the longest runs and drop any that overlap one already kept: the same
+// pixels cannot be two characters. This is what removes the ghosts real text
+// casts at near-miss offsets. Deterministic: longest first, then top to
+// bottom, then left to right.
+std::vector<std::vector<OffsetCandidate>> resolve_overlaps(
+    std::vector<std::vector<OffsetCandidate>> runs, const Image& image)
+{
+    std::sort(runs.begin(), runs.end(),
+              [](const std::vector<OffsetCandidate>& a,
+                 const std::vector<OffsetCandidate>& b) {
+                  if (a.size() != b.size()) return a.size() > b.size();
+                  if (a.front().bounds.y != b.front().bounds.y)
+                      return a.front().bounds.y < b.front().bounds.y;
+                  return a.front().bounds.x < b.front().bounds.x;
+              });
+
+    std::vector<char> claimed(image.width * image.height, 0);
+    const auto overlaps = [&](const Rect& r) {
+        for (std::size_t y = 0; y < r.height; ++y) {
+            for (std::size_t x = 0; x < r.width; ++x) {
+                if (claimed[(r.y + y) * image.width + r.x + x]) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    const auto claim = [&](const Rect& r) {
+        for (std::size_t y = 0; y < r.height; ++y) {
+            for (std::size_t x = 0; x < r.width; ++x) {
+                claimed[(r.y + y) * image.width + r.x + x] = 1;
+            }
+        }
+    };
+
+    std::vector<std::vector<OffsetCandidate>> kept;
+    for (const std::vector<OffsetCandidate>& run : runs) {
+        bool clash = false;
+        for (const OffsetCandidate& candidate : run) {
+            if (overlaps(candidate.bounds)) { clash = true; break; }
+        }
+        if (clash) {
+            continue;
+        }
+        for (const OffsetCandidate& candidate : run) {
+            claim(candidate.bounds);
+        }
+        kept.push_back(run);
+    }
+    return kept;
+}
+
+// Build a Run from a sequence of candidates on one baseline in one colour,
+// writing spaces back where the lattice shows a whole-cell gap between them.
+// SCORE 1000 arrives as two candidate sequences a couple of cells apart; this
+// is where the space between them is restored.
+Run build_offset_run(const std::vector<OffsetCandidate>& run,
+                     const Image& image, std::size_t cell_width)
+{
+    Run out;
+    for (std::size_t i = 0; i < run.size(); ++i) {
+        const OffsetCandidate& candidate = run[i];
+
+        if (i > 0) {
+            // Fill any whole-cell gap since the previous glyph with spaces.
+            const std::size_t span
+                = candidate.bounds.x - run[i - 1].bounds.x;
+            const std::size_t steps
+                = (span + cell_width / 2) / cell_width; // nearest whole cells
+            for (std::size_t s = 1; s < steps; ++s) {
+                Cell space;
+                space.codepoint = U' ';
+                space.offset = true;
+                const std::size_t sx = run[i - 1].bounds.x + s * cell_width;
+                space.bounds = Rect{sx, candidate.bounds.y, cell_width,
+                                    candidate.bounds.height};
+                out.cells.push_back(space);
+            }
+        }
+
+        Cell cell;
+        cell.bounds = candidate.bounds;
+        cell.codepoint = candidate.match->codepoint;
+        cell.glyph_set = *candidate.match->glyph_set;
+        cell.alternatives = candidate.match->alternatives;
+        cell.foreground = candidate.foreground;
+        cell.background = dominant_other(image, candidate.bounds,
+                                         candidate.foreground);
+        cell.offset = true;
+        out.cells.push_back(std::move(cell));
     }
 
+    for (const Cell& cell : out.cells) {
+        append_utf8(out.text, cell.codepoint);
+    }
+    const Rect& front = out.cells.front().bounds;
+    const Rect& back = out.cells.back().bounds;
+    out.bounds = Rect{front.x, front.y, back.right() - front.x, front.height};
+    return out;
+}
+
+// Rejoin runs across a space: same baseline, same colour, a whole number of
+// lattice steps apart. Two kept runs separated by one cell become one run with
+// a space between them.
+std::vector<std::vector<OffsetCandidate>> rejoin_across_spaces(
+    std::vector<std::vector<OffsetCandidate>> runs, std::size_t cell_width)
+{
+    std::sort(runs.begin(), runs.end(),
+              [](const std::vector<OffsetCandidate>& a,
+                 const std::vector<OffsetCandidate>& b) {
+                  if (a.front().bounds.y != b.front().bounds.y)
+                      return a.front().bounds.y < b.front().bounds.y;
+                  if (a.front().foreground != b.front().foreground)
+                      return a.front().foreground < b.front().foreground;
+                  return a.front().bounds.x < b.front().bounds.x;
+              });
+
+    std::vector<std::vector<OffsetCandidate>> merged;
+    for (std::vector<OffsetCandidate>& run : runs) {
+        if (!merged.empty()) {
+            std::vector<OffsetCandidate>& into = merged.back();
+            const OffsetCandidate& tail = into.back();
+            const OffsetCandidate& head = run.front();
+            if (tail.bounds.y == head.bounds.y
+                && tail.foreground == head.foreground
+                && head.bounds.x > tail.bounds.x) {
+                const std::size_t span = head.bounds.x - tail.bounds.x;
+                const std::size_t steps = (span + cell_width / 2) / cell_width;
+                // A whole number of steps, at least two (one step would have
+                // been chained already), landing near a lattice point.
+                const std::size_t ideal = steps * cell_width;
+                const std::size_t drift
+                    = span > ideal ? span - ideal : ideal - span;
+                if (steps >= 2 && drift <= 1) {
+                    into.insert(into.end(), run.begin(), run.end());
+                    continue;
+                }
+            }
+        }
+        merged.push_back(std::move(run));
+    }
+    return merged;
+}
+
+// Whether a run sits on the band's character grid, in which case the aligned
+// pass owns it and the off-grid pass leaves it alone. The two passes then
+// partition the text between them.
+bool on_grid(const std::vector<OffsetCandidate>& run, const Band& band)
+{
+    const OffsetCandidate& first = run.front();
+    const std::size_t row_pitch = band.effective_row_pitch();
+    const std::size_t column_pitch = band.effective_column_pitch();
+    const bool row_aligned = first.bounds.y >= band.origin_y
+        && (first.bounds.y - band.origin_y) % row_pitch == 0;
+    const bool column_aligned = first.bounds.x >= band.origin_x
+        && (first.bounds.x - band.origin_x) % column_pitch == 0;
+    return row_aligned && column_aligned;
+}
+
+void read_offset(const Image& image, const std::vector<Band>& bands,
+                 const GlyphIndex& index, const Options& options,
+                 Result& result)
+{
+    for (const Band& band : bands) {
+        Rect region;
+        if (!region_for(image, band, options.selection, region)) {
+            continue;
+        }
+
+        std::vector<std::vector<OffsetCandidate>> runs = register_runs(
+            gather_offset(image, region, band.cell_width, band.cell_height,
+                          index),
+            band.cell_width);
+
+        std::vector<std::vector<OffsetCandidate>> good;
+        for (std::vector<OffsetCandidate>& run : runs) {
+            if (credible(run)) {
+                good.push_back(std::move(run));
+            }
+        }
+
+        // Overlap resolution runs first, with grid runs still present: real
+        // grid text claims its pixels and so suppresses the near-miss ghosts
+        // that real text casts at neighbouring offsets. Only then are grid
+        // runs dropped -- the aligned pass owns them -- so that rejoining
+        // across spaces cannot fuse an off-grid label onto a grid run that
+        // happens to share its baseline and colour.
+        good = resolve_overlaps(std::move(good), image);
+
+        std::vector<std::vector<OffsetCandidate>> off_grid;
+        for (std::vector<OffsetCandidate>& run : good) {
+            if (!on_grid(run, band)) {
+                off_grid.push_back(std::move(run));
+            }
+        }
+
+        good = rejoin_across_spaces(std::move(off_grid), band.cell_width);
+
+        std::sort(good.begin(), good.end(),
+                  [](const std::vector<OffsetCandidate>& a,
+                     const std::vector<OffsetCandidate>& b) {
+                      if (a.front().bounds.y != b.front().bounds.y)
+                          return a.front().bounds.y < b.front().bounds.y;
+                      return a.front().bounds.x < b.front().bounds.x;
+                  });
+
+        for (const std::vector<OffsetCandidate>& run : good) {
+            Run built = build_offset_run(run, image, band.cell_width);
+            for (const Cell& cell : built.cells) {
+                ++result.total_cells;
+                if (cell.ambiguous()) {
+                    ++result.ambiguous_cells;
+                }
+            }
+            result.runs.push_back(std::move(built));
+        }
+    }
+}
+
+// The aligned grid walk: the whole of the first increment, unchanged.
+void read_aligned(const Image& image, const std::vector<Band>& bands,
+                  const GlyphIndex& index, const Options& options,
+                  Result& result)
+{
     // Bands in the order given, so reading order is the caller's to decide.
     for (const Band& band : bands) {
         Rect region;
@@ -345,6 +673,69 @@ Result read(const Image& image,
 
             flush_run(row_cells, result.runs);
         }
+    }
+}
+
+} // namespace
+
+std::size_t Run::unmatched_cells() const
+{
+    std::size_t count = 0;
+    for (const Cell& cell : cells) {
+        if (!cell.matched()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::size_t Run::ambiguous_cells() const
+{
+    std::size_t count = 0;
+    for (const Cell& cell : cells) {
+        if (cell.ambiguous()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::string Result::text() const
+{
+    std::string text;
+    for (std::size_t index = 0; index < runs.size(); ++index) {
+        if (index > 0) {
+            text.push_back('\n');
+        }
+        text += runs[index].text;
+    }
+    return text;
+}
+
+Result read(const Image& image,
+            const std::vector<Band>& bands,
+            const std::vector<GlyphSet>& glyph_sets,
+            const Options& options)
+{
+    validate(image, bands);
+
+    const GlyphIndex index(glyph_sets);
+
+    Result result;
+    if (image.empty()) {
+        return result;
+    }
+
+    // One pass or the other, never both: a caller wanting aligned and off-grid
+    // text runs read() twice and concatenates. The two searches partition the
+    // text -- aligned reads what sits on the grid, off-grid reads the rest --
+    // so there is nothing to deduplicate, and Cell::offset says which pass a
+    // run came from: false throughout an aligned result, true throughout an
+    // off-grid one.
+    if (options.search == Search::IncludeOffset) {
+        read_offset(image, bands, index, options, result);
+    } else {
+        read_aligned(image, bands, index, options, result);
     }
 
     return result;
