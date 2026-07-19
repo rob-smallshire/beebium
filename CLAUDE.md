@@ -228,6 +228,7 @@ WD1770 controller with:
 - `video-subsystem.md` - Display rendering pipeline
 - `grpc-server.md` - Service API documentation
 - `lifecycle-management.md` - Connection liveness (heartbeat, graceful/crash/unreachable), client teardown, window/server shutdown, and the rules behind them
+- `screen-text-library.md` - Reading text off the screen: the standalone recognition library and its CLI
 - `keyboard.md` - Keyboard matrix and input handling
 - `indicators.md` - LED status indicators
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
