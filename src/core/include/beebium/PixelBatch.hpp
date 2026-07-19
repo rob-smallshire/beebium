@@ -130,6 +130,21 @@ struct PixelBatch {
         return (count > 0 && count <= 8) ? count : 8;  // Default to 8 if not set
     }
 
+    // Scanlines per character row, from CRTC R9 + 1, in pixels[4].x and
+    // pixels[5].x. Carried per batch because the CRTC can be reprogrammed
+    // mid-frame, so this is the geometry in effect for these pixels rather
+    // than for the frame. Reading text off the screen needs it and the video
+    // path does not; a value beyond 5 bits cannot arise, R9 being 5 bits wide.
+    void set_char_scanlines(uint8_t scanlines) {
+        pixels.pixels[4].bits.x = scanlines & 0x0F;
+        pixels.pixels[5].bits.x = (scanlines >> 4) & 0x0F;
+    }
+
+    uint8_t char_scanlines() const {
+        return static_cast<uint8_t>((pixels.pixels[4].bits.x & 0x0F) |
+                                    ((pixels.pixels[5].bits.x & 0x0F) << 4));
+    }
+
     // Fill all 8 pixels with a single color (for blanking, borders, etc.)
     void fill(VideoDataPixel color) {
         for (int i = 0; i < 8; ++i) {

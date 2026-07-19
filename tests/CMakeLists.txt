@@ -943,6 +943,10 @@ target_compile_definitions(test_teletext_grid PRIVATE
 catch_discover_tests(test_teletext_grid)
 
 # Teletext cell-to-text conversion tests
+add_executable(test_screen_text test_screen_text.cpp)
+target_link_libraries(test_screen_text PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_screen_text)
+
 add_executable(test_teletext_text test_teletext_text.cpp)
 target_link_libraries(test_teletext_text PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_teletext_text)

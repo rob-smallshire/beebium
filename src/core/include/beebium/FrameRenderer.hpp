@@ -252,11 +252,17 @@ public:
 
         x_ += pixel_count;  // Advance by actual pixel count
 
-        // Track per-scanline pixel width for split-screen region detection
+        // Track per-scanline pixel width for split-screen region detection,
+        // and alongside it the character geometry those pixels were drawn
+        // with. The video path has no use for the geometry, but reading text
+        // off the screen cannot recover it from the pixels afterwards.
         if (write_y >= 0 && write_y < static_cast<int>(video_constants::FRAME_HEIGHT)) {
             scanline_pixel_widths_[write_y] = std::max(
                 scanline_pixel_widths_[write_y],
                 static_cast<uint16_t>(x_));
+            scanline_char_scanlines_[write_y] = batch.char_scanlines();
+            scanline_is_teletext_[write_y] =
+                batch.type() == PixelBatchType::Teletext ? 1 : 0;
         }
     }
 
@@ -288,6 +294,8 @@ public:
         prev_max_frame_scanlines_ = 0;
         blanking_count_ = 0;
         scanline_pixel_widths_.fill(0);
+        scanline_char_scanlines_.fill(0);
+        scanline_is_teletext_.fill(0);
     }
 
     // Get tracked frame dimensions (for debugging/testing)
@@ -352,38 +360,59 @@ private:
             meta.bottom_border = static_cast<uint32_t>(stable_frame_scanlines - top_border_ - displayed_scanlines);
         }
 
-        // Compress per-scanline pixel widths into contiguous regions
+        // Compress per-scanline pixel width and character geometry into
+        // contiguous regions. A change to any of the three ends a region: a
+        // band is a run of scanlines a single reader can treat alike.
         meta.regions.clear();
         if (frame_height > 0) {
             // Find first non-zero width (skip any leading gap scanlines)
             uint16_t current_width = 0;
+            uint8_t current_char_scanlines = 0;
+            uint8_t current_is_teletext = 0;
             uint32_t region_start = 0;
             for (uint32_t y = 0; y < frame_height; ++y) {
                 uint16_t w = scanline_pixel_widths_[y];
-                // Zero-width scanlines inherit the previous region's width
+                // Zero-width scanlines inherit the previous region's geometry
                 if (w == 0) continue;
+
+                const uint8_t cs = scanline_char_scanlines_[y];
+                const uint8_t tt = scanline_is_teletext_[y];
 
                 if (current_width == 0) {
                     // First non-zero width line
                     current_width = w;
+                    current_char_scanlines = cs;
+                    current_is_teletext = tt;
                     region_start = y;
-                } else if (w != current_width) {
-                    // Width changed - close previous region, start new one
-                    meta.regions.push_back({region_start, y, current_width});
+                } else if (w != current_width
+                           || cs != current_char_scanlines
+                           || tt != current_is_teletext) {
+                    // Geometry changed - close previous region, start new one
+                    meta.regions.push_back({region_start, y, current_width,
+                                            current_char_scanlines,
+                                            current_is_teletext != 0});
                     current_width = w;
+                    current_char_scanlines = cs;
+                    current_is_teletext = tt;
                     region_start = y;
                 }
             }
             // Close final region
             if (current_width > 0) {
-                meta.regions.push_back({region_start, static_cast<uint32_t>(frame_height), current_width});
+                meta.regions.push_back({region_start, static_cast<uint32_t>(frame_height),
+                                        current_width, current_char_scanlines,
+                                        current_is_teletext != 0});
             }
         }
 
-        // Reset scanline widths for next frame
+        // Reset per-scanline tracking for next frame
+        const size_t tracked = std::min(frame_height, static_cast<size_t>(video_constants::FRAME_HEIGHT));
         std::fill(scanline_pixel_widths_.begin(),
-                  scanline_pixel_widths_.begin() + std::min(frame_height, static_cast<size_t>(video_constants::FRAME_HEIGHT)),
-                  uint16_t{0});
+                  scanline_pixel_widths_.begin() + tracked, uint16_t{0});
+        std::fill(scanline_char_scanlines_.begin(),
+                  scanline_char_scanlines_.begin() + tracked, uint8_t{0});
+        std::fill(scanline_is_teletext_.begin(),
+                  scanline_is_teletext_.begin() + tracked, uint8_t{0});
 
         frame_buffer_->set_metadata(meta);
 
@@ -449,6 +478,12 @@ private:
 
     // Per-scanline pixel width tracking for split-screen region detection
     std::array<uint16_t, video_constants::FRAME_HEIGHT> scanline_pixel_widths_{};
+
+    // Per-scanline character geometry, compressed into the same regions. A
+    // region breaks on a change to any of the three, so a band is a run of
+    // scanlines sharing one character geometry as well as one pixel width.
+    std::array<uint8_t, video_constants::FRAME_HEIGHT> scanline_char_scanlines_{};
+    std::array<uint8_t, video_constants::FRAME_HEIGHT> scanline_is_teletext_{};
 };
 
 } // namespace beebium

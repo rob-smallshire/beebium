@@ -36,6 +36,7 @@ namespace beebium {
 //
 // The Hardware template parameter must provide:
 // - peek_video(uint16_t addr) const -> uint8_t: Read video memory
+// - crtc: Crtc6845 reference for character row geometry
 // - addressable_latch: AddressableLatch reference for screen base
 // - video_ula: VideoUla reference for mode info and pixel generation
 // - saa5050: Saa5050 reference for teletext rendering
@@ -73,6 +74,7 @@ public:
         if (crtc_output.interlace) flags |= VIDEO_FLAG_INTERLACE;
         if (crtc_output.odd_field) flags |= VIDEO_FLAG_ODD_FIELD;
         batch.set_flags(flags);
+        batch.set_char_scanlines(char_scanlines());
 
         // Push to output queue
         hardware_.video_output->push(batch);
@@ -163,6 +165,7 @@ private:
         if (crtc_output.interlace) flags |= VIDEO_FLAG_INTERLACE;
         if (crtc_output.odd_field) flags |= VIDEO_FLAG_ODD_FIELD;
         batch.set_flags(flags);
+        batch.set_char_scanlines(char_scanlines());
 
         hardware_.video_output->push(batch);
 
@@ -170,6 +173,7 @@ private:
         PixelBatch batch2;
         hardware_.saa5050.emit_pixels(batch2, bbc_colors::PALETTE);
         batch2.set_flags(flags);
+        batch2.set_char_scanlines(char_scanlines());
         hardware_.video_output->push(batch2);
 
         if (crtc_output.display) {
@@ -185,6 +189,15 @@ private:
         last_display_ = crtc_output.display;
         last_hsync_ = crtc_output.hsync;
         last_vsync_ = crtc_output.vsync;
+    }
+
+    // Scanlines per character row, from CRTC R9 + 1.
+    //
+    // Ridden on every batch so that reading text off the screen can recover the
+    // grid pitch per band: the CRTC can be reprogrammed mid-frame, and the
+    // pitch cannot be inferred from the pixels afterwards.
+    uint8_t char_scanlines() const {
+        return static_cast<uint8_t>(hardware_.crtc.max_scanline() + 1);
     }
 
     // Character data exists only for scanlines 0-7 within each character cell.

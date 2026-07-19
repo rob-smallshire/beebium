@@ -24,10 +24,25 @@ namespace beebium {
 // A horizontal region of scanlines sharing the same logical pixel width.
 // Used for split-screen modes where the CRTC is reprogrammed mid-frame
 // (e.g., Elite uses MODE 4 upper / MODE 5 lower).
+// Also carries the character geometry those scanlines were drawn with, which
+// the video path has no use for but reading text off the screen does: cell size
+// and grid pitch cannot be inferred from the pixels afterwards. A region breaks
+// on a change to any of these, so a band is a run of scanlines sharing one
+// character geometry as well as one pixel width.
 struct FrameDisplayRegion {
     uint32_t start_line = 0;    // First scanline (inclusive, 0-based)
     uint32_t end_line = 0;      // Last scanline (exclusive)
     uint32_t pixel_width = 0;   // Logical pixel width for scanlines in this region
+
+    // Scanlines per character row, from CRTC R9 + 1. The grid pitch, which is
+    // not the cell height: MODE 3 and MODE 6 put an eight-scanline glyph on a
+    // ten-scanline pitch and blank the two spare lines.
+    uint32_t char_scanlines = 0;
+
+    // True when the SAA5050 was driving these scanlines rather than the Video
+    // ULA, so their characters are recoverable exactly rather than by
+    // recognising glyphs in pixels.
+    bool is_teletext = false;
 };
 
 // Per-frame metadata describing frame dimensions and scaling.

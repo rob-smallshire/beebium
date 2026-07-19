@@ -8,6 +8,7 @@ add_library(beebium_core STATIC
     src/Via6522.cpp
     src/Sn76489.cpp
     src/KeyboardMapping.cpp
+    src/ScreenText.cpp
     src/TeletextText.cpp
     src/TextTranslation.cpp
     src/TypeAheadQueue.cpp
