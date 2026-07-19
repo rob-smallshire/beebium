@@ -15,7 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <set>
+#include <unordered_set>
 
 #include "screentext/Glyph.hpp"
 
@@ -112,9 +112,9 @@ TEST_CASE("No two glyphs in the Acorn set share a bitmap")
     // depend on insertion order.
     const GlyphSet& set = builtin_glyph_set("acorn-mos-1.20");
 
-    std::set<std::vector<std::uint8_t>> seen;
+    std::unordered_set<Bitmap> seen;
     for (const Glyph& glyph : set.glyphs) {
-        CHECK(seen.insert(glyph.bitmap.bytes()).second);
+        CHECK(seen.insert(glyph.bitmap).second);
     }
 }
 
@@ -128,13 +128,16 @@ TEST_CASE("No glyph's complement is also a glyph")
     // coin-toss on a cell divided evenly.
     const GlyphSet& set = builtin_glyph_set("acorn-mos-1.20");
 
-    std::set<std::vector<std::uint8_t>> bitmaps;
+    // Hashed rather than ordered: Bitmap has an equality and a hash of its
+    // own, and comparing the underlying byte vectors instead trips a GCC
+    // false positive about memcmp bounds it cannot infer.
+    std::unordered_set<Bitmap> bitmaps;
     for (const Glyph& glyph : set.glyphs) {
-        bitmaps.insert(glyph.bitmap.bytes());
+        bitmaps.insert(glyph.bitmap);
     }
     for (const Glyph& glyph : set.glyphs) {
-        INFO("codepoint U+" << std::hex << static_cast<unsigned>(glyph.codepoint));
-        CHECK(bitmaps.count(glyph.bitmap.inverted().bytes()) == 0);
+        INFO("codepoint " << static_cast<unsigned>(glyph.codepoint));
+        CHECK(bitmaps.count(glyph.bitmap.inverted()) == 0);
     }
 }
 
