@@ -14,6 +14,7 @@ being read back.
 | `waffle-instructions-2.png` | Text flowing around example tiles |
 | `waffle-instructions-4.png` | The same, with letters scattered in a diagram |
 | `waffle-board.png` | The game: mostly graphics, three lines of status text |
+| `loopy-loop.png` | Loopy Loop, by A.S.Shakoor: text over a dense dithered background, and text off the character grid |
 
 MODE 1 throughout -- 320x256 logical pixels, four colours, one display region,
 progressive. The text is the standard Acorn font on the character grid at
@@ -57,6 +58,38 @@ With that rule the four screens yield no off-grid false positives at all.
 One honest loss: the title reads `W A F F E`. The spaced-out `L` is dropped,
 `L` being HV-convex -- a corner shape, indistinguishable from things graphics
 are made of -- and standing alone with nothing to be in registration with.
+
+# Loopy Loop
+
+MODE 2 -- 160x256 logical pixels. Two things no other screen in the corpus
+has.
+
+**Text over a background dense enough to defeat the aligned reader.** The
+title, byline and key legend sit on a dithered pattern, so most of their cells
+hold three or more colours and are declined. Only the panel text, ROM font on
+black, is read: 386 of 640 cells come back unmatched. This is the screen that
+shows why offset search needs to ask "do the pixels of colour c form a glyph"
+rather than "does this cell reduce to a glyph" -- the second question has no
+good answer here.
+
+**Text that is genuinely not on the character grid.** The offset-search
+prototype found nine runs at baselines of 30, 43, 55, 68 and 239, none of them
+a multiple of eight. Every one corresponds to a character actually on the
+screen -- `H` and `K` from SHAKOOR, `'92`, `?` and `*` from the key legend,
+`D`, `W` and `N` from DOWN -- and three were checked against the ROM font
+pixel by pixel and match it exactly. No false positives at all, on the most
+hostile background in the corpus.
+
+Recall is another matter. Many characters on those lines are drawn *thicker*
+than the ROM glyph, the same shape OR'd with itself shifted a pixel, so they
+are not ROM glyphs any more and rightly do not match: `Z` and `L` were checked
+and differ. Reading those wants the game's own font supplied.
+
+**A redefined character.** The game prints "to reach next" with a diamond in
+place of the `a`, put there by `VDU 23`. It matches nothing and is reported
+unmatched, so the line reads `to re ch next` rather than a plausible wrong
+word. Exactly the intended behaviour, and a reminder that a screen's font is
+not always the ROM's even when it looks like it.
 
 ## Recapturing
 

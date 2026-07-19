@@ -689,3 +689,33 @@ TEST_CASE("Nothing is invented from a real game's graphics")
         }
     }
 }
+
+TEST_CASE("Text on a dense background is read where it is the ROM font")
+{
+    // Loopy Loop, by A.S.Shakoor. Its panel text is the ROM font on the grid
+    // over black; the rest of the screen is text over a dithered background
+    // dense enough that most cells hold three or more colours.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/loopy-loop.png") + "\"");
+
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find("points needed") != std::string::npos);
+    CHECK(output.stdout_text.find("level") != std::string::npos);
+    CHECK(output.stdout_text.find("500") != std::string::npos);
+}
+
+TEST_CASE("A redefined character is declined rather than guessed at")
+{
+    // The game prints "to reach next" with a diamond in place of the 'a',
+    // redefined through VDU 23. It is not in the ROM set and is not any other
+    // character either, so the cell is unmatched and contributes a space --
+    // the word comes back as "re ch" rather than as a plausible wrong word.
+    //
+    // Reading it properly needs the game's own glyph supplied, which is what
+    // supplied glyph sets are for.
+    const Output output
+        = run("read \"" + fixture_filepath("screens/loopy-loop.png") + "\"");
+
+    CHECK(output.stdout_text.find("to re ch next") != std::string::npos);
+    CHECK(output.stdout_text.find("to reach next") == std::string::npos);
+}
