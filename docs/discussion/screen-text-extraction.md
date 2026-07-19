@@ -559,6 +559,70 @@ should be treated the same way: useful now, not a commitment.
    access may still be wanted by automation, and if so it should be a separate
    deliberate interface rather than a side effect of copy.
 
+## What stream 1 changed
+
+Building the library corrected five things assumed here. Streams 2, 3 and 4 are
+specified against the corrected versions, not the ones above.
+
+**There is no background parameter, and no inverted flag.** A cell holds two
+colours; both assignments are tried, so the character is recovered either way,
+and a cell of three or more colours is unmatched. The library reports the two
+colours it found rather than a boolean. Consequences: the emulator does not
+supply a palette for this purpose, and nothing downstream should carry an
+"inverted" flag -- it is strictly less information than the pair.
+
+**Cell size and grid pitch are different things.** MODE 3 and MODE 6 put an
+eight-scanline glyph on a ten-scanline pitch, and the two spare scanlines are
+*blanked*, not painted with the background colour. The band record carries
+`column_pitch` and `row_pitch` separately from the cell size. Stream 2 must set
+`row_pitch = 10` for those modes; getting it wrong is silent while the
+background is black and total once it is not.
+
+**Uncertainty has two kinds, not one.** A cell may be unreadable, or readable
+but ambiguous -- where a font draws two characters identically, which 17 of 68
+period fonts surveyed do. The library reports alternatives rather than picking
+one silently. The `unknown_fraction` sketched below is therefore two
+quantities, and both should surface: "could not read" and "could not pin down"
+are different problems for a caller.
+
+**Codepoints live in the glyph set.** A glyph carries what it means as text, so
+the mapping is per-font rather than a global table. This matters more than it
+looks: character 96 is a pound sign in the MOS bitmap font, while in MODE 7 the
+pound sign is character 35. A single code-to-Unicode table would be wrong in
+one mode or the other. Per-font mapping makes the question not arise.
+
+**The Acorn set is characters 32-126.** VDU 127 deletes rather than prints, so
+those ROM bytes never appear on screen as a glyph.
+
+## Off-grid text is no longer deferred
+
+This document scoped `VDU 5` text out of the first increment on two grounds:
+that it is expensive, and that it "yields less structure". The second is wrong.
+
+Measured, the off-grid search produces **zero false positives** across the
+corpus -- synthetic screens carrying filled regions, diagonals, discs and
+dithered detail; four instruction screens from a real game; and the off-grid
+text in three others, drop shadows included. It returns ordinary runs, with
+positions and colours, exactly as the aligned path does. It is not fuzzier; it
+is the same answer arrived at differently. See
+`screen-text-offset-search.md`.
+
+So the remaining case for making it opt-in is **cost alone**: sixty-four
+offsets times the colours present in each window. That is a different argument
+from the one made here, and a weaker one:
+
+- Where the user drags a selection, snapped versus free-form remains a real
+  choice, because snapping is also about what the rectangle means.
+- Where there is no drag -- copying the whole screen, or a script reading it --
+  there is no longer an obvious reason to withhold the off-grid pass beyond
+  what it costs. A screen with `VDU 5` labels on it should probably just read
+  them.
+
+Settling that needs a number nobody has yet: how long the off-grid pass takes
+on a whole screen. Until then the default stays aligned-only, but the
+justification is provisional and should be revisited with timings in hand
+rather than treated as settled.
+
 ## Work partition
 
 Four streams. Two can start immediately and in parallel; the other two follow.
