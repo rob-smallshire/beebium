@@ -50,7 +50,6 @@ const char* const USAGE =
     "  --origin X,Y          where the character grid starts (default: 0,0)\n"
 
     "  --search MODE         aligned (default) or offset\n"
-    "  --no-inverted         do not match inverse video\n"
     "  --format FORMAT       text (default) or json\n"
     "  --list-builtin        list the built-in glyph sets and exit\n"
     "  -h, --help            show this help and exit\n"
@@ -77,7 +76,6 @@ struct Arguments {
     std::size_t origin_x = 0;
     std::size_t origin_y = 0;
     Search search = Search::AlignedOnly;
-    bool match_inverted = true;
     bool json = false;
 };
 
@@ -227,9 +225,7 @@ int parse_arguments(const std::vector<std::string>& argv,
             handled = true;
             return 0;
         }
-        if (argument == "--no-inverted") {
-            arguments.match_inverted = false;
-        } else if (argument == "--no-builtin") {
+        if (argument == "--no-builtin") {
             arguments.use_builtin = false;
         } else if (argument == "--glyphs") {
             if (!value_for(index, "--glyphs", value)) {
@@ -373,7 +369,6 @@ int run_read(const std::vector<std::string>& argv)
 
     Options options;
     options.search = arguments.search;
-    options.match_inverted = arguments.match_inverted;
     options.selection = selection;
 
     const Result result = read(image, {band}, glyph_sets, options);

@@ -14,7 +14,7 @@
 
 namespace screentext {
 
-GlyphIndex::GlyphIndex(const std::vector<GlyphSet>& sets, bool match_inverted)
+GlyphIndex::GlyphIndex(const std::vector<GlyphSet>& sets)
 {
     names_.reserve(sets.size());
     for (const GlyphSet& set : sets) {
@@ -33,23 +33,14 @@ GlyphIndex::GlyphIndex(const std::vector<GlyphSet>& sets, bool match_inverted)
             match.glyph_set = &names_[index];
 
             // insert_or_assign, so a later set displaces an earlier one.
-            match.inverted = false;
-            upright_.insert_or_assign(glyph.bitmap, match);
-
-            if (match_inverted) {
-                match.inverted = true;
-                inverted_.insert_or_assign(glyph.bitmap.inverted(), match);
-            }
+            glyphs_.insert_or_assign(glyph.bitmap, match);
         }
     }
 }
 
 const GlyphIndex::Match* GlyphIndex::find(const Bitmap& bitmap) const
 {
-    if (const auto found = upright_.find(bitmap); found != upright_.end()) {
-        return &found->second;
-    }
-    if (const auto found = inverted_.find(bitmap); found != inverted_.end()) {
+    if (const auto found = glyphs_.find(bitmap); found != glyphs_.end()) {
         return &found->second;
     }
     return nullptr;

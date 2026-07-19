@@ -36,11 +36,6 @@ enum class Search {
 struct Options {
     Search search = Search::AlignedOnly;
 
-    // Also compare each cell against the complement of every glyph. The BBC
-    // produces inverse text routinely by swapping foreground and background,
-    // so this is not an edge case and is on by default.
-    bool match_inverted = true;
-
     // Region to read, in image pixels. The whole image when unset. A cell not
     // wholly inside it is not read, so a selection clips runs at cell
     // boundaries rather than splitting characters.
@@ -54,8 +49,20 @@ struct Cell {
     // What the cell says. Zero when nothing matched -- never a guess.
     char32_t codepoint = 0;
 
-    // Matched against the complement of a glyph rather than the glyph.
-    bool inverted = false;
+    // The two pixel values the cell was drawn from: the one the glyph is
+    // drawn in, and the one around it. Equal when the cell is blank, there
+    // being no glyph to have a colour. Meaningful only when `matched()`.
+    //
+    // There is deliberately no "inverted" flag. A cell holds two colours and
+    // a shape, and neither arrangement of them is the real one that the other
+    // is a reversal of -- calling one inverse would be asserting a canonical
+    // orientation that does not exist. Which colour the glyph is drawn in is
+    // the fact worth having, and it is reported rather than reduced to a
+    // boolean about it. A caller wanting to know which cells stand out from
+    // their neighbours can compare backgrounds and decide for itself, with
+    // the whole picture in view rather than one cell at a time.
+    std::uint8_t foreground = 0;
+    std::uint8_t background = 0;
 
     // Matched away from the character grid. Never set while offset search is
     // unimplemented.
@@ -100,8 +107,14 @@ struct Result {
 // Read text from an image.
 //
 // `glyph_sets` are searched with later sets taking precedence over earlier
-// ones, and an upright match taking precedence over an inverted one. Matching
-// is exact byte comparison throughout: a cell either is a glyph or is not.
+// ones. Matching is exact byte comparison throughout: a cell either is a
+// glyph or is not.
+//
+// A cell's two colours are tried both ways round, and which way matched says
+// which colour the glyph was drawn in. Where both ways match a glyph -- which
+// needs a glyph set holding some glyph's complement, and no built-in set
+// does -- the reading whose background covers more of the cell is taken, the
+// lower pixel value breaking a tie.
 //
 // Throws std::invalid_argument when the image is inconsistent with its
 // dimensions, or a band has a zero cell size.

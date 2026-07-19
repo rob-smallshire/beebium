@@ -71,41 +71,46 @@ there is no approximate comparison anywhere in the design.
    holds exactly two values -- the glyph's colour and its background -- so the
    pair is recovered from the cell itself. This is what removes colour from the
    problem, so the same glyph in any colour is one bitmap.
-2. The bitmap is looked up in a hash built from the glyph sets.
-3. When `match_inverted` is set, the complement is looked up too, and the cell
-   records that it matched inverted. The BBC produces inverse text routinely by
-   swapping foreground and background, so this is not an edge case.
-4. No hit means unmatched.
+2. Both ways round are looked up in a hash built from the glyph sets: once
+   taking one colour as the background, once taking the other.
+3. Whichever matched says which colour the glyph was drawn in.
+4. No hit either way means unmatched.
 
 Precedence is fixed so that the answer never depends on iteration order: later
-glyph sets beat earlier ones, and an upright match beats an inverted one.
+glyph sets beat earlier ones. Where *both* readings are glyphs -- which needs a
+glyph set holding some glyph's complement, and no built-in set does -- the
+reading whose background covers more of the cell is taken, the lower pixel
+value breaking a tie.
 
-### Colour is worked out, not declared
+### Colour is worked out, not declared, and there is no "inverted"
 
 Nothing asks the caller which value is background, and there is no way to say.
 
-It is not needed. A cell holds two values, and the two ways of assigning them
-are precisely the upright and inverse readings -- both of which are tried
-anyway. Whichever is which, the character comes out the same. So a caller with
-several foreground colours, or several background colours, or both, passes them
-straight in; nothing links one cell's colours to another's.
+A cell holds two values and a shape. Both ways of assigning them are tried, so
+the character is recovered whichever way round it was drawn, and *which way
+matched* says which colour the glyph is in. That is reported as it stands:
+
+```cpp
+cell.foreground  // the value the glyph is drawn in
+cell.background  // the value around it
+```
+
+There is deliberately no `inverted` flag. Neither arrangement of a cell's two
+colours is the real one that the other is a reversal of; calling one inverse
+asserts a canonical orientation that does not exist. It is also strictly less
+information than the two values, and it forced a guess -- deciding what counted
+as inverse meant inferring one background for the whole screen, which is
+meaningless on a screen where every cell has its own.
+
+So a caller with several foreground colours, several background colours, or
+both, passes them straight in; nothing links one cell's colours to another's. A
+caller that does want to know which cells stand out from their neighbours
+compares backgrounds itself, with the whole picture in view. That is a question
+about a screen, and a cell cannot answer it.
 
 A cell of three or more values is unmatched. It is not one glyph in one colour
 on one background, and deciding which of its values were meant to be the glyph
 would be a guess.
-
-What the background *is* still matters for one thing: whether a cell reads as
-inverse video. That is not a property of a cell -- both readings are glyphs --
-but of how the cell sits against the screen around it, so it is measured. Each
-cell votes for the value covering more of it, and the winner is the screen's
-background.
-
-Cells vote, not pixels. Counting pixels lets a few solid cells outweigh a
-screenful of text, since a solid cell contributes all its pixels and a letter
-only its strokes; one cell of reverse video in four was enough to invert the
-answer while this was being built. It follows that a screen made *entirely* of
-reverse video has none: with nothing to be reverse of, dark letters on a light
-ground is simply what it is.
 
 ### Never guess
 
@@ -164,13 +169,15 @@ Acorn set departs from ASCII, verified against the glyph shapes rather than
 assumed.
 
 The ROM holds eight more bytes, a solid block, at character 127, and they are
-deliberately left out. `VDU 127` deletes a character rather than printing one,
-so those bytes never appear on screen as a glyph. Including them would also
-break the common case: a solid block is exactly the complement of a space, and
-an upright match beats an inverted one, so every inverse space -- most of an
-inverse-video line -- would come back as an invisible control code. That was
-observed on a real screenshot, not reasoned about in the abstract; see
-`tests/fixtures/README.md`.
+deliberately left out: `VDU 127` deletes a character rather than printing one,
+so those bytes never appear on screen as a glyph and do not describe any text.
+
+They were also excluded for a second reason that no longer applies. A solid
+block is exactly the complement of a space, and while an upright match beat an
+inverted one, every solid cell -- most of a reverse-video line -- came back as
+`U+007F`, an invisible control code. Reading both ways round and preferring the
+larger background settles that on its own now: a solid cell is a space in
+whatever colour it is filled with. The first reason stands regardless.
 
 ## Supplied glyph sets
 

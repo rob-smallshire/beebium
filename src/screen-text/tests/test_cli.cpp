@@ -205,19 +205,16 @@ TEST_CASE("A selection restricts what is read")
     CHECK(output.stdout_text == "CDE\n");
 }
 
-TEST_CASE("Inverse matching can be turned off from the command line")
+TEST_CASE("Text drawn dark on light is read like any other")
 {
     Canvas canvas(8 * 2, 8);
     canvas.stamp_inverted(0, 0, Canvas::glyph_for(acorn(), U'H'));
     const std::string filepath = temporary_filepath("inverse.pgm");
     write_pgm(filepath, canvas.image());
 
-    const Output matched = run("read \"" + filepath + "\"");
-    CHECK(matched.stdout_text.find('H') != std::string::npos);
-
-    const Output not_matched = run("read \"" + filepath + "\" --no-inverted");
-    CHECK(not_matched.status == 0);
-    CHECK(not_matched.stdout_text.find('H') == std::string::npos);
+    const Output output = run("read \"" + filepath + "\"");
+    CHECK(output.status == 0);
+    CHECK(output.stdout_text.find('H') != std::string::npos);
 }
 
 TEST_CASE("A supplied glyph set is loaded and takes precedence")
@@ -348,17 +345,18 @@ TEST_CASE("Real inverse video is read, and its spaces are spaces")
     CHECK(output.stdout_text.find("\nINVERSE TEXT\n") != std::string::npos);
 }
 
-TEST_CASE("Turning inverse matching off leaves real inverse text unread")
+TEST_CASE("JSON reports the colours a cell was drawn from")
 {
+    // The screenshot has a line printed dark-on-light below a command echoed
+    // light-on-dark, so both arrangements appear, and each cell says which
+    // colour its glyph was drawn in rather than claiming an orientation.
     const Output output = run("read \"" + fixture_filepath("mode4-inverse.png")
-                              + "\" --no-inverted");
+                              + "\" --format json");
 
     CHECK(output.status == 0);
-    // The line the program printed in inverse video is gone. The echo of the
-    // command that printed it survives, because that was typed in normal
-    // video, so the whole screenshot is not expected to be empty.
-    CHECK(output.stdout_text.find("\nINVERSE TEXT\n") == std::string::npos);
-    CHECK(output.stdout_text.find("PRINT \"INVERSE TEXT") != std::string::npos);
+    CHECK(output.stdout_text.find("\"foreground\":") != std::string::npos);
+    CHECK(output.stdout_text.find("\"background\":") != std::string::npos);
+    CHECK(output.stdout_text.find("\"inverted\"") == std::string::npos);
 }
 
 TEST_CASE("A selection over a real screenshot clips to the cells it covers")

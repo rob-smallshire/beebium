@@ -34,28 +34,25 @@ public:
     struct Match {
         char32_t codepoint = 0;
         const std::string* glyph_set = nullptr;
-        bool inverted = false;
     };
 
     // Later sets take precedence over earlier ones, so a caller can override
     // individual characters. Within one set, a later glyph likewise displaces
     // an earlier one with the same bitmap, so the outcome never depends on
     // iteration order.
-    GlyphIndex(const std::vector<GlyphSet>& sets, bool match_inverted);
+    explicit GlyphIndex(const std::vector<GlyphSet>& sets);
 
-    // Null when the bitmap is not a glyph. An upright match is preferred to
-    // an inverted one, so that a bitmap which is both -- as the MOS solid
-    // block and an inverted space are -- resolves the same way every time.
+    // Null when the bitmap is not a glyph. Exact equality, nothing else.
+    // Callers reduce a cell both ways round and look up each.
     const Match* find(const Bitmap& bitmap) const;
 
-    bool empty() const { return upright_.empty(); }
+    bool empty() const { return glyphs_.empty(); }
 
 private:
     // The set names, owned here so that a Match can hand out a stable pointer
     // even after the caller's sets have gone.
     std::vector<std::string> names_;
-    std::unordered_map<Bitmap, Match> upright_;
-    std::unordered_map<Bitmap, Match> inverted_;
+    std::unordered_map<Bitmap, Match> glyphs_;
 };
 
 } // namespace screentext

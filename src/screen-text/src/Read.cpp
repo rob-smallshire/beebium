@@ -41,100 +41,55 @@ void append_utf8(std::string& text, char32_t codepoint)
     }
 }
 
-// What a cell reduced to: the bitmap, and which value was taken as its
-// background so that inverse video can be judged afterwards.
-struct ReducedCell {
-    Bitmap bitmap;
-    std::uint8_t background = 0;
-    bool usable = false; // false when the cell cannot be one glyph
-};
-
-// Reduce a cell to one bit per pixel against a known background: a pixel
-// equal to it is clear, anything else is set.
-ReducedCell reduce_against(const Image& image,
-                           const Rect& bounds,
-                           std::uint8_t background)
-{
-    ReducedCell reduced;
-    reduced.bitmap = Bitmap(bounds.width, bounds.height);
-    reduced.background = background;
-    reduced.usable = true;
-
-    for (std::size_t y = 0; y < bounds.height; ++y) {
-        for (std::size_t x = 0; x < bounds.width; ++x) {
-            if (image.pixel(bounds.x + x, bounds.y + y) != background) {
-                reduced.bitmap.set_pixel(x, y, true);
-            }
-        }
-    }
-    return reduced;
-}
-
-// Reduce a cell without being told which value is background.
-//
-// A character cell drawn by the VDU drivers holds exactly two values, so the
-// pair can be recovered from the cell itself. Which of the two is background
-// need not be decided correctly for matching -- the two assignments give a
-// bitmap and its complement, and both are looked up -- but it is decided
-// deterministically anyway, preferring the value the rest of the screen uses,
-// so that inverse video can be told apart from ordinary text.
-//
-// Three or more values means the cell is not one glyph in one colour on one
-// background. It is left unusable rather than guessed at.
-ReducedCell reduce_by_inspection(const Image& image,
-                                 const Rect& bounds,
-                                 std::uint8_t screen_background)
-{
-    ReducedCell reduced;
-
+// The two colours a cell is drawn from, and how many pixels each covers.
+struct CellColours {
     std::uint8_t values[2] = {0, 0};
     std::size_t counts[2] = {0, 0};
     std::size_t distinct = 0;
+};
 
+// Collect a cell's colours. A character cell drawn by the VDU drivers holds
+// exactly two: the glyph's and its background's. Three or more means the cell
+// is not one glyph in one colour on one background, and it is left for the
+// caller to reject rather than guessed at.
+CellColours colours_of(const Image& image, const Rect& bounds)
+{
+    CellColours colours;
     for (std::size_t y = 0; y < bounds.height; ++y) {
         for (std::size_t x = 0; x < bounds.width; ++x) {
             const std::uint8_t value = image.pixel(bounds.x + x, bounds.y + y);
-            if (distinct > 0 && value == values[0]) {
-                ++counts[0];
-            } else if (distinct > 1 && value == values[1]) {
-                ++counts[1];
-            } else if (distinct < 2) {
-                values[distinct] = value;
-                counts[distinct] = 1;
-                ++distinct;
+            if (colours.distinct > 0 && value == colours.values[0]) {
+                ++colours.counts[0];
+            } else if (colours.distinct > 1 && value == colours.values[1]) {
+                ++colours.counts[1];
+            } else if (colours.distinct < 2) {
+                colours.values[colours.distinct] = value;
+                colours.counts[colours.distinct] = 1;
+                ++colours.distinct;
             } else {
-                return reduced; // a third colour: not one glyph
+                colours.distinct = 3;
+                return colours;
             }
         }
     }
+    return colours;
+}
 
-    if (distinct == 0) {
-        return reduced;
+// Reduce a cell to one bit per pixel against a chosen background: a pixel
+// equal to it is clear, anything else is set.
+Bitmap reduce_against(const Image& image,
+                      const Rect& bounds,
+                      std::uint8_t background)
+{
+    Bitmap bitmap(bounds.width, bounds.height);
+    for (std::size_t y = 0; y < bounds.height; ++y) {
+        for (std::size_t x = 0; x < bounds.width; ++x) {
+            if (image.pixel(bounds.x + x, bounds.y + y) != background) {
+                bitmap.set_pixel(x, y, true);
+            }
+        }
     }
-
-    // A cell of one value is blank, whatever that value is.
-    if (distinct == 1) {
-        reduced.bitmap = Bitmap(bounds.width, bounds.height);
-        reduced.background = values[0];
-        reduced.usable = true;
-        return reduced;
-    }
-
-    // Prefer whichever value the screen uses as its background; failing that,
-    // the one covering more of the cell, with the lower value breaking a tie
-    // so that the result never depends on scan order.
-    std::uint8_t background = 0;
-    if (values[0] == screen_background) {
-        background = values[0];
-    } else if (values[1] == screen_background) {
-        background = values[1];
-    } else if (counts[0] != counts[1]) {
-        background = counts[0] > counts[1] ? values[0] : values[1];
-    } else {
-        background = values[0] < values[1] ? values[0] : values[1];
-    }
-
-    return reduce_against(image, bounds, background);
+    return bitmap;
 }
 
 void validate(const Image& image, const std::vector<Band>& bands)
@@ -221,80 +176,6 @@ std::vector<std::vector<Rect>> cells_of(const Band& band, const Rect& region)
     return rows;
 }
 
-// Which value a single cell would call its background, judged only by what is
-// in the cell: the one covering more of it, with the lower value breaking a
-// tie. A cell of three or more values is not one glyph and has no opinion.
-std::optional<std::uint8_t> cell_background(const Image& image,
-                                            const Rect& bounds)
-{
-    std::uint8_t values[2] = {0, 0};
-    std::size_t counts[2] = {0, 0};
-    std::size_t distinct = 0;
-
-    for (std::size_t y = 0; y < bounds.height; ++y) {
-        for (std::size_t x = 0; x < bounds.width; ++x) {
-            const std::uint8_t value = image.pixel(bounds.x + x, bounds.y + y);
-            if (distinct > 0 && value == values[0]) {
-                ++counts[0];
-            } else if (distinct > 1 && value == values[1]) {
-                ++counts[1];
-            } else if (distinct < 2) {
-                values[distinct] = value;
-                counts[distinct] = 1;
-                ++distinct;
-            } else {
-                return std::nullopt;
-            }
-        }
-    }
-
-    if (distinct == 0) {
-        return std::nullopt;
-    }
-    if (distinct == 1) {
-        return values[0];
-    }
-    if (counts[0] != counts[1]) {
-        return counts[0] > counts[1] ? values[0] : values[1];
-    }
-    return values[0] < values[1] ? values[0] : values[1];
-}
-
-// The value the band uses as its background, by a vote of one per cell.
-//
-// This is what makes inverse video detectable without being told. Both
-// readings of a two-colour cell are glyphs, so which one is "inverse" is not
-// a property of the cell at all -- it is how the cell sits against the rest
-// of the screen, and that can be measured.
-//
-// Cells vote rather than pixels. Counting pixels lets a handful of solid
-// cells outweigh a screenful of text, because a solid cell contributes every
-// one of its pixels while a letter contributes only its strokes; one cell of
-// reverse video in four was enough to invert the answer. One cell, one vote
-// is far harder to skew, and matches what "the background of this screen"
-// means to somebody looking at it.
-std::uint8_t infer_background(const Image& image,
-                              const std::vector<std::vector<Rect>>& rows)
-{
-    std::size_t votes[256] = {};
-    for (const std::vector<Rect>& row : rows) {
-        for (const Rect& bounds : row) {
-            if (const std::optional<std::uint8_t> value
-                = cell_background(image, bounds)) {
-                ++votes[*value];
-            }
-        }
-    }
-
-    std::size_t best = 0;
-    for (std::size_t value = 1; value < 256; ++value) {
-        if (votes[value] > votes[best]) {
-            best = value;
-        }
-    }
-    return static_cast<std::uint8_t>(best);
-}
-
 void flush_run(std::vector<Cell>& cells, std::vector<Run>& runs)
 {
     const auto interesting = [](const Cell& cell) {
@@ -370,7 +251,7 @@ Result read(const Image& image,
     // search is not implemented: reading is aligned either way, and no cell
     // is ever reported as having matched at an offset.
 
-    const GlyphIndex index(glyph_sets, options.match_inverted);
+    const GlyphIndex index(glyph_sets);
 
     Result result;
     if (image.empty()) {
@@ -386,12 +267,6 @@ Result read(const Image& image,
 
         const std::vector<std::vector<Rect>> rows = cells_of(band, region);
 
-        // One value stands for the band's background, and it is measured
-        // rather than declared. It decides only what reads as inverse video:
-        // the text comes out the same either way, because both readings of a
-        // cell's two colours are tried.
-        const std::uint8_t screen_background = infer_background(image, rows);
-
         std::vector<Cell> row_cells;
         for (const std::vector<Rect>& row : rows) {
             row_cells.clear();
@@ -399,23 +274,52 @@ Result read(const Image& image,
                 Cell cell;
                 cell.bounds = bounds;
 
-                const ReducedCell reduced
-                    = reduce_by_inspection(image, bounds, screen_background);
+                // Try the cell both ways round. Which way matches says which
+                // colour the glyph was drawn in, so nothing needs to assume
+                // an orientation, and nothing needs to know what the rest of
+                // the screen is doing.
+                const CellColours colours = colours_of(image, bounds);
+                const GlyphIndex::Match* match = nullptr;
+                std::uint8_t background = 0;
 
-                const GlyphIndex::Match* match
-                    = reduced.usable ? index.find(reduced.bitmap) : nullptr;
+                for (std::size_t choice = 0; choice < colours.distinct
+                     && choice < 2; ++choice) {
+                    const std::uint8_t candidate = colours.values[choice];
+                    const GlyphIndex::Match* found
+                        = index.find(reduce_against(image, bounds, candidate));
+                    if (found == nullptr) {
+                        continue;
+                    }
+                    if (match == nullptr) {
+                        match = found;
+                        background = candidate;
+                        continue;
+                    }
+
+                    // Both readings are glyphs, which needs a glyph set
+                    // holding some glyph's complement. Take the one whose
+                    // background covers more of the cell, the lower value
+                    // breaking a tie, so the answer is fixed either way.
+                    const std::size_t held = colours.counts[choice == 0 ? 1 : 0];
+                    const std::size_t offered = colours.counts[choice];
+                    if (offered > held
+                        || (offered == held && candidate < background)) {
+                        match = found;
+                        background = candidate;
+                    }
+                }
+
                 if (match != nullptr) {
                     cell.codepoint = match->codepoint;
                     cell.glyph_set = *match->glyph_set;
+                    cell.background = background;
 
-                    // Two things can make a cell inverse: the glyph matched
-                    // as a complement, or the cell's background is not the
-                    // screen's. Either alone means inverse; both together
-                    // cancel, the cell having been read the other way up
-                    // already.
-                    const bool reversed_ground
-                        = reduced.background != screen_background;
-                    cell.inverted = match->inverted != reversed_ground;
+                    // A blank cell has one colour and no glyph to have the
+                    // other, so both are reported the same.
+                    cell.foreground = colours.distinct == 2
+                        ? (colours.values[0] == background ? colours.values[1]
+                                                           : colours.values[0])
+                        : background;
                 } else {
                     ++result.unmatched_cells;
                 }

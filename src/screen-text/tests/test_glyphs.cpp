@@ -86,16 +86,16 @@ TEST_CASE("Character 96 is a pound sign, not a grave accent")
     CHECK(glyph_with(set, U'`') == nullptr);    // GRAVE ACCENT
 }
 
-TEST_CASE("Character 127 is excluded, so a solid cell reads as inverse space")
+TEST_CASE("Character 127 is excluded, so a solid cell reads as a space")
 {
     // The ROM holds eight bytes of solid block at 127, but VDU 127 deletes a
     // character rather than printing one, so those bytes are never rendered
     // and do not describe any text.
     //
-    // Including them would also break the common case: a solid block is
-    // exactly the complement of a space, and an upright match beats an
-    // inverted one, so every inverse space -- most of an inverse-video
-    // line -- would come back as an invisible control code.
+    // They were once excluded for a second reason as well -- a solid block
+    // being the complement of a space, every solid cell read as an invisible
+    // control code -- which reading cells both ways round has since settled
+    // on its own. The reason above stands regardless.
     const GlyphSet& set = builtin_glyph_set("acorn-mos-1.20");
 
     CHECK(glyph_with(set, 0x007FU) == nullptr);
@@ -115,6 +115,26 @@ TEST_CASE("No two glyphs in the Acorn set share a bitmap")
     std::set<std::vector<std::uint8_t>> seen;
     for (const Glyph& glyph : set.glyphs) {
         CHECK(seen.insert(glyph.bitmap.bytes()).second);
+    }
+}
+
+TEST_CASE("No glyph's complement is also a glyph")
+{
+    // What lets a cell's two colours be told apart without being declared.
+    // Each cell is read both ways round, and at most one way can be a glyph,
+    // so whichever matched says which colour the glyph was drawn in. Were
+    // some glyph's complement also a glyph, both readings could match and
+    // the cell would be genuinely ambiguous -- resolvable by area, but a
+    // coin-toss on a cell divided evenly.
+    const GlyphSet& set = builtin_glyph_set("acorn-mos-1.20");
+
+    std::set<std::vector<std::uint8_t>> bitmaps;
+    for (const Glyph& glyph : set.glyphs) {
+        bitmaps.insert(glyph.bitmap.bytes());
+    }
+    for (const Glyph& glyph : set.glyphs) {
+        INFO("codepoint U+" << std::hex << static_cast<unsigned>(glyph.codepoint));
+        CHECK(bitmaps.count(glyph.bitmap.inverted().bytes()) == 0);
     }
 }
 

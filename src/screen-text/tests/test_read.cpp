@@ -120,11 +120,14 @@ TEST_CASE("Leading and trailing blanks are trimmed but interior spacing is kept"
     CHECK(result.runs[0].bounds.x == 24);
 }
 
-TEST_CASE("Inverse text is matched and flagged")
+TEST_CASE("A glyph drawn light on dark and dark on light both read")
 {
-    Canvas canvas(8 * 4, 8);
-    canvas.stamp_inverted(0, 0, Canvas::glyph_for(acorn(), U'H'));
-    canvas.stamp_inverted(8, 0, Canvas::glyph_for(acorn(), U'I'));
+    // Neither is the reversal of the other; they are two colour
+    // arrangements, and each cell says which colour its glyph was drawn in.
+    Canvas canvas(8 * 2, 8, 0);
+    canvas.stamp(0, 0, Canvas::glyph_for(acorn(), U'H'), 7);
+    canvas.fill(8, 0, 8, 8, 7);
+    canvas.stamp(8, 0, Canvas::glyph_for(acorn(), U'I'), 0);
 
     const Result result = read(canvas.image(),
                                {whole_image_band(canvas.image())},
@@ -133,43 +136,50 @@ TEST_CASE("Inverse text is matched and flagged")
     REQUIRE(result.runs.size() == 1);
     CHECK(result.runs[0].text == "HI");
     REQUIRE(result.runs[0].cells.size() == 2);
-    CHECK(result.runs[0].cells[0].inverted);
-    CHECK(result.runs[0].cells[1].inverted);
     CHECK(result.unmatched_cells == 0);
+
+    CHECK(result.runs[0].cells[0].foreground == 7);
+    CHECK(result.runs[0].cells[0].background == 0);
+    CHECK(result.runs[0].cells[1].foreground == 0);
+    CHECK(result.runs[0].cells[1].background == 7);
 }
 
-TEST_CASE("Inverse matching can be turned off, leaving inverse text unread")
+TEST_CASE("A blank cell reports its one colour as both")
 {
-    Canvas canvas(8 * 2, 8);
-    canvas.stamp_inverted(0, 0, Canvas::glyph_for(acorn(), U'H'));
-
-    Options options;
-    options.match_inverted = false;
+    Canvas canvas(8 * 3, 8, 0);
+    canvas.stamp(0, 0, Canvas::glyph_for(acorn(), U'A'), 7);
+    canvas.fill(8, 0, 8, 8, 4); // blank, in a colour of its own
+    canvas.stamp(16, 0, Canvas::glyph_for(acorn(), U'B'), 7);
 
     const Result result = read(canvas.image(),
                                {whole_image_band(canvas.image())},
-                               acorn_only(),
-                               options);
+                               acorn_only());
 
-    CHECK(result.unmatched_cells == 1);
     REQUIRE(result.runs.size() == 1);
-    CHECK_FALSE(result.runs[0].cells[0].matched());
+    CHECK(result.runs[0].text == "A B");
+    CHECK(result.unmatched_cells == 0);
+
+    // There is no glyph in it, so there is no colour a glyph was drawn in.
+    const Cell& blank = result.runs[0].cells[1];
+    CHECK(blank.codepoint == U' ');
+    CHECK(blank.foreground == 4);
+    CHECK(blank.background == 4);
 }
 
-TEST_CASE("An upright match is preferred to an inverted one")
+TEST_CASE("When both readings are glyphs, the larger background wins")
 {
-    // A bitmap can be one glyph upright and another inverted. The upright
-    // match wins, so the answer is fixed by the rule rather than by iteration
-    // order.
+    // Needs a glyph set holding some glyph's complement, which no built-in
+    // set does. The rule is that the colour covering more of the cell is the
+    // background, so the answer is fixed rather than left to iteration order.
     GlyphSet ambiguous;
     ambiguous.name = "ambiguous";
-    const Bitmap upright
-        = Bitmap::from_rows({0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0});
-    ambiguous.glyphs.push_back(Glyph(U'U', upright));
-    ambiguous.glyphs.push_back(Glyph(U'I', upright.inverted()));
+    const Bitmap sparse
+        = Bitmap::from_rows({0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+    ambiguous.glyphs.push_back(Glyph(U'S', sparse));
+    ambiguous.glyphs.push_back(Glyph(U'D', sparse.inverted()));
 
-    Canvas canvas(8, 8);
-    canvas.stamp(0, 0, upright);
+    Canvas canvas(8, 8, 0);
+    canvas.stamp(0, 0, sparse, 7);
 
     const Result result = read(canvas.image(),
                                {whole_image_band(canvas.image())},
@@ -177,8 +187,12 @@ TEST_CASE("An upright match is preferred to an inverted one")
 
     REQUIRE(result.runs.size() == 1);
     REQUIRE(result.runs[0].cells.size() == 1);
-    CHECK(result.runs[0].cells[0].codepoint == U'U');
-    CHECK_FALSE(result.runs[0].cells[0].inverted);
+
+    // One pixel of 7 against sixty-three of 0: the 0 is the background, so
+    // this is the sparse glyph rather than the dense one.
+    CHECK(result.runs[0].cells[0].codepoint == U'S');
+    CHECK(result.runs[0].cells[0].background == 0);
+    CHECK(result.runs[0].cells[0].foreground == 7);
 }
 
 TEST_CASE("An inverse space reads as a space, not as a control code")
@@ -200,14 +214,18 @@ TEST_CASE("An inverse space reads as a space, not as a control code")
     CHECK(result.runs[0].text == "A B");
     CHECK(result.unmatched_cells == 0);
 
-    // Every cell here is reverse video, so there is nothing for any of them
-    // to be reverse of: dark letters on a light ground is exactly what this
-    // is, and that is how it reads. Inverse video is a relation between a
-    // cell and the screen around it, not a property of a cell, so a screen
-    // made entirely of it has none.
+    // Dark letters on a light ground, which is all this is. Nothing here is
+    // a reversal of anything; the cells simply report the colours they were
+    // drawn from, and the light one is the ground throughout.
     for (const Cell& cell : result.runs[0].cells) {
-        CHECK_FALSE(cell.inverted);
+        CHECK(cell.background == 1);
     }
+    CHECK(result.runs[0].cells[0].foreground == 0);
+    CHECK(result.runs[0].cells[2].foreground == 0);
+
+    // The middle cell is blank -- a solid block of the ground colour -- so
+    // there is no glyph in it to have a colour of its own.
+    CHECK(result.runs[0].cells[1].foreground == 1);
 }
 
 TEST_CASE("A cell that matches nothing is unmatched, never guessed")
@@ -838,11 +856,11 @@ TEST_CASE("Two colours neither of which is the screen background still match")
     CHECK(result.runs[0].text == "Q");
 }
 
-TEST_CASE("Inverse video is judged against the background of the screen")
+TEST_CASE("A cell standing out from its neighbours reports its own colours")
 {
-    // Which cell is "inverse" is not a property of the cell -- both readings
-    // of two colours are glyphs. It is a property of how the cell sits
-    // against the rest of the screen, so that is what decides it.
+    // A caller wanting to know which cells stand out compares backgrounds
+    // itself, with the whole picture in view. That is a question about a
+    // screen, not about a cell, so a cell does not answer it.
     Canvas canvas(8 * 4, 8, 0);
     canvas.stamp_text(0, 0, "AB", acorn(), 8, 7);
     canvas.fill(16, 0, 8, 8, 7);
@@ -856,13 +874,23 @@ TEST_CASE("Inverse video is judged against the background of the screen")
     REQUIRE(result.runs.size() == 1);
     CHECK(result.runs[0].text == "ABCD");
     REQUIRE(result.runs[0].cells.size() == 4);
-    CHECK_FALSE(result.runs[0].cells[0].inverted);
-    CHECK_FALSE(result.runs[0].cells[1].inverted);
-    CHECK(result.runs[0].cells[2].inverted);
-    CHECK_FALSE(result.runs[0].cells[3].inverted);
+    CHECK(result.runs[0].cells[0].background == 0);
+    CHECK(result.runs[0].cells[1].background == 0);
+    CHECK(result.runs[0].cells[2].background == 7);
+    CHECK(result.runs[0].cells[3].background == 0);
+
+    // Which is enough for a caller to spot the odd one out.
+    const std::uint8_t common = result.runs[0].cells[0].background;
+    std::size_t standing_out = 0;
+    for (const Cell& cell : result.runs[0].cells) {
+        if (cell.background != common) {
+            ++standing_out;
+        }
+    }
+    CHECK(standing_out == 1);
 }
 
-TEST_CASE("A solid cell of a colour other than the background is an inverse space")
+TEST_CASE("A solid cell reads as a space in the colour it is filled with")
 {
     Canvas canvas(8 * 3, 8, 0);
     canvas.stamp_text(0, 0, "A", acorn(), 8, 7);
@@ -877,7 +905,7 @@ TEST_CASE("A solid cell of a colour other than the background is an inverse spac
     CHECK(result.runs[0].text == "A B");
     CHECK(result.unmatched_cells == 0);
     CHECK(result.runs[0].cells[1].codepoint == U' ');
-    CHECK(result.runs[0].cells[1].inverted);
+    CHECK(result.runs[0].cells[1].background == 7);
 }
 
 

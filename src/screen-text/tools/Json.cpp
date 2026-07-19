@@ -42,19 +42,21 @@ void append_cell(std::string& out, const Cell& cell)
     out += ",\"matched\":";
     out += cell.matched() ? "true" : "false";
 
-    // A codepoint is reported only when there is one. An unmatched cell says
-    // so rather than reporting a zero that might be read as a character.
+    // Codepoint and colours are reported only when there is a match. An
+    // unmatched cell says so rather than reporting zeroes that might be read
+    // as a character drawn in black on black.
     if (cell.matched()) {
-        char buffer[64];
-        std::snprintf(buffer, sizeof(buffer), ",\"codepoint\":%u",
-                      static_cast<unsigned>(cell.codepoint));
+        char buffer[128];
+        std::snprintf(buffer, sizeof(buffer),
+                      ",\"codepoint\":%u,\"foreground\":%u,\"background\":%u",
+                      static_cast<unsigned>(cell.codepoint),
+                      static_cast<unsigned>(cell.foreground),
+                      static_cast<unsigned>(cell.background));
         out += buffer;
         out += ",\"glyph_set\":";
         out += json_string(cell.glyph_set);
     }
 
-    out += ",\"inverted\":";
-    out += cell.inverted ? "true" : "false";
     out += ",\"offset\":";
     out += cell.offset ? "true" : "false";
     out += "}";
