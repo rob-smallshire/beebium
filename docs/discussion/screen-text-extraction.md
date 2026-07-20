@@ -699,7 +699,7 @@ file, which is the main practical reason for the split.
 
 ### 2. Integration with the servers
 
-Where bitmap modes start working. Needs the library, and needs emulator-side
+Where bitmap modes start working. Specified as a work order in `screen-text-integration-spec.md`. Needs the library, and needs emulator-side
 work that has nothing to do with recognition:
 
 - Widen the per-scanline record to carry what a band needs: cell geometry,
