@@ -15,7 +15,10 @@
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/TeletextGrid.hpp>
 
+#include <screentext/Glyph.hpp>
+
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -153,16 +156,95 @@ struct Band {
 // The bands of a completed frame, derived from what the renderer recorded.
 std::vector<Band> bands_of(const FrameMetadata& metadata);
 
+// The rendered pixels of a frame, as the framebuffer holds them: logical
+// pixels, BGRA32, row-major, `stride` pixels between one row and the next.
+//
+// The bitmap strategy reduces these to the library's one-byte-per-pixel image,
+// where equal bytes mean the same colour. Bitmap modes output discrete palette
+// colours with no blending, so distinct pixel values are distinct colours and
+// the reduction is exact.
+struct FrameImage {
+    const uint32_t* pixels = nullptr;
+    uint32_t stride = 0;   // Pixels per row (the framebuffer's capacity width)
+    uint32_t width = 0;    // Active frame width, in logical pixels
+    uint32_t height = 0;   // Active frame height, in scanlines
+
+    [[nodiscard]] uint32_t pixel(uint32_t x, uint32_t y) const {
+        return pixels[y * stride + x];
+    }
+
+    [[nodiscard]] bool empty() const {
+        return pixels == nullptr || width == 0 || height == 0;
+    }
+};
+
+// What a strategy needs beyond the band it is reading, assembled once per
+// request and handed to every band unchanged.
+//
+// The teletext strategy uses only the snapshot; the bitmap strategy uses the
+// pixels and the glyph set. Bundling them keeps read_band's dispatch one
+// function whatever a band turns out to need, and none of this crosses the
+// wire -- read_band's callers are all in the core and the service.
+struct BandSources {
+    // The MODE 7 grid, as the teletext strategy reads it. Non-null whenever a
+    // teletext band might be present.
+    const TeletextGrid::Snapshot* teletext = nullptr;
+
+    // The frame's rendered pixels, for the glyph-recognising strategy.
+    FrameImage image;
+
+    // Glyph sets in precedence order, later overriding earlier: the built-in
+    // Acorn ROM font first, then the soft font read from RAM. Non-null for a
+    // bitmap read.
+    const std::vector<screentext::GlyphSet>* glyph_sets = nullptr;
+};
+
 // Read one band, choosing the strategy the band's hardware state calls for.
 //
-// The teletext strategy applies when the SAA5050 was driving the band. Nothing
-// else applies yet, so any other band is unsupported and contributes no runs.
-// A strategy is added by extending this dispatch, not by changing anything the
-// callers or the wire see.
+// The teletext strategy applies when the SAA5050 was driving the band; every
+// other band is read by recognising glyphs in its pixels. The strategy is
+// chosen from the band, never from anything a caller said, so a new strategy is
+// added by extending this dispatch and nothing the callers or the wire see
+// changes.
 BandReading read_band(const Band& band,
                       const PixelRect& region,
                       Search search,
-                      const TeletextGrid::Snapshot& teletext);
+                      const BandSources& sources);
+
+// Read the soft (VDU 23) font redefinitions out of guest RAM as a glyph set
+// that overrides the ROM font where the running program has redefined a glyph.
+//
+// `peek_byte` reads a guest address without side effects, the way the debugger
+// reaches memory. What is read is the VDU driver's own font workspace, so this
+// resolves the font explode state exactly as the MOS would when drawing:
+//
+//   $0367  vduFontFlags          -- which of the seven 32-character zones have
+//                                    RAM (soft) definitions rather than ROM
+//   $0368  vduFontZoneAddressesHigh1..7 (through $036E) -- the page each zone's
+//                                    definitions live on
+//
+// These locations are pinned to the MOS 1.20 (Model B) and MOS 2.00 (Model B+)
+// family Beebium ships; they are NOT assumed to hold for a Master or any other
+// OS, which may lay its workspace out differently. Callers must therefore read
+// the soft font only for a recognised MOS -- assemble_glyph_sets does exactly
+// that. A glyph left in ROM, or redefined to blank, is not emitted: the ROM
+// base set already carries the former and an all-blank override would
+// masquerade as a space and collide with every blank cell.
+screentext::GlyphSet read_soft_font(
+    const std::function<uint8_t(uint16_t)>& peek_byte);
+
+// The glyph sets a bitmap band is read with: the ROM base font, overlaid with
+// the soft font from RAM when the running MOS is one whose workspace we know.
+//
+// The base font is the built-in Acorn set (MOS 1.20's, which is byte-for-byte
+// MOS 2.00's), correct for every machine Beebium ships and the fallback for any
+// it does not. The soft font is added only once the running MOS is recognised
+// by its ROM font; on an unrecognised OS the base set stands alone, so a
+// redefinition there is declined rather than mis-read from workspace addresses
+// that may not apply. Reading the ROM font itself live from an unrecognised
+// machine is the refinement that would slot in at that same recognition point.
+std::vector<screentext::GlyphSet> assemble_glyph_sets(
+    const std::function<uint8_t(uint16_t)>& peek_byte);
 
 // Concatenate the bands' readings into one, in reading order, and linearise.
 //

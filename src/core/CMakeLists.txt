@@ -74,3 +74,8 @@ target_link_libraries(beebium_core PUBLIC 6502_lib)
 # Link to extension API shared library (provides PeripheralExtension,
 # ExtensionContext, OneMHzBusPort, UserPort, PluginLoader, etc.)
 target_link_libraries(beebium_core PUBLIC beebium_extension_api)
+
+# Link to the standalone screen-text recognition library. The dependency points
+# one way -- the core's bitmap strategy calls into the library; the library
+# knows nothing of the emulator.
+target_link_libraries(beebium_core PUBLIC screentext)

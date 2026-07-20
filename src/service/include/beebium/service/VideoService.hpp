@@ -16,6 +16,8 @@
 #include "video.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <thread>
 
 namespace beebium {
@@ -28,7 +30,15 @@ namespace service {
 /// gRPC service implementation for video frame streaming
 class VideoServiceImpl final : public VideoService::Service {
 public:
-    VideoServiceImpl(FrameBuffer& frame_buffer, TeletextGrid& teletext_grid);
+    // Reads a guest memory byte without side effects, the way the debugger
+    // reaches memory. The bitmap screen-text strategy uses it to read the soft
+    // font out of the VDU driver's workspace, read-only and only at
+    // GetScreenText time. Empty when no machine is attached, in which case the
+    // ROM base font stands alone.
+    using PeekByte = std::function<uint8_t(uint16_t)>;
+
+    VideoServiceImpl(FrameBuffer& frame_buffer, TeletextGrid& teletext_grid,
+                     PeekByte peek_byte = {});
     ~VideoServiceImpl() override;
 
     // Non-copyable
@@ -63,6 +73,7 @@ public:
 private:
     FrameBuffer& frame_buffer_;
     TeletextGrid& teletext_grid_;
+    PeekByte peek_byte_;
 };
 
 } // namespace service

@@ -21,6 +21,10 @@
 #include "beebium/ScreenText.hpp"
 #include "beebium/TeletextGrid.hpp"
 
+#include <screentext/Glyph.hpp>
+
+#include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,6 +32,14 @@ using namespace beebium;
 using namespace beebium::screen;
 
 namespace {
+
+// The teletext strategy needs only the snapshot; wrap it in the sources the
+// dispatch now takes.
+BandSources teletext_sources(const TeletextGrid::Snapshot& snapshot) {
+    BandSources sources;
+    sources.teletext = &snapshot;
+    return sources;
+}
 
 // A cell-aligned run on a 8x8 grid, at a given row and column.
 TextRun run_at(uint32_t row, uint32_t column, const std::string& text,
@@ -285,7 +297,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
 
     SECTION("its runs are the grid rows") {
         const BandReading reading =
-            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
 
         REQUIRE(reading.supported);
         REQUIRE(reading.runs.size() == TeletextGrid::ROWS);
@@ -296,7 +308,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
 
     SECTION("runs carry the band's cell geometry so a selection can snap") {
         const BandReading reading =
-            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
 
         REQUIRE(reading.runs[0].cell_width == 12);
         REQUIRE(reading.runs[0].cell_height == 20);
@@ -307,7 +319,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
 
     SECTION("teletext is never uncertain, its cells being exact codes") {
         const BandReading reading =
-            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
 
         REQUIRE(reading.unreadable_cells == 0);
         REQUIRE(reading.ambiguous_cells == 0);
@@ -317,9 +329,9 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
         // Reading everywhere versus only the grid is a choice a glyph
         // recogniser makes. The teletext grid is the grid.
         const BandReading anywhere =
-            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
         const BandReading aligned =
-            read_band(teletext_band(), whole_screen(), Search::Aligned, screen);
+            read_band(teletext_band(), whole_screen(), Search::Aligned, teletext_sources(screen));
 
         REQUIRE(anywhere.runs == aligned.runs);
     }
@@ -327,34 +339,348 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
     SECTION("a region reads only the cells inside it") {
         const PixelRect region{0, 0, 5 * 12, 1 * 20};
         const BandReading reading =
-            read_band(teletext_band(), region, Search::Anywhere, screen);
+            read_band(teletext_band(), region, Search::Anywhere, teletext_sources(screen));
 
         REQUIRE(reading.runs.size() == 1);
         REQUIRE(reading.runs[0].text == "BBC C");
     }
 }
 
-TEST_CASE("A band with no strategy reports that it could not be read",
+namespace {
+
+constexpr uint32_t BLACK = 0xFF000000;
+constexpr uint32_t WHITE = 0xFFFFFFFF;
+
+// A framebuffer-shaped canvas of logical pixels, painted with glyphs the way
+// the renderer would, so the bitmap strategy can be exercised without a
+// machine. Tightly packed, so the stride is the width.
+struct Canvas {
+    uint32_t width;
+    uint32_t height;
+    std::vector<uint32_t> pixels;
+
+    Canvas(uint32_t w, uint32_t h, uint32_t fill = BLACK)
+        : width(w), height(h),
+          pixels(static_cast<size_t>(w) * h, fill) {}
+
+    FrameImage image() const {
+        return FrameImage{pixels.data(), width, width, height};
+    }
+
+    void set(uint32_t x, uint32_t y, uint32_t colour) {
+        pixels[static_cast<size_t>(y) * width + x] = colour;
+    }
+};
+
+const screentext::Bitmap& glyph_bitmap(const screentext::GlyphSet& set,
+                                       char32_t codepoint) {
+    for (const screentext::Glyph& glyph : set.glyphs) {
+        if (glyph.codepoint == codepoint) {
+            return glyph.bitmap;
+        }
+    }
+    throw std::runtime_error("no glyph for codepoint");
+}
+
+// Stamp an 8x8 bitmap at a pixel origin: set bits foreground, clear bits left
+// as whatever was there, matching how a glyph is drawn over a background.
+void stamp(Canvas& canvas, uint32_t x0, uint32_t y0,
+           const screentext::Bitmap& bitmap, uint32_t fg = WHITE) {
+    for (uint32_t y = 0; y < 8; ++y) {
+        for (uint32_t x = 0; x < 8; ++x) {
+            if (bitmap.pixel(x, y)) {
+                canvas.set(x0 + x, y0 + y, fg);
+            }
+        }
+    }
+}
+
+// Paint a string from the built-in glyphs, starting at a pixel origin and
+// stepping by the pitch.
+void paint_text(Canvas& canvas, const screentext::GlyphSet& set,
+                uint32_t x0, uint32_t y0, const std::string& text,
+                uint32_t fg = WHITE, uint32_t pitch = 8) {
+    for (size_t i = 0; i < text.size(); ++i) {
+        stamp(canvas, x0 + static_cast<uint32_t>(i) * pitch, y0,
+              glyph_bitmap(set, static_cast<char32_t>(text[i])), fg);
+    }
+}
+
+Band bitmap_band(uint32_t top, uint32_t bottom, uint32_t row_pitch = 8) {
+    Band band;
+    band.top = top;
+    band.bottom = bottom;
+    band.cell_width = 8;
+    band.cell_height = 8;
+    band.column_pitch = 8;
+    band.row_pitch = row_pitch;
+    band.is_teletext = false;
+    return band;
+}
+
+const screentext::GlyphSet& acorn() {
+    return screentext::builtin_glyph_set("acorn-mos-1.20");
+}
+
+BandSources bitmap_sources(const Canvas& canvas,
+                           const std::vector<screentext::GlyphSet>& sets) {
+    BandSources sources;
+    sources.image = canvas.image();
+    sources.glyph_sets = &sets;
+    return sources;
+}
+
+} // namespace
+
+TEST_CASE("The bitmap strategy reads a band the SAA5050 was not driving",
           "[screen-text]") {
-    // Today that is every band the SAA5050 was not driving. When a strategy
-    // that recognises glyphs in pixels is added behind this same dispatch,
-    // these bands start returning runs and nothing above here changes.
-    Band bitmap;
-    bitmap.top = 0;
-    bitmap.bottom = 256;
-    bitmap.cell_width = 8;
-    bitmap.cell_height = 8;
-    bitmap.column_pitch = 8;
-    bitmap.row_pitch = 8;
-    bitmap.is_teletext = false;
+    const std::vector<screentext::GlyphSet> sets{acorn()};
 
-    const TeletextGrid::Snapshot stale = grid_of({"STALE MODE 7 CELLS"});
-    const BandReading reading =
-        read_band(bitmap, {0, 0, 640, 256}, Search::Anywhere, stale);
+    SECTION("a blank screen is supported and contributes no text") {
+        // Read, and read as having no text on it -- distinct from a band no
+        // strategy could read, which is what this used to report.
+        Canvas canvas(8 * 10, 8);
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
 
-    REQUIRE_FALSE(reading.supported);
-    REQUIRE(reading.runs.empty());
-    REQUIRE(reading.unreadable_cells == 0);
+        REQUIRE(reading.supported);
+        REQUIRE(reading.runs.empty());
+        REQUIRE(reading.unreadable_cells == 0);
+        REQUIRE(reading.ambiguous_cells == 0);
+    }
+
+    SECTION("a line of text reads back as itself") {
+        Canvas canvas(8 * 10, 8);
+        paint_text(canvas, acorn(), 0, 0, "HELLO");
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.supported);
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.runs[0].text == "HELLO");
+        REQUIRE(reading.runs[0].cell_width == 8);
+        REQUIRE(reading.runs[0].cell_height == 8);
+    }
+
+    SECTION("runs are placed in frame pixels, offset by the band top") {
+        Canvas canvas(8 * 6, 200);
+        paint_text(canvas, acorn(), 8, 96, "HI");
+        const BandReading reading = read_band(
+            bitmap_band(64, 128), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.runs[0].text == "HI");
+        REQUIRE(reading.runs[0].bounds.x == 8);
+        REQUIRE(reading.runs[0].bounds.y == 96);
+    }
+
+    SECTION("a run that fills the width is marked as reaching the edge") {
+        Canvas canvas(8 * 4, 8);
+        paint_text(canvas, acorn(), 0, 0, "FULL");
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.runs[0].reached_right_edge);
+    }
+
+    SECTION("a ten-scanline pitch reads its eight-scanline glyphs") {
+        // MODE 3 and MODE 6: the glyph is eight tall on a ten-tall pitch, the
+        // two spare lines blanked. Sampling the gap would break the match.
+        Canvas canvas(8 * 6, 20);
+        paint_text(canvas, acorn(), 0, 0, "MODE6");
+        const BandReading reading = read_band(
+            bitmap_band(0, 20, /*row_pitch=*/10),
+            {0, 0, canvas.width, canvas.height}, Search::Aligned,
+            bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.runs[0].text == "MODE6");
+    }
+}
+
+TEST_CASE("The bitmap strategy declines a glyph it was not given, never guesses",
+          "[screen-text]") {
+    // A shape in no supplied set: three set bits that spell nothing. Supplied,
+    // it reads; unsupplied, the cell is unreadable rather than a wrong guess.
+    const screentext::Bitmap shape = screentext::Bitmap::from_rows(
+        {0x18, 0x24, 0x42, 0x99, 0x99, 0x42, 0x24, 0x18});
+
+    Canvas canvas(8 * 3, 8);
+    stamp(canvas, 0, 0, shape);
+
+    SECTION("unsupplied, it is counted unreadable and copies as a space") {
+        const std::vector<screentext::GlyphSet> sets{acorn()};
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.supported);
+        REQUIRE(reading.unreadable_cells == 1);
+        // Not mistaken for any ROM glyph.
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.runs[0].text[0] == ' ');
+    }
+
+    SECTION("supplied as a redefined glyph, it reads") {
+        screentext::GlyphSet soft;
+        soft.name = "soft-font";
+        soft.glyphs.emplace_back(U'\xA9', shape); // arbitrary codepoint
+        const std::vector<screentext::GlyphSet> sets{acorn(), soft};
+
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.unreadable_cells == 0);
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.runs[0].text == "\xC2\xA9"); // U+00A9, UTF-8
+    }
+}
+
+TEST_CASE("Anywhere reads what Aligned does and the off-grid text besides",
+          "[screen-text]") {
+    // Grid text at the origin, and VDU 5-style text a few pixels off it.
+    Canvas canvas(8 * 10, 8 * 4);
+    paint_text(canvas, acorn(), 0, 0, "GRID");
+    paint_text(canvas, acorn(), 3, 19, "AWAY");
+
+    const std::vector<screentext::GlyphSet> sets{acorn()};
+    const PixelRect whole{0, 0, canvas.width, canvas.height};
+
+    const BandReading aligned = read_band(
+        bitmap_band(0, canvas.height), whole, Search::Aligned,
+        bitmap_sources(canvas, sets));
+    const BandReading anywhere = read_band(
+        bitmap_band(0, canvas.height), whole, Search::Anywhere,
+        bitmap_sources(canvas, sets));
+
+    const Reading aligned_reading =
+        concatenate_bands_readings({aligned}, Layout::Rows);
+    const Reading anywhere_reading =
+        concatenate_bands_readings({anywhere}, Layout::Rows);
+
+    // Aligned finds the grid text and not the off-grid text.
+    REQUIRE(aligned_reading.text.find("GRID") != std::string::npos);
+    REQUIRE(aligned_reading.text.find("AWAY") == std::string::npos);
+
+    // Anywhere is a strict superset: both.
+    REQUIRE(anywhere_reading.text.find("GRID") != std::string::npos);
+    REQUIRE(anywhere_reading.text.find("AWAY") != std::string::npos);
+
+    // The off-grid run carries no cell geometry to snap to.
+    bool found_offset_run = false;
+    for (const TextRun& run : anywhere_reading.runs) {
+        if (run.text == "AWAY") {
+            found_offset_run = true;
+            REQUIRE(run.cell_width == 0);
+            REQUIRE(run.cell_height == 0);
+        }
+    }
+    REQUIRE(found_offset_run);
+}
+
+TEST_CASE("The soft font is read from the VDU driver's font workspace",
+          "[screen-text]") {
+    std::vector<uint8_t> memory(0x10000, 0);
+    auto peek = [&memory](uint16_t address) { return memory[address]; };
+
+    // The imploded default: zones 4-7 (characters 128-255) are soft, all four
+    // pointing at page $0C, so those codes alias the single $0C00 block.
+    memory[0x0367] = 0x0F;
+    for (int zone = 0; zone < 7; ++zone) {
+        memory[0x0368 + zone] = 0x0C;
+    }
+
+    SECTION("a redefined character in RAM becomes an overriding glyph") {
+        // Character 128 is zone 4, at $0C00 + (128 & 31) * 8 = $0C00.
+        const std::vector<uint8_t> rows{0x81, 0x42, 0x24, 0x18,
+                                        0x18, 0x24, 0x42, 0x81};
+        for (int i = 0; i < 8; ++i) {
+            memory[0x0C00 + i] = rows[i];
+        }
+
+        const screentext::GlyphSet soft = read_soft_font(peek);
+
+        // One glyph, not four: the aliases 160, 192 and 224 share the address
+        // and are not emitted again.
+        REQUIRE(soft.glyphs.size() == 1);
+        REQUIRE(soft.glyphs[0].codepoint == 0x80);
+        REQUIRE(soft.glyphs[0].bitmap == screentext::Bitmap::from_rows(rows));
+    }
+
+    SECTION("a character whose zone is in ROM is left to the base font") {
+        // 'A' (65) is in zone 2, whose soft bit is clear in the imploded flags,
+        // so it is never emitted even though it sits below the RAM ranges.
+        for (int i = 0; i < 8; ++i) {
+            memory[0x0C00 + i] = 0xFF;
+        }
+        const screentext::GlyphSet soft = read_soft_font(peek);
+        for (const screentext::Glyph& glyph : soft.glyphs) {
+            REQUIRE(glyph.codepoint != U'A');
+        }
+    }
+
+    SECTION("a blank redefinition is declined, not emitted as a space") {
+        const screentext::GlyphSet soft = read_soft_font(peek);
+        REQUIRE(soft.glyphs.empty());
+    }
+
+    SECTION("assemble gates the soft font on recognising the MOS") {
+        // Paint the ROM font at $C000 so the machine is recognised as the MOS
+        // family whose workspace we know, then redefine character 128.
+        const screentext::GlyphSet& acorn_set =
+            screentext::builtin_glyph_set("acorn-mos-1.20");
+        for (const screentext::Glyph& glyph : acorn_set.glyphs) {
+            const uint8_t code =
+                glyph.codepoint == 0x00A3 ? 0x60
+                                          : static_cast<uint8_t>(glyph.codepoint);
+            const uint16_t address = 0xC000 + (code - 0x20) * 8;
+            for (int i = 0; i < 8; ++i) {
+                memory[address + i] = glyph.bitmap.bytes()[i];
+            }
+        }
+        for (int i = 0; i < 8; ++i) {
+            memory[0x0C00 + i] = 0x3C;
+        }
+
+        const std::vector<screentext::GlyphSet> recognised =
+            assemble_glyph_sets(peek);
+        REQUIRE(recognised.size() == 2);
+        REQUIRE(recognised[1].name == "soft-font");
+        REQUIRE(recognised[1].glyphs.size() == 1);
+
+        // Corrupt one probe byte: the MOS is no longer recognised, so the soft
+        // font is declined and only the base set stands.
+        memory[0xC000 + (0x41 - 0x20) * 8] ^= 0xFF;
+        const std::vector<screentext::GlyphSet> unrecognised =
+            assemble_glyph_sets(peek);
+        REQUIRE(unrecognised.size() == 1);
+    }
+
+    SECTION("code 96 in an exploded zone carries the pound sign") {
+        // Fully explode: every zone soft. Zone 3 (96-127) moves to RAM; code
+        // 96 is the Acorn font's pound sign, so that is the text it carries.
+        memory[0x0367] = 0x7F;
+        memory[0x036A] = 0x1A; // zone 3 page, arbitrary RAM
+        const uint16_t base = 0x1A00 + ((0x60 & 0x1F) << 3);
+        for (int i = 0; i < 8; ++i) {
+            memory[base + i] = static_cast<uint8_t>(0x10 + i);
+        }
+        const screentext::GlyphSet soft = read_soft_font(peek);
+
+        bool found = false;
+        for (const screentext::Glyph& glyph : soft.glyphs) {
+            if (glyph.codepoint == 0x00A3) {
+                found = true;
+            }
+        }
+        REQUIRE(found);
+    }
 }
 
 TEST_CASE("Bands come from what the renderer recorded", "[screen-text]") {

@@ -16,13 +16,18 @@
 #include "beebium/TeletextText.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <utility>
+#include <vector>
 
 namespace beebium::service {
 
 VideoServiceImpl::VideoServiceImpl(FrameBuffer& frame_buffer,
-                                   TeletextGrid& teletext_grid)
+                                   TeletextGrid& teletext_grid,
+                                   PeekByte peek_byte)
     : frame_buffer_(frame_buffer)
-    , teletext_grid_(teletext_grid) {
+    , teletext_grid_(teletext_grid)
+    , peek_byte_(std::move(peek_byte)) {
 }
 
 namespace {
@@ -71,8 +76,34 @@ grpc::Status VideoServiceImpl::GetScreenText(
     const auto& meta = frame_buffer_.metadata();
 
     // One consistent frame, taken without stalling the emulation thread for
-    // longer than a single buffer copy.
+    // longer than a single buffer copy: the teletext grid for the teletext
+    // strategy, the pixels for the bitmap one.
     const auto teletext = teletext_grid_.snapshot();
+
+    std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
+    frame_buffer_.copy_frame(pixels.data(), pixels.size());
+
+    screen::FrameImage frame_image;
+    frame_image.pixels = pixels.data();
+    frame_image.stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
+    frame_image.width = meta.width;
+    frame_image.height = meta.height;
+
+    // The glyph set the machine was drawing with: the ROM base font, overlaid
+    // with the soft font read from RAM when the running MOS is recognised.
+    // Without a machine to peek, the base font stands alone. Assembled once and
+    // handed to every band.
+    std::vector<screentext::GlyphSet> glyph_sets;
+    if (peek_byte_) {
+        glyph_sets = screen::assemble_glyph_sets(peek_byte_);
+    } else {
+        glyph_sets.push_back(screentext::builtin_glyph_set("acorn-mos-1.20"));
+    }
+
+    screen::BandSources sources;
+    sources.teletext = &teletext;
+    sources.image = frame_image;
+    sources.glyph_sets = &glyph_sets;
 
     // The whole display when the caller named no region. A caller that has not
     // dragged anything wants everything.
@@ -99,7 +130,7 @@ grpc::Status VideoServiceImpl::GetScreenText(
         if (band_rect.intersected(region).empty()) {
             continue;
         }
-        readings.push_back(screen::read_band(band, region, search, teletext));
+        readings.push_back(screen::read_band(band, region, search, sources));
     }
 
     const screen::Reading reading = screen::concatenate_bands_readings(std::move(readings), layout);

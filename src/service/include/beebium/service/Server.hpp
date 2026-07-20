@@ -228,8 +228,12 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     // outlives the machine's use of it because both are owned here.
     impl_->machine.state().memory.saa5050.set_teletext_grid(&impl_->teletext_grid);
 
+    // The screen-text path reads the soft font out of guest RAM at
+    // GetScreenText time. It reaches memory the way the debugger does, through
+    // a side-effect-free peek, read-only and only on demand.
     impl_->video_service = std::make_unique<VideoServiceImpl>(
-        impl_->frame_buffer, impl_->teletext_grid);
+        impl_->frame_buffer, impl_->teletext_grid,
+        [this](uint16_t address) { return impl_->machine.peek(address); });
 
     // Create break callbacks that call Machine methods
     BreakCallbacks break_callbacks{

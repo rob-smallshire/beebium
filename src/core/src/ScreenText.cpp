@@ -14,7 +14,11 @@
 
 #include <beebium/TeletextText.hpp>
 
+#include <screentext/Read.hpp>
+
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -173,6 +177,242 @@ BandReading read_teletext_band(const Band& band,
     return reading;
 }
 
+// The VDU driver's font workspace, read to resolve the soft (VDU 23) font.
+//
+// These addresses are specific to the MOS 1.20 (Model B) and MOS 2.00 (Model
+// B+) family Beebium ships, and are NOT assumed to hold for any other OS: a
+// Master or a foreign MOS may lay its workspace out differently. So the soft
+// font is read only once the running MOS has been recognised by its ROM font
+// (see known_bbc_mos); an unrecognised MOS falls back to the base font alone
+// rather than reading these addresses on faith. See ScreenText.hpp.
+constexpr uint16_t VDU_FONT_FLAGS = 0x0367;
+constexpr uint16_t VDU_FONT_ZONE_PAGES = 0x0368; // Seven bytes, zones 1..7
+
+// The MOS ROM font sits at $C000, eight bytes per character from character 32,
+// so character c is at $C000 + (c - 32) * 8. This is where the base set was
+// generated from, and comparing it back is how the running MOS is recognised.
+constexpr uint16_t ROM_FONT_BASE = 0xC000;
+constexpr uint16_t ROM_FONT_FIRST_CHARACTER = 0x20;
+
+// The vduFontFlags bit that marks a zone as holding RAM (soft) definitions,
+// indexed by zone number 1..7. The zone of code c is c >> 5. From the MOS
+// fontMaskTable.
+constexpr std::array<uint8_t, 8> ZONE_SOFT_BIT = {
+    0x00, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+
+// The text a redefined code carries. Identity across the printable range, bar
+// the single place the Acorn font departs from ASCII: code &60 is a pound sign.
+char32_t soft_codepoint(uint8_t code) {
+    return code == 0x60 ? char32_t{0x00A3} : char32_t{code};
+}
+
+// Whether the running MOS is one whose font workspace we know how to read.
+//
+// The soft-font addresses above are pinned to MOS 1.20/2.00; on any other OS
+// they could mean something else entirely. Rather than trust the version, we
+// recognise the machine by its ROM font: if the bytes at $C000 match the Acorn
+// set the base font was generated from, this is that MOS family and its
+// workspace layout holds. If not -- a Master, a foreign or future MOS -- we
+// decline to read the soft font rather than read the wrong addresses.
+//
+// This is also the seam where reading the ROM font live from an unrecognised
+// machine would slot in; until then, recognition failing means the base font
+// alone, which is never worse than assuming a layout that does not apply.
+bool known_bbc_mos(const std::function<uint8_t(uint16_t)>& peek_byte) {
+    const screentext::GlyphSet& acorn =
+        screentext::builtin_glyph_set("acorn-mos-1.20");
+
+    // A handful of distinctive characters spread across the font, enough that
+    // an unrelated ROM will not match by accident: '!', 'A', pound, 'z'.
+    for (const uint8_t code : {uint8_t{0x21}, uint8_t{0x41}, uint8_t{0x60},
+                               uint8_t{0x7A}}) {
+        const char32_t codepoint = soft_codepoint(code);
+        const screentext::Glyph* glyph = nullptr;
+        for (const screentext::Glyph& candidate : acorn.glyphs) {
+            if (candidate.codepoint == codepoint) {
+                glyph = &candidate;
+                break;
+            }
+        }
+        if (glyph == nullptr) {
+            return false;
+        }
+
+        const uint16_t address = static_cast<uint16_t>(
+            ROM_FONT_BASE + (code - ROM_FONT_FIRST_CHARACTER) * 8);
+        const std::vector<uint8_t>& expected = glyph->bitmap.bytes();
+        if (expected.size() < 8) {
+            return false;
+        }
+        for (int i = 0; i < 8; ++i) {
+            if (peek_byte(static_cast<uint16_t>(address + i)) != expected[i]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// The rightmost cell right-edge the aligned walk reaches within the region, in
+// image-local pixels, or zero when no whole cell fits. Used to tell a run that
+// ran to the edge -- and so wrapped -- from one that stopped short.
+uint32_t last_cell_right(const screentext::Band& band, std::size_t region_right) {
+    const std::size_t pitch = band.effective_column_pitch();
+    uint32_t last = 0;
+    for (std::size_t x = band.origin_x; x + band.cell_width <= region_right;
+         x += pitch) {
+        last = static_cast<uint32_t>(x + band.cell_width);
+    }
+    return last;
+}
+
+// Reduce the band's rendered pixels to the library's one-byte-per-pixel image,
+// where equal bytes mean the same colour. Each distinct framebuffer value is
+// given a small id; the library needs only equality, not the palette, so any
+// consistent assignment serves. A bitmap mode shows at most sixteen colours in
+// a band, so the ids never approach the byte's range.
+screentext::Image band_image(const FrameImage& frame, const Band& band) {
+    screentext::Image image;
+    image.width = frame.width;
+    image.height = band.bottom - band.top;
+    image.pixels.resize(image.width * image.height);
+
+    std::vector<uint32_t> palette;
+    palette.reserve(16);
+    for (uint32_t y = 0; y < image.height; ++y) {
+        for (uint32_t x = 0; x < image.width; ++x) {
+            const uint32_t value = frame.pixel(x, band.top + y);
+            std::size_t id = 0;
+            for (; id < palette.size(); ++id) {
+                if (palette[id] == value) {
+                    break;
+                }
+            }
+            if (id == palette.size()) {
+                // More distinct colours than a byte can hold cannot arise in a
+                // bitmap mode; were it ever to, the surplus collapses onto the
+                // last id rather than wrapping, so a cell is at worst unread.
+                if (palette.size() <= 0xFF) {
+                    palette.push_back(value);
+                } else {
+                    id = 0xFF;
+                }
+            }
+            image.pixels[y * image.width + x] = static_cast<uint8_t>(id);
+        }
+    }
+    return image;
+}
+
+// Add a run to the reading, translating the library's image-local geometry back
+// to frame pixels and carrying the cell geometry a snapped selection needs.
+void append_run(BandReading& reading, const screentext::Run& run,
+                const Band& band, uint32_t last_right) {
+    if (run.cells.empty()) {
+        return;
+    }
+    const bool off_grid = run.cells.front().offset;
+
+    TextRun out;
+    out.text = run.text;
+    out.bounds = {static_cast<uint32_t>(run.bounds.x),
+                  static_cast<uint32_t>(run.bounds.y) + band.top,
+                  static_cast<uint32_t>(run.bounds.width),
+                  static_cast<uint32_t>(run.bounds.height)};
+
+    if (off_grid) {
+        // Text at the graphics cursor is not on any grid, so it carries no cell
+        // geometry to snap to and never counts as having reached an edge.
+        out.cell_width = 0;
+        out.cell_height = 0;
+        out.reached_right_edge = false;
+    } else {
+        out.cell_width = band.cell_width;
+        out.cell_height = band.cell_height;
+        out.reached_right_edge =
+            last_right != 0 && run.bounds.right() == last_right;
+    }
+    reading.runs.push_back(std::move(out));
+}
+
+// Read a band by recognising glyphs in its pixels.
+//
+// The band the SAA5050 was not driving is bitmap: its characters are font
+// glyphs drawn unmodified, so a cell either matches a known glyph exactly or is
+// left unread -- never guessed. The geometry carries straight over from the
+// core band, in image-local coordinates; the glyph set is the one assembled
+// from the running machine. Aligned runs one grid pass; Anywhere runs the grid
+// pass and the off-grid pass and concatenates them, the library having built
+// the two to be disjoint.
+BandReading read_bitmap_band(const Band& band,
+                             const PixelRect& region,
+                             Search search,
+                             const BandSources& sources) {
+    BandReading reading;
+    // The band was read: a bitmap display is supported whether or not any text
+    // was found on it, which is what tells "graphics, no text" from "could not
+    // read". An absent image or glyph set is a wiring fault, not a blank
+    // screen, so it stays unsupported rather than claiming an empty reading.
+    if (sources.image.empty() || sources.glyph_sets == nullptr) {
+        return reading;
+    }
+    reading.supported = true;
+
+    const PixelRect band_rect{0, band.top, sources.image.width,
+                              band.bottom - band.top};
+    const PixelRect covered = band_rect.intersected(region);
+    if (covered.empty() || band.column_pitch == 0 || band.row_pitch == 0) {
+        return reading;
+    }
+
+    const screentext::Image image = band_image(sources.image, band);
+
+    screentext::Band lib_band;
+    lib_band.top = 0;
+    lib_band.bottom = band.bottom - band.top;
+    lib_band.cell_width = band.cell_width;
+    lib_band.cell_height = band.cell_height;
+    lib_band.column_pitch = band.column_pitch;
+    lib_band.row_pitch = band.row_pitch;
+    lib_band.origin_x = band.origin_x;
+    lib_band.origin_y = 0;
+    const std::vector<screentext::Band> lib_bands{lib_band};
+
+    // The covered rectangle, in the image's band-local coordinates.
+    screentext::Options options;
+    options.selection = screentext::Rect{covered.x, covered.y - band.top,
+                                         covered.width, covered.height};
+
+    const std::size_t region_right =
+        std::min<std::size_t>(options.selection->right(), image.width);
+    const uint32_t last_right = last_cell_right(lib_band, region_right);
+
+    const auto absorb = [&](const screentext::Result& result, bool aligned) {
+        reading.unreadable_cells +=
+            static_cast<uint32_t>(result.unmatched_cells);
+        reading.ambiguous_cells +=
+            static_cast<uint32_t>(result.ambiguous_cells);
+        for (const screentext::Run& run : result.runs) {
+            append_run(reading, run, band, aligned ? last_right : 0);
+        }
+    };
+
+    options.search = screentext::Search::AlignedOnly;
+    absorb(screentext::read(image, lib_bands, *sources.glyph_sets, options),
+           true);
+
+    if (search == Search::Anywhere) {
+        // The off-grid pass finds only what the grid pass did not, so the two
+        // results concatenate with nothing to reconcile: runs appended, counts
+        // summed. This makes Anywhere a strict superset of Aligned.
+        options.search = screentext::Search::OffsetOnly;
+        absorb(screentext::read(image, lib_bands, *sources.glyph_sets, options),
+               false);
+    }
+
+    return reading;
+}
+
 } // namespace
 
 PixelRect PixelRect::intersected(const PixelRect& other) const {
@@ -237,8 +477,8 @@ std::vector<Band> bands_of(const FrameMetadata& metadata) {
 
 BandReading read_band(const Band& band,
                       const PixelRect& region,
-                      Search /*search*/,
-                      const TeletextGrid::Snapshot& teletext) {
+                      Search search,
+                      const BandSources& sources) {
     // The strategy is chosen from the hardware state that was in effect when
     // these scanlines were drawn, not from anything the caller said. A new
     // strategy is added by extending this dispatch; nothing above it, on the
@@ -246,16 +486,89 @@ BandReading read_band(const Band& band,
     //
     // The search mode is recorded and passed through to the strategies. The
     // teletext strategy has no use for it -- the grid is the grid -- and the
-    // strategies that recognise glyphs in pixels choose between walking the
-    // grid and searching sub-cell offsets on the strength of it.
+    // bitmap strategy chooses between walking the grid alone and also searching
+    // sub-cell offsets on the strength of it.
     if (band.is_teletext) {
-        return read_teletext_band(band, region, teletext);
+        if (sources.teletext == nullptr) {
+            return BandReading{};
+        }
+        return read_teletext_band(band, region, *sources.teletext);
     }
 
-    // No strategy reads pixels yet, so the band says so rather than
-    // contributing something stale. The counts stay zero: nothing was tried,
-    // which is not the same as having tried and failed on a cell.
-    return BandReading{};
+    return read_bitmap_band(band, region, search, sources);
+}
+
+screentext::GlyphSet read_soft_font(
+    const std::function<uint8_t(uint16_t)>& peek_byte) {
+    screentext::GlyphSet set;
+    set.name = "soft-font";
+
+    const uint8_t flags = peek_byte(VDU_FONT_FLAGS);
+
+    // Every printable code, ascending, skipping DEL, which prints nothing. A
+    // code whose zone is still in ROM is left to the base set; a code redefined
+    // to blank is skipped rather than emitted, since an all-zero glyph would
+    // match every blank cell and masquerade as a space.
+    //
+    // When the font is imploded the four upper zones all point at the same
+    // $0C00 block, so codes 128, 160, 192 and 224 are the same pixels on
+    // screen -- genuinely aliased by the MOS. Emitting all four would make
+    // every redefined glyph ambiguous with its own aliases, which is noise, not
+    // the font-collision ambiguity the library exists to report. So each
+    // backing address is emitted once and the lowest code that owns it wins.
+    std::vector<uint16_t> seen_bases;
+    for (uint16_t code = 0x20; code <= 0xFF; ++code) {
+        if (code == 0x7F) {
+            continue;
+        }
+        const uint8_t zone = static_cast<uint8_t>(code >> 5); // 1..7
+        if ((flags & ZONE_SOFT_BIT[zone]) == 0) {
+            continue;
+        }
+
+        const uint8_t page = peek_byte(
+            static_cast<uint16_t>(VDU_FONT_ZONE_PAGES + (zone - 1)));
+        const uint16_t base = static_cast<uint16_t>(page << 8)
+            | static_cast<uint16_t>((code & 0x1F) << 3);
+
+        if (std::find(seen_bases.begin(), seen_bases.end(), base)
+            != seen_bases.end()) {
+            continue;
+        }
+
+        std::vector<uint8_t> rows(8);
+        uint8_t any = 0;
+        for (int i = 0; i < 8; ++i) {
+            rows[i] = peek_byte(static_cast<uint16_t>(base + i));
+            any |= rows[i];
+        }
+        if (any == 0) {
+            continue;
+        }
+
+        seen_bases.push_back(base);
+        set.glyphs.emplace_back(soft_codepoint(static_cast<uint8_t>(code)),
+                                screentext::Bitmap::from_rows(rows));
+    }
+
+    return set;
+}
+
+std::vector<screentext::GlyphSet> assemble_glyph_sets(
+    const std::function<uint8_t(uint16_t)>& peek_byte) {
+    std::vector<screentext::GlyphSet> sets;
+    // The ROM base font, always: it is the fallback whatever the machine, and
+    // correct for every OS Beebium ships.
+    sets.push_back(screentext::builtin_glyph_set("acorn-mos-1.20"));
+
+    // The soft font, only when the running MOS is one whose font workspace we
+    // know how to read. On an unrecognised OS the redefinitions are declined
+    // rather than read from addresses that may not mean what they do here --
+    // honest degrading, never a wrong glyph.
+    if (known_bbc_mos(peek_byte)) {
+        sets.push_back(read_soft_font(peek_byte));
+    }
+    return sets;
 }
 
 Reading concatenate_bands_readings(std::vector<BandReading> readings, Layout layout) {
