@@ -4,6 +4,14 @@ A work order for stream 3 of `screen-text-extraction.md`. Read that document
 and its "What stream 1 changed" section first; this one says what to build on
 the server and does not repeat the why.
 
+> **Amended after delivery (July 2026).** The `ScreenTextSearch` enum below is
+> shown with three values (`BOTH`, `ALIGNED`, `OFFSET`). It was reduced to two,
+> `ANYWHERE` and `ALIGNED`, once it was clear a caller should choose one search
+> up front rather than ask for both and merge -- see "Two searches, chosen up
+> front" in `screen-text-extraction.md`. The seam, the clients and the tests
+> were updated to match. Read the enum below as historical; the shipped proto
+> is the authority.
+
 ## What you are building
 
 Two gRPC calls on the emulator, and their Python and TypeScript client

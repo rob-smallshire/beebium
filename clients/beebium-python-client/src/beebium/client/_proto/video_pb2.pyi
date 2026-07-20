@@ -114,12 +114,19 @@ class _ScreenTextSearch:
 
 class _ScreenTextSearchEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ScreenTextSearch.ValueType], _builtins.type):
     DESCRIPTOR: _descriptor.EnumDescriptor
-    SCREEN_TEXT_SEARCH_BOTH: _ScreenTextSearch.ValueType  # 0
-    """Whole-screen copy and scripts want everything, so the default is the
-    most inclusive. A snapped drag sets ALIGNED; a free-form drag sets BOTH.
+    SCREEN_TEXT_SEARCH_ANYWHERE: _ScreenTextSearch.ValueType  # 0
+    """Read all the text, wherever it sits: on the character grid and placed
+    freely with VDU 5. The default -- a caller that does not restrict gets
+    everything. This is not a merge the caller performs: the server reads the
+    grid and the off-grid text in disjoint passes and returns them together,
+    so ANYWHERE is a strict superset of ALIGNED, not a second thing to
+    reconcile against it.
     """
     SCREEN_TEXT_SEARCH_ALIGNED: _ScreenTextSearch.ValueType  # 1
-    SCREEN_TEXT_SEARCH_OFFSET: _ScreenTextSearch.ValueType  # 2
+    """Read only text aligned to the character grid: exact, cheaper, and what a
+    drag snapped to the grid wants. A caller chooses this or ANYWHERE up
+    front; there is never a reason to ask for both and combine them.
+    """
 
 class ScreenTextSearch(_ScreenTextSearch, metaclass=_ScreenTextSearchEnumTypeWrapper):
     """Which of the two searches a strategy should run.
@@ -128,12 +135,19 @@ class ScreenTextSearch(_ScreenTextSearch, metaclass=_ScreenTextSearchEnumTypeWra
     strategy reads the character grid and is unaffected by it.
     """
 
-SCREEN_TEXT_SEARCH_BOTH: ScreenTextSearch.ValueType  # 0
-"""Whole-screen copy and scripts want everything, so the default is the
-most inclusive. A snapped drag sets ALIGNED; a free-form drag sets BOTH.
+SCREEN_TEXT_SEARCH_ANYWHERE: ScreenTextSearch.ValueType  # 0
+"""Read all the text, wherever it sits: on the character grid and placed
+freely with VDU 5. The default -- a caller that does not restrict gets
+everything. This is not a merge the caller performs: the server reads the
+grid and the off-grid text in disjoint passes and returns them together,
+so ANYWHERE is a strict superset of ALIGNED, not a second thing to
+reconcile against it.
 """
 SCREEN_TEXT_SEARCH_ALIGNED: ScreenTextSearch.ValueType  # 1
-SCREEN_TEXT_SEARCH_OFFSET: ScreenTextSearch.ValueType  # 2
+"""Read only text aligned to the character grid: exact, cheaper, and what a
+drag snapped to the grid wants. A caller chooses this or ANYWHERE up
+front; there is never a reason to ask for both and combine them.
+"""
 Global___ScreenTextSearch: _TypeAlias = ScreenTextSearch  # noqa: Y015
 
 class _ScreenTextLayout:
@@ -542,7 +556,10 @@ class GetScreenTextRequest(_message.Message):
     layout: Global___ScreenTextLayout.ValueType
     @_builtins.property
     def region(self) -> Global___PixelRegion:
-        """The part of the display to read. Whole display when unset."""
+        """The part of the display to read. Whole display when unset. Independent of
+        `search`: what part of the screen to read and how hard to look for text
+        in it are separate choices.
+        """
 
     def __init__(
         self,

@@ -618,38 +618,48 @@ from the one made here, and a weaker one:
   what it costs. A screen with `VDU 5` labels on it should probably just read
   them.
 
-### Settled: a whole-screen copy runs both passes
+### Two searches, chosen up front -- not a merge
 
-The number that was missing has been taken (`docs/screen-text-library.md`).
-Aligned reading is about a millisecond for a whole MODE 0 screen on an M1 Max
-and under three on a Raspberry Pi 5, the slowest platform Beebium ships to.
-Colour depth barely registers -- a three-or-more-colour cell is rejected early,
-so the deeper modes are cheaper, not dearer, which is the opposite of the
-intuition. The off-grid pass is projected at tens of milliseconds per screen,
-with a ceiling around 420 ms on a Pi 5 for a pathological all-noise screen that
-no game produces, and it parallelises trivially across the sixty-four offsets
-if that ceiling ever needs lowering.
+A caller asks for one of two searches, never both:
 
-Against that, the decision is easy. **A whole-screen copy, and a script reading
-the screen, run the aligned pass and then the off-grid pass, and merge.** "Copy
-the screen" should mean every character on it, and tens of milliseconds for a
-once-in-a-few-minutes, user-initiated action off any hot path is not a cost
-worth withholding a feature for. The pathological ceiling is a fifth of a
-second on the slowest hardware, still imperceptible for a copy.
+- **Aligned** reads only text on the character grid. Exact, and cheap: about a
+  millisecond for a whole MODE 0 screen on an M1 Max, under three on a
+  Raspberry Pi 5, the slowest platform Beebium ships to. Colour depth barely
+  registers -- a three-or-more-colour cell is rejected early, so the deeper
+  modes are cheaper, not dearer, the opposite of the intuition.
+- **Anywhere** reads all the text, on the grid and placed freely with `VDU 5`.
+  Tens of milliseconds per screen, ceiling around 420 ms on a Pi 5 for a
+  pathological all-noise screen no game produces.
 
-Where the user *drags* a selection, snapped versus free-form remains a real
-choice -- but for a reason that survives the timing: snapping is also about what
-the rectangle means, not only about cost. Snapped selection reads the grid;
-free-form additionally reads off it. That distinction stays.
+**Anywhere is a strict superset of Aligned, not a second result to reconcile
+with it.** The library builds its grid and off-grid passes to be *disjoint* --
+the off-grid pass visits offset (0, 0) internally, finds the grid text, uses it
+to suppress ghosts, and then drops it. So the server serves Anywhere by running
+both passes and concatenating: no overlap, nothing to dedupe. And because
+Anywhere includes the grid pass, it catches the lone simple glyphs the off-grid
+pass alone would reject as noise, so it loses nothing Aligned would have found.
 
-So the only place the off-grid pass is withheld is a snapped drag, where the
-user has said "the grid" by snapping. Everywhere else -- whole screen, script,
-free-form drag -- it runs.
+A caller therefore picks by what it expects, once: Aligned when it has reason to
+believe the text is on the grid -- a listing, a prompt -- and Anywhere when it
+does not. There is never a reason to ask for both and combine them, which is why
+the request offers no such option and no merge happens client-side.
 
-One integration question this hands to stream 2, noted so it is not
-rediscovered: grid text sits at offset (0, 0), which the off-grid search also
-visits, so text on the grid can be found by both passes. Merging must dedupe by
-position rather than concatenate, or aligned text appears twice.
+### Which search, and which extent, are independent
+
+They are separate fields on the request and separate decisions. *Extent* is
+what part of the display to read -- the whole thing, or a rectangle. *Search* is
+how hard to look within it. A whole-screen read can be Aligned or Anywhere; a
+dragged rectangle can be either too. Nothing about copying the whole screen
+dictates the search, and an earlier draft that said "a whole-screen copy runs
+the off-grid pass" was wrong to weld them.
+
+Which search a given user action uses -- a whole-screen Copy command, a snapped
+drag, a free-form drag -- is a **client UX choice, settled in stream 4**, not a
+property of this interface. The natural pairing is that a drag *snapped* to the
+grid asks for Aligned (the snap is the user saying "the grid"), and a free-form
+drag asks for Anywhere; what a plain whole-screen Copy does is for stream 4 to
+decide. The interface only provides the two searches and leaves the choosing to
+the caller.
 
 ## Work partition
 

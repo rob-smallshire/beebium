@@ -165,8 +165,8 @@ export interface ScreenGeometry {
     frameNumber: number;
 }
 
-/** Which of the two searches a glyph-recognising strategy should run. */
-export type ScreenTextSearchMode = "both" | "aligned" | "offset";
+/** Which search a glyph-recognising strategy should run. */
+export type ScreenTextSearchMode = "anywhere" | "aligned";
 
 export interface Frame {
     frameNumber: number;
@@ -347,11 +347,12 @@ export class Video {
      *
      * @param options.region `[x, y, width, height]` in frame pixels; the whole
      *     display when omitted. Clipped to the display rather than rejected.
-     * @param options.search `"aligned"` reads only text on the character grid,
-     *     which is what a snapped drag wants; `"offset"` reads only text off
-     *     it; `"both"`, the default, reads both, which is what a whole screen
-     *     copy and a script want. Honoured by strategies that recognise glyphs
-     *     in pixels; a MODE 7 display is always its grid.
+     * @param options.search `"anywhere"`, the default, reads all the text --
+     *     on the grid and placed freely with VDU 5 -- and is a strict superset
+     *     of `"aligned"`, which reads only the grid and is exact and cheaper,
+     *     as a snapped drag wants. Pick one up front; there is no reason to ask
+     *     for both. Independent of `region`. Honoured by strategies that
+     *     recognise glyphs in pixels; a MODE 7 display is always its grid.
      * @param options.flowed Join a run that reached the right edge to the next
      *     without a line break, rejoining a line that wrapped. By default each
      *     grid row is its own line, preserving the shape of the selection.
@@ -362,11 +363,10 @@ export class Video {
         flowed?: boolean;
     }): Promise<ScreenText> {
         const searches: Record<ScreenTextSearchMode, ScreenTextSearch> = {
-            both: ScreenTextSearch.SCREEN_TEXT_SEARCH_BOTH,
+            anywhere: ScreenTextSearch.SCREEN_TEXT_SEARCH_ANYWHERE,
             aligned: ScreenTextSearch.SCREEN_TEXT_SEARCH_ALIGNED,
-            offset: ScreenTextSearch.SCREEN_TEXT_SEARCH_OFFSET,
         };
-        const search = options?.search ?? "both";
+        const search = options?.search ?? "anywhere";
         if (!(search in searches)) {
             throw new RangeError(
                 `Unknown search ${search}; expected one of ` +

@@ -285,7 +285,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
 
     SECTION("its runs are the grid rows") {
         const BandReading reading =
-            read_band(teletext_band(), whole_screen(), Search::Both, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
 
         REQUIRE(reading.supported);
         REQUIRE(reading.runs.size() == TeletextGrid::ROWS);
@@ -296,7 +296,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
 
     SECTION("runs carry the band's cell geometry so a selection can snap") {
         const BandReading reading =
-            read_band(teletext_band(), whole_screen(), Search::Both, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
 
         REQUIRE(reading.runs[0].cell_width == 12);
         REQUIRE(reading.runs[0].cell_height == 20);
@@ -307,30 +307,27 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
 
     SECTION("teletext is never uncertain, its cells being exact codes") {
         const BandReading reading =
-            read_band(teletext_band(), whole_screen(), Search::Both, screen);
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
 
         REQUIRE(reading.unreadable_cells == 0);
         REQUIRE(reading.ambiguous_cells == 0);
     }
 
     SECTION("the search mode does not change what teletext reads") {
-        // Aligned and off-grid searching are choices a glyph recogniser makes.
-        // The teletext grid is the grid.
-        const BandReading both =
-            read_band(teletext_band(), whole_screen(), Search::Both, screen);
+        // Reading everywhere versus only the grid is a choice a glyph
+        // recogniser makes. The teletext grid is the grid.
+        const BandReading anywhere =
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, screen);
         const BandReading aligned =
             read_band(teletext_band(), whole_screen(), Search::Aligned, screen);
-        const BandReading offset =
-            read_band(teletext_band(), whole_screen(), Search::Offset, screen);
 
-        REQUIRE(both.runs == aligned.runs);
-        REQUIRE(both.runs == offset.runs);
+        REQUIRE(anywhere.runs == aligned.runs);
     }
 
     SECTION("a region reads only the cells inside it") {
         const PixelRect region{0, 0, 5 * 12, 1 * 20};
         const BandReading reading =
-            read_band(teletext_band(), region, Search::Both, screen);
+            read_band(teletext_band(), region, Search::Anywhere, screen);
 
         REQUIRE(reading.runs.size() == 1);
         REQUIRE(reading.runs[0].text == "BBC C");
@@ -353,7 +350,7 @@ TEST_CASE("A band with no strategy reports that it could not be read",
 
     const TeletextGrid::Snapshot stale = grid_of({"STALE MODE 7 CELLS"});
     const BandReading reading =
-        read_band(bitmap, {0, 0, 640, 256}, Search::Both, stale);
+        read_band(bitmap, {0, 0, 640, 256}, Search::Anywhere, stale);
 
     REQUIRE_FALSE(reading.supported);
     REQUIRE(reading.runs.empty());

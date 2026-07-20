@@ -356,7 +356,7 @@ class Video:
         self,
         *,
         region: tuple[int, int, int, int] | None = None,
-        search: str = "both",
+        search: str = "anywhere",
         flowed: bool = False,
     ) -> ScreenText:
         """Read text from the display, whatever mode is producing it.
@@ -374,12 +374,13 @@ class Video:
             region: ``(x, y, width, height)`` in frame pixels; the whole
                 display when None. Clipped to the display rather than
                 rejected.
-            search: ``"aligned"`` reads only text on the character grid, which
-                is what a snapped drag wants; ``"offset"`` reads only text off
-                it; ``"both"``, the default, reads both, which is what a whole
-                screen copy and a script want. Honoured by strategies that
-                recognise glyphs in pixels; a MODE 7 display is always its
-                grid.
+            search: ``"anywhere"``, the default, reads all the text -- on the
+                grid and placed freely with VDU 5 -- and is a strict superset
+                of ``"aligned"``, which reads only the grid and is exact and
+                cheaper, as a snapped drag wants. Pick one up front; there is
+                no reason to ask for both. Independent of ``region``. Honoured
+                by strategies that recognise glyphs in pixels; a MODE 7 display
+                is always its grid.
             flowed: Join a run that reached the right edge to the next without
                 a line break, rejoining a line that wrapped. By default each
                 grid row is its own line, preserving the shape of the
@@ -389,9 +390,8 @@ class Video:
             The runs, the text they join to, and how much was uncertain.
         """
         searches = {
-            "both": video_pb2.SCREEN_TEXT_SEARCH_BOTH,
+            "anywhere": video_pb2.SCREEN_TEXT_SEARCH_ANYWHERE,
             "aligned": video_pb2.SCREEN_TEXT_SEARCH_ALIGNED,
-            "offset": video_pb2.SCREEN_TEXT_SEARCH_OFFSET,
         }
         if search not in searches:
             raise ValueError(

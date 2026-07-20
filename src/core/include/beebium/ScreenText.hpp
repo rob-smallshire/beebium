@@ -55,9 +55,13 @@ struct PixelRect {
 // recognises glyphs in pixels chooses between walking the grid and searching
 // sub-cell offsets on the strength of it.
 enum class Search {
-    Both,
+    // All the text, wherever it sits. A strategy that reads glyphs from pixels
+    // reads the grid and the off-grid text in disjoint passes and returns them
+    // together; because the passes do not overlap, that is a concatenation, not
+    // a reconciliation, and the result is a strict superset of Aligned.
+    Anywhere,
+    // Only text on the character grid: exact and cheaper.
     Aligned,
-    Offset,
 };
 
 // How the runs are joined into one string.
@@ -164,10 +168,10 @@ BandReading read_band(const Band& band,
 //
 // Reading order is bands top to bottom, and within a band by baseline then x.
 // Bands do not overlap and no strategy may produce overlapping runs, so this is
-// plain concatenation: there is nothing to dedupe. A strategy that runs more
-// than one pass over the same band -- the bitmap strategy will, aligned and
-// off-grid -- reconciles its own passes before returning one BandReading, so
-// that assumption holds here without this function having to defend it.
+// plain concatenation: there is nothing to dedupe. When the bitmap strategy
+// serves Anywhere it runs two passes over the band -- the grid and the off-grid
+// search -- but the library builds those to be disjoint, so it concatenates
+// them into one BandReading. There is nothing to reconcile at either level.
 Reading concatenate_bands_readings(std::vector<BandReading> readings, Layout layout);
 
 // Join runs into one string.

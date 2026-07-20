@@ -43,11 +43,9 @@ screen::Search to_screen_search(ScreenTextSearch search) {
     switch (search) {
         case SCREEN_TEXT_SEARCH_ALIGNED:
             return screen::Search::Aligned;
-        case SCREEN_TEXT_SEARCH_OFFSET:
-            return screen::Search::Offset;
-        case SCREEN_TEXT_SEARCH_BOTH:
+        case SCREEN_TEXT_SEARCH_ANYWHERE:
         default:
-            return screen::Search::Both;
+            return screen::Search::Anywhere;
     }
 }
 
