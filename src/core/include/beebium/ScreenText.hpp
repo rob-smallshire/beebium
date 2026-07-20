@@ -236,13 +236,23 @@ screentext::GlyphSet read_soft_font(
 // The glyph sets a bitmap band is read with: the ROM base font, overlaid with
 // the soft font from RAM when the running MOS is one whose workspace we know.
 //
-// The base font is the built-in Acorn set (MOS 1.20's, which is byte-for-byte
-// MOS 2.00's), correct for every machine Beebium ships and the fallback for any
-// it does not. The soft font is added only once the running MOS is recognised
-// by its ROM font; on an unrecognised OS the base set stands alone, so a
-// redefinition there is declined rather than mis-read from workspace addresses
-// that may not apply. Reading the ROM font itself live from an unrecognised
-// machine is the refinement that would slot in at that same recognition point.
+// The base font is always the built-in Acorn set (MOS 1.20's, which is
+// byte-for-byte MOS 2.00's). The soft font is added only once the running MOS
+// is recognised by its ROM font; on an unrecognised OS the base set stands
+// alone, so a redefinition there is declined rather than mis-read from
+// workspace addresses that may not apply.
+//
+// DEFERRED -- the ROM base font is never read from the machine. On the OS ROMs
+// Beebium ships the built-in set IS the machine's ROM font, so this is exact.
+// But on a machine whose ROM font differs -- a Master (MOS 3.x), MOS 5.x, or a
+// foreign OS -- text drawn in that font is matched against MOS 1.20's glyphs,
+// so glyphs that differ do not match and read as unread (honest, but unread);
+// today there is no live ROM-font read at all, only the built-in. Closing this
+// means, at the recognition point in the implementation, reading the ROM font
+// out of an unrecognised machine and using the built-in only when that too
+// fails. It belongs with the wider multi-MOS work (the Master explodes the font
+// into a different location and lays its VDU workspace out differently), so it
+// is deferred until those machines are supported.
 std::vector<screentext::GlyphSet> assemble_glyph_sets(
     const std::function<uint8_t(uint16_t)>& peek_byte);
 

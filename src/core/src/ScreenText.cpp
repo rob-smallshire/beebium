@@ -206,41 +206,45 @@ char32_t soft_codepoint(uint8_t code) {
     return code == 0x60 ? char32_t{0x00A3} : char32_t{code};
 }
 
-// Whether the running MOS is one whose font workspace we know how to read.
+// Whether the running MOS is one whose ROM font is the base set, and so whose
+// font workspace we know how to read.
 //
-// The soft-font addresses above are pinned to MOS 1.20/2.00; on any other OS
-// they could mean something else entirely. Rather than trust the version, we
-// recognise the machine by its ROM font: if the bytes at $C000 match the Acorn
-// set the base font was generated from, this is that MOS family and its
-// workspace layout holds. If not -- a Master, a foreign or future MOS -- we
-// decline to read the soft font rather than read the wrong addresses.
+// There is no version byte to read for this. OSBYTE 0 returns a single coarse
+// "OS type" -- 1 for the whole Model B/B+ line, indistinguishable from a Master
+// -- and it is a call, not a byte; the exact "OS 1.20" text exists only as an
+// error string whose ROM address moves between versions. So rather than a
+// proxy, we verify the thing we actually depend on: the ROM font itself. If
+// every glyph at $C000 matches the built-in Acorn set byte for byte, the base
+// font is correct for this machine, and -- since the only ROMs carrying that
+// exact font are MOS 1.20 and 2.00 -- its font workspace is the one read above.
 //
-// This is also the seam where reading the ROM font live from an unrecognised
-// machine would slot in; until then, recognition failing means the base font
-// alone, which is never worse than assuming a layout that does not apply.
+// The residual assumption is narrow: a ROM with the 1.20 font but a different
+// page-3 layout would be misread, but such a ROM is the 1.20/2.00 MOS.
+//
+// DEFERRED -- other MOS families. A Master (MOS 3.x), MOS 5.x, or a second
+// processor explodes the font into a different place by default and lays its
+// VDU workspace out differently, and its ROM font differs, so this check fails
+// and the machine gets the base font alone. Supporting them means recognising
+// the MOS and carrying a per-family (font, workspace-layout) map, plus reading
+// the ROM font live for the base set. Until then, failing here is safe: the
+// built-in font stands and redefinitions are declined, never misread.
 bool known_bbc_mos(const std::function<uint8_t(uint16_t)>& peek_byte) {
     const screentext::GlyphSet& acorn =
         screentext::builtin_glyph_set("acorn-mos-1.20");
 
-    // A handful of distinctive characters spread across the font, enough that
-    // an unrelated ROM will not match by accident: '!', 'A', pound, 'z'.
-    for (const uint8_t code : {uint8_t{0x21}, uint8_t{0x41}, uint8_t{0x60},
-                               uint8_t{0x7A}}) {
-        const char32_t codepoint = soft_codepoint(code);
-        const screentext::Glyph* glyph = nullptr;
-        for (const screentext::Glyph& candidate : acorn.glyphs) {
-            if (candidate.codepoint == codepoint) {
-                glyph = &candidate;
-                break;
-            }
-        }
-        if (glyph == nullptr) {
-            return false;
-        }
+    // The whole font, not a sample: every built-in glyph must match the ROM at
+    // its address, so "recognised" means the base set is verified in full and
+    // there is no room for an unrelated ROM to pass by coincidence.
+    for (const screentext::Glyph& glyph : acorn.glyphs) {
+        // The built-in codepoint maps back to a BBC code: identity everywhere
+        // bar the pound sign, which the Acorn font places at code &60.
+        const uint8_t code = glyph.codepoint == 0x00A3
+            ? uint8_t{0x60}
+            : static_cast<uint8_t>(glyph.codepoint);
 
         const uint16_t address = static_cast<uint16_t>(
             ROM_FONT_BASE + (code - ROM_FONT_FIRST_CHARACTER) * 8);
-        const std::vector<uint8_t>& expected = glyph->bitmap.bytes();
+        const std::vector<uint8_t>& expected = glyph.bitmap.bytes();
         if (expected.size() < 8) {
             return false;
         }
