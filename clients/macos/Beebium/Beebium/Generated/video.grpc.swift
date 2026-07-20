@@ -33,6 +33,16 @@ internal protocol Beebium_VideoServiceClientProtocol: GRPCClient {
     _ request: Beebium_GetTeletextScreenRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>
+
+  func getScreenText(
+    _ request: Beebium_GetScreenTextRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetScreenTextRequest, Beebium_ScreenText>
+
+  func getScreenGeometry(
+    _ request: Beebium_GetScreenGeometryRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>
 }
 
 extension Beebium_VideoServiceClientProtocol {
@@ -101,6 +111,50 @@ extension Beebium_VideoServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
+    )
+  }
+
+  /// Read text from the display, whatever mode is producing it.
+  ///
+  /// The caller selects in pixels and gets back text plus where it was found.
+  /// A pixel rectangle is something a client can produce from a drag without
+  /// knowing anything about modes, grids or cell sizes, and the strategy that
+  /// reads a given band of scanlines is the server's business.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetScreenText.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getScreenText(
+    _ request: Beebium_GetScreenTextRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetScreenTextRequest, Beebium_ScreenText> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenText.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenTextInterceptors() ?? []
+    )
+  }
+
+  /// Report the character grid the display currently implies, per band.
+  ///
+  /// Separate from GetScreenText because snapping a drag has to happen while
+  /// the drag is in progress, when the client has nothing to send yet.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetScreenGeometry.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getScreenGeometry(
+    _ request: Beebium_GetScreenGeometryRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenGeometry.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? []
     )
   }
 }
@@ -182,6 +236,16 @@ internal protocol Beebium_VideoServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetTeletextScreenRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>
+
+  func makeGetScreenTextCall(
+    _ request: Beebium_GetScreenTextRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetScreenTextRequest, Beebium_ScreenText>
+
+  func makeGetScreenGeometryCall(
+    _ request: Beebium_GetScreenGeometryRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -229,6 +293,30 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
     )
   }
+
+  internal func makeGetScreenTextCall(
+    _ request: Beebium_GetScreenTextRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetScreenTextRequest, Beebium_ScreenText> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenText.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenTextInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetScreenGeometryCall(
+    _ request: Beebium_GetScreenGeometryRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenGeometry.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -268,6 +356,30 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetTeletextScreenInterceptors() ?? []
     )
   }
+
+  internal func getScreenText(
+    _ request: Beebium_GetScreenTextRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ScreenText {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenText.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenTextInterceptors() ?? []
+    )
+  }
+
+  internal func getScreenGeometry(
+    _ request: Beebium_GetScreenGeometryRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ScreenGeometry {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.getScreenGeometry.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -297,6 +409,12 @@ internal protocol Beebium_VideoServiceClientInterceptorFactoryProtocol: Sendable
 
   /// - Returns: Interceptors to use when invoking 'getTeletextScreen'.
   func makeGetTeletextScreenInterceptors() -> [ClientInterceptor<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>]
+
+  /// - Returns: Interceptors to use when invoking 'getScreenText'.
+  func makeGetScreenTextInterceptors() -> [ClientInterceptor<Beebium_GetScreenTextRequest, Beebium_ScreenText>]
+
+  /// - Returns: Interceptors to use when invoking 'getScreenGeometry'.
+  func makeGetScreenGeometryInterceptors() -> [ClientInterceptor<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>]
 }
 
 internal enum Beebium_VideoServiceClientMetadata {
@@ -307,6 +425,8 @@ internal enum Beebium_VideoServiceClientMetadata {
       Beebium_VideoServiceClientMetadata.Methods.subscribeFrames,
       Beebium_VideoServiceClientMetadata.Methods.getConfig,
       Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen,
+      Beebium_VideoServiceClientMetadata.Methods.getScreenText,
+      Beebium_VideoServiceClientMetadata.Methods.getScreenGeometry,
     ]
   )
 
@@ -326,6 +446,18 @@ internal enum Beebium_VideoServiceClientMetadata {
     internal static let getTeletextScreen = GRPCMethodDescriptor(
       name: "GetTeletextScreen",
       path: "/beebium.VideoService/GetTeletextScreen",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getScreenText = GRPCMethodDescriptor(
+      name: "GetScreenText",
+      path: "/beebium.VideoService/GetScreenText",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getScreenGeometry = GRPCMethodDescriptor(
+      name: "GetScreenGeometry",
+      path: "/beebium.VideoService/GetScreenGeometry",
       type: GRPCCallType.unary
     )
   }
@@ -352,6 +484,20 @@ internal protocol Beebium_VideoServiceProvider: CallHandlerProvider {
   /// with the pixels it replaces, and that is a separate transport from the
   /// same capture; see docs/discussion/teletext-cell-capture.md.
   func getTeletextScreen(request: Beebium_GetTeletextScreenRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TeletextScreen>
+
+  /// Read text from the display, whatever mode is producing it.
+  ///
+  /// The caller selects in pixels and gets back text plus where it was found.
+  /// A pixel rectangle is something a client can produce from a drag without
+  /// knowing anything about modes, grids or cell sizes, and the strategy that
+  /// reads a given band of scanlines is the server's business.
+  func getScreenText(request: Beebium_GetScreenTextRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ScreenText>
+
+  /// Report the character grid the display currently implies, per band.
+  ///
+  /// Separate from GetScreenText because snapping a drag has to happen while
+  /// the drag is in progress, when the client has nothing to send yet.
+  func getScreenGeometry(request: Beebium_GetScreenGeometryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ScreenGeometry>
 }
 
 extension Beebium_VideoServiceProvider {
@@ -393,6 +539,24 @@ extension Beebium_VideoServiceProvider {
         userFunction: self.getTeletextScreen(request:context:)
       )
 
+    case "GetScreenText":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetScreenTextRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenText>(),
+        interceptors: self.interceptors?.makeGetScreenTextInterceptors() ?? [],
+        userFunction: self.getScreenText(request:context:)
+      )
+
+    case "GetScreenGeometry":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetScreenGeometryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenGeometry>(),
+        interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? [],
+        userFunction: self.getScreenGeometry(request:context:)
+      )
+
     default:
       return nil
     }
@@ -432,6 +596,26 @@ internal protocol Beebium_VideoServiceAsyncProvider: CallHandlerProvider, Sendab
     request: Beebium_GetTeletextScreenRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_TeletextScreen
+
+  /// Read text from the display, whatever mode is producing it.
+  ///
+  /// The caller selects in pixels and gets back text plus where it was found.
+  /// A pixel rectangle is something a client can produce from a drag without
+  /// knowing anything about modes, grids or cell sizes, and the strategy that
+  /// reads a given band of scanlines is the server's business.
+  func getScreenText(
+    request: Beebium_GetScreenTextRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ScreenText
+
+  /// Report the character grid the display currently implies, per band.
+  ///
+  /// Separate from GetScreenText because snapping a drag has to happen while
+  /// the drag is in progress, when the client has nothing to send yet.
+  func getScreenGeometry(
+    request: Beebium_GetScreenGeometryRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ScreenGeometry
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -480,6 +664,24 @@ extension Beebium_VideoServiceAsyncProvider {
         wrapping: { try await self.getTeletextScreen(request: $0, context: $1) }
       )
 
+    case "GetScreenText":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetScreenTextRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenText>(),
+        interceptors: self.interceptors?.makeGetScreenTextInterceptors() ?? [],
+        wrapping: { try await self.getScreenText(request: $0, context: $1) }
+      )
+
+    case "GetScreenGeometry":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetScreenGeometryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenGeometry>(),
+        interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? [],
+        wrapping: { try await self.getScreenGeometry(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -499,6 +701,14 @@ internal protocol Beebium_VideoServiceServerInterceptorFactoryProtocol: Sendable
   /// - Returns: Interceptors to use when handling 'getTeletextScreen'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetTeletextScreenInterceptors() -> [ServerInterceptor<Beebium_GetTeletextScreenRequest, Beebium_TeletextScreen>]
+
+  /// - Returns: Interceptors to use when handling 'getScreenText'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetScreenTextInterceptors() -> [ServerInterceptor<Beebium_GetScreenTextRequest, Beebium_ScreenText>]
+
+  /// - Returns: Interceptors to use when handling 'getScreenGeometry'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetScreenGeometryInterceptors() -> [ServerInterceptor<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>]
 }
 
 internal enum Beebium_VideoServiceServerMetadata {
@@ -509,6 +719,8 @@ internal enum Beebium_VideoServiceServerMetadata {
       Beebium_VideoServiceServerMetadata.Methods.subscribeFrames,
       Beebium_VideoServiceServerMetadata.Methods.getConfig,
       Beebium_VideoServiceServerMetadata.Methods.getTeletextScreen,
+      Beebium_VideoServiceServerMetadata.Methods.getScreenText,
+      Beebium_VideoServiceServerMetadata.Methods.getScreenGeometry,
     ]
   )
 
@@ -528,6 +740,18 @@ internal enum Beebium_VideoServiceServerMetadata {
     internal static let getTeletextScreen = GRPCMethodDescriptor(
       name: "GetTeletextScreen",
       path: "/beebium.VideoService/GetTeletextScreen",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getScreenText = GRPCMethodDescriptor(
+      name: "GetScreenText",
+      path: "/beebium.VideoService/GetScreenText",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getScreenGeometry = GRPCMethodDescriptor(
+      name: "GetScreenGeometry",
+      path: "/beebium.VideoService/GetScreenGeometry",
       type: GRPCCallType.unary
     )
   }

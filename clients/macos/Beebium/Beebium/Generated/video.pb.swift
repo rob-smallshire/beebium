@@ -147,6 +147,95 @@ enum Beebium_TeletextTextLayout: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Which of the two searches a strategy should run.
+///
+/// Honoured by strategies that recognise glyphs in pixels; the teletext
+/// strategy reads the character grid and is unaffected by it.
+enum Beebium_ScreenTextSearch: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// Read all the text, wherever it sits: on the character grid and placed
+  /// freely with VDU 5. The default -- a caller that does not restrict gets
+  /// everything. This is not a merge the caller performs: the server reads the
+  /// grid and the off-grid text in disjoint passes and returns them together,
+  /// so ANYWHERE is a strict superset of ALIGNED, not a second thing to
+  /// reconcile against it.
+  case anywhere // = 0
+
+  /// Read only text aligned to the character grid: exact, cheaper, and what a
+  /// drag snapped to the grid wants. A caller chooses this or ANYWHERE up
+  /// front; there is never a reason to ask for both and combine them.
+  case aligned // = 1
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .anywhere
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .anywhere
+    case 1: self = .aligned
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .anywhere: return 0
+    case .aligned: return 1
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_ScreenTextSearch] = [
+    .anywhere,
+    .aligned,
+  ]
+
+}
+
+/// How the runs are joined into `text`.
+enum Beebium_ScreenTextLayout: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// Each grid row is its own line, preserving the shape of the selection.
+  case rows // = 0
+
+  /// A row filled to the region's right edge wrapped, so it continues into
+  /// the next without a break.
+  case flowed // = 1
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .rows
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .rows
+    case 1: self = .flowed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .rows: return 0
+    case .flowed: return 1
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_ScreenTextLayout] = [
+    .rows,
+    .flowed,
+  ]
+
+}
+
 /// Future: format preferences, scaling options
 struct Beebium_SubscribeFramesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -377,6 +466,187 @@ struct Beebium_TeletextScreen: Sendable {
   init() {}
 }
 
+/// A rectangle in frame pixel coordinates, the origin being the top-left of the
+/// active area rather than of the bordered display.
+struct Beebium_PixelRegion: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var x: UInt32 = 0
+
+  var y: UInt32 = 0
+
+  var width: UInt32 = 0
+
+  var height: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_GetScreenTextRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The part of the display to read. Whole display when unset. Independent of
+  /// `search`: what part of the screen to read and how hard to look for text
+  /// in it are separate choices.
+  var region: Beebium_PixelRegion {
+    get {return _region ?? Beebium_PixelRegion()}
+    set {_region = newValue}
+  }
+  /// Returns true if `region` has been explicitly set.
+  var hasRegion: Bool {return self._region != nil}
+  /// Clears the value of `region`. Subsequent reads from it will return its default value.
+  mutating func clearRegion() {self._region = nil}
+
+  var search: Beebium_ScreenTextSearch = .anywhere
+
+  var layout: Beebium_ScreenTextLayout = .rows
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _region: Beebium_PixelRegion? = nil
+}
+
+/// A contiguous piece of text and where it was found, so a client can highlight
+/// exactly what it captured.
+struct Beebium_ScreenTextRun: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var text: String = String()
+
+  var bounds: Beebium_PixelRegion {
+    get {return _bounds ?? Beebium_PixelRegion()}
+    set {_bounds = newValue}
+  }
+  /// Returns true if `bounds` has been explicitly set.
+  var hasBounds: Bool {return self._bounds != nil}
+  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+  mutating func clearBounds() {self._bounds = nil}
+
+  /// The character cell geometry this run was read with, so a selection can
+  /// snap to it. Zero when the run is not cell-aligned, as text written at
+  /// the graphics cursor is.
+  var cellWidth: UInt32 = 0
+
+  var cellHeight: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _bounds: Beebium_PixelRegion? = nil
+}
+
+struct Beebium_ScreenText: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// True when at least one band in the requested region had a strategy that
+  /// could read it.
+  ///
+  /// Distinct from readable-but-empty: a graphics screen that was read and
+  /// found to contain no text is supported with no runs, whereas a display
+  /// this build has no strategy for is unsupported. Which displays fall in
+  /// the second group narrows as strategies are added.
+  var supported: Bool = false
+
+  /// In reading order: bands top to bottom, and within a band by baseline
+  /// then x.
+  var runs: [Beebium_ScreenTextRun] = []
+
+  /// The runs joined into text by `layout`, for a client that wants a string
+  /// and not structure. Lines are joined with LF; converting to a
+  /// platform-native ending is the client's business, since the server cannot
+  /// know the client's platform.
+  var text: String = String()
+
+  /// Cells a strategy tried to read and could not identify at all. Zero for
+  /// the teletext strategy, whose cells are exact character codes.
+  var unreadableCells: UInt32 = 0
+
+  /// Cells a strategy read but could not pin to a single character, because
+  /// the font in use draws two characters identically. Also zero for
+  /// teletext.
+  var ambiguousCells: UInt32 = 0
+
+  var frameNumber: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_GetScreenGeometryRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// The character grid for one band of scanlines, in frame pixel coordinates.
+///
+/// Reported for every band whether or not text can be read from it: where the
+/// cells are and what is in them are separate questions, and snapping needs
+/// only the first.
+struct Beebium_ScreenBandGeometry: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// First scanline, inclusive
+  var top: UInt32 = 0
+
+  /// One past the last
+  var bottom: UInt32 = 0
+
+  var cellWidth: UInt32 = 0
+
+  var cellHeight: UInt32 = 0
+
+  /// Cell-to-cell step. Equal to the cell size except where a mode leaves
+  /// blank scanlines between rows, as MODE 3 and MODE 6 do: an eight-scanline
+  /// glyph on a ten-scanline pitch.
+  var columnPitch: UInt32 = 0
+
+  var rowPitch: UInt32 = 0
+
+  /// Where the grid starts within the band
+  var originX: UInt32 = 0
+
+  var originY: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ScreenGeometry: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var bands: [Beebium_ScreenBandGeometry] = []
+
+  var frameNumber: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "beebium"
@@ -391,6 +661,14 @@ extension Beebium_TeletextCharacterSet: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_TeletextTextLayout: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TELETEXT_LAYOUT_ROWS\0\u{1}TELETEXT_LAYOUT_FLOWED\0")
+}
+
+extension Beebium_ScreenTextSearch: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SCREEN_TEXT_SEARCH_ANYWHERE\0\u{1}SCREEN_TEXT_SEARCH_ALIGNED\0")
+}
+
+extension Beebium_ScreenTextLayout: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SCREEN_TEXT_LAYOUT_ROWS\0\u{1}SCREEN_TEXT_LAYOUT_FLOWED\0")
 }
 
 extension Beebium_SubscribeFramesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -809,6 +1087,318 @@ extension Beebium_TeletextScreen: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if lhs.columns != rhs.columns {return false}
     if lhs.cells != rhs.cells {return false}
     if lhs.text != rhs.text {return false}
+    if lhs.frameNumber != rhs.frameNumber {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_PixelRegion: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PixelRegion"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}x\0\u{1}y\0\u{1}width\0\u{1}height\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.x) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.y) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.width) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.height) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.x != 0 {
+      try visitor.visitSingularUInt32Field(value: self.x, fieldNumber: 1)
+    }
+    if self.y != 0 {
+      try visitor.visitSingularUInt32Field(value: self.y, fieldNumber: 2)
+    }
+    if self.width != 0 {
+      try visitor.visitSingularUInt32Field(value: self.width, fieldNumber: 3)
+    }
+    if self.height != 0 {
+      try visitor.visitSingularUInt32Field(value: self.height, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_PixelRegion, rhs: Beebium_PixelRegion) -> Bool {
+    if lhs.x != rhs.x {return false}
+    if lhs.y != rhs.y {return false}
+    if lhs.width != rhs.width {return false}
+    if lhs.height != rhs.height {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetScreenTextRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{1}search\0\u{1}layout\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._region) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.search) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.layout) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._region {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.search != .anywhere {
+      try visitor.visitSingularEnumField(value: self.search, fieldNumber: 2)
+    }
+    if self.layout != .rows {
+      try visitor.visitSingularEnumField(value: self.layout, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetScreenTextRequest, rhs: Beebium_GetScreenTextRequest) -> Bool {
+    if lhs._region != rhs._region {return false}
+    if lhs.search != rhs.search {return false}
+    if lhs.layout != rhs.layout {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ScreenTextRun: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ScreenTextRun"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{1}bounds\0\u{3}cell_width\0\u{3}cell_height\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._bounds) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.cellWidth) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.cellHeight) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 1)
+    }
+    try { if let v = self._bounds {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if self.cellWidth != 0 {
+      try visitor.visitSingularUInt32Field(value: self.cellWidth, fieldNumber: 3)
+    }
+    if self.cellHeight != 0 {
+      try visitor.visitSingularUInt32Field(value: self.cellHeight, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ScreenTextRun, rhs: Beebium_ScreenTextRun) -> Bool {
+    if lhs.text != rhs.text {return false}
+    if lhs._bounds != rhs._bounds {return false}
+    if lhs.cellWidth != rhs.cellWidth {return false}
+    if lhs.cellHeight != rhs.cellHeight {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ScreenText: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ScreenText"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}supported\0\u{1}runs\0\u{1}text\0\u{3}unreadable_cells\0\u{3}ambiguous_cells\0\u{3}frame_number\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.supported) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.runs) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.unreadableCells) }()
+      case 5: try { try decoder.decodeSingularUInt32Field(value: &self.ambiguousCells) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.frameNumber) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.supported != false {
+      try visitor.visitSingularBoolField(value: self.supported, fieldNumber: 1)
+    }
+    if !self.runs.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.runs, fieldNumber: 2)
+    }
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 3)
+    }
+    if self.unreadableCells != 0 {
+      try visitor.visitSingularUInt32Field(value: self.unreadableCells, fieldNumber: 4)
+    }
+    if self.ambiguousCells != 0 {
+      try visitor.visitSingularUInt32Field(value: self.ambiguousCells, fieldNumber: 5)
+    }
+    if self.frameNumber != 0 {
+      try visitor.visitSingularUInt64Field(value: self.frameNumber, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ScreenText, rhs: Beebium_ScreenText) -> Bool {
+    if lhs.supported != rhs.supported {return false}
+    if lhs.runs != rhs.runs {return false}
+    if lhs.text != rhs.text {return false}
+    if lhs.unreadableCells != rhs.unreadableCells {return false}
+    if lhs.ambiguousCells != rhs.ambiguousCells {return false}
+    if lhs.frameNumber != rhs.frameNumber {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetScreenGeometryRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetScreenGeometryRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetScreenGeometryRequest, rhs: Beebium_GetScreenGeometryRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ScreenBandGeometry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ScreenBandGeometry"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}top\0\u{1}bottom\0\u{3}cell_width\0\u{3}cell_height\0\u{3}column_pitch\0\u{3}row_pitch\0\u{3}origin_x\0\u{3}origin_y\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.top) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.bottom) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.cellWidth) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.cellHeight) }()
+      case 5: try { try decoder.decodeSingularUInt32Field(value: &self.columnPitch) }()
+      case 6: try { try decoder.decodeSingularUInt32Field(value: &self.rowPitch) }()
+      case 7: try { try decoder.decodeSingularUInt32Field(value: &self.originX) }()
+      case 8: try { try decoder.decodeSingularUInt32Field(value: &self.originY) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.top != 0 {
+      try visitor.visitSingularUInt32Field(value: self.top, fieldNumber: 1)
+    }
+    if self.bottom != 0 {
+      try visitor.visitSingularUInt32Field(value: self.bottom, fieldNumber: 2)
+    }
+    if self.cellWidth != 0 {
+      try visitor.visitSingularUInt32Field(value: self.cellWidth, fieldNumber: 3)
+    }
+    if self.cellHeight != 0 {
+      try visitor.visitSingularUInt32Field(value: self.cellHeight, fieldNumber: 4)
+    }
+    if self.columnPitch != 0 {
+      try visitor.visitSingularUInt32Field(value: self.columnPitch, fieldNumber: 5)
+    }
+    if self.rowPitch != 0 {
+      try visitor.visitSingularUInt32Field(value: self.rowPitch, fieldNumber: 6)
+    }
+    if self.originX != 0 {
+      try visitor.visitSingularUInt32Field(value: self.originX, fieldNumber: 7)
+    }
+    if self.originY != 0 {
+      try visitor.visitSingularUInt32Field(value: self.originY, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ScreenBandGeometry, rhs: Beebium_ScreenBandGeometry) -> Bool {
+    if lhs.top != rhs.top {return false}
+    if lhs.bottom != rhs.bottom {return false}
+    if lhs.cellWidth != rhs.cellWidth {return false}
+    if lhs.cellHeight != rhs.cellHeight {return false}
+    if lhs.columnPitch != rhs.columnPitch {return false}
+    if lhs.rowPitch != rhs.rowPitch {return false}
+    if lhs.originX != rhs.originX {return false}
+    if lhs.originY != rhs.originY {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ScreenGeometry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ScreenGeometry"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}bands\0\u{3}frame_number\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.bands) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.frameNumber) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.bands.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.bands, fieldNumber: 1)
+    }
+    if self.frameNumber != 0 {
+      try visitor.visitSingularUInt64Field(value: self.frameNumber, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ScreenGeometry, rhs: Beebium_ScreenGeometry) -> Bool {
+    if lhs.bands != rhs.bands {return false}
     if lhs.frameNumber != rhs.frameNumber {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
