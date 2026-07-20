@@ -75,6 +75,8 @@ struct ContentView: View {
     @StateObject private var videoSettings = VideoSettings.loadFromUserDefaults()
     @StateObject private var speedModel = SpeedControlModel()
     @StateObject private var pasteCoordinator = PasteCoordinator()
+    @StateObject private var selectionCoordinator = SelectionCoordinator()
+    private let selectionPasteboard = SystemSelectionPasteboard()
     let initialTarget: ConnectionTarget
     let initialNeedsRun: Bool
     let initialProvenanceUUID: String?
@@ -139,7 +141,8 @@ struct ContentView: View {
             indicatorClient: indicatorClient,
             videoSettings: videoSettings,
             bbcKeyCache: keyboardMappingManager.bbcKeyCache,
-            pasteCoordinator: pasteCoordinator
+            pasteCoordinator: pasteCoordinator,
+            selectionCoordinator: selectionCoordinator
         )
     }
 
@@ -237,6 +240,7 @@ struct ContentView: View {
             Text(message)
         }
         .focusedValue(\.pasteCoordinator, pasteCoordinator)
+        .focusedValue(\.selectionCoordinator, selectionCoordinator)
         .onAppear {
             // The coordinator holds these weakly; ContentView owns them for
             // the window's lifetime.
@@ -244,6 +248,13 @@ struct ContentView: View {
             pasteCoordinator.speedControl = speedModel
             pasteCoordinator.audioMute = audioMixerState
             pasteCoordinator.realTimeTransportActive = { econetClient.requiresRealTime }
+
+            // The selection coordinator holds these weakly too. Its
+            // geometrySource is the Metal renderer, wired in EmulatorView where
+            // the renderer is created.
+            selectionCoordinator.textService = videoClient
+            selectionCoordinator.freezer = videoClient
+            selectionCoordinator.pasteboard = selectionPasteboard
         }
         .focusedValue(\.sidebarMode, $sidebarMode)
         .focusedValue(\.showSidebar, $showSidebar)

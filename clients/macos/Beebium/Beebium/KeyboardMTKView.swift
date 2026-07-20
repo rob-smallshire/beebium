@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import AppKit
+import Combine
 import MetalKit
 
 /// Custom MTKView subclass that handles keyboard input.
@@ -35,6 +36,17 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
     /// Reads the MODE 7 screen for copying
     weak var videoClient: VideoClient?
 
+    /// Owns text selection and copy over the frozen display.
+    weak var selectionCoordinator: SelectionCoordinator? {
+        didSet { setUpSelectionOverlay() }
+    }
+
+    /// Draws the marquee and run highlights above the Metal frame.
+    private let selectionOverlayView = SelectionOverlayView()
+
+    /// Redraws the overlay whenever the selection or its highlights change.
+    private var selectionObserver: AnyCancellable?
+
     /// Track previous modifier flags for change detection
     private var lastModifiers: NSEvent.ModifierFlags = []
 
@@ -46,6 +58,96 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
     override func becomeFirstResponder() -> Bool {
         return true
+    }
+
+    // MARK: - Selection (Cmd-drag over the display)
+
+    /// A Cmd-drag selects text; the qualifier held picks the interpretation. A
+    /// plain drag is reserved for the machine (the future BBC mouse), and a
+    /// plain click gives the machine back by dismissing any live selection.
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command), let coordinator = selectionCoordinator {
+            coordinator.begin(
+                atNormalizedPoint: normalizedPoint(for: event),
+                interpretation: Self.selectionInterpretation(for: event.modifierFlags))
+            return
+        }
+        if let coordinator = selectionCoordinator, coordinator.isSelecting {
+            coordinator.cancel()
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if let coordinator = selectionCoordinator, coordinator.isSelecting {
+            coordinator.update(toNormalizedPoint: normalizedPoint(for: event))
+            return
+        }
+        super.mouseDragged(with: event)
+    }
+
+    /// The selection stays live after the mouse comes up, so the user can change
+    /// the interpretation and copy. Escape or a plain click dismisses it.
+    override func mouseUp(with event: NSEvent) {
+        if let coordinator = selectionCoordinator, coordinator.isSelecting { return }
+        super.mouseUp(with: event)
+    }
+
+    /// The interpretation a held modifier selects: none is rows, Option is a
+    /// rectangle, Shift is anywhere. Shift wins if both are held.
+    static func selectionInterpretation(for flags: NSEvent.ModifierFlags)
+        -> ScreenSelectionInterpretation {
+        if flags.contains(.shift) { return .anywhere }
+        if flags.contains(.option) { return .rectangle }
+        return .rows
+    }
+
+    /// A mouse event's location as a normalised, top-left-origin point over the
+    /// view, which is what the coordinate mapper works in. The Metal view is not
+    /// flipped (y up), so the vertical axis is inverted here.
+    private func normalizedPoint(for event: NSEvent) -> CGPoint {
+        let local = convert(event.locationInWindow, from: nil)
+        let width = max(bounds.width, 1)
+        let height = max(bounds.height, 1)
+        return CGPoint(x: local.x / width, y: 1 - local.y / height)
+    }
+
+    // MARK: - Selection overlay
+
+    private func setUpSelectionOverlay() {
+        if selectionOverlayView.superview == nil {
+            selectionOverlayView.frame = bounds
+            selectionOverlayView.autoresizingMask = [.width, .height]
+            addSubview(selectionOverlayView)
+        }
+        selectionObserver = selectionCoordinator?.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.refreshSelectionOverlay() }
+        refreshSelectionOverlay()
+    }
+
+    private func refreshSelectionOverlay() {
+        guard let coordinator = selectionCoordinator, coordinator.isSelecting,
+              let geometry = coordinator.frozenGeometry else {
+            selectionOverlayView.isHidden = true
+            selectionOverlayView.highlightRects = []
+            selectionOverlayView.marqueeRect = nil
+            return
+        }
+        selectionOverlayView.isHidden = false
+        let size = bounds.size
+        selectionOverlayView.highlightRects = coordinator.highlightRects.map {
+            ScreenCoordinateMapper.viewRect(frameRect: $0, geometry: geometry, viewSize: size)
+        }
+        selectionOverlayView.marqueeRect = coordinator.marqueeRect.map {
+            ScreenCoordinateMapper.viewRect(frameRect: $0, geometry: geometry, viewSize: size)
+        }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        refreshSelectionOverlay()
     }
 
     // MARK: - Keyboard Events
@@ -66,6 +168,16 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
         // Ignore macOS key repeat - BBC MOS handles its own auto-repeat
         if event.isARepeat {
+            return
+        }
+
+        // Escape dismisses a live selection and is swallowed, the same rule the
+        // paste feature follows below: while a host interaction owns the screen,
+        // Escape ends that, and only reaches the Beeb when there is nothing
+        // host-side to cancel.
+        if event.keyCode == MacKeyCode.escape, let coordinator = selectionCoordinator,
+           coordinator.isSelecting {
+            coordinator.cancel()
             return
         }
 
@@ -109,6 +221,16 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
               + " current=[\(formatModifiers(current))]"
               + " prev=[\(formatModifiers(lastModifiers))]"
               + " diff=[\(formatModifiers(diff))]")
+
+        // While a host drag owns the screen, further modifiers qualify the
+        // selection rather than reaching the machine. Update the interpretation
+        // and swallow the change so no spurious modifier press or release is
+        // forwarded to the emulated keyboard.
+        if let coordinator = selectionCoordinator, coordinator.ownsQualifierModifiers {
+            coordinator.setInterpretation(Self.selectionInterpretation(for: current))
+            lastModifiers = current
+            return
+        }
 
         // Caps Lock uses special handling (toggle sync)
         if diff.contains(.capsLock) {
@@ -239,41 +361,34 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         }
     }
 
-    /// Copy the MODE 7 screen to the clipboard as text.
+    /// Copy the screen's text to the clipboard: the selection in aligned-rows
+    /// reading when one is live, or the whole screen aligned when there is not.
     ///
-    /// Whole screen for now; a dragged selection is the natural next step, and
-    /// the server call already takes a region for it.
-    ///
-    /// Only MODE 7 has characters to copy. In a bitmap mode the screen is
-    /// pixels, and recovering text from those means matching glyphs against
-    /// the MOS font -- a separate problem this does not attempt.
+    /// Whatever mode the machine is in, the server reads the text and returns
+    /// it; the client never learns the mode. The aligned-rectangle and anywhere
+    /// variants are their own Edit-menu commands (Option-Cmd-C, Shift-Cmd-C).
     @objc func copy(_ sender: Any?) {
-        guard let videoClient = videoClient else {
+        guard let coordinator = selectionCoordinator else {
             NSSound.beep()
             return
         }
-
         Task { @MainActor in
-            guard let text = await videoClient.teletextScreenText(), !text.isEmpty else {
-                // Not MODE 7, or nothing on screen. Say so rather than
-                // silently putting nothing on the clipboard, which would look
-                // like the command had worked.
-                presentCopyUnavailable()
-                return
+            if await coordinator.copy(.rows) == nil {
+                // Read, but nothing on screen was text -- a graphics-only
+                // display. Say so rather than silently putting nothing on the
+                // clipboard, which would look like the command had worked.
+                presentNothingToCopy()
             }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
         }
     }
 
     @MainActor
-    private func presentCopyUnavailable() {
+    private func presentNothingToCopy() {
         guard let window = window else { return }
         let alert = NSAlert()
         alert.messageText = "Nothing to copy"
         alert.informativeText =
-            "The screen can only be copied as text in MODE 7, where the display "
-            + "is made of characters. In the other screen modes it is pixels."
+            "No text was found on the screen to copy."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.beginSheetModal(for: window, completionHandler: nil)
@@ -286,7 +401,7 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
     /// would do nothing with no explanation.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(copy(_:)) {
-            return videoClient != nil
+            return selectionCoordinator != nil
         }
         if menuItem.action == #selector(paste(_:)) {
             let hasText = NSPasteboard.general.canReadObject(

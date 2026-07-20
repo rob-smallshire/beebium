@@ -159,6 +159,62 @@ final class MetalRenderer: NSObject {
     }
 }
 
+// MARK: - Selection geometry
+
+extension MetalRenderer {
+    /// Snapshot the geometry needed to map view points to frame pixels and
+    /// back. Sourced from the active style's own `makeUniforms`, so the mapping
+    /// tracks whatever the style produced (Standard's edge-margin inset, Debug's
+    /// coloured borders) without this method knowing which style is active.
+    ///
+    /// Returns nil before the first frame has been drawn at a real drawable
+    /// size, when there is nothing to map into yet.
+    func captureRenderGeometry() -> ScreenRenderGeometry? {
+        guard textureWidth > 0, textureHeight > 0,
+              drawableSize.width > 0, drawableSize.height > 0 else { return nil }
+
+        let frame = FrameContext(
+            textureWidth: textureWidth,
+            textureHeight: textureHeight,
+            displayWidth: displayWidth,
+            displayHeight: displayHeight,
+            leftBorder: leftBorder,
+            rightBorder: rightBorder,
+            topBorder: topBorder,
+            bottomBorder: bottomBorder,
+            interlaced: isInterlaced,
+            regions: displayRegions
+        )
+        let drawable = DrawableContext(drawableSize: drawableSize, parScale: parScale)
+        let uniforms = activeStyle.makeUniforms(frame: frame, drawable: drawable)
+        return ScreenRenderGeometry(uniforms: uniforms, regions: displayRegions)
+    }
+}
+
+extension ScreenRenderGeometry {
+    /// Extract the scalar and vector geometry from the shader uniforms. The
+    /// regions arrive separately as a plain array rather than unpacked from the
+    /// uniforms' fixed tuple, since the renderer already holds them that way.
+    init(uniforms u: Uniforms, regions: [DisplayRegion]) {
+        self.init(
+            drawableSize: CGSize(width: CGFloat(u.drawableSize.x),
+                                 height: CGFloat(u.drawableSize.y)),
+            textureSize: CGSize(width: CGFloat(u.textureSize.x),
+                                height: CGFloat(u.textureSize.y)),
+            displaySize: CGSize(width: CGFloat(u.displaySize.x),
+                                height: CGFloat(u.displaySize.y)),
+            totalSize: CGSize(width: CGFloat(u.totalSize.x),
+                              height: CGFloat(u.totalSize.y)),
+            borderOffset: CGPoint(x: CGFloat(u.borderOffset.x),
+                                  y: CGFloat(u.borderOffset.y)),
+            parScale: Double(u.parScale),
+            interlaced: u.interlaced != 0,
+            edgeMargin: Double(u.edgeMargin),
+            regions: regions
+        )
+    }
+}
+
 // MARK: - MTKViewDelegate
 extension MetalRenderer: MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {

@@ -70,6 +70,12 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// Metal renderer for direct frame updates (bypasses SwiftUI update batching)
     weak var renderer: MetalRenderer?
 
+    /// When true, frames stop reaching the renderer so the last one stays on
+    /// screen while a selection is drawn over it. The stream keeps arriving and
+    /// the emulator keeps running; only the display is held still. Set through
+    /// the DisplayFreezer conformance, which the selection coordinator drives.
+    private var isDisplayFrozen = false
+
     /// Expose the gRPC channel for other clients (e.g., KeyboardClient) to share
     var channel: GRPCChannel? { _channel }
 
@@ -101,6 +107,91 @@ final class VideoClient: ObservableObject, Disconnectable {
             print("[VideoClient] getTeletextScreen failed: \(error)")
             return nil
         }
+    }
+
+    /// Read the character grid the display currently implies, per band, in
+    /// frame pixel coordinates.
+    ///
+    /// Fetched once when a selection gesture begins: the frozen frame's grid is
+    /// fixed for the selection's life, and snapping a drag needs the cell
+    /// boundaries before there is any text to ask for. Returns an empty array
+    /// when the display has no band to report or the call fails.
+    func screenGeometry() async -> [ScreenBandGeometry] {
+        guard let channel = _channel else { return [] }
+        let client = Beebium_VideoServiceClient(channel: channel)
+        do {
+            let geometry = try await client.getScreenGeometry(
+                Beebium_GetScreenGeometryRequest()).response.get()
+            return geometry.bands.map { band in
+                ScreenBandGeometry(
+                    top: Int(band.top),
+                    bottom: Int(band.bottom),
+                    cellWidth: Int(band.cellWidth),
+                    cellHeight: Int(band.cellHeight),
+                    columnPitch: Int(band.columnPitch),
+                    rowPitch: Int(band.rowPitch),
+                    originX: Int(band.originX),
+                    originY: Int(band.originY)
+                )
+            }
+        } catch {
+            print("[VideoClient] getScreenGeometry failed: \(error)")
+            return []
+        }
+    }
+
+    /// Read the text on the display, whatever mode the machine is in.
+    ///
+    /// `region` is in frame pixel coordinates; nil reads the whole display. The
+    /// server picks the strategy per band of scanlines, so the client never
+    /// learns the mode -- it gets back the runs it found and the cell geometry
+    /// they were read with. Returns nil only when the call fails; a readable
+    /// screen with no text comes back supported with no runs.
+    func screenText(region: FramePixelRect?,
+                    search: ScreenTextSearchMode,
+                    layout: ScreenTextJoinLayout) async -> ScreenTextReading? {
+        guard let channel = _channel else { return nil }
+        let client = Beebium_VideoServiceClient(channel: channel)
+
+        var request = Beebium_GetScreenTextRequest()
+        request.search = search.proto
+        request.layout = layout.proto
+        if let region {
+            var pixelRegion = Beebium_PixelRegion()
+            pixelRegion.x = UInt32(max(0, region.x))
+            pixelRegion.y = UInt32(max(0, region.y))
+            pixelRegion.width = UInt32(max(0, region.width))
+            pixelRegion.height = UInt32(max(0, region.height))
+            request.region = pixelRegion
+        }
+
+        do {
+            let screen = try await client.getScreenText(request).response.get()
+            return ScreenTextReading(
+                supported: screen.supported,
+                text: screen.text,
+                unreadableCells: Int(screen.unreadableCells),
+                ambiguousCells: Int(screen.ambiguousCells),
+                runs: screen.runs.map { run in
+                    ScreenTextRun(
+                        text: run.text,
+                        bounds: FramePixelRect(
+                            x: Int(run.bounds.x), y: Int(run.bounds.y),
+                            width: Int(run.bounds.width), height: Int(run.bounds.height)),
+                        cellWidth: Int(run.cellWidth),
+                        cellHeight: Int(run.cellHeight)
+                    )
+                }
+            )
+        } catch {
+            print("[VideoClient] getScreenText failed: \(error)")
+            return nil
+        }
+    }
+
+    /// Freeze or resume forwarding frames to the renderer. See `isDisplayFrozen`.
+    func setDisplayFrozen(_ frozen: Bool) {
+        isDisplayFrozen = frozen
     }
 
     /// Reconnect to a different target
@@ -205,6 +296,12 @@ final class VideoClient: ObservableObject, Disconnectable {
         displayWidth = Int(frame.displayWidth)
         displayHeight = Int(frame.displayHeight)
         currentFrame = frame.pixels
+
+        // Hold the displayed frame still while a selection is live. The frame
+        // keeps arriving -- the counters above stay current -- but the renderer
+        // is not handed the new pixels, so the frozen still remains on screen
+        // and the selection maps to the geometry the user is looking at.
+        if isDisplayFrozen { return }
 
         // Determine interlace state from field_order
         // PROGRESSIVE = non-interlaced (bitmap modes), EVEN_FIRST/ODD_FIRST = interlaced (MODE 7)

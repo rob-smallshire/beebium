@@ -35,6 +35,9 @@ struct EmulatorView: NSViewRepresentable {
     /// Types pasted text on the emulated keyboard.
     var pasteCoordinator: PasteCoordinator?
 
+    /// Owns text selection and copy over the frozen display.
+    var selectionCoordinator: SelectionCoordinator?
+
     func makeNSView(context: Context) -> KeyboardMTKView {
         let mtkView = KeyboardMTKView()
 
@@ -57,11 +60,16 @@ struct EmulatorView: NSViewRepresentable {
 
             // Wire up renderer to video client for direct frame updates
             videoClient.renderer = renderer
+
+            // The selection maps view points to frame pixels through the
+            // renderer's geometry, so it needs the renderer as its source.
+            selectionCoordinator?.geometrySource = renderer
         }
 
         // Wire up keyboard client for key events
         mtkView.keyboardClient = keyboardClient
         mtkView.pasteCoordinator = pasteCoordinator
+        mtkView.selectionCoordinator = selectionCoordinator
         mtkView.videoClient = videoClient
 
         // Wire up indicator client and Touch Bar manager

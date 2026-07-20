@@ -124,6 +124,7 @@ struct BeebiumApp: App {
     @FocusedBinding(\.sidebarMode) private var sidebarMode
     @FocusedBinding(\.isImmersive) private var isImmersive
     @FocusedValue(\.pasteCoordinator) private var pasteCoordinator
+    @FocusedValue(\.selectionCoordinator) private var selectionCoordinator
     @StateObject private var keyboardMappingManager = KeyboardMappingManager()
     @StateObject private var connectWindowState = ConnectWindowState.shared
 
@@ -189,6 +190,27 @@ struct BeebiumApp: App {
             // by Option, because nobody goes looking for a feature they do not
             // know exists -- they paste a long listing, watch it crawl, and
             // conclude that pasting is slow.
+            // The aligned-rows Copy is the standard Edit > Copy (Cmd-C),
+            // handled by the machine view's responder. These two are the other
+            // interpretations, discoverable in the menu with their shortcuts:
+            // holding the modifier previews the highlight, pressing C commits
+            // it. Names are placeholders pending a look at the built menu.
+            CommandGroup(after: .pasteboard) {
+                Button("Copy Columns") {
+                    guard let coordinator = selectionCoordinator else { return }
+                    Task { @MainActor in await coordinator.copy(.rectangle) }
+                }
+                .keyboardShortcut("c", modifiers: [.option, .command])
+                .disabled(selectionCoordinator == nil)
+
+                Button("Copy All Text") {
+                    guard let coordinator = selectionCoordinator else { return }
+                    Task { @MainActor in await coordinator.copy(.anywhere) }
+                }
+                .keyboardShortcut("c", modifiers: [.shift, .command])
+                .disabled(selectionCoordinator == nil)
+            }
+
             CommandGroup(after: .pasteboard) {
                 Button("Paste at Full Speed") {
                     guard let coordinator = pasteCoordinator,
