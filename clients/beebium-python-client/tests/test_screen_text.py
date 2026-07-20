@@ -19,6 +19,8 @@ docs/discussion/screen-text-extraction.md.
 
 from __future__ import annotations
 
+import pytest
+
 from beebium.client import Beebium
 
 
@@ -55,6 +57,27 @@ def _switch_to_mode(bbc: Beebium, mode: int, message: str) -> bool:
         != TELETEXT_CELL_WIDTH,
         emulated_seconds=10.0,
     )
+
+
+def _run_program(bbc: Beebium, lines: list[str]) -> bool:
+    """Enter and RUN a short BASIC program, leaving a bitmap mode on screen.
+
+    The program's first line switches mode, so the lines the user typed are
+    cleared as it runs and only what the program itself drew is left -- which
+    is what lets a test tell grid text from off-grid text without the echoed
+    source getting in the way.
+    """
+    _wait_for_prompt(bbc)
+    program = "".join(f"{10 * (i + 1)} {line}\r" for i, line in enumerate(lines))
+    bbc.keyboard.type("NEW\r" + program + "RUN\r")
+
+    def in_bitmap_mode() -> bool:
+        # A frame captured mid-reprogramming can carry no bands at all, so the
+        # first band is reached only once one exists.
+        bands = bbc.video.screen_geometry().bands
+        return bool(bands) and bands[0].cell_width != TELETEXT_CELL_WIDTH
+
+    return bbc.run_until_or_timeout(in_bitmap_mode, emulated_seconds=15.0)
 
 
 class TestScreenTextInTeletext:
@@ -123,42 +146,74 @@ class TestScreenTextInTeletext:
 
 
 class TestScreenTextInBitmapModes:
-    """A bitmap display, which nothing reads yet."""
+    """A bitmap display, which the glyph-recognising strategy now reads."""
 
-    def test_mode_4_reports_that_it_cannot_be_read(self, bbc: Beebium) -> None:
-        # THIS ASSERTION IS WRITTEN TO INVERT.
+    def test_mode_4_reads_its_text(self, bbc: Beebium) -> None:
+        # The inversion of what this used to assert. A strategy that recognises
+        # glyphs in pixels now reads the bitmap display, through the same API
+        # and client -- the property the whole design is judged on. Where this
+        # once required `not supported` and empty runs, it now requires the
+        # opposite: the display is supported and its text comes back.
         #
-        # No strategy reads glyphs out of pixels yet, so a bitmap display
-        # honestly reports that it could not be read rather than returning the
-        # MODE 7 cells left over from before the mode change.
-        #
-        # When a strategy that recognises glyphs is added behind the same
-        # dispatch, this call starts returning the text without any change to
-        # the API or to this client -- which is the property the whole design
-        # is judged on. At that point this test should be rewritten to assert
-        # `supported` and the message, and the assertion below on runs should
-        # become an assertion that the runs contain it.
+        # The geometry flips to bitmap the instant MODE 4 runs, which is before
+        # the PRINT that follows it has drawn anything, so the text is waited
+        # for through the very API under test rather than assumed present.
         assert _switch_to_mode(bbc, 4, "BITMAP TEXT")
+        bbc.run_until_or_timeout(
+            lambda: "BITMAP TEXT" in bbc.video.screen_text().text,
+            emulated_seconds=10.0,
+        )
 
         screen = bbc.video.screen_text()
 
-        assert not screen.supported
-        assert screen.runs == ()
-        assert screen.text == ""
+        assert screen.supported
+        assert "BITMAP TEXT" in screen.text
+        assert any("BITMAP TEXT" in run.text for run in screen.runs)
 
-        # Not merely absent: the stale teletext cells must not leak through.
-        assert "BBC Computer" not in screen.text
+    # Every bitmap mode. MODE 2 and MODE 5 are 20 columns wide, so the message
+    # is kept short enough to print and echo without wrapping.
+    @pytest.mark.parametrize("mode", [0, 1, 2, 3, 4, 5, 6])
+    def test_each_bitmap_mode_reads_printed_text(
+        self, bbc: Beebium, mode: int
+    ) -> None:
+        assert _switch_to_mode(bbc, mode, "HELLO BEEB")
+        read = bbc.run_until_or_timeout(
+            lambda: "HELLO BEEB" in bbc.video.screen_text().text,
+            emulated_seconds=10.0,
+        )
 
-    def test_a_bitmap_mode_is_never_uncertain_while_nothing_reads_it(
+        assert read
+        assert bbc.video.screen_text().supported
+
+    def test_a_bitmap_screen_of_graphics_reads_supported_with_no_text(
         self, bbc: Beebium
     ) -> None:
-        # Nothing was tried, which is not the same as having tried a cell and
-        # failed on it. The counts stay zero until a strategy populates them.
-        assert _switch_to_mode(bbc, 4, "BITMAP TEXT")
-        screen = bbc.video.screen_text()
+        # "Graphics, no text" is distinct from "could not read". A cleared
+        # graphics screen is read, and simply has nothing on it.
+        assert _switch_to_mode(bbc, 4, "X")
+        bbc.keyboard.type("CLS\r")
+        bbc.run_until_or_timeout(
+            lambda: "X" not in bbc.video.screen_text().text,
+            emulated_seconds=5.0,
+        )
 
-        assert screen.unreadable_cells == 0
-        assert screen.ambiguous_cells == 0
+        screen = bbc.video.screen_text()
+        assert screen.supported
+
+    def test_graphics_over_text_populates_the_unreadable_count(
+        self, bbc: Beebium
+    ) -> None:
+        # Scattered plotted points are no glyph, so the cells they fall in are
+        # reported unreadable rather than guessed at -- the uncertainty the API
+        # promises to surface.
+        assert _switch_to_mode(bbc, 4, "SPECKLE")
+        bbc.keyboard.type("FOR I%=0 TO 600:PLOT 69,I%*2,I%:NEXT\r")
+        bbc.run_until_or_timeout(
+            lambda: bbc.video.screen_text().unreadable_cells > 0,
+            emulated_seconds=10.0,
+        )
+
+        assert bbc.video.screen_text().unreadable_cells > 0
 
 
 class TestScreenGeometry:
@@ -212,3 +267,103 @@ class TestScreenGeometry:
             assert band.cell_height > 0
             assert band.column_pitch >= band.cell_width
             assert band.row_pitch >= band.cell_height
+
+
+class TestScreenTextSoftFont:
+    """VDU 23 redefinitions, read out of RAM and honoured, or honestly declined."""
+
+    def test_a_redefined_character_reads_once_its_glyph_is_supplied(
+        self, bbc: Beebium
+    ) -> None:
+        # Redefine character 224 -- the range the User Guide teaches -- to a
+        # hollow box and print it. The strategy reads the definition from RAM,
+        # so the box reads back as character 224 rather than as garbage.
+        assert _run_program(
+            bbc,
+            [
+                "MODE 4",
+                "VDU 23,224,255,129,129,129,129,129,129,255",
+                "PRINT CHR$(224)",
+            ],
+        )
+        # The redefined glyph appears once the PRINT runs, after the mode
+        # change the geometry wait keyed on.
+        read = bbc.run_until_or_timeout(
+            lambda: chr(224) in bbc.video.screen_text().text,
+            emulated_seconds=10.0,
+        )
+
+        screen = bbc.video.screen_text()
+        assert screen.supported
+        # Character 224 carries its own code as text: U+00E0 on the wire.
+        assert read
+        assert chr(224) in screen.text
+
+    def test_a_glyph_drawn_with_a_since_replaced_definition_is_declined(
+        self, bbc: Beebium
+    ) -> None:
+        # A program may redefine a character part way down the screen, so the
+        # glyph on screen was drawn with a definition the per-frame font no
+        # longer holds -- the one mid-screen redefinition this design does not
+        # chase. It must degrade honestly: the stale glyph is declined, never
+        # matched to whatever now occupies its code.
+        #
+        # Here a diamond is printed as character 224, then 224 is redefined to a
+        # box. The diamond on screen matches neither the box nor any ROM glyph,
+        # so it reads as unread, not as character 224.
+        assert _run_program(
+            bbc,
+            [
+                "MODE 4",
+                "VDU 23,224,24,60,126,255,255,126,60,24",
+                "PRINT CHR$(224)",
+                "VDU 23,224,255,129,129,129,129,129,129,255",
+                'PRINT "DONE"',
+            ],
+        )
+        # DONE prints after the redefinition, so waiting for it guarantees the
+        # font on screen has moved on from the diamond that was drawn.
+        assert bbc.run_until_or_timeout(
+            lambda: "DONE" in bbc.video.screen_text().text,
+            emulated_seconds=10.0,
+        )
+
+        screen = bbc.video.screen_text()
+        assert screen.supported
+        assert chr(224) not in screen.text
+
+
+class TestScreenTextOffGrid:
+    """VDU 5 text, off the character grid: read under Anywhere, not Aligned."""
+
+    def test_off_grid_text_reads_under_anywhere_and_not_aligned(
+        self, bbc: Beebium
+    ) -> None:
+        # VDU 5 sends text to the graphics cursor, at a pixel position that is
+        # not on the character grid. The aligned pass walks the grid and misses
+        # it; the off-grid pass finds it. The word is drawn by the program, so
+        # the echoed source that also contains it is cleared by the mode change
+        # before the read.
+        assert _run_program(
+            bbc,
+            [
+                "MODE 4",
+                "VDU 5",
+                "MOVE 100,500",
+                'PRINT "OFFGRID"',
+                "VDU 4",
+            ],
+        )
+        # The word appears once the off-grid PRINT runs; wait for the search
+        # that is meant to find it.
+        assert bbc.run_until_or_timeout(
+            lambda: "OFFGRID"
+            in bbc.video.screen_text(search="anywhere").text,
+            emulated_seconds=10.0,
+        )
+
+        aligned = bbc.video.screen_text(search="aligned").text
+        anywhere = bbc.video.screen_text(search="anywhere").text
+
+        assert "OFFGRID" not in aligned
+        assert "OFFGRID" in anywhere
