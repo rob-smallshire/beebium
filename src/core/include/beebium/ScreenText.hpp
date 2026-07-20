@@ -160,12 +160,15 @@ BandReading read_band(const Band& band,
                       Search search,
                       const TeletextGrid::Snapshot& teletext);
 
-// Merge the bands' readings into one, in reading order, and linearise.
+// Concatenate the bands' readings into one, in reading order, and linearise.
 //
 // Reading order is bands top to bottom, and within a band by baseline then x.
 // Bands do not overlap and no strategy may produce overlapping runs, so this is
-// concatenation rather than a merge that has to dedupe.
-Reading merge(std::vector<BandReading> readings, Layout layout);
+// plain concatenation: there is nothing to dedupe. A strategy that runs more
+// than one pass over the same band -- the bitmap strategy will, aligned and
+// off-grid -- reconciles its own passes before returning one BandReading, so
+// that assumption holds here without this function having to defend it.
+Reading concatenate_bands_readings(std::vector<BandReading> readings, Layout layout);
 
 // Join runs into one string.
 //

@@ -104,7 +104,7 @@ grpc::Status VideoServiceImpl::GetScreenText(
         readings.push_back(screen::read_band(band, region, search, teletext));
     }
 
-    const screen::Reading reading = screen::merge(std::move(readings), layout);
+    const screen::Reading reading = screen::concatenate_bands_readings(std::move(readings), layout);
 
     response->set_supported(reading.supported);
     response->set_text(reading.text);

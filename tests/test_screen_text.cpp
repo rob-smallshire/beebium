@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// The merge and linearisation rules behind GetScreenText.
+// The band-concatenation and linearisation rules behind GetScreenText.
 //
 // Exercised off synthetic runs rather than a booted machine, so the reading
 // order and the layouts are pinned without any timing in the way. The strategy
@@ -193,9 +193,9 @@ TEST_CASE("Flowed layout rejoins a line that wrapped", "[screen-text]") {
     }
 }
 
-TEST_CASE("Merge orders bands top to bottom", "[screen-text]") {
+TEST_CASE("Concatenation orders bands top to bottom", "[screen-text]") {
     SECTION("runs come out in the order the bands were given") {
-        Reading reading = merge(
+        Reading reading = concatenate_bands_readings(
             {
                 readable({run_at(0, 0, "UPPER")}),
                 readable({run_at(10, 0, "LOWER")}),
@@ -209,7 +209,7 @@ TEST_CASE("Merge orders bands top to bottom", "[screen-text]") {
     }
 
     SECTION("within a band, runs sort by baseline then x") {
-        Reading reading = merge(
+        Reading reading = concatenate_bands_readings(
             {
                 readable({
                     run_at(1, 10, "SECOND-ROW-RIGHT"),
@@ -226,9 +226,9 @@ TEST_CASE("Merge orders bands top to bottom", "[screen-text]") {
     }
 }
 
-TEST_CASE("Merge reports what could be read", "[screen-text]") {
+TEST_CASE("Concatenation reports what could be read", "[screen-text]") {
     SECTION("a band no strategy can read makes the whole request unsupported") {
-        Reading reading = merge({unreadable_band()}, Layout::Rows);
+        Reading reading = concatenate_bands_readings({unreadable_band()}, Layout::Rows);
 
         REQUIRE_FALSE(reading.supported);
         REQUIRE(reading.runs.empty());
@@ -238,7 +238,7 @@ TEST_CASE("Merge reports what could be read", "[screen-text]") {
     SECTION("one readable band is enough for the request to be supported") {
         // A split screen with a MODE 7 band reads that band and says so, even
         // while the band beside it contributes nothing.
-        Reading reading = merge(
+        Reading reading = concatenate_bands_readings(
             {
                 readable({run_at(0, 0, "READ ME")}),
                 unreadable_band(),
@@ -252,14 +252,14 @@ TEST_CASE("Merge reports what could be read", "[screen-text]") {
 
     SECTION("a readable band that found nothing is still supported") {
         // Distinct from unreadable: the band was read and had no text on it.
-        Reading reading = merge({readable({})}, Layout::Rows);
+        Reading reading = concatenate_bands_readings({readable({})}, Layout::Rows);
 
         REQUIRE(reading.supported);
         REQUIRE(reading.runs.empty());
     }
 
     SECTION("no bands at all is unsupported") {
-        Reading reading = merge({}, Layout::Rows);
+        Reading reading = concatenate_bands_readings({}, Layout::Rows);
         REQUIRE_FALSE(reading.supported);
     }
 
@@ -272,7 +272,7 @@ TEST_CASE("Merge reports what could be read", "[screen-text]") {
         second.unreadable_cells = 4;
         second.ambiguous_cells = 2;
 
-        Reading reading = merge({first, second}, Layout::Rows);
+        Reading reading = concatenate_bands_readings({first, second}, Layout::Rows);
 
         REQUIRE(reading.unreadable_cells == 7);
         REQUIRE(reading.ambiguous_cells == 3);

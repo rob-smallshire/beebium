@@ -258,13 +258,13 @@ BandReading read_band(const Band& band,
     return BandReading{};
 }
 
-Reading merge(std::vector<BandReading> readings, Layout layout) {
-    Reading merged;
+Reading concatenate_bands_readings(std::vector<BandReading> readings, Layout layout) {
+    Reading combined;
 
     for (BandReading& band : readings) {
-        merged.supported = merged.supported || band.supported;
-        merged.unreadable_cells += band.unreadable_cells;
-        merged.ambiguous_cells += band.ambiguous_cells;
+        combined.supported = combined.supported || band.supported;
+        combined.unreadable_cells += band.unreadable_cells;
+        combined.ambiguous_cells += band.ambiguous_cells;
 
         // Within a band, by baseline then x. Stable, so a strategy that
         // already emits in order keeps the order it chose.
@@ -279,13 +279,13 @@ Reading merge(std::vector<BandReading> readings, Layout layout) {
         // Bands arrive top to bottom and do not overlap, and no strategy may
         // produce overlapping runs, so this is concatenation: there is nothing
         // to dedupe and nothing that would need to be.
-        merged.runs.insert(merged.runs.end(),
-                           std::make_move_iterator(band.runs.begin()),
-                           std::make_move_iterator(band.runs.end()));
+        combined.runs.insert(combined.runs.end(),
+                             std::make_move_iterator(band.runs.begin()),
+                             std::make_move_iterator(band.runs.end()));
     }
 
-    merged.text = linearise(merged.runs, layout);
-    return merged;
+    combined.text = linearise(combined.runs, layout);
+    return combined;
 }
 
 std::string linearise(const std::vector<TextRun>& runs, Layout layout) {
