@@ -606,10 +606,12 @@ TEST_CASE("The soft font is read from the VDU driver's font workspace",
 
         const screentext::GlyphSet soft = read_soft_font(peek);
 
-        // One glyph, not four: the aliases 160, 192 and 224 share the address
-        // and are not emitted again.
+        // One glyph, not four: codes 128, 160, 192 and 224 share the $0C00
+        // address, so it is emitted once. The pixels cannot say which alias was
+        // printed, so the highest -- 224, the range the User Guide teaches --
+        // is taken.
         REQUIRE(soft.glyphs.size() == 1);
-        REQUIRE(soft.glyphs[0].codepoint == 0x80);
+        REQUIRE(soft.glyphs[0].codepoint == 0xE0);
         REQUIRE(soft.glyphs[0].bitmap == screentext::Bitmap::from_rows(rows));
     }
 

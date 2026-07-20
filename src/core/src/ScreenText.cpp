@@ -515,8 +515,11 @@ screentext::GlyphSet read_soft_font(
     // screen -- genuinely aliased by the MOS. Emitting all four would make
     // every redefined glyph ambiguous with its own aliases, which is noise, not
     // the font-collision ambiguity the library exists to report. So each
-    // backing address is emitted once and the lowest code that owns it wins.
-    std::vector<uint16_t> seen_bases;
+    // backing address is emitted once. The pixels cannot say which alias was
+    // printed, so the highest code that owns the address is taken: 224-255 is
+    // the range the User Guide teaches for user-defined characters, and the one
+    // a program redefining an imploded glyph almost always prints.
+    std::vector<uint16_t> bases;    // Backing address of each emitted glyph
     for (uint16_t code = 0x20; code <= 0xFF; ++code) {
         if (code == 0x7F) {
             continue;
@@ -531,8 +534,14 @@ screentext::GlyphSet read_soft_font(
         const uint16_t base = static_cast<uint16_t>(page << 8)
             | static_cast<uint16_t>((code & 0x1F) << 3);
 
-        if (std::find(seen_bases.begin(), seen_bases.end(), base)
-            != seen_bases.end()) {
+        const char32_t codepoint = soft_codepoint(static_cast<uint8_t>(code));
+
+        // Ascending, so a later code aliasing an emitted address is higher:
+        // take over its codepoint rather than adding a second, colliding glyph.
+        const auto seen = std::find(bases.begin(), bases.end(), base);
+        if (seen != bases.end()) {
+            set.glyphs[static_cast<size_t>(seen - bases.begin())].codepoint =
+                codepoint;
             continue;
         }
 
@@ -546,9 +555,8 @@ screentext::GlyphSet read_soft_font(
             continue;
         }
 
-        seen_bases.push_back(base);
-        set.glyphs.emplace_back(soft_codepoint(static_cast<uint8_t>(code)),
-                                screentext::Bitmap::from_rows(rows));
+        bases.push_back(base);
+        set.glyphs.emplace_back(codepoint, screentext::Bitmap::from_rows(rows));
     }
 
     return set;
