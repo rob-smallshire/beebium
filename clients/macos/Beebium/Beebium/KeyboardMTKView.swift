@@ -119,6 +119,8 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         if selectionOverlayView.superview == nil {
             selectionOverlayView.frame = bounds
             selectionOverlayView.autoresizingMask = [.width, .height]
+            // Layer-backed so it composites cleanly above the Metal layer.
+            selectionOverlayView.wantsLayer = true
             addSubview(selectionOverlayView)
         }
         selectionObserver = selectionCoordinator?.objectWillChange
