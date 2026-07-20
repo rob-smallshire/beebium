@@ -735,7 +735,7 @@ the API supersedes them.
 
 ### 4. macOS front end
 
-Drag-to-select over the display, in the three modes: snapped rows (the
+Interaction designed in `screen-text-selection-ui.md`. Drag-to-select over the display, in the three modes: snapped rows (the
 default), snapped rectangle, and free-form. Copy moves onto `GetScreenText`,
 and the MODE 7 wording comes out of the UI.
 
