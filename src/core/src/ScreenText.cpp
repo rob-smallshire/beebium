@@ -331,6 +331,19 @@ void append_run(BandReading& reading, const screentext::Run& run,
                   static_cast<uint32_t>(run.bounds.width),
                   static_cast<uint32_t>(run.bounds.height)};
 
+    // Carry the per-cell readability so a client highlights only what was read.
+    // The library's cell coordinates are band-local, like the run's; band.top
+    // lifts them to frame pixels the same way.
+    out.cells.reserve(run.cells.size());
+    for (const screentext::Cell& cell : run.cells) {
+        out.cells.push_back(TextCell{
+            PixelRect{static_cast<uint32_t>(cell.bounds.x),
+                      static_cast<uint32_t>(cell.bounds.y) + band.top,
+                      static_cast<uint32_t>(cell.bounds.width),
+                      static_cast<uint32_t>(cell.bounds.height)},
+            cell.matched()});
+    }
+
     if (off_grid) {
         // Text at the graphics cursor is not on any grid, so it carries no cell
         // geometry to snap to and never counts as having reached an edge.

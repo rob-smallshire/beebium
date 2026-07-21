@@ -147,6 +147,11 @@ grpc::Status VideoServiceImpl::GetScreenText(
         to_proto_region(run.bounds, out->mutable_bounds());
         out->set_cell_width(run.cell_width);
         out->set_cell_height(run.cell_height);
+        for (const screen::TextCell& cell : run.cells) {
+            auto* out_cell = out->add_cells();
+            to_proto_region(cell.bounds, out_cell->mutable_bounds());
+            out_cell->set_matched(cell.matched);
+        }
     }
 
     return grpc::Status::OK;

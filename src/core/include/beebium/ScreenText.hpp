@@ -76,6 +76,17 @@ enum class Layout {
     Flowed,
 };
 
+// One cell of a run: where it sits, and whether a glyph was recognised there.
+// A genuine space is matched (it is a real character); an unmatched cell had
+// ink no glyph fit and copies as a space. Reported so a client can highlight
+// only what was read rather than the whole run, which spans unmatched cells.
+struct TextCell {
+    PixelRect bounds;
+    bool matched = false;
+
+    bool operator==(const TextCell&) const = default;
+};
+
 // A contiguous piece of text and where it was found.
 struct TextRun {
     std::string text;
@@ -86,6 +97,11 @@ struct TextRun {
     // cursor is.
     uint32_t cell_width = 0;
     uint32_t cell_height = 0;
+
+    // The run's cells in reading order, from the glyph-recognising strategy.
+    // Empty from the teletext strategy, whose cells are exact characters and
+    // all matched: a client then highlights the whole run's bounds.
+    std::vector<TextCell> cells;
 
     // True when the run reached the right edge of the region it was read from,
     // so Flowed layout knows the line continues rather than ends.

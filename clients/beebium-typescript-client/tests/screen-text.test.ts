@@ -40,12 +40,13 @@ async function launchAtPrompt(): Promise<Beebium> {
  * Waited on through the geometry rather than through the text API: whether
  * that API can read a bitmap mode is the very thing under test.
  *
- * The wait keys on the cell width, which is 12 for the SAA5050 and 8 for every
- * bitmap mode. The row pitch is no good for this: a frame captured while the
- * CRTC is being reprogrammed is briefly shorter than a screen, so the pitch
- * derived from it dips before the mode has actually changed.
+ * The wait keys on the cell width, which is 16 for the SAA5050 (two batches of
+ * eight) and 8 for every bitmap mode. The row pitch is no good for this: a
+ * frame captured while the CRTC is being reprogrammed is briefly shorter than a
+ * screen, so the pitch derived from it dips before the mode has actually
+ * changed.
  */
-const TELETEXT_CELL_WIDTH = 12;
+const TELETEXT_CELL_WIDTH = 16;
 
 async function switchToMode(bbc: Beebium, mode: number, message: string): Promise<void> {
     await bbc.keyboard.type(`MODE ${mode}\rPRINT "${message}"\r`);
@@ -57,6 +58,19 @@ async function switchToMode(bbc: Beebium, mode: number, message: string): Promis
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error(`machine did not reach MODE ${mode}`);
+}
+
+/** Advance the machine until the screen text satisfies a predicate. */
+async function waitFor(
+    bbc: Beebium,
+    predicate: (text: string) => boolean,
+): Promise<void> {
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+        if (predicate((await bbc.video.screenText()).text)) return;
+        await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("screen text did not satisfy the predicate in time");
 }
 
 describe("screenText in teletext", () => {
@@ -111,28 +125,32 @@ describe("screenText in teletext", () => {
 });
 
 describe("screenText in bitmap modes", () => {
-    it("reports that MODE 4 cannot be read", async () => {
-        // THIS ASSERTION IS WRITTEN TO INVERT.
-        //
-        // No strategy reads glyphs out of pixels yet, so a bitmap display
-        // honestly reports that it could not be read rather than returning the
-        // MODE 7 cells left over from before the mode change.
-        //
-        // When a strategy that recognises glyphs is added behind the same
-        // dispatch, this call starts returning the text with no change to the
-        // API or to this client -- the property the whole design is judged on.
-        // At that point rewrite this to assert `supported` and the message.
+    it("reads MODE 4 text through the same API", async () => {
+        // The glyph-recognising strategy reads the bitmap display through the
+        // same API and client that once returned "not supported" here -- the
+        // property the whole design is judged on.
         const bbc = await launchAtPrompt();
         await switchToMode(bbc, 4, "BITMAP TEXT");
+        await waitFor(bbc, (text) => text.includes("BITMAP TEXT"));
 
         const screen = await bbc.video.screenText();
 
-        expect(screen.supported).toBe(false);
-        expect(screen.runs).toHaveLength(0);
-        expect(screen.text).toBe("");
-
-        // Not merely absent: the stale teletext cells must not leak through.
+        expect(screen.supported).toBe(true);
+        expect(screen.text).toContain("BITMAP TEXT");
         expect(screen.text).not.toContain("BBC Computer");
+    }, 60000);
+
+    it("carries per-cell readability so a client highlights only what it read", async () => {
+        const bbc = await launchAtPrompt();
+        await switchToMode(bbc, 4, "READABLE");
+        await waitFor(bbc, (text) => text.includes("READABLE"));
+
+        const run = (await bbc.video.screenText()).runs.find((r) =>
+            r.text.includes("READABLE"),
+        );
+        expect(run).toBeDefined();
+        expect(run!.cells.length).toBeGreaterThan(0);
+        expect(run!.cells.every((cell) => cell.matched)).toBe(true);
     }, 60000);
 });
 
@@ -144,8 +162,8 @@ describe("screenGeometry", () => {
         expect(geometry.bands).toHaveLength(1);
         const band = geometry.bands[0]!;
         expect(Math.floor((band.bottom - band.top) / band.rowPitch)).toBe(25);
-        expect(band.cellWidth).toBe(12);
-        expect(band.columnPitch).toBe(12);
+        expect(band.cellWidth).toBe(16);
+        expect(band.columnPitch).toBe(16);
     }, 60000);
 
     it("reports a bitmap grid for a band it cannot read", async () => {

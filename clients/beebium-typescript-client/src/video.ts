@@ -76,6 +76,19 @@ export interface PixelRegion {
     height: number;
 }
 
+/** One cell of a run: where it sits, and whether a glyph was recognised. */
+export interface ScreenTextCell {
+    bounds: PixelRegion;
+
+    /**
+     * True when a glyph was recognised here; false when the cell had ink the
+     * font could not identify. An unmatched cell still copies as a space to
+     * keep columns aligned, but a client can leave it out of a highlight rather
+     * than dress a failed read up as a success. A genuine space is matched.
+     */
+    matched: boolean;
+}
+
 /** A contiguous piece of text and where it was found. */
 export interface ScreenTextRun {
     text: string;
@@ -93,6 +106,13 @@ export interface ScreenTextRun {
      */
     cellWidth: number;
     cellHeight: number;
+
+    /**
+     * The run's cells in reading order, from the glyph-recognising strategy.
+     * Empty from the teletext strategy, whose cells are exact characters and
+     * all matched: a client then highlights the whole run's bounds.
+     */
+    cells: ScreenTextCell[];
 }
 
 /** Text read from the display, whatever mode is producing it. */
@@ -220,6 +240,15 @@ function toScreenText(proto: ProtoScreenText): ScreenText {
             },
             cellWidth: run.cellWidth,
             cellHeight: run.cellHeight,
+            cells: run.cells.map((cell) => ({
+                bounds: {
+                    x: cell.bounds?.x ?? 0,
+                    y: cell.bounds?.y ?? 0,
+                    width: cell.bounds?.width ?? 0,
+                    height: cell.bounds?.height ?? 0,
+                },
+                matched: cell.matched,
+            })),
         })),
         text: proto.text,
         unreadableCells: proto.unreadableCells,

@@ -319,6 +319,15 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
         REQUIRE(reading.runs[2].bounds.y == 2 * 20);
     }
 
+    SECTION("teletext runs carry no cells, their characters being exact") {
+        // Every teletext cell is a known character, so there is nothing per
+        // cell to distinguish; a client highlights the whole run's bounds.
+        const BandReading reading =
+            read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
+
+        REQUIRE(reading.runs[0].cells.empty());
+    }
+
     SECTION("teletext is never uncertain, its cells being exact codes") {
         const BandReading reading =
             read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
@@ -464,6 +473,46 @@ TEST_CASE("The bitmap strategy reads a band the SAA5050 was not driving",
         REQUIRE(reading.runs[0].text == "HELLO");
         REQUIRE(reading.runs[0].cell_width == 8);
         REQUIRE(reading.runs[0].cell_height == 8);
+    }
+
+    SECTION("a run carries its cells so a client highlights only what was read") {
+        Canvas canvas(8 * 10, 8);
+        paint_text(canvas, acorn(), 0, 0, "HELLO");
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.runs.size() == 1);
+        const std::vector<TextCell>& cells = reading.runs[0].cells;
+        REQUIRE(cells.size() == 5);
+        for (uint32_t i = 0; i < cells.size(); ++i) {
+            REQUIRE(cells[i].matched);
+            REQUIRE(cells[i].bounds.x == i * 8);
+            REQUIRE(cells[i].bounds.width == 8);
+        }
+    }
+
+    SECTION("a cell the font cannot read is carried as unmatched") {
+        // A diagonal stroke is no Acorn glyph, so the middle cell matches
+        // nothing. It still occupies its column -- as a space in the text -- but
+        // is flagged unmatched so a client can leave it dark.
+        Canvas canvas(8 * 3, 8);
+        paint_text(canvas, acorn(), 0, 0, "A");
+        paint_text(canvas, acorn(), 16, 0, "B");
+        for (uint32_t i = 0; i < 8; ++i) {
+            canvas.set(8 + i, i, WHITE);
+        }
+        const BandReading reading = read_band(
+            bitmap_band(0, 8), {0, 0, canvas.width, canvas.height},
+            Search::Aligned, bitmap_sources(canvas, sets));
+
+        REQUIRE(reading.runs.size() == 1);
+        REQUIRE(reading.unreadable_cells >= 1);
+        const std::vector<TextCell>& cells = reading.runs[0].cells;
+        REQUIRE(cells.size() == 3);
+        REQUIRE(cells[0].matched);
+        REQUIRE_FALSE(cells[1].matched);
+        REQUIRE(cells[2].matched);
     }
 
     SECTION("runs are placed in frame pixels, offset by the band top") {

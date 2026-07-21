@@ -21,6 +21,7 @@ export {
     type PixelRegion,
     type ScreenText,
     type ScreenTextRun,
+    type ScreenTextCell,
     type ScreenTextSearchMode,
     type ScreenGeometry,
     type ScreenBandGeometry,

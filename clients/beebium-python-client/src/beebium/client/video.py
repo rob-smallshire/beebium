@@ -17,12 +17,11 @@ from __future__ import annotations
 import array
 import threading
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from beebium.client._proto import video_pb2, video_pb2_grpc
 from beebium.client.exceptions import TimeoutError
-
 
 # A MODE 7 display is always this size.
 TELETEXT_ROWS = 25
@@ -71,6 +70,19 @@ class PixelRegion:
 
 
 @dataclass(frozen=True)
+class ScreenTextCell:
+    """One cell of a run: where it sits, and whether a glyph was recognised."""
+
+    bounds: PixelRegion
+
+    matched: bool
+    """True when a glyph was recognised here; false when the cell had ink the
+    font could not identify. An unmatched cell still copies as a space to keep
+    columns aligned, but a client can leave it out of a highlight rather than
+    dress a failed read up as a success. A genuine space is matched."""
+
+
+@dataclass(frozen=True)
 class ScreenTextRun:
     """A contiguous piece of text and where it was found."""
 
@@ -85,6 +97,11 @@ class ScreenTextRun:
     """The character cell geometry the run was read with, so a selection can
     snap to it. Zero when the run is not cell-aligned, as text written at the
     graphics cursor is."""
+
+    cells: list[ScreenTextCell] = field(default_factory=list)
+    """The run's cells in reading order, from the glyph-recognising strategy.
+    Empty from the teletext strategy, whose cells are exact characters and all
+    matched: a client then highlights the whole run's bounds."""
 
 
 @dataclass(frozen=True)
@@ -427,6 +444,18 @@ class Video:
                     ),
                     cell_width=run.cell_width,
                     cell_height=run.cell_height,
+                    cells=[
+                        ScreenTextCell(
+                            bounds=PixelRegion(
+                                x=cell.bounds.x,
+                                y=cell.bounds.y,
+                                width=cell.bounds.width,
+                                height=cell.bounds.height,
+                            ),
+                            matched=cell.matched,
+                        )
+                        for cell in run.cells
+                    ],
                 )
                 for run in response.runs
             ),

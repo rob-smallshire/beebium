@@ -216,6 +216,42 @@ class TestScreenTextInBitmapModes:
 
         assert bbc.video.screen_text().unreadable_cells > 0
 
+    def test_a_bitmap_run_carries_per_cell_readability(
+        self, bbc: Beebium
+    ) -> None:
+        # A run exposes its cells so a client highlights only what was read.
+        # Cleanly printed text matches every cell, including its spaces.
+        assert _switch_to_mode(bbc, 4, "READABLE")
+        bbc.run_until_or_timeout(
+            lambda: "READABLE" in bbc.video.screen_text().text,
+            emulated_seconds=10.0,
+        )
+
+        run = next(
+            run for run in bbc.video.screen_text().runs if "READABLE" in run.text
+        )
+        assert run.cells, "a bitmap run should report its cells"
+        assert all(cell.matched for cell in run.cells)
+
+    def test_an_unreadable_cell_is_carried_as_unmatched(
+        self, bbc: Beebium
+    ) -> None:
+        # The count and the per-cell flag agree: when the screen holds ink no
+        # glyph fits, some run carries a cell flagged unmatched, so a client can
+        # leave it dark rather than highlight a space as if it were read.
+        assert _switch_to_mode(bbc, 4, "SPECKLE")
+        bbc.keyboard.type("FOR I%=0 TO 600:PLOT 69,I%*2,I%:NEXT\r")
+        bbc.run_until_or_timeout(
+            lambda: bbc.video.screen_text().unreadable_cells > 0,
+            emulated_seconds=10.0,
+        )
+
+        screen = bbc.video.screen_text()
+        assert screen.unreadable_cells > 0
+        assert any(
+            not cell.matched for run in screen.runs for cell in run.cells
+        )
+
 
 class TestScreenGeometry:
     """The grid a client snaps a drag to, which every mode has."""

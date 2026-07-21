@@ -50,6 +50,15 @@ enum ScreenTextJoinLayout {
     }
 }
 
+/// One cell of a run: where it sits, and whether a glyph was recognised there.
+/// A genuine space is matched; an unmatched cell had ink no glyph fit and copies
+/// as a space. Highlighting only matched cells keeps the overlay from dressing a
+/// failed read up as a success.
+struct ScreenTextRunCell: Equatable {
+    var bounds: FramePixelRect
+    var matched: Bool
+}
+
 /// A contiguous piece of text and where it was found, in frame pixels.
 struct ScreenTextRun: Equatable {
     var text: String
@@ -58,6 +67,9 @@ struct ScreenTextRun: Equatable {
     /// cell-aligned (text written at the graphics cursor with VDU 5).
     var cellWidth: Int
     var cellHeight: Int
+    /// The run's cells in reading order. Empty from the teletext strategy, whose
+    /// cells are exact characters; a client then highlights the whole `bounds`.
+    var cells: [ScreenTextRunCell] = []
 }
 
 /// What GetScreenText returned, wire-free.
@@ -288,7 +300,20 @@ final class SelectionCoordinator: ObservableObject {
             let resolved = await self.resolveRuns(interpretation: interpretation)
             // Discard a response for a selection that has since moved.
             guard self.highlightGeneration == generation else { return }
-            self.highlightRects = (resolved?.runs ?? []).map { $0.bounds }
+            self.highlightRects = Self.matchedCellRects(resolved?.runs ?? [])
+        }
+    }
+
+    /// The rectangles to highlight for a set of runs: each matched cell, or the
+    /// whole run's bounds when it reports no cells (teletext, whose cells are all
+    /// exact matches). Unmatched cells -- ink the font could not identify -- are
+    /// left dark, so the overlay shows only what was actually read, not a line
+    /// of spaces dressed up as a successful copy.
+    static func matchedCellRects(_ runs: [ScreenTextRun]) -> [FramePixelRect] {
+        runs.flatMap { run in
+            run.cells.isEmpty
+                ? [run.bounds]
+                : run.cells.filter { $0.matched }.map { $0.bounds }
         }
     }
 
@@ -530,6 +555,7 @@ extension SelectionCoordinator {
             }
             let characters = Array(run.text)
             var trimmedText = ""
+            var trimmedCells: [ScreenTextRunCell] = []
             var firstKeptIndex: Int?
             for (index, character) in characters.enumerated() {
                 let centreX = run.bounds.x + index * step + step / 2
@@ -539,6 +565,9 @@ extension SelectionCoordinator {
                 if afterStart && beforeEnd {
                     if firstKeptIndex == nil { firstKeptIndex = index }
                     trimmedText.append(character)
+                    // Cells correspond one-to-one with characters, so a kept
+                    // character keeps its cell and thus its matched status.
+                    if index < run.cells.count { trimmedCells.append(run.cells[index]) }
                 }
             }
             guard let firstIndex = firstKeptIndex, !trimmedText.isEmpty else { continue }
@@ -547,7 +576,8 @@ extension SelectionCoordinator {
             bounds.width = trimmedText.count * step
             kept.append((row, bounds.x, ScreenTextRun(
                 text: trimmedText, bounds: bounds,
-                cellWidth: run.cellWidth, cellHeight: run.cellHeight)))
+                cellWidth: run.cellWidth, cellHeight: run.cellHeight,
+                cells: trimmedCells)))
         }
 
         // Reading order, then join runs on a row into a line and rows with LF.

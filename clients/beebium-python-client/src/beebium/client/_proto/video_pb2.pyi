@@ -579,6 +579,39 @@ class GetScreenTextRequest(_message.Message):
 Global___GetScreenTextRequest: _TypeAlias = GetScreenTextRequest  # noqa: Y015
 
 @_typing.final
+class ScreenTextCell(_message.Message):
+    """One character cell of a run: where it sits, and whether a glyph was
+    recognised there. A genuine space is a match (it is a real character); an
+    unmatched cell had ink the font could not identify and copies as a space.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    BOUNDS_FIELD_NUMBER: _builtins.int
+    MATCHED_FIELD_NUMBER: _builtins.int
+    matched: _builtins.bool
+    """True when a glyph was recognised here, false when the cell had ink that
+    matched nothing. So a client can highlight only what was read: painting
+    an unmatched cell would dress a failed read up as a success, even though
+    the text still carries a space for it to keep columns aligned.
+    """
+    @_builtins.property
+    def bounds(self) -> Global___PixelRegion: ...
+    def __init__(
+        self,
+        *,
+        bounds: Global___PixelRegion | None = ...,
+        matched: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds", "matched", b"matched"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ScreenTextCell: _TypeAlias = ScreenTextCell  # noqa: Y015
+
+@_typing.final
 class ScreenTextRun(_message.Message):
     """A contiguous piece of text and where it was found, so a client can highlight
     exactly what it captured.
@@ -590,6 +623,7 @@ class ScreenTextRun(_message.Message):
     BOUNDS_FIELD_NUMBER: _builtins.int
     CELL_WIDTH_FIELD_NUMBER: _builtins.int
     CELL_HEIGHT_FIELD_NUMBER: _builtins.int
+    CELLS_FIELD_NUMBER: _builtins.int
     text: _builtins.str
     cell_width: _builtins.int
     """The character cell geometry this run was read with, so a selection can
@@ -599,6 +633,15 @@ class ScreenTextRun(_message.Message):
     cell_height: _builtins.int
     @_builtins.property
     def bounds(self) -> Global___PixelRegion: ...
+    @_builtins.property
+    def cells(self) -> _containers.RepeatedCompositeFieldContainer[Global___ScreenTextCell]:
+        """The run's cells in reading order, from the glyph-recognising strategy, so
+        a client highlights only the cells it read rather than the whole run --
+        which spans unmatched cells too. Empty from the teletext strategy, whose
+        cells are exact characters and are all matched: a client then highlights
+        the whole run's bounds.
+        """
+
     def __init__(
         self,
         *,
@@ -606,10 +649,11 @@ class ScreenTextRun(_message.Message):
         bounds: Global___PixelRegion | None = ...,
         cell_width: _builtins.int = ...,
         cell_height: _builtins.int = ...,
+        cells: _abc.Iterable[Global___ScreenTextCell] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds", "cell_height", b"cell_height", "cell_width", b"cell_width", "text", b"text"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bounds", b"bounds", "cell_height", b"cell_height", "cell_width", b"cell_width", "cells", b"cells", "text", b"text"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

@@ -179,7 +179,15 @@ final class VideoClient: ObservableObject, Disconnectable {
                             x: Int(run.bounds.x), y: Int(run.bounds.y),
                             width: Int(run.bounds.width), height: Int(run.bounds.height)),
                         cellWidth: Int(run.cellWidth),
-                        cellHeight: Int(run.cellHeight)
+                        cellHeight: Int(run.cellHeight),
+                        cells: run.cells.map { cell in
+                            ScreenTextRunCell(
+                                bounds: FramePixelRect(
+                                    x: Int(cell.bounds.x), y: Int(cell.bounds.y),
+                                    width: Int(cell.bounds.width),
+                                    height: Int(cell.bounds.height)),
+                                matched: cell.matched)
+                        }
                     )
                 }
             )

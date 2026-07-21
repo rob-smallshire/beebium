@@ -172,6 +172,64 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertTrue(rects.isEmpty)
     }
 
+    // MARK: - Per-cell highlighting
+
+    func testMatchedCellRectsSkipsUnmatchedCells() {
+        // A run with a middle cell the font could not read: only the matched
+        // cells are highlighted, so the overlay does not claim a read it did
+        // not make.
+        let run = ScreenTextRun(
+            text: "A B", bounds: FramePixelRect(x: 0, y: 0, width: 24, height: 8),
+            cellWidth: 8, cellHeight: 8,
+            cells: [
+                ScreenTextRunCell(bounds: FramePixelRect(x: 0, y: 0, width: 8, height: 8),
+                                  matched: true),
+                ScreenTextRunCell(bounds: FramePixelRect(x: 8, y: 0, width: 8, height: 8),
+                                  matched: false),
+                ScreenTextRunCell(bounds: FramePixelRect(x: 16, y: 0, width: 8, height: 8),
+                                  matched: true),
+            ])
+        XCTAssertEqual(SelectionCoordinator.matchedCellRects([run]), [
+            FramePixelRect(x: 0, y: 0, width: 8, height: 8),
+            FramePixelRect(x: 16, y: 0, width: 8, height: 8),
+        ])
+    }
+
+    func testMatchedCellRectsFallsBackToRunBoundsWithoutCells() {
+        // Teletext reports no cells (all exact matches); the whole run is lit.
+        let run = ScreenTextRun(
+            text: "HELLO", bounds: FramePixelRect(x: 0, y: 0, width: 80, height: 20),
+            cellWidth: 16, cellHeight: 20)
+        XCTAssertEqual(SelectionCoordinator.matchedCellRects([run]),
+                       [FramePixelRect(x: 0, y: 0, width: 80, height: 20)])
+    }
+
+    func testTrimToFlowCarriesCellsSoRowsRespectReadability() {
+        // Cells travel with their characters through the flow trim, so a rows
+        // selection highlights only the matched cells it kept.
+        let cells = (0..<6).map { i in
+            ScreenTextRunCell(
+                bounds: FramePixelRect(x: i * 8, y: 0, width: 8, height: 8),
+                matched: i != 2)  // the third cell was unreadable
+        }
+        let run = ScreenTextRun(
+            text: "ABCDEF", bounds: FramePixelRect(x: 0, y: 0, width: 48, height: 8),
+            cellWidth: 8, cellHeight: 8, cells: cells)
+        let flow = SelectionCoordinator.RowsFlow(
+            start: .init(column: 2, row: 0), end: .init(column: 5, row: 0),
+            requestRegion: FramePixelRect(x: 0, y: 0, width: 640, height: 8))
+
+        let trimmed = SelectionCoordinator.trimToFlow(runs: [run], band: band, flow: flow)
+        XCTAssertEqual(trimmed.text, "CDEF")
+        // Kept cells are C, D, E, F -- of which C (column 2) was unmatched.
+        XCTAssertEqual(trimmed.runs.first?.cells.count, 4)
+        XCTAssertEqual(SelectionCoordinator.matchedCellRects(trimmed.runs), [
+            FramePixelRect(x: 24, y: 0, width: 8, height: 8),  // D
+            FramePixelRect(x: 32, y: 0, width: 8, height: 8),  // E
+            FramePixelRect(x: 40, y: 0, width: 8, height: 8),  // F
+        ])
+    }
+
     // MARK: - Interpretation to search
 
     func testInterpretationChoosesTheSearch() {

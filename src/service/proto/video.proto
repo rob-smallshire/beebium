@@ -222,6 +222,19 @@ message GetScreenTextRequest {
     ScreenTextLayout layout = 3;
 }
 
+// One character cell of a run: where it sits, and whether a glyph was
+// recognised there. A genuine space is a match (it is a real character); an
+// unmatched cell had ink the font could not identify and copies as a space.
+message ScreenTextCell {
+    PixelRegion bounds = 1;
+
+    // True when a glyph was recognised here, false when the cell had ink that
+    // matched nothing. So a client can highlight only what was read: painting
+    // an unmatched cell would dress a failed read up as a success, even though
+    // the text still carries a space for it to keep columns aligned.
+    bool matched = 2;
+}
+
 // A contiguous piece of text and where it was found, so a client can highlight
 // exactly what it captured.
 message ScreenTextRun {
@@ -233,6 +246,13 @@ message ScreenTextRun {
     // the graphics cursor is.
     uint32 cell_width = 3;
     uint32 cell_height = 4;
+
+    // The run's cells in reading order, from the glyph-recognising strategy, so
+    // a client highlights only the cells it read rather than the whole run --
+    // which spans unmatched cells too. Empty from the teletext strategy, whose
+    // cells are exact characters and are all matched: a client then highlights
+    // the whole run's bounds.
+    repeated ScreenTextCell cells = 5;
 }
 
 message ScreenText {
