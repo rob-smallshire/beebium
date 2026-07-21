@@ -84,16 +84,18 @@ Band teletext_band() {
     Band band;
     band.top = 0;
     band.bottom = 500;
-    band.cell_width = 12;
+    band.cell_width = 16;
     band.cell_height = 20;
-    band.column_pitch = 12;
+    band.column_pitch = 16;
     band.row_pitch = 20;
     band.is_teletext = true;
     return band;
 }
 
 PixelRect whole_screen() {
-    return {0, 0, 480, 500};
+    // A teletext character is sixteen framebuffer pixels wide, so a 40-column
+    // screen is 640 across, the same width the renderer reports.
+    return {0, 0, 640, 500};
 }
 
 } // namespace
@@ -310,7 +312,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
         const BandReading reading =
             read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
 
-        REQUIRE(reading.runs[0].cell_width == 12);
+        REQUIRE(reading.runs[0].cell_width == 16);
         REQUIRE(reading.runs[0].cell_height == 20);
         REQUIRE(reading.runs[0].bounds.x == 0);
         REQUIRE(reading.runs[0].bounds.y == 0);
@@ -337,7 +339,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
     }
 
     SECTION("a region reads only the cells inside it") {
-        const PixelRect region{0, 0, 5 * 12, 1 * 20};
+        const PixelRect region{0, 0, 5 * 16, 1 * 20};
         const BandReading reading =
             read_band(teletext_band(), region, Search::Anywhere, teletext_sources(screen));
 
@@ -739,14 +741,14 @@ TEST_CASE("Bands come from what the renderer recorded", "[screen-text]") {
         FrameMetadata meta;
         meta.height = 500;
         meta.interlaced = true;
-        meta.regions.push_back({0, 500, 480, 20, true});
+        meta.regions.push_back({0, 500, 640, 20, true});
 
         const std::vector<Band> bands = bands_of(meta);
 
         REQUIRE(bands.size() == 1);
         REQUIRE(bands[0].is_teletext);
-        REQUIRE(bands[0].cell_width == 12);
-        REQUIRE(bands[0].column_pitch == 12);
+        REQUIRE(bands[0].cell_width == 16);
+        REQUIRE(bands[0].column_pitch == 16);
         REQUIRE(bands[0].row_pitch == 20);
         REQUIRE(bands[0].cell_height == 20);
     }

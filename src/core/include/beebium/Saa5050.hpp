@@ -214,6 +214,7 @@ public:
         m_last_graphics_char = 0;
         m_capture_row = 0;
         m_capture_column = 0;
+        m_display_started = false;
         m_write_index = 0;  // No pipeline delay - output immediately
         m_read_index = 0;
         std::memset(m_output, 0, sizeof(m_output));
@@ -392,6 +393,7 @@ public:
             m_teletext_grid->swap();
         }
         m_capture_row = 0;
+        m_display_started = false;
         m_raster = 0;
         ++m_frame;
         if (m_frame >= 64) {
@@ -444,6 +446,20 @@ private:
     void capture_cell(uint8_t value, uint8_t dispen, bool cursor) {
         if (!m_teletext_grid || !dispen) {
             return;
+        }
+
+        // set_raster() advances m_capture_row on every character-row wrap,
+        // whether or not display is enabled, so the vertical-border rows between
+        // vsync and the first displayed row leave it counting from the top of
+        // the frame rather than the top of the picture. The renderer, by
+        // contrast, resets its write position when display enable rises, so the
+        // pixels of the first displayed row land at grid row 0. Snap the capture
+        // row back to zero at the first displayed cell of the frame so the
+        // captured grid and the rendered pixels agree on which row is which --
+        // otherwise every cell is recorded a few rows below where it was drawn.
+        if (!m_display_started) {
+            m_capture_row = 0;
+            m_display_started = true;
         }
 
         TeletextCell cell;
@@ -648,6 +664,10 @@ private:
     TeletextGrid* m_teletext_grid = nullptr;
     uint8_t m_capture_row = 0;
     uint8_t m_capture_column = 0;
+    // Whether display enable has risen this frame, so the border rows that
+    // set_raster() counted before the picture began can be discounted (see
+    // capture_cell). Reset at vsync and in reset().
+    bool m_display_started = false;
 
     // Double height state
     uint8_t m_raster_shift = 0;

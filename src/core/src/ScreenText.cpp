@@ -35,8 +35,15 @@ constexpr uint32_t BITMAP_CELL_WIDTH = 8;
 // leave the two spare scanlines of their ten-scanline pitch blank.
 constexpr uint32_t BITMAP_CELL_HEIGHT = 8;
 
-// The SAA5050 draws a character as twelve pixels across two batches of six.
-constexpr uint32_t TELETEXT_CELL_WIDTH = 12;
+// The SAA5050 draws a character sixteen framebuffer pixels wide: two pixel
+// batches, each expanding six bits of the font row to eight pixels (Saa5050
+// emit_pixels). A whole 40-column teletext row is therefore 640 pixels, the
+// same width the renderer reports -- so a run's bounds line up with the pixels
+// it names. (The chip's internal font row is doubled 6->12 for anti-aliasing,
+// which is where an earlier value of twelve came from, but that is re-expanded
+// to 8 per half before it reaches the framebuffer, so the on-screen pitch is
+// sixteen, not twelve.)
+constexpr uint32_t TELETEXT_CELL_WIDTH = 16;
 
 void strip_trailing_spaces(std::string& line) {
     while (!line.empty() && line.back() == ' ') {

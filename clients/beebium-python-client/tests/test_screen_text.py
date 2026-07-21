@@ -30,9 +30,10 @@ def _wait_for_prompt(bbc: Beebium) -> None:
     )
 
 
-# The SAA5050 draws a character twelve pixels wide; every bitmap mode uses
-# eight. That makes the cell width the reliable sign of which is driving.
-TELETEXT_CELL_WIDTH = 12
+# The SAA5050 draws a character sixteen framebuffer pixels wide (two batches of
+# eight); every bitmap mode uses eight. That makes the cell width the reliable
+# sign of which is driving.
+TELETEXT_CELL_WIDTH = 16
 
 
 def _switch_to_mode(bbc: Beebium, mode: int, message: str) -> bool:
@@ -228,8 +229,8 @@ class TestScreenGeometry:
         assert len(geometry.bands) == 1
         band = geometry.bands[0]
         assert (band.bottom - band.top) // band.row_pitch == 25
-        assert band.cell_width == 12
-        assert band.column_pitch == 12
+        assert band.cell_width == 16
+        assert band.column_pitch == 16
 
     def test_a_bitmap_mode_reports_its_own_grid(self, bbc: Beebium) -> None:
         # Reported even though no strategy can read text from the band:
