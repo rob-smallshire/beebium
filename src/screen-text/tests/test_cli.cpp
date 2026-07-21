@@ -946,3 +946,33 @@ TEST_CASE("The offset search reads real text off a hostile background")
         CHECK(permitted.find(character) != std::string::npos);
     }
 }
+
+TEST_CASE("A game's own font is declined by the ROM set, read when supplied")
+{
+    // Thrust draws its high-score table in a bespoke 5-pixel font it blits
+    // from its own glyph table -- not the ROM font, and not a VDU 23
+    // redefinition the MOS would give a character code. So the built-in Acorn
+    // set matches almost none of it, and the text copies as spaces: unread,
+    // never guessed. This is the "copies as spaces" a custom-font game shows.
+    const std::string image = fixture_filepath("screens/thrust-hiscore.png");
+
+    const Output builtin = run("read \"" + image + "\" --format json");
+    CHECK(builtin.status == 0);
+    // Almost the whole table is unmatched against the ROM font.
+    CHECK(json_number(builtin.stdout_text, "unmatched_cells") > 400);
+    const Output builtin_text = run("read \"" + image + "\"");
+    CHECK(builtin_text.stdout_text.find("THRUSTERS") == std::string::npos);
+    CHECK(builtin_text.stdout_text.find("SPACELORD") == std::string::npos);
+
+    // Supply the game's own font -- transcribed into fonts/thrust.glyphs --
+    // and the same pixels read as text.
+    const std::string font = fixture_filepath("fonts/thrust.glyphs");
+    const Output supplied
+        = run("read \"" + image + "\" --no-builtin --glyphs \"" + font + "\"");
+    CHECK(supplied.status == 0);
+    CHECK(supplied.stdout_text.find("TOP EIGHT THRUSTERS") != std::string::npos);
+    CHECK(supplied.stdout_text.find("SPACELORD") != std::string::npos);
+    CHECK(supplied.stdout_text.find("COMMODORE") != std::string::npos);
+    CHECK(supplied.stdout_text.find("PRESS SPACE BAR TO START")
+          != std::string::npos);
+}
