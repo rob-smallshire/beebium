@@ -73,12 +73,21 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         ) { notification in
             guard let menu = notification.object as? NSMenu else { return }
             Self.placeFullSpeedPasteBelowPaste(in: menu)
+            Self.placeCopyVariantsBelowCopy(in: menu)
         }
     }
 
-    /// Guards against the reordering below re-entering through the very
-    /// notification that triggered it.
+    /// The screen-copy variants that must sit together directly beneath the
+    /// standard Copy, in this order. SwiftUI drops them after the whole
+    /// pasteboard group (below Select All), stranded from the Copy they belong
+    /// with; this pulls them back up. Matched by title because they are ours and
+    /// never localised.
+    private static let copyVariantTitles = ["Copy as Columns", "Copy Text from Graphics"]
+
+    /// Guards against the reorderings below re-entering through the very
+    /// notification that triggered them.
     private static var isReorderingPasteItems = false
+    private static var isReorderingCopyItems = false
 
     private static func placeFullSpeedPasteBelowPaste(in menu: NSMenu) {
         guard !isReorderingPasteItems else { return }
@@ -99,6 +108,42 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         let item = menu.items[fullSpeedIndex]
         menu.removeItem(at: fullSpeedIndex)
         menu.insertItem(item, at: pasteIndex + 1)
+    }
+
+    private static func placeCopyVariantsBelowCopy(in menu: NSMenu) {
+        guard !isReorderingCopyItems else { return }
+
+        // Copy is matched by selector so it survives localisation; the variants
+        // by their (unlocalised) titles.
+        let variants = copyVariantTitles.compactMap { title in
+            menu.items.first(where: { $0.title == title })
+        }
+        guard variants.count == copyVariantTitles.count,
+              let copyIndex = menu.items.firstIndex(
+                  where: { $0.action == #selector(NSText.copy(_:)) })
+        else { return }
+
+        // Already grouped in order immediately below Copy? Then nothing to do,
+        // which is also what stops this re-entering endlessly.
+        let wanted = Array(menu.items[
+            (copyIndex + 1)..<min(copyIndex + 1 + variants.count, menu.items.count)])
+        if wanted == variants { return }
+
+        isReorderingCopyItems = true
+        defer { isReorderingCopyItems = false }
+
+        for item in variants {
+            if let index = menu.items.firstIndex(of: item) {
+                menu.removeItem(at: index)
+            }
+        }
+        // Copy's index can have shifted as the variants were pulled out.
+        guard let anchor = menu.items.firstIndex(
+                  where: { $0.action == #selector(NSText.copy(_:)) })
+        else { return }
+        for (offset, item) in variants.enumerated() {
+            menu.insertItem(item, at: anchor + 1 + offset)
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -194,21 +239,31 @@ struct BeebiumApp: App {
             // handled by the machine view's responder. These two are the other
             // interpretations, discoverable in the menu with their shortcuts:
             // holding the modifier previews the highlight, pressing C commits
-            // it. Names are placeholders pending a look at the built menu.
+            // it. placeCopyVariantsBelowCopy pulls them up to sit under Copy,
+            // which SwiftUI cannot do (it can only place a group after the whole
+            // pasteboard group). The help strings carry the nuance the short
+            // titles cannot -- what each captures, and that the last one reads
+            // text out of the picture and so is the least certain.
             CommandGroup(after: .pasteboard) {
-                Button("Copy Columns") {
+                Button("Copy as Columns") {
                     guard let coordinator = selectionCoordinator else { return }
                     Task { @MainActor in await coordinator.copy(.rectangle) }
                 }
                 .keyboardShortcut("c", modifiers: [.option, .command])
                 .disabled(selectionCoordinator == nil)
+                .help("Copy the selected block of characters column by column, "
+                    + "as for a table of figures.")
 
-                Button("Copy All Text") {
+                Button("Copy Text from Graphics") {
                     guard let coordinator = selectionCoordinator else { return }
                     Task { @MainActor in await coordinator.copy(.anywhere) }
                 }
                 .keyboardShortcut("c", modifiers: [.shift, .command])
                 .disabled(selectionCoordinator == nil)
+                .help("Copy all the text in the selection, including text drawn "
+                    + "freely into the picture such as a game's score. Reads the "
+                    + "text out of the pixels, so it is the least certain of the "
+                    + "copy commands.")
             }
 
             CommandGroup(after: .pasteboard) {

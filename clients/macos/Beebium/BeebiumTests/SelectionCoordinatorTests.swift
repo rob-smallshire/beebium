@@ -296,16 +296,30 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertEqual(freezer.resumed, 1)
     }
 
-    func testLoadBandsRefreshesTheMarquee() async {
+    func testRowsShowsItsRangeAndNotTheMarquee() async {
+        // The snapped range traces a rows selection, so the raw marquee outline
+        // is suppressed to avoid cluttering it.
         let (coordinator, _, _, _, _) = makeCoordinator(bands: [band])
-        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.5, y: 0.5),
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
                           interpretation: .rows)
-        XCTAssertNil(coordinator.marqueeRect)
-        // Fetching the grid refreshes the highlights, which sets the marquee
-        // rectangle synchronously (the run highlights themselves are fetched
-        // asynchronously and are not asserted here).
         await coordinator.loadBandsAndRefresh()
+        coordinator.update(toNormalizedPoint: CGPoint(x: 0.7, y: 0.7))
+
+        XCTAssertNil(coordinator.marqueeRect)
+        XCTAssertFalse(coordinator.rangeRects.isEmpty)
+    }
+
+    func testAnywhereShowsTheMarqueeAndHasNoRange() async {
+        // Anywhere has no grid, so nothing snaps; the marquee outline is the
+        // only thing that shows how far the selection reaches.
+        let (coordinator, _, _, _, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .anywhere)
+        await coordinator.loadBandsAndRefresh()
+        coordinator.update(toNormalizedPoint: CGPoint(x: 0.7, y: 0.7))
+
         XCTAssertNotNil(coordinator.marqueeRect)
+        XCTAssertTrue(coordinator.rangeRects.isEmpty)
     }
 
     // MARK: - Copy

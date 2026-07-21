@@ -267,9 +267,13 @@ final class SelectionCoordinator: ObservableObject {
             rangeRects = []
             return
         }
-        marqueeRect = region
-
         let interpretation = self.interpretation
+
+        // Rows and columns show their snapped range, which traces the selection
+        // more clearly than the raw drag, so the marquee outline would only
+        // clutter them. Only the grid-less anywhere mode, which has no range,
+        // needs the outline to show how far the selection reaches.
+        marqueeRect = interpretation == .anywhere ? region : nil
 
         // The range is pure geometry from the frozen grid, so it can be drawn at
         // once, without waiting for the text. The band under the selection start
