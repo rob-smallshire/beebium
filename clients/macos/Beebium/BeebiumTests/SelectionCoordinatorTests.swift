@@ -195,6 +195,48 @@ final class SelectionCoordinatorTests: XCTestCase {
         ])
     }
 
+    func testMatchedSpaceBetweenGlyphsIsHighlighted() {
+        // "A B": the space bridges two real glyphs, so it is lit along with
+        // them -- a continuous highlight, as an editor draws it.
+        let run = ScreenTextRun(
+            text: "A B", bounds: FramePixelRect(x: 0, y: 0, width: 24, height: 8),
+            cellWidth: 8, cellHeight: 8,
+            cells: [
+                ScreenTextRunCell(bounds: FramePixelRect(x: 0, y: 0, width: 8, height: 8),
+                                  matched: true),
+                ScreenTextRunCell(bounds: FramePixelRect(x: 8, y: 0, width: 8, height: 8),
+                                  matched: true),
+                ScreenTextRunCell(bounds: FramePixelRect(x: 16, y: 0, width: 8, height: 8),
+                                  matched: true),
+            ])
+        XCTAssertEqual(SelectionCoordinator.matchedCellRects([run]), [
+            FramePixelRect(x: 0, y: 0, width: 8, height: 8),
+            FramePixelRect(x: 8, y: 0, width: 8, height: 8),
+            FramePixelRect(x: 16, y: 0, width: 8, height: 8),
+        ])
+    }
+
+    func testAllGlyphsUnreadableLightsNothingNotItsGaps() {
+        // A custom-font run: every letter is unmatched, so its characters read
+        // as spaces, and the only matched cell is a genuine gap between words.
+        // That lone space is not text we read, so nothing is highlighted --
+        // rather than lighting the gaps and leaving the letters dark.
+        let run = ScreenTextRun(
+            text: "    ", bounds: FramePixelRect(x: 0, y: 0, width: 32, height: 8),
+            cellWidth: 8, cellHeight: 8,
+            cells: [
+                ScreenTextRunCell(bounds: FramePixelRect(x: 0, y: 0, width: 8, height: 8),
+                                  matched: false),
+                ScreenTextRunCell(bounds: FramePixelRect(x: 8, y: 0, width: 8, height: 8),
+                                  matched: false),
+                ScreenTextRunCell(bounds: FramePixelRect(x: 16, y: 0, width: 8, height: 8),
+                                  matched: true),  // a gap that fits the space glyph
+                ScreenTextRunCell(bounds: FramePixelRect(x: 24, y: 0, width: 8, height: 8),
+                                  matched: false),
+            ])
+        XCTAssertTrue(SelectionCoordinator.matchedCellRects([run]).isEmpty)
+    }
+
     func testMatchedCellRectsFallsBackToRunBoundsWithoutCells() {
         // Teletext reports no cells (all exact matches); the whole run is lit.
         let run = ScreenTextRun(

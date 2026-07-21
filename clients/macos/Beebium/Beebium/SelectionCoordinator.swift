@@ -304,16 +304,39 @@ final class SelectionCoordinator: ObservableObject {
         }
     }
 
-    /// The rectangles to highlight for a set of runs: each matched cell, or the
-    /// whole run's bounds when it reports no cells (teletext, whose cells are all
-    /// exact matches). Unmatched cells -- ink the font could not identify -- are
-    /// left dark, so the overlay shows only what was actually read, not a line
-    /// of spaces dressed up as a successful copy.
+    /// The rectangles to highlight for a set of runs, showing only the text that
+    /// was actually read.
+    ///
+    /// A run with no cells is teletext, whose cells are all exact matches: the
+    /// whole run's bounds are lit. Otherwise a cell is lit only when it is a
+    /// *real glyph* -- matched, and not a space -- or a space that bridges real
+    /// glyphs, the way an editor highlights the space in "two words". A matched
+    /// space is a blank cell that happens to fit the space glyph; adrift in a
+    /// run of unrecognised glyphs (a game's custom font, where every letter is
+    /// unmatched and only the gaps between words match) it is not text we read,
+    /// so it stays dark and the overlay honestly shows nothing rather than a row
+    /// of lit gaps.
+    ///
+    /// The run's `text` is one character per cell, so a cell's character says
+    /// whether it is a space without the server having to send the codepoint.
     static func matchedCellRects(_ runs: [ScreenTextRun]) -> [FramePixelRect] {
-        runs.flatMap { run in
-            run.cells.isEmpty
-                ? [run.bounds]
-                : run.cells.filter { $0.matched }.map { $0.bounds }
+        runs.flatMap { run -> [FramePixelRect] in
+            guard !run.cells.isEmpty else { return [run.bounds] }
+
+            let characters = Array(run.text)
+            func isRealGlyph(_ i: Int) -> Bool {
+                run.cells[i].matched && i < characters.count && characters[i] != " "
+            }
+            let realGlyphs = run.cells.indices.filter(isRealGlyph)
+            guard let first = realGlyphs.first, let last = realGlyphs.last else {
+                // Nothing recognised in this run -- do not light its gaps.
+                return []
+            }
+            // From the first real glyph to the last, light every matched cell:
+            // the glyphs, and the spaces between them that they bridge.
+            return (first...last)
+                .filter { run.cells[$0].matched }
+                .map { run.cells[$0].bounds }
         }
     }
 
