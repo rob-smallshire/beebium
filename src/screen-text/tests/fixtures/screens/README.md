@@ -184,3 +184,16 @@ uv run --extra imaging python ../../src/screen-text/tests/fixtures/capture_waffl
 The navigation is boot, `Y` at "Instructions?", then a key through four
 instruction screens and into the game. Each screen wants a few seconds to draw;
 capture too early and you get it half-finished.
+
+# Thrust
+
+`thrust-hiscore.png` -- the high-score table of Thrust (Superior Software),
+288x240, reached by pressing ESCAPE during play. Its text is drawn in the
+game's own five-pixel font, blitted from a private glyph table rather than
+printed as MOS characters, so the ROM glyph set matches almost none of it and
+the table copies as spaces -- the correct "unread, not guessed" behaviour for a
+custom-font game. Supplying `../fonts/thrust.glyphs`, transcribed from this very
+screen, reads it in full. Both are asserted as a test.
+
+Captured with `../capture_thrust.py`, which also dumps the redefinable-character
+RAM to show the font is not there -- evidence the text is not MOS characters.

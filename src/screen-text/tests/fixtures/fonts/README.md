@@ -51,3 +51,14 @@ python3 ../import_fonts.py --archives-dirpath <directory of unzipped fonts>
 
 Which fonts are converted, and the note recorded at the top of each, live in
 `FONTS` in that script.
+
+## thrust.glyphs -- a game's own font
+
+`thrust.glyphs` is different in kind from the five above: not a period BBC font
+installed by `VDU 23`, but the bespoke five-pixel typeface Thrust (Superior
+Software, 1986) blits from its own glyph table. It exists to demonstrate the
+supplied-glyph-set path on a real custom-font game: against the ROM set the
+high-score screen (`../screens/thrust-hiscore.png`) reads as spaces, because
+none of its glyphs is the ROM font; against this set it reads in full. It
+covers only the letters, digits and stop that screen uses. See its header for
+how it was transcribed, and `../capture_thrust.py` for the capture.
