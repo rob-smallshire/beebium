@@ -23,14 +23,22 @@ import AppKit
 /// drawing agreeing on which way is up.
 final class SelectionOverlayView: NSView {
 
+    /// The selection range, in this view's coordinates: the reading-order flow
+    /// (rows), the snapped block (rectangle), or empty (anywhere). Drawn as the
+    /// lighter fill beneath the runs, so "what is selected" reads distinctly
+    /// from "what will copy".
+    var rangeRects: [CGRect] = [] {
+        didSet { needsDisplay = true }
+    }
+
     /// The recognised runs, in this view's coordinates. These are what a copy
-    /// would take, so highlighting them is the version-one feedback.
+    /// would take, drawn as the stronger fill on top of the range.
     var highlightRects: [CGRect] = [] {
         didSet { needsDisplay = true }
     }
 
-    /// The raw dragged rectangle, in this view's coordinates. Outlined so the
-    /// user sees the gesture even where no text was found.
+    /// The raw dragged rectangle, in this view's coordinates. Outlined faintly so
+    /// the user still sees the literal gesture beneath the snapped range.
     var marqueeRect: CGRect? {
         didSet { needsDisplay = true }
     }
@@ -44,16 +52,23 @@ final class SelectionOverlayView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        // A tint that reads on both the bright and dark screens a BBC produces.
-        let fill = NSColor.selectedContentBackgroundColor.withAlphaComponent(0.35)
-        context.setFillColor(fill.cgColor)
+        // One tint that reads on both the bright and dark screens a BBC
+        // produces, in two intensities: the range (what is selected) beneath the
+        // runs (what will copy).
+        let tint = NSColor.selectedContentBackgroundColor
+
+        context.setFillColor(tint.withAlphaComponent(0.25).cgColor)
+        for rect in rangeRects {
+            context.fill(rect.integral)
+        }
+
+        context.setFillColor(tint.withAlphaComponent(0.50).cgColor)
         for rect in highlightRects {
             context.fill(rect.integral)
         }
 
         if let marquee = marqueeRect {
-            context.setStrokeColor(
-                NSColor.selectedContentBackgroundColor.withAlphaComponent(0.9).cgColor)
+            context.setStrokeColor(tint.withAlphaComponent(0.5).cgColor)
             context.setLineWidth(1.0)
             // Inset by half a line so the 1px stroke sits inside the rectangle.
             context.stroke(marquee.insetBy(dx: 0.5, dy: 0.5))

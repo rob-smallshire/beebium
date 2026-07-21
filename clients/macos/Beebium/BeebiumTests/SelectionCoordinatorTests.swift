@@ -110,6 +110,68 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertEqual(trimmed.text, "WXYZ")
     }
 
+    // MARK: - Selection range (the lighter fill)
+
+    func testRowsRangeFlowsToTheScreenEdges() {
+        // Anchor col 2 row 0, focus col 3 row 2: first row from col 2 to the
+        // right edge, the whole middle row, the last row from the left edge to
+        // col 3. Full width is 640 (80 columns of 8).
+        let rects = SelectionCoordinator.rangeRects(
+            interpretation: .rows,
+            anchor: CGPoint(x: 20, y: 2), focus: CGPoint(x: 30, y: 18),
+            band: band, frameWidth: 640)
+        XCTAssertEqual(rects, [
+            FramePixelRect(x: 16, y: 0, width: 624, height: 8),   // col 2 -> right
+            FramePixelRect(x: 0, y: 8, width: 640, height: 8),    // whole middle row
+            FramePixelRect(x: 0, y: 16, width: 32, height: 8),    // left -> col 3
+        ])
+    }
+
+    func testRowsRangeOnASingleRowIsJustTheSegment() {
+        let rects = SelectionCoordinator.rangeRects(
+            interpretation: .rows,
+            anchor: CGPoint(x: 20, y: 2), focus: CGPoint(x: 52, y: 2),
+            band: band, frameWidth: 640)
+        // Columns 2..6 on row 0: x 16, through the end of column 6 (56).
+        XCTAssertEqual(rects, [FramePixelRect(x: 16, y: 0, width: 40, height: 8)])
+    }
+
+    func testRowsRangeSkipsTheMiddleBlockWhenRowsAreAdjacent() {
+        let rects = SelectionCoordinator.rangeRects(
+            interpretation: .rows,
+            anchor: CGPoint(x: 20, y: 2), focus: CGPoint(x: 30, y: 10),
+            band: band, frameWidth: 640)
+        // Rows 0 and 1 only: first row to the right edge, last row from the left.
+        XCTAssertEqual(rects, [
+            FramePixelRect(x: 16, y: 0, width: 624, height: 8),
+            FramePixelRect(x: 0, y: 8, width: 32, height: 8),
+        ])
+    }
+
+    func testRectangleRangeIsTheSnappedBlock() {
+        let rects = SelectionCoordinator.rangeRects(
+            interpretation: .rectangle,
+            anchor: CGPoint(x: 20, y: 2), focus: CGPoint(x: 30, y: 18),
+            band: band, frameWidth: 640)
+        XCTAssertEqual(rects, [FramePixelRect(x: 16, y: 0, width: 16, height: 24)])
+    }
+
+    func testAnywhereHasNoRange() {
+        let rects = SelectionCoordinator.rangeRects(
+            interpretation: .anywhere,
+            anchor: CGPoint(x: 20, y: 2), focus: CGPoint(x: 30, y: 18),
+            band: band, frameWidth: 640)
+        XCTAssertTrue(rects.isEmpty)
+    }
+
+    func testRangeIsEmptyWithoutAGrid() {
+        let rects = SelectionCoordinator.rangeRects(
+            interpretation: .rows,
+            anchor: CGPoint(x: 20, y: 2), focus: CGPoint(x: 30, y: 18),
+            band: nil, frameWidth: 640)
+        XCTAssertTrue(rects.isEmpty)
+    }
+
     // MARK: - Interpretation to search
 
     func testInterpretationChoosesTheSearch() {

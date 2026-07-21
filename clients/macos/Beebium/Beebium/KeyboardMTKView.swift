@@ -133,12 +133,16 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         guard let coordinator = selectionCoordinator, coordinator.isSelecting,
               let geometry = coordinator.frozenGeometry else {
             selectionOverlayView.isHidden = true
+            selectionOverlayView.rangeRects = []
             selectionOverlayView.highlightRects = []
             selectionOverlayView.marqueeRect = nil
             return
         }
         selectionOverlayView.isHidden = false
         let size = bounds.size
+        selectionOverlayView.rangeRects = coordinator.rangeRects.map {
+            ScreenCoordinateMapper.viewRect(frameRect: $0, geometry: geometry, viewSize: size)
+        }
         selectionOverlayView.highlightRects = coordinator.highlightRects.map {
             ScreenCoordinateMapper.viewRect(frameRect: $0, geometry: geometry, viewSize: size)
         }

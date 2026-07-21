@@ -149,9 +149,18 @@ final class SelectionCoordinator: ObservableObject {
     /// the view swallows Escape and draws the overlay.
     @Published private(set) var isSelecting = false
 
-    /// The runs currently highlighted, in frame pixels, for the overlay to
-    /// draw. Reflects the current interpretation.
+    /// The runs currently highlighted -- what a copy will actually take -- in
+    /// frame pixels, for the overlay to draw as the stronger fill. Reflects the
+    /// current interpretation.
     @Published private(set) var highlightRects: [FramePixelRect] = []
+
+    /// The selection range in frame pixels: the reading-order flow for rows (to
+    /// the screen edges), the snapped block for a rectangle, and nothing for
+    /// anywhere (which has no grid). Drawn as the lighter fill beneath the runs,
+    /// so the user sees what is selected as well as what will copy. Pure
+    /// geometry, so it appears as soon as the grid is known, before the text
+    /// comes back.
+    @Published private(set) var rangeRects: [FramePixelRect] = []
 
     /// The raw dragged rectangle, in frame pixels, for the overlay to outline.
     @Published private(set) var marqueeRect: FramePixelRect?
@@ -239,6 +248,7 @@ final class SelectionCoordinator: ObservableObject {
         frozenGeometry = nil
         bands = []
         highlightRects = []
+        rangeRects = []
         marqueeRect = nil
         highlightGeneration += 1
         freezer?.resumeDisplay()
@@ -250,14 +260,25 @@ final class SelectionCoordinator: ObservableObject {
         highlightGeneration += 1
         let generation = highlightGeneration
 
-        guard let region = selectionBounds() else {
+        guard let region = selectionBounds(),
+              let anchor = anchorFrame, let focus = focusFrame else {
             marqueeRect = nil
             highlightRects = []
+            rangeRects = []
             return
         }
         marqueeRect = region
 
         let interpretation = self.interpretation
+
+        // The range is pure geometry from the frozen grid, so it can be drawn at
+        // once, without waiting for the text. The band under the selection start
+        // decides the cell geometry.
+        let band = griddedBand(containingFrameY: Int(min(anchor.y, focus.y)))
+        rangeRects = Self.rangeRects(
+            interpretation: interpretation, anchor: anchor, focus: focus,
+            band: band, frameWidth: Int(frozenGeometry?.textureSize.width ?? 0))
+
         Task { [weak self] in
             guard let self else { return }
             let resolved = await self.resolveRuns(interpretation: interpretation)
@@ -385,6 +406,67 @@ extension SelectionCoordinator {
         let width = band.frameX(ofColumn: lastCol) + band.cellWidth - x
         let height = band.frameY(ofRow: lastRow) + band.cellHeight - y
         return FramePixelRect(x: x, y: y, width: max(0, width), height: max(0, height))
+    }
+
+    /// The selection range in frame pixels -- the overlay's lighter fill, drawn
+    /// beneath the recognised runs. Rows flows in reading order to the screen's
+    /// left and right edges; a rectangle is the snapped block; anywhere has no
+    /// grid, so its only feedback is the marquee and the runs. `frameWidth` is
+    /// the active area's width, the right edge the rows flow reaches.
+    static func rangeRects(interpretation: ScreenSelectionInterpretation,
+                           anchor: CGPoint, focus: CGPoint,
+                           band: ScreenBandGeometry?, frameWidth: Int)
+        -> [FramePixelRect] {
+        switch interpretation {
+        case .anywhere:
+            return []
+        case .rectangle:
+            guard let band, band.isGridded else { return [] }
+            return [snappedRectangle(anchor: anchor, focus: focus, band: band)]
+        case .rows:
+            guard let band, band.isGridded else { return [] }
+            let a = CellAddress(column: band.column(atFrameX: Int(anchor.x)),
+                                row: band.row(atFrameY: Int(anchor.y)))
+            let b = CellAddress(column: band.column(atFrameX: Int(focus.x)),
+                                row: band.row(atFrameY: Int(focus.y)))
+            let (start, end) = orderedInReadingOrder(a, b)
+            return rowsFlowRects(start: start, end: end, band: band,
+                                 frameWidth: frameWidth)
+        }
+    }
+
+    /// The reading-order flow as up to three rectangles: the first row from the
+    /// start column to the right edge, whole rows in between as one block, and
+    /// the last row from the left edge to the end column. A single-row selection
+    /// is just the segment between the two columns. Rows use the pitch, not the
+    /// cell height, so consecutive rows touch (MODE 3 and MODE 6 leave blank
+    /// scanlines between cells; a selection should not be dashed).
+    static func rowsFlowRects(start: CellAddress, end: CellAddress,
+                              band: ScreenBandGeometry, frameWidth: Int)
+        -> [FramePixelRect] {
+        let rowHeight = band.rowPitch
+        let leftX = band.frameX(ofColumn: 0)
+        let rightX = max(leftX, frameWidth)
+        let startX = band.frameX(ofColumn: start.column)
+        let endX = band.frameX(ofColumn: end.column) + band.columnPitch
+
+        func rowRect(_ row: Int, _ x0: Int, _ x1: Int) -> FramePixelRect {
+            FramePixelRect(x: x0, y: band.frameY(ofRow: row),
+                           width: max(0, x1 - x0), height: rowHeight)
+        }
+
+        if start.row == end.row {
+            return [rowRect(start.row, startX, endX)]
+        }
+        var rects = [rowRect(start.row, startX, rightX)]
+        let middleRows = end.row - start.row - 1
+        if middleRows > 0 {
+            rects.append(FramePixelRect(
+                x: leftX, y: band.frameY(ofRow: start.row + 1),
+                width: max(0, rightX - leftX), height: rowHeight * middleRows))
+        }
+        rects.append(rowRect(end.row, leftX, endX))
+        return rects
     }
 
     /// A cell address within a band.
