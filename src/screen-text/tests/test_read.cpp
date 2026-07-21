@@ -1516,3 +1516,116 @@ TEST_CASE("A screen in one font is not readable with another")
     CHECK(right.unmatched_cells == 0);
     CHECK(wrong.unmatched_cells > broadway.glyphs.size() / 2);
 }
+
+// The contract a client's selection overlay relies on to highlight only what
+// was read. The macOS front end walks `run.text` one character per cell,
+// against `run.cells`, to tell a recognised glyph from a space or an
+// unmatched cell. These pin what that walk assumes, so a change to how runs
+// are built cannot break it silently.
+
+namespace {
+
+// Count Unicode scalars in a UTF-8 string: bytes that are not continuation
+// bytes. This is what a client sees as "characters" (Array(String) in Swift),
+// and it must equal the cell count -- one codepoint per cell, not one byte.
+std::size_t codepoint_count(const std::string& utf8)
+{
+    std::size_t count = 0;
+    for (const unsigned char byte : utf8) {
+        if ((byte & 0xC0U) != 0x80U) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("A run's text is one codepoint per cell, even for a multibyte glyph")
+{
+    // The pound sign is one cell but two UTF-8 bytes, so counting bytes would
+    // put text and cells out of step; counting codepoints keeps them aligned.
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp(0, 0, Canvas::glyph_for(acorn(), 0x00A3U));   // pound sign
+    canvas.stamp_text(8, 0, "5", acorn(), 8);
+    canvas.stamp(16, 0, Canvas::glyph_for(acorn(), U'A'));
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    const Run& run = result.runs[0];
+    CHECK(run.text == "\xC2\xA3" "5A");            // 4 bytes
+    CHECK(run.text.size() == 4);                    // bytes
+    CHECK(codepoint_count(run.text) == 3);          // codepoints
+    CHECK(run.cells.size() == 3);                   // one per cell
+    CHECK(codepoint_count(run.text) == run.cells.size());
+}
+
+TEST_CASE("An unmatched cell is reported in the run with its bounds")
+{
+    // The overlay iterates cells and uses each cell's bounds; an unmatched
+    // cell must be present, positioned, and flagged, not dropped.
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp_text(0, 0, "A", acorn());
+    canvas.set_pixel(8, 0, 1); // middle cell: inked but not a glyph
+    canvas.stamp_text(16, 0, "B", acorn());
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    const Run& run = result.runs[0];
+    REQUIRE(run.cells.size() == 3);
+
+    CHECK_FALSE(run.cells[1].matched());
+    CHECK(run.cells[1].bounds.x == 8);
+    CHECK(run.cells[1].bounds.width == 8);
+    CHECK(run.cells[1].bounds.height == 8);
+    // A client tells this unreadable cell from a real space by the character:
+    // an unmatched cell holds a space in the text but is flagged unmatched.
+    CHECK(run.text == "A B");
+    CHECK(run.cells[0].matched());
+    CHECK(run.cells[2].matched());
+}
+
+TEST_CASE("A real gap is a matched space, distinct from an unmatched cell")
+{
+    // Both put a space in the text; the overlay separates them by the matched
+    // flag, so a genuine gap must come back matched with the space codepoint.
+    Canvas canvas(8 * 3, 8);
+    canvas.stamp_text(0, 0, "A B", acorn()); // middle cell genuinely blank
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    const Run& run = result.runs[0];
+    REQUIRE(run.cells.size() == 3);
+    CHECK(run.cells[1].matched());
+    CHECK(run.cells[1].codepoint == U' ');
+}
+
+TEST_CASE("Every offset-run cell is matched, so a client meets no unmatched one")
+{
+    // The offset search reports only matches, so a client highlighting its
+    // cells never has to reason about an unmatched one -- there are none.
+    Canvas canvas(8 * 8, 16);
+    canvas.stamp_text(3, 2, "SCORE", acorn()); // off the grid
+
+    Options options;
+    options.search = Search::OffsetOnly;
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only(), options);
+
+    REQUIRE(!result.runs.empty());
+    for (const Run& run : result.runs) {
+        for (const Cell& cell : run.cells) {
+            CHECK(cell.matched());
+        }
+    }
+}
