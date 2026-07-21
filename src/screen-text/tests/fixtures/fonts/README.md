@@ -62,3 +62,12 @@ high-score screen (`../screens/thrust-hiscore.png`) reads as spaces, because
 none of its glyphs is the ROM font; against this set it reads in full. It
 covers only the letters, digits and stop that screen uses. See its header for
 how it was transcribed, and `../capture_thrust.py` for the capture.
+
+## repton3.glyphs -- a soft font, read from RAM
+
+Where `thrust.glyphs` was transcribed from the screen because the font lived in
+a private table, `repton3.glyphs` was read straight from the MOS soft-font area
+&C00: Repton 3's menu redefines characters 224-249 as a chunky A-Z (offset
++159), a proper VDU 23 font. The mapping is therefore exact and needs no
+guessing -- code 224+n is the nth letter. It reads the menu of
+`../screens/repton3-select.png`. See its header, and `../capture_repton3.py`.

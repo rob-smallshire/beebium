@@ -197,3 +197,21 @@ screen, reads it in full. Both are asserted as a test.
 
 Captured with `../capture_thrust.py`, which also dumps the redefinable-character
 RAM to show the font is not there -- evidence the text is not MOS characters.
+
+# Repton 3
+
+`repton3-select.png` -- the MODE 5 splash and menu (PLEASE SELECT / (1) THE
+GAME / (2) THE EDITOR), 160x256. Where Thrust hides its font in a private
+table, Repton's menu is the opposite: the MOS soft font at &C00, characters
+224-249 redefined as a chunky A-Z (the game prints a capital as letter+159). So
+the ROM-font "(1)" and "(2)" read, while the redefined words copy as spaces
+until `../fonts/repton3.glyphs` -- read straight from that soft-font RAM -- is
+supplied, and then the menu reads in full. Both are asserted as a test.
+
+The game's own credits screen ("Written by Matthew Atkinson"), reached by
+selecting the game and waiting through the load, uses a different thin font
+blitted from a private table, in neither &C00 nor the ROM -- so Repton uses
+both mechanisms, a screen each. It is investigated but not committed.
+
+Captured with `../capture_repton3.py`, which dumps the soft font to show it is
+there (unlike Thrust's).

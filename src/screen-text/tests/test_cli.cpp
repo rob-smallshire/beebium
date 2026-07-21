@@ -976,3 +976,30 @@ TEST_CASE("A game's own font is declined by the ROM set, read when supplied")
     CHECK(supplied.stdout_text.find("PRESS SPACE BAR TO START")
           != std::string::npos);
 }
+
+TEST_CASE("A soft-font game reads with its VDU 23 alphabet supplied")
+{
+    // Repton 3's menu is the MOS soft font at &C00: characters 224-249
+    // redefined as a chunky A-Z, so the game prints a capital by printing
+    // letter+159. Against the ROM set the menu copies as spaces, though the
+    // ROM-font "(1)" and "(2)" read; supply the game's A-Z and it reads.
+    const std::string image = fixture_filepath("screens/repton3-select.png");
+
+    const Output builtin = run("read \"" + image + "\"");
+    CHECK(builtin.status == 0);
+    // The ROM-font option numbers read; the custom-font words do not.
+    CHECK(builtin.stdout_text.find("(1)") != std::string::npos);
+    CHECK(builtin.stdout_text.find("(2)") != std::string::npos);
+    CHECK(builtin.stdout_text.find("THE GAME") == std::string::npos);
+    CHECK(builtin.stdout_text.find("PLEASE SELECT") == std::string::npos);
+
+    // Supplying the redefined alphabet reads the menu, ROM parentheses and
+    // all, in one pass -- the two glyph sets coexisting.
+    const std::string font = fixture_filepath("fonts/repton3.glyphs");
+    const Output supplied
+        = run("read \"" + image + "\" --glyphs \"" + font + "\"");
+    CHECK(supplied.status == 0);
+    CHECK(supplied.stdout_text.find("PLEASE SELECT:") != std::string::npos);
+    CHECK(supplied.stdout_text.find("(1) THE GAME") != std::string::npos);
+    CHECK(supplied.stdout_text.find("(2) THE EDITOR") != std::string::npos);
+}
