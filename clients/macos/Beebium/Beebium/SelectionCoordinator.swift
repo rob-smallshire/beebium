@@ -62,7 +62,7 @@ enum ScreenTextCharactersMode: String, CaseIterable {
     /// Where the choice is remembered between sessions. A window takes this as
     /// its starting value and may then be set independently, so two windows
     /// showing different things can be read differently.
-    static let defaultsKey = "screenTextTeletextCharacters"
+    static let defaultsKey = "screenTextMode7Characters"
 
     /// The remembered choice, or `.codes` when nothing has been remembered or
     /// what was remembered is no longer a mode we have.
@@ -220,7 +220,7 @@ final class SelectionCoordinator: ObservableObject {
 
     private(set) var interpretation: ScreenSelectionInterpretation = .rows
 
-    /// Where the `Teletext Copies As` choice is read from. Injectable so the
+    /// Where the `Mode 7 Copies As` choice is read from. Injectable so the
     /// coordinator can be tested without touching the user's own defaults.
     var defaults: UserDefaults = .standard
 
@@ -231,8 +231,8 @@ final class SelectionCoordinator: ObservableObject {
     ///
     /// Read at each copy rather than held. The menu writes the defaults and
     /// nothing pushes the value here, which is what keeps that submenu free of
-    /// any focused value -- see CopyTeletextAsMenu for why that matters.
-    var teletextCharacters: ScreenTextCharactersMode {
+    /// any focused value -- see Mode7CopiesAsMenu for why that matters.
+    var mode7Characters: ScreenTextCharactersMode {
         .remembered(in: defaults)
     }
 
@@ -422,7 +422,7 @@ final class SelectionCoordinator: ObservableObject {
     func copyWholeScreen() async -> String? {
         guard let reading = await textService?.screenText(
             region: nil, search: .aligned, layout: .rows,
-            characters: teletextCharacters) else { return nil }
+            characters: mode7Characters) else { return nil }
         let text = reading.text
         guard !text.isEmpty else { return nil }
         pasteboard?.writeText(text)
@@ -450,14 +450,14 @@ final class SelectionCoordinator: ObservableObject {
             let region = Self.boundingRect(anchor, focus)
             guard let reading = await textService?.screenText(
                 region: region, search: .anywhere, layout: .rows,
-                characters: teletextCharacters) else { return nil }
+                characters: mode7Characters) else { return nil }
             return (reading.runs, reading.text)
 
         case .rectangle:
             let region = Self.snappedRectangle(anchor: anchor, focus: focus, band: band)
             guard let reading = await textService?.screenText(
                 region: region, search: .aligned, layout: .rows,
-                characters: teletextCharacters) else { return nil }
+                characters: mode7Characters) else { return nil }
             return (reading.runs, reading.text)
 
         case .rows:
@@ -466,14 +466,14 @@ final class SelectionCoordinator: ObservableObject {
                 let region = Self.boundingRect(anchor, focus)
                 guard let reading = await textService?.screenText(
                     region: region, search: .aligned, layout: .rows,
-                    characters: teletextCharacters) else { return nil }
+                    characters: mode7Characters) else { return nil }
                 return (reading.runs, reading.text)
             }
             let flow = Self.rowsFlow(anchor: anchor, focus: focus, band: band,
                                      frameWidth: Int(frozenGeometry?.textureSize.width ?? 0))
             guard let reading = await textService?.screenText(
                 region: flow.requestRegion, search: .aligned, layout: .rows,
-                characters: teletextCharacters) else {
+                characters: mode7Characters) else {
                 return nil
             }
             return Self.trimToFlow(runs: reading.runs, band: band, flow: flow)

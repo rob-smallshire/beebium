@@ -79,12 +79,12 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
 
     /// The screen-copy items that must sit together directly beneath the
     /// standard Copy, in this order: the two copy variants, then the submenu
-    /// saying how teletext is copied. SwiftUI drops them after the whole
+    /// saying how Mode 7 is copied. SwiftUI drops them after the whole
     /// pasteboard group (below Select All), stranded from the Copy they belong
     /// with; this pulls them back up. Matched by title because they are ours and
     /// never localised.
     private static let copySectionTitles = [
-        "Copy as Columns", "Copy Text from Graphics", "Teletext Copies As",
+        "Copy as Columns", "Copy Text from Graphics", "Mode 7 Copies As",
     ]
 
     /// Guards against the reorderings below re-entering through the very
@@ -281,7 +281,7 @@ struct BeebiumApp: App {
                 // putting the checkmark in the title, and a menu item whose
                 // title changes is a different item, so every toggle replaces
                 // the whole submenu instead of updating it.
-                CopyTeletextAsMenu()
+                Mode7CopiesAsMenu()
             }
 
             CommandGroup(after: .pasteboard) {
@@ -339,8 +339,13 @@ struct BeebiumApp: App {
     }
 }
 
-/// The Edit menu's `Teletext Copies As` submenu: which meaning a MODE 7 byte
+/// The Edit menu's `Mode 7 Copies As` submenu: which meaning a MODE 7 byte
 /// carries when it is copied.
+///
+/// Named for the screen mode, not for teletext. Teletext is the broadcast data
+/// service, and the Acorn Teletext Adapter -- a 1 MHz bus peripheral with a TV
+/// tuner -- is a thing this emulator may one day have. Spending the word on a
+/// screen-mode concern here would leave that peripheral nowhere to stand.
 ///
 /// A preference rather than a command: it is not about a particular window, so
 /// it reads and writes the defaults directly and no focused value comes into
@@ -351,12 +356,12 @@ struct BeebiumApp: App {
 /// is what a Picker models and what AppKit draws the radio checkmark for;
 /// building it from Buttons means putting the checkmark in the title, and a
 /// menu item whose title changes is a different item.
-private struct CopyTeletextAsMenu: View {
+private struct Mode7CopiesAsMenu: View {
     @AppStorage(ScreenTextCharactersMode.defaultsKey)
     private var characters: String = ScreenTextCharactersMode.codes.rawValue
 
     var body: some View {
-        Picker("Teletext Copies As", selection: $characters) {
+        Picker("Mode 7 Copies As", selection: $characters) {
             Text("Character Codes")
                 .help("Copy the character codes at face value, so square "
                     + "brackets and the caret come back as themselves. Keeps a "
@@ -365,8 +370,9 @@ private struct CopyTeletextAsMenu: View {
 
             Text("Displayed Characters")
                 .help("Copy the characters the screen actually showed, so the "
-                    + "arrows, fractions and division sign the teletext chip "
-                    + "draws come back as themselves.")
+                    + "arrows, fractions and division sign Mode 7 draws in "
+                    + "place of some ASCII characters come back as "
+                    + "themselves.")
                 .tag(ScreenTextCharactersMode.displayed.rawValue)
         }
     }

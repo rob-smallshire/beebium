@@ -43,14 +43,25 @@ rides on the request beside `search` and `layout`.
 capturing teletext as it looked, who can say so; right for the listing case,
 which is both commoner and worse to get wrong.
 
-**The control belongs in the Edit menu, not a settings pane.** A `Teletext
+**The control belongs in the Edit menu, not a settings pane.** A `Mode 7
 Copies As` submenu of two radio items, orthogonal to the three copy commands
 rather than multiplying with them.
 
-It is deliberately *not* called `Copy Teletext As`. A title beginning with
-"Copy" reads as a fourth copy command sitting among the other three, when what
-it actually does is say how the other three behave. Naming it for the state
-rather than the action keeps the distinction visible in the menu itself.
+Two things in that title were arrived at rather than chosen first.
+
+It is not `Copy Mode 7 As`. A title beginning with "Copy" reads as a fourth
+copy command sitting among the other three, when what it actually does is say
+how those three behave. Naming it for the state rather than the action keeps
+the distinction visible in the menu itself.
+
+And it says **Mode 7**, not **Teletext**. Teletext is the broadcast data
+service; Mode 7 is the BBC screen mode that borrows its character generator.
+The two are not the same thing, and Beebium may one day emulate the Acorn
+Teletext Adapter -- a 1 MHz bus peripheral with a TV tuner, which is teletext
+in the real sense. A menu that had already spent the word on a screen-mode
+concern would leave that peripheral nowhere to stand. Mode 7 is also simply
+the more accurate name for what this governs: the screen mode, whoever put the
+characters on it.
 
 **Copy only.** Every codepoint the Displayed reading produces lies outside
 ASCII, so the paste substitutions in `TextTranslation.cpp` already map `←` and
