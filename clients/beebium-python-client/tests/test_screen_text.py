@@ -194,6 +194,38 @@ class TestTeletextRepertoire:
             == bbc.video.screen_text().text
         )
 
+    def test_sixels_copy_as_the_blocks_they_drew(self, bbc: Beebium) -> None:
+        """A mosaic is a character, and Displayed says which one.
+
+        Unicode's block sextants are the same 2x3 pattern the SAA5050 draws,
+        so this is an exact mapping and not a picture of one.
+        """
+        _wait_for_prompt(bbc)
+        # CHR$(151) selects contiguous graphics; then every block, the
+        # top-left alone, the left column, and none.
+        bbc.keyboard.type(
+            'CLS:PRINTCHR$(151);CHR$(255);CHR$(161);CHR$(181);CHR$(160);"Z"\r'
+        )
+        # Only true once the line has run: CLS wipes the echoed command, whose
+        # own "Z" would otherwise satisfy this while it was still being typed.
+        assert bbc.run_until_or_timeout(
+            lambda: "Z" in bbc.video.screen_text().text
+            and "PRINT" not in bbc.video.screen_text().text,
+            emulated_seconds=30.0,
+        )
+
+        # Under Codes a mosaic byte is a graphics code, not text -- but it
+        # still holds its column so the rows stay aligned.
+        assert bbc.video.screen_text().text.startswith("     Z")
+
+        shown = bbc.video.screen_text(characters="displayed").text
+        # A space for the control code, then the three blocks, then the blank
+        # mosaic and the letter. The full and half blocks are the patterns
+        # Unicode had before the sextants, so they are not sextants.
+        assert shown.startswith(
+            " \u2588\U0001FB00\u258c Z"
+        ), f"got {shown.splitlines()[0]!r}"
+
     def test_an_unknown_repertoire_is_refused(self, bbc: Beebium) -> None:
         with pytest.raises(ValueError, match="semaphore"):
             bbc.video.screen_text(characters="semaphore")

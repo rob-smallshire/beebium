@@ -293,6 +293,32 @@ TEST_CASE("Concatenation reports what could be read", "[screen-text]") {
     }
 }
 
+TEST_CASE("A mosaic reads as the block it drew, through read_band",
+          "[screen-text]") {
+    // The path a copy actually takes. teletext_text() and this band reader
+    // once each carried their own copy of "what a cell copies as", kept in
+    // step by a comment; both now ask teletext_cell_codepoint(), and this
+    // pins that they agree.
+    TeletextGrid grid;
+    TeletextCell mosaic;
+    mosaic.character = 0x21;  // graphics marker plus the top-left block
+    mosaic.charset = TeletextCellCharset::ContiguousGraphics;
+    grid.set_cell(0, 0, mosaic);
+    grid.swap();
+    const TeletextGrid::Snapshot screen = grid.snapshot();
+
+    const BandReading as_displayed =
+        read_band(teletext_band(), whole_screen(), Search::Anywhere,
+                  teletext_sources(screen), TeletextCharacters::Displayed);
+    REQUIRE(as_displayed.supported);
+    CHECK(as_displayed.runs[0].text == "\xF0\x9F\xAC\x80");  // U+1FB00
+
+    const BandReading as_codes =
+        read_band(teletext_band(), whole_screen(), Search::Anywhere,
+                  teletext_sources(screen), TeletextCharacters::Codes);
+    CHECK(as_codes.runs[0].text.empty());
+}
+
 TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
     const TeletextGrid::Snapshot screen =
         grid_of({"BBC Computer 32K", "", "BASIC", "", ">"});

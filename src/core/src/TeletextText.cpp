@@ -12,30 +12,14 @@
 
 #include <beebium/TeletextText.hpp>
 
+#include <beebium/Utf8.hpp>
+
 #include <algorithm>
 
 namespace beebium {
 
 namespace {
 
-// Append a codepoint to a UTF-8 string.
-void append_utf8(std::string& out, char32_t codepoint) {
-    if (codepoint < 0x80) {
-        out.push_back(static_cast<char>(codepoint));
-    } else if (codepoint < 0x800) {
-        out.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
-        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-    } else if (codepoint < 0x10000) {
-        out.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
-        out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-    } else {
-        out.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
-        out.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-    }
-}
 
 // Strip trailing spaces from the end of the accumulated text.
 void strip_trailing_spaces(std::string& text) {
@@ -80,6 +64,72 @@ char32_t teletext_alpha_codepoint(uint8_t character, TeletextCharacters characte
     return 0;
 }
 
+char32_t teletext_graphics_codepoint(uint8_t character) {
+    // Bit 5 is the graphics marker, not part of the pattern: without it the
+    // code is one of the alphanumerics that show through in graphics mode.
+    if (!(character & 0x20)) {
+        return 0;
+    }
+
+    // Gather the six lit blocks into the order Unicode numbers them: top pair,
+    // middle pair, bottom pair, left before right. The chip's bottom-right bit
+    // is 6, not 5, because 5 was spent marking the code as graphics.
+    const uint8_t pattern =
+        static_cast<uint8_t>(((character & 0x01) ? 0x01 : 0) |
+                             ((character & 0x02) ? 0x02 : 0) |
+                             ((character & 0x04) ? 0x04 : 0) |
+                             ((character & 0x08) ? 0x08 : 0) |
+                             ((character & 0x10) ? 0x10 : 0) |
+                             ((character & 0x40) ? 0x20 : 0));
+
+    // The four patterns Unicode already had characters for, which is why the
+    // sextant block holds sixty and not sixty-four.
+    switch (pattern) {
+        case 0x00: return 0x0020;  // SPACE
+        case 0x15: return 0x258C;  // LEFT HALF BLOCK
+        case 0x2A: return 0x2590;  // RIGHT HALF BLOCK
+        case 0x3F: return 0x2588;  // FULL BLOCK
+        default: break;
+    }
+
+    // The rest run in pattern order from U+1FB00, skipping those four. Only
+    // two fall below any given pattern here, the blank and the full block
+    // being the ends.
+    const uint32_t skipped = (pattern > 0x15 ? 1u : 0u) + (pattern > 0x2A ? 1u : 0u);
+    return 0x1FB00 + (pattern - 1 - skipped);
+}
+
+char32_t teletext_cell_codepoint(const TeletextCell& cell,
+                                 TeletextCharacters characters) {
+    // Showing nothing: a concealed cell is hidden until the viewer reveals it,
+    // and the lower half of a double-height row repeats the row above rather
+    // than saying anything new.
+    if (cell.concealed || cell.double_height_bottom) {
+        return 0;
+    }
+
+    if (cell.charset != TeletextCellCharset::Alpha && (cell.character & 0x20)) {
+        // A mosaic. Only the Displayed reading has anything to say about it:
+        // under Codes the byte is a graphics code, not text.
+        //
+        // Reached by held-graphics cells too, whose byte is a control code but
+        // which draw the held mosaic -- the capture resolved that, so there is
+        // nothing to re-derive here.
+        return characters == TeletextCharacters::Displayed
+                   ? teletext_graphics_codepoint(cell.character)
+                   : 0;
+    }
+
+    if (cell.is_control_code) {
+        return 0;
+    }
+
+    // Alpha, either because the cell is in alpha mode or because it is one of
+    // the alphanumerics that show through in graphics mode: 0x40-0x5F, where
+    // the graphics marker bit is clear.
+    return teletext_alpha_codepoint(cell.character, characters);
+}
+
 namespace {
 
 // Shared by the live grid and a snapshot: both expose cell(row, column).
@@ -104,16 +154,7 @@ std::string convert(const Source& grid,
         for (size_t column = first_column; column < last_column; ++column) {
             const TeletextCell& cell = grid.cell(row, column);
 
-            // Everything that is not readable alpha text occupies its column
-            // as a space, so what is copied lines up with what is displayed.
-            const bool readable =
-                !cell.is_control_code
-                && !cell.concealed
-                && !cell.double_height_bottom
-                && cell.charset == TeletextCellCharset::Alpha;
-
-            const char32_t codepoint =
-                readable ? teletext_alpha_codepoint(cell.character, characters) : 0;
+            const char32_t codepoint = teletext_cell_codepoint(cell, characters);
 
             if (codepoint == 0) {
                 line.push_back(' ');

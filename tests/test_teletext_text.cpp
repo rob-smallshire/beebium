@@ -24,6 +24,8 @@
 
 #include <beebium/TeletextText.hpp>
 
+#include <set>
+
 #include <algorithm>
 #include <vector>
 
@@ -103,9 +105,10 @@ TEST_CASE("Leading spaces are kept", "[teletext-text]") {
 // What does not copy as text
 // ============================================================================
 
-TEST_CASE("Graphics cells copy as spaces", "[teletext-text]") {
-    // Mosaics have Unicode forms and a renderer should use them, but text
-    // pasted into a bug report should not be full of block characters.
+TEST_CASE("Graphics cells copy as spaces under Codes", "[teletext-text]") {
+    // Under Codes a mosaic byte is a graphics code and not text, so it holds
+    // its column and says nothing. The Displayed reading is where it becomes
+    // the block it drew -- see the sixel cases below.
     TeletextCell mosaic;
     mosaic.character = 0x7F;
     mosaic.charset = TeletextCellCharset::ContiguousGraphics;
@@ -334,4 +337,100 @@ TEST_CASE("Flowed linearisation still breaks where a line ended",
 
     CHECK(teletext_text(grid, TeletextRegion::whole_screen(),
                         TeletextLinearisation::Flowed) == "SHORT\nNEXT");
+}
+
+// ============================================================================
+// Sixels: what a graphics cell drew
+// ============================================================================
+//
+// Expected characters are written as UTF-8 byte escapes rather than as
+// literals, because source here stays 7-bit ASCII: a non-ASCII byte in a test
+// name or literal breaks CTest and Catch2 on Windows.
+
+namespace {
+
+// A mosaic cell holding one graphics code.
+TeletextCell mosaic_cell(uint8_t character,
+                         TeletextCellCharset charset =
+                             TeletextCellCharset::ContiguousGraphics) {
+    TeletextCell cell;
+    cell.character = character;
+    cell.charset = charset;
+    return cell;
+}
+
+std::string displayed(const TeletextCell& cell) {
+    return teletext_text(grid_with(cell), TeletextRegion::whole_screen(),
+                         TeletextLinearisation::Rows,
+                         TeletextCharacters::Displayed);
+}
+
+} // namespace
+
+TEST_CASE("A mosaic copies as the block sextant it drew", "[teletext-text]") {
+    // 0x21: the graphics marker plus bit 0, so only the top-left block is lit.
+    // That is the first sextant, U+1FB00.
+    CHECK(displayed(mosaic_cell(0x21)) == "\xF0\x9F\xAC\x80");
+
+    // 0x7E: every block but the top-left. The last sextant, U+1FB3B -- worth
+    // pinning because it is the far end of the range the arithmetic walks.
+    CHECK(displayed(mosaic_cell(0x7E)) == "\xF0\x9F\xAC\xBB");
+}
+
+TEST_CASE("The four patterns Unicode already had are not sextants",
+          "[teletext-text]") {
+    // Blank, both half blocks and the full block predate the sextant range,
+    // which is why it holds sixty characters and not sixty-four. Getting these
+    // wrong would shift every codepoint above them.
+    CHECK(displayed(mosaic_cell(0x20)) == "");          // blank: a space, stripped
+    CHECK(displayed(mosaic_cell(0x35)) == "\xE2\x96\x8C");  // U+258C LEFT HALF
+    CHECK(displayed(mosaic_cell(0x6A)) == "\xE2\x96\x90");  // U+2590 RIGHT HALF
+    CHECK(displayed(mosaic_cell(0x7F)) == "\xE2\x96\x88");  // U+2588 FULL BLOCK
+}
+
+TEST_CASE("Every mosaic maps to a distinct character", "[teletext-text]") {
+    // Sixty-four patterns, sixty-four different characters: the mapping is a
+    // bijection, so no two mosaics can copy as the same thing.
+    std::set<std::string> seen;
+    for (uint8_t code = 0x20; code <= 0x3F; ++code) {
+        seen.insert(displayed(mosaic_cell(code)));
+    }
+    for (uint16_t code = 0x60; code <= 0x7F; ++code) {
+        seen.insert(displayed(mosaic_cell(static_cast<uint8_t>(code))));
+    }
+    CHECK(seen.size() == 64);
+}
+
+TEST_CASE("Separated graphics copy as the same sextants", "[teletext-text]") {
+    // Separation is how the chip draws a mosaic, not a different character --
+    // as italics are not different letters.
+    for (uint8_t code = 0x20; code <= 0x3F; ++code) {
+        CHECK(displayed(mosaic_cell(code, TeletextCellCharset::SeparatedGraphics))
+              == displayed(mosaic_cell(code)));
+    }
+}
+
+TEST_CASE("Letters show through in graphics mode", "[teletext-text]") {
+    // 0x40-0x5F have the graphics marker bit clear, so the chip draws them
+    // from the font even in graphics mode. They are letters and copy as
+    // letters, in either repertoire.
+    const TeletextCell letter = mosaic_cell(0x41);  // 'A'
+
+    CHECK(teletext_text(grid_with(letter)) == "A");
+    CHECK(displayed(letter) == "A");
+}
+
+TEST_CASE("A held-graphics cell copies as the mosaic it showed",
+          "[teletext-text]") {
+    // Under hold graphics a control code draws the last mosaic instead of a
+    // space. The capture resolved that -- the cell carries the held character
+    // and the graphics charset, with is_control_code still set -- so the
+    // reading follows what was on the screen.
+    TeletextCell held = mosaic_cell(0x21);
+    held.is_control_code = true;
+
+    CHECK(displayed(held) == "\xF0\x9F\xAC\x80");
+
+    // Under Codes it is what its byte says it is: a control code, and no text.
+    CHECK(teletext_text(grid_with(held)) == "");
 }

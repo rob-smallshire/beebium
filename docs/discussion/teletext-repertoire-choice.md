@@ -150,8 +150,37 @@ submenu shimmers and never opens. Nothing read any of the six properties, and
 `currentFrame` was retaining a copy of every framebuffer for no reader at all.
 Fixed at source in `f713b1ce` -- per-frame state is no longer published.
 
-## Not part of this
+## Sixels, which turned out to belong after all
 
-Sixels and control codes both copy as spaces and stay that way. Under a
-Displayed reading sixels could be Symbols for Legacy Computing, but that is a
-second axis and wants its own submenu group if ever wanted at all.
+This document originally put mosaics out of scope: they copied as spaces and
+were to stay that way, with Symbols for Legacy Computing noted as a possible
+second axis. That was wrong, and the menu's own wording is what showed it.
+`Displayed Characters` promises what the screen showed; a screen of mosaics
+that copies as blank space does not deliver it.
+
+Unicode's **block sextants** (U+1FB00) are the same 2x3 pattern the SAA5050
+draws, so this is an exact mapping and not an approximation -- the same
+character, not a picture of one. Four patterns are not sextants because Unicode
+already had them: blank, both half blocks, and the full block.
+
+Contiguous and separated graphics map alike. Separation is how the chip draws a
+mosaic, not a different character, in the way that italics are not different
+letters.
+
+Under **Codes** mosaics remain spaces, holding their columns: there the byte is
+a graphics code and not text.
+
+Two things fell out of doing it, both duplication that had gone unnoticed:
+
+- **The per-cell rule existed twice** -- in `teletext_text()` and in the
+  screen-text band reader -- kept in step by a comment saying so. Changing one
+  silently broke the other, which is what the comment was for and could not do.
+  Both now call `teletext_cell_codepoint()`.
+- **`append_utf8` existed twice**, and the second copy stopped at three bytes.
+  Invisible while nothing emitted a codepoint above U+FFFF, and silently wrong
+  the moment something did. One copy now, in `Utf8.hpp`.
+
+Control codes still copy as spaces, which is right: a control code displays
+nothing. Except under hold graphics, where it displays the held mosaic -- and
+the capture already resolves that, recording the held character and the
+graphics charset, so it needs no special case here.

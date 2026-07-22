@@ -12,6 +12,8 @@
 
 #include <beebium/ScreenText.hpp>
 
+#include <beebium/Utf8.hpp>
+
 #include <beebium/TeletextText.hpp>
 
 #include <screentext/Read.hpp>
@@ -51,18 +53,6 @@ void strip_trailing_spaces(std::string& line) {
     }
 }
 
-void append_utf8(std::string& out, char32_t codepoint) {
-    if (codepoint < 0x80) {
-        out.push_back(static_cast<char>(codepoint));
-    } else if (codepoint < 0x800) {
-        out.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
-        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-    } else {
-        out.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
-        out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-    }
-}
 
 // Which grid cells of a band a pixel rectangle covers.
 struct CellRange {
@@ -116,9 +106,9 @@ CellRange cells_covered(const Band& band,
 // information into a picture in order to guess it back. Nothing here can be
 // uncertain, so both uncertainty counts stay zero.
 //
-// What a cell copies as matches teletext_text(): graphics, control codes,
-// concealed cells and the bottom half of a double-height row all occupy their
-// column as a space, so what is copied lines up with what is displayed.
+// What a cell copies as is teletext_cell_codepoint()'s decision, the same one
+// teletext_text() asks. A cell with no text form occupies its column as a
+// space, so what is copied lines up with what is displayed.
 BandReading read_teletext_band(const Band& band,
                                const PixelRect& region,
                                const TeletextGrid::Snapshot& teletext,
@@ -145,14 +135,7 @@ BandReading read_teletext_band(const Band& band,
         for (uint32_t column = range.first_column; column < range.last_column; ++column) {
             const TeletextCell& cell = teletext.cell(row, column);
 
-            const bool readable =
-                !cell.is_control_code
-                && !cell.concealed
-                && !cell.double_height_bottom
-                && cell.charset == TeletextCellCharset::Alpha;
-
-            const char32_t codepoint =
-                readable ? teletext_alpha_codepoint(cell.character, characters) : 0;
+            const char32_t codepoint = teletext_cell_codepoint(cell, characters);
 
             if (codepoint == 0) {
                 line.push_back(' ');

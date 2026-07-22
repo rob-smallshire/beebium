@@ -108,4 +108,39 @@ char32_t teletext_alpha_codepoint(
     uint8_t character,
     TeletextCharacters characters = TeletextCharacters::Codes);
 
+// The Unicode codepoint a MODE 7 mosaic (sixel) character draws.
+//
+// A graphics cell divides into a 2x3 grid of blocks, and the code says which
+// are lit: bits 0 and 1 are the top pair, 2 and 3 the middle, 4 and 6 the
+// bottom. Bit 5 is what marks the code as graphics at all, which is why
+// 0x40-0x5F are alphanumerics even in graphics mode.
+//
+// Unicode has exactly this, in Symbols for Legacy Computing: the block
+// sextants at U+1FB00, which enumerate the sixty-four patterns minus the four
+// that already had characters -- blank, both half blocks, and the full block.
+// So the mapping is exact rather than approximate, and does not depend on a
+// font: it is the same character.
+//
+// Contiguous and separated graphics map alike. Separation is how the chip
+// draws a mosaic -- with gaps between the blocks -- and not a different
+// character, in the way that italics are not different letters.
+//
+// Returns 0 for a code that is not a mosaic, which the caller renders as a
+// space.
+char32_t teletext_graphics_codepoint(uint8_t character);
+
+// What one captured cell copies as: the single rule for reading a MODE 7 cell.
+//
+// Every reader of the grid goes through this, so that "what a cell copies as"
+// has one answer rather than one per caller. It had two for a while -- the
+// linear teletext_text() and the screen-text band reader -- kept in step by a
+// comment, which is exactly as reliable as it sounds.
+//
+// Returns 0 for a cell with no text form, which the caller renders as a space
+// so that what is copied lines up with what is displayed. That covers control
+// codes, concealed cells, the lower half of a double-height row, and -- under
+// Codes -- mosaics, whose byte is a graphics code and not text.
+char32_t teletext_cell_codepoint(const TeletextCell& cell,
+                                 TeletextCharacters characters);
+
 } // namespace beebium
