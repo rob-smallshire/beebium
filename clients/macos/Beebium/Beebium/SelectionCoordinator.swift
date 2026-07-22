@@ -220,17 +220,20 @@ final class SelectionCoordinator: ObservableObject {
 
     private(set) var interpretation: ScreenSelectionInterpretation = .rows
 
-    /// Which meaning a MODE 7 byte is copied with. Set from the Edit menu's
-    /// `Copy Teletext As` submenu, and applied to every copy this window makes:
-    /// the choice is a property of what the user is looking at, not of which
-    /// copy command they reach for, so it does not multiply with them.
-    var teletextCharacters: ScreenTextCharactersMode = .remembered() {
-        didSet {
-            guard teletextCharacters != oldValue, isSelecting else { return }
-            // The highlight is geometry and does not change, but a live preview
-            // of the text would; refreshing keeps the two in step.
-            refreshHighlights()
-        }
+    /// Where the `Copy Teletext As` choice is read from. Injectable so the
+    /// coordinator can be tested without touching the user's own defaults.
+    var defaults: UserDefaults = .standard
+
+    /// Which meaning a MODE 7 byte is copied with, applied to every copy this
+    /// window makes: the choice is a property of what the user is looking at,
+    /// not of which copy command they reach for, so it does not multiply with
+    /// them.
+    ///
+    /// Read at each copy rather than held. The menu writes the defaults and
+    /// nothing pushes the value here, which is what keeps that submenu free of
+    /// any focused value -- see CopyTeletextAsMenu for why that matters.
+    var teletextCharacters: ScreenTextCharactersMode {
+        .remembered(in: defaults)
     }
 
     /// Frame-pixel anchor (drag start) and focus (drag now). Both frozen-frame

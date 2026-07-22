@@ -82,7 +82,9 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
     /// pasteboard group (below Select All), stranded from the Copy they belong
     /// with; this pulls them back up. Matched by title because they are ours and
     /// never localised.
-    private static let copyVariantTitles = ["Copy as Columns", "Copy Text from Graphics"]
+    private static let copyVariantTitles = [
+        "Copy as Columns", "Copy Text from Graphics", "Copy Teletext As",
+    ]
 
     /// Guards against the reorderings below re-entering through the very
     /// notification that triggered them.
@@ -173,26 +175,7 @@ struct BeebiumApp: App {
     @StateObject private var keyboardMappingManager = KeyboardMappingManager()
     @StateObject private var connectWindowState = ConnectWindowState.shared
 
-    /// Which meaning MODE 7 bytes are copied with, remembered between sessions
-    /// and used as the starting value for each new window. Held as its raw
-    /// string because that is what @AppStorage can store.
-    @AppStorage(ScreenTextCharactersMode.defaultsKey)
-    private var teletextCharacters: String = ScreenTextCharactersMode.codes.rawValue
 
-    /// The remembered choice, as the menu's Picker needs it: reading gives the
-    /// mode, writing both remembers it and applies it to the focused window.
-    ///
-    /// Left enabled with no machine window focused. It is a preference as much
-    /// as a command -- what it sets is where the next window starts -- so there
-    /// is nothing dishonest about changing it with nothing to copy from.
-    private var teletextCharactersBinding: Binding<ScreenTextCharactersMode> {
-        Binding(
-            get: { ScreenTextCharactersMode(rawValue: teletextCharacters) ?? .codes },
-            set: { mode in
-                teletextCharacters = mode.rawValue
-                selectionCoordinator?.teletextCharacters = mode
-            })
-    }
 
     var body: some Scene {
         WindowGroup("Beebium", id: "main") {
@@ -297,19 +280,7 @@ struct BeebiumApp: App {
                 // putting the checkmark in the title, and a menu item whose
                 // title changes is a different item, so every toggle replaces
                 // the whole submenu instead of updating it.
-                Picker("Copy Teletext As", selection: teletextCharactersBinding) {
-                    Text("Character Codes")
-                        .help("Copy the character codes at face value, so square "
-                            + "brackets and the caret come back as themselves. "
-                            + "Keeps a copied BASIC listing intact.")
-                        .tag(ScreenTextCharactersMode.codes)
-
-                    Text("Displayed Characters")
-                        .help("Copy the characters the screen actually showed, so "
-                            + "the arrows, fractions and division sign the "
-                            + "teletext chip draws come back as themselves.")
-                        .tag(ScreenTextCharactersMode.displayed)
-                }
+                CopyTeletextAsMenu()
             }
 
             CommandGroup(after: .pasteboard) {
@@ -363,6 +334,39 @@ struct BeebiumApp: App {
         // Settings window (singleton, accessed via Cmd+, or Beebium menu)
         Settings {
             SettingsView()
+        }
+    }
+}
+
+/// The Edit menu's `Copy Teletext As` submenu: which meaning a MODE 7 byte
+/// carries when it is copied.
+///
+/// A preference rather than a command: it is not about a particular window, so
+/// it reads and writes the defaults directly and no focused value comes into
+/// it. The coordinator reads the same defaults when it copies, so nothing has
+/// to be pushed into a window from here.
+///
+/// A Picker and not a pair of Buttons. The choice is one of two states, which
+/// is what a Picker models and what AppKit draws the radio checkmark for;
+/// building it from Buttons means putting the checkmark in the title, and a
+/// menu item whose title changes is a different item.
+private struct CopyTeletextAsMenu: View {
+    @AppStorage(ScreenTextCharactersMode.defaultsKey)
+    private var characters: String = ScreenTextCharactersMode.codes.rawValue
+
+    var body: some View {
+        Picker("Copy Teletext As", selection: $characters) {
+            Text("Character Codes")
+                .help("Copy the character codes at face value, so square "
+                    + "brackets and the caret come back as themselves. Keeps a "
+                    + "copied BASIC listing intact.")
+                .tag(ScreenTextCharactersMode.codes.rawValue)
+
+            Text("Displayed Characters")
+                .help("Copy the characters the screen actually showed, so the "
+                    + "arrows, fractions and division sign the teletext chip "
+                    + "draws come back as themselves.")
+                .tag(ScreenTextCharactersMode.displayed.rawValue)
         }
     }
 }

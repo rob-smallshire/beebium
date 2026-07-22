@@ -491,7 +491,13 @@ final class SelectionCoordinatorTests: XCTestCase {
 
     func testChosenRepertoireReachesEveryCopy() async {
         let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
-        coordinator.teletextCharacters = .displayed
+        // Set the way the menu sets it: written to the defaults, which the
+        // coordinator reads when it copies.
+        let defaults = UserDefaults(suiteName: "repertoire-reaches-copies")!
+        defaults.removePersistentDomain(forName: "repertoire-reaches-copies")
+        defer { defaults.removePersistentDomain(forName: "repertoire-reaches-copies") }
+        coordinator.defaults = defaults
+        ScreenTextCharactersMode.displayed.remember(in: defaults)
 
         _ = await coordinator.copy(.rows)   // whole screen, no selection
 

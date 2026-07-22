@@ -29,19 +29,27 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// Current connection state
     @Published private(set) var connectionState: ConnectionState = .disconnected
 
-    /// Latest received frame data (BGRA32 pixels)
-    @Published private(set) var currentFrame: Data?
+    // The per-frame state below is deliberately NOT @Published.
+    //
+    // Frames arrive fifty times a second and go straight to the renderer, which
+    // is the whole point of holding a MetalRenderer here. Publishing anything
+    // that changes per frame fires objectWillChange at that rate, and every
+    // view observing this client -- ContentView, and so the entire window tree
+    // and every focused value it exports -- is invalidated with it, whether or
+    // not it reads what changed. SwiftUI must hear about connection state,
+    // which changes when something actually happens; it must not hear about
+    // frames.
 
     /// Frame dimensions (logical pixels)
-    @Published private(set) var frameWidth: Int = 736
-    @Published private(set) var frameHeight: Int = 576
+    private(set) var frameWidth: Int = 736
+    private(set) var frameHeight: Int = 576
 
     /// Display dimensions (target after scaling)
-    @Published private(set) var displayWidth: Int = 736
-    @Published private(set) var displayHeight: Int = 576
+    private(set) var displayWidth: Int = 736
+    private(set) var displayHeight: Int = 576
 
     /// Frame counter for debugging
-    @Published private(set) var frameCount: UInt64 = 0
+    private(set) var frameCount: UInt64 = 0
 
     /// A single event loop group shared by every VideoClient and reused across
     /// reconnects. It is intentionally created once and never shut down.
@@ -305,7 +313,6 @@ final class VideoClient: ObservableObject, Disconnectable {
         frameHeight = Int(frame.height)
         displayWidth = Int(frame.displayWidth)
         displayHeight = Int(frame.displayHeight)
-        currentFrame = frame.pixels
 
         // Hold the displayed frame still while a selection is live. The frame
         // keeps arriving -- the counters above stay current -- but the renderer

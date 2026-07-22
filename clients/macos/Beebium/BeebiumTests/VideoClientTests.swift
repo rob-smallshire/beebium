@@ -20,7 +20,6 @@ final class VideoClientTests: XCTestCase {
         let client = VideoClient()
 
         XCTAssertEqual(client.connectionState, .disconnected)
-        XCTAssertNil(client.currentFrame)
         XCTAssertEqual(client.frameWidth, 736)
         XCTAssertEqual(client.frameHeight, 576)
         XCTAssertEqual(client.frameCount, 0)
