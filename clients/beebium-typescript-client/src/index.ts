@@ -23,6 +23,7 @@ export {
     type ScreenTextRun,
     type ScreenTextCell,
     type ScreenTextSearchMode,
+    type ScreenTextCharactersMode,
     type ScreenGeometry,
     type ScreenBandGeometry,
     TELETEXT_ROWS,

@@ -146,6 +146,59 @@ class TestScreenTextInTeletext:
         assert bbc.video.screen_text().frame_number > first
 
 
+class TestTeletextRepertoire:
+    """Which meaning a MODE 7 byte carries.
+
+    The SAA5050 draws eleven codes as characters ASCII puts elsewhere, so the
+    same screen reads two ways and only the caller knows which was meant.
+    """
+
+    # Typed as a BASIC string, read back both ways. All four are codes the
+    # SAA5050 draws as something else, and three of them are BASIC syntax.
+    DIVERGENT = "[]^~"
+    AS_DISPLAYED = "←→↑÷"
+
+    def _print_divergent(self, bbc: Beebium) -> None:
+        _wait_for_prompt(bbc)
+        bbc.keyboard.type(f'PRINT "{self.DIVERGENT}"\r')
+        assert bbc.run_until_or_timeout(
+            lambda: self.DIVERGENT in bbc.video.screen_text().text,
+            emulated_seconds=5.0,
+        )
+
+    def test_the_default_is_the_codes(self, bbc: Beebium) -> None:
+        # A copied BASIC listing keeps its assembler brackets and its
+        # exponentiation operator, which is both the commoner capture and the
+        # worse one to corrupt.
+        self._print_divergent(bbc)
+
+        assert self.DIVERGENT in bbc.video.screen_text().text
+        assert self.AS_DISPLAYED not in bbc.video.screen_text().text
+
+    def test_displayed_reports_the_glyphs_the_screen_showed(
+        self, bbc: Beebium
+    ) -> None:
+        self._print_divergent(bbc)
+
+        text = bbc.video.screen_text(characters="displayed").text
+        assert self.AS_DISPLAYED in text
+        assert self.DIVERGENT not in text
+
+    def test_asking_for_the_codes_explicitly_matches_the_default(
+        self, bbc: Beebium
+    ) -> None:
+        self._print_divergent(bbc)
+
+        assert (
+            bbc.video.screen_text(characters="codes").text
+            == bbc.video.screen_text().text
+        )
+
+    def test_an_unknown_repertoire_is_refused(self, bbc: Beebium) -> None:
+        with pytest.raises(ValueError, match="semaphore"):
+            bbc.video.screen_text(characters="semaphore")
+
+
 class TestScreenTextInBitmapModes:
     """A bitmap display, which the glyph-recognising strategy now reads."""
 

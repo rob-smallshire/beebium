@@ -291,14 +291,18 @@ final class SelectionCoordinatorTests: XCTestCase {
             var region: FramePixelRect?
             var search: ScreenTextSearchMode
             var layout: ScreenTextJoinLayout
+            var characters: ScreenTextCharactersMode
         }
         var calls: [Call] = []
         var searchesUsed: [ScreenTextSearchMode] { calls.map { $0.search } }
+        var charactersUsed: [ScreenTextCharactersMode] { calls.map { $0.characters } }
 
         func screenGeometry() async -> [ScreenBandGeometry] { bands }
         func screenText(region: FramePixelRect?, search: ScreenTextSearchMode,
-                        layout: ScreenTextJoinLayout) async -> ScreenTextReading? {
-            calls.append(Call(region: region, search: search, layout: layout))
+                        layout: ScreenTextJoinLayout,
+                        characters: ScreenTextCharactersMode) async -> ScreenTextReading? {
+            calls.append(Call(region: region, search: search, layout: layout,
+                              characters: characters))
             return reading
         }
     }
@@ -474,6 +478,49 @@ final class SelectionCoordinatorTests: XCTestCase {
         // A rows flow reads whole intermediate rows, so its region starts at x 0.
         XCTAssertEqual(text.calls.last?.region?.x, 0)
         XCTAssertEqual(text.calls.last?.search, .aligned)
+    }
+
+    // MARK: - Teletext repertoire
+
+    func testCopyAsksForCharacterCodesByDefault() async {
+        let (coordinator, text, _, _, _) = makeCoordinator()
+        _ = await coordinator.copy(.rows)
+        XCTAssertEqual(text.charactersUsed, [.codes],
+                       "the byte at face value, so a BASIC listing survives")
+    }
+
+    func testChosenRepertoireReachesEveryCopy() async {
+        let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
+        coordinator.teletextCharacters = .displayed
+
+        _ = await coordinator.copy(.rows)   // whole screen, no selection
+
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.2, y: 0.2),
+                          interpretation: .rectangle)
+        coordinator.update(toNormalizedPoint: CGPoint(x: 0.8, y: 0.8))
+        _ = await coordinator.copy(.rectangle)
+        _ = await coordinator.copy(.anywhere)
+
+        XCTAssertFalse(text.calls.isEmpty)
+        XCTAssertTrue(text.charactersUsed.allSatisfy { $0 == .displayed },
+                      "the choice belongs to the window, not to one command")
+    }
+
+    func testRepertoireIsRememberedAndRestored() {
+        let defaults = UserDefaults(suiteName: "repertoire-test")!
+        defaults.removePersistentDomain(forName: "repertoire-test")
+
+        XCTAssertEqual(ScreenTextCharactersMode.remembered(in: defaults), .codes,
+                       "nothing remembered yet")
+
+        ScreenTextCharactersMode.displayed.remember(in: defaults)
+        XCTAssertEqual(ScreenTextCharactersMode.remembered(in: defaults), .displayed)
+
+        // A value from some other build is declined rather than trusted.
+        defaults.set("semaphore", forKey: ScreenTextCharactersMode.defaultsKey)
+        XCTAssertEqual(ScreenTextCharactersMode.remembered(in: defaults), .codes)
+
+        defaults.removePersistentDomain(forName: "repertoire-test")
     }
 
     func testCopyReturnsNilWhenNothingWasFound() async {

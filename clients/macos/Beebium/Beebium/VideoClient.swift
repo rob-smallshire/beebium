@@ -149,13 +149,15 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// screen with no text comes back supported with no runs.
     func screenText(region: FramePixelRect?,
                     search: ScreenTextSearchMode,
-                    layout: ScreenTextJoinLayout) async -> ScreenTextReading? {
+                    layout: ScreenTextJoinLayout,
+                    characters: ScreenTextCharactersMode) async -> ScreenTextReading? {
         guard let channel = _channel else { return nil }
         let client = Beebium_VideoServiceClient(channel: channel)
 
         var request = Beebium_GetScreenTextRequest()
         request.search = search.proto
         request.layout = layout.proto
+        request.characters = characters.proto
         if let region {
             var pixelRegion = Beebium_PixelRegion()
             pixelRegion.x = UInt32(max(0, region.x))

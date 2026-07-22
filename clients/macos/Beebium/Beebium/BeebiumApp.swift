@@ -173,6 +173,18 @@ struct BeebiumApp: App {
     @StateObject private var keyboardMappingManager = KeyboardMappingManager()
     @StateObject private var connectWindowState = ConnectWindowState.shared
 
+    /// Which meaning MODE 7 bytes are copied with, remembered between sessions
+    /// and used as the starting value for each new window. Held as its raw
+    /// string because that is what @AppStorage can store.
+    @AppStorage(ScreenTextCharactersMode.defaultsKey)
+    private var teletextCharacters: String = ScreenTextCharactersMode.codes.rawValue
+
+    /// Apply a repertoire to the focused window and remember it for the next.
+    private func setTeletextCharacters(_ mode: ScreenTextCharactersMode) {
+        teletextCharacters = mode.rawValue
+        selectionCoordinator?.teletextCharacters = mode
+    }
+
     var body: some Scene {
         WindowGroup("Beebium", id: "main") {
             MainWindowRouter(
@@ -264,6 +276,34 @@ struct BeebiumApp: App {
                     + "freely into the picture such as a game's score. Reads the "
                     + "text out of the pixels, so it is the least certain of the "
                     + "copy commands.")
+
+                // Which meaning a MODE 7 byte carries when it is copied. A
+                // submenu rather than more copy commands: the choice is
+                // orthogonal to all three above, so multiplying it into them
+                // would give six commands saying two things.
+                Menu("Copy Teletext As") {
+                    Button {
+                        setTeletextCharacters(.codes)
+                    } label: {
+                        Text(teletextCharacters == ScreenTextCharactersMode.codes.rawValue
+                             ? "\u{2713} Character Codes" : "Character Codes")
+                    }
+                    .disabled(selectionCoordinator == nil)
+                    .help("Copy the character codes at face value, so square "
+                        + "brackets and the caret come back as themselves. Keeps "
+                        + "a copied BASIC listing intact.")
+
+                    Button {
+                        setTeletextCharacters(.displayed)
+                    } label: {
+                        Text(teletextCharacters == ScreenTextCharactersMode.displayed.rawValue
+                             ? "\u{2713} Displayed Characters" : "Displayed Characters")
+                    }
+                    .disabled(selectionCoordinator == nil)
+                    .help("Copy the characters the screen actually showed, so "
+                        + "the arrows, fractions and division sign the teletext "
+                        + "chip draws come back as themselves.")
+                }
             }
 
             CommandGroup(after: .pasteboard) {

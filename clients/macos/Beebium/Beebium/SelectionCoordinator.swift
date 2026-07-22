@@ -37,6 +37,46 @@ enum ScreenTextSearchMode {
     }
 }
 
+/// Which meaning a MODE 7 byte is read with.
+///
+/// The SAA5050 draws eleven codes as characters ASCII puts elsewhere -- a left
+/// arrow where ASCII has `[`, an up arrow where ASCII has `^`, and so on -- so a
+/// teletext screen can be read two ways and only the person reading it knows
+/// which they meant. The mapping itself is the server's; this is the choice.
+enum ScreenTextCharactersMode: String, CaseIterable {
+    /// The byte at face value. The default: MODE 7 is the BBC's default screen
+    /// mode, and a copied BASIC listing keeps its assembler brackets and its
+    /// exponentiation operator.
+    case codes
+    /// The glyphs the screen showed, as Unicode. For capturing a teletext page
+    /// as it looked.
+    case displayed
+
+    var proto: Beebium_ScreenTextCharacters {
+        switch self {
+        case .codes: return .codes
+        case .displayed: return .displayed
+        }
+    }
+
+    /// Where the choice is remembered between sessions. A window takes this as
+    /// its starting value and may then be set independently, so two windows
+    /// showing different things can be read differently.
+    static let defaultsKey = "screenTextTeletextCharacters"
+
+    /// The remembered choice, or `.codes` when nothing has been remembered or
+    /// what was remembered is no longer a mode we have.
+    static func remembered(in defaults: UserDefaults = .standard) -> Self {
+        guard let raw = defaults.string(forKey: defaultsKey),
+              let mode = Self(rawValue: raw) else { return .codes }
+        return mode
+    }
+
+    func remember(in defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: Self.defaultsKey)
+    }
+}
+
 /// How the server joins runs into its `text` field.
 enum ScreenTextJoinLayout {
     case rows
@@ -115,7 +155,8 @@ protocol ScreenTextService: AnyObject {
     func screenGeometry() async -> [ScreenBandGeometry]
     func screenText(region: FramePixelRect?,
                     search: ScreenTextSearchMode,
-                    layout: ScreenTextJoinLayout) async -> ScreenTextReading?
+                    layout: ScreenTextJoinLayout,
+                    characters: ScreenTextCharactersMode) async -> ScreenTextReading?
 }
 
 /// The rendering geometry the mapping needs, captured once when the frame
@@ -178,6 +219,19 @@ final class SelectionCoordinator: ObservableObject {
     @Published private(set) var marqueeRect: FramePixelRect?
 
     private(set) var interpretation: ScreenSelectionInterpretation = .rows
+
+    /// Which meaning a MODE 7 byte is copied with. Set from the Edit menu's
+    /// `Copy Teletext As` submenu, and applied to every copy this window makes:
+    /// the choice is a property of what the user is looking at, not of which
+    /// copy command they reach for, so it does not multiply with them.
+    var teletextCharacters: ScreenTextCharactersMode = .remembered() {
+        didSet {
+            guard teletextCharacters != oldValue, isSelecting else { return }
+            // The highlight is geometry and does not change, but a live preview
+            // of the text would; refreshing keeps the two in step.
+            refreshHighlights()
+        }
+    }
 
     /// Frame-pixel anchor (drag start) and focus (drag now). Both frozen-frame
     /// coordinates; the view-to-frame mapping happened at event time.
@@ -364,7 +418,8 @@ final class SelectionCoordinator: ObservableObject {
     @discardableResult
     func copyWholeScreen() async -> String? {
         guard let reading = await textService?.screenText(
-            region: nil, search: .aligned, layout: .rows) else { return nil }
+            region: nil, search: .aligned, layout: .rows,
+            characters: teletextCharacters) else { return nil }
         let text = reading.text
         guard !text.isEmpty else { return nil }
         pasteboard?.writeText(text)
@@ -391,13 +446,15 @@ final class SelectionCoordinator: ObservableObject {
         case .anywhere:
             let region = Self.boundingRect(anchor, focus)
             guard let reading = await textService?.screenText(
-                region: region, search: .anywhere, layout: .rows) else { return nil }
+                region: region, search: .anywhere, layout: .rows,
+                characters: teletextCharacters) else { return nil }
             return (reading.runs, reading.text)
 
         case .rectangle:
             let region = Self.snappedRectangle(anchor: anchor, focus: focus, band: band)
             guard let reading = await textService?.screenText(
-                region: region, search: .aligned, layout: .rows) else { return nil }
+                region: region, search: .aligned, layout: .rows,
+                characters: teletextCharacters) else { return nil }
             return (reading.runs, reading.text)
 
         case .rows:
@@ -405,13 +462,15 @@ final class SelectionCoordinator: ObservableObject {
                 // No grid to flow along: fall back to the plain rectangle.
                 let region = Self.boundingRect(anchor, focus)
                 guard let reading = await textService?.screenText(
-                    region: region, search: .aligned, layout: .rows) else { return nil }
+                    region: region, search: .aligned, layout: .rows,
+                    characters: teletextCharacters) else { return nil }
                 return (reading.runs, reading.text)
             }
             let flow = Self.rowsFlow(anchor: anchor, focus: focus, band: band,
                                      frameWidth: Int(frozenGeometry?.textureSize.width ?? 0))
             guard let reading = await textService?.screenText(
-                region: flow.requestRegion, search: .aligned, layout: .rows) else {
+                region: flow.requestRegion, search: .aligned, layout: .rows,
+                characters: teletextCharacters) else {
                 return nil
             }
             return Self.trimToFlow(runs: reading.runs, band: band, flow: flow)

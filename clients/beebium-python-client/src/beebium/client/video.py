@@ -375,6 +375,7 @@ class Video:
         region: tuple[int, int, int, int] | None = None,
         search: str = "anywhere",
         flowed: bool = False,
+        characters: str = "codes",
     ) -> ScreenText:
         """Read text from the display, whatever mode is producing it.
 
@@ -402,6 +403,15 @@ class Video:
                 a line break, rejoining a line that wrapped. By default each
                 grid row is its own line, preserving the shape of the
                 selection.
+            characters: Which meaning a MODE 7 byte carries. ``"codes"``, the
+                default, takes the byte at face value, so ``[``, ``]`` and
+                ``^`` come back as themselves and a copied BASIC listing keeps
+                its assembler blocks and exponentiation. ``"displayed"``
+                reports the glyphs the SAA5050 actually drew for those eleven
+                codes -- a left arrow, a right arrow, an up arrow and the rest
+                -- for capturing a teletext screen as it looked. Only the
+                caller knows which was meant. Ignored outside MODE 7, whose
+                font is the MOS's and already ASCII.
 
         Returns:
             The runs, the text they join to, and how much was uncertain.
@@ -416,6 +426,16 @@ class Video:
                 f"{', '.join(sorted(searches))}"
             )
 
+        repertoires = {
+            "codes": video_pb2.SCREEN_TEXT_CHARACTERS_CODES,
+            "displayed": video_pb2.SCREEN_TEXT_CHARACTERS_DISPLAYED,
+        }
+        if characters not in repertoires:
+            raise ValueError(
+                f"Unknown characters {characters!r}; expected one of "
+                f"{', '.join(sorted(repertoires))}"
+            )
+
         request = video_pb2.GetScreenTextRequest(
             search=searches[search],
             layout=(
@@ -423,6 +443,7 @@ class Video:
                 if flowed
                 else video_pb2.SCREEN_TEXT_LAYOUT_ROWS
             ),
+            characters=repertoires[characters],
         )
         if region is not None:
             x, y, width, height = region

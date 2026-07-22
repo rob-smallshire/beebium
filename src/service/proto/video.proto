@@ -212,6 +212,30 @@ enum ScreenTextLayout {
     SCREEN_TEXT_LAYOUT_FLOWED = 1;
 }
 
+// Which meaning a MODE 7 byte is read with.
+//
+// The SAA5050 draws eleven codes as characters ASCII puts elsewhere: it puts a
+// left arrow where ASCII has `[`, an up arrow where ASCII has `^`, a division
+// sign where ASCII has `~`, and so on. A teletext screen can therefore be read
+// two ways, and only the person reading it knows which they meant -- is this a
+// picture of text, or a listing of code? So the transformation lives here, on
+// the server, where the SAA5050's repertoire is known once, and the choice
+// rides on the request, where the caller can make it.
+//
+// Honoured by the teletext strategy; a band read by recognising glyphs in
+// pixels is unaffected, as its font is the MOS's and already ASCII.
+enum ScreenTextCharacters {
+    // What the byte is: `[`, `]`, `^`, `~` and the rest at face value. The
+    // default, because MODE 7 is the BBC's default screen mode and a copied
+    // BASIC listing is both the commonest capture and the worst to corrupt --
+    // `[` and `]` delimit assembler blocks and `^` is exponentiation.
+    SCREEN_TEXT_CHARACTERS_CODES = 0;
+
+    // What the screen showed: the SAA5050's own glyphs, as Unicode. For
+    // capturing teletext as it looked.
+    SCREEN_TEXT_CHARACTERS_DISPLAYED = 1;
+}
+
 message GetScreenTextRequest {
     // The part of the display to read. Whole display when unset. Independent of
     // `search`: what part of the screen to read and how hard to look for text
@@ -220,6 +244,7 @@ message GetScreenTextRequest {
 
     ScreenTextSearch search = 2;
     ScreenTextLayout layout = 3;
+    ScreenTextCharacters characters = 4;
 }
 
 // One character cell of a run: where it sits, and whether a glyph was

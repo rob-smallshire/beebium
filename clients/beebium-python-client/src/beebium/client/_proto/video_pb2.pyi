@@ -174,6 +174,50 @@ the next without a break.
 """
 Global___ScreenTextLayout: _TypeAlias = ScreenTextLayout  # noqa: Y015
 
+class _ScreenTextCharacters:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _ScreenTextCharactersEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ScreenTextCharacters.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    SCREEN_TEXT_CHARACTERS_CODES: _ScreenTextCharacters.ValueType  # 0
+    """What the byte is: `[`, `]`, `^`, `~` and the rest at face value. The
+    default, because MODE 7 is the BBC's default screen mode and a copied
+    BASIC listing is both the commonest capture and the worst to corrupt --
+    `[` and `]` delimit assembler blocks and `^` is exponentiation.
+    """
+    SCREEN_TEXT_CHARACTERS_DISPLAYED: _ScreenTextCharacters.ValueType  # 1
+    """What the screen showed: the SAA5050's own glyphs, as Unicode. For
+    capturing teletext as it looked.
+    """
+
+class ScreenTextCharacters(_ScreenTextCharacters, metaclass=_ScreenTextCharactersEnumTypeWrapper):
+    """Which meaning a MODE 7 byte is read with.
+
+    The SAA5050 draws eleven codes as characters ASCII puts elsewhere: it puts a
+    left arrow where ASCII has `[`, an up arrow where ASCII has `^`, a division
+    sign where ASCII has `~`, and so on. A teletext screen can therefore be read
+    two ways, and only the person reading it knows which they meant -- is this a
+    picture of text, or a listing of code? So the transformation lives here, on
+    the server, where the SAA5050's repertoire is known once, and the choice
+    rides on the request, where the caller can make it.
+
+    Honoured by the teletext strategy; a band read by recognising glyphs in
+    pixels is unaffected, as its font is the MOS's and already ASCII.
+    """
+
+SCREEN_TEXT_CHARACTERS_CODES: ScreenTextCharacters.ValueType  # 0
+"""What the byte is: `[`, `]`, `^`, `~` and the rest at face value. The
+default, because MODE 7 is the BBC's default screen mode and a copied
+BASIC listing is both the commonest capture and the worst to corrupt --
+`[` and `]` delimit assembler blocks and `^` is exponentiation.
+"""
+SCREEN_TEXT_CHARACTERS_DISPLAYED: ScreenTextCharacters.ValueType  # 1
+"""What the screen showed: the SAA5050's own glyphs, as Unicode. For
+capturing teletext as it looked.
+"""
+Global___ScreenTextCharacters: _TypeAlias = ScreenTextCharacters  # noqa: Y015
+
 @_typing.final
 class SubscribeFramesRequest(_message.Message):
     """Future: format preferences, scaling options"""
@@ -552,8 +596,10 @@ class GetScreenTextRequest(_message.Message):
     REGION_FIELD_NUMBER: _builtins.int
     SEARCH_FIELD_NUMBER: _builtins.int
     LAYOUT_FIELD_NUMBER: _builtins.int
+    CHARACTERS_FIELD_NUMBER: _builtins.int
     search: Global___ScreenTextSearch.ValueType
     layout: Global___ScreenTextLayout.ValueType
+    characters: Global___ScreenTextCharacters.ValueType
     @_builtins.property
     def region(self) -> Global___PixelRegion:
         """The part of the display to read. Whole display when unset. Independent of
@@ -567,10 +613,11 @@ class GetScreenTextRequest(_message.Message):
         region: Global___PixelRegion | None = ...,
         search: Global___ScreenTextSearch.ValueType = ...,
         layout: Global___ScreenTextLayout.ValueType = ...,
+        characters: Global___ScreenTextCharacters.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "region", b"region"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "layout", b"layout", "region", b"region", "search", b"search"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "characters", b"characters", "layout", b"layout", "region", b"region", "search", b"search"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__region: _TypeAlias = _typing.Literal["region"]  # noqa: Y015
     _WhichOneofArgType__region: _TypeAlias = _typing.Literal["_region", b"_region"]  # noqa: Y015

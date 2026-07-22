@@ -18,6 +18,7 @@ import {
     TeletextTextLayout,
     ScreenTextLayout,
     ScreenTextSearch,
+    ScreenTextCharacters,
 } from "./generated/video.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable, BackgroundStreamHandle } from "./stream-utils.js";
@@ -187,6 +188,12 @@ export interface ScreenGeometry {
 
 /** Which search a glyph-recognising strategy should run. */
 export type ScreenTextSearchMode = "anywhere" | "aligned";
+
+/**
+ * Which meaning a MODE 7 byte is read with: the byte at face value, or the
+ * glyph the SAA5050 drew for it. They differ for eleven codes.
+ */
+export type ScreenTextCharactersMode = "codes" | "displayed";
 
 export interface Frame {
     frameNumber: number;
@@ -385,11 +392,20 @@ export class Video {
      * @param options.flowed Join a run that reached the right edge to the next
      *     without a line break, rejoining a line that wrapped. By default each
      *     grid row is its own line, preserving the shape of the selection.
+     * @param options.characters Which meaning a MODE 7 byte carries.
+     *     `"codes"`, the default, takes the byte at face value, so `[`, `]`
+     *     and `^` come back as themselves and a copied BASIC listing keeps its
+     *     assembler blocks and exponentiation. `"displayed"` reports the glyphs
+     *     the SAA5050 actually drew for those eleven codes -- a left arrow, a
+     *     right arrow, an up arrow and the rest -- for capturing a teletext
+     *     screen as it looked. Only the caller knows which was meant. Ignored
+     *     outside MODE 7, whose font is the MOS's and already ASCII.
      */
     async screenText(options?: {
         region?: PixelRegion;
         search?: ScreenTextSearchMode;
         flowed?: boolean;
+        characters?: ScreenTextCharactersMode;
     }): Promise<ScreenText> {
         const searches: Record<ScreenTextSearchMode, ScreenTextSearch> = {
             anywhere: ScreenTextSearch.SCREEN_TEXT_SEARCH_ANYWHERE,
@@ -403,11 +419,24 @@ export class Video {
             );
         }
 
+        const repertoires: Record<ScreenTextCharactersMode, ScreenTextCharacters> = {
+            codes: ScreenTextCharacters.SCREEN_TEXT_CHARACTERS_CODES,
+            displayed: ScreenTextCharacters.SCREEN_TEXT_CHARACTERS_DISPLAYED,
+        };
+        const characters = options?.characters ?? "codes";
+        if (!(characters in repertoires)) {
+            throw new RangeError(
+                `Unknown characters ${characters}; expected one of ` +
+                `${Object.keys(repertoires).join(", ")}`,
+            );
+        }
+
         const request: Record<string, unknown> = {
             search: searches[search],
             layout: options?.flowed
                 ? ScreenTextLayout.SCREEN_TEXT_LAYOUT_FLOWED
                 : ScreenTextLayout.SCREEN_TEXT_LAYOUT_ROWS,
+            characters: repertoires[characters],
         };
         if (options?.region !== undefined) {
             request["region"] = options.region;

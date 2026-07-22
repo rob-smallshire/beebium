@@ -59,6 +59,12 @@ screen::Layout to_screen_layout(ScreenTextLayout layout) {
                                                : screen::Layout::Rows;
 }
 
+TeletextCharacters to_screen_characters(ScreenTextCharacters characters) {
+    return characters == SCREEN_TEXT_CHARACTERS_DISPLAYED
+               ? TeletextCharacters::Displayed
+               : TeletextCharacters::Codes;
+}
+
 void to_proto_region(const screen::PixelRect& rect, PixelRegion* out) {
     out->set_x(rect.x);
     out->set_y(rect.y);
@@ -119,6 +125,7 @@ grpc::Status VideoServiceImpl::GetScreenText(
 
     const screen::Search search = to_screen_search(request->search());
     const screen::Layout layout = to_screen_layout(request->layout());
+    const TeletextCharacters characters = to_screen_characters(request->characters());
 
     std::vector<screen::BandReading> readings;
     for (const screen::Band& band : screen::bands_of(meta)) {
@@ -130,7 +137,8 @@ grpc::Status VideoServiceImpl::GetScreenText(
         if (band_rect.intersected(region).empty()) {
             continue;
         }
-        readings.push_back(screen::read_band(band, region, search, sources));
+        readings.push_back(
+            screen::read_band(band, region, search, sources, characters));
     }
 
     const screen::Reading reading = screen::concatenate_bands_readings(std::move(readings), layout);

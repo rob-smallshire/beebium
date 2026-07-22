@@ -236,6 +236,60 @@ enum Beebium_ScreenTextLayout: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Which meaning a MODE 7 byte is read with.
+///
+/// The SAA5050 draws eleven codes as characters ASCII puts elsewhere: it puts a
+/// left arrow where ASCII has `[`, an up arrow where ASCII has `^`, a division
+/// sign where ASCII has `~`, and so on. A teletext screen can therefore be read
+/// two ways, and only the person reading it knows which they meant -- is this a
+/// picture of text, or a listing of code? So the transformation lives here, on
+/// the server, where the SAA5050's repertoire is known once, and the choice
+/// rides on the request, where the caller can make it.
+///
+/// Honoured by the teletext strategy; a band read by recognising glyphs in
+/// pixels is unaffected, as its font is the MOS's and already ASCII.
+enum Beebium_ScreenTextCharacters: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// What the byte is: `[`, `]`, `^`, `~` and the rest at face value. The
+  /// default, because MODE 7 is the BBC's default screen mode and a copied
+  /// BASIC listing is both the commonest capture and the worst to corrupt --
+  /// `[` and `]` delimit assembler blocks and `^` is exponentiation.
+  case codes // = 0
+
+  /// What the screen showed: the SAA5050's own glyphs, as Unicode. For
+  /// capturing teletext as it looked.
+  case displayed // = 1
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .codes
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .codes
+    case 1: self = .displayed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .codes: return 0
+    case .displayed: return 1
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_ScreenTextCharacters] = [
+    .codes,
+    .displayed,
+  ]
+
+}
+
 /// Future: format preferences, scaling options
 struct Beebium_SubscribeFramesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -507,6 +561,8 @@ struct Beebium_GetScreenTextRequest: Sendable {
 
   var layout: Beebium_ScreenTextLayout = .rows
 
+  var characters: Beebium_ScreenTextCharacters = .codes
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -706,6 +762,10 @@ extension Beebium_ScreenTextSearch: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_ScreenTextLayout: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SCREEN_TEXT_LAYOUT_ROWS\0\u{1}SCREEN_TEXT_LAYOUT_FLOWED\0")
+}
+
+extension Beebium_ScreenTextCharacters: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SCREEN_TEXT_CHARACTERS_CODES\0\u{1}SCREEN_TEXT_CHARACTERS_DISPLAYED\0")
 }
 
 extension Beebium_SubscribeFramesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1177,7 +1237,7 @@ extension Beebium_PixelRegion: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetScreenTextRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{1}search\0\u{1}layout\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{1}search\0\u{1}layout\0\u{1}characters\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1188,6 +1248,7 @@ extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 1: try { try decoder.decodeSingularMessageField(value: &self._region) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.search) }()
       case 3: try { try decoder.decodeSingularEnumField(value: &self.layout) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.characters) }()
       default: break
       }
     }
@@ -1207,6 +1268,9 @@ extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
     if self.layout != .rows {
       try visitor.visitSingularEnumField(value: self.layout, fieldNumber: 3)
     }
+    if self.characters != .codes {
+      try visitor.visitSingularEnumField(value: self.characters, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1214,6 +1278,7 @@ extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs._region != rhs._region {return false}
     if lhs.search != rhs.search {return false}
     if lhs.layout != rhs.layout {return false}
+    if lhs.characters != rhs.characters {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

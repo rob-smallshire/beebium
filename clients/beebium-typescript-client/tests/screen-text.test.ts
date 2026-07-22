@@ -124,6 +124,59 @@ describe("screenText in teletext", () => {
     }, 60000);
 });
 
+/**
+ * The SAA5050 draws eleven codes as characters ASCII puts elsewhere, so the
+ * same screen reads two ways and only the caller knows which was meant.
+ */
+describe("screenText teletext repertoire", () => {
+    // All four are codes the SAA5050 draws as something else, and three of
+    // them are BASIC syntax.
+    const DIVERGENT = "[]^~";
+    const AS_DISPLAYED = "←→↑÷";
+
+    async function printDivergent(): Promise<Beebium> {
+        const bbc = await launchAtPrompt();
+        await bbc.keyboard.type(`PRINT "${DIVERGENT}"\r`);
+        await waitFor(bbc, (text) => text.includes(DIVERGENT));
+        return bbc;
+    }
+
+    it("takes the byte at face value by default", async () => {
+        // A copied BASIC listing keeps its assembler brackets and its
+        // exponentiation operator.
+        const bbc = await printDivergent();
+        const text = (await bbc.video.screenText()).text;
+
+        expect(text).toContain(DIVERGENT);
+        expect(text).not.toContain(AS_DISPLAYED);
+    }, 60000);
+
+    it("reports the glyphs the screen showed when asked", async () => {
+        const bbc = await printDivergent();
+        const text = (await bbc.video.screenText({ characters: "displayed" })).text;
+
+        expect(text).toContain(AS_DISPLAYED);
+        expect(text).not.toContain(DIVERGENT);
+    }, 60000);
+
+    it("asking for the codes explicitly matches the default", async () => {
+        const bbc = await printDivergent();
+
+        expect((await bbc.video.screenText({ characters: "codes" })).text)
+            .toBe((await bbc.video.screenText()).text);
+    }, 60000);
+
+    it("refuses a repertoire it does not have", async () => {
+        const bbc = await launchAtPrompt();
+
+        await expect(
+            bbc.video.screenText({
+                characters: "semaphore" as never,
+            }),
+        ).rejects.toThrow(RangeError);
+    }, 60000);
+});
+
 describe("screenText in bitmap modes", () => {
     it("reads MODE 4 text through the same API", async () => {
         // The glyph-recognising strategy reads the bitmap display through the

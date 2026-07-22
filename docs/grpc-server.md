@@ -149,10 +149,18 @@ Request fields, all optional:
 - `region` - `{x, y, width, height}` in frame pixels; the whole display when
   unset, and clipped to it rather than rejected
 - `search` - `ALIGNED` reads only text on the character grid, which is what a
-  snapped drag wants; `OFFSET` only text off it; `BOTH`, the default, reads
-  both. Honoured by strategies that recognise glyphs in pixels
+  snapped drag wants; `ANYWHERE`, the default, also reads text placed freely
+  with VDU 5 and is a strict superset of `ALIGNED`. Honoured by strategies that
+  recognise glyphs in pixels
 - `layout` - `ROWS` (default) gives each grid row its own line; `FLOWED`
   rejoins a line that wrapped at the right edge
+- `characters` - which meaning a MODE 7 byte carries. `CODES`, the default,
+  takes the byte at face value, so `[`, `]` and `^` come back as themselves and
+  a copied BASIC listing keeps its assembler blocks and its exponentiation.
+  `DISPLAYED` reports the glyphs the SAA5050 actually drew for the eleven codes
+  where its repertoire differs from ASCII -- arrows, fractions, a division sign
+  -- for capturing a teletext page as it looked. Only the caller knows which was
+  meant, so the mapping is the server's and the choice is theirs
 
 Response:
 - `supported` - whether any band of the region had a strategy that could read
