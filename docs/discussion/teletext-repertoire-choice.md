@@ -1,8 +1,7 @@
 # Choosing How MODE 7 Bytes Are Read
 
-**Status: built**, from the core through the wire to the Edit menu, and tested
-at each level. The menu itself has not been looked at by a human. This document
-is the design and what it became.
+**Status: built and in use**, from the core through the wire to the Edit menu,
+and tested at each level. This document is the design and what it became.
 
 ## The problem
 
@@ -44,9 +43,14 @@ rides on the request beside `search` and `layout`.
 capturing teletext as it looked, who can say so; right for the listing case,
 which is both commoner and worse to get wrong.
 
-**The control belongs in the Edit menu, not a settings pane.** A `Copy Teletext
-As` submenu of two radio items, orthogonal to the three copy commands rather
-than multiplying with them.
+**The control belongs in the Edit menu, not a settings pane.** A `Teletext
+Copies As` submenu of two radio items, orthogonal to the three copy commands
+rather than multiplying with them.
+
+It is deliberately *not* called `Copy Teletext As`. A title beginning with
+"Copy" reads as a fourth copy command sitting among the other three, when what
+it actually does is say how the other three behave. Naming it for the state
+rather than the action keeps the distinction visible in the menu itself.
 
 **Copy only.** Every codepoint the Displayed reading produces lies outside
 ASCII, so the paste substitutions in `TextTranslation.cpp` already map `←` and
@@ -91,7 +95,7 @@ Substitutions menu, where whether a setting affects copy or paste is unclear.
 
 **macOS**
 
-- `Copy Teletext As` submenu in the Edit group, two items with checkmarks,
+- `Teletext Copies As` submenu in the Edit group, two items with checkmarks,
   sitting alongside the three copy commands rather than multiplying with them.
 - `SelectionCoordinator.teletextCharacters`, applied to every copy the window
   makes, starting from the remembered value
@@ -108,10 +112,27 @@ either reading, and the integration test that asserts `GetScreenText` and
 `GetTeletextScreen` agree about a MODE 7 screen now pins that. It is scaffolding
 due for retirement, so it does not get a knob of its own.
 
-## Left to do
+## What the menu cost to get right
 
-Eyeball the menu. Everything else in the list this document used to carry is
-built and tested.
+Two things worth remembering, because neither was visible from the code that
+looked wrong.
+
+**A menu item whose title changes is a different item.** The first version
+built the two choices from Buttons and put the checkmark into the title. Every
+toggle therefore replaced both items rather than updating them. A `Picker` is
+the construct for a choice of one: stable titles, and AppKit draws the radio
+checkmark itself.
+
+**The submenu would not open, and the reason was not in the menu.**
+`VideoClient` published six properties from `handleFrame` -- four lines above
+its own comment explaining that the renderer is updated directly to bypass
+SwiftUI. Frames arrive fifty times a second, so `objectWillChange` fired at
+that rate and invalidated every view observing the client: `ContentView`, and
+through it the whole window tree and every focused value it exports. The Edit
+menu was rebuilt fifty times a second. A flat menu item survives that; a
+submenu shimmers and never opens. Nothing read any of the six properties, and
+`currentFrame` was retaining a copy of every framebuffer for no reader at all.
+Fixed at source in `f713b1ce` -- per-frame state is no longer published.
 
 ## Not part of this
 

@@ -220,7 +220,7 @@ final class SelectionCoordinator: ObservableObject {
 
     private(set) var interpretation: ScreenSelectionInterpretation = .rows
 
-    /// Where the `Copy Teletext As` choice is read from. Injectable so the
+    /// Where the `Teletext Copies As` choice is read from. Injectable so the
     /// coordinator can be tested without touching the user's own defaults.
     var defaults: UserDefaults = .standard
 

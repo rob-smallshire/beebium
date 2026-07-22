@@ -77,13 +77,14 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The screen-copy variants that must sit together directly beneath the
-    /// standard Copy, in this order. SwiftUI drops them after the whole
+    /// The screen-copy items that must sit together directly beneath the
+    /// standard Copy, in this order: the two copy variants, then the submenu
+    /// saying how teletext is copied. SwiftUI drops them after the whole
     /// pasteboard group (below Select All), stranded from the Copy they belong
     /// with; this pulls them back up. Matched by title because they are ours and
     /// never localised.
-    private static let copyVariantTitles = [
-        "Copy as Columns", "Copy Text from Graphics", "Copy Teletext As",
+    private static let copySectionTitles = [
+        "Copy as Columns", "Copy Text from Graphics", "Teletext Copies As",
     ]
 
     /// Guards against the reorderings below re-entering through the very
@@ -117,10 +118,10 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
 
         // Copy is matched by selector so it survives localisation; the variants
         // by their (unlocalised) titles.
-        let variants = copyVariantTitles.compactMap { title in
+        let variants = copySectionTitles.compactMap { title in
             menu.items.first(where: { $0.title == title })
         }
-        guard variants.count == copyVariantTitles.count,
+        guard variants.count == copySectionTitles.count,
               let copyIndex = menu.items.firstIndex(
                   where: { $0.action == #selector(NSText.copy(_:)) })
         else { return }
@@ -338,7 +339,7 @@ struct BeebiumApp: App {
     }
 }
 
-/// The Edit menu's `Copy Teletext As` submenu: which meaning a MODE 7 byte
+/// The Edit menu's `Teletext Copies As` submenu: which meaning a MODE 7 byte
 /// carries when it is copied.
 ///
 /// A preference rather than a command: it is not about a particular window, so
@@ -355,7 +356,7 @@ private struct CopyTeletextAsMenu: View {
     private var characters: String = ScreenTextCharactersMode.codes.rawValue
 
     var body: some View {
-        Picker("Copy Teletext As", selection: $characters) {
+        Picker("Teletext Copies As", selection: $characters) {
             Text("Character Codes")
                 .help("Copy the character codes at face value, so square "
                     + "brackets and the caret come back as themselves. Keeps a "
