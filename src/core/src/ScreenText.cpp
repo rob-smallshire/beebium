@@ -121,7 +121,8 @@ CellRange cells_covered(const Band& band,
 // column as a space, so what is copied lines up with what is displayed.
 BandReading read_teletext_band(const Band& band,
                                const PixelRect& region,
-                               const TeletextGrid::Snapshot& teletext) {
+                               const TeletextGrid::Snapshot& teletext,
+                               TeletextCharacters characters) {
     BandReading reading;
     if (!teletext.active) {
         // The grid holds whatever was last shown in MODE 7. A band the
@@ -151,7 +152,7 @@ BandReading read_teletext_band(const Band& band,
                 && cell.charset == TeletextCellCharset::Alpha;
 
             const char32_t codepoint =
-                readable ? teletext_alpha_codepoint(cell.character) : 0;
+                readable ? teletext_alpha_codepoint(cell.character, characters) : 0;
 
             if (codepoint == 0) {
                 line.push_back(' ');
@@ -502,7 +503,8 @@ std::vector<Band> bands_of(const FrameMetadata& metadata) {
 BandReading read_band(const Band& band,
                       const PixelRect& region,
                       Search search,
-                      const BandSources& sources) {
+                      const BandSources& sources,
+                      TeletextCharacters characters) {
     // The strategy is chosen from the hardware state that was in effect when
     // these scanlines were drawn, not from anything the caller said. A new
     // strategy is added by extending this dispatch; nothing above it, on the
@@ -516,7 +518,7 @@ BandReading read_band(const Band& band,
         if (sources.teletext == nullptr) {
             return BandReading{};
         }
-        return read_teletext_band(band, region, *sources.teletext);
+        return read_teletext_band(band, region, *sources.teletext, characters);
     }
 
     return read_bitmap_band(band, region, search, sources);

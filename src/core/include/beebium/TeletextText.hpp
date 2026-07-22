@@ -32,6 +32,26 @@ struct TeletextRegion {
 };
 
 // How a region of cells becomes a run of text.
+// Which repertoire gives the captured bytes their meaning.
+//
+// The bytes are the same either way; only what they are taken to mean differs.
+// The SAA5050 draws eleven codes as characters ASCII puts elsewhere -- `[` is
+// drawn as a left arrow, `^` as an up arrow, `~` as a division sign -- so a
+// MODE 7 screen can be read two ways, and only the person reading it knows
+// which they meant.
+//
+// Codes is the default because the commonest thing anyone copies off a BBC
+// screen is a program listing, and MODE 7 is the default screen mode: `[` and
+// `]` delimit assembler blocks in BBC BASIC and `^` is exponentiation, so
+// reading them as arrows quietly corrupts the listing. Reporting the code is
+// wrong only for someone capturing teletext as it looked, who can say so.
+enum class TeletextCharacters {
+    // What the byte is: `[`, `]`, `^`, `~` and the rest as ASCII.
+    Codes,
+    // What the screen showed: the SAA5050's own glyphs, as Unicode.
+    Displayed,
+};
+
 enum class TeletextLinearisation {
     // Each row of the region contributes its own line: the shape of the
     // rectangle is preserved. This is what a column of figures wants.
@@ -66,19 +86,26 @@ enum class TeletextLinearisation {
 // meets its own clipboard. The server cannot know the client's platform.
 std::string teletext_text(const TeletextGrid& grid,
                           const TeletextRegion& region = TeletextRegion::whole_screen(),
-                          TeletextLinearisation linearisation = TeletextLinearisation::Rows);
+                          TeletextLinearisation linearisation = TeletextLinearisation::Rows,
+                          TeletextCharacters characters = TeletextCharacters::Codes);
 
 // As above, for a snapshot taken off the emulation thread. Any reader outside
 // that thread holds a snapshot rather than the live grid.
 std::string teletext_text(const TeletextGrid::Snapshot& snapshot,
                           const TeletextRegion& region = TeletextRegion::whole_screen(),
-                          TeletextLinearisation linearisation = TeletextLinearisation::Rows);
+                          TeletextLinearisation linearisation = TeletextLinearisation::Rows,
+                          TeletextCharacters characters = TeletextCharacters::Codes);
 
-// The Unicode codepoint a MODE 7 alpha character displays as.
+// The Unicode codepoint a MODE 7 alpha character means, in the chosen
+// repertoire.
 //
-// The SAA5050's UK repertoire is ASCII except for a handful of positions, so
-// most characters map to themselves. Returns 0 for a character that has no
-// sensible text form.
-char32_t teletext_alpha_codepoint(uint8_t character);
+// Under Displayed the SAA5050's UK repertoire applies: ASCII except for the
+// eleven positions where the chip draws something else. Under Codes the byte
+// is taken at face value, so those eleven read as the ASCII characters they
+// are. Either way most characters map to themselves, and 0 comes back for a
+// character with no sensible text form.
+char32_t teletext_alpha_codepoint(
+    uint8_t character,
+    TeletextCharacters characters = TeletextCharacters::Codes);
 
 } // namespace beebium

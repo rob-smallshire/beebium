@@ -46,30 +46,34 @@ void strip_trailing_spaces(std::string& text) {
 
 } // namespace
 
-char32_t teletext_alpha_codepoint(uint8_t character) {
-    // The SAA5050's UK repertoire is ASCII except at these positions. This is
-    // the source of the familiar MODE 7 surprise that '#' shows as a pound
-    // sign and '_' shows as a hash -- so a cell holding 0x23 must copy as a
-    // pound sign, because that is what is on screen.
+char32_t teletext_alpha_codepoint(uint8_t character, TeletextCharacters characters) {
+    // Under Displayed, the eleven positions where the SAA5050's UK repertoire
+    // departs from ASCII. This is the source of the familiar MODE 7 surprise
+    // that '#' shows as a pound sign and '_' shows as a hash.
     //
     // Deliberately the inverse of the teletext substitutions in
-    // TextTranslation.cpp, so text copied from a MODE 7 screen pastes back as
-    // the same characters.
-    switch (character) {
-        case 0x23: return 0x00A3;  // POUND SIGN
-        case 0x5B: return 0x2190;  // LEFTWARDS ARROW
-        case 0x5C: return 0x00BD;  // VULGAR FRACTION ONE HALF
-        case 0x5D: return 0x2192;  // RIGHTWARDS ARROW
-        case 0x5E: return 0x2191;  // UPWARDS ARROW
-        case 0x5F: return 0x0023;  // NUMBER SIGN
-        case 0x60: return 0x2015;  // HORIZONTAL BAR
-        case 0x7B: return 0x00BC;  // VULGAR FRACTION ONE QUARTER
-        case 0x7C: return 0x2016;  // DOUBLE VERTICAL LINE
-        case 0x7D: return 0x00BE;  // VULGAR FRACTION THREE QUARTERS
-        case 0x7E: return 0x00F7;  // DIVISION SIGN
-        default: break;
+    // TextTranslation.cpp, so text copied this way pastes back as the same
+    // bytes. Those substitutions also mean paste needs no equivalent choice:
+    // every one of these codepoints lies outside ASCII, so a left arrow and a
+    // '[' both type &5B and the two readings converge on the way back in.
+    if (characters == TeletextCharacters::Displayed) {
+        switch (character) {
+            case 0x23: return 0x00A3;  // POUND SIGN
+            case 0x5B: return 0x2190;  // LEFTWARDS ARROW
+            case 0x5C: return 0x00BD;  // VULGAR FRACTION ONE HALF
+            case 0x5D: return 0x2192;  // RIGHTWARDS ARROW
+            case 0x5E: return 0x2191;  // UPWARDS ARROW
+            case 0x5F: return 0x0023;  // NUMBER SIGN
+            case 0x60: return 0x2015;  // HORIZONTAL BAR
+            case 0x7B: return 0x00BC;  // VULGAR FRACTION ONE QUARTER
+            case 0x7C: return 0x2016;  // DOUBLE VERTICAL LINE
+            case 0x7D: return 0x00BE;  // VULGAR FRACTION THREE QUARTERS
+            case 0x7E: return 0x00F7;  // DIVISION SIGN
+            default: break;
+        }
     }
 
+    // Under Codes, and for every character either way, the byte is itself.
     if (character >= 0x20 && character < 0x7F) {
         return character;
     }
@@ -82,7 +86,8 @@ namespace {
 template <typename Source>
 std::string convert(const Source& grid,
                     const TeletextRegion& region,
-                    TeletextLinearisation linearisation) {
+                    TeletextLinearisation linearisation,
+                    TeletextCharacters characters) {
     const size_t first_row = std::min(region.row, TeletextGrid::ROWS);
     const size_t first_column = std::min(region.column, TeletextGrid::COLUMNS);
     const size_t last_row = std::min(first_row + region.rows, TeletextGrid::ROWS);
@@ -108,7 +113,7 @@ std::string convert(const Source& grid,
                 && cell.charset == TeletextCellCharset::Alpha;
 
             const char32_t codepoint =
-                readable ? teletext_alpha_codepoint(cell.character) : 0;
+                readable ? teletext_alpha_codepoint(cell.character, characters) : 0;
 
             if (codepoint == 0) {
                 line.push_back(' ');
@@ -154,14 +159,16 @@ std::string convert(const Source& grid,
 
 std::string teletext_text(const TeletextGrid& grid,
                           const TeletextRegion& region,
-                          TeletextLinearisation linearisation) {
-    return convert(grid, region, linearisation);
+                          TeletextLinearisation linearisation,
+                          TeletextCharacters characters) {
+    return convert(grid, region, linearisation, characters);
 }
 
 std::string teletext_text(const TeletextGrid::Snapshot& snapshot,
                           const TeletextRegion& region,
-                          TeletextLinearisation linearisation) {
-    return convert(snapshot, region, linearisation);
+                          TeletextLinearisation linearisation,
+                          TeletextCharacters characters) {
+    return convert(snapshot, region, linearisation, characters);
 }
 
 } // namespace beebium

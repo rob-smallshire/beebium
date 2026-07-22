@@ -14,6 +14,7 @@
 
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/TeletextGrid.hpp>
+#include <beebium/TeletextText.hpp>
 
 #include <screentext/Glyph.hpp>
 
@@ -225,7 +226,8 @@ struct BandSources {
 BandReading read_band(const Band& band,
                       const PixelRect& region,
                       Search search,
-                      const BandSources& sources);
+                      const BandSources& sources,
+                      TeletextCharacters characters = TeletextCharacters::Codes);
 
 // Read the soft (VDU 23) font redefinitions out of guest RAM as a glyph set
 // that overrides the ROM font where the running program has redefined a glyph.

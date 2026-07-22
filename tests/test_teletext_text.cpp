@@ -24,6 +24,7 @@
 
 #include <beebium/TeletextText.hpp>
 
+#include <algorithm>
 #include <vector>
 
 using namespace beebium;
@@ -168,23 +169,69 @@ TEST_CASE("Control codes hold their column", "[teletext-text]") {
 // The SAA5050 repertoire
 // ============================================================================
 
-TEST_CASE("Characters copy as what the screen displays", "[teletext-text]") {
+TEST_CASE("By default a character copies as the byte it is", "[teletext-text]") {
+    // The default repertoire is Codes, because the commonest thing anyone
+    // copies off a BBC screen is a program listing and MODE 7 is the default
+    // mode: '[' and ']' delimit assembler blocks in BBC BASIC and '^' is
+    // exponentiation, so reading them as arrows corrupts the listing.
+    TeletextCell cell;
+
+    cell.character = 0x5B;
+    CHECK(teletext_text(grid_with(cell)) == "[");
+
+    cell.character = 0x5D;
+    CHECK(teletext_text(grid_with(cell)) == "]");
+
+    cell.character = 0x5E;
+    CHECK(teletext_text(grid_with(cell)) == "^");
+
+    cell.character = 0x7E;
+    CHECK(teletext_text(grid_with(cell)) == "~");
+
+    cell.character = 0x23;
+    CHECK(teletext_text(grid_with(cell)) == "#");
+}
+
+TEST_CASE("A BASIC listing survives being copied from MODE 7",
+          "[teletext-text]") {
+    // The case the default exists for. An assembler block and a power operator
+    // must come back as themselves, not as arrows.
+    const auto grid = grid_of({"10 P%=&2000", "20 [OPT2:LDA #&41:]", "30 A=B^2"});
+
+    const std::string text = teletext_text(grid);
+
+    CHECK(text.find("[OPT2") != std::string::npos);
+    CHECK(text.find(":]") != std::string::npos);
+    CHECK(text.find("B^2") != std::string::npos);
+}
+
+TEST_CASE("Characters copy as what the screen displays when asked",
+          "[teletext-text]") {
     // The familiar MODE 7 surprise: 0x23 shows a pound sign, 0x5F a hash.
     // Copying the ASCII byte instead would produce text that does not match
     // the screen.
     TeletextCell cell;
 
+    const auto displayed = [](const TeletextGrid::Snapshot& screen) {
+        return teletext_text(screen, TeletextRegion::whole_screen(),
+                             TeletextLinearisation::Rows,
+                             TeletextCharacters::Displayed);
+    };
+
     cell.character = 0x23;
-    CHECK(teletext_text(grid_with(cell)) == "\xC2\xA3");  // U+00A3
+    CHECK(displayed(grid_with(cell)) == "\xC2\xA3");  // U+00A3
 
     cell.character = 0x5F;
-    CHECK(teletext_text(grid_with(cell)) == "#");
+    CHECK(displayed(grid_with(cell)) == "#");
 
     cell.character = 0x5C;
-    CHECK(teletext_text(grid_with(cell)) == "\xC2\xBD");  // U+00BD one half
+    CHECK(displayed(grid_with(cell)) == "\xC2\xBD");  // U+00BD one half
 
     cell.character = 0x7E;
-    CHECK(teletext_text(grid_with(cell)) == "\xC3\xB7");  // U+00F7 division
+    CHECK(displayed(grid_with(cell)) == "\xC3\xB7");  // U+00F7 division
+
+    cell.character = 0x5B;
+    CHECK(displayed(grid_with(cell)) == "\xE2\x86\x90");  // U+2190 left arrow
 }
 
 TEST_CASE("Ordinary ASCII is unchanged", "[teletext-text]") {
@@ -192,16 +239,40 @@ TEST_CASE("Ordinary ASCII is unchanged", "[teletext-text]") {
     CHECK(teletext_text(grid) == "AZ az 09 !?");
 }
 
+TEST_CASE("Only the eleven divergent codes differ between the repertoires",
+          "[teletext-text]") {
+    // Every other printable character means itself either way, so the choice
+    // is narrow and a caller who picks the wrong one loses only these.
+    static constexpr uint8_t divergent[] = {0x23, 0x5B, 0x5C, 0x5D, 0x5E,
+                                            0x5F, 0x60, 0x7B, 0x7C, 0x7D, 0x7E};
+
+    for (uint8_t code = 0x20; code < 0x7F; ++code) {
+        const bool is_divergent =
+            std::find(std::begin(divergent), std::end(divergent), code)
+            != std::end(divergent);
+
+        const char32_t codes =
+            teletext_alpha_codepoint(code, TeletextCharacters::Codes);
+        const char32_t shown =
+            teletext_alpha_codepoint(code, TeletextCharacters::Displayed);
+
+        INFO("code " << static_cast<int>(code));
+        CHECK(codes == code);
+        CHECK((codes != shown) == is_divergent);
+    }
+}
+
 TEST_CASE("The alpha mapping is the inverse of the paste substitutions",
           "[teletext-text]") {
     // Text copied from a MODE 7 screen must paste back as the same characters,
     // so this table and the teletext entries in TextTranslation.cpp have to
     // agree. See the kTeletext table there.
-    CHECK(teletext_alpha_codepoint(0x5B) == 0x2190);  // [ shows as left arrow
-    CHECK(teletext_alpha_codepoint(0x5D) == 0x2192);  // ] right arrow
-    CHECK(teletext_alpha_codepoint(0x5E) == 0x2191);  // ^ up arrow
-    CHECK(teletext_alpha_codepoint(0x7B) == 0x00BC);  // { one quarter
-    CHECK(teletext_alpha_codepoint(0x7D) == 0x00BE);  // } three quarters
+    using enum TeletextCharacters;
+    CHECK(teletext_alpha_codepoint(0x5B, Displayed) == 0x2190);  // [ left arrow
+    CHECK(teletext_alpha_codepoint(0x5D, Displayed) == 0x2192);  // ] right arrow
+    CHECK(teletext_alpha_codepoint(0x5E, Displayed) == 0x2191);  // ^ up arrow
+    CHECK(teletext_alpha_codepoint(0x7B, Displayed) == 0x00BC);  // { one quarter
+    CHECK(teletext_alpha_codepoint(0x7D, Displayed) == 0x00BE);  // } three quarters
 }
 
 // ============================================================================
