@@ -108,6 +108,10 @@ Control codes change rendering state but display as spaces:
 
 96 characters × 10 rows × 6 bits per row, stored in `teletext_font.inl`. Each character is 6 pixels wide, rendered into 8-pixel batches (6 character + 2 spacing).
 
+**Naming: "teletext" vs "Mode 7".** These are not synonyms, and the codebase
+currently uses the first where it often means the second. See
+[Naming: teletext and Mode 7](#naming-teletext-and-mode-7).
+
 ### PixelBatch
 
 16-byte packet containing:
@@ -666,6 +670,50 @@ This correctly handles:
 - Direct CRTC programming via VDU 23
 
 The interlace flag is passed through to clients via `field_order` in the Frame message.
+
+## Naming: teletext and Mode 7
+
+**Teletext** is the broadcast data service -- pages carried in the vertical
+blanking interval of a television signal. **Mode 7** is the BBC screen mode
+that borrows the SAA5050, teletext's character generator, to draw a 40x25
+character display out of whatever the machine put in screen memory. Most Mode 7
+screens have never been near a broadcast in their lives.
+
+Beebium may one day emulate the **Acorn Teletext Adapter**: a 1 MHz bus
+peripheral with a TV tuner that receives real teletext pages and hands them to
+the computer. That is teletext in the proper sense, and it needs the word.
+
+So:
+
+| Concept | Name it | Why |
+|---|---|---|
+| The SAA5050 and its character ROM | **teletext** | It genuinely is a teletext character generator, and its repertoire genuinely is the teletext character set. An adapter feeding the same chip does not make these names wrong -- it makes them correctly shared. |
+| The character set / repertoire choice | **teletext** | Same reason: `TeletextCharacters`, `TeletextCharacterSet` describe the chip's repertoire, not the screen. |
+| The screen, its grid, its capture | **Mode 7** | A display concern. An adapter would feed *into* it and does not own it. This is where a peripheral service would collide head-on. |
+| Anything a user reads | **Mode 7** | Users of a BBC micro know the mode by its number. The Edit menu says `Mode 7 Copies As` for exactly this reason. |
+
+By that rule these are **misnamed today**, all naming the screen rather than the
+chip:
+
+- `GetTeletextScreen`, `GetTeletextScreenRequest`, `TeletextScreen`,
+  `TeletextScreenCell`, `TeletextScreenRegion` (`video.proto`)
+- `TeletextGrid` and its snapshot (core)
+- the `is_teletext` flag on a screen-text `Band`
+- `teletext_screen()` / `teletextScreen()` in the Python and TypeScript clients
+
+**Deliberately not renamed yet, and the trigger for doing it.** Most of that
+list is `GetTeletextScreen` and its message types, which are already scaffolding
+due for retirement: `GetScreenText` supersedes them and reads every mode, not
+just this one. Renaming them now would mean a protocol fingerprint bump, a
+rebuild of all four servers and three sets of client stubs, spent on an RPC we
+intend to delete. **When `GetTeletextScreen` retires, what remains is
+`TeletextGrid` and the band flag -- an internal, contained rename.** That is the
+moment to do it, and the Teletext Adapter's own design is the moment it stops
+being optional.
+
+Recorded here rather than in the discussion document that raised it
+(`discussion/teletext-repertoire-choice.md`), because a naming rule is only
+worth writing down where the next person to break it will be reading.
 
 # Ideas
 

@@ -63,6 +63,11 @@ concern would leave that peripheral nowhere to stand. Mode 7 is also simply
 the more accurate name for what this governs: the screen mode, whoever put the
 characters on it.
 
+That distinction outgrew this document: the codebase says "teletext" in a good
+many places where it means Mode 7, and the rule for telling them apart -- plus
+what is misnamed today and when to fix it -- is in
+[the video subsystem's naming section](../video-subsystem.md#naming-teletext-and-mode-7).
+
 **Copy only.** Every codepoint the Displayed reading produces lies outside
 ASCII, so the paste substitutions in `TextTranslation.cpp` already map `←` and
 `[` onto the same `&5B`. The two readings converge on the way back in, so paste
