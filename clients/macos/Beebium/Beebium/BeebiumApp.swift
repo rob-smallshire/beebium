@@ -179,10 +179,19 @@ struct BeebiumApp: App {
     @AppStorage(ScreenTextCharactersMode.defaultsKey)
     private var teletextCharacters: String = ScreenTextCharactersMode.codes.rawValue
 
-    /// Apply a repertoire to the focused window and remember it for the next.
-    private func setTeletextCharacters(_ mode: ScreenTextCharactersMode) {
-        teletextCharacters = mode.rawValue
-        selectionCoordinator?.teletextCharacters = mode
+    /// The remembered choice, as the menu's Picker needs it: reading gives the
+    /// mode, writing both remembers it and applies it to the focused window.
+    ///
+    /// Left enabled with no machine window focused. It is a preference as much
+    /// as a command -- what it sets is where the next window starts -- so there
+    /// is nothing dishonest about changing it with nothing to copy from.
+    private var teletextCharactersBinding: Binding<ScreenTextCharactersMode> {
+        Binding(
+            get: { ScreenTextCharactersMode(rawValue: teletextCharacters) ?? .codes },
+            set: { mode in
+                teletextCharacters = mode.rawValue
+                selectionCoordinator?.teletextCharacters = mode
+            })
     }
 
     var body: some Scene {
@@ -281,28 +290,25 @@ struct BeebiumApp: App {
                 // submenu rather than more copy commands: the choice is
                 // orthogonal to all three above, so multiplying it into them
                 // would give six commands saying two things.
-                Menu("Copy Teletext As") {
-                    Button {
-                        setTeletextCharacters(.codes)
-                    } label: {
-                        Text(teletextCharacters == ScreenTextCharactersMode.codes.rawValue
-                             ? "\u{2713} Character Codes" : "Character Codes")
-                    }
-                    .disabled(selectionCoordinator == nil)
-                    .help("Copy the character codes at face value, so square "
-                        + "brackets and the caret come back as themselves. Keeps "
-                        + "a copied BASIC listing intact.")
+                //
+                // A Picker and not a pair of Buttons. The choice is one of two
+                // states, which is what a Picker models and what AppKit draws
+                // the radio checkmark for; building it from Buttons means
+                // putting the checkmark in the title, and a menu item whose
+                // title changes is a different item, so every toggle replaces
+                // the whole submenu instead of updating it.
+                Picker("Copy Teletext As", selection: teletextCharactersBinding) {
+                    Text("Character Codes")
+                        .help("Copy the character codes at face value, so square "
+                            + "brackets and the caret come back as themselves. "
+                            + "Keeps a copied BASIC listing intact.")
+                        .tag(ScreenTextCharactersMode.codes)
 
-                    Button {
-                        setTeletextCharacters(.displayed)
-                    } label: {
-                        Text(teletextCharacters == ScreenTextCharactersMode.displayed.rawValue
-                             ? "\u{2713} Displayed Characters" : "Displayed Characters")
-                    }
-                    .disabled(selectionCoordinator == nil)
-                    .help("Copy the characters the screen actually showed, so "
-                        + "the arrows, fractions and division sign the teletext "
-                        + "chip draws come back as themselves.")
+                    Text("Displayed Characters")
+                        .help("Copy the characters the screen actually showed, so "
+                            + "the arrows, fractions and division sign the "
+                            + "teletext chip draws come back as themselves.")
+                        .tag(ScreenTextCharactersMode.displayed)
                 }
             }
 
