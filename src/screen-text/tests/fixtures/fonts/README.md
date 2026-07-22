@@ -67,7 +67,33 @@ how it was transcribed, and `../capture_thrust.py` for the capture.
 
 Where `thrust.glyphs` was transcribed from the screen because the font lived in
 a private table, `repton3.glyphs` was read straight from the MOS soft-font area
-&C00: Repton 3's menu redefines characters 224-249 as a chunky A-Z (offset
-+159), a proper VDU 23 font. The mapping is therefore exact and needs no
-guessing -- code 224+n is the nth letter. It reads the menu of
-`../screens/repton3-select.png`. See its header, and `../capture_repton3.py`.
+&C00: Repton 3's menu redefines characters 224-249 as a chunky A-Z, a proper
+VDU 23 font, and prints a capital as letter+159. For *this game's menu* the
+mapping is therefore exact and needs no guessing -- code 224+n is the nth
+letter. It reads the menu of `../screens/repton3-select.png`. See its header,
+and `../capture_repton3.py`.
+
+### No offset convention may be assumed
+
+It is tempting to read Repton's +159 as the rule and detect it automatically.
+It is not a rule, and doing so would be guessing.
+
+There is folklore that games map letters into the user-defined block by adding
+160. Repton falsifies it. That is all one counterexample can do: **falsifying a
+universal claim takes a single case, establishing one takes far more.** Repton
+tells us +160 is wrong; it tells us nothing about what any other program does.
+
+The corpus already shows the spread. Thrust uses no character codes at all,
+blitting a private table. Repton's menu uses an offset. Repton's own credits
+screen blits a private table like Thrust. Two games, three behaviours -- and no
+reason to think a third game would match any of them.
+
+So: **never infer meaning from a code.** The machine can tell you which code a
+cell holds -- the redefinable area at &C00 and its aliases are a hardware fact,
+and reading them is sound. It cannot tell you which letter that glyph draws,
+because nothing in the machine records it. Only a supplied glyph set carries
+that, authored by someone who looked at the screen.
+
+An offset heuristic would produce confident wrong text where the design
+otherwise produces honest spaces, which is the one failure mode this library
+exists to avoid.
