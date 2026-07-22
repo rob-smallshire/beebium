@@ -97,3 +97,32 @@ that, authored by someone who looked at the screen.
 An offset heuristic would produce confident wrong text where the design
 otherwise produces honest spaces, which is the one failure mode this library
 exists to avoid.
+
+## Recovering a font automatically -- a note for later
+
+Transcribing a font by hand, as `thrust.glyphs` was, is the only way to read a
+game that hides its glyphs in a private table. Automating it is a substantial
+feature in its own right, not attempted here, but two things are worth recording
+for whoever considers it.
+
+**General-purpose OCR does not work on this.** macOS's built-in text
+recognition was tried on these screens and performed poorly. The reason is that
+its priors do not fit: it expects anti-aliased, proportional, high-resolution
+glyphs with a language model behind them, and a BBC character is an eight-by-
+eight aliased bitmap -- five rows tall in Thrust's case -- in a bespoke
+typeface, sometimes over a dithered background, where a letter is a few dozen
+set pixels. Nothing it assumes holds.
+
+**The problem is smaller than "OCR" makes it sound.** The exact matcher already
+does the hard half: distinct bitmaps partition a screen with no fuzziness at
+all, because the same bitmap is always the same character. A screen holds a few
+dozen distinct glyphs, perfectly clustered. What is missing is only the label on
+each cluster -- closer to a substitution cipher than to image recognition, with
+word boundaries, letter frequency and dictionary shape all available as
+evidence.
+
+If it is built, it belongs **outside the reader**: a producer of glyph sets, not
+a change to matching. A "learn a font from this image" tool whose output is a
+`.glyphs` file a human inspects and corrects keeps the property the rest of this
+library rests on -- the matcher never guesses, and anything uncertain is
+reviewed before it is trusted rather than presented as read.
