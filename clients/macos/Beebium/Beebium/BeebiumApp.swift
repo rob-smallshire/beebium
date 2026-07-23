@@ -77,14 +77,16 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The screen-copy items that must sit together directly beneath the
-    /// standard Copy, in this order: the two copy variants, then the submenu
-    /// saying how Mode 7 is copied. SwiftUI drops them after the whole
-    /// pasteboard group (below Select All), stranded from the Copy they belong
-    /// with; this pulls them back up. Matched by title because they are ours and
-    /// never localised.
+    /// The two copy variants that must sit together directly beneath the
+    /// standard Copy. SwiftUI drops them after the whole pasteboard group
+    /// (below Select All), stranded from the Copy they belong with; this pulls
+    /// them back up. Matched by title because they are ours and never localised.
+    ///
+    /// "Mode 7 Copies As" is not among them: it is not a copy command but a
+    /// setting the copies obey, so it lives in its own section lower down rather
+    /// than crowding the Copy it governs.
     private static let copySectionTitles = [
-        "Copy as Columns", "Copy Text from Graphics", "Mode 7 Copies As",
+        "Copy as Columns", "Copy Text from Graphics",
     ]
 
     /// Guards against the reorderings below re-entering through the very
@@ -269,19 +271,6 @@ struct BeebiumApp: App {
                     + "freely into the picture such as a game's score. Reads the "
                     + "text out of the pixels, so it is the least certain of the "
                     + "copy commands.")
-
-                // Which meaning a MODE 7 byte carries when it is copied. A
-                // submenu rather than more copy commands: the choice is
-                // orthogonal to all three above, so multiplying it into them
-                // would give six commands saying two things.
-                //
-                // A Picker and not a pair of Buttons. The choice is one of two
-                // states, which is what a Picker models and what AppKit draws
-                // the radio checkmark for; building it from Buttons means
-                // putting the checkmark in the title, and a menu item whose
-                // title changes is a different item, so every toggle replaces
-                // the whole submenu instead of updating it.
-                Mode7CopiesAsMenu()
             }
 
             CommandGroup(after: .pasteboard) {
@@ -298,6 +287,24 @@ struct BeebiumApp: App {
                 .help(pasteCoordinator?.fullSpeedUnavailableReason
                       ?? "Run the machine as fast as it will go until the "
                        + "pasted text has all been typed.")
+            }
+
+            // Which meaning a MODE 7 byte carries when it is copied, in its own
+            // section near the bottom of the menu -- as Safari groups its
+            // settings-like items -- rather than beside the copy commands. It is
+            // a setting the copies obey, not a fourth thing to copy, so it reads
+            // better set apart from them than crowded among them.
+            //
+            // A submenu, and a Picker within it rather than a pair of Buttons.
+            // The choice is one of two states, which is what a Picker models and
+            // what AppKit draws the radio checkmark for; a pair of Buttons would
+            // carry the checkmark in the title, and a menu item whose title
+            // changes is a different item, so every toggle would replace the
+            // whole submenu instead of updating it. It is declared before the
+            // keyboard-mapping group so it sits above it.
+            CommandGroup(after: .textEditing) {
+                Divider()
+                Mode7CopiesAsMenu()
             }
 
             CommandGroup(after: .textEditing) {
