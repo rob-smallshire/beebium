@@ -138,6 +138,34 @@ class TestScreenTextInTeletext:
         assert one_row.supported
         assert "\n" not in one_row.text
 
+    def test_a_blank_row_between_text_keeps_its_line(self, bbc: Beebium) -> None:
+        # The shape of the screen is part of what was read. Building the text
+        # from the runs that have something on them closes the gaps up, and the
+        # boot message comes back as solid lines.
+        _wait_for_prompt(bbc)
+        lines = bbc.video.screen_text().text.split("\n")
+
+        banner = next(i for i, line in enumerate(lines) if "BBC Computer" in line)
+        basic = next(i for i, line in enumerate(lines) if line.strip() == "BASIC")
+
+        assert basic > banner + 1, "the rows between them are not run together"
+        assert all(not lines[i].strip() for i in range(banner + 1, basic))
+
+    def test_a_region_keeps_the_blank_rows_it_covers(self, bbc: Beebium) -> None:
+        # Six rows read is six rows reported, however few of them hold text.
+        _wait_for_prompt(bbc)
+        band = bbc.video.screen_geometry().bands[0]
+        rows = 6
+
+        text = bbc.video.screen_text(
+            region=(0, 0, band.column_pitch * 40, band.row_pitch * rows)
+        ).text
+
+        # Trailing blank rows are stripped, so this is a floor rather than an
+        # equality: what matters is that the interior blanks survived.
+        assert "\n\n" in text
+        assert len(text.split("\n")) <= rows
+
     def test_the_frame_number_advances(self, bbc: Beebium) -> None:
         _wait_for_prompt(bbc)
         first = bbc.video.screen_text().frame_number

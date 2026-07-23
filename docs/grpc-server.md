@@ -181,7 +181,13 @@ Response:
   teletext strategy, whose cells are exact characters and all matched
 - `text` - the runs joined by `layout`, lines separated with LF. Every cell
   contributes a character, including the unmatched ones, so columns stay
-  aligned
+  aligned, and **every row of the region contributes a line, including the
+  blank ones** -- the gap between paragraphs is part of what was on screen.
+  Trailing blank rows are stripped, because a screen is 25 rows tall whatever
+  is written on it and a copy should not end in the empty part. Leading blank
+  rows are **kept**: they position everything after them, so dropping them
+  would leave a caller that finds a line here and then reads that row back
+  with a row-indexed call off by however many went
 - `unreadableCells`, `ambiguousCells` - cells a strategy could not identify at
   all, and cells it read but could not pin to one character because the font
   draws two the same. Both zero for MODE 7, whose cells are exact codes

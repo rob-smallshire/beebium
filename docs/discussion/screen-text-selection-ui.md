@@ -203,6 +203,22 @@ it:
   real glyphs, so a run whose glyphs are all unreadable highlights nothing and
   the overlay says so honestly.
 
+**A blank row is a row.** The copied text has a line for every row the
+selection covers, blank ones included, and nothing is trimmed at either end: if
+you dragged over three empty rows above the text, you get three empty lines. The
+shape of the screen is part of what was selected, and a boot message whose gaps
+were closed up would come back as four solid lines instead of four separated by
+blanks.
+
+That has to be built from the **row range**, not from the runs. Taking a line
+per run drops any row that had nothing readable on it -- and the two strategies
+disagree about how they report such a row, which walking the rows makes moot:
+the teletext reader emits an empty run for it, the glyph recogniser emits no run
+at all.
+
+Blank rows stay out of the *highlight*, though. There is nothing on them to
+light up, and the range layer already shows they are selected.
+
 The wrinkle is rows: an aligned-rows selection is a text-flow region, not a
 rectangle, and `GetScreenText` takes a rectangular region. Settled as the first
 of the two options: request the bounding rectangle and trim the first and last
@@ -248,16 +264,15 @@ the raw drag rectangle over the top was clutter. Each mode therefore has its own
 silhouette -- notched flow, clean block, or bare outline -- which is what tells
 you which one you are in.
 
-**Version two: preview.** Surfacing the extracted text *as text* -- a floating
-panel or the status bar showing what will be copied, with the ambiguous and
-unreadable cells the library distinguishes marked as such. Deliberately deferred
-until version one has been lived with: the highlight interaction wants using
-before its richer companion is designed, so the preview is shaped by experience
-rather than guessed. The architecture does not change to add it -- the text and
-the per-run detail are already in the `GetScreenText` response -- so nothing in
-version one forecloses it. Version one has since added the per-cell `matched`
-flag, which is the first half of what a preview needs to mark what it could not
-read; the ambiguity half is still only a count.
+**Version two: preview -- dropped.** The plan was to surface the extracted text
+*as text*, in a panel showing what would be copied with the unreadable cells
+marked. It was deferred until version one had been lived with, on the grounds
+that the preview should be shaped by experience rather than guessed. Living with
+it answered the question the other way: the highlights turned out to be feedback
+enough, especially once they showed only the cells actually read, and a panel
+would add furniture for something the overlay already says. Not deferred --
+unnecessary. Nothing forecloses it if that judgement ever changes: the text and
+the per-cell detail are already in the `GetScreenText` response.
 
 ## Settled since
 
@@ -278,13 +293,21 @@ nuance a three-word menu item cannot hold actually lives.
 single atomic read with no preview to be inconsistent with, so it reads the live
 screen and stays as it was.
 
+**An unreadable cell copies as a space.** It holds its column so the text stays
+aligned with the screen, and the highlight already says it was not read, so the
+copy does not have to refuse as well. Making a wholly unreadable selection copy
+nothing was considered and judged not worth the special case.
+
 ## Open questions
 
 1. **Adjusting a finished selection.** Version one treats a new `Cmd`-drag as a
    fresh selection, releasing whatever the last one held. Shift-click-to-extend
    and drag handles are refinements that can wait, unless they prove necessary
    early.
-2. **A wholly unreadable selection still copies as spaces.** The highlight now
-   shows nothing when no glyph could be read, which is honest, but the copy
-   still puts a space per cell on the clipboard. Whether that should instead
-   copy nothing at all is open.
+2. **Reading a game's own font.** A game that draws with glyphs of its own
+   copies as spaces, because nothing in the machine records which letter a
+   redefined glyph draws -- only a supplied glyph set carries that. Whether
+   Beebium should ship or produce such sets is open; the reader itself will not
+   guess. See `screen-text-extraction.md` and the corpus notes under
+   `src/screen-text/tests/fixtures/fonts/`.
+

@@ -150,6 +150,29 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertEqual(trimmed.text, "\nAAA\n\nCCC\n")
     }
 
+    func testTrimToFlowKeepsTheLineOfARowReportedAsAnEmptyRun() {
+        // The two strategies report a blank row differently and both must give
+        // it its line: the teletext reader emits an empty run for it (this
+        // test), the glyph reader emits no run at all (the test above).
+        let flow = SelectionCoordinator.RowsFlow(
+            start: .init(column: 0, row: 0),
+            end: .init(column: 79, row: 2),
+            requestRegion: FramePixelRect(x: 0, y: 0, width: 640, height: 24))
+        let runs = [
+            ScreenTextRun(text: "AAA",
+                          bounds: FramePixelRect(x: 0, y: 0, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+            ScreenTextRun(text: "",
+                          bounds: FramePixelRect(x: 0, y: 8, width: 640, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+            ScreenTextRun(text: "CCC",
+                          bounds: FramePixelRect(x: 0, y: 16, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+        ]
+        let trimmed = SelectionCoordinator.trimToFlow(runs: runs, band: band, flow: flow)
+        XCTAssertEqual(trimmed.text, "AAA\n\nCCC")
+    }
+
     func testTrimToFlowKeepsBlankRunsOutOfTheHighlight() {
         // A blank row contributes a line but nothing to light up: the range
         // layer already shows it is selected.
