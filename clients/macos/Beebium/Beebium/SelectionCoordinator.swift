@@ -825,16 +825,20 @@ extension SelectionCoordinator {
         kept.sort { $0.row != $1.row ? $0.row < $1.row : $0.x < $1.x }
         let orderedRuns = kept.map { $0.run }
 
+        // A line per row of the flow, not a line per run. A row with nothing
+        // readable on it is still a row the selection covered, and building the
+        // text from the runs alone drops it -- closing the gaps up and
+        // misreporting the shape of the screen. Strategies differ here too: the
+        // teletext reader reports a blank row as an empty run, while the glyph
+        // reader reports no run at all, and walking the rows is right for both.
         var lines: [String] = []
-        var currentRow: Int?
-        for entry in kept {
-            if entry.row != currentRow {
-                lines.append(entry.run.text)
-                currentRow = entry.row
-            } else {
-                lines[lines.count - 1] += entry.run.text
-            }
+        for row in flow.start.row...max(flow.start.row, flow.end.row) {
+            let line = kept.filter { $0.row == row }
+                           .map { $0.run.text }
+                           .joined()
+            lines.append(line)
         }
+
         return (orderedRuns, lines.joined(separator: "\n"))
     }
 }

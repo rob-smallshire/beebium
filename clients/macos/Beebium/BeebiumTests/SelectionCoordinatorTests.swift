@@ -110,6 +110,66 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertEqual(trimmed.text, "WXYZ")
     }
 
+    func testTrimToFlowKeepsBlankRowsAsEmptyLines() {
+        // A row inside the selection with nothing readable on it is still a
+        // row. Dropping it closes up the gaps and misreports the shape of the
+        // screen -- a boot message comes back as four solid lines.
+        let flow = SelectionCoordinator.RowsFlow(
+            start: .init(column: 0, row: 0),
+            end: .init(column: 79, row: 2),
+            requestRegion: FramePixelRect(x: 0, y: 0, width: 640, height: 24))
+        let runs = [
+            ScreenTextRun(text: "AAA",
+                          bounds: FramePixelRect(x: 0, y: 0, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+            // Row 1 is blank, and the strategy reported no run for it at all.
+            ScreenTextRun(text: "CCC",
+                          bounds: FramePixelRect(x: 0, y: 16, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+        ]
+        let trimmed = SelectionCoordinator.trimToFlow(runs: runs, band: band, flow: flow)
+        XCTAssertEqual(trimmed.text, "AAA\n\nCCC")
+    }
+
+    func testTrimToFlowKeepsBlankRowsAtTheEndsToo() {
+        // Faithful to the selection: a blank row the drag covered is a row,
+        // wherever in the range it falls. Five rows selected, five lines out.
+        let flow = SelectionCoordinator.RowsFlow(
+            start: .init(column: 0, row: 0),
+            end: .init(column: 79, row: 4),
+            requestRegion: FramePixelRect(x: 0, y: 0, width: 640, height: 40))
+        let runs = [
+            ScreenTextRun(text: "AAA",
+                          bounds: FramePixelRect(x: 0, y: 8, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+            ScreenTextRun(text: "CCC",
+                          bounds: FramePixelRect(x: 0, y: 24, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+        ]
+        let trimmed = SelectionCoordinator.trimToFlow(runs: runs, band: band, flow: flow)
+        XCTAssertEqual(trimmed.text, "\nAAA\n\nCCC\n")
+    }
+
+    func testTrimToFlowKeepsBlankRunsOutOfTheHighlight() {
+        // A blank row contributes a line but nothing to light up: the range
+        // layer already shows it is selected.
+        let flow = SelectionCoordinator.RowsFlow(
+            start: .init(column: 0, row: 0),
+            end: .init(column: 79, row: 2),
+            requestRegion: FramePixelRect(x: 0, y: 0, width: 640, height: 24))
+        let runs = [
+            ScreenTextRun(text: "AAA",
+                          bounds: FramePixelRect(x: 0, y: 0, width: 24, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+            ScreenTextRun(text: "",
+                          bounds: FramePixelRect(x: 0, y: 8, width: 640, height: 8),
+                          cellWidth: 8, cellHeight: 8),
+        ]
+        let trimmed = SelectionCoordinator.trimToFlow(runs: runs, band: band, flow: flow)
+        XCTAssertEqual(trimmed.runs.count, 1, "the blank row is not a highlight")
+        XCTAssertEqual(trimmed.runs.first?.text, "AAA")
+    }
+
     // MARK: - Selection range (the lighter fill)
 
     func testRowsRangeFlowsToTheScreenEdges() {

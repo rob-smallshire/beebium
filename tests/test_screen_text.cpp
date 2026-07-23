@@ -157,12 +157,30 @@ TEST_CASE("Linearisation joins runs into text", "[screen-text]") {
         REQUIRE(linearise(runs, Layout::Rows) == "TEXT");
     }
 
-    SECTION("leading blank rows are kept") {
+    SECTION("leading blank rows are kept, unlike trailing ones") {
+        // Deliberately asymmetric. Trailing blanks are the empty bottom of a
+        // screen that is 25 rows whatever is on it, and carry nothing. Leading
+        // blanks position everything after them: a caller that finds a line in
+        // this text and then reads that row back with a row-indexed call --
+        // which is what the row parameter means -- would be off by however many
+        // were dropped. A GUI is free to trim them for presentation, and does;
+        // the API stays faithful.
         const std::vector<TextRun> runs{
             run_at(0, 0, ""),
             run_at(1, 0, "TEXT"),
         };
         REQUIRE(linearise(runs, Layout::Rows) == "\nTEXT");
+    }
+
+    SECTION("blank rows between text survive the trailing trim") {
+        const std::vector<TextRun> runs{
+            run_at(0, 0, "ABOVE"),
+            run_at(1, 0, ""),
+            run_at(2, 0, "BELOW"),
+            run_at(3, 0, ""),
+            run_at(4, 0, ""),
+        };
+        REQUIRE(linearise(runs, Layout::Rows) == "ABOVE\n\nBELOW");
     }
 
     SECTION("lines are joined with LF and never CR") {
