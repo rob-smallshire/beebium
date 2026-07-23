@@ -692,24 +692,29 @@ So:
 | The screen, its grid, its capture | **Mode 7** | A display concern. An adapter would feed *into* it and does not own it. This is where a peripheral service would collide head-on. |
 | Anything a user reads | **Mode 7** | Users of a BBC micro know the mode by its number. The Edit menu says `Mode 7 Copies As` for exactly this reason. |
 
-By that rule these are **misnamed today**, all naming the screen rather than the
-chip:
+By that rule, the one thing that clearly names the *screen* rather than the chip
+is the `is_teletext` flag on a screen-text `Band`, which marks a band of the
+Mode 7 display.
 
-- `GetTeletextScreen`, `GetTeletextScreenRequest`, `TeletextScreen`,
-  `TeletextScreenCell`, `TeletextScreenRegion` (`video.proto`)
-- `TeletextGrid` and its snapshot (core)
-- the `is_teletext` flag on a screen-text `Band`
-- `teletext_screen()` / `teletextScreen()` in the Python and TypeScript clients
+**`GetTeletextScreen` and its cells are correctly named, as of the 2026-07
+decision to keep them.** They were going to be retired -- `GetScreenText`
+supersedes them for text and reads every mode -- but the retirement was
+conditional on nothing needing the attribute-rich teletext cells, and something
+does: they are the only exposure of the SAA5050's per-cell state (colour,
+character set, concealment, flash, double height, control-code). So the RPC
+stays, repositioned as the teletext *attribute* API, and that role is
+teletext in the rule's own sense -- it carries chip state, not a rendering of
+the screen. `TeletextGrid`, `TeletextScreenCell` and the `teletext_screen()`
+wrappers name that same chip state and keep the word honestly. What moved to
+`GetScreenText` was the *text*, which is the Mode 7 concern; what stayed
+teletext is the chip.
 
-**Deliberately not renamed yet, and the trigger for doing it.** Most of that
-list is `GetTeletextScreen` and its message types, which are already scaffolding
-due for retirement: `GetScreenText` supersedes them and reads every mode, not
-just this one. Renaming them now would mean a protocol fingerprint bump, a
-rebuild of all four servers and three sets of client stubs, spent on an RPC we
-intend to delete. **When `GetTeletextScreen` retires, what remains is
-`TeletextGrid` and the band flag -- an internal, contained rename.** That is the
-moment to do it, and the Teletext Adapter's own design is the moment it stops
-being optional.
+So the sweeping rename this section once anticipated mostly evaporated: there is
+no retirement to trigger it, and most of what looked misnamed turned out to name
+the chip after all. The live tension that remains is small and local -- chiefly
+whether the `is_teletext` band flag ought to read `mode7` -- and can be settled
+if and when the Acorn Teletext Adapter arrives and the two senses of the word
+sit side by side in one codebase.
 
 Recorded here rather than in the discussion document that raised it
 (`discussion/teletext-repertoire-choice.md`), because a naming rule is only

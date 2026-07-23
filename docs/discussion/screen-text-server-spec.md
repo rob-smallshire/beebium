@@ -232,8 +232,12 @@ existing `teletext_screen` wrappers. Return the runs and the counts, not only
 the string -- a script wanting to know what was uncertain needs them.
 
 Do **not** retire `GetTeletextScreen` or the `teletext_screen` wrappers in this
-stream. Copy still uses them until stream 4 moves it to `GetScreenText`;
-retirement is a tail of that stream, not this one.
+stream. Copy still uses them until stream 4 moves it to `GetScreenText`.
+
+(Postscript, 2026-07: in the event they were not retired at all. Once copy moved
+to `GetScreenText`, the RPC's text role was redundant but its per-cell
+attributes had no other home, so it was kept and repositioned as the teletext
+attribute API. See `../video-subsystem.md` and `screen-text-extraction.md`.)
 
 ## The build trap you will hit
 

@@ -217,6 +217,30 @@ eight-scanline glyph on a ten-scanline pitch and blank the two spare lines.
 Observed geometries: MODE 7 is one band of 16x20 cells over 500 scanlines;
 MODE 4 is 8x8 over 256; MODE 6 is an 8x8 cell on a `rowPitch` of 10.
 
+#### GetTeletextScreen
+
+Reads the MODE 7 screen as attribute-rich cells: the SAA5050's per-cell state,
+resolved by the chip. For plain text, use `GetScreenText` instead -- it reads
+every mode, and copy uses it. `GetTeletextScreen` is the way to the one thing
+`GetScreenText` does not carry: each cell's foreground and background colour,
+character set (alpha / contiguous / separated graphics), concealment, flash,
+double-height half, cursor, and whether it is a control code.
+
+```bash
+grpcurl -plaintext \
+  -import-path src/service/proto -proto video.proto \
+  localhost:48875 beebium.VideoService/GetTeletextScreen
+```
+
+Takes an optional region (`row`, `column`, `rows`, `columns`) and a `layout`.
+Returns `active` false in any non-MODE-7 mode, where the cells describe whatever
+was last shown in MODE 7 rather than anything current, so a caller must check
+it. The attributes are captured after the control codes are resolved, so nothing
+downstream re-runs the serial codes to know what a cell looked like; the same
+capture feeds the teletext strategy behind `GetScreenText`. The `text` field is
+provided for a caller already holding the cells, and is the same conversion
+`GetScreenText` returns for a MODE 7 band.
+
 #### HoldScreen and ReleaseScreen
 
 Holds the screen as it stands, so a selection reads the still it was drawn on

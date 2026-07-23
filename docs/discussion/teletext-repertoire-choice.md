@@ -125,8 +125,10 @@ Substitutions menu, where whether a setting affects copy or paste is unclear.
 It shares `teletext_text()`, so it now reports codes too. Left that way
 deliberately: the two APIs reading one capture differently would be worse than
 either reading, and the integration test that asserts `GetScreenText` and
-`GetTeletextScreen` agree about a MODE 7 screen now pins that. It is scaffolding
-due for retirement, so it does not get a knob of its own.
+`GetTeletextScreen` agree about a MODE 7 screen now pins that. It does not get a
+knob of its own -- its text field is a convenience beside its real purpose,
+which (as of the 2026-07 decision to keep it) is the per-cell attributes, not
+the text. A caller wanting Displayed text asks `GetScreenText`.
 
 ## What the menu cost to get right
 

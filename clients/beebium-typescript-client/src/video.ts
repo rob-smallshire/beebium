@@ -341,13 +341,19 @@ export class Video {
     }
 
     /**
-     * Read the MODE 7 screen as characters rather than pixels.
+     * Read the MODE 7 screen as attribute-rich cells.
      *
-     * Prefer this to reading screen memory. The cells are captured after the
-     * SAA5050 has resolved the control codes, so there is no hardware-scroll
-     * offset to undo and no attribute state to re-derive -- the two failings
-     * of the screen-memory scraper in `screen.ts`, which returns a rotated
-     * grid once the display has scrolled.
+     * This is the way to the SAA5050's per-cell state -- foreground and
+     * background colour, character set, concealment, flash, double height, the
+     * cursor, and whether a cell is a control code -- resolved by the chip and
+     * carried on each cell. Nothing else exposes it: `screenText()` returns
+     * text and geometry but not these attributes.
+     *
+     * For plain text, prefer `screenText()`. It reads every mode rather than
+     * only MODE 7, and copy uses it; this call is for a caller that wants the
+     * attributes as well. The cells are captured after the SAA5050 has resolved
+     * the control codes, so there is no hardware-scroll offset to undo and no
+     * attribute state to re-derive.
      *
      * Only MODE 7 has characters to read. In a bitmap mode the returned screen
      * has `active` false and describes whatever was last shown in MODE 7, so

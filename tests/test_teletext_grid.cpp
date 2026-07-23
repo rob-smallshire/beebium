@@ -22,7 +22,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <beebium/Saa5050.hpp>
 #include <beebium/TeletextGrid.hpp>
+
+#include <cstdint>
+#include <vector>
 
 using namespace beebium;
 
@@ -118,6 +122,184 @@ TEST_CASE("Reset returns the grid to empty and inactive", "[teletext-grid]") {
     CHECK_FALSE(grid.active());
     CHECK(grid.frame_number() == 0);
     CHECK(grid.cell(1, 1).character == 0);
+}
+
+// ============================================================================
+// Attribute capture, driven directly through the chip
+// ============================================================================
+//
+// The grid records more than each character: it records the SAA5050 state in
+// effect at the cell -- foreground and background colour, character set,
+// concealment, flash, double height, whether the cell was a control code, and
+// whether the cursor was on it. These are what make the grid a truer record of
+// the screen than screen memory, which holds only the bytes and leaves every
+// reader to re-run the serial control codes to learn what a cell looked like.
+// They travel out over GetTeletextScreen, so a client can render or inspect a
+// page without knowing the chip.
+//
+// The chip is driven here without a CRTC. byte() with display enabled captures
+// one cell and advances the capture column, so a row of calls fills grid row 0;
+// process_control_code runs before the capture, so a control cell already
+// carries the state it switched to, and the cells after it inherit it. A single
+// vsync() publishes the frame.
+
+namespace {
+
+// Feed a row of bytes with display enabled, then publish the frame.
+void capture_row(Saa5050& saa, const std::vector<uint8_t>& row) {
+    for (uint8_t value : row) {
+        saa.byte(value, /*dispen=*/1);
+    }
+    saa.vsync();
+}
+
+} // namespace
+
+TEST_CASE("A control code holds its column and is flagged as one",
+          "[teletext-grid][attributes]") {
+    // Column alignment is the whole point of capturing the grid, so a control
+    // code occupies its cell rather than closing the gap -- and it is marked,
+    // so a reader tells the space it draws from a real space.
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    capture_row(saa, {0x01, 'A'});  // alpha red, then a letter
+
+    CHECK(grid.cell(0, 0).is_control_code);
+    CHECK(grid.cell(0, 0).character == 0x01);
+    CHECK_FALSE(grid.cell(0, 1).is_control_code);
+    CHECK(grid.cell(0, 1).character == 'A');
+}
+
+TEST_CASE("An alpha colour sets the foreground of the cells after it",
+          "[teletext-grid][attributes]") {
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    capture_row(saa, {0x02, 'G'});  // alpha green
+
+    CHECK(grid.cell(0, 1).fg == 2);
+    CHECK(grid.cell(0, 1).charset == TeletextCellCharset::Alpha);
+}
+
+TEST_CASE("New Background copies the foreground into the background",
+          "[teletext-grid][attributes]") {
+    // Yellow foreground, then New Background, so the following cell is yellow
+    // on yellow -- the teletext idiom for a solid colour block.
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    capture_row(saa, {0x03, 0x1D, 'X'});  // yellow, new background
+
+    CHECK(grid.cell(0, 2).fg == 3);
+    CHECK(grid.cell(0, 2).bg == 3);
+}
+
+TEST_CASE("A graphics colour switches the cell into the graphics character set",
+          "[teletext-grid][attributes]") {
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    // Graphics white, then a mosaic byte. The default graphics set is
+    // contiguous.
+    capture_row(saa, {0x17, 0x7F});
+
+    CHECK(grid.cell(0, 1).charset == TeletextCellCharset::ContiguousGraphics);
+    CHECK(grid.cell(0, 1).character == 0x7F);
+}
+
+TEST_CASE("Separated graphics is captured as its own character set",
+          "[teletext-grid][attributes]") {
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    capture_row(saa, {0x17, 0x1A, 0x7F});  // graphics white, separated
+
+    CHECK(grid.cell(0, 2).charset == TeletextCellCharset::SeparatedGraphics);
+}
+
+TEST_CASE("Conceal marks the cells it hides", "[teletext-grid][attributes]") {
+    // The capture records that a cell is concealed; the text reader is what
+    // then declines to copy it. Both matter, and they are separate jobs.
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    capture_row(saa, {0x18, 'S'});  // conceal
+
+    CHECK(grid.cell(0, 1).concealed);
+}
+
+TEST_CASE("Double height marks the top half on the row that carries it",
+          "[teletext-grid][attributes]") {
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    capture_row(saa, {0x0D, 'D'});  // double height
+
+    CHECK(grid.cell(0, 1).double_height_top);
+    CHECK_FALSE(grid.cell(0, 1).double_height_bottom);
+}
+
+TEST_CASE("Double height marks the bottom half on the next row",
+          "[teletext-grid][attributes]") {
+    // The bottom half is drawn on the following display row with the raster
+    // offset engaged. Drive the row wrap directly -- set_raster advances the
+    // capture row and toggles the offset -- since there is no CRTC here.
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    saa.byte(0x0D, /*dispen=*/1);  // double height, at (0,0)
+    saa.byte('D', /*dispen=*/1);   // top half, at (0,1)
+
+    // A character row completes: raster climbs past the wrap threshold and
+    // drops back, which advances the capture row and engages the offset.
+    saa.set_raster(15);
+    saa.set_raster(0);
+
+    saa.byte('D', /*dispen=*/1);   // bottom half, on the new row
+    saa.vsync();
+
+    CHECK(grid.cell(0, 1).double_height_top);
+    CHECK(grid.cell(1, 2).double_height_bottom);
+    CHECK_FALSE(grid.cell(1, 2).double_height_top);
+}
+
+TEST_CASE("Flash is captured on the concealed half of the flash cycle",
+          "[teletext-grid][attributes]") {
+    // Flash is phase-dependent: a flashing cell reads as flashing only on the
+    // frames where the character is hidden. Publish an empty frame first to
+    // move the chip into that phase, then capture into the next.
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    saa.vsync();  // advances the frame counter into the concealed phase
+
+    capture_row(saa, {0x08, 'F', 0x09, 'S'});  // flash F, steady S
+
+    CHECK(grid.cell(0, 1).flashing);        // F, after the flash code
+    CHECK_FALSE(grid.cell(0, 3).flashing);  // S, after steady
+}
+
+TEST_CASE("The cursor cell is flagged", "[teletext-grid][attributes]") {
+    Saa5050 saa;
+    TeletextGrid grid;
+    saa.set_teletext_grid(&grid);
+
+    saa.byte('A', /*dispen=*/1, /*cursor=*/false);
+    saa.byte('B', /*dispen=*/1, /*cursor=*/true);
+    saa.vsync();
+
+    CHECK_FALSE(grid.cell(0, 0).cursor);
+    CHECK(grid.cell(0, 1).cursor);
 }
 
 // ============================================================================

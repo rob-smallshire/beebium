@@ -133,3 +133,103 @@ class TestTeletextCells:
         column = lines[banner_row].index("BBC Computer")
 
         assert chr(screen.cell(banner_row, column).character) == "B"
+
+
+# Character-set codes as they arrive on the wire (proto TeletextCharacterSet).
+CHARSET_ALPHA = 0
+CHARSET_CONTIGUOUS = 1
+CHARSET_SEPARATED = 2
+
+
+class TestTeletextCellAttributes:
+    """The per-cell attributes the SAA5050 resolves.
+
+    These are the reason to read the grid rather than screen memory: colour,
+    character set, concealment, flash and double height are carried on the cell,
+    already resolved, so nothing downstream re-runs the serial control codes.
+    Every attribute is exercised end to end by driving MODE 7 with the BASIC
+    control codes that set it -- CHR$(129..159) map to the SAA5050's 0x01..0x1F
+    after the top bit is masked. The core capture logic is pinned deterministically
+    in tests/test_teletext_grid.cpp; here we prove the wire carries it.
+    """
+
+    def _find_cell(self, bbc: Beebium, predicate, seconds: float = 10.0):
+        """Advance the machine until a cell satisfies predicate, and return it."""
+        found = {}
+
+        def hit() -> bool:
+            for cell in bbc.video.teletext_screen().cells:
+                if predicate(cell):
+                    found["cell"] = cell
+                    return True
+            return False
+
+        assert bbc.run_until_or_timeout(hit, emulated_seconds=seconds), (
+            "no cell matched the attribute predicate"
+        )
+        return found["cell"]
+
+    def test_a_colour_code_sets_the_foreground_and_is_marked_a_control_code(
+        self, bbc: Beebium
+    ) -> None:
+        _wait_for_prompt(bbc)
+        bbc.keyboard.type('PRINT CHR$(130);"Q"\r')  # alpha green, then Q
+
+        cell = self._find_cell(bbc, lambda c: c.character == ord("Q") and c.fg == 2)
+        assert cell.fg == 2
+        assert not cell.is_control_code
+
+        # The colour code itself occupies a cell, flagged and holding its column.
+        control = self._find_cell(
+            bbc, lambda c: c.is_control_code and c.character == 0x02
+        )
+        assert control.is_control_code
+
+    def test_conceal_is_carried_even_though_the_text_hides_it(
+        self, bbc: Beebium
+    ) -> None:
+        # A concealed cell keeps its character on the wire -- the reader is what
+        # declines to copy it -- so it is found by cell, not by text.
+        _wait_for_prompt(bbc)
+        bbc.keyboard.type('PRINT CHR$(152);"Q"\r')  # conceal, then Q
+
+        cell = self._find_cell(
+            bbc, lambda c: c.character == ord("Q") and c.concealed
+        )
+        assert cell.concealed
+
+    def test_graphics_codes_switch_the_character_set(self, bbc: Beebium) -> None:
+        _wait_for_prompt(bbc)
+        # Graphics white then contiguous, and separately separated graphics.
+        bbc.keyboard.type("PRINT CHR$(151);CHR$(255)\r")
+        contiguous = self._find_cell(
+            bbc, lambda c: c.charset == CHARSET_CONTIGUOUS
+        )
+        assert contiguous.charset == CHARSET_CONTIGUOUS
+
+        bbc.keyboard.type("PRINT CHR$(151);CHR$(154);CHR$(255)\r")
+        separated = self._find_cell(
+            bbc, lambda c: c.charset == CHARSET_SEPARATED
+        )
+        assert separated.charset == CHARSET_SEPARATED
+
+    def test_double_height_is_carried(self, bbc: Beebium) -> None:
+        _wait_for_prompt(bbc)
+        bbc.keyboard.type('PRINT CHR$(141);"Q"\r')  # double height, then Q
+
+        cell = self._find_cell(
+            bbc, lambda c: c.character == ord("Q") and c.double_height_top
+        )
+        assert cell.double_height_top
+        assert not cell.double_height_bottom
+
+    def test_flash_is_carried_on_the_concealed_phase(self, bbc: Beebium) -> None:
+        # Flash is phase-dependent: the cell reads as flashing only on the frames
+        # where the character is hidden. Sampling across frames catches one.
+        _wait_for_prompt(bbc)
+        bbc.keyboard.type('PRINT CHR$(136);"Q"\r')  # flash, then Q
+
+        cell = self._find_cell(
+            bbc, lambda c: c.character == ord("Q") and c.flashing
+        )
+        assert cell.flashing

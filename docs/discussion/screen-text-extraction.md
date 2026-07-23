@@ -526,14 +526,22 @@ selection overlay composes with any style.
 whole-screen copy in MODE 7. Under this design:
 
 - The **capture** remains, as the teletext strategy's implementation.
-- The **RPC** is scaffolding. Once `GetScreenText` exists, copy should use it,
-  and `GetTeletextScreen` should be expected to go, unless something else needs
-  attribute-rich teletext cells for reasons of its own.
+- The **RPC** stays, but for a different reason than it was built. Its text
+  role is now redundant -- copy uses `GetScreenText`, which reads every mode --
+  so what `GetTeletextScreen` is kept for is the one thing `GetScreenText` does
+  not carry: the SAA5050's per-cell attributes (colour, character set,
+  concealment, flash, double height, control-code). That is the "unless
+  something else needs attribute-rich teletext cells" clause, resolved: those
+  cells are wanted, so the RPC is repositioned as the teletext attribute API
+  rather than retired. (Decided 2026-07; see
+  `docs/grpc-server.md` and the naming rule in `../video-subsystem.md`.)
 - `teletext_text()` becomes an internal detail of the teletext strategy rather
   than a public conversion.
 
-The client wrappers (`Video.teletext_screen()`, `video.teletextScreen()`)
-should be treated the same way: useful now, not a commitment.
+The client wrappers (`Video.teletext_screen()`, `video.teletextScreen()`) stay
+with the RPC, repositioned the same way: the way to the attributes, with plain
+text pointed at `screen_text()`/`screenText()`. The dead Swift wrapper, which
+had no caller, was removed.
 
 ## Open questions
 

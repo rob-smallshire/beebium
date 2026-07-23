@@ -93,30 +93,6 @@ final class VideoClient: ObservableObject, Disconnectable {
         self.port = target.port
     }
 
-    /// Read the MODE 7 screen as text.
-    ///
-    /// Returns nil when the display is not MODE 7, or when the screen cannot
-    /// be read. The server does the cell-to-text conversion so every client
-    /// agrees on what graphics, control codes and concealed cells copy as.
-    ///
-    /// Lines arrive joined with LF, which is already what the macOS pasteboard
-    /// wants; a client on a platform with a different convention converts here,
-    /// at the point where text meets the local clipboard.
-    func teletextScreenText() async -> String? {
-        guard let channel = _channel else { return nil }
-
-        let client = Beebium_VideoServiceClient(channel: channel)
-        do {
-            let screen = try await client.getTeletextScreen(
-                Beebium_GetTeletextScreenRequest()).response.get()
-            guard screen.active else { return nil }
-            return screen.text
-        } catch {
-            print("[VideoClient] getTeletextScreen failed: \(error)")
-            return nil
-        }
-    }
-
     /// Hold the screen as it stands, so every read a selection makes describes
     /// one still rather than whatever the machine has drawn since.
     ///

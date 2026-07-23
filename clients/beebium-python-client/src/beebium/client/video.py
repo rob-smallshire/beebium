@@ -42,7 +42,9 @@ class TeletextScreen:
     text: str
     """The region as text, converted server-side so every client agrees on what
     graphics, control codes, concealed cells and double-height rows copy as.
-    Lines are joined with LF."""
+    Lines are joined with LF. For plain text prefer ``screen_text()``, which
+    reads every mode and not only MODE 7; this field is here so a caller already
+    holding the cells for their attributes need not make a second call."""
 
     frame_number: int
 
@@ -387,12 +389,19 @@ class Video:
         columns: int | None = None,
         flowed: bool = False,
     ) -> TeletextScreen:
-        """Read the MODE 7 screen as characters rather than pixels.
+        """Read the MODE 7 screen as attribute-rich cells.
 
-        Prefer this to reading screen memory. The cells are captured after the
-        SAA5050 has resolved the control codes, so there is no hardware-scroll
-        offset to undo and no attribute state to re-derive -- the two failings
-        of the screen-memory scrapers this replaces.
+        This is the way to the SAA5050's per-cell state -- foreground and
+        background colour, character set, concealment, flash, double height,
+        the cursor, and whether a cell is a control code -- resolved by the chip
+        and carried on each cell. Nothing else exposes it: ``screen_text()``
+        returns text and geometry but not these attributes.
+
+        For plain text, prefer ``screen_text()``. It reads every mode rather
+        than only MODE 7, and copy uses it; this call is for a caller that wants
+        the attributes as well. The cells are captured after the SAA5050 has
+        resolved the control codes, so there is no hardware-scroll offset to
+        undo and no attribute state to re-derive.
 
         Only MODE 7 has characters to read. In a bitmap mode the returned
         screen has ``active`` False and describes whatever was last shown in
