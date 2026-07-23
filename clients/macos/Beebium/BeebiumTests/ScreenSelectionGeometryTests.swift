@@ -189,6 +189,70 @@ final class ScreenSelectionGeometryTests: XCTestCase {
         assertClose(hit!.pixel, CGPoint(x: 160, y: 128))
     }
 
+    // MARK: - Registration with the picture
+
+    /// The whole active area must map to exactly the letterboxed picture
+    /// rectangle the renderer draws into -- at any window shape. This is the
+    /// property the overlay depends on: highlight rectangles only stay in
+    /// register with the glyphs behind them if both are laid out by the same
+    /// enclosing geometry.
+    private func assertWholeFrameFillsThePicture(
+        _ g: ScreenRenderGeometry, viewSize: CGSize,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let whole = FramePixelRect(
+            x: 0, y: 0,
+            width: Int(g.textureSize.width), height: Int(g.textureSize.height))
+        let drawn = ScreenCoordinateMapper.viewRect(
+            frameRect: whole, geometry: g, viewSize: viewSize)
+        let picture = ScreenCoordinateMapper.pictureRect(g)
+        XCTAssertEqual(drawn.minX, picture.minX * viewSize.width,
+                       accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(drawn.minY, picture.minY * viewSize.height,
+                       accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(drawn.width, picture.width * viewSize.width,
+                       accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(drawn.height, picture.height * viewSize.height,
+                       accuracy: 0.5, file: file, line: line)
+    }
+
+    func testHighlightsStayRegisteredAsTheWindowIsReshaped() {
+        // Tall, square and wide windows letterbox and pillarbox differently.
+        // The mapping has to follow the window it is drawing into, which is
+        // what a stale drawable size breaks.
+        for size in [CGSize(width: 1250, height: 1000),   // matches the content
+                     CGSize(width: 2000, height: 800),    // pillarboxed
+                     CGSize(width: 700, height: 1200)] {  // letterboxed
+            // No edge margin here: the inset is orthogonal to registration and
+            // is covered by its own tests, and without it the active area is
+            // exactly the picture rectangle, which makes the expectation plain.
+            var g = fillingGeometry()
+            g.drawableSize = size
+            assertWholeFrameFillsThePicture(g, viewSize: size)
+        }
+    }
+
+    func testAStaleDrawableSizeLosesRegistration() {
+        // The bug this guards: mapping with the geometry captured before a
+        // resize, but scaling into the window after it, puts the highlight
+        // somewhere the picture is not.
+        var stale = fillingGeometry()
+        stale.drawableSize = CGSize(width: 1250, height: 1000)
+        let resized = CGSize(width: 2000, height: 800)
+
+        let whole = FramePixelRect(x: 0, y: 0, width: 640, height: 256)
+        let wrong = ScreenCoordinateMapper.viewRect(
+            frameRect: whole, geometry: stale, viewSize: resized)
+
+        var current = stale
+        current.drawableSize = resized
+        let right = ScreenCoordinateMapper.viewRect(
+            frameRect: whole, geometry: current, viewSize: resized)
+
+        XCTAssertNotEqual(wrong.width, right.width, accuracy: 1,
+                          "a stale drawable size must not agree with the live one")
+    }
+
     // MARK: - View-rect mapping for highlights
 
     func testViewRectSpansTheFrameRectInViewSpace() {

@@ -559,6 +559,25 @@ final class SelectionCoordinatorTests: XCTestCase {
         XCTAssertEqual(text.holdsTaken, 2)
     }
 
+    func testMappingGeometryFollowsTheWindowNotTheOneCapturedAtDragStart() async {
+        // Resizing the window, or changing the pixel shape or edge margin,
+        // relays out the picture. The overlay has to be laid out by the same
+        // geometry or its highlights slide off the glyphs behind them.
+        let (coordinator, _, geometry, _, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+
+        // The window is reshaped, and the renderer reports the new drawable.
+        var reshaped = fillingGeometry()
+        reshaped.drawableSize = CGSize(width: 2000, height: 800)
+        geometry.geometry = reshaped
+        coordinator.viewSize = CGSize(width: 2000, height: 800)
+
+        XCTAssertEqual(coordinator.mappingGeometry?.drawableSize,
+                       CGSize(width: 2000, height: 800))
+    }
+
     // MARK: - Copy
 
     func testCopyWithNoSelectionCopiesWholeScreenAligned() async {

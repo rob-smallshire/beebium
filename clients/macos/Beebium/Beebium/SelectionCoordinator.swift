@@ -303,6 +303,34 @@ final class SelectionCoordinator: ObservableObject {
     /// read-only so the overlay can map highlight rectangles from frame pixels
     /// to view coordinates.
     private(set) var frozenGeometry: ScreenRenderGeometry?
+
+    /// The view's current size, set by the view as it is laid out.
+    ///
+    /// Only its aspect matters, which points and backing pixels share, so the
+    /// view can hand over its bounds without converting.
+    var viewSize: CGSize?
+
+    /// The geometry to map with right now, for both directions.
+    ///
+    /// The *content* half -- texture, display size, borders, regions -- comes
+    /// from the held frame, because that is the frame the renderer is showing
+    /// and the frame the reads describe. The *presentation* half -- the window
+    /// shape, the pixel shape, the edge margin -- is read live, because the
+    /// renderer lays the picture out afresh whenever any of them changes.
+    ///
+    /// Mapping with the capture taken at drag start instead leaves the overlay
+    /// laid out for the window as it was: resize the window mid-selection and
+    /// the highlights keep their old aspect fit while the picture takes the new
+    /// one, and the two slide out of register. They must be laid out by one
+    /// geometry, so this is it.
+    var mappingGeometry: ScreenRenderGeometry? {
+        guard var geometry = geometrySource?.captureRenderGeometry()
+                ?? frozenGeometry else { return nil }
+        if let viewSize, viewSize.width > 0, viewSize.height > 0 {
+            geometry.drawableSize = viewSize
+        }
+        return geometry
+    }
     private var bands: [ScreenBandGeometry] = []
 
     /// Bumped on every selection change so a slow highlight response for a
@@ -410,7 +438,7 @@ final class SelectionCoordinator: ObservableObject {
 
     /// Extend the selection to a new normalised view point.
     func update(toNormalizedPoint point: CGPoint) {
-        guard isSelecting, let geometry = frozenGeometry else { return }
+        guard isSelecting, let geometry = mappingGeometry else { return }
         guard let hit = ScreenCoordinateMapper.framePixel(
             normalizedPoint: point, geometry: geometry) else { return }
         focusNormalized = point

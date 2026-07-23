@@ -123,6 +123,7 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
             selectionOverlayView.wantsLayer = true
             addSubview(selectionOverlayView)
         }
+        selectionCoordinator?.viewSize = bounds.size
         selectionObserver = selectionCoordinator?.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.refreshSelectionOverlay() }
@@ -131,7 +132,7 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
     private func refreshSelectionOverlay() {
         guard let coordinator = selectionCoordinator, coordinator.isSelecting,
-              let geometry = coordinator.frozenGeometry else {
+              let geometry = coordinator.mappingGeometry else {
             selectionOverlayView.isHidden = true
             selectionOverlayView.rangeRects = []
             selectionOverlayView.highlightRects = []
@@ -153,6 +154,11 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        // The overlay and the picture must be laid out by one geometry, so the
+        // coordinator is told the window's shape before anything is mapped
+        // with it -- otherwise a resize mid-selection leaves the highlights
+        // fitted to the window as it was.
+        selectionCoordinator?.viewSize = newSize
         refreshSelectionOverlay()
     }
 
