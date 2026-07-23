@@ -207,6 +207,47 @@ describe("screenText in bitmap modes", () => {
     }, 60000);
 });
 
+describe("holding a screen", () => {
+    it("carries the grid and the still with the hold", async () => {
+        const bbc = await launchAtPrompt();
+        const hold = await bbc.video.holdScreen({ includeFrame: true });
+        try {
+            expect(hold.holdId).not.toBe(0);
+            expect(hold.geometry.bands.length).toBeGreaterThan(0);
+            expect(hold.frame).toBeDefined();
+        } finally {
+            await bbc.video.releaseScreen(hold.holdId);
+        }
+    }, 60000);
+
+    it("does not change as the machine draws on", async () => {
+        // The point of the mechanism: a selection drawn on a still is read
+        // against that still, not against whatever has been drawn since.
+        const bbc = await launchAtPrompt();
+        const hold = await bbc.video.holdScreen();
+        try {
+            const atHold = await bbc.video.screenText({ holdId: hold.holdId });
+
+            await bbc.keyboard.type('PRINT "ZZZZ"\r');
+            await waitFor(bbc, (text) => text.includes("ZZZZ"));
+
+            const live = await bbc.video.screenText();
+            const held = await bbc.video.screenText({ holdId: hold.holdId });
+
+            expect(live.text).toContain("ZZZZ");
+            expect(held.text).not.toContain("ZZZZ");
+            expect(held.text).toBe(atHold.text);
+        } finally {
+            await bbc.video.releaseScreen(hold.holdId);
+        }
+    }, 60000);
+
+    it("refuses an unknown hold rather than reading live", async () => {
+        const bbc = await launchAtPrompt();
+        await expect(bbc.video.screenText({ holdId: 0xdeadbeef })).rejects.toThrow();
+    }, 60000);
+});
+
 describe("screenGeometry", () => {
     it("reports one 40x25 band in teletext", async () => {
         const bbc = await launchAtPrompt();

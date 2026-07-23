@@ -493,3 +493,217 @@ TEST_CASE("VideoService GetScreenText honours a region",
         CHECK(run.bounds().y() < 40 + run.cell_height());
     }
 }
+
+// ============================================================================
+// Holding a screen
+// ============================================================================
+//
+// A reading depends on four things that move independently -- the pixels, the
+// band geometry, the teletext grid and the font in RAM. Read at four different
+// instants they describe a screen that never existed, and on a moving display
+// the text a user copies is not the text they selected. Holding captures them
+// together so later reads name one still.
+
+namespace {
+
+// Run the machine, letting the server's render thread keep up, until a
+// predicate holds or time runs out.
+//
+// Single-threaded on purpose, unlike RunningMachine above: these tests write to
+// screen memory between steps, and a machine running on its own thread would
+// race with that.
+template <typename Predicate>
+bool pump_until(VideoTestFixture& fixture, Predicate predicate,
+                std::chrono::milliseconds timeout = std::chrono::seconds(15)) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (predicate()) {
+            return true;
+        }
+        fixture.run_cycles(20000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return predicate();
+}
+
+grpc::Status read_screen_text(VideoTestFixture& fixture,
+                              beebium::ScreenText& out,
+                              const uint64_t* hold_id = nullptr) {
+    grpc::ClientContext context;
+    beebium::GetScreenTextRequest request;
+    if (hold_id != nullptr) {
+        request.set_hold_id(*hold_id);
+    }
+    return fixture.stub().GetScreenText(&context, request, &out);
+}
+
+std::string live_text(VideoTestFixture& fixture) {
+    beebium::ScreenText response;
+    if (!read_screen_text(fixture, response).ok()) {
+        return {};
+    }
+    return response.text();
+}
+
+grpc::Status hold_screen(VideoTestFixture& fixture, beebium::ScreenHold& out,
+                         bool include_frame = false) {
+    grpc::ClientContext context;
+    beebium::HoldScreenRequest request;
+    request.set_include_frame(include_frame);
+    return fixture.stub().HoldScreen(&context, request, &out);
+}
+
+// Write a marker into MODE 7 screen memory, where the boot screen's first row
+// is blank and the MOS will not overwrite it.
+void write_marker(VideoTestFixture& fixture, const std::string& marker) {
+    for (size_t i = 0; i < marker.size(); ++i) {
+        fixture.machine().write(static_cast<uint16_t>(0x7C00 + i),
+                                static_cast<uint8_t>(marker[i]));
+    }
+}
+
+} // anonymous namespace
+
+TEST_CASE("VideoService HoldScreen returns the grid with the hold",
+          "[grpc][video][screen-hold]") {
+    VideoTestFixture fixture;
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+
+    beebium::ScreenHold hold;
+    auto status = hold_screen(fixture, hold);
+
+    REQUIRE(status.ok());
+    CHECK(hold.hold_id() != 0);
+
+    // The grid comes back with the hold, so a drag can snap without a second
+    // call -- and so the geometry cannot drift from the pixels it describes.
+    CHECK(hold.geometry().bands_size() >= 1);
+    CHECK(hold.geometry().bands(0).cell_width() > 0);
+
+    // The still is only sent when asked for.
+    CHECK_FALSE(hold.has_frame());
+}
+
+TEST_CASE("VideoService a held screen does not change as the machine draws on",
+          "[grpc][video][screen-hold]") {
+    VideoTestFixture fixture;
+    REQUIRE(pump_until(fixture, [&] {
+        return live_text(fixture).find("BASIC") != std::string::npos;
+    }));
+
+    beebium::ScreenHold hold;
+    REQUIRE(hold_screen(fixture, hold).ok());
+
+    const uint64_t held_id = hold.hold_id();
+    beebium::ScreenText at_hold;
+    REQUIRE(read_screen_text(fixture, at_hold, &held_id).ok());
+
+    // Change the screen under the hold, and wait for the live reading to show
+    // it -- so the two readings are known to differ before either is judged.
+    write_marker(fixture, "ZZZZ");
+    REQUIRE(pump_until(fixture, [&] {
+        return live_text(fixture).find("ZZZZ") != std::string::npos;
+    }));
+
+    beebium::ScreenText live;
+    REQUIRE(read_screen_text(fixture, live).ok());
+    beebium::ScreenText held;
+    REQUIRE(read_screen_text(fixture, held, &held_id).ok());
+
+    // The live screen has the marker; the held one is the still it was taken
+    // from and never will.
+    CHECK(live.text().find("ZZZZ") != std::string::npos);
+    CHECK(held.text().find("ZZZZ") == std::string::npos);
+    CHECK(held.text() == at_hold.text());
+
+    // Pinned to one frame, however far the machine has run since.
+    CHECK(held.frame_number() == at_hold.frame_number());
+    CHECK(live.frame_number() > held.frame_number());
+}
+
+TEST_CASE("VideoService GetScreenGeometry reads a held screen",
+          "[grpc][video][screen-hold]") {
+    VideoTestFixture fixture;
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+
+    beebium::ScreenHold hold;
+    REQUIRE(hold_screen(fixture, hold).ok());
+
+    grpc::ClientContext context;
+    beebium::GetScreenGeometryRequest request;
+    request.set_hold_id(hold.hold_id());
+    beebium::ScreenGeometry response;
+
+    REQUIRE(fixture.stub().GetScreenGeometry(&context, request, &response).ok());
+
+    // The same grid the hold reported, from the same capture.
+    REQUIRE(response.bands_size() == hold.geometry().bands_size());
+    CHECK(response.bands(0).cell_width() == hold.geometry().bands(0).cell_width());
+    CHECK(response.bands(0).row_pitch() == hold.geometry().bands(0).row_pitch());
+    CHECK(response.frame_number() == hold.geometry().frame_number());
+}
+
+TEST_CASE("VideoService a released hold is gone", "[grpc][video][screen-hold]") {
+    VideoTestFixture fixture;
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+
+    beebium::ScreenHold hold;
+    REQUIRE(hold_screen(fixture, hold).ok());
+
+    grpc::ClientContext release_context;
+    beebium::ReleaseScreenRequest release;
+    release.set_hold_id(hold.hold_id());
+    beebium::ReleaseScreenResponse released;
+    REQUIRE(fixture.stub().ReleaseScreen(&release_context, release, &released).ok());
+
+    const uint64_t released_id = hold.hold_id();
+    beebium::ScreenText response;
+    auto status = read_screen_text(fixture, response, &released_id);
+
+    CHECK(status.error_code() == grpc::StatusCode::NOT_FOUND);
+}
+
+TEST_CASE("VideoService an unknown hold is refused, not read live",
+          "[grpc][video][screen-hold]") {
+    // Falling back to the live screen would be the very confusion holding
+    // exists to prevent, and it would be silent.
+    VideoTestFixture fixture;
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+
+    const uint64_t never_held = 0xDEADBEEF;
+
+    beebium::ScreenText text;
+    CHECK(read_screen_text(fixture, text, &never_held).error_code()
+          == grpc::StatusCode::NOT_FOUND);
+
+    grpc::ClientContext context;
+    beebium::GetScreenGeometryRequest request;
+    request.set_hold_id(never_held);
+    beebium::ScreenGeometry geometry;
+    CHECK(fixture.stub().GetScreenGeometry(&context, request, &geometry).error_code()
+          == grpc::StatusCode::NOT_FOUND);
+}
+
+TEST_CASE("VideoService HoldScreen can return the still it captured",
+          "[grpc][video][screen-hold]") {
+    // So a client can display exactly the frame its reads will be made
+    // against, rather than whichever frame it last happened to draw.
+    VideoTestFixture fixture;
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+
+    beebium::ScreenHold hold;
+    REQUIRE(hold_screen(fixture, hold, /*include_frame=*/true).ok());
+
+    REQUIRE(hold.has_frame());
+    const auto& frame = hold.frame();
+    CHECK(frame.width() > 0);
+    CHECK(frame.height() > 0);
+    CHECK(frame.pixels().size()
+          == static_cast<size_t>(frame.width()) * frame.height() * 4);
+
+    // The still and the reading are the same frame, which is the whole point.
+    const uint64_t still_id = hold.hold_id();
+    beebium::ScreenText held;
+    REQUIRE(read_screen_text(fixture, held, &still_id).ok());
+    CHECK(held.frame_number() == frame.frame_number());
+}

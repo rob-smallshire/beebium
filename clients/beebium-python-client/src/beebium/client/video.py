@@ -169,6 +169,75 @@ class ScreenGeometry:
     frame_number: int
 
 
+def _geometry_from_proto(proto) -> ScreenGeometry:
+    """The band grid, from either GetScreenGeometry or a hold."""
+    return ScreenGeometry(
+        bands=tuple(
+            ScreenBandGeometry(
+                top=band.top,
+                bottom=band.bottom,
+                cell_width=band.cell_width,
+                cell_height=band.cell_height,
+                column_pitch=band.column_pitch,
+                row_pitch=band.row_pitch,
+                origin_x=band.origin_x,
+                origin_y=band.origin_y,
+            )
+            for band in proto.bands
+        ),
+        frame_number=proto.frame_number,
+    )
+
+
+def _frame_from_proto(proto) -> Frame:
+    """A frame, from either the stream or a hold."""
+    return Frame(
+        frame_number=proto.frame_number,
+        cycle_count=proto.cycle_count,
+        width=proto.width,
+        height=proto.height,
+        pixels=proto.pixels,
+        left_border=proto.left_border,
+        right_border=proto.right_border,
+        top_border=proto.top_border,
+        bottom_border=proto.bottom_border,
+        display_width=proto.display_width,
+        display_height=proto.display_height,
+        field_order=proto.field_order,
+        regions=tuple(
+            DisplayRegion(
+                start_line=r.start_line,
+                end_line=r.end_line,
+                pixel_width=r.pixel_width,
+            )
+            for r in proto.regions
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class ScreenHold:
+    """A screen held on the server for the life of a selection.
+
+    A reading depends on the pixels, the band geometry, the teletext grid and
+    the font in RAM, all of which move independently. Read at four different
+    instants they describe a screen that never existed, so holding captures
+    them together and later reads name the capture. The emulator keeps
+    running: a hold is a copy, not a pause.
+    """
+
+    hold_id: int
+    """Names the hold in later ``screen_text`` and ``screen_geometry`` calls."""
+
+    geometry: ScreenGeometry
+    """The grid the held screen implies, returned with the hold so it cannot
+    drift from the pixels it describes."""
+
+    frame: Frame | None
+    """The held still, when ``include_frame`` was asked for, so a caller can
+    show exactly the picture its reads are made against."""
+
+
 @dataclass(frozen=True)
 class VideoConfig:
     """Video configuration."""
@@ -376,6 +445,7 @@ class Video:
         search: str = "anywhere",
         flowed: bool = False,
         characters: str = "codes",
+        hold_id: int | None = None,
     ) -> ScreenText:
         """Read text from the display, whatever mode is producing it.
 
@@ -445,6 +515,8 @@ class Video:
             ),
             characters=repertoires[characters],
         )
+        if hold_id is not None:
+            request.hold_id = hold_id
         if region is not None:
             x, y, width, height = region
             request.region.CopyFrom(
@@ -486,7 +558,7 @@ class Video:
             frame_number=response.frame_number,
         )
 
-    def screen_geometry(self) -> ScreenGeometry:
+    def screen_geometry(self, *, hold_id: int | None = None) -> ScreenGeometry:
         """Report the character grid the display currently implies, per band.
 
         Separate from ``screen_text`` because snapping a drag has to happen
@@ -500,23 +572,42 @@ class Video:
             One band per run of scanlines sharing a character geometry. A
             split screen has more than one.
         """
-        response = self._stub.GetScreenGeometry(video_pb2.GetScreenGeometryRequest())
-        return ScreenGeometry(
-            bands=tuple(
-                ScreenBandGeometry(
-                    top=band.top,
-                    bottom=band.bottom,
-                    cell_width=band.cell_width,
-                    cell_height=band.cell_height,
-                    column_pitch=band.column_pitch,
-                    row_pitch=band.row_pitch,
-                    origin_x=band.origin_x,
-                    origin_y=band.origin_y,
-                )
-                for band in response.bands
-            ),
-            frame_number=response.frame_number,
+        request = video_pb2.GetScreenGeometryRequest()
+        if hold_id is not None:
+            request.hold_id = hold_id
+        return _geometry_from_proto(self._stub.GetScreenGeometry(request))
+
+    def hold_screen(self, *, include_frame: bool = False) -> ScreenHold:
+        """Hold the screen as it stands, so reads describe one still.
+
+        Everything a reading depends on is captured together, so a selection
+        made against a moving display reads the picture it was drawn on rather
+        than whatever has been drawn since. The emulator keeps running.
+
+        Args:
+            include_frame: Also return the captured still, so a caller can
+                display exactly the picture its reads will be made against.
+
+        Returns:
+            The hold. Pass its ``hold_id`` to ``screen_text`` and
+            ``screen_geometry``, and release it when finished.
+        """
+        response = self._stub.HoldScreen(
+            video_pb2.HoldScreenRequest(include_frame=include_frame)
         )
+        return ScreenHold(
+            hold_id=response.hold_id,
+            geometry=_geometry_from_proto(response.geometry),
+            frame=_frame_from_proto(response.frame) if response.HasField("frame") else None,
+        )
+
+    def release_screen(self, hold_id: int) -> None:
+        """Let a held screen go.
+
+        Holds expire on their own, so a client that dies does not leak one,
+        but a client that has finished should say so.
+        """
+        self._stub.ReleaseScreen(video_pb2.ReleaseScreenRequest(hold_id=hold_id))
 
     def capture_frame(self, timeout: float = 1.0) -> Frame:
         """Capture a single frame.

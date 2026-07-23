@@ -13,6 +13,7 @@ import type {
     TeletextScreenCell,
     ScreenText as ProtoScreenText,
     ScreenGeometry as ProtoScreenGeometry,
+    ScreenHold as ProtoScreenHold,
 } from "./generated/video.js";
 import {
     TeletextTextLayout,
@@ -264,6 +265,32 @@ function toScreenText(proto: ProtoScreenText): ScreenText {
     };
 }
 
+/**
+ * A screen held on the server for the life of a selection.
+ *
+ * A reading depends on the pixels, the band geometry, the teletext grid and the
+ * font in RAM, all of which move independently. Read at four different instants
+ * they describe a screen that never existed, so holding captures them together
+ * and later reads name the capture. The emulator keeps running: a hold is a
+ * copy, not a pause.
+ */
+export interface ScreenHold {
+    /** Names the hold in later `screenText` and `screenGeometry` calls. */
+    holdId: number;
+
+    /**
+     * The grid the held screen implies, returned with the hold so it cannot
+     * drift from the pixels it describes.
+     */
+    geometry: ScreenGeometry;
+
+    /**
+     * The held still, when `includeFrame` was asked for, so a caller can show
+     * exactly the picture its reads are made against.
+     */
+    frame?: Frame;
+}
+
 function toScreenGeometry(proto: ProtoScreenGeometry): ScreenGeometry {
     return {
         bands: proto.bands.map((band) => ({
@@ -406,6 +433,7 @@ export class Video {
         search?: ScreenTextSearchMode;
         flowed?: boolean;
         characters?: ScreenTextCharactersMode;
+        holdId?: number;
     }): Promise<ScreenText> {
         const searches: Record<ScreenTextSearchMode, ScreenTextSearch> = {
             anywhere: ScreenTextSearch.SCREEN_TEXT_SEARCH_ANYWHERE,
@@ -441,6 +469,9 @@ export class Video {
         if (options?.region !== undefined) {
             request["region"] = options.region;
         }
+        if (options?.holdId !== undefined) {
+            request["holdId"] = options.holdId;
+        }
 
         const response = await promisify<Record<string, unknown>, ProtoScreenText>(
             this.stub as unknown as Record<string, Function>,
@@ -460,13 +491,48 @@ export class Video {
      * Every band reports a grid, including one no strategy can read text from:
      * where the cells are and what is in them are separate questions.
      */
-    async screenGeometry(): Promise<ScreenGeometry> {
-        const response = await promisify<{}, ProtoScreenGeometry>(
+    async screenGeometry(options?: { holdId?: number }): Promise<ScreenGeometry> {
+        const request: Record<string, unknown> = {};
+        if (options?.holdId !== undefined) {
+            request["holdId"] = options.holdId;
+        }
+        const response = await promisify<Record<string, unknown>, ProtoScreenGeometry>(
             this.stub as unknown as Record<string, Function>,
             "getScreenGeometry",
-            {},
+            request,
         );
         return toScreenGeometry(response);
+    }
+
+    /**
+     * Hold the screen as it stands, so reads describe one still.
+     *
+     * Everything a reading depends on is captured together, so a selection made
+     * against a moving display reads the picture it was drawn on rather than
+     * whatever has been drawn since. The emulator keeps running.
+     *
+     * Release the hold when finished; holds also expire on their own.
+     */
+    async holdScreen(options?: { includeFrame?: boolean }): Promise<ScreenHold> {
+        const response = await promisify<Record<string, unknown>, ProtoScreenHold>(
+            this.stub as unknown as Record<string, Function>,
+            "holdScreen",
+            { includeFrame: options?.includeFrame ?? false },
+        );
+        return {
+            holdId: response.holdId,
+            geometry: toScreenGeometry(response.geometry!),
+            frame: response.frame ? toFrame(response.frame) : undefined,
+        };
+    }
+
+    /** Let a held screen go. */
+    async releaseScreen(holdId: number): Promise<void> {
+        await promisify<Record<string, unknown>, unknown>(
+            this.stub as unknown as Record<string, Function>,
+            "releaseScreen",
+            { holdId },
+        );
     }
 
     /**

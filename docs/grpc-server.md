@@ -194,8 +194,44 @@ the cells are and what is in them are separate questions. Each band carries
 origin. The pitch is not the cell size -- MODE 3 and MODE 6 put an
 eight-scanline glyph on a ten-scanline pitch and blank the two spare lines.
 
-Observed geometries: MODE 7 is one band of 12x20 cells over 500 scanlines;
+Observed geometries: MODE 7 is one band of 16x20 cells over 500 scanlines;
 MODE 4 is 8x8 over 256; MODE 6 is an 8x8 cell on a `rowPitch` of 10.
+
+#### HoldScreen and ReleaseScreen
+
+Holds the screen as it stands, so a selection reads the still it was drawn on
+rather than whatever the machine has drawn since.
+
+A reading depends on four things that move independently: the pixels, the band
+geometry, the teletext grid, and the font in RAM, which `VDU 23` can redefine at
+any moment. Read at four different instants they describe a screen that never
+existed, and on a moving display the text a user copies is not the text they
+selected. `HoldScreen` captures them together; `GetScreenText` and
+`GetScreenGeometry` then take a `holdId` and read the capture.
+
+```bash
+grpcurl -plaintext -d '{"includeFrame": true}' \
+  -import-path src/service/proto -proto video.proto \
+  localhost:48875 beebium.VideoService/HoldScreen
+```
+
+The grid comes back with the hold, so holding costs no more round trips than
+fetching the geometry alone did -- and the geometry cannot then describe a
+different frame from the pixels. With `includeFrame` the captured still comes
+too, in the same shape the frame stream carries, so a client can display exactly
+the picture its reads will be made against rather than whichever frame it last
+drew.
+
+**The emulator keeps running.** A hold is a copy, not a pause: nothing about
+holding a screen reaches the machine or any other client.
+
+Naming a hold that is unknown or has expired fails with `NOT_FOUND`. Falling
+back to the live screen would be the very confusion holding exists to prevent,
+and it would be silent.
+
+Holds expire (five minutes) so a client that dies does not leak one, and the
+server keeps a bounded number, dropping the oldest. A client that has finished
+should call `ReleaseScreen` rather than wait for either.
 
 ### KeyboardService
 

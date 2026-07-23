@@ -22,6 +22,7 @@ export {
     type ScreenText,
     type ScreenTextRun,
     type ScreenTextCell,
+    type ScreenHold,
     type ScreenTextSearchMode,
     type ScreenTextCharactersMode,
     type ScreenGeometry,

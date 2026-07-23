@@ -72,44 +72,200 @@ void to_proto_region(const screen::PixelRect& rect, PixelRegion* out) {
     out->set_height(rect.height);
 }
 
+// The grid every band implies, reported whether or not text can be read from
+// it: where the cells are and what is in them are separate questions, and
+// snapping a drag needs only the first.
+void to_proto_geometry(const FrameMetadata& meta, ScreenGeometry* out) {
+    for (const screen::Band& band : screen::bands_of(meta)) {
+        auto* band_out = out->add_bands();
+        band_out->set_top(band.top);
+        band_out->set_bottom(band.bottom);
+        band_out->set_cell_width(band.cell_width);
+        band_out->set_cell_height(band.cell_height);
+        band_out->set_column_pitch(band.column_pitch);
+        band_out->set_row_pitch(band.row_pitch);
+        band_out->set_origin_x(band.origin_x);
+        band_out->set_origin_y(band.origin_y);
+    }
+    out->set_frame_number(meta.frame_number);
+}
+
+// A captured still, in the shape the frame stream carries, so a client can
+// display it through the code it already has. The frame number is the
+// metadata's, not the buffer's version counter, so the still and the readings
+// taken from the same capture agree about which frame they are.
+void to_proto_frame(const FrameMetadata& meta,
+                    const std::vector<uint32_t>& pixels,
+                    uint32_t stride, Frame* out) {
+    out->set_frame_number(meta.frame_number);
+    out->set_width(meta.width);
+    out->set_height(meta.height);
+
+    // Packed to the logical width, dropping the capacity stride's padding.
+    std::vector<uint32_t> packed(static_cast<size_t>(meta.width) * meta.height);
+    for (uint32_t y = 0; y < meta.height; ++y) {
+        const size_t row = static_cast<size_t>(y) * stride;
+        std::copy(pixels.begin() + row, pixels.begin() + row + meta.width,
+                  packed.begin() + static_cast<size_t>(y) * meta.width);
+    }
+    out->set_pixels(packed.data(), packed.size() * sizeof(uint32_t));
+
+    out->set_field_order(meta.interlaced ? FieldOrder::EVEN_FIRST
+                                         : FieldOrder::PROGRESSIVE);
+    out->set_left_border(meta.left_border);
+    out->set_right_border(meta.right_border);
+    out->set_top_border(meta.top_border);
+    out->set_bottom_border(meta.bottom_border);
+    out->set_display_width(meta.display_width);
+    out->set_display_height(meta.display_height);
+    for (const auto& region : meta.regions) {
+        auto* region_out = out->add_regions();
+        region_out->set_start_line(region.start_line);
+        region_out->set_end_line(region.end_line);
+        region_out->set_pixel_width(region.pixel_width);
+    }
+}
+
 } // namespace
+
+// Everything a reading depends on, captured at one instant.
+struct VideoServiceImpl::ScreenCapture {
+    FrameMetadata metadata;
+    std::vector<uint32_t> pixels;
+    uint32_t stride = 0;
+    TeletextGrid::Snapshot teletext;
+    std::vector<screentext::GlyphSet> glyph_sets;
+    std::chrono::steady_clock::time_point taken;
+};
+
+std::shared_ptr<const VideoServiceImpl::ScreenCapture>
+VideoServiceImpl::capture_screen() const {
+    auto capture = std::make_shared<ScreenCapture>();
+    capture->stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
+    capture->pixels.resize(frame_buffer_.capacity_pixels());
+
+    // The metadata, the grid and the pixels are read one after another, so a
+    // frame completing between them would pair one frame's bands with
+    // another's pixels -- the incoherence this whole mechanism exists to
+    // remove. Retry while the frame counter moves under us; at fifty frames a
+    // second a couple of attempts is always enough, and the bound means a
+    // machine running flat out cannot spin here for ever.
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        const uint64_t before = frame_buffer_.version();
+        capture->metadata = frame_buffer_.metadata();
+        capture->teletext = teletext_grid_.snapshot();
+        frame_buffer_.copy_frame(capture->pixels.data(), capture->pixels.size());
+        if (frame_buffer_.version() == before) {
+            break;
+        }
+    }
+
+    // The font the machine was drawing with, read at the same instant. VDU 23
+    // can redefine a glyph at any moment, and a font read later would recognise
+    // the held pixels as characters they were never drawn as.
+    if (peek_byte_) {
+        capture->glyph_sets = screen::assemble_glyph_sets(peek_byte_);
+    } else {
+        capture->glyph_sets.push_back(
+            screentext::builtin_glyph_set("acorn-mos-1.20"));
+    }
+
+    capture->taken = std::chrono::steady_clock::now();
+    return capture;
+}
+
+std::shared_ptr<const VideoServiceImpl::ScreenCapture>
+VideoServiceImpl::held_screen(uint64_t hold_id) const {
+    std::lock_guard<std::mutex> lock(holds_mutex_);
+    const auto found = holds_.find(hold_id);
+    if (found == holds_.end()) {
+        return nullptr;
+    }
+    // An expired hold is as good as gone; HoldScreen reaps it.
+    if (std::chrono::steady_clock::now() - found->second->taken > HOLD_LIFETIME) {
+        return nullptr;
+    }
+    return found->second;
+}
+
+grpc::Status VideoServiceImpl::HoldScreen(
+    grpc::ServerContext* /*context*/,
+    const HoldScreenRequest* request,
+    ScreenHold* response) {
+
+    auto capture = capture_screen();
+
+    uint64_t hold_id = 0;
+    {
+        std::lock_guard<std::mutex> lock(holds_mutex_);
+
+        // Reap what a client stopped caring about, then bound what is left so
+        // one that never releases cannot grow the server without limit.
+        const auto now = std::chrono::steady_clock::now();
+        std::erase_if(holds_, [&](const auto& entry) {
+            return now - entry.second->taken > HOLD_LIFETIME;
+        });
+        while (holds_.size() >= MAX_HOLDS) {
+            holds_.erase(holds_.begin());  // Lowest id is the oldest
+        }
+
+        hold_id = next_hold_id_++;
+        holds_.emplace(hold_id, capture);
+    }
+
+    response->set_hold_id(hold_id);
+    to_proto_geometry(capture->metadata, response->mutable_geometry());
+    if (request->include_frame()) {
+        to_proto_frame(capture->metadata, capture->pixels, capture->stride,
+                       response->mutable_frame());
+    }
+    return grpc::Status::OK;
+}
+
+grpc::Status VideoServiceImpl::ReleaseScreen(
+    grpc::ServerContext* /*context*/,
+    const ReleaseScreenRequest* request,
+    ReleaseScreenResponse* /*response*/) {
+
+    // Releasing something already gone is not an error: a client tidying up
+    // after an expiry it never noticed has done nothing wrong.
+    std::lock_guard<std::mutex> lock(holds_mutex_);
+    holds_.erase(request->hold_id());
+    return grpc::Status::OK;
+}
 
 grpc::Status VideoServiceImpl::GetScreenText(
     grpc::ServerContext* /*context*/,
     const GetScreenTextRequest* request,
     ScreenText* response) {
 
-    const auto& meta = frame_buffer_.metadata();
+    // A held screen when the caller named one, so the reading describes the
+    // still they are looking at rather than whatever has been drawn since.
+    // Otherwise the live screen, captured whole.
+    std::shared_ptr<const ScreenCapture> capture;
+    if (request->has_hold_id()) {
+        capture = held_screen(request->hold_id());
+        if (!capture) {
+            return grpc::Status(
+                grpc::StatusCode::NOT_FOUND,
+                "no such screen hold: it was released or has expired");
+        }
+    } else {
+        capture = capture_screen();
+    }
 
-    // One consistent frame, taken without stalling the emulation thread for
-    // longer than a single buffer copy: the teletext grid for the teletext
-    // strategy, the pixels for the bitmap one.
-    const auto teletext = teletext_grid_.snapshot();
-
-    std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
-    frame_buffer_.copy_frame(pixels.data(), pixels.size());
+    const FrameMetadata& meta = capture->metadata;
 
     screen::FrameImage frame_image;
-    frame_image.pixels = pixels.data();
-    frame_image.stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
+    frame_image.pixels = capture->pixels.data();
+    frame_image.stride = capture->stride;
     frame_image.width = meta.width;
     frame_image.height = meta.height;
 
-    // The glyph set the machine was drawing with: the ROM base font, overlaid
-    // with the soft font read from RAM when the running MOS is recognised.
-    // Without a machine to peek, the base font stands alone. Assembled once and
-    // handed to every band.
-    std::vector<screentext::GlyphSet> glyph_sets;
-    if (peek_byte_) {
-        glyph_sets = screen::assemble_glyph_sets(peek_byte_);
-    } else {
-        glyph_sets.push_back(screentext::builtin_glyph_set("acorn-mos-1.20"));
-    }
-
     screen::BandSources sources;
-    sources.teletext = &teletext;
+    sources.teletext = &capture->teletext;
     sources.image = frame_image;
-    sources.glyph_sets = &glyph_sets;
+    sources.glyph_sets = &capture->glyph_sets;
 
     // The whole display when the caller named no region. A caller that has not
     // dragged anything wants everything.
@@ -167,27 +323,21 @@ grpc::Status VideoServiceImpl::GetScreenText(
 
 grpc::Status VideoServiceImpl::GetScreenGeometry(
     grpc::ServerContext* /*context*/,
-    const GetScreenGeometryRequest* /*request*/,
+    const GetScreenGeometryRequest* request,
     ScreenGeometry* response) {
 
-    const auto& meta = frame_buffer_.metadata();
-
-    // Every band reports its grid, including one no strategy can read text
-    // from. Where the cells are and what is in them are separate questions,
-    // and snapping a drag needs only the first.
-    for (const screen::Band& band : screen::bands_of(meta)) {
-        auto* out = response->add_bands();
-        out->set_top(band.top);
-        out->set_bottom(band.bottom);
-        out->set_cell_width(band.cell_width);
-        out->set_cell_height(band.cell_height);
-        out->set_column_pitch(band.column_pitch);
-        out->set_row_pitch(band.row_pitch);
-        out->set_origin_x(band.origin_x);
-        out->set_origin_y(band.origin_y);
+    if (request->has_hold_id()) {
+        const auto capture = held_screen(request->hold_id());
+        if (!capture) {
+            return grpc::Status(
+                grpc::StatusCode::NOT_FOUND,
+                "no such screen hold: it was released or has expired");
+        }
+        to_proto_geometry(capture->metadata, response);
+        return grpc::Status::OK;
     }
 
-    response->set_frame_number(meta.frame_number);
+    to_proto_geometry(frame_buffer_.metadata(), response);
     return grpc::Status::OK;
 }
 

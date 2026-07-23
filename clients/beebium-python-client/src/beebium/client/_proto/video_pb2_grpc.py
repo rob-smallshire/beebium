@@ -72,6 +72,16 @@ class VideoServiceStub(object):
                 request_serializer=video__pb2.GetScreenGeometryRequest.SerializeToString,
                 response_deserializer=video__pb2.ScreenGeometry.FromString,
                 _registered_method=True)
+        self.HoldScreen = channel.unary_unary(
+                '/beebium.VideoService/HoldScreen',
+                request_serializer=video__pb2.HoldScreenRequest.SerializeToString,
+                response_deserializer=video__pb2.ScreenHold.FromString,
+                _registered_method=True)
+        self.ReleaseScreen = channel.unary_unary(
+                '/beebium.VideoService/ReleaseScreen',
+                request_serializer=video__pb2.ReleaseScreenRequest.SerializeToString,
+                response_deserializer=video__pb2.ReleaseScreenResponse.FromString,
+                _registered_method=True)
 
 
 class VideoServiceServicer(object):
@@ -128,6 +138,32 @@ class VideoServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def HoldScreen(self, request, context):
+        """Hold the screen as it is now, so a selection reads the still it was drawn
+        on rather than whatever the machine has drawn since.
+
+        A read depends on four things that move independently -- the pixels, the
+        band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+        redefine at any moment. Reading them at four different instants describes
+        a screen that never existed, and on a moving display the text a user
+        copies is not the text they selected. So they are captured together, and
+        later reads name the capture.
+
+        The emulator keeps running: a hold is a copy, not a pause. Nothing about
+        holding a screen reaches the machine or any other client.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReleaseScreen(self, request, context):
+        """Release a held screen. Holds expire on their own so a client that dies
+        does not leak one, but a client that has finished should say so.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_VideoServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -155,6 +191,16 @@ def add_VideoServiceServicer_to_server(servicer, server):
                     servicer.GetScreenGeometry,
                     request_deserializer=video__pb2.GetScreenGeometryRequest.FromString,
                     response_serializer=video__pb2.ScreenGeometry.SerializeToString,
+            ),
+            'HoldScreen': grpc.unary_unary_rpc_method_handler(
+                    servicer.HoldScreen,
+                    request_deserializer=video__pb2.HoldScreenRequest.FromString,
+                    response_serializer=video__pb2.ScreenHold.SerializeToString,
+            ),
+            'ReleaseScreen': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReleaseScreen,
+                    request_deserializer=video__pb2.ReleaseScreenRequest.FromString,
+                    response_serializer=video__pb2.ReleaseScreenResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -293,6 +339,60 @@ class VideoService(object):
             '/beebium.VideoService/GetScreenGeometry',
             video__pb2.GetScreenGeometryRequest.SerializeToString,
             video__pb2.ScreenGeometry.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def HoldScreen(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/HoldScreen',
+            video__pb2.HoldScreenRequest.SerializeToString,
+            video__pb2.ScreenHold.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReleaseScreen(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/ReleaseScreen',
+            video__pb2.ReleaseScreenRequest.SerializeToString,
+            video__pb2.ReleaseScreenResponse.FromString,
             options,
             channel_credentials,
             insecure,

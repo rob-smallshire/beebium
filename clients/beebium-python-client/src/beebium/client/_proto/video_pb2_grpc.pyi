@@ -73,6 +73,24 @@ class VideoServiceStub:
     Separate from GetScreenText because snapping a drag has to happen while
     the drag is in progress, when the client has nothing to send yet.
     """
+    HoldScreen: _grpc.UnaryUnaryMultiCallable[_video_pb2.HoldScreenRequest, _video_pb2.ScreenHold]
+    """Hold the screen as it is now, so a selection reads the still it was drawn
+    on rather than whatever the machine has drawn since.
+
+    A read depends on four things that move independently -- the pixels, the
+    band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+    redefine at any moment. Reading them at four different instants describes
+    a screen that never existed, and on a moving display the text a user
+    copies is not the text they selected. So they are captured together, and
+    later reads name the capture.
+
+    The emulator keeps running: a hold is a copy, not a pause. Nothing about
+    holding a screen reaches the machine or any other client.
+    """
+    ReleaseScreen: _grpc.UnaryUnaryMultiCallable[_video_pb2.ReleaseScreenRequest, _video_pb2.ReleaseScreenResponse]
+    """Release a held screen. Holds expire on their own so a client that dies
+    does not leak one, but a client that has finished should say so.
+    """
 
 @_typing.type_check_only
 class VideoServiceAsyncStub(VideoServiceStub):
@@ -106,6 +124,24 @@ class VideoServiceAsyncStub(VideoServiceStub):
 
     Separate from GetScreenText because snapping a drag has to happen while
     the drag is in progress, when the client has nothing to send yet.
+    """
+    HoldScreen: _aio.UnaryUnaryMultiCallable[_video_pb2.HoldScreenRequest, _video_pb2.ScreenHold]  # type: ignore[assignment]
+    """Hold the screen as it is now, so a selection reads the still it was drawn
+    on rather than whatever the machine has drawn since.
+
+    A read depends on four things that move independently -- the pixels, the
+    band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+    redefine at any moment. Reading them at four different instants describes
+    a screen that never existed, and on a moving display the text a user
+    copies is not the text they selected. So they are captured together, and
+    later reads name the capture.
+
+    The emulator keeps running: a hold is a copy, not a pause. Nothing about
+    holding a screen reaches the machine or any other client.
+    """
+    ReleaseScreen: _aio.UnaryUnaryMultiCallable[_video_pb2.ReleaseScreenRequest, _video_pb2.ReleaseScreenResponse]  # type: ignore[assignment]
+    """Release a held screen. Holds expire on their own so a client that dies
+    does not leak one, but a client that has finished should say so.
     """
 
 class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -167,6 +203,36 @@ class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
 
         Separate from GetScreenText because snapping a drag has to happen while
         the drag is in progress, when the client has nothing to send yet.
+        """
+
+    @_abc_1.abstractmethod
+    def HoldScreen(
+        self,
+        request: _video_pb2.HoldScreenRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.ScreenHold, _abc.Awaitable[_video_pb2.ScreenHold]]:
+        """Hold the screen as it is now, so a selection reads the still it was drawn
+        on rather than whatever the machine has drawn since.
+
+        A read depends on four things that move independently -- the pixels, the
+        band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+        redefine at any moment. Reading them at four different instants describes
+        a screen that never existed, and on a moving display the text a user
+        copies is not the text they selected. So they are captured together, and
+        later reads name the capture.
+
+        The emulator keeps running: a hold is a copy, not a pause. Nothing about
+        holding a screen reaches the machine or any other client.
+        """
+
+    @_abc_1.abstractmethod
+    def ReleaseScreen(
+        self,
+        request: _video_pb2.ReleaseScreenRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.ReleaseScreenResponse, _abc.Awaitable[_video_pb2.ReleaseScreenResponse]]:
+        """Release a held screen. Holds expire on their own so a client that dies
+        does not leak one, but a client that has finished should say so.
         """
 
 def add_VideoServiceServicer_to_server(servicer: VideoServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

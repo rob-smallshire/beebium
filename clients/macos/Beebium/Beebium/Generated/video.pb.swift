@@ -563,11 +563,25 @@ struct Beebium_GetScreenTextRequest: Sendable {
 
   var characters: Beebium_ScreenTextCharacters = .codes
 
+  /// Read the screen held under this id rather than the live one, so what
+  /// comes back describes the still the caller is looking at. NOT_FOUND when
+  /// the hold is unknown or has expired -- silently reading the live screen
+  /// instead would be the very confusion holding exists to prevent.
+  var holdID: UInt64 {
+    get {return _holdID ?? 0}
+    set {_holdID = newValue}
+  }
+  /// Returns true if `holdID` has been explicitly set.
+  var hasHoldID: Bool {return self._holdID != nil}
+  /// Clears the value of `holdID`. Subsequent reads from it will return its default value.
+  mutating func clearHoldID() {self._holdID = nil}
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 
   fileprivate var _region: Beebium_PixelRegion? = nil
+  fileprivate var _holdID: UInt64? = nil
 }
 
 /// One character cell of a run: where it sits, and whether a glyph was
@@ -680,6 +694,97 @@ struct Beebium_ScreenText: Sendable {
 }
 
 struct Beebium_GetScreenGeometryRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The grid of a held screen rather than the live one. NOT_FOUND when the
+  /// hold is unknown or has expired.
+  var holdID: UInt64 {
+    get {return _holdID ?? 0}
+    set {_holdID = newValue}
+  }
+  /// Returns true if `holdID` has been explicitly set.
+  var hasHoldID: Bool {return self._holdID != nil}
+  /// Clears the value of `holdID`. Subsequent reads from it will return its default value.
+  mutating func clearHoldID() {self._holdID = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _holdID: UInt64? = nil
+}
+
+struct Beebium_HoldScreenRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Return the held still as well, so a client can display exactly the frame
+  /// its reads will be made against. Without it the client shows whatever
+  /// frame it last drew, which may be a frame or two earlier than the capture
+  /// -- close, but not the same picture.
+  var includeFrame: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ScreenHold: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Names this hold in later GetScreenText and GetScreenGeometry calls.
+  var holdID: UInt64 = 0
+
+  /// The grid the held screen implies. Returned here so a drag can snap
+  /// without a second call, and so the geometry can never drift from the
+  /// pixels it describes.
+  var geometry: Beebium_ScreenGeometry {
+    get {return _geometry ?? Beebium_ScreenGeometry()}
+    set {_geometry = newValue}
+  }
+  /// Returns true if `geometry` has been explicitly set.
+  var hasGeometry: Bool {return self._geometry != nil}
+  /// Clears the value of `geometry`. Subsequent reads from it will return its default value.
+  mutating func clearGeometry() {self._geometry = nil}
+
+  /// The held still, when `include_frame` was set, in the same shape the frame
+  /// stream carries so a client can display it through the code it already
+  /// has.
+  var frame: Beebium_Frame {
+    get {return _frame ?? Beebium_Frame()}
+    set {_frame = newValue}
+  }
+  /// Returns true if `frame` has been explicitly set.
+  var hasFrame: Bool {return self._frame != nil}
+  /// Clears the value of `frame`. Subsequent reads from it will return its default value.
+  mutating func clearFrame() {self._frame = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _geometry: Beebium_ScreenGeometry? = nil
+  fileprivate var _frame: Beebium_Frame? = nil
+}
+
+struct Beebium_ReleaseScreenRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var holdID: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ReleaseScreenResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1237,7 +1342,7 @@ extension Beebium_PixelRegion: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetScreenTextRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{1}search\0\u{1}layout\0\u{1}characters\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}region\0\u{1}search\0\u{1}layout\0\u{1}characters\0\u{3}hold_id\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1249,6 +1354,7 @@ extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 2: try { try decoder.decodeSingularEnumField(value: &self.search) }()
       case 3: try { try decoder.decodeSingularEnumField(value: &self.layout) }()
       case 4: try { try decoder.decodeSingularEnumField(value: &self.characters) }()
+      case 5: try { try decoder.decodeSingularUInt64Field(value: &self._holdID) }()
       default: break
       }
     }
@@ -1271,6 +1377,9 @@ extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
     if self.characters != .codes {
       try visitor.visitSingularEnumField(value: self.characters, fieldNumber: 4)
     }
+    try { if let v = self._holdID {
+      try visitor.visitSingularUInt64Field(value: v, fieldNumber: 5)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1279,6 +1388,7 @@ extension Beebium_GetScreenTextRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.search != rhs.search {return false}
     if lhs.layout != rhs.layout {return false}
     if lhs.characters != rhs.characters {return false}
+    if lhs._holdID != rhs._holdID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1434,6 +1544,144 @@ extension Beebium_ScreenText: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Beebium_GetScreenGeometryRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetScreenGeometryRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}hold_id\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self._holdID) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._holdID {
+      try visitor.visitSingularUInt64Field(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetScreenGeometryRequest, rhs: Beebium_GetScreenGeometryRequest) -> Bool {
+    if lhs._holdID != rhs._holdID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_HoldScreenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".HoldScreenRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}include_frame\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.includeFrame) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.includeFrame != false {
+      try visitor.visitSingularBoolField(value: self.includeFrame, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_HoldScreenRequest, rhs: Beebium_HoldScreenRequest) -> Bool {
+    if lhs.includeFrame != rhs.includeFrame {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ScreenHold: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ScreenHold"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}hold_id\0\u{1}geometry\0\u{1}frame\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.holdID) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._geometry) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._frame) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.holdID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.holdID, fieldNumber: 1)
+    }
+    try { if let v = self._geometry {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._frame {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ScreenHold, rhs: Beebium_ScreenHold) -> Bool {
+    if lhs.holdID != rhs.holdID {return false}
+    if lhs._geometry != rhs._geometry {return false}
+    if lhs._frame != rhs._frame {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ReleaseScreenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ReleaseScreenRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}hold_id\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.holdID) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.holdID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.holdID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ReleaseScreenRequest, rhs: Beebium_ReleaseScreenRequest) -> Bool {
+    if lhs.holdID != rhs.holdID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ReleaseScreenResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ReleaseScreenResponse"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1445,7 +1693,7 @@ extension Beebium_GetScreenGeometryRequest: SwiftProtobuf.Message, SwiftProtobuf
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_GetScreenGeometryRequest, rhs: Beebium_GetScreenGeometryRequest) -> Bool {
+  static func ==(lhs: Beebium_ReleaseScreenResponse, rhs: Beebium_ReleaseScreenResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

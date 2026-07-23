@@ -43,6 +43,16 @@ internal protocol Beebium_VideoServiceClientProtocol: GRPCClient {
     _ request: Beebium_GetScreenGeometryRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>
+
+  func holdScreen(
+    _ request: Beebium_HoldScreenRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_HoldScreenRequest, Beebium_ScreenHold>
+
+  func releaseScreen(
+    _ request: Beebium_ReleaseScreenRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_ReleaseScreenRequest, Beebium_ReleaseScreenResponse>
 }
 
 extension Beebium_VideoServiceClientProtocol {
@@ -157,6 +167,54 @@ extension Beebium_VideoServiceClientProtocol {
       interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? []
     )
   }
+
+  /// Hold the screen as it is now, so a selection reads the still it was drawn
+  /// on rather than whatever the machine has drawn since.
+  ///
+  /// A read depends on four things that move independently -- the pixels, the
+  /// band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+  /// redefine at any moment. Reading them at four different instants describes
+  /// a screen that never existed, and on a moving display the text a user
+  /// copies is not the text they selected. So they are captured together, and
+  /// later reads name the capture.
+  ///
+  /// The emulator keeps running: a hold is a copy, not a pause. Nothing about
+  /// holding a screen reaches the machine or any other client.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to HoldScreen.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func holdScreen(
+    _ request: Beebium_HoldScreenRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_HoldScreenRequest, Beebium_ScreenHold> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.holdScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeHoldScreenInterceptors() ?? []
+    )
+  }
+
+  /// Release a held screen. Holds expire on their own so a client that dies
+  /// does not leak one, but a client that has finished should say so.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ReleaseScreen.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func releaseScreen(
+    _ request: Beebium_ReleaseScreenRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_ReleaseScreenRequest, Beebium_ReleaseScreenResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.releaseScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReleaseScreenInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -246,6 +304,16 @@ internal protocol Beebium_VideoServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetScreenGeometryRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>
+
+  func makeHoldScreenCall(
+    _ request: Beebium_HoldScreenRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_HoldScreenRequest, Beebium_ScreenHold>
+
+  func makeReleaseScreenCall(
+    _ request: Beebium_ReleaseScreenRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_ReleaseScreenRequest, Beebium_ReleaseScreenResponse>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -317,6 +385,30 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? []
     )
   }
+
+  internal func makeHoldScreenCall(
+    _ request: Beebium_HoldScreenRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_HoldScreenRequest, Beebium_ScreenHold> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.holdScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeHoldScreenInterceptors() ?? []
+    )
+  }
+
+  internal func makeReleaseScreenCall(
+    _ request: Beebium_ReleaseScreenRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_ReleaseScreenRequest, Beebium_ReleaseScreenResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.releaseScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReleaseScreenInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -380,6 +472,30 @@ extension Beebium_VideoServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? []
     )
   }
+
+  internal func holdScreen(
+    _ request: Beebium_HoldScreenRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ScreenHold {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.holdScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeHoldScreenInterceptors() ?? []
+    )
+  }
+
+  internal func releaseScreen(
+    _ request: Beebium_ReleaseScreenRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ReleaseScreenResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_VideoServiceClientMetadata.Methods.releaseScreen.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReleaseScreenInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -415,6 +531,12 @@ internal protocol Beebium_VideoServiceClientInterceptorFactoryProtocol: Sendable
 
   /// - Returns: Interceptors to use when invoking 'getScreenGeometry'.
   func makeGetScreenGeometryInterceptors() -> [ClientInterceptor<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>]
+
+  /// - Returns: Interceptors to use when invoking 'holdScreen'.
+  func makeHoldScreenInterceptors() -> [ClientInterceptor<Beebium_HoldScreenRequest, Beebium_ScreenHold>]
+
+  /// - Returns: Interceptors to use when invoking 'releaseScreen'.
+  func makeReleaseScreenInterceptors() -> [ClientInterceptor<Beebium_ReleaseScreenRequest, Beebium_ReleaseScreenResponse>]
 }
 
 internal enum Beebium_VideoServiceClientMetadata {
@@ -427,6 +549,8 @@ internal enum Beebium_VideoServiceClientMetadata {
       Beebium_VideoServiceClientMetadata.Methods.getTeletextScreen,
       Beebium_VideoServiceClientMetadata.Methods.getScreenText,
       Beebium_VideoServiceClientMetadata.Methods.getScreenGeometry,
+      Beebium_VideoServiceClientMetadata.Methods.holdScreen,
+      Beebium_VideoServiceClientMetadata.Methods.releaseScreen,
     ]
   )
 
@@ -458,6 +582,18 @@ internal enum Beebium_VideoServiceClientMetadata {
     internal static let getScreenGeometry = GRPCMethodDescriptor(
       name: "GetScreenGeometry",
       path: "/beebium.VideoService/GetScreenGeometry",
+      type: GRPCCallType.unary
+    )
+
+    internal static let holdScreen = GRPCMethodDescriptor(
+      name: "HoldScreen",
+      path: "/beebium.VideoService/HoldScreen",
+      type: GRPCCallType.unary
+    )
+
+    internal static let releaseScreen = GRPCMethodDescriptor(
+      name: "ReleaseScreen",
+      path: "/beebium.VideoService/ReleaseScreen",
       type: GRPCCallType.unary
     )
   }
@@ -498,6 +634,24 @@ internal protocol Beebium_VideoServiceProvider: CallHandlerProvider {
   /// Separate from GetScreenText because snapping a drag has to happen while
   /// the drag is in progress, when the client has nothing to send yet.
   func getScreenGeometry(request: Beebium_GetScreenGeometryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ScreenGeometry>
+
+  /// Hold the screen as it is now, so a selection reads the still it was drawn
+  /// on rather than whatever the machine has drawn since.
+  ///
+  /// A read depends on four things that move independently -- the pixels, the
+  /// band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+  /// redefine at any moment. Reading them at four different instants describes
+  /// a screen that never existed, and on a moving display the text a user
+  /// copies is not the text they selected. So they are captured together, and
+  /// later reads name the capture.
+  ///
+  /// The emulator keeps running: a hold is a copy, not a pause. Nothing about
+  /// holding a screen reaches the machine or any other client.
+  func holdScreen(request: Beebium_HoldScreenRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ScreenHold>
+
+  /// Release a held screen. Holds expire on their own so a client that dies
+  /// does not leak one, but a client that has finished should say so.
+  func releaseScreen(request: Beebium_ReleaseScreenRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ReleaseScreenResponse>
 }
 
 extension Beebium_VideoServiceProvider {
@@ -555,6 +709,24 @@ extension Beebium_VideoServiceProvider {
         responseSerializer: ProtobufSerializer<Beebium_ScreenGeometry>(),
         interceptors: self.interceptors?.makeGetScreenGeometryInterceptors() ?? [],
         userFunction: self.getScreenGeometry(request:context:)
+      )
+
+    case "HoldScreen":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_HoldScreenRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenHold>(),
+        interceptors: self.interceptors?.makeHoldScreenInterceptors() ?? [],
+        userFunction: self.holdScreen(request:context:)
+      )
+
+    case "ReleaseScreen":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ReleaseScreenRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ReleaseScreenResponse>(),
+        interceptors: self.interceptors?.makeReleaseScreenInterceptors() ?? [],
+        userFunction: self.releaseScreen(request:context:)
       )
 
     default:
@@ -616,6 +788,30 @@ internal protocol Beebium_VideoServiceAsyncProvider: CallHandlerProvider, Sendab
     request: Beebium_GetScreenGeometryRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_ScreenGeometry
+
+  /// Hold the screen as it is now, so a selection reads the still it was drawn
+  /// on rather than whatever the machine has drawn since.
+  ///
+  /// A read depends on four things that move independently -- the pixels, the
+  /// band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+  /// redefine at any moment. Reading them at four different instants describes
+  /// a screen that never existed, and on a moving display the text a user
+  /// copies is not the text they selected. So they are captured together, and
+  /// later reads name the capture.
+  ///
+  /// The emulator keeps running: a hold is a copy, not a pause. Nothing about
+  /// holding a screen reaches the machine or any other client.
+  func holdScreen(
+    request: Beebium_HoldScreenRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ScreenHold
+
+  /// Release a held screen. Holds expire on their own so a client that dies
+  /// does not leak one, but a client that has finished should say so.
+  func releaseScreen(
+    request: Beebium_ReleaseScreenRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ReleaseScreenResponse
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -682,6 +878,24 @@ extension Beebium_VideoServiceAsyncProvider {
         wrapping: { try await self.getScreenGeometry(request: $0, context: $1) }
       )
 
+    case "HoldScreen":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_HoldScreenRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ScreenHold>(),
+        interceptors: self.interceptors?.makeHoldScreenInterceptors() ?? [],
+        wrapping: { try await self.holdScreen(request: $0, context: $1) }
+      )
+
+    case "ReleaseScreen":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ReleaseScreenRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ReleaseScreenResponse>(),
+        interceptors: self.interceptors?.makeReleaseScreenInterceptors() ?? [],
+        wrapping: { try await self.releaseScreen(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -709,6 +923,14 @@ internal protocol Beebium_VideoServiceServerInterceptorFactoryProtocol: Sendable
   /// - Returns: Interceptors to use when handling 'getScreenGeometry'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetScreenGeometryInterceptors() -> [ServerInterceptor<Beebium_GetScreenGeometryRequest, Beebium_ScreenGeometry>]
+
+  /// - Returns: Interceptors to use when handling 'holdScreen'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeHoldScreenInterceptors() -> [ServerInterceptor<Beebium_HoldScreenRequest, Beebium_ScreenHold>]
+
+  /// - Returns: Interceptors to use when handling 'releaseScreen'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeReleaseScreenInterceptors() -> [ServerInterceptor<Beebium_ReleaseScreenRequest, Beebium_ReleaseScreenResponse>]
 }
 
 internal enum Beebium_VideoServiceServerMetadata {
@@ -721,6 +943,8 @@ internal enum Beebium_VideoServiceServerMetadata {
       Beebium_VideoServiceServerMetadata.Methods.getTeletextScreen,
       Beebium_VideoServiceServerMetadata.Methods.getScreenText,
       Beebium_VideoServiceServerMetadata.Methods.getScreenGeometry,
+      Beebium_VideoServiceServerMetadata.Methods.holdScreen,
+      Beebium_VideoServiceServerMetadata.Methods.releaseScreen,
     ]
   )
 
@@ -752,6 +976,18 @@ internal enum Beebium_VideoServiceServerMetadata {
     internal static let getScreenGeometry = GRPCMethodDescriptor(
       name: "GetScreenGeometry",
       path: "/beebium.VideoService/GetScreenGeometry",
+      type: GRPCCallType.unary
+    )
+
+    internal static let holdScreen = GRPCMethodDescriptor(
+      name: "HoldScreen",
+      path: "/beebium.VideoService/HoldScreen",
+      type: GRPCCallType.unary
+    )
+
+    internal static let releaseScreen = GRPCMethodDescriptor(
+      name: "ReleaseScreen",
+      path: "/beebium.VideoService/ReleaseScreen",
       type: GRPCCallType.unary
     )
   }

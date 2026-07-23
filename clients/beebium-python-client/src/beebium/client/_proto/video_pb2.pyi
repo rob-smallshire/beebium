@@ -597,9 +597,16 @@ class GetScreenTextRequest(_message.Message):
     SEARCH_FIELD_NUMBER: _builtins.int
     LAYOUT_FIELD_NUMBER: _builtins.int
     CHARACTERS_FIELD_NUMBER: _builtins.int
+    HOLD_ID_FIELD_NUMBER: _builtins.int
     search: Global___ScreenTextSearch.ValueType
     layout: Global___ScreenTextLayout.ValueType
     characters: Global___ScreenTextCharacters.ValueType
+    hold_id: _builtins.int
+    """Read the screen held under this id rather than the live one, so what
+    comes back describes the still the caller is looking at. NOT_FOUND when
+    the hold is unknown or has expired -- silently reading the live screen
+    instead would be the very confusion holding exists to prevent.
+    """
     @_builtins.property
     def region(self) -> Global___PixelRegion:
         """The part of the display to read. Whole display when unset. Independent of
@@ -614,13 +621,19 @@ class GetScreenTextRequest(_message.Message):
         search: Global___ScreenTextSearch.ValueType = ...,
         layout: Global___ScreenTextLayout.ValueType = ...,
         characters: Global___ScreenTextCharacters.ValueType = ...,
+        hold_id: _builtins.int | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "region", b"region"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_hold_id", b"_hold_id", "_region", b"_region", "hold_id", b"hold_id", "region", b"region"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_region", b"_region", "characters", b"characters", "layout", b"layout", "region", b"region", "search", b"search"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_hold_id", b"_hold_id", "_region", b"_region", "characters", b"characters", "hold_id", b"hold_id", "layout", b"layout", "region", b"region", "search", b"search"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__hold_id: _TypeAlias = _typing.Literal["hold_id"]  # noqa: Y015
+    _WhichOneofArgType__hold_id: _TypeAlias = _typing.Literal["_hold_id", b"_hold_id"]  # noqa: Y015
     _WhichOneofReturnType__region: _TypeAlias = _typing.Literal["region"]  # noqa: Y015
     _WhichOneofArgType__region: _TypeAlias = _typing.Literal["_region", b"_region"]  # noqa: Y015
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__hold_id) -> _WhichOneofReturnType__hold_id | None: ...
+    @_typing.overload
     def WhichOneof(self, oneof_group: _WhichOneofArgType__region) -> _WhichOneofReturnType__region | None: ...
 
 Global___GetScreenTextRequest: _TypeAlias = GetScreenTextRequest  # noqa: Y015
@@ -769,6 +782,113 @@ Global___ScreenText: _TypeAlias = ScreenText  # noqa: Y015
 class GetScreenGeometryRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    HOLD_ID_FIELD_NUMBER: _builtins.int
+    hold_id: _builtins.int
+    """The grid of a held screen rather than the live one. NOT_FOUND when the
+    hold is unknown or has expired.
+    """
+    def __init__(
+        self,
+        *,
+        hold_id: _builtins.int | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_hold_id", b"_hold_id", "hold_id", b"hold_id"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_hold_id", b"_hold_id", "hold_id", b"hold_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__hold_id: _TypeAlias = _typing.Literal["hold_id"]  # noqa: Y015
+    _WhichOneofArgType__hold_id: _TypeAlias = _typing.Literal["_hold_id", b"_hold_id"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__hold_id) -> _WhichOneofReturnType__hold_id | None: ...
+
+Global___GetScreenGeometryRequest: _TypeAlias = GetScreenGeometryRequest  # noqa: Y015
+
+@_typing.final
+class HoldScreenRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    INCLUDE_FRAME_FIELD_NUMBER: _builtins.int
+    include_frame: _builtins.bool
+    """Return the held still as well, so a client can display exactly the frame
+    its reads will be made against. Without it the client shows whatever
+    frame it last drew, which may be a frame or two earlier than the capture
+    -- close, but not the same picture.
+    """
+    def __init__(
+        self,
+        *,
+        include_frame: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["include_frame", b"include_frame"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___HoldScreenRequest: _TypeAlias = HoldScreenRequest  # noqa: Y015
+
+@_typing.final
+class ScreenHold(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    HOLD_ID_FIELD_NUMBER: _builtins.int
+    GEOMETRY_FIELD_NUMBER: _builtins.int
+    FRAME_FIELD_NUMBER: _builtins.int
+    hold_id: _builtins.int
+    """Names this hold in later GetScreenText and GetScreenGeometry calls."""
+    @_builtins.property
+    def geometry(self) -> Global___ScreenGeometry:
+        """The grid the held screen implies. Returned here so a drag can snap
+        without a second call, and so the geometry can never drift from the
+        pixels it describes.
+        """
+
+    @_builtins.property
+    def frame(self) -> Global___Frame:
+        """The held still, when `include_frame` was set, in the same shape the frame
+        stream carries so a client can display it through the code it already
+        has.
+        """
+
+    def __init__(
+        self,
+        *,
+        hold_id: _builtins.int = ...,
+        geometry: Global___ScreenGeometry | None = ...,
+        frame: Global___Frame | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_frame", b"_frame", "frame", b"frame", "geometry", b"geometry"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_frame", b"_frame", "frame", b"frame", "geometry", b"geometry", "hold_id", b"hold_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__frame: _TypeAlias = _typing.Literal["frame"]  # noqa: Y015
+    _WhichOneofArgType__frame: _TypeAlias = _typing.Literal["_frame", b"_frame"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__frame) -> _WhichOneofReturnType__frame | None: ...
+
+Global___ScreenHold: _TypeAlias = ScreenHold  # noqa: Y015
+
+@_typing.final
+class ReleaseScreenRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    HOLD_ID_FIELD_NUMBER: _builtins.int
+    hold_id: _builtins.int
+    def __init__(
+        self,
+        *,
+        hold_id: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["hold_id", b"hold_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ReleaseScreenRequest: _TypeAlias = ReleaseScreenRequest  # noqa: Y015
+
+@_typing.final
+class ReleaseScreenResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
     def __init__(
         self,
     ) -> None: ...
@@ -778,7 +898,7 @@ class GetScreenGeometryRequest(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___GetScreenGeometryRequest: _TypeAlias = GetScreenGeometryRequest  # noqa: Y015
+Global___ReleaseScreenResponse: _TypeAlias = ReleaseScreenResponse  # noqa: Y015
 
 @_typing.final
 class ScreenBandGeometry(_message.Message):

@@ -33,6 +33,24 @@ service VideoService {
     // Separate from GetScreenText because snapping a drag has to happen while
     // the drag is in progress, when the client has nothing to send yet.
     rpc GetScreenGeometry(GetScreenGeometryRequest) returns (ScreenGeometry);
+
+    // Hold the screen as it is now, so a selection reads the still it was drawn
+    // on rather than whatever the machine has drawn since.
+    //
+    // A read depends on four things that move independently -- the pixels, the
+    // band geometry, the teletext grid, and the font in RAM, which VDU 23 can
+    // redefine at any moment. Reading them at four different instants describes
+    // a screen that never existed, and on a moving display the text a user
+    // copies is not the text they selected. So they are captured together, and
+    // later reads name the capture.
+    //
+    // The emulator keeps running: a hold is a copy, not a pause. Nothing about
+    // holding a screen reaches the machine or any other client.
+    rpc HoldScreen(HoldScreenRequest) returns (ScreenHold);
+
+    // Release a held screen. Holds expire on their own so a client that dies
+    // does not leak one, but a client that has finished should say so.
+    rpc ReleaseScreen(ReleaseScreenRequest) returns (ReleaseScreenResponse);
 }
 
 message SubscribeFramesRequest {
@@ -245,6 +263,12 @@ message GetScreenTextRequest {
     ScreenTextSearch search = 2;
     ScreenTextLayout layout = 3;
     ScreenTextCharacters characters = 4;
+
+    // Read the screen held under this id rather than the live one, so what
+    // comes back describes the still the caller is looking at. NOT_FOUND when
+    // the hold is unknown or has expired -- silently reading the live screen
+    // instead would be the very confusion holding exists to prevent.
+    optional uint64 hold_id = 5;
 }
 
 // One character cell of a run: where it sits, and whether a glyph was
@@ -312,7 +336,40 @@ message ScreenText {
     uint64 frame_number = 6;
 }
 
-message GetScreenGeometryRequest {}
+message GetScreenGeometryRequest {
+    // The grid of a held screen rather than the live one. NOT_FOUND when the
+    // hold is unknown or has expired.
+    optional uint64 hold_id = 1;
+}
+
+message HoldScreenRequest {
+    // Return the held still as well, so a client can display exactly the frame
+    // its reads will be made against. Without it the client shows whatever
+    // frame it last drew, which may be a frame or two earlier than the capture
+    // -- close, but not the same picture.
+    bool include_frame = 1;
+}
+
+message ScreenHold {
+    // Names this hold in later GetScreenText and GetScreenGeometry calls.
+    uint64 hold_id = 1;
+
+    // The grid the held screen implies. Returned here so a drag can snap
+    // without a second call, and so the geometry can never drift from the
+    // pixels it describes.
+    ScreenGeometry geometry = 2;
+
+    // The held still, when `include_frame` was set, in the same shape the frame
+    // stream carries so a client can display it through the code it already
+    // has.
+    optional Frame frame = 3;
+}
+
+message ReleaseScreenRequest {
+    uint64 hold_id = 1;
+}
+
+message ReleaseScreenResponse {}
 
 // The character grid for one band of scanlines, in frame pixel coordinates.
 //

@@ -292,17 +292,49 @@ final class SelectionCoordinatorTests: XCTestCase {
             var search: ScreenTextSearchMode
             var layout: ScreenTextJoinLayout
             var characters: ScreenTextCharactersMode
+            var holdID: UInt64?
         }
         var calls: [Call] = []
         var searchesUsed: [ScreenTextSearchMode] { calls.map { $0.search } }
         var charactersUsed: [ScreenTextCharactersMode] { calls.map { $0.characters } }
+        var holdsUsed: [UInt64?] { calls.map { $0.holdID } }
 
-        func screenGeometry() async -> [ScreenBandGeometry] { bands }
+        /// The still this fake hands back with a hold.
+        var heldFrame: HeldFrame? = HeldFrame(
+            pixels: Data([0, 0, 0, 0]), width: 640, height: 256,
+            displayWidth: 640, displayHeight: 256,
+            leftBorder: 0, rightBorder: 0, topBorder: 0, bottomBorder: 0,
+            interlaced: false,
+            regions: [DisplayRegion(startLine: 0, endLine: 256, pixelWidth: 640)])
+        var nextHoldID: UInt64 = 42
+        var holdsTaken = 0
+        var released: [UInt64] = []
+        /// Set to fail the hold, as a server that has gone away would.
+        var refuseHold = false
+        /// Geometry fetched separately from a hold, which holding should make
+        /// unnecessary.
+        var separateGeometryFetches = 0
+
+        func holdScreen(includeFrame: Bool) async -> ScreenHold? {
+            if refuseHold { return nil }
+            holdsTaken += 1
+            return ScreenHold(holdID: nextHoldID, bands: bands,
+                              frame: includeFrame ? heldFrame : nil)
+        }
+
+        func releaseScreen(_ holdID: UInt64) async { released.append(holdID) }
+
+        func screenGeometry(holdID: UInt64?) async -> [ScreenBandGeometry] {
+            separateGeometryFetches += 1
+            return bands
+        }
+
         func screenText(region: FramePixelRect?, search: ScreenTextSearchMode,
                         layout: ScreenTextJoinLayout,
-                        characters: ScreenTextCharactersMode) async -> ScreenTextReading? {
+                        characters: ScreenTextCharactersMode,
+                        holdID: UInt64?) async -> ScreenTextReading? {
             calls.append(Call(region: region, search: search, layout: layout,
-                              characters: characters))
+                              characters: characters, holdID: holdID))
             return reading
         }
     }
@@ -315,8 +347,10 @@ final class SelectionCoordinatorTests: XCTestCase {
     final class FakeFreezer: DisplayFreezer {
         var frozen = 0
         var resumed = 0
+        var shown: [HeldFrame] = []
         func freezeDisplay() { frozen += 1 }
         func resumeDisplay() { resumed += 1 }
+        func showHeldFrame(_ frame: HeldFrame) { shown.append(frame) }
     }
 
     final class FakePasteboard: SelectionPasteboard {
@@ -406,7 +440,7 @@ final class SelectionCoordinatorTests: XCTestCase {
         let (coordinator, _, _, _, _) = makeCoordinator(bands: [band])
         coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
                           interpretation: .rows)
-        await coordinator.loadBandsAndRefresh()
+        await coordinator.drainPendingWork()
         coordinator.update(toNormalizedPoint: CGPoint(x: 0.7, y: 0.7))
 
         XCTAssertNil(coordinator.marqueeRect)
@@ -419,11 +453,110 @@ final class SelectionCoordinatorTests: XCTestCase {
         let (coordinator, _, _, _, _) = makeCoordinator(bands: [band])
         coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
                           interpretation: .anywhere)
-        await coordinator.loadBandsAndRefresh()
+        await coordinator.drainPendingWork()
         coordinator.update(toNormalizedPoint: CGPoint(x: 0.7, y: 0.7))
 
         XCTAssertNotNil(coordinator.marqueeRect)
         XCTAssertTrue(coordinator.rangeRects.isEmpty)
+    }
+
+    // MARK: - Holding the screen
+
+    func testBeginHoldsTheScreenRatherThanFetchingGeometrySeparately() async {
+        // The hold returns the grid, so holding costs no more round trips than
+        // fetching the geometry used to -- and the grid cannot then describe a
+        // different frame from the pixels.
+        let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+
+        XCTAssertEqual(text.holdsTaken, 1)
+        XCTAssertEqual(text.separateGeometryFetches, 0)
+    }
+
+    func testTheHeldStillIsShownSoTheUserSelectsOnWhatIsRead() async {
+        let (coordinator, text, _, freezer, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+
+        XCTAssertEqual(freezer.shown.count, 1)
+        XCTAssertEqual(freezer.shown.first, text.heldFrame)
+    }
+
+    func testReadsAreMadeAgainstTheHeldScreen() async {
+        // The point of the whole mechanism: what is recognised describes the
+        // still, not whatever the machine has drawn since.
+        let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+        coordinator.update(toNormalizedPoint: CGPoint(x: 0.7, y: 0.7))
+        text.calls.removeAll()
+
+        _ = await coordinator.copy(.rows)
+
+        XCTAssertFalse(text.calls.isEmpty)
+        XCTAssertTrue(text.calls.allSatisfy { $0.holdID == text.nextHoldID },
+                      "every read of a live selection names the hold")
+    }
+
+    func testCancelReleasesTheHold() async {
+        let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+
+        coordinator.cancel()
+        await coordinator.drainPendingWork()
+
+        XCTAssertEqual(text.released, [text.nextHoldID])
+    }
+
+    func testARefusedHoldEndsTheSelectionRatherThanReadingLive() async {
+        // With no hold there is no still to read against, and carrying on would
+        // put the user back in front of the mismatch this exists to remove.
+        let (coordinator, text, _, freezer, _) = makeCoordinator(bands: [band])
+        text.refuseHold = true
+
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+
+        XCTAssertFalse(coordinator.isSelecting)
+        XCTAssertEqual(freezer.resumed, 1, "the display is let go again")
+    }
+
+    func testWholeScreenCopyNeedsNoHold() async {
+        // No selection, no preview, nothing to be inconsistent with: a single
+        // atomic read of the live screen.
+        let (coordinator, text, _, _, _) = makeCoordinator()
+
+        _ = await coordinator.copy(.rows)
+
+        XCTAssertEqual(text.holdsTaken, 0)
+        XCTAssertEqual(text.calls.count, 1)
+        XCTAssertNil(text.calls[0].holdID)
+    }
+
+    func testAFreshDragReleasesTheScreenTheLastOneHeld() async {
+        // Version one treats a new Cmd-drag as a fresh selection, so the hold
+        // the old one took must go rather than wait for the expiry.
+        let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.3, y: 0.3),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+        let first = text.nextHoldID
+        text.nextHoldID = first + 1
+
+        coordinator.begin(atNormalizedPoint: CGPoint(x: 0.5, y: 0.5),
+                          interpretation: .rows)
+        await coordinator.drainPendingWork()
+        await coordinator.drainPendingWork()
+
+        XCTAssertEqual(text.released, [first])
+        XCTAssertEqual(text.holdsTaken, 2)
     }
 
     // MARK: - Copy
@@ -470,7 +603,7 @@ final class SelectionCoordinatorTests: XCTestCase {
         let (coordinator, text, _, _, _) = makeCoordinator(bands: [band])
         coordinator.begin(atNormalizedPoint: CGPoint(x: 0.2, y: 0.2),
                           interpretation: .rows)
-        await coordinator.loadBandsAndRefresh()
+        await coordinator.drainPendingWork()
         coordinator.update(toNormalizedPoint: CGPoint(x: 0.8, y: 0.8))
         text.calls.removeAll()
 
@@ -484,7 +617,18 @@ final class SelectionCoordinatorTests: XCTestCase {
 
     func testCopyAsksForCharacterCodesByDefault() async {
         let (coordinator, text, _, _, _) = makeCoordinator()
+        // An empty suite of its own, not the standard defaults: what this
+        // asserts is the default with nothing remembered, and reading the real
+        // domain would make it pass or fail on whatever the developer last
+        // chose in the menu.
+        let suite = "repertoire-default"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        coordinator.defaults = defaults
+
         _ = await coordinator.copy(.rows)
+
         XCTAssertEqual(text.charactersUsed, [.codes],
                        "the byte at face value, so a BASIC listing survives")
     }

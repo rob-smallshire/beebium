@@ -112,6 +112,36 @@ struct ScreenTextRun: Equatable {
     var cells: [ScreenTextRunCell] = []
 }
 
+/// A still the server captured, in the shape the renderer needs to show it.
+///
+/// The client displays this rather than whichever frame it last happened to
+/// draw, so the picture the user selects on is pixel-for-pixel the one the
+/// reads are made against -- not a frame or two either side of it.
+struct HeldFrame: Equatable {
+    var pixels: Data
+    var width: Int
+    var height: Int
+    var displayWidth: Int
+    var displayHeight: Int
+    var leftBorder: Int
+    var rightBorder: Int
+    var topBorder: Int
+    var bottomBorder: Int
+    var interlaced: Bool
+    var regions: [DisplayRegion]
+}
+
+/// A screen held on the server for the life of a selection.
+struct ScreenHold: Equatable {
+    var holdID: UInt64
+    /// The grid the held screen implies, returned with the hold so the geometry
+    /// cannot drift from the pixels it describes -- and so holding costs no
+    /// more round trips than fetching the geometry used to.
+    var bands: [ScreenBandGeometry]
+    /// The held still, when it was asked for.
+    var frame: HeldFrame?
+}
+
 /// What GetScreenText returned, wire-free.
 struct ScreenTextReading: Equatable {
     var supported: Bool
@@ -152,11 +182,21 @@ enum ScreenSelectionInterpretation: Equatable {
 /// tested without a channel.
 @MainActor
 protocol ScreenTextService: AnyObject {
-    func screenGeometry() async -> [ScreenBandGeometry]
+    /// Hold the screen as it stands, so every read a selection makes describes
+    /// one still. The emulator keeps running: a hold is a copy, not a pause.
+    func holdScreen(includeFrame: Bool) async -> ScreenHold?
+
+    /// Let a held screen go. Holds expire on their own, but a client that has
+    /// finished should say so.
+    func releaseScreen(_ holdID: UInt64) async
+
+    func screenGeometry(holdID: UInt64?) async -> [ScreenBandGeometry]
+
     func screenText(region: FramePixelRect?,
                     search: ScreenTextSearchMode,
                     layout: ScreenTextJoinLayout,
-                    characters: ScreenTextCharactersMode) async -> ScreenTextReading?
+                    characters: ScreenTextCharactersMode,
+                    holdID: UInt64?) async -> ScreenTextReading?
 }
 
 /// The rendering geometry the mapping needs, captured once when the frame
@@ -172,6 +212,10 @@ protocol RenderGeometrySource: AnyObject {
 protocol DisplayFreezer: AnyObject {
     func freezeDisplay()
     func resumeDisplay()
+
+    /// Show a still the server captured, in place of the frame the view last
+    /// drew, so the picture the selection is drawn on is the one being read.
+    func showHeldFrame(_ frame: HeldFrame)
 }
 
 /// The system pasteboard, as the copy needs it.
@@ -236,6 +280,20 @@ final class SelectionCoordinator: ObservableObject {
         .remembered(in: defaults)
     }
 
+    /// The screen held on the server for this selection's life. Every read names
+    /// it, so what is recognised describes the still on screen.
+    private var holdID: UInt64?
+
+    /// The gesture in normalised view coordinates, kept so the anchor and focus
+    /// can be re-derived if the held still turns out to be a slightly later
+    /// frame than the one the view had when the drag began.
+    private var anchorNormalized: CGPoint?
+    private var focusNormalized: CGPoint?
+
+    /// The work a begin or a cancel scheduled, so tests can await it.
+    private var pendingHold: Task<Void, Never>?
+    private var pendingRelease: Task<Void, Never>?
+
     /// Frame-pixel anchor (drag start) and focus (drag now). Both frozen-frame
     /// coordinates; the view-to-frame mapping happened at event time.
     private var anchorFrame: CGPoint?
@@ -270,25 +328,84 @@ final class SelectionCoordinator: ObservableObject {
         guard let hit = ScreenCoordinateMapper.framePixel(
             normalizedPoint: point, geometry: geometry) else { return }
 
+        // A fresh drag replaces whatever was selected, so let the screen the
+        // last one held go rather than leaving it for the expiry to reap.
+        cancel()
+
         frozenGeometry = geometry
+        anchorNormalized = point
+        focusNormalized = point
         anchorFrame = hit.pixel
         focusFrame = hit.pixel
         self.interpretation = interpretation
         isSelecting = true
+
+        // Stop the view at once, so the picture is still while the hold is
+        // taken; the hold then replaces it with the exact frame it captured.
         freezer?.freezeDisplay()
 
-        // The grid is fixed for the frozen frame; fetch it once. Highlights wait
-        // for it so a rows/rectangle selection can snap.
-        Task { [weak self] in await self?.loadBandsAndRefresh() }
+        pendingHold = Task { [weak self] in await self?.holdScreenAndRefresh() }
     }
 
-    /// Fetch the character grid for the frozen frame and refresh the highlights.
-    /// Split out from `begin` so it can be driven deterministically in tests.
-    func loadBandsAndRefresh() async {
-        let bands = await textService?.screenGeometry() ?? []
+    /// Hold the screen for this selection and show the still it captured.
+    ///
+    /// This is what makes the preview honest. Without it the client freezes its
+    /// own picture while reads run against the live screen, so on anything that
+    /// moves the highlights describe a frame the user is not looking at. Split
+    /// out from `begin` so it can be driven deterministically in tests.
+    func holdScreenAndRefresh() async {
         guard isSelecting else { return }
-        self.bands = bands
+
+        guard let hold = await textService?.holdScreen(includeFrame: true) else {
+            // No still to read against. Carrying on would read the live screen
+            // behind a frozen picture -- the mismatch this exists to remove --
+            // so let the display go rather than mislead.
+            cancel()
+            return
+        }
+        guard isSelecting else {
+            // Dismissed while the hold was in flight; do not leak it.
+            await textService?.releaseScreen(hold.holdID)
+            return
+        }
+
+        holdID = hold.holdID
+        bands = hold.bands
+
+        if let frame = hold.frame {
+            freezer?.showHeldFrame(frame)
+
+            // The capture may be a frame or two on from the one the view had,
+            // so take the geometry the still actually implies and re-map the
+            // gesture onto it. Ordinarily identical; this costs nothing when it
+            // is, and is right when a mode changed in between.
+            if let geometry = geometrySource?.captureRenderGeometry() {
+                frozenGeometry = geometry
+                remapGesture(to: geometry)
+            }
+        }
+
         refreshHighlights()
+    }
+
+    /// Re-derive the frame-pixel anchor and focus from the normalised gesture.
+    private func remapGesture(to geometry: ScreenRenderGeometry) {
+        if let normalized = anchorNormalized,
+           let hit = ScreenCoordinateMapper.framePixel(
+               normalizedPoint: normalized, geometry: geometry) {
+            anchorFrame = hit.pixel
+        }
+        if let normalized = focusNormalized,
+           let hit = ScreenCoordinateMapper.framePixel(
+               normalizedPoint: normalized, geometry: geometry) {
+            focusFrame = hit.pixel
+        }
+    }
+
+    /// Awaits the work a begin or a cancel scheduled. For tests.
+    func drainPendingWork() async {
+        await pendingHold?.value
+        await pendingRelease?.value
     }
 
     /// Extend the selection to a new normalised view point.
@@ -296,6 +413,7 @@ final class SelectionCoordinator: ObservableObject {
         guard isSelecting, let geometry = frozenGeometry else { return }
         guard let hit = ScreenCoordinateMapper.framePixel(
             normalizedPoint: point, geometry: geometry) else { return }
+        focusNormalized = point
         focusFrame = hit.pixel
         refreshHighlights()
     }
@@ -312,8 +430,18 @@ final class SelectionCoordinator: ObservableObject {
     func cancel() {
         guard isSelecting else { return }
         isSelecting = false
+
+        // Let the server drop the still. Holds expire on their own, so a lost
+        // release is survivable, but saying so returns the memory at once.
+        if let released = holdID, let service = textService {
+            pendingRelease = Task { await service.releaseScreen(released) }
+        }
+        holdID = nil
+
         anchorFrame = nil
         focusFrame = nil
+        anchorNormalized = nil
+        focusNormalized = nil
         frozenGeometry = nil
         bands = []
         highlightRects = []
@@ -422,7 +550,7 @@ final class SelectionCoordinator: ObservableObject {
     func copyWholeScreen() async -> String? {
         guard let reading = await textService?.screenText(
             region: nil, search: .aligned, layout: .rows,
-            characters: mode7Characters) else { return nil }
+            characters: mode7Characters, holdID: nil) else { return nil }
         let text = reading.text
         guard !text.isEmpty else { return nil }
         pasteboard?.writeText(text)
@@ -450,14 +578,14 @@ final class SelectionCoordinator: ObservableObject {
             let region = Self.boundingRect(anchor, focus)
             guard let reading = await textService?.screenText(
                 region: region, search: .anywhere, layout: .rows,
-                characters: mode7Characters) else { return nil }
+                characters: mode7Characters, holdID: holdID) else { return nil }
             return (reading.runs, reading.text)
 
         case .rectangle:
             let region = Self.snappedRectangle(anchor: anchor, focus: focus, band: band)
             guard let reading = await textService?.screenText(
                 region: region, search: .aligned, layout: .rows,
-                characters: mode7Characters) else { return nil }
+                characters: mode7Characters, holdID: holdID) else { return nil }
             return (reading.runs, reading.text)
 
         case .rows:
@@ -466,14 +594,14 @@ final class SelectionCoordinator: ObservableObject {
                 let region = Self.boundingRect(anchor, focus)
                 guard let reading = await textService?.screenText(
                     region: region, search: .aligned, layout: .rows,
-                    characters: mode7Characters) else { return nil }
+                    characters: mode7Characters, holdID: holdID) else { return nil }
                 return (reading.runs, reading.text)
             }
             let flow = Self.rowsFlow(anchor: anchor, focus: focus, band: band,
                                      frameWidth: Int(frozenGeometry?.textureSize.width ?? 0))
             guard let reading = await textService?.screenText(
                 region: flow.requestRegion, search: .aligned, layout: .rows,
-                characters: mode7Characters) else {
+                characters: mode7Characters, holdID: holdID) else {
                 return nil
             }
             return Self.trimToFlow(runs: reading.runs, band: band, flow: flow)
@@ -690,6 +818,24 @@ extension VideoClient: ScreenTextService {}
 extension VideoClient: DisplayFreezer {
     func freezeDisplay() { setDisplayFrozen(true) }
     func resumeDisplay() { setDisplayFrozen(false) }
+
+    /// Push the server's captured still through the same path a streamed frame
+    /// takes, so the view shows exactly the frame the reads are made against.
+    /// The display is already frozen, so nothing overwrites it.
+    func showHeldFrame(_ frame: HeldFrame) {
+        renderer?.updateFrame(
+            data: frame.pixels,
+            width: frame.width,
+            height: frame.height,
+            displayWidth: frame.displayWidth,
+            displayHeight: frame.displayHeight,
+            leftBorder: frame.leftBorder,
+            rightBorder: frame.rightBorder,
+            topBorder: frame.topBorder,
+            bottomBorder: frame.bottomBorder,
+            interlaced: frame.interlaced,
+            regions: frame.regions)
+    }
 }
 
 extension MetalRenderer: RenderGeometrySource {}

@@ -16,8 +16,12 @@
 #include "video.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <thread>
 
 namespace beebium {
@@ -70,10 +74,47 @@ public:
         const GetScreenGeometryRequest* request,
         ScreenGeometry* response) override;
 
+    grpc::Status HoldScreen(
+        grpc::ServerContext* context,
+        const HoldScreenRequest* request,
+        ScreenHold* response) override;
+
+    grpc::Status ReleaseScreen(
+        grpc::ServerContext* context,
+        const ReleaseScreenRequest* request,
+        ReleaseScreenResponse* response) override;
+
 private:
+    // Everything a screen-text reading depends on, captured at one instant:
+    // the pixels, the frame metadata the bands come from, the teletext grid,
+    // and the glyph sets read from the machine. Defined in the .cpp -- nothing
+    // outside needs its shape, and forward-declaring it keeps the core's
+    // headers out of this one.
+    struct ScreenCapture;
+
+    // The live screen, captured. Taken whole so the four parts describe one
+    // frame rather than four moments.
+    std::shared_ptr<const ScreenCapture> capture_screen() const;
+
+    // The screen held under an id, or null when it is unknown or expired.
+    std::shared_ptr<const ScreenCapture> held_screen(uint64_t hold_id) const;
+
+    // How long a hold survives without being released. A hold is a
+    // user-scale thing -- the life of a drag -- so this only has to outlast
+    // someone thinking, and exists so a client that dies does not leak one.
+    static constexpr std::chrono::minutes HOLD_LIFETIME{5};
+
+    // A ceiling on holds, so a client that takes them and never releases
+    // cannot grow the server without bound. Each is a frame's worth of pixels.
+    static constexpr size_t MAX_HOLDS = 8;
+
     FrameBuffer& frame_buffer_;
     TeletextGrid& teletext_grid_;
     PeekByte peek_byte_;
+
+    mutable std::mutex holds_mutex_;
+    std::map<uint64_t, std::shared_ptr<const ScreenCapture>> holds_;
+    uint64_t next_hold_id_ = 1;
 };
 
 } // namespace service

@@ -338,6 +338,78 @@ class TestScreenTextInBitmapModes:
         )
 
 
+class TestScreenHold:
+    """Holding a screen, so a selection reads the still it was drawn on."""
+
+    def test_the_hold_carries_the_grid_and_the_still(self, bbc: Beebium) -> None:
+        # The grid comes back with the hold, so holding costs no more round
+        # trips than fetching the geometry did -- and the grid cannot then
+        # describe a different frame from the pixels.
+        _wait_for_prompt(bbc)
+        hold = bbc.video.hold_screen(include_frame=True)
+        try:
+            assert hold.hold_id != 0
+            assert hold.geometry.bands
+            assert hold.frame is not None
+            assert (
+                len(hold.frame.pixels)
+                == hold.frame.width * hold.frame.height * 4
+            )
+        finally:
+            bbc.video.release_screen(hold.hold_id)
+
+    def test_a_held_screen_does_not_change_as_the_machine_draws_on(
+        self, bbc: Beebium
+    ) -> None:
+        # The point of the whole mechanism. Without it a selection drawn on a
+        # still is read against whatever the machine has drawn since, and the
+        # text a user copies is not the text they selected.
+        _wait_for_prompt(bbc)
+        hold = bbc.video.hold_screen()
+        try:
+            at_hold = bbc.video.screen_text(hold_id=hold.hold_id)
+
+            # Change the screen under the hold, and wait for the live reading
+            # to show it, so the two are known to differ before either is
+            # judged.
+            bbc.keyboard.type('PRINT "ZZZZ"\r')
+            assert bbc.run_until_or_timeout(
+                lambda: "ZZZZ" in bbc.video.screen_text().text,
+                emulated_seconds=10.0,
+            )
+
+            live = bbc.video.screen_text()
+            held = bbc.video.screen_text(hold_id=hold.hold_id)
+
+            assert "ZZZZ" in live.text
+            assert "ZZZZ" not in held.text
+            assert held.text == at_hold.text
+            assert held.frame_number == at_hold.frame_number
+            assert live.frame_number > held.frame_number
+        finally:
+            bbc.video.release_screen(hold.hold_id)
+
+    def test_geometry_can_be_read_from_a_hold(self, bbc: Beebium) -> None:
+        _wait_for_prompt(bbc)
+        hold = bbc.video.hold_screen()
+        try:
+            geometry = bbc.video.screen_geometry(hold_id=hold.hold_id)
+            assert geometry.frame_number == hold.geometry.frame_number
+            assert len(geometry.bands) == len(hold.geometry.bands)
+        finally:
+            bbc.video.release_screen(hold.hold_id)
+
+    def test_an_unknown_hold_is_refused_rather_than_read_live(
+        self, bbc: Beebium
+    ) -> None:
+        # Falling back to the live screen would be the very confusion holding
+        # exists to prevent, and it would be silent.
+        _wait_for_prompt(bbc)
+        with pytest.raises(Exception) as refused:
+            bbc.video.screen_text(hold_id=0xDEADBEEF)
+        assert "NOT_FOUND" in str(refused.value) or "not found" in str(refused.value).lower()
+
+
 class TestScreenGeometry:
     """The grid a client snaps a drag to, which every mode has."""
 

@@ -117,6 +117,77 @@ final class VideoClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// Hold the screen as it stands, so every read a selection makes describes
+    /// one still rather than whatever the machine has drawn since.
+    ///
+    /// The emulator keeps running -- a hold is a copy, not a pause -- and the
+    /// grid comes back with it, so this costs no more round trips than fetching
+    /// the geometry alone used to. Asking for the frame gets the captured still
+    /// as well, which the client shows so the picture and the reading are the
+    /// same frame by construction.
+    func holdScreen(includeFrame: Bool) async -> ScreenHold? {
+        guard let channel = _channel else { return nil }
+        let client = Beebium_VideoServiceClient(channel: channel)
+
+        var request = Beebium_HoldScreenRequest()
+        request.includeFrame = includeFrame
+
+        do {
+            let hold = try await client.holdScreen(request).response.get()
+            let bands = hold.geometry.bands.map { band in
+                ScreenBandGeometry(
+                    top: Int(band.top),
+                    bottom: Int(band.bottom),
+                    cellWidth: Int(band.cellWidth),
+                    cellHeight: Int(band.cellHeight),
+                    columnPitch: Int(band.columnPitch),
+                    rowPitch: Int(band.rowPitch),
+                    originX: Int(band.originX),
+                    originY: Int(band.originY)
+                )
+            }
+            var still: HeldFrame?
+            if hold.hasFrame {
+                let frame = hold.frame
+                still = HeldFrame(
+                    pixels: frame.pixels,
+                    width: Int(frame.width),
+                    height: Int(frame.height),
+                    displayWidth: Int(frame.displayWidth),
+                    displayHeight: Int(frame.displayHeight),
+                    leftBorder: Int(frame.leftBorder),
+                    rightBorder: Int(frame.rightBorder),
+                    topBorder: Int(frame.topBorder),
+                    bottomBorder: Int(frame.bottomBorder),
+                    interlaced: frame.fieldOrder != .progressive,
+                    regions: frame.regions.map { region in
+                        DisplayRegion(
+                            startLine: Int(region.startLine),
+                            endLine: Int(region.endLine),
+                            pixelWidth: Int(region.pixelWidth))
+                    })
+            }
+            return ScreenHold(holdID: hold.holdID, bands: bands, frame: still)
+        } catch {
+            print("[VideoClient] holdScreen failed: \(error)")
+            return nil
+        }
+    }
+
+    /// Let a held screen go. Holds expire on their own, so a lost release is
+    /// survivable; saying so returns the memory at once.
+    func releaseScreen(_ holdID: UInt64) async {
+        guard let channel = _channel else { return }
+        let client = Beebium_VideoServiceClient(channel: channel)
+        var request = Beebium_ReleaseScreenRequest()
+        request.holdID = holdID
+        do {
+            _ = try await client.releaseScreen(request).response.get()
+        } catch {
+            print("[VideoClient] releaseScreen failed: \(error)")
+        }
+    }
+
     /// Read the character grid the display currently implies, per band, in
     /// frame pixel coordinates.
     ///
@@ -124,12 +195,13 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// fixed for the selection's life, and snapping a drag needs the cell
     /// boundaries before there is any text to ask for. Returns an empty array
     /// when the display has no band to report or the call fails.
-    func screenGeometry() async -> [ScreenBandGeometry] {
+    func screenGeometry(holdID: UInt64? = nil) async -> [ScreenBandGeometry] {
         guard let channel = _channel else { return [] }
         let client = Beebium_VideoServiceClient(channel: channel)
+        var request = Beebium_GetScreenGeometryRequest()
+        if let holdID { request.holdID = holdID }
         do {
-            let geometry = try await client.getScreenGeometry(
-                Beebium_GetScreenGeometryRequest()).response.get()
+            let geometry = try await client.getScreenGeometry(request).response.get()
             return geometry.bands.map { band in
                 ScreenBandGeometry(
                     top: Int(band.top),
@@ -158,7 +230,8 @@ final class VideoClient: ObservableObject, Disconnectable {
     func screenText(region: FramePixelRect?,
                     search: ScreenTextSearchMode,
                     layout: ScreenTextJoinLayout,
-                    characters: ScreenTextCharactersMode) async -> ScreenTextReading? {
+                    characters: ScreenTextCharactersMode,
+                    holdID: UInt64? = nil) async -> ScreenTextReading? {
         guard let channel = _channel else { return nil }
         let client = Beebium_VideoServiceClient(channel: channel)
 
@@ -166,6 +239,7 @@ final class VideoClient: ObservableObject, Disconnectable {
         request.search = search.proto
         request.layout = layout.proto
         request.characters = characters.proto
+        if let holdID { request.holdID = holdID }
         if let region {
             var pixelRegion = Beebium_PixelRegion()
             pixelRegion.x = UInt32(max(0, region.x))
