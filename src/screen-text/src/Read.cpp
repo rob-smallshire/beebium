@@ -141,10 +141,19 @@ bool region_for(const Image& image,
     return true;
 }
 
-// Finish a run: trim the blank cells from each end and record it, unless
-// there is nothing worth reporting. A cell is worth reporting when it matched
-// something other than a blank glyph, or when it matched nothing at all --
-// the latter being the difference between "unreadable" and "empty".
+// Finish a run: record the row from its left edge to its last interesting
+// cell, unless there is nothing worth reporting. A cell is worth reporting
+// when it matched something other than a blank glyph, or when it matched
+// nothing at all -- the latter being the difference between "unreadable" and
+// "empty".
+//
+// Leading blanks are kept and trailing ones dropped, which is not an
+// inconsistency but the same rule applied to columns that already governs
+// rows: a leading blank positions everything after it, so losing it shifts the
+// text, while a trailing blank is only the empty edge of a fixed-size screen
+// and carries nothing. A table of right-aligned figures is the case that
+// shows it -- trim the indentation and every row left-justifies, so the
+// columns stop lining up though every glyph was read correctly.
 // The cell rectangles of a band, row by row, in reading order.
 std::vector<std::vector<Rect>> cells_of(const Band& band, const Rect& region)
 {
@@ -183,21 +192,22 @@ void flush_run(std::vector<Cell>& cells, std::vector<Run>& runs)
         return !cell.matched() || cell.codepoint != U' ';
     };
 
-    std::size_t first = 0;
-    while (first < cells.size() && !interesting(cells[first])) {
-        ++first;
-    }
-    if (first == cells.size()) {
+    // A row with nothing interesting anywhere is not a run at all: it is blank,
+    // and reporting it would turn every empty row into an entry.
+    const bool worth_reporting =
+        std::any_of(cells.begin(), cells.end(), interesting);
+    if (!worth_reporting) {
         cells.clear();
         return;
     }
+
     std::size_t last = cells.size();
-    while (last > first && !interesting(cells[last - 1])) {
+    while (last > 0 && !interesting(cells[last - 1])) {
         --last;
     }
 
     Run run;
-    run.cells.assign(cells.begin() + static_cast<std::ptrdiff_t>(first),
+    run.cells.assign(cells.begin(),
                      cells.begin() + static_cast<std::ptrdiff_t>(last));
 
     for (const Cell& cell : run.cells) {

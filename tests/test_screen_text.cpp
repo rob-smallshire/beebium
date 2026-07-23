@@ -567,8 +567,12 @@ TEST_CASE("The bitmap strategy reads a band the SAA5050 was not driving",
             Search::Aligned, bitmap_sources(canvas, sets));
 
         REQUIRE(reading.runs.size() == 1);
-        REQUIRE(reading.runs[0].text == "HI");
-        REQUIRE(reading.runs[0].bounds.x == 8);
+        // The text was painted one cell in, so the run opens with the blank
+        // cell that puts it there and starts at the row's left edge. What this
+        // section is about is the y: the band's own top lifts it into frame
+        // pixels.
+        REQUIRE(reading.runs[0].text == " HI");
+        REQUIRE(reading.runs[0].bounds.x == 0);
         REQUIRE(reading.runs[0].bounds.y == 96);
     }
 
@@ -596,6 +600,37 @@ TEST_CASE("The bitmap strategy reads a band the SAA5050 was not driving",
         REQUIRE(reading.runs.size() == 1);
         REQUIRE(reading.runs[0].text == "MODE6");
     }
+}
+
+TEST_CASE("Indentation survives a bitmap read, as it does in MODE 7",
+          "[screen-text]") {
+    // A table of right-aligned figures, as a BASIC program prints it. The
+    // leading spaces put the columns under one another; without them each row
+    // left-justifies and the table stops lining up, even though every glyph was
+    // read correctly. MODE 7 has always kept them, because the teletext reader
+    // reports a whole row; a bitmap read must agree.
+    const std::vector<screentext::GlyphSet> sets{acorn()};
+
+    Canvas canvas(8 * 16, 8 * 2);
+    paint_text(canvas, acorn(), 8 * 3, 0, "12   16");
+    paint_text(canvas, acorn(), 8 * 4, 8, "9   17");
+
+    const BandReading reading = read_band(
+        bitmap_band(0, 16), {0, 0, canvas.width, canvas.height},
+        Search::Aligned, bitmap_sources(canvas, sets));
+
+    REQUIRE(reading.runs.size() == 2);
+    CHECK(reading.runs[0].text == "   12   16");
+    CHECK(reading.runs[1].text == "    9   17");
+
+    // One character per cell still holds, which the client relies on to map a
+    // character back to the cell it came from.
+    CHECK(reading.runs[0].cells.size() == reading.runs[0].text.size());
+
+    // And the whole thing linearises with its shape intact.
+    const Reading joined =
+        concatenate_bands_readings({reading}, Layout::Rows);
+    CHECK(joined.text == "   12   16\n    9   17");
 }
 
 TEST_CASE("The bitmap strategy declines a glyph it was not given, never guesses",

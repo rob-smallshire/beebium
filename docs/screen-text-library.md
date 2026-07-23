@@ -91,9 +91,17 @@ replaces what the built-in one said.
 
 ### What you get back
 
-`Result::runs`, one per character row that holds anything worth reporting, with
-leading and trailing blanks trimmed and interior spacing preserved. Each `Run`
-has UTF-8 `text`, `bounds`, and its `cells`.
+`Result::runs`, one per character row that holds anything worth reporting,
+running from the left edge of the row to its last interesting cell: **leading
+blanks are kept, trailing blanks trimmed, interior spacing preserved.** Each
+`Run` has UTF-8 `text`, `bounds`, and its `cells`, one cell per character.
+
+The asymmetry is deliberate, and is the same rule that governs rows. A leading
+blank *positions* everything after it, so dropping it moves the text; a trailing
+blank is only the empty edge of a fixed-size screen and says nothing. A table of
+right-aligned figures is the case that shows it: trim the indentation and every
+row left-justifies, so the columns stop lining up even though every glyph was
+read correctly. A wholly blank row is not a run at all.
 
 Each `Cell` carries its `bounds`, the `codepoint`, the `foreground` and
 `background` values it was drawn from, which `glyph_set` matched, and

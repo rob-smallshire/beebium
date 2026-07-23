@@ -48,16 +48,17 @@ char32_t codepoint_for_testcard(std::size_t index)
     return character == 96 ? 0x00A3U : static_cast<char32_t>(character);
 }
 
-// Join expected rows the way runs are reported: blanks trimmed from each end,
-// wholly blank rows dropped, the rest joined with newlines.
+// Join expected rows the way runs are reported: leading blanks kept (they
+// position what follows), trailing blanks trimmed, wholly blank rows dropped,
+// the rest joined with newlines.
 std::string trimmed_text(const std::vector<std::u32string>& rows)
 {
     std::string text;
     for (const std::u32string& row : rows) {
-        const std::size_t first = row.find_first_not_of(U' ');
-        if (first == std::u32string::npos) {
+        if (row.find_first_not_of(U' ') == std::u32string::npos) {
             continue;
         }
+        const std::size_t first = 0;
         const std::size_t last = row.find_last_not_of(U' ');
         if (!text.empty()) {
             text.push_back('\n');
@@ -103,14 +104,17 @@ TEST_CASE("A run reports the rectangle it occupied")
                                acorn_only());
 
     REQUIRE(result.runs.size() == 1);
+    // The run starts at the row's left edge, because the two blank cells before
+    // "ABC" are part of it: they are what puts "ABC" in the third column. It
+    // ends at the last glyph, trailing blanks carrying no position.
     const Rect& bounds = result.runs[0].bounds;
-    CHECK(bounds.x == 16);
+    CHECK(bounds.x == 0);
     CHECK(bounds.y == 0);
-    CHECK(bounds.width == 24);
+    CHECK(bounds.width == 40);
     CHECK(bounds.height == 8);
 }
 
-TEST_CASE("Leading and trailing blanks are trimmed but interior spacing is kept")
+TEST_CASE("Trailing blanks are trimmed but leading and interior spacing is kept")
 {
     Canvas canvas(8 * 12, 8);
     canvas.stamp_text(8 * 3, 0, "A  B", acorn());
@@ -120,8 +124,51 @@ TEST_CASE("Leading and trailing blanks are trimmed but interior spacing is kept"
                                acorn_only());
 
     REQUIRE(result.runs.size() == 1);
-    CHECK(result.runs[0].text == "A  B");
-    CHECK(result.runs[0].bounds.x == 24);
+    CHECK(result.runs[0].text == "   A  B");
+    CHECK(result.runs[0].bounds.x == 0);
+}
+
+TEST_CASE("Leading blanks are kept, so indentation survives")
+{
+    // A table of right-aligned figures, as a BASIC program prints them. The
+    // leading spaces are what put the columns under one another: drop them and
+    // every row left-justifies, so the table stops lining up even though every
+    // glyph was read correctly.
+    //
+    // Leading and trailing are not symmetric, and for the same reason rows are
+    // not: a leading blank positions everything after it, while a trailing one
+    // is only the empty edge of a fixed-size screen.
+    Canvas canvas(8 * 16, 8 * 2);
+    canvas.stamp_text(8 * 3, 0, "12   16", acorn());
+    canvas.stamp_text(8 * 4, 8, "9   17", acorn());
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 2);
+    CHECK(result.runs[0].text == "   12   16");
+    CHECK(result.runs[1].text == "    9   17");
+
+    // The run now starts at the grid origin, and its cells still correspond
+    // one-to-one with its characters.
+    CHECK(result.runs[0].bounds.x == 0);
+    CHECK(result.runs[0].cells.size() == result.runs[0].text.size());
+}
+
+TEST_CASE("Trailing blanks are still trimmed")
+{
+    // Nothing follows them, so they carry no position; keeping them would pad
+    // every row out to the width of the region.
+    Canvas canvas(8 * 12, 8);
+    canvas.stamp_text(8 * 2, 0, "HI", acorn());
+
+    const Result result = read(canvas.image(),
+                               {whole_image_band(canvas.image())},
+                               acorn_only());
+
+    REQUIRE(result.runs.size() == 1);
+    CHECK(result.runs[0].text == "  HI");
 }
 
 TEST_CASE("A glyph drawn light on dark and dark on light both read")

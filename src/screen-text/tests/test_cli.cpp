@@ -308,14 +308,17 @@ TEST_CASE("A real MODE 4 BASIC listing is read from a screenshot")
     const Output output
         = run("read \"" + fixture_filepath("mode4-listing.png") + "\"");
 
+    // BBC BASIC's LIST indents the body of a listing by three spaces. That
+    // indentation is part of what is on the screen, so it is reproduced --
+    // this fixture is the real-machine evidence for keeping leading blanks.
     CHECK(output.status == 0);
     CHECK(output.stdout_text ==
           ">LIST\n"
-          "10 REM SCREEN TEXT\n"
-          "20 FOR I%=1 TO 3\n"
-          "30 PRINT \"LINE \";I%\n"
-          "40 NEXT I%\n"
-          "50 END\n"
+          "   10 REM SCREEN TEXT\n"
+          "   20 FOR I%=1 TO 3\n"
+          "   30 PRINT \"LINE \";I%\n"
+          "   40 NEXT I%\n"
+          "   50 END\n"
           ">_\n");
 }
 
@@ -457,16 +460,15 @@ std::string expected_testcard(std::size_t columns, std::size_t rows)
         lines.push_back(line);
     }
 
-    // Runs are trimmed of leading and trailing blanks, so the expectation is
-    // trimmed the same way before comparing.
+    // A run keeps its leading blanks and drops its trailing ones, so the
+    // expectation is built the same way before comparing.
     std::string text;
     for (const std::string& line : lines) {
-        const std::size_t first = line.find_first_not_of(' ');
-        if (first == std::string::npos) {
+        if (line.find_first_not_of(' ') == std::string::npos) {
             continue;
         }
         const std::size_t last = line.find_last_not_of(' ');
-        text += line.substr(first, last - first + 1);
+        text += line.substr(0, last + 1);
         text.push_back('\n');
     }
     return text;
@@ -590,12 +592,14 @@ TEST_CASE("A real screen with a different colour pair in every cell is read")
                 line.push_back(' ');
             }
         }
-        const std::size_t first = line.find_first_not_of(' ');
-        if (first == std::string::npos) {
+        // Leading blanks are kept (they position what follows) and trailing
+        // ones trimmed, so a row is expected from its left edge to its last
+        // printed character.
+        if (line.find_first_not_of(' ') == std::string::npos) {
             continue;
         }
         const std::size_t last = line.find_last_not_of(' ');
-        expected += line.substr(first, last - first + 1);
+        expected += line.substr(0, last + 1);
         expected.push_back('\n');
     }
 

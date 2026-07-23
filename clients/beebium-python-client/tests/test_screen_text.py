@@ -259,6 +259,67 @@ class TestTeletextRepertoire:
             bbc.video.screen_text(characters="semaphore")
 
 
+class TestIndentationAcrossModes:
+    """Indentation survives, whichever mode drew the screen.
+
+    A table of right-aligned figures is the case that shows it: the leading
+    spaces put the columns under one another, and a reader that drops them
+    left-justifies every row -- the table stops lining up even though every
+    character was read correctly. MODE 7 always kept them, because the teletext
+    reader reports whole rows; the glyph reader used to trim them.
+    """
+
+    # Printed with PRINT's comma-free right alignment, so each figure is
+    # preceded by spaces and the rows line up into columns.
+    PROGRAM = [
+        'FOR R%=1 TO 3',
+        'FOR C%=1 TO 4',
+        'PRINT RIGHT$("    "+STR$(R%*C%),5);',
+        'NEXT C%',
+        'PRINT',
+        'NEXT R%',
+    ]
+
+    def _run_table(self, bbc: Beebium, mode: int | None) -> str:
+        _wait_for_prompt(bbc)
+        lines = list(self.PROGRAM)
+        if mode is not None:
+            lines.insert(0, f"MODE {mode}")
+        program = "".join(
+            f"{10 * (i + 1)} {line}\r" for i, line in enumerate(lines)
+        )
+        bbc.keyboard.type("NEW\r" + program + "RUN\r")
+
+        # The last row of the table is the signal the program has finished.
+        assert bbc.run_until_or_timeout(
+            lambda: "3    6    9   12" in bbc.video.screen_text().text,
+            emulated_seconds=30.0,
+        ), "program did not produce the table"
+        return bbc.video.screen_text().text
+
+    @staticmethod
+    def _table_rows(text: str) -> list[str]:
+        return [
+            line.rstrip()
+            for line in text.split("\n")
+            if line.strip() and line.strip()[0].isdigit() and "%" not in line
+        ]
+
+    def test_mode_7_keeps_the_indentation(self, bbc: Beebium) -> None:
+        rows = self._table_rows(self._run_table(bbc, mode=None))
+
+        assert "    1    2    3    4" in rows
+        assert "    3    6    9   12" in rows
+
+    def test_a_bitmap_mode_keeps_the_same_indentation(self, bbc: Beebium) -> None:
+        # The defect: these came back left-justified, as "1    2    3    4",
+        # so the columns no longer lined up with what was on the screen.
+        rows = self._table_rows(self._run_table(bbc, mode=1))
+
+        assert "    1    2    3    4" in rows
+        assert "    3    6    9   12" in rows
+
+
 class TestScreenTextInBitmapModes:
     """A bitmap display, which the glyph-recognising strategy now reads."""
 
