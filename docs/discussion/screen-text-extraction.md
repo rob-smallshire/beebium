@@ -508,6 +508,8 @@ rows is the default.
 
 ## The client's part
 
+- Hold the screen when the gesture begins, and read against the hold for the
+  selection's life (see "What holding the screen changed" below).
 - Convert a drag to frame pixel coordinates. The renderer already does this
   mapping in reverse to draw, including the Display Style geometry.
 - Send the rectangle; receive text and runs.
@@ -593,6 +595,39 @@ one mode or the other. Per-font mapping makes the question not arise.
 
 **The Acorn set is characters 32-126.** VDU 127 deletes rather than prints, so
 those ROM bytes never appear on screen as a glyph.
+
+## What holding the screen changed
+
+Building the front end corrected the interface in two ways this document did not
+foresee. Both are now on the wire.
+
+**A reading has to name one instant.** The design assumed a client could freeze
+its own picture and then ask about the screen. It cannot: the four things a
+reading depends on -- the pixels, the band geometry, the teletext grid, and the
+font in RAM that `VDU 23` can redefine -- all move independently, so reads issued
+behind a frozen picture describe a screen that never existed. On anything that
+moves, the text a user copies is not the text they selected.
+
+So `HoldScreen` captures those four together and returns a `hold_id`;
+`GetScreenText` and `GetScreenGeometry` take that id and read the capture, and
+refuse an unknown or expired one with `NOT_FOUND` rather than quietly reading
+live. The hold returns the grid too, replacing the separate geometry call the
+client used to make on mouse-down, and optionally the captured still, which the
+client displays so the picture and the reading are the same frame by
+construction.
+
+Holding is a **copy, not a pause** -- the emulator keeps running. Pausing would
+have been simpler and just as coherent, but it would let a local UI gesture stop
+a machine other clients and real-time transports are attached to.
+
+**`TextRun` needed per-cell readability.** The design gave a run its text and one
+bounding rectangle. That is enough to copy but not to *show* what was read: a run
+spans every cell on its line, unmatched ones included, so highlighting its bounds
+paints ink the font could not read as though it had been -- and in the joined
+text an unmatched cell and a genuine space are both a space, so a client cannot
+tell them apart afterwards. A run now carries its `cells`, each with its own
+bounds and a `matched` flag. The text still emits a character per cell, so
+columns stay aligned; the highlight can now show only what was actually read.
 
 ## Off-grid text is no longer deferred
 
@@ -733,11 +768,15 @@ Also in this stream: retiring `GetTeletextScreen` and its client wrappers once
 copy no longer uses them, and the Python and TypeScript screen scrapers once
 the API supersedes them.
 
-### 4. macOS front end
+### 4. macOS front end -- built
 
 Interaction designed in `screen-text-selection-ui.md`. Drag-to-select over the display, in the three modes: snapped rows (the
 default), snapped rectangle, and free-form. Copy moves onto `GetScreenText`,
 and the MODE 7 wording comes out of the UI.
+
+Built, and it corrected the interface twice on the way: screens must be held
+server-side rather than frozen client-side, and runs must carry per-cell
+readability. Both are described under "What holding the screen changed" above.
 
 The selection overlay composes with any Display Style rather than being one --
 `display-styles.md` warns against a Cartesian product of options.

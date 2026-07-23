@@ -161,16 +161,27 @@ Request fields, all optional:
   where its repertoire differs from ASCII -- arrows, fractions, a division sign
   -- for capturing a teletext page as it looked. Only the caller knows which was
   meant, so the mapping is the server's and the choice is theirs
+- `holdId` - read a screen held by `HoldScreen` rather than the live one, so
+  the reading describes the still the caller is looking at (see below).
+  `NOT_FOUND` when the hold is unknown or has expired
 
 Response:
 - `supported` - whether any band of the region had a strategy that could read
   it. Distinct from readable-but-empty: a display that was read and found to
-  hold no text is supported with no runs. **Only MODE 7 is readable today**, so
-  a bitmap display reports `supported: false` rather than returning the stale
-  MODE 7 cells that `GetTeletextScreen` does
+  hold no text is supported with no runs, whereas a display no strategy can
+  read is unsupported. MODE 7 is read exactly from the character grid; MODEs
+  0-6 are read by recognising glyphs in the pixels
 - `runs` - each a piece of text, its pixel bounds, and the cell geometry it was
   read with, so a client can highlight or snap to exactly what it captured
-- `text` - the runs joined by `layout`, lines separated with LF
+- `runs[].cells` - the run's cells in reading order, each with its own `bounds`
+  and a `matched` flag. A client highlighting what was read uses these rather
+  than the whole run's bounds, which spans unmatched cells too: an unmatched
+  cell had ink no glyph fit and copies as a space, so painting it would dress a
+  failed read up as a success. A genuine space *is* matched. Empty from the
+  teletext strategy, whose cells are exact characters and all matched
+- `text` - the runs joined by `layout`, lines separated with LF. Every cell
+  contributes a character, including the unmatched ones, so columns stay
+  aligned
 - `unreadableCells`, `ambiguousCells` - cells a strategy could not identify at
   all, and cells it read but could not pin to one character because the font
   draws two the same. Both zero for MODE 7, whose cells are exact codes
@@ -187,6 +198,9 @@ grpcurl -plaintext \
   -import-path src/service/proto -proto video.proto \
   localhost:48875 beebium.VideoService/GetScreenGeometry
 ```
+
+Takes an optional `holdId`, to report the grid of a held screen rather than the
+live one.
 
 Every band reports a grid, including one no strategy can read text from: where
 the cells are and what is in them are separate questions. Each band carries
