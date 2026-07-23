@@ -248,9 +248,7 @@ struct BeebiumApp: App {
             // holding the modifier previews the highlight, pressing C commits
             // it. placeCopyVariantsBelowCopy pulls them up to sit under Copy,
             // which SwiftUI cannot do (it can only place a group after the whole
-            // pasteboard group). The help strings carry the nuance the short
-            // titles cannot -- what each captures, and that the last one reads
-            // text out of the picture and so is the least certain.
+            // pasteboard group).
             CommandGroup(after: .pasteboard) {
                 Button("Copy as Columns") {
                     guard let coordinator = selectionCoordinator else { return }
@@ -258,8 +256,6 @@ struct BeebiumApp: App {
                 }
                 .keyboardShortcut("c", modifiers: [.option, .command])
                 .disabled(selectionCoordinator == nil)
-                .help("Copy the selected block of characters column by column, "
-                    + "as for a table of figures.")
 
                 Button("Copy Text from Graphics") {
                     guard let coordinator = selectionCoordinator else { return }
@@ -267,10 +263,6 @@ struct BeebiumApp: App {
                 }
                 .keyboardShortcut("c", modifiers: [.shift, .command])
                 .disabled(selectionCoordinator == nil)
-                .help("Copy all the text in the selection, including text drawn "
-                    + "freely into the picture such as a game's score. Reads the "
-                    + "text out of the pixels, so it is the least certain of the "
-                    + "copy commands.")
             }
 
             CommandGroup(after: .pasteboard) {
@@ -284,9 +276,6 @@ struct BeebiumApp: App {
                 }
                 .keyboardShortcut("v", modifiers: [.option, .command])
                 .disabled(pasteCoordinator?.canPasteAtFullSpeed != true)
-                .help(pasteCoordinator?.fullSpeedUnavailableReason
-                      ?? "Run the machine as fast as it will go until the "
-                       + "pasted text has all been typed.")
             }
 
             // Which meaning a MODE 7 byte carries when it is copied, in its own
@@ -370,16 +359,9 @@ private struct Mode7CopiesAsMenu: View {
     var body: some View {
         Picker("Mode 7 Copies As", selection: $characters) {
             Text("Character Codes")
-                .help("Copy the character codes at face value, so square "
-                    + "brackets and the caret come back as themselves. Keeps a "
-                    + "copied BASIC listing intact.")
                 .tag(ScreenTextCharactersMode.codes.rawValue)
 
             Text("Displayed Characters")
-                .help("Copy the characters the screen actually showed, so the "
-                    + "arrows, fractions and division sign Mode 7 draws in "
-                    + "place of some ASCII characters come back as "
-                    + "themselves.")
                 .tag(ScreenTextCharactersMode.displayed.rawValue)
         }
     }
