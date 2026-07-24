@@ -146,6 +146,38 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         channel = nil
     }
 
+    /// Release every key and modifier currently held on the emulated keyboard,
+    /// without disconnecting.
+    ///
+    /// Called when the window loses key focus: macOS delivers the matching
+    /// key-up / flagsChanged to whoever holds focus next, so a key or modifier
+    /// held at that moment would otherwise stay down on the BBC forever (the
+    /// classic "stuck SHIFT" -- SHIFT is derived from pressedKeys, so a lost
+    /// SHIFT release leaves desiredShift stuck down). Releasing everything on
+    /// focus loss makes regaining focus a clean slate; the user re-presses
+    /// whatever they are still physically holding, generating fresh downs.
+    func releaseAllKeys() {
+        guard !pressedKeys.isEmpty || bbcShiftIsDown || bbcCtrlIsDown else { return }
+        let pressedSnapshot = pressedKeys
+        let shiftWasDown = bbcShiftIsDown
+        let ctrlWasDown = bbcCtrlIsDown
+        pressedKeys.removeAll()
+        bbcShiftIsDown = false
+        bbcCtrlIsDown = false
+        enqueueSend { [weak self] in
+            guard let self = self else { return }
+            for (_, state) in pressedSnapshot where !self.isModifierIK(state.ikNumber) {
+                await self.sendKeyUp(ikNumber: state.ikNumber)
+            }
+            if shiftWasDown {
+                await self.sendKeyUp(ikNumber: BBCModifierKey.shift)
+            }
+            if ctrlWasDown {
+                await self.sendKeyUp(ikNumber: BBCModifierKey.ctrl)
+            }
+        }
+    }
+
     /// Fetch the keyboard mappings from the core and populate the cache
     func loadKeyMappings() async {
         guard let client = client else {

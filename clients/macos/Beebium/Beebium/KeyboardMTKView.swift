@@ -443,17 +443,21 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
     // MARK: - Focus Handling
 
-    /// Observer for window becoming key (focus gained)
+    /// Observers for window focus changes (gained / lost)
     private var windowDidBecomeKeyObserver: NSObjectProtocol?
+    private var windowDidResignKeyObserver: NSObjectProtocol?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
 
-        // Remove old observer if any
-        if let observer = windowDidBecomeKeyObserver {
-            NotificationCenter.default.removeObserver(observer)
-            windowDidBecomeKeyObserver = nil
+        // Remove old observers if any
+        for observer in [windowDidBecomeKeyObserver, windowDidResignKeyObserver] {
+            if let observer = observer {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
+        windowDidBecomeKeyObserver = nil
+        windowDidResignKeyObserver = nil
 
         if let window = window {
             // Become first responder when added to window
@@ -469,12 +473,29 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
             ) { [weak self] _ in
                 self?.resetModifierTracking()
             }
+
+            // Observe window losing key focus to release any held keys. macOS
+            // sends the matching key-up / flagsChanged to whoever gains focus,
+            // so a key or modifier held now would stay stuck down on the BBC
+            // (the "sticky SHIFT" seen mid-game after Cmd-Tab, an alert, etc.).
+            // Also resync local modifier tracking so a later flagsChanged is
+            // diffed against reality, not stale state.
+            windowDidResignKeyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didResignKeyNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                self?.keyboardClient?.releaseAllKeys()
+                self?.lastModifiers = []
+            }
         }
     }
 
     deinit {
-        if let observer = windowDidBecomeKeyObserver {
-            NotificationCenter.default.removeObserver(observer)
+        for observer in [windowDidBecomeKeyObserver, windowDidResignKeyObserver] {
+            if let observer = observer {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
     }
 
