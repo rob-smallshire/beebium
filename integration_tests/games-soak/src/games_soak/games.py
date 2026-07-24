@@ -195,12 +195,15 @@ GAMES: list[Game] = [
     Game(
         name="Cylon Attack",
         disc="discs/games/Disc001-CylonAttackAFSTD.ssd",
-        # The "A 3D Space battle" title takes a long time to appear; the game
-        # then asks "Load high score table (Y/N)?" -- answer N (waiting for that
-        # exact prompt) to drop into the attract mode.
+        # The "A 3D Space battle" title takes a long time to appear. It then
+        # asks "Do you want INSTRUCTIONS (Y/N)?" -- answer N -- and then "Load
+        # high score table (Y/N)?" -- answer N -- to drop into the attract mode.
         landmark="A 3D Space battle",
         landmark_timeout_seconds=120.0,
-        nav=(("Load high score table", "N"),),
+        nav=(
+            ("Do you want INSTRUCTIONS", "N"),
+            ("Load high score table", "N"),
+        ),
     ),
     # Other games with attract/demo modes worth adding (recipes TBD): Thrust
     # (discs/games/Disc024-Thrust.ssd) and Arcadians.
