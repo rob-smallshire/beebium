@@ -28,6 +28,7 @@ struct MainWindowRouter: View {
     @State private var connectionTarget: ConnectionTarget?
     @State private var needsRun: Bool = false
     @State private var provenanceUUID: String?
+    @State private var showSidebar: Bool?
     @State private var currentWindow: NSWindow?
 
     var body: some View {
@@ -37,6 +38,7 @@ struct MainWindowRouter: View {
                     initialTarget: target,
                     initialNeedsRun: needsRun,
                     initialProvenanceUUID: provenanceUUID,
+                    initialShowSidebar: showSidebar,
                     keyboardMappingManager: keyboardMappingManager
                 )
             } else {
@@ -51,10 +53,11 @@ struct MainWindowRouter: View {
             }
         }
         .onAppear {
-            let (target, run, prov) = ConnectWindowState.shared.consumePendingTarget()
+            let (target, run, prov, sidebar) = ConnectWindowState.shared.consumePendingTarget()
             connectionTarget = target
             needsRun = run
             provenanceUUID = prov
+            showSidebar = sidebar
             if target != nil {
                 NotificationCenter.default.post(name: .didOpenEmulatorWindow, object: nil)
             }
@@ -86,6 +89,9 @@ struct ContentView: View {
     let initialTarget: ConnectionTarget
     let initialNeedsRun: Bool
     let initialProvenanceUUID: String?
+    /// Initial sidebar visibility (e.g. from a beebium://…&sidebar=closed launch);
+    /// nil leaves the default. Applied once in onAppear.
+    let initialShowSidebar: Bool?
     /// Whether this window needs to call Run() after connection (for cores launched with --wait=api).
     /// Initialised from initialNeedsRun in onAppear; reset to false after Run() succeeds.
     @State private var needsRun: Bool = false
@@ -261,6 +267,12 @@ struct ContentView: View {
             selectionCoordinator.textService = videoClient
             selectionCoordinator.freezer = videoClient
             selectionCoordinator.pasteboard = selectionPasteboard
+
+            // Apply an initial sidebar state requested at launch (e.g. a
+            // beebium://…&sidebar=closed connect URL); nil leaves the default.
+            if let initialShowSidebar = initialShowSidebar {
+                showSidebar = initialShowSidebar
+            }
         }
         .focusedValue(\.sidebarMode, $sidebarMode)
         .focusedValue(\.showSidebar, $showSidebar)

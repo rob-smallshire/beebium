@@ -158,7 +158,8 @@ def attach_frontend(app_filepath: Path, target: str) -> int | None:
     Returns the frontend process id if it can be found, else None.
     """
     port = _port_of(target)
-    url = f"beebium://connect?host=127.0.0.1&port={port}"
+    # sidebar=closed: the soak wants an unobstructed machine view.
+    url = f"beebium://connect?host=127.0.0.1&port={port}&sidebar=closed"
     # Register the bundle so LaunchServices routes beebium:// to this build,
     # then open the URL -- which also launches the app if needed. (Opening the
     # app separately as well is redundant and leaves a stray Welcome window.)

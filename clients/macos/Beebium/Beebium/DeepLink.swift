@@ -32,6 +32,9 @@ struct DeepLinkConnectRequest: Equatable {
     /// Provenance UUID when the caller launched the server itself; nil for a
     /// plain external attach.
     let provenanceUUID: String?
+    /// Requested initial sidebar visibility (?sidebar=closed / open); nil leaves
+    /// the app default.
+    let showSidebar: Bool?
 }
 
 enum DeepLink {
@@ -70,9 +73,17 @@ enum DeepLink {
 
         let needsRun = value("run").map { ["1", "true", "yes"].contains($0.lowercased()) } ?? false
 
+        let showSidebar: Bool?
+        switch value("sidebar")?.lowercased() {
+        case "closed", "hidden", "off", "0", "false", "no": showSidebar = false
+        case "open", "shown", "on", "1", "true", "yes": showSidebar = true
+        default: showSidebar = nil   // absent or unrecognised: leave the default
+        }
+
         return DeepLinkConnectRequest(
             target: ConnectionTarget(host: host, port: port),
             needsRun: needsRun,
-            provenanceUUID: value("provenance"))
+            provenanceUUID: value("provenance"),
+            showSidebar: showSidebar)
     }
 }

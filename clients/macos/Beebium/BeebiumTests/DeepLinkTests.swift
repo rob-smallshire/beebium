@@ -47,6 +47,13 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(request?.provenanceUUID, "ABC-123")
     }
 
+    func testSidebarParam() {
+        XCTAssertEqual(parse("beebium://connect?host=h&sidebar=closed")?.showSidebar, false)
+        XCTAssertEqual(parse("beebium://connect?host=h&sidebar=open")?.showSidebar, true)
+        XCTAssertNil(parse("beebium://connect?host=h")?.showSidebar)
+        XCTAssertNil(parse("beebium://connect?host=h&sidebar=weird")?.showSidebar)
+    }
+
     func testWrongSchemeRejected() {
         XCTAssertNil(parse("http://connect?host=h&port=1"))
     }

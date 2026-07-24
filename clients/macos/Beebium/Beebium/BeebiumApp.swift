@@ -358,6 +358,7 @@ struct BeebiumApp: App {
         state.pendingTarget = request.target
         state.pendingNeedsRun = request.needsRun
         state.pendingProvenanceUUID = request.provenanceUUID
+        state.pendingShowSidebar = request.showSidebar
         openWindow(id: "main")
 
         // A beebium:// connect opens the machine window directly, so close the

@@ -28,18 +28,24 @@ class ConnectWindowState: ObservableObject {
     /// Provenance UUID for a core launched by this app (nil for external connections)
     @Published var pendingProvenanceUUID: String?
 
+    /// Initial sidebar visibility requested for the next window (e.g. from a
+    /// beebium://…&sidebar=closed launch); nil leaves the app default.
+    @Published var pendingShowSidebar: Bool?
+
     private init() {}
 
     /// Consume the pending target (returns it and clears it)
-    /// - Returns: Tuple of (target, needsRun, provenanceUUID)
-    func consumePendingTarget() -> (ConnectionTarget?, Bool, String?) {
+    /// - Returns: Tuple of (target, needsRun, provenanceUUID, showSidebar)
+    func consumePendingTarget() -> (ConnectionTarget?, Bool, String?, Bool?) {
         let target = pendingTarget
         let needsRun = pendingNeedsRun
         let provenanceUUID = pendingProvenanceUUID
+        let showSidebar = pendingShowSidebar
         pendingTarget = nil
         pendingNeedsRun = false
         pendingProvenanceUUID = nil
-        return (target, needsRun, provenanceUUID)
+        pendingShowSidebar = nil
+        return (target, needsRun, provenanceUUID, showSidebar)
     }
 }
 
