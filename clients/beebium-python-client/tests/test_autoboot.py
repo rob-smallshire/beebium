@@ -285,3 +285,167 @@ def test_runtime_link_change_not_seen_by_soft_break(
         assert not booted, (
             "plain BREAK booted after a runtime link change; OS 1.20 only "
             "commits the links to &028F on power-on / hard reset")
+
+
+# ---------------------------------------------------------------------------
+# Reset-type x SHIFT on a non-Tube Model B (fast; the reset/link logic is
+# host-side). Galaforce auto-boots to a Mode 7 instructions screen.
+#
+# OS 1.20 auto-boot decision (reset-type-independent): boot iff
+#   SHIFT_live == startUpOptions.bit3 (&028F)
+# CTRL only sets the reset *type*: a CTRL-BREAK is a hard reset, which
+# (re)commits the live links to &028F -- so a runtime link change is seen by a
+# CTRL-BREAK but not by a plain BREAK.
+# ---------------------------------------------------------------------------
+
+GALAFORCE_DISC_FILENAME = "Disc025-Galaforce.ssd"
+GALAFORCE_LANDMARK = "In the midst of the"
+
+
+@pytest.fixture(scope="module")
+def galaforce_disc_filepath() -> Path:
+    repo_root = Path(__file__).parent.parent.parent.parent
+    for candidate in (
+        repo_root / "tests" / "assets" / "discs" / GALAFORCE_DISC_FILENAME,
+        repo_root / "discs" / "games" / GALAFORCE_DISC_FILENAME,
+    ):
+        if candidate.exists():
+            return candidate
+    pytest.skip(f"Galaforce disc image not found: {GALAFORCE_DISC_FILENAME}")
+
+
+@pytest.fixture
+def model_b_launch(
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+    dfs_1770_rom_filepath: Path,
+):
+    """Factory to launch a plain Model B (no Tube) with extra CLI args."""
+    base = ["--fdc", "acorn-1770", "--sideways", f"14:rom:{dfs_1770_rom_filepath}"]
+
+    @contextlib.contextmanager
+    def _launch(extra: list[str] | None = None):
+        try:
+            with Beebium.launch(
+                mos_filepath=mos_filepath,
+                basic_filepath=basic_filepath,
+                server_filepath=beebium_server_filepath,
+                extra_args=base + list(extra or []),
+                startup_timeout=20.0,
+            ) as bbc:
+                yield bbc
+        except ServerNotFoundError as e:
+            pytest.skip(str(e))
+
+    return _launch
+
+
+def _combo_break(bbc: Beebium, *, shift: bool, ctrl: bool,
+                 shift_hold_after: float = 0.5) -> None:
+    """Break with optional SHIFT and/or CTRL held across (and past) the break,
+    so both the early reset-type CTRL read and the later SHIFT read see them."""
+    kb = bbc.keyboard
+    if ctrl:
+        kb.ctrl_down()
+    if shift:
+        kb.shift_down()
+    time.sleep(0.02)
+    kb.break_down()
+    time.sleep(0.05)
+    kb.break_up()
+    time.sleep(shift_hold_after)
+    if shift:
+        kb.shift_up()
+    if ctrl:
+        kb.ctrl_up()
+
+
+def _at_prompt(bbc: Beebium) -> None:
+    assert run_until_or_timeout(
+        bbc, lambda: screen_contains(bbc, ">"), emulated_seconds=10.0)
+
+
+def _galaforce_booted(bbc: Beebium, emulated_seconds: float = 25.0) -> bool:
+    return run_until_or_timeout(
+        bbc, lambda: screen_contains(bbc, GALAFORCE_LANDMARK),
+        emulated_seconds=emulated_seconds)
+
+
+@_skip_windows_ci
+def test_ctrl_break_honours_runtime_link_change(
+    model_b_launch, galaforce_disc_filepath: Path
+) -> None:
+    """CTRL-BREAK is a hard reset: it re-commits the live links, so a runtime
+    set_startup_auto_boot is honoured (unlike a plain BREAK)."""
+    with model_b_launch() as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        _at_prompt(bbc)
+        bbc.disc.drive(0).insert(galaforce_disc_filepath)
+        bbc.keyboard.set_startup_auto_boot(True)
+        bbc.debugger.ensure_running()
+        _combo_break(bbc, shift=False, ctrl=True)
+        assert _galaforce_booted(bbc), "CTRL-BREAK did not honour the runtime link"
+
+
+@_skip_windows_ci
+def test_ctrl_break_default_link_does_not_boot(
+    model_b_launch, galaforce_disc_filepath: Path
+) -> None:
+    """CTRL-BREAK with the default link (no SHIFT) does not boot."""
+    with model_b_launch() as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        _at_prompt(bbc)
+        bbc.disc.drive(0).insert(galaforce_disc_filepath)
+        bbc.debugger.ensure_running()
+        _combo_break(bbc, shift=False, ctrl=True)
+        assert not _galaforce_booted(bbc)
+
+
+# The two CTRL-SHIFT-BREAK cases below assert the OS-1.20-correct outcome and
+# currently FAIL: the emulator drops the SHIFT contribution to the auto-boot
+# decision during a hard (CTRL) reset, though the key matrix shows SHIFT down.
+# Per OS 1.20 the decision is SHIFT_live XOR startUpOptions.bit3 regardless of
+# reset type (auto-boot decision at .skipStartupMessage: PHP/PLA/LSR x4/
+# EOR .startUpOptions; SHIFT read live via .interrogateKeyboard key 0). strict
+# xfail so these flip to a reported XPASS once the emulator bug is fixed.
+_ctrl_shift_bug = pytest.mark.xfail(
+    reason="emulator ignores SHIFT in the auto-boot decision on a CTRL (hard) "
+           "reset; OS 1.20 reads SHIFT live regardless of reset type",
+    strict=True,
+)
+
+
+@_skip_windows_ci
+@_ctrl_shift_bug
+def test_ctrl_shift_break_default_link_boots(
+    model_b_launch, galaforce_disc_filepath: Path
+) -> None:
+    """Default link + CTRL-SHIFT-BREAK: SHIFT flips it, so it SHOULD boot."""
+    with model_b_launch() as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        _at_prompt(bbc)
+        bbc.disc.drive(0).insert(galaforce_disc_filepath)
+        bbc.debugger.ensure_running()
+        _combo_break(bbc, shift=True, ctrl=True)
+        assert _galaforce_booted(bbc), (
+            "CTRL-SHIFT-BREAK should boot with the default link (SHIFT flips "
+            "the decision), per OS 1.20")
+
+
+@_skip_windows_ci
+@_ctrl_shift_bug
+def test_ctrl_shift_break_autoboot_link_suppresses(
+    model_b_launch, galaforce_disc_filepath: Path
+) -> None:
+    """Auto-boot link + CTRL-SHIFT-BREAK: SHIFT flips it, so it should NOT boot."""
+    with model_b_launch() as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        _at_prompt(bbc)
+        bbc.disc.drive(0).insert(galaforce_disc_filepath)
+        bbc.keyboard.set_startup_auto_boot(True)
+        bbc.debugger.ensure_running()
+        _combo_break(bbc, shift=True, ctrl=True)
+        assert not _galaforce_booted(bbc), (
+            "CTRL-SHIFT-BREAK should suppress boot with the auto-boot link "
+            "(SHIFT flips the decision), per OS 1.20")
