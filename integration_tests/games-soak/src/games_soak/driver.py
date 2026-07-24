@@ -389,20 +389,27 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
             _advance_screen(bbc, key, timeout=game.attract_change_timeout)
 
 
-def teardown_game(bbc: Beebium, game: Game) -> None:
+def teardown_game(bbc: Beebium, game: Game, speed_multiplier: float = 1.0) -> None:
     """Eject the disc and cold-reset, leaving a clean machine for the next game.
 
     A soft ctrl_break between games did not clear RAM, so the previous game's
     state bled into the next boot -- its Shift-Break autoboot could land on the
     wrong screen (a missed landmark) or a black screen. A hard reset
     (debugger.reset clears RAM and the System VIA) gives each game a clean cold
-    start."""
+    start.
+
+    debugger.reset pauses the machine but not the PacingClock, so the wall time
+    spent resetting and booting is counted as owed emulation and the clock runs
+    fast (~2x) to make it up. Re-setting the speed multiplier rebases the pacing
+    clock (it re-anchors on any speed change), discarding that phantom deficit;
+    pass speed_multiplier so a non-default --speed is honoured."""
     drive = bbc.disc.drive(0)
     if not drive.is_empty:
         drive.eject()
         drive.wait_for_eject(timeout=15.0)
     bbc.debugger.reset()          # cold reset: clears RAM for a clean next boot
     bbc.debugger.ensure_running()
+    bbc.system.set_speed_multiplier(speed_multiplier)  # rebase pacing after reset
     time.sleep(1.0)               # let the cold boot reach the BASIC prompt
 
 
@@ -580,7 +587,7 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
                             _log(f"{game.name}: emulator still advancing; "
                                  f"skipping to the next game.")
                             try:
-                                teardown_game(bbc, game)
+                                teardown_game(bbc, game, speed_multiplier=args.speed)
                             except Exception as t_exc:  # noqa: BLE001
                                 _log(f"{game.name}: teardown after skip failed: {t_exc}")
                             continue
@@ -598,7 +605,7 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
                         _hold(bbc, args.hold_minutes, frontend_pid)
                         return stall
 
-                    teardown_game(bbc, game)
+                    teardown_game(bbc, game, speed_multiplier=args.speed)
 
                     if not run_forever and time.monotonic() >= deadline:
                         _log(f"No stall within {args.max_minutes} min; giving up.")
