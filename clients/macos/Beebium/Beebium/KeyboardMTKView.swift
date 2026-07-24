@@ -318,17 +318,56 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
 
     /// Determine if a specific modifier key is pressed based on its keyCode and current flags
     private func isModifierPressed(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {
+        return Self.modifierKeyIsDown(keyCode: keyCode, rawFlags: flags.rawValue)
+    }
+
+    /// Whether a specific physical modifier keyCode is currently down, from a
+    /// flagsChanged event's raw modifier bits.
+    ///
+    /// The coalesced NSEvent.ModifierFlags (.shift, .control, ...) cannot tell
+    /// left from right, so releasing one Shift while the other is held leaves
+    /// .shift set and the released side is misread as still-down -- its key-up
+    /// never fires and SHIFT sticks (the same for CTRL/Option/Command). The
+    /// device-dependent left/right bits, carried in the raw flags, disambiguate.
+    /// When those bits are absent (some synthetic events) we fall back to the
+    /// coalesced flag, preserving the single-modifier behaviour.
+    static func modifierKeyIsDown(keyCode: UInt16, rawFlags: UInt) -> Bool {
+        // Device-dependent (left/right) masks, as delivered in the raw flags.
+        let leftShift: UInt = 0x0002, rightShift: UInt = 0x0004
+        let leftControl: UInt = 0x0001, rightControl: UInt = 0x2000
+        let leftOption: UInt = 0x0020, rightOption: UInt = 0x0040
+        let leftCommand: UInt = 0x0008, rightCommand: UInt = 0x0010
+        // Coalesced (device-independent) masks, used as the fallback.
+        let shiftFlag: UInt = 0x20000, controlFlag: UInt = 0x40000
+        let optionFlag: UInt = 0x80000, commandFlag: UInt = 0x100000
+        let functionFlag: UInt = 0x800000
+
+        func down(side: UInt, sibling: UInt, coalesced: UInt) -> Bool {
+            if rawFlags & (side | sibling) != 0 {
+                return rawFlags & side != 0        // device bits present: use this side
+            }
+            return rawFlags & coalesced != 0       // no device bits: fall back
+        }
+
         switch keyCode {
-        case MacKeyCode.shift, MacKeyCode.rightShift:
-            return flags.contains(.shift)
-        case MacKeyCode.control, MacKeyCode.rightControl:
-            return flags.contains(.control)
-        case MacKeyCode.option, MacKeyCode.rightOption:
-            return flags.contains(.option)
-        case MacKeyCode.command, MacKeyCode.rightCommand:
-            return flags.contains(.command)
+        case MacKeyCode.shift:
+            return down(side: leftShift, sibling: rightShift, coalesced: shiftFlag)
+        case MacKeyCode.rightShift:
+            return down(side: rightShift, sibling: leftShift, coalesced: shiftFlag)
+        case MacKeyCode.control:
+            return down(side: leftControl, sibling: rightControl, coalesced: controlFlag)
+        case MacKeyCode.rightControl:
+            return down(side: rightControl, sibling: leftControl, coalesced: controlFlag)
+        case MacKeyCode.option:
+            return down(side: leftOption, sibling: rightOption, coalesced: optionFlag)
+        case MacKeyCode.rightOption:
+            return down(side: rightOption, sibling: leftOption, coalesced: optionFlag)
+        case MacKeyCode.command:
+            return down(side: leftCommand, sibling: rightCommand, coalesced: commandFlag)
+        case MacKeyCode.rightCommand:
+            return down(side: rightCommand, sibling: leftCommand, coalesced: commandFlag)
         case MacKeyCode.function:
-            return flags.contains(.function)
+            return rawFlags & functionFlag != 0
         default:
             return false
         }
