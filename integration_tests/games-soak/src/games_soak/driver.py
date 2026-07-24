@@ -56,6 +56,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from beebium.client import Beebium
+from beebium.client.exceptions import ScreenExpectTimeout
 from beebium.client.screen import dump_screen, screen_contains
 
 from games_soak.games import GAMES, Game
@@ -140,6 +141,22 @@ def _advance_screen(bbc: Beebium, key: str, *, timeout: float = 8.0,
         if bbc.video.screen_text().text != before:
             return True
     return False
+
+
+def _page_through_prompt(bbc: Beebium, prompt: str, key: str, *,
+                         max_pages: int = 15, prompt_timeout: float = 15.0,
+                         change_timeout: float = 8.0) -> None:
+    """Page through screens that each show `prompt` (pexpect-style): wait for the
+    prompt to appear, press `key` and wait for it to advance, and repeat until
+    the prompt no longer appears. Robust to variable page counts and to a game
+    that takes a while to show the first prompt, unlike a fixed keypress count.
+    The machine must be running."""
+    for _ in range(max_pages):
+        try:
+            bbc.expect(prompt, timeout=prompt_timeout)
+        except ScreenExpectTimeout:
+            return  # prompt gone -> reached the game/attract
+        _advance_screen(bbc, key, timeout=change_timeout)
 
 
 # ----------------------------------------------------------------------------
@@ -378,12 +395,12 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
     # the frontend renders and real-time-dependent bugs can manifest.
     bbc.debugger.ensure_running()
 
-    # Page through an attract/demo mode. Rather than blind-timing the presses,
-    # wait for each press to visibly advance the screen before the next, so a
-    # key is never sent before the game has responded (games take a while to
-    # load before the first keypress registers). An optional settle first, for
-    # games whose title has no landmark to wait on.
-    if game.attract_keys:
+    # Drive an attract/demo mode. Prefer pexpect-style paging when the game
+    # shows a consistent prompt on each page (robust to load timing and page
+    # count); otherwise fall back to timed, change-detected key presses.
+    if game.page_prompt:
+        _page_through_prompt(bbc, game.page_prompt, game.page_key)
+    elif game.attract_keys:
         time.sleep(game.attract_delay_seconds)
         for key in game.attract_keys:
             _advance_screen(bbc, key, timeout=game.attract_change_timeout)

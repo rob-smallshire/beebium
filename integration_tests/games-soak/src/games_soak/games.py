@@ -84,6 +84,14 @@ class Game:
     # title has no Mode 7 landmark finish loading before we start pressing keys.
     attract_delay_seconds: float = 0.0
 
+    # pexpect-style paging: while page_prompt is on screen, press page_key and
+    # wait for it to advance, until the prompt is gone. Robust to variable page
+    # counts and load timing (each press waits for the prompt), so it is
+    # preferred over a fixed attract_keys count when a game shows a consistent
+    # "press X to continue" prompt on each page.
+    page_prompt: str | None = None
+    page_key: str = " "
+
     # How long to let the game run (in its attract/demo mode or gameplay) in
     # real time while watching for a freeze, before moving to the next game.
     run_minutes: float = 5.0
@@ -167,9 +175,11 @@ GAMES: list[Game] = [
     Game(
         name="Meteors",
         disc="discs/games/Disc001-Meteors.ssd",
-        # Graphics title with no Mode 7 text; settle, then SPACE x3 at ~1s.
-        attract_delay_seconds=5.0,
-        attract_keys=(" ", " ", " "),
+        # Instruction pages each show "Press SPACE BAR to continue"; page through
+        # them until the prompt is gone (reaches the game/attract). Robust to the
+        # graphics title loading before the prompt appears -- a blind count lost
+        # the first press and stuck on the last page.
+        page_prompt="Press SPACE BAR to continue",
     ),
     Game(
         name="Zalaga",
