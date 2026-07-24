@@ -230,6 +230,7 @@ WD1770 controller with:
 - `lifecycle-management.md` - Connection liveness (heartbeat, graceful/crash/unreachable), client teardown, window/server shutdown, and the rules behind them
 - `screen-text-library.md` - Reading text off the screen: the standalone recognition library and its CLI
 - `keyboard.md` - Keyboard matrix and input handling
+- `frontend-modifier-keys.md` - How a front-end must translate host modifier keys (SHIFT/CTRL) to avoid stuck-modifier desync; platform-independent rules plus macOS specifics, for future front-ends
 - `indicators.md` - LED status indicators
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
 - `deployment.md` - Installed layout and runtime ROM/preset discovery
