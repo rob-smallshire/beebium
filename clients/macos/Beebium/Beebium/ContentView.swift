@@ -13,6 +13,12 @@
 import AppKit
 import SwiftUI
 
+/// Identity of the Welcome window, shared so a beebium:// launch can find and
+/// close the empty Welcome that SwiftUI auto-opens (see BeebiumApp.handleDeepLink).
+enum WelcomeWindow {
+    static let title = "Welcome to Beebium"
+}
+
 /// Routes the main WindowGroup to either welcome or emulator content based on whether
 /// a connection target was pending when the window was created. This eliminates the need
 /// for a separate Welcome Window scene and avoids the ghost Window menu entry caused by
@@ -38,7 +44,7 @@ struct MainWindowRouter: View {
                     .background(WindowAccessor(window: $currentWindow, configure: { window in
                         window.titlebarAppearsTransparent = true
                         window.titleVisibility = .hidden
-                        window.title = "Welcome to Beebium"
+                        window.title = WelcomeWindow.title
                         window.setContentSize(NSSize(width: 800, height: 640))
                         window.center()
                     }))

@@ -359,6 +359,17 @@ struct BeebiumApp: App {
         state.pendingNeedsRun = request.needsRun
         state.pendingProvenanceUUID = request.provenanceUUID
         openWindow(id: "main")
+
+        // A beebium:// connect opens the machine window directly, so close the
+        // empty Welcome window SwiftUI auto-opens at launch (and any other
+        // unconnected Welcome window). Launching a disc via URL should not leave
+        // a Welcome screen behind. Deferred so the machine window exists first.
+        DispatchQueue.main.async {
+            for window in NSApplication.shared.windows
+            where window.title == WelcomeWindow.title {
+                window.close()
+            }
+        }
     }
 }
 
