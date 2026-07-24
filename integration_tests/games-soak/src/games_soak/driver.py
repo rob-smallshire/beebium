@@ -360,7 +360,10 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
     bbc.debugger.ensure_running()
 
     # Drive an attract/demo mode with timed real-time keypresses (e.g. Galaforce
-    # advances instruction pages on a timer, not at a distinct landmark).
+    # advances instruction pages on a timer, not at a distinct landmark). An
+    # optional settle first, for games whose title has no landmark to wait on.
+    if game.attract_keys:
+        time.sleep(game.attract_delay_seconds)
     for key in game.attract_keys:
         bbc.keyboard.type(key)
         time.sleep(game.attract_interval_seconds)

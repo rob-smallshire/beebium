@@ -74,6 +74,9 @@ class Game:
     # than at a distinct per-page landmark.
     attract_keys: tuple[str, ...] = ()
     attract_interval_seconds: float = 1.0
+    # Real-time settle before the first attract keypress, to let a game whose
+    # title has no Mode 7 landmark finish loading before we start pressing keys.
+    attract_delay_seconds: float = 0.0
 
     # How long to let the game run in real time while watching for a freeze.
     run_minutes: float = 3.0
@@ -159,6 +162,45 @@ GAMES: list[Game] = [
         # Press SPACE four times at ~1s intervals to reach hi-scores/attract.
         attract_keys=(" ", " ", " ", " "),
         attract_interval_seconds=1.0,
+        run_minutes=3.0,
+    ),
+    Game(
+        name="Meteors",
+        disc="discs/games/Disc001-Meteors.ssd",
+        # Graphics title with no Mode 7 text; settle, then SPACE x3 at ~1s.
+        attract_delay_seconds=5.0,
+        attract_keys=(" ", " ", " "),
+        attract_interval_seconds=1.0,
+        run_minutes=3.0,
+    ),
+    Game(
+        name="Zalaga",
+        disc="discs/games/Disc003-Zalaga.ssd",
+        landmark="Zalaga",  # Mode 7 title ("Aardvark Software presents... Zalaga")
+        # Return x5 at ~1s intervals, then K, to reach the game.
+        attract_keys=("\r", "\r", "\r", "\r", "\r", "K"),
+        attract_interval_seconds=1.0,
+        run_minutes=3.0,
+    ),
+    Game(
+        name="Battlezone",
+        disc="discs/games/Disc173-BATTLEZONERSTD.ssd",
+        landmark="BATTLEZONE",  # Mode 7 title ("ROCKETEER presents BATTLEZONE")
+        # SPACE x7 at ~1s intervals to reach attract mode.
+        attract_keys=(" ", " ", " ", " ", " ", " ", " "),
+        attract_interval_seconds=1.0,
+        run_minutes=3.0,
+    ),
+    Game(
+        name="Cylon Attack",
+        disc="discs/games/Disc001-CylonAttackAFSTD.ssd",
+        # The Mode 7 "A 3D Space battle" screen takes a long time to appear.
+        landmark="A 3D Space battle",
+        landmark_timeout_seconds=120.0,
+        landmark_chunk_seconds=2.0,
+        # N, wait ~5s, N again -> attract mode.
+        attract_keys=("N", "N"),
+        attract_interval_seconds=5.0,
         run_minutes=3.0,
     ),
     # Other games with attract/demo modes worth adding (recipes TBD): Thrust
