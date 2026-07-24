@@ -386,6 +386,22 @@ class StallReport:
     reason: str
 
 
+def _emulator_advancing(bbc: Beebium, executor: ThreadPoolExecutor,
+                        rpc_timeout: float) -> bool:
+    """True if the emulated cycle counter advances over a short interval.
+
+    Used to tell a genuine freeze from a mere screen-navigation desync: the
+    machine keeps running fine, we just lost track of which screen it is on.
+    """
+    ok0, c0 = _call_with_timeout(
+        executor, lambda: bbc.debugger.cycle_count, rpc_timeout)
+    time.sleep(0.5)
+    ok1, c1 = _call_with_timeout(
+        executor, lambda: bbc.debugger.cycle_count, rpc_timeout)
+    return bool(ok0 and ok1 and isinstance(c0, int)
+                and isinstance(c1, int) and c1 > c0)
+
+
 def watch_for_stall(bbc: Beebium, game: Game, args: argparse.Namespace,
                     executor: ThreadPoolExecutor,
                     frontend_pid: int | None,
@@ -523,14 +539,31 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
                     try:
                         boot_game(bbc, game, disc_filepath)
                     except Exception as exc:  # noqa: BLE001
-                        # A boot/nav failure might itself be a freeze; capture it.
                         _log(f"{game.name}: boot/navigation failed: {exc}")
+                        # A boot/nav failure is usually a flaky screen-navigation
+                        # desync, not a freeze. boot_game leaves the CPU stopped
+                        # (run_until_or_timeout), so resume first, then only
+                        # stop-and-capture if the emulator is genuinely frozen;
+                        # otherwise skip this game and keep soaking.
+                        try:
+                            bbc.debugger.ensure_running()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        if _emulator_advancing(bbc, executor, args.rpc_timeout):
+                            _log(f"{game.name}: emulator still advancing; "
+                                 f"skipping to the next game.")
+                            try:
+                                teardown_game(bbc, game)
+                            except Exception as t_exc:  # noqa: BLE001
+                                _log(f"{game.name}: teardown after skip failed: {t_exc}")
+                            continue
+                        _log(f"{game.name}: emulator not advancing -- treating as a stall.")
                         report = capture_diagnostics(
-                            bbc, executor, game, f"boot/nav failure: {exc}",
+                            bbc, executor, game, f"boot/nav failure (frozen): {exc}",
                             frontend_pid, fps_monitor)
                         _hold(bbc, args.hold_minutes, frontend_pid)
                         return StallReport(game.name, report,
-                                           f"boot/nav failure: {exc}")
+                                           f"boot/nav failure (frozen): {exc}")
 
                     stall = watch_for_stall(bbc, game, args, executor,
                                             frontend_pid, fps_monitor)
