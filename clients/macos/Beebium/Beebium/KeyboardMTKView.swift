@@ -70,6 +70,14 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
             coordinator.begin(
                 atNormalizedPoint: normalizedPoint(for: event),
                 interpretation: Self.selectionInterpretation(for: event.modifierFlags))
+            // The selection now owns the qualifier modifiers, so from here
+            // flagsChanged is swallowed rather than forwarded (see below). A
+            // modifier still held on the BBC -- e.g. a SHIFT pressed before the
+            // Cmd-drag -- would therefore never receive its release and stick.
+            // Release everything now; the user re-presses after the selection
+            // ends, exactly as on focus loss.
+            keyboardClient?.releaseAllKeys()
+            lastModifiers = event.modifierFlags
             return
         }
         if let coordinator = selectionCoordinator, coordinator.isSelecting {
