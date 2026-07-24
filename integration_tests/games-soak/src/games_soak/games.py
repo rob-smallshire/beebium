@@ -148,9 +148,9 @@ GAMES: list[Game] = [
         disc="discs/games/Disc025-Galaforce.ssd",
         # Mode 7 instructions screen; unique opening line of the story text.
         landmark="In the midst of the",
-        # Press SPACE six times at ~1s intervals to advance through the
+        # Press SPACE seven times at ~1s intervals to advance through the
         # instruction pages to the hi-score table and self-play attract mode.
-        attract_keys=(" ", " ", " ", " ", " ", " "),
+        attract_keys=(" ", " ", " ", " ", " ", " ", " "),
         attract_interval_seconds=1.0,
     ),
     Game(
