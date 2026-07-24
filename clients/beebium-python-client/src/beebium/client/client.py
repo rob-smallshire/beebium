@@ -488,6 +488,31 @@ class Beebium:
     # Emulated time helpers
     # =========================================================================
 
+    def boot_disc(self, disc_filepath, *, drive: int = 0,
+                  hold_time: float = 0.02,
+                  shift_hold_after: float = 0.5) -> None:
+        """Insert a disc and auto-boot it, as a user does with Shift-Break.
+
+        Mounts ``disc_filepath`` in ``drive`` then performs a Shift-Break, so
+        DFS runs the disc's ``!BOOT`` file whatever its ``*OPT 4,n`` boot option
+        (``*EXEC``/``*RUN``/``*LOAD``) -- no need to know or type the right
+        command. The emulator is left running.
+
+        Args:
+            disc_filepath: Path to the disc image to boot.
+            drive: Drive number to mount into (default 0).
+            hold_time: How long to hold Break.
+            shift_hold_after: How long to keep Shift held after Break so DFS
+                reads it during the reset routine.
+        """
+        self.disc.drive(drive).insert(disc_filepath)
+        # DFS reads Shift while executing the reset routine, so the CPU must be
+        # running through the break -- not stopped (e.g. after a prior
+        # run_until_or_timeout) -- or the read never happens and !BOOT is skipped.
+        self.debugger.ensure_running()
+        self.keyboard.shift_break(hold_time=hold_time,
+                                  shift_hold_after=shift_hold_after)
+
     def run_for_emulated_seconds(self, seconds: float) -> None:
         """Run the emulator for the specified number of emulated seconds.
 

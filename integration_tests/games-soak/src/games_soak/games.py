@@ -26,10 +26,11 @@ record. Landmark/navigation text is matched against the Mode 7 screen via
 beebium.client.screen.screen_contains, exactly as the source tests do -- every
 game here boots through a Mode 7 menu before switching to its own mode.
 
-All three currently share the same Model B base (MOS 1.20, BASIC 2, Acorn 1770
-DFS 2.26 in slot 14); Tube games add --tube-65c02. Each game relaunches its own
-server, so heterogeneous machine configs (Tube vs not) coexist and the full
-server + frontend lifecycle is exercised every iteration.
+All games share the same Model B base (MOS 1.20, BASIC 2, Acorn 1770 DFS 2.26 in
+slot 14); Tube games add --tube-65c02, so a run covers one group (--tube or not).
+Games auto-boot via Beebium.boot_disc (a Shift-Break), so no per-game boot
+command is needed. Revs, Chuckie Egg and Elite recipes come from the matching
+tests; Galaforce and Galaforce 2 were worked out by hand.
 """
 
 from __future__ import annotations
@@ -53,12 +54,10 @@ class Game:
 
     # --- disc + boot ---
     disc: str = ""              # path relative to the repo root
-    # For Tube games: wait for this banner after reset before booting the disc.
+    # Games auto-boot via Beebium.boot_disc (Shift-Break), so no per-game boot
+    # command is needed. For Tube games, wait for this banner (the second
+    # processor coming up) before auto-booting.
     boot_banner: str | None = None
-    # Typed after reset + mount to boot the disc, e.g. "*EXEC !BOOT\r". (Runtime
-    # keyboard-link autoboot on BREAK does not currently work in the emulator --
-    # tracked separately -- so games boot by typing their !BOOT invocation.)
-    boot_command: str | None = None
 
     # --- navigation to a running/attract state ---
     # Confirms the game booted before navigating; None skips the check.
@@ -108,7 +107,6 @@ GAMES: list[Game] = [
     Game(
         name="Revs",
         disc="discs/games/Disc015-Revs.ssd",
-        boot_command="*EXEC !BOOT\r",
         # The boot sequence itself is the landmark walk; no separate banner.
         nav=_REVS_NAV,
         landmark_timeout_seconds=60.0,
@@ -120,7 +118,6 @@ GAMES: list[Game] = [
         tube_args=("--tube-65c02",),
         disc="tests/assets/discs/chuckieEgg2023.ssd",
         boot_banner="Acorn TUBE",
-        boot_command="*EXEC !BOOT\r",
         landmark="A game of skill",
         # The title screen waits for a keypress; pressing space starts play.
         nav=(("A game of skill", " "),),
@@ -134,7 +131,6 @@ GAMES: list[Game] = [
         tube_args=("--tube-65c02",),
         disc="tests/assets/discs/Disc999-EliteSNG45.ssd",
         boot_banner="Acorn TUBE",
-        boot_command="*RUN !BOOT\r",
         landmark="6502 Second Processor ELITE",
         # The !BOOT loader shows the banner then switches to a graphics mode;
         # confirming the banner and letting it run is enough for the soak. Elite
@@ -147,7 +143,6 @@ GAMES: list[Game] = [
     Game(
         name="Galaforce",
         disc="discs/games/Disc025-Galaforce.ssd",
-        boot_command="*EXEC !BOOT\r",
         # Mode 7 instructions screen; unique opening line of the story text.
         landmark="In the midst of the",
         # Press SPACE six times at ~1s intervals to advance through the
@@ -159,7 +154,6 @@ GAMES: list[Game] = [
     Game(
         name="Galaforce 2",
         disc="discs/games/Disc039-Galaforce2PIAS6.ssd",
-        boot_command="*EXEC !BOOT\r",
         # Mode 7 instructions screen; unique opening line of the story text.
         landmark="Everything that Galaforce was",
         # Press SPACE four times at ~1s intervals to reach hi-scores/attract.

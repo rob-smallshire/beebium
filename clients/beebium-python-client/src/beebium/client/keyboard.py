@@ -730,6 +730,33 @@ class Keyboard:
         self.ctrl_up()
         return down_ok and up_ok
 
+    def shift_break(self, hold_time: float = 0.02,
+                    shift_hold_after: float = 0.5) -> bool:
+        """Press Shift-Break to auto-boot the disc's !BOOT file.
+
+        DFS reads the Shift key during its reset service, a little way into the
+        reset routine, to decide whether to run !BOOT. Shift must therefore
+        stay held for a short while AFTER Break is released, not just during it
+        -- releasing it immediately (as a naive down/up would) misses the read
+        and no auto-boot happens. shift_hold_after keeps Shift down past that
+        read; the default is comfortably longer than DFS needs.
+
+        Args:
+            hold_time: How long to hold Break (seconds).
+            shift_hold_after: How long to keep Shift held after releasing Break.
+
+        Returns:
+            True if the Break down/up operations succeeded.
+        """
+        self.shift_down()
+        time.sleep(0.01)  # Brief delay to ensure Shift is registered
+        down_ok = self.break_down()
+        time.sleep(hold_time)
+        up_ok = self.break_up()
+        time.sleep(shift_hold_after)  # DFS reads Shift during the reset routine
+        self.shift_up()
+        return down_ok and up_ok
+
     # =========================================================================
     # Keyboard links (DIP switches)
     # =========================================================================

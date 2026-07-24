@@ -326,22 +326,17 @@ def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
 # ----------------------------------------------------------------------------
 
 def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
-    """Reset, mount the disc, boot, and navigate to a running/attract state."""
-    # Reset, wait for the command prompt, then boot the disc by typing its boot
-    # command. (Runtime keyboard-link autoboot on BREAK does not take effect in
-    # the emulator -- only --auto-boot at cold launch does -- so a typed
-    # *EXEC/*RUN !BOOT is the reliable path, matching the Chuckie/Elite tests.)
-    # Waiting for the prompt matters: keystrokes typed during the reset sequence
-    # are lost.
-    bbc.keyboard.ctrl_break()
-    prompt = game.boot_banner or ">"
-    if not _wait_for_text(bbc, prompt, timeout=30.0, chunk=0.5):
-        raise RuntimeError(
-            f"{game.name}: prompt {prompt!r} never appeared after reset:\n"
-            f"{dump_screen(bbc)}")
-    bbc.disc.drive(0).insert(disc_filepath)
-    if game.boot_command:
-        bbc.keyboard.type(game.boot_command)
+    """Mount the disc, auto-boot it, and navigate to a running/attract state."""
+    # Tube games: let the cold-boot banner settle before auto-booting the disc,
+    # so the second processor is up when DFS runs !BOOT.
+    if game.boot_banner:
+        if not _wait_for_text(bbc, game.boot_banner, timeout=30.0, chunk=1.0):
+            raise RuntimeError(
+                f"{game.name}: boot banner {game.boot_banner!r} never "
+                f"appeared:\n{dump_screen(bbc)}")
+    # Auto-boot exactly as a user does with Shift-Break; *OPT-agnostic, so it
+    # works whether the disc's !BOOT is *EXEC, *RUN or *LOAD.
+    bbc.boot_disc(disc_filepath)
 
     if game.landmark:
         if not _wait_for_text(bbc, game.landmark,
