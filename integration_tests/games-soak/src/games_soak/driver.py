@@ -142,10 +142,11 @@ def attach_frontend(app_filepath: Path, target: str) -> int | None:
     """
     port = _port_of(target)
     url = f"beebium://connect?host=127.0.0.1&port={port}"
-    # Register the bundle so LaunchServices routes beebium:// to this build.
+    # Register the bundle so LaunchServices routes beebium:// to this build,
+    # then open the URL -- which also launches the app if needed. (Opening the
+    # app separately as well is redundant and leaves a stray Welcome window.)
     subprocess.run([LSREGISTER, "-f", str(app_filepath)],
                    capture_output=True, check=False)
-    subprocess.run(["open", str(app_filepath)], capture_output=True, check=False)
     subprocess.run(["open", url], capture_output=True, check=False)
     _log(f"Asked the frontend to attach: {url}")
     # Give the window a moment to appear, then find the process.
