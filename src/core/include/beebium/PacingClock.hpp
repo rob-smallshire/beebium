@@ -227,19 +227,30 @@ public:
         return paused_;
     }
 
-    /// Re-anchor the pacing baseline to the current cycle count and wall clock,
+    /// Re-anchor the pacing baseline to the given cycle count and wall clock,
     /// discarding any accumulated deficit. Use after emulation (or wall time)
     /// advanced without the pacing clock -- e.g. a debugger reset or a
     /// run_until step sequence -- so it does not run fast to "catch up". Unlike
     /// resume(), this does NOT touch the pause state or notify pause_cv_, so it
     /// is safe to call from the emulation thread without disturbing the timer
     /// thread or the debugger's pause handling.
-    void rebase() {
+    ///
+    /// The caller passes the machine's current cycle count rather than letting
+    /// this read the last reported total: a hard reset zeroes the machine's
+    /// counter, so the last report_cycles() value is stale and larger than the
+    /// count the loop will report next. Anchoring the baseline to the stale
+    /// value would make the next `total_cycles_ - baseline_cycles_` underflow to
+    /// a huge unsigned number -- the controller then reads the machine as
+    /// wildly ahead and paces it down to one cycle per tick (a ~kHz crawl).
+    /// Both the baseline and the reported total are set here so the difference
+    /// is zero until the emulation reports fresh progress.
+    void rebase(uint64_t current_cycles) {
         std::lock_guard lock(mutex_);
         start_time_ = Clock::now();
         last_pace_wall_ = start_time_;
         effective_elapsed_ns_ = 0.0;
-        baseline_cycles_ = total_cycles_.load(std::memory_order_relaxed);
+        total_cycles_.store(current_cycles, std::memory_order_relaxed);
+        baseline_cycles_ = current_cycles;
         last_speed_ = speed_multiplier_.load(std::memory_order_relaxed);
         controller_.reset();
     }

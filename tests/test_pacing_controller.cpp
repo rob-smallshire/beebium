@@ -22,9 +22,11 @@
 #include <beebium/PacingClock.hpp>
 #include <beebium/PacingController.hpp>
 
+#include <chrono>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 using namespace beebium;
@@ -227,4 +229,34 @@ TEST_CASE("PacingController catch-up clamp scales with speed", "[pacing]") {
     SECTION("default speed is 1x") {
         REQUIRE(ctrl.update(1'000'000'000, 0) == 3000);
     }
+}
+
+// A hard reset (debugger.reset) zeroes the machine's cycle counter while the
+// pacing clock still holds the pre-reset total from its last report_cycles.
+// rebase() must re-anchor the baseline to the machine's actual (post-reset)
+// count: anchoring it to the stale, larger total makes the next
+// total_cycles - baseline_cycles underflow, the controller reads the machine
+// as wildly ahead, and it paces down to one cycle per tick -- a ~kHz crawl that
+// leaves a reset machine unable to boot. rebase(current) takes the real count.
+TEST_CASE("PacingClock rebase after a reset does not crawl", "[pacing]") {
+    PacingConfig config{2'000'000, 500, 1.0};  // 2 MHz, real-time
+    PacingClock clock(config, std::chrono::microseconds(500), PlatformSleep{});
+
+    // A long session has elapsed: the clock last saw a large cycle total.
+    clock.report_cycles(600'000'000);
+
+    // A hard reset zeroes the machine's counter; rebase is handed that count.
+    clock.rebase(10);
+
+    // Wall time passes while the reset machine has barely advanced (behind
+    // real time), so the controller should ask for a healthy catch-up.
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    clock.report_cycles(110);
+
+    uint64_t next = clock.cycles_for_next_tick();
+
+    // With the stale baseline the difference underflows and the controller
+    // returns its floor of 1; the fix yields the real deficit, clamped to the
+    // controller's ceiling (nominal 1000 * 3 = 3000 at 1x).
+    REQUIRE(next >= 1000);
 }

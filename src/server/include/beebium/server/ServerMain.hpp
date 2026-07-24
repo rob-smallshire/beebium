@@ -1495,10 +1495,12 @@ void run_emulation_loop(MachineType& machine,
         // wall time spent paused (a debugger reset, a run_until_or_timeout step
         // sequence, etc.) must not be charged to the pacing clock as owed
         // emulation -- otherwise it runs fast to "catch up" after every debug
-        // operation. Re-anchor the pacing clock on resume so the deficit is
-        // measured from now.
+        // operation. Re-anchor the pacing clock to the machine's current cycle
+        // count on resume: a hard reset zeroes that counter, so the baseline
+        // must follow it or the deficit accounting underflows and paces the
+        // machine down to a crawl.
         if (machine.wait_if_paused() && use_pacing) {
-            pacing_clock.rebase();
+            pacing_clock.rebase(machine.cycle_count());
         }
 
         // Check if shutdown was requested during wait
