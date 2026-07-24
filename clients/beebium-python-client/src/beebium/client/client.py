@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -35,6 +36,7 @@ from beebium.client.econet_transport import EconetTransport
 from beebium.client.exceptions import (
     BeebiumError,
     ProtocolMismatchError,
+    ScreenExpectTimeout,
 )
 from beebium.client.exceptions import (
     ConnectionError as BeebiumConnectionError,
@@ -512,6 +514,47 @@ class Beebium:
         self.debugger.ensure_running()
         self.keyboard.shift_break(hold_time=hold_time,
                                   shift_hold_after=shift_hold_after)
+
+    def expect(self, *texts: str, timeout: float = 30.0,
+               poll: float = 0.5) -> str:
+        """Wait until one of `texts` appears in the on-screen text, in any
+        display mode, and return the text that matched.
+
+        pexpect-style screen automation: the machine keeps running in real time
+        while this polls the recognised screen text -- GetScreenText reads MODEs
+        0-7 by glyph recognition, so it works whether the program is in Mode 7
+        or a graphics mode with legible text. Use it to wait for a prompt before
+        sending keys, instead of blind-timing key presses (games take a while to
+        load before they respond to the first keypress).
+
+        The machine must be running (call ``debugger.ensure_running`` first if
+        it was left stopped, e.g. by ``run_until_or_timeout``).
+
+        Args:
+            texts: One or more substrings to wait for; the first found wins.
+            timeout: Wall-clock seconds to wait before giving up.
+            poll: Seconds between screen reads.
+
+        Returns:
+            The matched substring.
+
+        Raises:
+            ScreenExpectTimeout: if none of `texts` appears within `timeout`.
+        """
+        if not texts:
+            raise ValueError("expect requires at least one text to wait for")
+        deadline = time.monotonic() + timeout
+        screen = ""
+        while True:
+            screen = self.video.screen_text().text
+            for text in texts:
+                if text in screen:
+                    return text
+            if time.monotonic() >= deadline:
+                raise ScreenExpectTimeout(
+                    f"expect timed out after {timeout:g}s waiting for "
+                    f"{list(texts)!r}. Last screen:\n{screen}")
+            time.sleep(poll)
 
     def run_for_emulated_seconds(self, seconds: float) -> None:
         """Run the emulator for the specified number of emulated seconds.

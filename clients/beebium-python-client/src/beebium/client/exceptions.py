@@ -72,6 +72,12 @@ class TimeoutError(BeebiumError):
     pass
 
 
+class ScreenExpectTimeout(TimeoutError):
+    """Expected screen text did not appear within the timeout (see Beebium.expect)."""
+
+    pass
+
+
 class DiscError(BeebiumError):
     """A disc operation failed."""
 
