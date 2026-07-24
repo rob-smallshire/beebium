@@ -45,8 +45,10 @@ pass --tube for the Tube games (Elite, Chuckie Egg), omit it for the rest.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
@@ -158,6 +160,75 @@ def _frontend_pid() -> int | None:
     return pids[0] if pids else None
 
 
+_FPS_PREDICATE = ('subsystem == "com.beebium.Beebium" AND '
+                  'category == "framerate" AND processIdentifier == {pid}')
+_FPS_RE = re.compile(r"received_fps=([0-9.]+)")
+
+
+class FrameRateMonitor:
+    """Tail the frontend's received-frame-rate log (VideoClient framerateLog).
+
+    The frontend emits `received_fps=<n>` once a second; this reads them off the
+    unified log for a specific process so the soak can detect a frontend-only
+    freeze: cycle_count still advancing while received fps has been zero (or
+    silent) for a while.
+    """
+
+    def __init__(self, pid: int) -> None:
+        self._pid = pid
+        self._proc: subprocess.Popen | None = None
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._last_fps: float | None = None
+        self._seen_frames = False
+        # Wall-clock of the last window that reported a non-zero rate. Frames
+        # silent (no log line at all) also count as "not moving" via this clock.
+        self._last_nonzero_wall = time.monotonic()
+
+    def start(self) -> None:
+        predicate = _FPS_PREDICATE.format(pid=self._pid)
+        self._proc = subprocess.Popen(
+            ["log", "stream", "--style", "ndjson", "--predicate", predicate],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        self._thread = threading.Thread(target=self._read, daemon=True)
+        self._thread.start()
+
+    def _read(self) -> None:
+        assert self._proc is not None and self._proc.stdout is not None
+        for line in self._proc.stdout:
+            match = _FPS_RE.search(line)
+            if not match:
+                continue
+            fps = float(match.group(1))
+            with self._lock:
+                self._last_fps = fps
+                self._seen_frames = True
+                if fps > 0.0:
+                    self._last_nonzero_wall = time.monotonic()
+
+    def note_frames_flowing(self) -> None:
+        """Reset the silence clock, e.g. after navigation, so the play phase
+        starts from a clean baseline rather than counting boot-time silence."""
+        with self._lock:
+            self._last_nonzero_wall = time.monotonic()
+
+    def seen_frames(self) -> bool:
+        with self._lock:
+            return self._seen_frames
+
+    def last_fps(self) -> float | None:
+        with self._lock:
+            return self._last_fps
+
+    def silent_for(self) -> float:
+        with self._lock:
+            return time.monotonic() - self._last_nonzero_wall
+
+    def stop(self) -> None:
+        if self._proc is not None:
+            self._proc.terminate()
+
+
 # ----------------------------------------------------------------------------
 # Diagnostics capture
 # ----------------------------------------------------------------------------
@@ -198,7 +269,8 @@ def _sample_process(label: str, pid: int) -> list[str]:
 
 def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
                         game: Game, reason: str,
-                        frontend_pid: int | None) -> Path:
+                        frontend_pid: int | None,
+                        fps_monitor: FrameRateMonitor | None = None) -> Path:
     REPORTS_DIRPATH.mkdir(exist_ok=True)
     report_filepath = REPORTS_DIRPATH / f"stall-{game.name.replace(' ', '_')}-{_now_iso()}.txt"
     server_pid = _server_pid(bbc)
@@ -211,8 +283,11 @@ def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
         f"server pid: {server_pid}",
         f"frontend pid: {frontend_pid}",
         f"target: {bbc.target}",
-        "",
     ]
+    if fps_monitor is not None:
+        lines.append(f"frontend last received_fps: {fps_monitor.last_fps()} "
+                     f"(silent for {fps_monitor.silent_for():.0f}s)")
+    lines.append("")
 
     # gRPC liveness while the emulation is (maybe) frozen: does the service
     # layer still answer? Sample cpu registers twice -- if the emulation thread
@@ -235,6 +310,11 @@ def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
         # frontend that is also blocked from one that is merely showing a
         # stalled server's last frame.
         lines += _sample_process("frontend", frontend_pid)
+        lines.append("=== frontend received_fps history (last 90s) ===")
+        lines.append(_run(
+            ["log", "show", "--last", "90s", "--style", "compact",
+             "--predicate", _FPS_PREDICATE.format(pid=frontend_pid)], 20))
+        lines.append("")
 
     report_filepath.write_text("\n".join(lines))
     _log(f"Diagnostics written to {report_filepath}")
@@ -247,25 +327,21 @@ def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
 
 def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
     """Reset, mount the disc, boot, and navigate to a running/attract state."""
-    if game.autoboot:
-        # SHIFT-BREAK equivalent: DFS runs !BOOT on reset. Enabling the link and
-        # pressing BREAK reboots into the freshly inserted disc's boot file,
-        # whatever *OPT 4,n it uses -- more robust than guessing *EXEC vs *RUN.
-        bbc.keyboard.set_startup_auto_boot(True)
-        bbc.disc.drive(0).insert(disc_filepath)
-        bbc.keyboard.press_break()
-    else:
-        bbc.keyboard.set_startup_auto_boot(False)
-        bbc.keyboard.ctrl_break()  # clean hard reset
-        if game.boot_banner:
-            if not _wait_for_text(bbc, game.boot_banner,
-                                  timeout=30.0, chunk=1.0):
-                raise RuntimeError(
-                    f"{game.name}: boot banner {game.boot_banner!r} never "
-                    f"appeared:\n{dump_screen(bbc)}")
-        bbc.disc.drive(0).insert(disc_filepath)
-        if game.boot_command:
-            bbc.keyboard.type(game.boot_command)
+    # Reset, wait for the command prompt, then boot the disc by typing its boot
+    # command. (Runtime keyboard-link autoboot on BREAK does not take effect in
+    # the emulator -- only --auto-boot at cold launch does -- so a typed
+    # *EXEC/*RUN !BOOT is the reliable path, matching the Chuckie/Elite tests.)
+    # Waiting for the prompt matters: keystrokes typed during the reset sequence
+    # are lost.
+    bbc.keyboard.ctrl_break()
+    prompt = game.boot_banner or ">"
+    if not _wait_for_text(bbc, prompt, timeout=30.0, chunk=0.5):
+        raise RuntimeError(
+            f"{game.name}: prompt {prompt!r} never appeared after reset:\n"
+            f"{dump_screen(bbc)}")
+    bbc.disc.drive(0).insert(disc_filepath)
+    if game.boot_command:
+        bbc.keyboard.type(game.boot_command)
 
     if game.landmark:
         if not _wait_for_text(bbc, game.landmark,
@@ -288,6 +364,12 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
     # the frontend renders and real-time-dependent bugs can manifest.
     bbc.debugger.ensure_running()
 
+    # Drive an attract/demo mode with timed real-time keypresses (e.g. Galaforce
+    # advances instruction pages on a timer, not at a distinct landmark).
+    for key in game.attract_keys:
+        bbc.keyboard.type(key)
+        time.sleep(game.attract_interval_seconds)
+
 
 def teardown_game(bbc: Beebium, game: Game) -> None:
     """Break out of the game and eject its disc, ready for the next."""
@@ -307,11 +389,15 @@ class StallReport:
 
 def watch_for_stall(bbc: Beebium, game: Game, args: argparse.Namespace,
                     executor: ThreadPoolExecutor,
-                    frontend_pid: int | None) -> StallReport | None:
-    """Run `game` in real time for run_minutes, watching cycle_count.
+                    frontend_pid: int | None,
+                    fps_monitor: FrameRateMonitor | None = None) -> StallReport | None:
+    """Run `game` in real time for run_minutes, watching cycle_count (and, if a
+    frontend is attached, its received frame rate).
 
     Returns a StallReport if a freeze is caught, else None (the game ran clean).
     """
+    if fps_monitor is not None:
+        fps_monitor.note_frames_flowing()
     start_wall = time.monotonic()
     start_cycles = bbc.debugger.cycle_count
     last_cycles = start_cycles
@@ -339,19 +425,37 @@ def watch_for_stall(bbc: Beebium, game: Game, args: argparse.Namespace,
             _log(f"cycle_count read failed (transient?): {value}")
 
         stalled_for = now - last_progress_wall
+        fps_silent_for = fps_monitor.silent_for() if fps_monitor else None
         if now - last_report_wall >= args.report_seconds:
             rate = (cycles - start_cycles) / max(now - start_wall, 1e-9)
+            fps_note = (f" fps={fps_monitor.last_fps()}" if fps_monitor else "")
             _log(f"[{game.name}] wall={now - start_wall:6.0f}s "
                  f"cycles={cycles:>14d} rate={rate/1e6:5.2f}MHz "
-                 f"stalled={stalled_for:4.0f}s")
+                 f"stalled={stalled_for:4.0f}s{fps_note}")
             last_report_wall = now
 
+        # Mode B: the core itself stopped advancing.
         if stalled_for >= args.stall_seconds:
             signature = ("cycle_count frozen (gRPC responsive)" if last_read_ok
                          else "cycle_count unobservable (gRPC not answering)")
-            reason = f"{signature} at {cycles} for {stalled_for:.0f}s"
+            reason = f"Mode B: {signature} at {cycles} for {stalled_for:.0f}s"
             _log(f"STALL in {game.name}: {reason}")
-            report = capture_diagnostics(bbc, executor, game, reason, frontend_pid)
+            report = capture_diagnostics(bbc, executor, game, reason,
+                                         frontend_pid, fps_monitor)
+            return StallReport(game.name, report, reason)
+
+        # Mode A: the core keeps advancing but the frontend stopped rendering.
+        # Only meaningful once frames have been seen and the core is NOT itself
+        # stalled (else it is just Mode B seen from the frontend).
+        if (fps_monitor is not None and fps_monitor.seen_frames()
+                and stalled_for < args.stall_seconds
+                and fps_silent_for is not None
+                and fps_silent_for >= args.stall_seconds):
+            reason = (f"Mode A: frontend received_fps 0 for {fps_silent_for:.0f}s "
+                      f"while cycle_count advancing (at {cycles})")
+            _log(f"STALL in {game.name}: {reason}")
+            report = capture_diagnostics(bbc, executor, game, reason,
+                                         frontend_pid, fps_monitor)
             return StallReport(game.name, report, reason)
 
         if now >= deadline:
@@ -376,6 +480,7 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
         extra_args.append("--advertise")
 
     frontend_pid: int | None = None
+    fps_monitor: FrameRateMonitor | None = None
 
     with ThreadPoolExecutor(max_workers=1) as executor, Beebium.launch(
         mos_filepath=args.roms / MOS_ROM,
@@ -392,6 +497,10 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
         if args.macos_app:
             frontend_pid = attach_frontend(args.macos_app, bbc.target)
             _log(f"Frontend pid: {frontend_pid}")
+            if frontend_pid is not None:
+                fps_monitor = FrameRateMonitor(frontend_pid)
+                fps_monitor.start()
+                _log("Watching frontend received_fps for Mode A freezes.")
         else:
             _log("No --macos-app given; running headless (Mode A freezes will "
                  "not be observed).")
@@ -402,36 +511,42 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
         if run_forever:
             _log("Cycling games indefinitely; Ctrl-C or kill to stop.")
 
-        loop = 0
-        while True:
-            loop += 1
-            for game in games:
-                disc_filepath = REPO / game.disc
-                if not disc_filepath.exists():
-                    _log(f"SKIP {game.name}: disc not found at {disc_filepath}")
-                    continue
-                _log(f"--- loop {loop}: {game.name} ---")
-                try:
-                    boot_game(bbc, game, disc_filepath)
-                except Exception as exc:  # noqa: BLE001
-                    # A boot/nav failure might itself be a freeze; capture it.
-                    _log(f"{game.name}: boot/navigation failed: {exc}")
-                    report = capture_diagnostics(
-                        bbc, executor, game, f"boot/nav failure: {exc}",
-                        frontend_pid)
-                    _hold(bbc, args.hold_minutes, frontend_pid)
-                    return StallReport(game.name, report, f"boot/nav failure: {exc}")
+        try:
+            loop = 0
+            while True:
+                loop += 1
+                for game in games:
+                    disc_filepath = REPO / game.disc
+                    if not disc_filepath.exists():
+                        _log(f"SKIP {game.name}: disc not found at {disc_filepath}")
+                        continue
+                    _log(f"--- loop {loop}: {game.name} ---")
+                    try:
+                        boot_game(bbc, game, disc_filepath)
+                    except Exception as exc:  # noqa: BLE001
+                        # A boot/nav failure might itself be a freeze; capture it.
+                        _log(f"{game.name}: boot/navigation failed: {exc}")
+                        report = capture_diagnostics(
+                            bbc, executor, game, f"boot/nav failure: {exc}",
+                            frontend_pid, fps_monitor)
+                        _hold(bbc, args.hold_minutes, frontend_pid)
+                        return StallReport(game.name, report,
+                                           f"boot/nav failure: {exc}")
 
-                stall = watch_for_stall(bbc, game, args, executor, frontend_pid)
-                if stall is not None:
-                    _hold(bbc, args.hold_minutes, frontend_pid)
-                    return stall
+                    stall = watch_for_stall(bbc, game, args, executor,
+                                            frontend_pid, fps_monitor)
+                    if stall is not None:
+                        _hold(bbc, args.hold_minutes, frontend_pid)
+                        return stall
 
-                teardown_game(bbc, game)
+                    teardown_game(bbc, game)
 
-                if not run_forever and time.monotonic() >= deadline:
-                    _log(f"No stall within {args.max_minutes} min; giving up.")
-                    return None
+                    if not run_forever and time.monotonic() >= deadline:
+                        _log(f"No stall within {args.max_minutes} min; giving up.")
+                        return None
+        finally:
+            if fps_monitor is not None:
+                fps_monitor.stop()
 
 
 def _hold(bbc: Beebium, hold_minutes: float, frontend_pid: int | None) -> None:

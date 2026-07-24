@@ -14,6 +14,13 @@ import Foundation
 import GRPC
 import NIO
 import SwiftProtobuf
+import os
+
+/// Received-frame-rate probe, read back by the soak harness via `log stream`
+/// to detect a frontend-only freeze (frames stop arriving while the server's
+/// cycle counter keeps advancing). Emitted at .notice so it persists to the
+/// log store; numbers are marked public so they are not redacted.
+private let framerateLog = Logger(subsystem: "com.beebium.Beebium", category: "framerate")
 
 /// Connection state for the video client
 enum ConnectionState: Equatable {
@@ -50,6 +57,11 @@ final class VideoClient: ObservableObject, Disconnectable {
 
     /// Frame counter for debugging
     private(set) var frameCount: UInt64 = 0
+
+    /// Received-frame-rate accounting (see framerateLog). Logged once per
+    /// window of ~1s; not @Published -- it must never invalidate the view tree.
+    private var fpsWindowStartTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
+    private var framesThisWindow: Int = 0
 
     /// A single event loop group shared by every VideoClient and reused across
     /// reconnects. It is intentionally created once and never shut down.
@@ -357,8 +369,27 @@ final class VideoClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// Count arriving frames and, about once a second, log the received frame
+    /// rate. A soak driver watching this alongside the server's cycle_count can
+    /// tell a frontend-only freeze (rate -> 0 while cycles advance) from a core
+    /// stall (both stop). Accumulate-and-log with no timer; runs on the main
+    /// actor with handleFrame, so no synchronisation is needed.
+    private func recordFrameRate(_ frameNumber: UInt64) {
+        framesThisWindow += 1
+        let now = CFAbsoluteTimeGetCurrent()
+        let elapsed = now - fpsWindowStartTime
+        if elapsed >= 1.0 {
+            let fps = String(format: "%.1f", Double(framesThisWindow) / elapsed)
+            framerateLog.notice(
+                "received_fps=\(fps, privacy: .public) frame=\(frameNumber, privacy: .public)")
+            framesThisWindow = 0
+            fpsWindowStartTime = now
+        }
+    }
+
     private func handleFrame(_ frame: Beebium_Frame) {
         frameCount = frame.frameNumber
+        recordFrameRate(frame.frameNumber)
         frameWidth = Int(frame.width)
         frameHeight = Int(frame.height)
         displayWidth = Int(frame.displayWidth)
