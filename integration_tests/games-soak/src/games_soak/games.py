@@ -23,8 +23,10 @@ Keep them in step with those tests; if a boot sequence changes there, mirror it
 here. New games are added by working out a boot recipe (booting by hand,
 reading landmarks off the screen with the screen helpers) and appending a Game
 record. Landmark/navigation text is matched against the Mode 7 screen via
-beebium.client.screen.screen_contains, exactly as the source tests do -- every
-game here boots through a Mode 7 menu before switching to its own mode.
+beebium.client.screen.screen_contains, exactly as the source tests do. Most
+games show a Mode 7 title/menu to wait on; a few (e.g. Meteors) come up
+straight in a graphics mode with no text, and use attract_delay_seconds to
+settle before the timed key presses instead.
 
 All games share the same Model B base (MOS 1.20, BASIC 2, Acorn 1770 DFS 2.26 in
 slot 14); Tube games add --tube-65c02, so a run covers one group (--tube or not).
@@ -78,8 +80,9 @@ class Game:
     # title has no Mode 7 landmark finish loading before we start pressing keys.
     attract_delay_seconds: float = 0.0
 
-    # How long to let the game run in real time while watching for a freeze.
-    run_minutes: float = 3.0
+    # How long to let the game run (in its attract/demo mode or gameplay) in
+    # real time while watching for a freeze, before moving to the next game.
+    run_minutes: float = 5.0
 
 
 # Revs navigation: verbatim from tests/test_revs_timing.py REVS_BOOT_SEQUENCE.
@@ -114,7 +117,6 @@ GAMES: list[Game] = [
         nav=_REVS_NAV,
         landmark_timeout_seconds=60.0,
         landmark_chunk_seconds=0.5,
-        run_minutes=3.0,
     ),
     Game(
         name="Chuckie Egg 2023",
@@ -127,7 +129,6 @@ GAMES: list[Game] = [
         # The game takes a long time to load through the Tube.
         landmark_timeout_seconds=300.0,
         landmark_chunk_seconds=5.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Elite",
@@ -141,7 +142,6 @@ GAMES: list[Game] = [
         nav=(),
         landmark_timeout_seconds=60.0,
         landmark_chunk_seconds=1.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Galaforce",
@@ -152,7 +152,6 @@ GAMES: list[Game] = [
         # instruction pages to the hi-score table and self-play attract mode.
         attract_keys=(" ", " ", " ", " ", " ", " "),
         attract_interval_seconds=1.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Galaforce 2",
@@ -162,7 +161,6 @@ GAMES: list[Game] = [
         # Press SPACE four times at ~1s intervals to reach hi-scores/attract.
         attract_keys=(" ", " ", " ", " "),
         attract_interval_seconds=1.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Meteors",
@@ -171,7 +169,6 @@ GAMES: list[Game] = [
         attract_delay_seconds=5.0,
         attract_keys=(" ", " ", " "),
         attract_interval_seconds=1.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Zalaga",
@@ -180,7 +177,6 @@ GAMES: list[Game] = [
         # Return x5 at ~1s intervals, then K, to reach the game.
         attract_keys=("\r", "\r", "\r", "\r", "\r", "K"),
         attract_interval_seconds=1.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Battlezone",
@@ -189,7 +185,6 @@ GAMES: list[Game] = [
         # SPACE x7 at ~1s intervals to reach attract mode.
         attract_keys=(" ", " ", " ", " ", " ", " ", " "),
         attract_interval_seconds=1.0,
-        run_minutes=3.0,
     ),
     Game(
         name="Cylon Attack",
@@ -201,7 +196,6 @@ GAMES: list[Game] = [
         # N, wait ~5s, N again -> attract mode.
         attract_keys=("N", "N"),
         attract_interval_seconds=5.0,
-        run_minutes=3.0,
     ),
     # Other games with attract/demo modes worth adding (recipes TBD): Thrust
     # (discs/games/Disc024-Thrust.ssd) and Arcadians.
