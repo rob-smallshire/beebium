@@ -63,7 +63,12 @@ from games_soak.games import GAMES, Game
 
 REPO = Path(__file__).resolve().parents[4]
 DEFAULT_ROMS = REPO / "roms"
-DEFAULT_SERVER = REPO / "build" / "src" / "server" / "beebium-model-b"
+# A Model B with a ROM/RAM board, not a plain Model B: some games (e.g.
+# Battlezone) load into sideways RAM and abort with "Sideways RAM bank not
+# found" on a machine that has none. The board's sixteen slots each support
+# ROM/RAM/empty independently, so DFS (14) and BASIC (15) stay ROM while a few
+# free slots are RAM.
+DEFAULT_SERVER = REPO / "build" / "src" / "server" / "beebium-model-b-romram"
 REPORTS_DIRPATH = Path(__file__).resolve().parents[2] / "reports"
 
 # Base machine, shared by every game in the table (see games.py).
@@ -72,6 +77,8 @@ BASIC_ROM = "bbc-basic_2.rom"
 DFS_ROM = "acorn-dfs_2_26.rom"
 DFS_SLOT = 14
 FDC = "acorn-1770"
+# Free slots configured as sideways RAM (DFS is 14, BASIC 15).
+SIDEWAYS_RAM_SLOTS = (4, 5, 6, 7)
 
 LSREGISTER = (
     "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/"
@@ -548,6 +555,8 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
     _log(f"Games this run: {', '.join(g.name for g in games)}")
 
     extra_args = ["--fdc", FDC, "--sideways", f"{DFS_SLOT}:rom:{args.roms / DFS_ROM}"]
+    for slot in SIDEWAYS_RAM_SLOTS:
+        extra_args += ["--sideways", f"{slot}:ram"]
     if args.tube:
         extra_args = ["--tube-65c02", *extra_args]
     if args.advertise:
