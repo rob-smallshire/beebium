@@ -25,8 +25,10 @@ so these run with --tube-65c02.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -138,3 +140,148 @@ def test_naive_shift_break_without_hold_does_not_autoboot(
         emulated_seconds=20.0,
     )
     assert not booted, "expected no auto-boot when Shift is released too early"
+
+
+# ---------------------------------------------------------------------------
+# The auto-boot keyboard link (--auto-boot / set_startup_auto_boot).
+#
+# The link REVERSES the SHIFT-BREAK action: with it set, a plain BREAK boots the
+# disc and holding SHIFT across BREAK suppresses the boot -- the inverse of the
+# default (no link) behaviour that the tests above exercise.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def tube_launch(
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+    dfs_1770_rom_filepath: Path,
+):
+    """Factory to launch a Tube machine with extra CLI args, skipping if the
+    server is not found. Yields a context manager producing a Beebium."""
+    base = [
+        "--tube-65c02", "--fdc", "acorn-1770",
+        "--sideways", f"14:rom:{dfs_1770_rom_filepath}",
+    ]
+
+    @contextlib.contextmanager
+    def _launch(extra: list[str] | None = None):
+        try:
+            with Beebium.launch(
+                mos_filepath=mos_filepath,
+                basic_filepath=basic_filepath,
+                server_filepath=beebium_server_filepath,
+                extra_args=base + list(extra or []),
+                startup_timeout=20.0,
+            ) as bbc:
+                yield bbc
+        except ServerNotFoundError as e:
+            pytest.skip(str(e))
+
+    return _launch
+
+
+@_skip_windows_ci
+def test_auto_boot_link_boots_at_power_on(tube_launch, elite_disc_filepath: Path) -> None:
+    """With the auto-boot link set (--auto-boot), the disc boots at power-on."""
+    with tube_launch(["--auto-boot", "--floppy", f"0:{elite_disc_filepath}"]) as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        booted = run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=60.0)
+        if not booted:
+            dump_diagnostics(bbc)
+        assert booted, "auto-boot link did not boot the disc at power-on"
+
+
+@_skip_windows_ci
+def test_auto_boot_link_makes_plain_break_boot(
+    tube_launch, elite_disc_filepath: Path
+) -> None:
+    """With the auto-boot link set, a plain BREAK boots the disc (no Shift)."""
+    with tube_launch(["--auto-boot"]) as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        assert run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
+        bbc.disc.drive(0).insert(elite_disc_filepath)
+        bbc.debugger.ensure_running()
+        bbc.keyboard.press_break()  # plain BREAK, no Shift
+        time.sleep(0.5)
+        booted = run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=60.0)
+        if not booted:
+            dump_diagnostics(bbc)
+        assert booted, "plain BREAK did not boot with the auto-boot link set"
+
+
+@_skip_windows_ci
+def test_auto_boot_link_reverses_shift_break(
+    tube_launch, elite_disc_filepath: Path
+) -> None:
+    """With the auto-boot link set, holding Shift across BREAK SUPPRESSES boot."""
+    with tube_launch(["--auto-boot"]) as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        assert run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
+        bbc.disc.drive(0).insert(elite_disc_filepath)
+        bbc.debugger.ensure_running()
+        # boot_disc holds Shift across the break; with the link set that inverts
+        # to "do not boot".
+        bbc.keyboard.shift_break()
+        booted = run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=25.0)
+        assert not booted, "Shift-Break should suppress boot when the link is set"
+
+
+@_skip_windows_ci
+def test_runtime_auto_boot_link_honored_by_hard_reset(
+    tube_launch, elite_disc_filepath: Path
+) -> None:
+    """set_startup_auto_boot at runtime round-trips and is honoured by a hard
+    reset (debugger.reset(), a power-on-equivalent that re-reads the links)."""
+    with tube_launch([]) as bbc:
+        bbc.disc.set_spin_up_delay(False)
+        assert run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
+        bbc.disc.drive(0).insert(elite_disc_filepath)
+
+        assert bbc.keyboard.get_startup_auto_boot() is False
+        bbc.keyboard.set_startup_auto_boot(True)
+        assert bbc.keyboard.get_startup_auto_boot() is True
+
+        bbc.debugger.reset()          # hard reset: re-reads the links
+        bbc.debugger.ensure_running()
+        booted = run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=60.0)
+        if not booted:
+            dump_diagnostics(bbc)
+        assert booted, "runtime auto-boot link not honoured by a hard reset"
+
+
+@_skip_windows_ci
+def test_runtime_link_change_not_seen_by_soft_break(
+    tube_launch, elite_disc_filepath: Path
+) -> None:
+    """A runtime link change is NOT honoured by a subsequent plain BREAK.
+
+    This is faithful to OS 1.20, not a bug: the MOS commits the keyboard links
+    to the startup-options byte (&028F) only on the power-on and hard-reset
+    paths; a soft reset (plain BREAK) scans the links but branches around the
+    store, so &028F keeps its power-on value, and the auto-boot decision reads
+    that cached byte. So changing the link at runtime takes effect only on the
+    next power-on / hard reset (see test above), never on a plain BREAK.
+    """
+    with tube_launch([]) as bbc:  # no --auto-boot: link off at power-on
+        bbc.disc.set_spin_up_delay(False)
+        assert run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
+        bbc.disc.drive(0).insert(elite_disc_filepath)
+        bbc.keyboard.set_startup_auto_boot(True)  # changes the live link only
+        bbc.debugger.ensure_running()
+        bbc.keyboard.press_break()                # soft reset: reuses &028F
+        time.sleep(0.5)
+        booted = run_until_or_timeout(
+            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=25.0)
+        assert not booted, (
+            "plain BREAK booted after a runtime link change; OS 1.20 only "
+            "commits the links to &028F on power-on / hard reset")

@@ -236,7 +236,19 @@ class Debugger:
         )
 
     def reset(self) -> None:
-        """Reset the machine.
+        """Perform a hard (power-on-equivalent) reset and leave the CPU stopped.
+
+        This is a cold reset, not a BREAK: it clears main RAM, resets the System
+        VIA, and re-reads the keyboard links, then runs the reset sequence to the
+        first instruction boundary and leaves the machine stopped (call
+        ``ensure_running`` / ``run`` to resume). Because it re-reads the links, a
+        runtime change via ``keyboard.set_startup_auto_boot`` / ``set_links``
+        takes effect on the next ``reset``.
+
+        This differs from the two keyboard-driven resets, which are warm (soft)
+        resets that preserve RAM: ``keyboard.press_break`` (plain BREAK) and
+        ``keyboard.ctrl_break`` (BREAK with Ctrl held, which MOS treats as a hard
+        reset in software but which does not clear RAM here).
 
         Raises:
             DebuggerError: If the reset fails.
