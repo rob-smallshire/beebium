@@ -219,21 +219,38 @@ class ServerProcess:
             self._report_unexpected_exit(proc.returncode)
 
     def _start_readers(self) -> None:
-        """Spawn daemon threads to drain the server's stdout/stderr pipes."""
+        """Spawn daemon threads to drain the server's stdout/stderr pipes.
 
-        def pump(pipe: object, sink: list[bytes]) -> None:
+        With BEEBIUM_SERVER_STDERR=1 the drained output is also teed live to
+        this process's own stdout/stderr, so server logging -- in particular the
+        opt-in BEEBIUM_*_TRACE diagnostics, which the server writes to stderr --
+        is visible in the terminal instead of only being surfaced on a crash.
+        """
+        tee = os.environ.get("BEEBIUM_SERVER_STDERR") == "1"
+
+        def pump(pipe: object, sink: list[bytes], mirror: object) -> None:
             try:
                 for chunk in iter(lambda: pipe.read(4096), b""):  # type: ignore[union-attr]
                     sink.append(chunk)
+                    if mirror is not None:
+                        # Write bytes straight to the underlying binary buffer so
+                        # a chunk that splits a multi-byte character is not
+                        # mangled; fall back to a decoded write if there is none.
+                        buffer = getattr(mirror, "buffer", None)
+                        if buffer is not None:
+                            buffer.write(chunk)  # type: ignore[union-attr]
+                        else:
+                            mirror.write(chunk.decode("utf-8", errors="replace"))  # type: ignore[union-attr]
+                        mirror.flush()  # type: ignore[union-attr]
             except (ValueError, OSError):
                 pass  # pipe closed underneath us during shutdown
 
         assert self._process is not None
-        for pipe, sink in (
-            (self._process.stdout, self._stdout_chunks),
-            (self._process.stderr, self._stderr_chunks),
+        for pipe, sink, mirror in (
+            (self._process.stdout, self._stdout_chunks, sys.stdout if tee else None),
+            (self._process.stderr, self._stderr_chunks, sys.stderr if tee else None),
         ):
-            thread = threading.Thread(target=pump, args=(pipe, sink), daemon=True)
+            thread = threading.Thread(target=pump, args=(pipe, sink, mirror), daemon=True)
             thread.start()
             self._reader_threads.append(thread)
 
