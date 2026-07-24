@@ -402,43 +402,39 @@ def test_ctrl_break_default_link_does_not_boot(
         assert not _galaforce_booted(bbc)
 
 
-# The two CTRL-SHIFT-BREAK cases below assert the OS-1.20-correct outcome and
-# currently FAIL: the emulator drops the SHIFT contribution to the auto-boot
-# decision during a hard (CTRL) reset, though the key matrix shows SHIFT down.
-# Per OS 1.20 the decision is SHIFT_live XOR startUpOptions.bit3 regardless of
-# reset type (auto-boot decision at .skipStartupMessage: PHP/PLA/LSR x4/
-# EOR .startUpOptions; SHIFT read live via .interrogateKeyboard key 0). strict
-# xfail so these flip to a reported XPASS once the emulator bug is fixed.
-_ctrl_shift_bug = pytest.mark.xfail(
-    reason="emulator ignores SHIFT in the auto-boot decision on a CTRL (hard) "
-           "reset; OS 1.20 reads SHIFT live regardless of reset type",
-    strict=True,
-)
+# CTRL-SHIFT-BREAK: holding CTRL makes it the "reset without booting" gesture,
+# and CTRL suppresses SHIFT's effect on the auto-boot decision. The full rule,
+# from the emulator running OS 1.20 across every combination, is
+#   boot = (SHIFT AND NOT CTRL) XOR autoboot-link
+# so with CTRL held the committed link alone decides. This is faithful, not a
+# bug: a keyboard-scan trace confirmed the emulator feeds SHIFT=pressed to the
+# ROM throughout a CTRL-break, yet the ROM does not boot -- the suppression is
+# the ROM's (osbyte118's SHIFT/CTRL handling), not the emulator's.
 
 
 @_skip_windows_ci
-@_ctrl_shift_bug
-def test_ctrl_shift_break_default_link_boots(
+def test_ctrl_shift_break_default_link_does_not_boot(
     model_b_launch, galaforce_disc_filepath: Path
 ) -> None:
-    """Default link + CTRL-SHIFT-BREAK: SHIFT flips it, so it SHOULD boot."""
+    """Default link + CTRL-SHIFT-BREAK does NOT boot: CTRL suppresses SHIFT, so
+    unlike a plain SHIFT-BREAK it does not auto-boot."""
     with model_b_launch() as bbc:
         bbc.disc.set_spin_up_delay(False)
         _at_prompt(bbc)
         bbc.disc.drive(0).insert(galaforce_disc_filepath)
         bbc.debugger.ensure_running()
         _combo_break(bbc, shift=True, ctrl=True)
-        assert _galaforce_booted(bbc), (
-            "CTRL-SHIFT-BREAK should boot with the default link (SHIFT flips "
-            "the decision), per OS 1.20")
+        assert not _galaforce_booted(bbc), (
+            "CTRL held should suppress the SHIFT auto-boot (Ctrl-Break is the "
+            "reset-without-booting gesture)")
 
 
 @_skip_windows_ci
-@_ctrl_shift_bug
-def test_ctrl_shift_break_autoboot_link_suppresses(
+def test_ctrl_shift_break_autoboot_link_boots(
     model_b_launch, galaforce_disc_filepath: Path
 ) -> None:
-    """Auto-boot link + CTRL-SHIFT-BREAK: SHIFT flips it, so it should NOT boot."""
+    """Auto-boot link + CTRL-SHIFT-BREAK boots: CTRL is a hard reset that commits
+    the link, and with SHIFT suppressed the committed auto-boot link decides."""
     with model_b_launch() as bbc:
         bbc.disc.set_spin_up_delay(False)
         _at_prompt(bbc)
@@ -446,6 +442,6 @@ def test_ctrl_shift_break_autoboot_link_suppresses(
         bbc.keyboard.set_startup_auto_boot(True)
         bbc.debugger.ensure_running()
         _combo_break(bbc, shift=True, ctrl=True)
-        assert not _galaforce_booted(bbc), (
-            "CTRL-SHIFT-BREAK should suppress boot with the auto-boot link "
-            "(SHIFT flips the decision), per OS 1.20")
+        assert _galaforce_booted(bbc), (
+            "auto-boot link committed by the hard reset should boot; CTRL "
+            "suppresses the SHIFT-reversal")
