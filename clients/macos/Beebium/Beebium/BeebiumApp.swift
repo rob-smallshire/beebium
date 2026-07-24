@@ -177,14 +177,16 @@ struct BeebiumApp: App {
     @FocusedValue(\.selectionCoordinator) private var selectionCoordinator
     @StateObject private var keyboardMappingManager = KeyboardMappingManager()
     @StateObject private var connectWindowState = ConnectWindowState.shared
-
-
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         WindowGroup("Beebium", id: "main") {
             MainWindowRouter(
                 keyboardMappingManager: keyboardMappingManager
             )
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
         }
         .windowToolbarStyle(.unified)
         .commands {
@@ -332,6 +334,31 @@ struct BeebiumApp: App {
         Settings {
             SettingsView()
         }
+    }
+
+    /// Handle a `beebium://connect?host=...&port=...` deep link by attaching a
+    /// window to the given server, bypassing Bonjour discovery and the Connect
+    /// dialog. Used by automated soak drivers to point the frontend at a server
+    /// on an ephemeral, un-advertised port; also usable interactively via
+    /// `open "beebium://connect?host=localhost&port=48875"`.
+    @MainActor
+    private func handleDeepLink(_ url: URL) {
+        guard let request = DeepLink.parseConnect(url) else { return }
+
+        // If a window is already connected to this target, just bring it
+        // forward rather than opening a duplicate. This also makes a
+        // double-delivered URL idempotent.
+        if ConnectionRegistry.shared.activateWindow(for: request.target) {
+            return
+        }
+
+        // Set the pending target the way the Connect dialog does, then open a
+        // fresh main window whose MainWindowRouter.onAppear consumes it.
+        let state = ConnectWindowState.shared
+        state.pendingTarget = request.target
+        state.pendingNeedsRun = request.needsRun
+        state.pendingProvenanceUUID = request.provenanceUUID
+        openWindow(id: "main")
     }
 }
 

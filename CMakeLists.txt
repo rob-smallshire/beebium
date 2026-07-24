@@ -72,6 +72,20 @@ if(BEEBIUM_ENABLE_SANITIZERS)
     endif()
 endif()
 
+# ThreadSanitizer for hunting data races and lock-order inversions. Kept
+# separate from BEEBIUM_ENABLE_SANITIZERS because TSan cannot be combined with
+# AddressSanitizer in the same build.
+option(BEEBIUM_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+if(BEEBIUM_ENABLE_TSAN)
+    if(BEEBIUM_ENABLE_SANITIZERS)
+        message(FATAL_ERROR "BEEBIUM_ENABLE_TSAN cannot be combined with BEEBIUM_ENABLE_SANITIZERS (ThreadSanitizer conflicts with AddressSanitizer)")
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=thread)
+    endif()
+endif()
+
 # Code coverage (use as guidance, not a target)
 option(BEEBIUM_ENABLE_COVERAGE "Enable code coverage reporting" OFF)
 if(BEEBIUM_ENABLE_COVERAGE)

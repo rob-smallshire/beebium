@@ -78,6 +78,7 @@
 		7519FD97BF5579394E98C4DA /* PeripheralTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4E1CC9ABAFFA92C4A74F5B /* PeripheralTree.swift */; };
 		75BBA7064C85D6CDB3797111 /* StatusBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9849250F602C15283E458A /* StatusBarView.swift */; };
 		79DB2DF04399A3F0579DA079 /* SidewaysClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */; };
+		7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */; };
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
 		8248344928EA9782B944178F /* SidebarMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992C39260909EB85C84D2C20 /* SidebarMode.swift */; };
 		82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28ED949DB593C8353954F7B1 /* MachinePreset.swift */; };
@@ -118,6 +119,7 @@
 		BB826699AAD95D5477C0D88F /* peripheral_extension.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */; };
 		BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CA435023B19D31740E399C /* ColorExtensionsTests.swift */; };
 		BE8551008B3836CA24806130 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */; };
+		C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12818B1698A8D15AE8A63653 /* DeepLink.swift */; };
 		C29A1601A7336A71D236BAFB /* sideways.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC4EB31EFDD95098F6DE936 /* sideways.grpc.swift */; };
 		C33A98EC584EB6432A7CE7AD /* Atomics in Frameworks */ = {isa = PBXBuildFile; productRef = CDFCBD9064C78D1ABC230708 /* Atomics */; };
 		C3ED514E6ED1E2D44FD407BF /* StandardDisplayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B7611FB75A31FE7201B3F30 /* StandardDisplayStyle.swift */; };
@@ -187,10 +189,12 @@
 		0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarLEDs.swift; sourceTree = "<group>"; };
 		1031975F4050BF5875549DFA /* FileCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCommands.swift; sourceTree = "<group>"; };
 		10DDDBA41F04259ED4E39CF0 /* DisplayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayStyle.swift; sourceTree = "<group>"; };
+		12818B1698A8D15AE8A63653 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
 		15311FE0E08476CA352DD0FB /* SelectionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionCoordinator.swift; sourceTree = "<group>"; };
 		16524154FADCB403497AFB1F /* VideoSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsTests.swift; sourceTree = "<group>"; };
 		1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCModifierStateTests.swift; sourceTree = "<group>"; };
 		2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = keyboard.grpc.swift; sourceTree = "<group>"; };
+		208639B544792E5992A279DF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumSvgGlyphRenderer.swift; sourceTree = "<group>"; };
 		22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.grpc.swift; sourceTree = "<group>"; };
 		25D1F9F6D43714BB3F5B5CEB /* AudioMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerView.swift; sourceTree = "<group>"; };
@@ -224,6 +228,7 @@
 		5B2624275BB5D5286D790AF3 /* econet.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet.grpc.swift; sourceTree = "<group>"; };
 		5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationSchema.swift; sourceTree = "<group>"; };
 		5B4E1CC9ABAFFA92C4A74F5B /* PeripheralTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralTree.swift; sourceTree = "<group>"; };
+		5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkTests.swift; sourceTree = "<group>"; };
 		5E54D546E48798EB281A43A0 /* VideoSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettings.swift; sourceTree = "<group>"; };
 		5E556C71961C889896FAB4BD /* KeyboardSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSettingsPane.swift; sourceTree = "<group>"; };
 		607580C54AA31C57AD9627C8 /* VideoSettingsCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsCacheTests.swift; sourceTree = "<group>"; };
@@ -505,6 +510,7 @@
 				0380D979784116B4110F8904 /* ConnectionRegistry.swift */,
 				E2FF930B029ECBBAE243C4D0 /* ContentView.swift */,
 				8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */,
+				12818B1698A8D15AE8A63653 /* DeepLink.swift */,
 				CF6562062957B62B8C099A42 /* DiscClient.swift */,
 				639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */,
 				D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */,
@@ -520,6 +526,7 @@
 				93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */,
 				F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */,
 				2CE550723A13DFA9A20EB302 /* IndicatorView.swift */,
+				208639B544792E5992A279DF /* Info.plist */,
 				3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */,
 				BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */,
 				9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */,
@@ -585,6 +592,7 @@
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
+				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
 				BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */,
@@ -731,6 +739,7 @@
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
+				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
 				D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */,
@@ -776,6 +785,7 @@
 				627C3A63E155268D81CFFA47 /* ContentView.swift in Sources */,
 				5EF39565CAF128FD1974E0BF /* DebugDisplayStyle.swift in Sources */,
 				345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */,
+				C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */,
 				4D9536D54F0C9291F5ECD326 /* DiscClient.swift in Sources */,
 				DD38D6EB9C3CC2182169F801 /* Disconnectable.swift in Sources */,
 				AEFDACA93EC7747DF05C2447 /* DiscoveryClient.swift in Sources */,
@@ -894,8 +904,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_FILE = Beebium/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -913,8 +922,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_FILE = Beebium/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
