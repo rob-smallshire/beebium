@@ -71,11 +71,15 @@ class Game:
     landmark_chunk_seconds: float = 0.5
 
     # Real-time keypresses to drive an attract/demo mode, pressed AFTER nav with
-    # the machine running, spaced by attract_interval_seconds. Used for games
-    # (e.g. Galaforce) that advance through instruction pages on a timer rather
-    # than at a distinct per-page landmark.
+    # the machine running. Each press waits (sampling the screen) for the screen
+    # to change before the next, so no press is sent before the game has
+    # responded -- robust to the seconds a game takes to load before it accepts
+    # the first keypress. Used for games (e.g. Galaforce) that page through
+    # instruction screens rather than stopping at one distinct landmark.
     attract_keys: tuple[str, ...] = ()
-    attract_interval_seconds: float = 1.0
+    # Max wall-clock seconds to wait for the screen to change after each press
+    # (covers slow page transitions and built-in pauses, e.g. Cylon Attack).
+    attract_change_timeout: float = 8.0
     # Real-time settle before the first attract keypress, to let a game whose
     # title has no Mode 7 landmark finish loading before we start pressing keys.
     attract_delay_seconds: float = 0.0
@@ -151,7 +155,6 @@ GAMES: list[Game] = [
         # Press SPACE seven times at ~1s intervals to advance through the
         # instruction pages to the hi-score table and self-play attract mode.
         attract_keys=(" ", " ", " ", " ", " ", " ", " "),
-        attract_interval_seconds=1.0,
     ),
     Game(
         name="Galaforce 2",
@@ -160,7 +163,6 @@ GAMES: list[Game] = [
         landmark="Everything that Galaforce was",
         # Press SPACE four times at ~1s intervals to reach hi-scores/attract.
         attract_keys=(" ", " ", " ", " "),
-        attract_interval_seconds=1.0,
     ),
     Game(
         name="Meteors",
@@ -168,7 +170,6 @@ GAMES: list[Game] = [
         # Graphics title with no Mode 7 text; settle, then SPACE x3 at ~1s.
         attract_delay_seconds=5.0,
         attract_keys=(" ", " ", " "),
-        attract_interval_seconds=1.0,
     ),
     Game(
         name="Zalaga",
@@ -176,7 +177,6 @@ GAMES: list[Game] = [
         landmark="Zalaga",  # Mode 7 title ("Aardvark Software presents... Zalaga")
         # Return x5 at ~1s intervals, then K, to reach the game.
         attract_keys=("\r", "\r", "\r", "\r", "\r", "K"),
-        attract_interval_seconds=1.0,
     ),
     Game(
         name="Battlezone",
@@ -184,7 +184,6 @@ GAMES: list[Game] = [
         landmark="BATTLEZONE",  # Mode 7 title ("ROCKETEER presents BATTLEZONE")
         # SPACE x7 at ~1s intervals to reach attract mode.
         attract_keys=(" ", " ", " ", " ", " ", " ", " "),
-        attract_interval_seconds=1.0,
     ),
     Game(
         name="Cylon Attack",
@@ -195,7 +194,6 @@ GAMES: list[Game] = [
         landmark_chunk_seconds=2.0,
         # N, wait ~5s, N again -> attract mode.
         attract_keys=("N", "N"),
-        attract_interval_seconds=5.0,
     ),
     # Other games with attract/demo modes worth adding (recipes TBD): Thrust
     # (discs/games/Disc024-Thrust.ssd) and Arcadians.

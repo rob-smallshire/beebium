@@ -516,7 +516,7 @@ class Beebium:
                                   shift_hold_after=shift_hold_after)
 
     def expect(self, *texts: str, timeout: float = 30.0,
-               poll: float = 0.5) -> str:
+               sample_interval_seconds: float = 1.0) -> str:
         """Wait until one of `texts` appears in the on-screen text, in any
         display mode, and return the text that matched.
 
@@ -533,7 +533,9 @@ class Beebium:
         Args:
             texts: One or more substrings to wait for; the first found wins.
             timeout: Wall-clock seconds to wait before giving up.
-            poll: Seconds between screen reads.
+            sample_interval_seconds: Seconds between screen reads; the screen
+                only changes on the ~50Hz field rate, so a coarse interval is
+                plenty and avoids needless GetScreenText work.
 
         Returns:
             The matched substring.
@@ -554,7 +556,7 @@ class Beebium:
                 raise ScreenExpectTimeout(
                     f"expect timed out after {timeout:g}s waiting for "
                     f"{list(texts)!r}. Last screen:\n{screen}")
-            time.sleep(poll)
+            time.sleep(sample_interval_seconds)
 
     def run_for_emulated_seconds(self, seconds: float) -> None:
         """Run the emulator for the specified number of emulated seconds.

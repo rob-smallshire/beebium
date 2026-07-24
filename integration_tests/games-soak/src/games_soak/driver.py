@@ -125,6 +125,23 @@ def _wait_for_text(bbc: Beebium, text: str, timeout: float, chunk: float) -> boo
     return screen_contains(bbc, text)
 
 
+def _advance_screen(bbc: Beebium, key: str, *, timeout: float = 8.0,
+                    sample_interval: float = 1.0) -> bool:
+    """Press `key`, then wait (sampling the screen ~1s) for the screen text to
+    change, so the next press is not sent before the game has responded to this
+    one. The machine must already be running. Returns True if the screen
+    changed within `timeout` (False = the press did not advance, e.g. a terminal
+    attract screen or a not-yet-ready game -- the caller proceeds regardless)."""
+    before = bbc.video.screen_text().text
+    bbc.keyboard.type(key)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(sample_interval)
+        if bbc.video.screen_text().text != before:
+            return True
+    return False
+
+
 # ----------------------------------------------------------------------------
 # Frontend attach (macOS URL scheme)
 # ----------------------------------------------------------------------------
@@ -360,14 +377,15 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
     # the frontend renders and real-time-dependent bugs can manifest.
     bbc.debugger.ensure_running()
 
-    # Drive an attract/demo mode with timed real-time keypresses (e.g. Galaforce
-    # advances instruction pages on a timer, not at a distinct landmark). An
-    # optional settle first, for games whose title has no landmark to wait on.
+    # Page through an attract/demo mode. Rather than blind-timing the presses,
+    # wait for each press to visibly advance the screen before the next, so a
+    # key is never sent before the game has responded (games take a while to
+    # load before the first keypress registers). An optional settle first, for
+    # games whose title has no landmark to wait on.
     if game.attract_keys:
         time.sleep(game.attract_delay_seconds)
-    for key in game.attract_keys:
-        bbc.keyboard.type(key)
-        time.sleep(game.attract_interval_seconds)
+        for key in game.attract_keys:
+            _advance_screen(bbc, key, timeout=game.attract_change_timeout)
 
 
 def teardown_game(bbc: Beebium, game: Game) -> None:
