@@ -227,6 +227,23 @@ public:
         return paused_;
     }
 
+    /// Re-anchor the pacing baseline to the current cycle count and wall clock,
+    /// discarding any accumulated deficit. Use after emulation (or wall time)
+    /// advanced without the pacing clock -- e.g. a debugger reset or a
+    /// run_until step sequence -- so it does not run fast to "catch up". Unlike
+    /// resume(), this does NOT touch the pause state or notify pause_cv_, so it
+    /// is safe to call from the emulation thread without disturbing the timer
+    /// thread or the debugger's pause handling.
+    void rebase() {
+        std::lock_guard lock(mutex_);
+        start_time_ = Clock::now();
+        last_pace_wall_ = start_time_;
+        effective_elapsed_ns_ = 0.0;
+        baseline_cycles_ = total_cycles_.load(std::memory_order_relaxed);
+        last_speed_ = speed_multiplier_.load(std::memory_order_relaxed);
+        controller_.reset();
+    }
+
     struct TimingStats {
         uint64_t ticks_executed;
         uint64_t ticks_io_woken;

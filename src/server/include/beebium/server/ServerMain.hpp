@@ -1491,8 +1491,15 @@ void run_emulation_loop(MachineType& machine,
         // in a normal context where mutex operations are safe.
         platform::dispatch_pending_signal();
 
-        // Block if debugger has paused execution
-        machine.wait_if_paused();
+        // Block if debugger has paused execution. If we actually blocked, the
+        // wall time spent paused (a debugger reset, a run_until_or_timeout step
+        // sequence, etc.) must not be charged to the pacing clock as owed
+        // emulation -- otherwise it runs fast to "catch up" after every debug
+        // operation. Re-anchor the pacing clock on resume so the deficit is
+        // measured from now.
+        if (machine.wait_if_paused() && use_pacing) {
+            pacing_clock.rebase();
+        }
 
         // Check if shutdown was requested during wait
         if (machine.shutdown_requested()) {

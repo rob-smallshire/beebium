@@ -541,11 +541,17 @@ public:
 
     // Block until not paused - call from emulation loop.
     // Returns immediately if shutdown is requested, allowing clean exit.
-    void wait_if_paused() {
+    /// Block while the debugger has paused execution. Returns true if it
+    /// actually blocked (the machine was paused), so the caller can re-anchor
+    /// timing that must not count the paused interval (see the pacing clock).
+    bool wait_if_paused() {
         std::unique_lock<std::mutex> lock(debug_mutex_);
+        bool blocked = false;
         while (paused_.load() && !shutdown_requested_.load()) {
+            blocked = true;
             debug_cv_.wait_for(lock, std::chrono::milliseconds(100));
         }
+        return blocked;
     }
 
     // Request clean shutdown - unblocks wait_if_paused()
