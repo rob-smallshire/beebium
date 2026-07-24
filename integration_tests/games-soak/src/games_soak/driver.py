@@ -310,7 +310,8 @@ def _sample_process(label: str, pid: int) -> list[str]:
 def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
                         game: Game, reason: str,
                         frontend_pid: int | None,
-                        fps_monitor: FrameRateMonitor | None = None) -> Path:
+                        fps_monitor: FrameRateMonitor | None = None,
+                        *, frontend_first: bool = False) -> Path:
     REPORTS_DIRPATH.mkdir(exist_ok=True)
     report_filepath = REPORTS_DIRPATH / f"stall-{game.name.replace(' ', '_')}-{_now_iso()}.txt"
     server_pid = _server_pid(bbc)
@@ -329,32 +330,43 @@ def capture_diagnostics(bbc: Beebium, executor: ThreadPoolExecutor,
                      f"(silent for {fps_monitor.silent_for():.0f}s)")
     lines.append("")
 
-    # gRPC liveness while the emulation is (maybe) frozen: does the service
-    # layer still answer? Sample cpu registers twice -- if the emulation thread
-    # lives, PC moves; if wedged, PC is identical.
-    ok, value = _call_with_timeout(executor, lambda: bbc.debugger.cycle_count, 5.0)
-    lines.append(f"gRPC debugger.cycle_count probe: ok={ok} value={value}")
-    ok2, regs1 = _call_with_timeout(executor, lambda: bbc.cpu.registers, 5.0)
-    time.sleep(0.5)
-    ok3, regs2 = _call_with_timeout(executor, lambda: bbc.cpu.registers, 5.0)
-    lines.append(f"gRPC cpu.registers probe #1: ok={ok2} value={regs1}")
-    lines.append(f"gRPC cpu.registers probe #2: ok={ok3} value={regs2}")
-    ok4, pacing = _call_with_timeout(executor, lambda: bbc.system.get_pacing_stats(), 5.0)
-    lines.append(f"system.get_pacing_stats probe: ok={ok4} value={pacing}")
-    lines.append("")
-
-    if server_pid is not None:
-        lines += _sample_process("server", server_pid)
-    if frontend_pid is not None:
-        # Even for a server stall, sample the frontend: it distinguishes a
-        # frontend that is also blocked from one that is merely showing a
-        # stalled server's last frame.
-        lines += _sample_process("frontend", frontend_pid)
-        lines.append("=== frontend received_fps history (last 90s) ===")
-        lines.append(_run(
+    def frontend_diag() -> list[str]:
+        if frontend_pid is None:
+            return []
+        # A frozen frontend is the ephemeral evidence -- a grey window a user
+        # tends to close within seconds -- so a Mode A capture samples it before
+        # anything else. The server is held for inspection and can wait.
+        out = _sample_process("frontend", frontend_pid)
+        out.append("=== frontend received_fps history (last 90s) ===")
+        out.append(_run(
             ["log", "show", "--last", "90s", "--style", "compact",
              "--predicate", _FPS_PREDICATE.format(pid=frontend_pid)], 20))
-        lines.append("")
+        out.append("")
+        return out
+
+    def server_diag() -> list[str]:
+        out: list[str] = []
+        # gRPC liveness while the emulation is (maybe) frozen: does the service
+        # layer still answer? Sample cpu registers twice -- if the emulation
+        # thread lives, PC moves; if wedged, PC is identical.
+        ok, value = _call_with_timeout(executor, lambda: bbc.debugger.cycle_count, 5.0)
+        out.append(f"gRPC debugger.cycle_count probe: ok={ok} value={value}")
+        ok2, regs1 = _call_with_timeout(executor, lambda: bbc.cpu.registers, 5.0)
+        time.sleep(0.5)
+        ok3, regs2 = _call_with_timeout(executor, lambda: bbc.cpu.registers, 5.0)
+        out.append(f"gRPC cpu.registers probe #1: ok={ok2} value={regs1}")
+        out.append(f"gRPC cpu.registers probe #2: ok={ok3} value={regs2}")
+        ok4, pacing = _call_with_timeout(executor, lambda: bbc.system.get_pacing_stats(), 5.0)
+        out.append(f"system.get_pacing_stats probe: ok={ok4} value={pacing}")
+        out.append("")
+        if server_pid is not None:
+            out += _sample_process("server", server_pid)
+        return out
+
+    # For a Mode A (frontend) freeze, grab the frontend stacks first; otherwise
+    # the server liveness probes lead.
+    lines += (frontend_diag() + server_diag()) if frontend_first \
+        else (server_diag() + frontend_diag())
 
     report_filepath.write_text("\n".join(lines))
     _log(f"Diagnostics written to {report_filepath}")
@@ -503,16 +515,21 @@ def watch_for_stall(bbc: Beebium, game: Game, args: argparse.Namespace,
 
         # Mode A: the core keeps advancing but the frontend stopped rendering.
         # Only meaningful once frames have been seen and the core is NOT itself
-        # stalled (else it is just Mode B seen from the frontend).
+        # stalled (else it is just Mode B seen from the frontend). Uses a shorter
+        # threshold than Mode B: a silent frame monitor is an unambiguous
+        # frontend freeze, and its window (a grey window a user closes on sight)
+        # must be sampled fast, whereas a core stall wants more confidence
+        # against a transient RPC drop.
         if (fps_monitor is not None and fps_monitor.seen_frames()
                 and stalled_for < args.stall_seconds
                 and fps_silent_for is not None
-                and fps_silent_for >= args.stall_seconds):
+                and fps_silent_for >= args.fps_stall_seconds):
             reason = (f"Mode A: frontend received_fps 0 for {fps_silent_for:.0f}s "
                       f"while cycle_count advancing (at {cycles})")
             _log(f"STALL in {game.name}: {reason}")
             report = capture_diagnostics(bbc, executor, game, reason,
-                                         frontend_pid, fps_monitor)
+                                         frontend_pid, fps_monitor,
+                                         frontend_first=True)
             return StallReport(game.name, report, reason)
 
         if now >= deadline:
@@ -662,8 +679,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Give up after this many wall-clock minutes "
                              "(0 or less = run indefinitely).")
     parser.add_argument("--stall-seconds", type=float, default=20.0,
-                        help="No cycle_count progress for this long = a stall.")
-    parser.add_argument("--poll-seconds", type=float, default=2.0,
+                        help="No cycle_count progress for this long = a core "
+                             "(Mode B) stall.")
+    parser.add_argument("--fps-stall-seconds", type=float, default=6.0,
+                        help="Frontend received_fps silent for this long while "
+                             "the core advances = a frontend (Mode A) freeze. "
+                             "Shorter than --stall-seconds so the frozen window "
+                             "is sampled before it can be closed.")
+    parser.add_argument("--poll-seconds", type=float, default=1.0,
                         help="Liveness poll interval.")
     parser.add_argument("--report-seconds", type=float, default=30.0,
                         help="How often to print a progress line.")
