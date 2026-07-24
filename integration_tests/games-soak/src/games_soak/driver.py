@@ -389,27 +389,20 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
             _advance_screen(bbc, key, timeout=game.attract_change_timeout)
 
 
-def teardown_game(bbc: Beebium, game: Game, speed_multiplier: float = 1.0) -> None:
+def teardown_game(bbc: Beebium, game: Game) -> None:
     """Eject the disc and cold-reset, leaving a clean machine for the next game.
 
     A soft ctrl_break between games did not clear RAM, so the previous game's
     state bled into the next boot -- its Shift-Break autoboot could land on the
     wrong screen (a missed landmark) or a black screen. A hard reset
     (debugger.reset clears RAM and the System VIA) gives each game a clean cold
-    start.
-
-    debugger.reset pauses the machine but not the PacingClock, so the wall time
-    spent resetting and booting is counted as owed emulation and the clock runs
-    fast (~2x) to make it up. Re-setting the speed multiplier rebases the pacing
-    clock (it re-anchors on any speed change), discarding that phantom deficit;
-    pass speed_multiplier so a non-default --speed is honoured."""
+    start. (Pacing is rebased later, once the game is booted -- see run_soak.)"""
     drive = bbc.disc.drive(0)
     if not drive.is_empty:
         drive.eject()
         drive.wait_for_eject(timeout=15.0)
     bbc.debugger.reset()          # cold reset: clears RAM for a clean next boot
     bbc.debugger.ensure_running()
-    bbc.system.set_speed_multiplier(speed_multiplier)  # rebase pacing after reset
     time.sleep(1.0)               # let the cold boot reach the BASIC prompt
 
 
@@ -587,7 +580,7 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
                             _log(f"{game.name}: emulator still advancing; "
                                  f"skipping to the next game.")
                             try:
-                                teardown_game(bbc, game, speed_multiplier=args.speed)
+                                teardown_game(bbc, game)
                             except Exception as t_exc:  # noqa: BLE001
                                 _log(f"{game.name}: teardown after skip failed: {t_exc}")
                             continue
@@ -599,13 +592,21 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
                         return StallReport(game.name, report,
                                            f"boot/nav failure (frozen): {exc}")
 
+                    # NOTE: games after the first run ~2x real time. debugger.reset
+                    # (in teardown) and boot_game's fast-forwards advance emulation
+                    # without the PacingClock, which then runs fast to make up the
+                    # "lost" wall time and is never rebased. Poking the speed
+                    # multiplier from here to force a rebase is unreliable (a
+                    # same-value set does not rebase, and nudging it destabilises
+                    # the debugger stepping the next boot uses). The proper fix is
+                    # server-side: have debugger.reset rebase the PacingClock.
                     stall = watch_for_stall(bbc, game, args, executor,
                                             frontend_pid, fps_monitor)
                     if stall is not None:
                         _hold(bbc, args.hold_minutes, frontend_pid)
                         return stall
 
-                    teardown_game(bbc, game, speed_multiplier=args.speed)
+                    teardown_game(bbc, game)
 
                     if not run_forever and time.monotonic() >= deadline:
                         _log(f"No stall within {args.max_minutes} min; giving up.")
