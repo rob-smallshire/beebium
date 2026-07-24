@@ -57,7 +57,7 @@ from pathlib import Path
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ScreenExpectTimeout
-from beebium.client.screen import dump_screen, screen_contains
+from beebium.client.screen import dump_screen
 
 from games_soak.games import GAMES, Game
 
@@ -112,18 +112,22 @@ def _wait_for(predicate, timeout: float, poll: float = 0.25) -> bool:
     return False
 
 
-def _wait_for_text(bbc: Beebium, text: str, timeout: float, chunk: float) -> bool:
-    """Fast-forward emulated time until `text` appears on the Mode 7 screen.
+def _wait_for_text(bbc: Beebium, text: str, timeout: float) -> bool:
+    """Wait in real time for `text` to appear on the screen (any screen mode).
 
-    Uses the client's run_until_or_timeout (the same mechanism the source game
-    tests use), then confirms directly since its return value is advisory.
-    """
-    bbc.run_until_or_timeout(
-        lambda: screen_contains(bbc, text),
-        emulated_seconds=timeout,
-        chunk_seconds=chunk,
-    )
-    return screen_contains(bbc, text)
+    Uses the screen-text expect mechanism: it samples the running screen once a
+    second and never touches the debugger's execution-state stream. The
+    fast-forward run/stop path (run_until_or_timeout) races that stream -- a
+    cycle-budget breakpoint can fire before the client subscribes for the stop,
+    which then blocks for the full timeout -- so expect is preferred for the
+    soak, where the machine is already running in real time. Returns True if the
+    text appeared before the timeout."""
+    bbc.debugger.ensure_running()
+    try:
+        bbc.expect(text, timeout=timeout)
+        return True
+    except ScreenExpectTimeout:
+        return False
 
 
 def _advance_screen(bbc: Beebium, key: str, *, timeout: float = 8.0,
@@ -366,7 +370,7 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
     # Tube games: let the cold-boot banner settle before auto-booting the disc,
     # so the second processor is up when DFS runs !BOOT.
     if game.boot_banner:
-        if not _wait_for_text(bbc, game.boot_banner, timeout=30.0, chunk=1.0):
+        if not _wait_for_text(bbc, game.boot_banner, timeout=30.0):
             raise RuntimeError(
                 f"{game.name}: boot banner {game.boot_banner!r} never "
                 f"appeared:\n{dump_screen(bbc)}")
@@ -376,24 +380,18 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
 
     if game.landmark:
         if not _wait_for_text(bbc, game.landmark,
-                              timeout=game.landmark_timeout_seconds,
-                              chunk=game.landmark_chunk_seconds):
+                              timeout=game.landmark_timeout_seconds):
             raise RuntimeError(
                 f"{game.name}: landmark {game.landmark!r} never appeared:\n"
                 f"{dump_screen(bbc)}")
 
     for wait_text, key in game.nav:
         if not _wait_for_text(bbc, wait_text,
-                              timeout=game.landmark_timeout_seconds,
-                              chunk=game.landmark_chunk_seconds):
+                              timeout=game.landmark_timeout_seconds):
             raise RuntimeError(
                 f"{game.name}: navigation step {wait_text!r} never appeared:\n"
                 f"{dump_screen(bbc)}")
         bbc.keyboard.type(key)
-
-    # run_until_or_timeout leaves the CPU stopped; resume real-time running so
-    # the frontend renders and real-time-dependent bugs can manifest.
-    bbc.debugger.ensure_running()
 
     # Drive an attract/demo mode. Prefer pexpect-style paging when the game
     # shows a consistent prompt on each page (robust to load timing and page

@@ -22,11 +22,11 @@ which is where the boot sequence was originally worked out and is kept green:
 Keep them in step with those tests; if a boot sequence changes there, mirror it
 here. New games are added by working out a boot recipe (booting by hand,
 reading landmarks off the screen with the screen helpers) and appending a Game
-record. Landmark/navigation text is matched against the Mode 7 screen via
-beebium.client.screen.screen_contains, exactly as the source tests do. Most
-games show a Mode 7 title/menu to wait on; a few (e.g. Meteors) come up
-straight in a graphics mode with no text, and use attract_delay_seconds to
-settle before the timed key presses instead.
+record. Landmark and navigation text is waited for in real time via the
+screen-text expect mechanism (Beebium.expect), which samples the running screen
+in any screen mode and never touches the debugger's execution-state stream. Most
+games show a title/menu to wait on; a few (e.g. Meteors) come up straight in a
+graphics mode and page through a "press SPACE" prompt instead.
 
 All games share the same Model B base (MOS 1.20, BASIC 2, Acorn 1770 DFS 2.26 in
 slot 14); Tube games add --tube-65c02, so a run covers one group (--tube or not).
@@ -66,9 +66,9 @@ class Game:
     landmark: str | None = None
     # (wait_text, key) pairs: wait until wait_text appears, then type key.
     nav: tuple[tuple[str, str], ...] = ()
-    # run_until_or_timeout budget applied to the landmark and each nav step.
+    # Real-time budget for the landmark and each nav step to appear on screen
+    # (waited for via the screen-text expect mechanism).
     landmark_timeout_seconds: float = 60.0
-    landmark_chunk_seconds: float = 0.5
 
     # Real-time keypresses to drive an attract/demo mode, pressed AFTER nav with
     # the machine running. Each press waits (sampling the screen) for the screen
@@ -128,7 +128,6 @@ GAMES: list[Game] = [
         # The boot sequence itself is the landmark walk; no separate banner.
         nav=_REVS_NAV,
         landmark_timeout_seconds=60.0,
-        landmark_chunk_seconds=0.5,
     ),
     Game(
         name="Chuckie Egg 2023",
@@ -140,7 +139,6 @@ GAMES: list[Game] = [
         nav=(("A game of skill", " "),),
         # The game takes a long time to load through the Tube.
         landmark_timeout_seconds=300.0,
-        landmark_chunk_seconds=5.0,
     ),
     Game(
         name="Elite",
@@ -153,7 +151,6 @@ GAMES: list[Game] = [
         # enters an attract mode on its own, so it exercises the machine.
         nav=(),
         landmark_timeout_seconds=60.0,
-        landmark_chunk_seconds=1.0,
     ),
     Game(
         name="Galaforce",
@@ -198,12 +195,12 @@ GAMES: list[Game] = [
     Game(
         name="Cylon Attack",
         disc="discs/games/Disc001-CylonAttackAFSTD.ssd",
-        # The Mode 7 "A 3D Space battle" screen takes a long time to appear.
+        # The "A 3D Space battle" title takes a long time to appear; the game
+        # then asks "Load high score table (Y/N)?" -- answer N (waiting for that
+        # exact prompt) to drop into the attract mode.
         landmark="A 3D Space battle",
         landmark_timeout_seconds=120.0,
-        landmark_chunk_seconds=2.0,
-        # N, wait ~5s, N again -> attract mode.
-        attract_keys=("N", "N"),
+        nav=(("Load high score table", "N"),),
     ),
     # Other games with attract/demo modes worth adding (recipes TBD): Thrust
     # (discs/games/Disc024-Thrust.ssd) and Arcadians.
