@@ -72,7 +72,7 @@ class TestDiscoveryPrecedence:
     """Explicit choices outrank discovery; discovery outranks PATH."""
 
     def test_explicit_path_wins(self, finder: ServerProcess, tmp_path: Path) -> None:
-        explicit = _make_executable(tmp_path, "beebium-model-b")
+        explicit = _make_executable(tmp_path, finder._exe_name("beebium-model-b"))
         assert finder._find_server(explicit) == explicit
 
     def test_explicit_missing_path_is_an_error(
@@ -85,7 +85,7 @@ class TestDiscoveryPrecedence:
         self, finder: ServerProcess, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """BEEBIUM_SERVER remains the way to test against a different build."""
-        override = _make_executable(tmp_path, "beebium-model-b")
+        override = _make_executable(tmp_path, finder._exe_name("beebium-model-b"))
         monkeypatch.setenv("BEEBIUM_SERVER", str(override))
         assert finder._find_server(None) == override
 
