@@ -389,12 +389,20 @@ def boot_game(bbc: Beebium, game: Game, disc_filepath: Path) -> None:
 
 
 def teardown_game(bbc: Beebium, game: Game) -> None:
-    """Break out of the game and eject its disc, ready for the next."""
-    bbc.keyboard.ctrl_break()
+    """Eject the disc and cold-reset, leaving a clean machine for the next game.
+
+    A soft ctrl_break between games did not clear RAM, so the previous game's
+    state bled into the next boot -- its Shift-Break autoboot could land on the
+    wrong screen (a missed landmark) or a black screen. A hard reset
+    (debugger.reset clears RAM and the System VIA) gives each game a clean cold
+    start."""
     drive = bbc.disc.drive(0)
     if not drive.is_empty:
         drive.eject()
         drive.wait_for_eject(timeout=15.0)
+    bbc.debugger.reset()          # cold reset: clears RAM for a clean next boot
+    bbc.debugger.ensure_running()
+    time.sleep(1.0)               # let the cold boot reach the BASIC prompt
 
 
 @dataclass
