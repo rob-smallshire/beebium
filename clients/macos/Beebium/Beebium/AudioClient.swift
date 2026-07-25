@@ -76,6 +76,14 @@ final class AudioClient: ObservableObject, Disconnectable {
     /// Audio engine (AVAudioEngine wrapper)
     private var engine: AudioEngine?
 
+    /// Serialises AudioEngine start/stop off the main thread. Instantiating the
+    /// CoreAudio IO unit can block on a HAL mutex -- notably right after the host
+    /// wakes from sleep, while CoreAudio is still coming back -- so it must never
+    /// run on the main thread (the reconnect cascade calls connect there). A
+    /// serial queue also keeps a start and a stop from overlapping across
+    /// threads, which AVAudioEngine does not allow.
+    private let engineQueue = DispatchQueue(label: "com.beebium.audio-engine")
+
     // MARK: - gRPC Client
 
     private var client: Beebium_AudioServiceNIOClient?
@@ -94,13 +102,19 @@ final class AudioClient: ObservableObject, Disconnectable {
     func connect(channel: GRPCChannel) {
         client = Beebium_AudioServiceNIOClient(channel: channel)
 
-        // Start audio engine
-        engine = AudioEngine(renderer: renderer)
-        do {
-            try engine?.start()
-        } catch {
-            errorMessage = "Failed to start audio engine: \(error.localizedDescription)"
-            return
+        // Start the audio engine off the main thread (see engineQueue): its
+        // CoreAudio setup can block, and must not freeze the UI.
+        let engine = AudioEngine(renderer: renderer)
+        self.engine = engine
+        engineQueue.async { [weak self] in
+            do {
+                try engine.start()
+            } catch {
+                Task { @MainActor in
+                    self?.errorMessage =
+                        "Failed to start audio engine: \(error.localizedDescription)"
+                }
+            }
         }
 
         // Fetch format and start streaming
@@ -115,8 +129,13 @@ final class AudioClient: ObservableObject, Disconnectable {
         streamTask?.cancel()
         streamTask = nil
 
-        // Stop audio engine
-        engine?.stop()
+        // Stop the engine on the same serial queue that starts it, so a start
+        // still blocked in CoreAudio (e.g. post-wake) completes first and the
+        // two never overlap across threads. The closure holds the last strong
+        // reference until it runs.
+        if let engine = engine {
+            engineQueue.async { engine.stop() }
+        }
         engine = nil
 
         // Clear state
