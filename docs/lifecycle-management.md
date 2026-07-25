@@ -183,14 +183,22 @@ implementations are idempotent.
   disc flush runs, which is one reason DFS write-back also flushes on the
   in-emulation paths (step-away, write-inactivity) rather than only at shutdown.
 
-### Recovery semantics for `unreachable`
+### Recovery semantics
 
-Recovery is currently **passive**: the client waits for heartbeats to resume on
-the still-open stream. This covers a frozen process (`SIGCONT`) and a network
-partition that heals while the TCP connection survives. A connection that truly
-dies ends the stream and escalates to `died`. **Active** periodic
-re-establishment of a fully-dead connection (a true reconnect loop) is a possible
-future addition.
+Two layers. **Passive**, for `unreachable`: while heartbeats have stopped but the
+stream is still open, the client just waits for them to resume — covering a
+frozen process (`SIGCONT`) and a network partition that heals while the TCP
+connection survives.
+
+**Active**, for a connection that truly dies (the stream ends — `error`/`died`):
+`ReconnectCoordinator` runs a real reconnect loop — reconnect the channel-owning
+video client (the rest cascade off `connected`), backing off 0.5s→8s over a
+fixed number of attempts, then a terminal "couldn't reconnect" overlay the user
+can retry. A **graceful shutdown (`stopped`) is never fought**, and a window
+close cancels the loop first. Waking from a full system sleep forces an immediate
+attempt (the accelerant) — see [frontend-sleep-wake.md](frontend-sleep-wake.md).
+The `unreachable`/`error` spinner therefore now genuinely reconnects rather than
+only waiting.
 
 ---
 
@@ -218,7 +226,9 @@ fingerprint; all four constants were regenerated together.
 | Concern | Location |
 |---------|----------|
 | Liveness states, heartbeat watchdog | `clients/macos/.../SystemClient.swift` (`Liveness`, `armHeartbeatWatchdog`) |
-| Disconnection overlays | `clients/macos/.../ContentView.swift` (`statusOverlay`, `disconnectionOverlay`, `reconnectingOverlay`) |
+| Disconnection overlays | `clients/macos/.../ContentView.swift` (`statusOverlay`, `disconnectionOverlay`, `reconnectingOverlay`, `recoveryFailedOverlay`) |
+| Active reconnect loop | `clients/macos/.../ReconnectCoordinator.swift` (+ `ReconnectCoordinatorTests`) |
+| Host sleep/wake abstraction | `clients/macos/.../SystemPowerMonitor.swift` (`SystemPowerMonitoring`, `MacSystemPowerMonitor`) |
 | Shared event loop group, channel teardown | `clients/macos/.../VideoClient.swift` (`sharedGroup`, `disconnect`) |
 | Window close flow | `clients/macos/.../ContentView.swift` (`WindowCloseCoordinator`), `MachineManager` |
 | Bulk disconnect ordering | `clients/macos/.../Disconnectable.swift` (`ClientGroup`) |

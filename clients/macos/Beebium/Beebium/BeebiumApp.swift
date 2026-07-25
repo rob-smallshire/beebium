@@ -22,6 +22,11 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
     /// Titles of Window scene entries to hide in the Window menu.
     private static let hiddenWindowMenuTitles: Set<String> = ["New Machine", "Connect to Machine"]
 
+    /// Watches host sleep/wake and re-broadcasts them app-wide, so every open
+    /// window can recover its own connection. Owned here because the signal is
+    /// app-level; each window consumes it via `.onReceive` (see ContentView).
+    private let powerMonitor: SystemPowerMonitoring = MacSystemPowerMonitor()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Tooltips drive much of Beebium's secondary information (per-row
         // socket details in the Memory sidebar, parsed ROM kinds, slot
@@ -75,6 +80,17 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
             Self.placeFullSpeedPasteBelowPaste(in: menu)
             Self.placeCopyVariantsBelowCopy(in: menu)
         }
+
+        // Re-broadcast host sleep/wake as app-wide notifications. A full system
+        // sleep suspends the process and drops its connections; each window
+        // recovers its own on wake (ContentView -> ReconnectCoordinator).
+        powerMonitor.onWillSleep = {
+            NotificationCenter.default.post(name: .beebiumHostWillSleep, object: nil)
+        }
+        powerMonitor.onDidWake = {
+            NotificationCenter.default.post(name: .beebiumHostDidWake, object: nil)
+        }
+        powerMonitor.start()
     }
 
     /// The two copy variants that must sit together directly beneath the

@@ -85,6 +85,9 @@ struct ContentView: View {
     @StateObject private var speedModel = SpeedControlModel()
     @StateObject private var pasteCoordinator = PasteCoordinator()
     @StateObject private var selectionCoordinator = SelectionCoordinator()
+    /// Actively re-establishes the connection after an unexpected drop (a wake
+    /// from sleep, a network blip, a server bounce). Configured in onAppear.
+    @StateObject private var reconnectCoordinator = ReconnectCoordinator()
     private let selectionPasteboard = SystemSelectionPasteboard()
     let initialTarget: ConnectionTarget
     let initialNeedsRun: Bool
@@ -228,7 +231,7 @@ struct ContentView: View {
         .animation(.default, value: showStatusBar)
     }
 
-    var body: some View {
+    private var styledContent: some View {
         Group {
             if isImmersive {
                 immersiveLayout
@@ -253,6 +256,10 @@ struct ContentView: View {
         }
         .focusedValue(\.pasteCoordinator, pasteCoordinator)
         .focusedValue(\.selectionCoordinator, selectionCoordinator)
+    }
+
+    var body: some View {
+        styledContent
         .onAppear {
             // The coordinator holds these weakly; ContentView owns them for
             // the window's lifetime.
@@ -355,6 +362,17 @@ struct ContentView: View {
             clientGroup.register(sidewaysClient)
             clientGroup.registerVideoClient(videoClient)
 
+            // Reconnecting the VideoClient re-establishes every stream (it owns
+            // the shared channel; the rest follow the .connected cascade). Never
+            // fight an intentional stop: a graceful server shutdown announces
+            // itself before/at the drop.
+            reconnectCoordinator.configure(
+                reconnect: { videoClient.reconnect(to: videoClient.target) },
+                isIntentionalStop: {
+                    systemClient.liveness == .stopped || systemClient.isServerShuttingDown
+                }
+            )
+
             // Connection target was passed from MainWindowRouter (which consumed the
             // pending target from ConnectWindowState). Connect immediately.
             needsRun = initialNeedsRun
@@ -381,13 +399,18 @@ struct ContentView: View {
                     videoClient: videoClient,
                     machineManager: MachineManager.shared,
                     window: window,
-                    clientGroup: clientGroup
+                    clientGroup: clientGroup,
+                    reconnectCoordinator: reconnectCoordinator
                 )
                 coordinator.install(on: window)
                 closeCoordinator = coordinator
             }
         }
         .onChange(of: videoClient.connectionState) { newState in
+            // Drive active recovery: an unexpected .error starts/continues the
+            // reconnect loop; .connected resets it.
+            reconnectCoordinator.handleConnectionState(newState)
+
             // Immersive Mode is only meaningful while emulation is live. Any
             // transition out of .connected (network blip, server shutdown,
             // user-initiated disconnect) returns the window to its normal
@@ -477,6 +500,12 @@ struct ContentView: View {
                 isImmersive = false
             }
         }
+        .modifier(HostPowerEventsModifier(
+            // A full system sleep suspends us and drops the connection; force a
+            // fresh attempt on wake, and don't burn a backoff while asleep.
+            onWake: { reconnectCoordinator.handleWake() },
+            onWillSleep: { reconnectCoordinator.handleWillSleep() }
+        ))
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             // Sync Caps Lock state when window gains focus (macOS Caps Lock
             // may have changed while we were unfocused). Only fire after
@@ -559,9 +588,24 @@ struct ContentView: View {
 
     @ViewBuilder
     private var statusOverlay: some View {
-        // Server liveness (from the WatchServerStatus status facility) takes
-        // priority: a mid-session loss or shutdown is what the user most needs
-        // to see, and it is distinct from connect-time states.
+        // An active reconnect takes priority over the raw liveness state: a
+        // dropped stream reads as .died even while we are already bringing the
+        // connection back (e.g. after a wake from sleep), so show the honest
+        // "reconnecting" spinner until it succeeds or the attempts are spent.
+        switch reconnectCoordinator.phase {
+        case .reconnecting(let attempt):
+            reconnectingOverlay(label: connectionLabel, attempt: attempt)
+        case .givenUp:
+            recoveryFailedOverlay(label: connectionLabel)
+        case .idle:
+            livenessOverlay
+        }
+    }
+
+    /// Overlay for the raw liveness state, shown when no active reconnect is in
+    /// progress (see statusOverlay).
+    @ViewBuilder
+    private var livenessOverlay: some View {
         switch systemClient.liveness {
         case .died:
             // The server process ended unexpectedly (crash/kill). We know it was
@@ -589,7 +633,7 @@ struct ContentView: View {
             // unreachable temporarily (network blip). This is recoverable -- it
             // clears itself if heartbeats resume -- so show a spinner and a
             // single button to give up rather than a terminal message.
-            reconnectingOverlay(label: connectionLabel)
+            reconnectingOverlay(label: connectionLabel, attempt: nil)
         case .active:
             connectStatusCard
         }
@@ -675,10 +719,10 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Transient, recoverable disconnection: the server stopped heartbeating but
-    /// the stream is still open. Auto-recovers when heartbeats resume; a single
-    /// button lets the user give up and close the window.
-    private func reconnectingOverlay(label: String) -> some View {
+    /// Recoverable disconnection: either an active reconnect is in progress
+    /// (`attempt` set) or heartbeats stopped on a still-open stream (`attempt`
+    /// nil, passive recovery). A single button lets the user give up and close.
+    private func reconnectingOverlay(label: String, attempt: Int?) -> some View {
         ZStack {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
@@ -694,8 +738,54 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                if let attempt {
+                    Text("Attempt \(attempt) of \(ReconnectCoordinator.maxAttempts)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 Button("Close") {
+                    reconnectCoordinator.cancel()
                     closeWindow()
+                }
+                .padding(.top, 6)
+            }
+            .padding(36)
+            .frame(maxWidth: 420)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .shadow(radius: 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The active reconnect exhausted its automatic attempts. Honest terminal
+    /// state, but with a manual Retry (the server may yet return -- a laptop
+    /// opened much later, a network restored) alongside Close.
+    private func recoveryFailedOverlay(label: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 52))
+                    .foregroundColor(.orange)
+                Text("Couldn\u{2019}t reconnect")
+                    .font(.title2.weight(.semibold))
+                Text("Gave up trying to reach \(label). It may be off, asleep, "
+                    + "or unreachable.")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 12) {
+                    Button("Retry") {
+                        reconnectCoordinator.retryNow()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    Button("Close") {
+                        reconnectCoordinator.cancel()
+                        closeWindow()
+                    }
                 }
                 .padding(.top, 6)
             }
@@ -783,6 +873,24 @@ struct WindowAccessor: NSViewRepresentable {
 
 // MARK: - Window Close Coordinator
 
+/// Delivers host sleep/wake (posted app-wide by the power monitor) to a window,
+/// as its own modifier so the two publisher subscriptions do not swell
+/// ContentView.body past the Swift type-checker's complexity budget.
+private struct HostPowerEventsModifier: ViewModifier {
+    let onWake: () -> Void
+    let onWillSleep: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .beebiumHostDidWake)) { _ in
+                onWake()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .beebiumHostWillSleep)) { _ in
+                onWillSleep()
+            }
+    }
+}
+
 /// Intercepts the window close button to implement lifecycle-aware behavior.
 ///
 /// SwiftUI's WindowGroup manages its own NSWindowDelegate, so we cannot rely on
@@ -798,13 +906,15 @@ class WindowCloseCoordinator: NSObject {
     let videoClient: VideoClient
     let machineManager: MachineManager
     let clientGroup: ClientGroup
+    let reconnectCoordinator: ReconnectCoordinator
     weak var window: NSWindow?
 
-    init(systemClient: SystemClient, videoClient: VideoClient, machineManager: MachineManager, window: NSWindow, clientGroup: ClientGroup) {
+    init(systemClient: SystemClient, videoClient: VideoClient, machineManager: MachineManager, window: NSWindow, clientGroup: ClientGroup, reconnectCoordinator: ReconnectCoordinator) {
         self.systemClient = systemClient
         self.videoClient = videoClient
         self.machineManager = machineManager
         self.clientGroup = clientGroup
+        self.reconnectCoordinator = reconnectCoordinator
         self.window = window
     }
 
@@ -836,6 +946,10 @@ class WindowCloseCoordinator: NSObject {
         let address = videoClient.target.address
         let clientCount = systemClient.clientCount
         NSLog("[WindowCloseCoordinator] handleCloseButton for address %@, clientCount %d", address, clientCount)
+
+        // Closing the window is intentional: stop any reconnect loop so a
+        // pending backoff cannot re-dial while we tear the connection down.
+        reconnectCoordinator.cancel()
 
         let action = machineManager.windowCloseAction(forAddress: address, clientCount: clientCount)
 

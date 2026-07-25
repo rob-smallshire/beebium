@@ -465,7 +465,8 @@ final class MachineManagerTests: XCTestCase {
             videoClient: videoClient,
             machineManager: manager,
             window: window,
-            clientGroup: ClientGroup()
+            clientGroup: ClientGroup(),
+            reconnectCoordinator: ReconnectCoordinator()
         )
         coordinator.install(on: window)
 
