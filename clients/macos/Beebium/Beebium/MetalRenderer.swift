@@ -31,6 +31,13 @@ final class MetalRenderer: NSObject {
     private var textureHeight: Int = 0
     private var drawableSize: CGSize = .zero
 
+    /// The view presenting this renderer's output, held weakly so a frame
+    /// arrival can mark it for display. The view is paused (no free-running
+    /// display link), so presentation is driven by the ~50 Hz frame stream
+    /// rather than a CVDisplayLink -- which stalls when the display sleeps and
+    /// does not restart, freezing the window while frames keep arriving.
+    weak var mtkView: MTKView?
+
     // Display dimensions (target after scaling). BBC displays all modes at the
     // same physical size (640 wide).
     private var displayWidth: Int = 640
@@ -156,6 +163,11 @@ final class MetalRenderer: NSObject {
                 bytesPerRow: width * 4
             )
         }
+
+        // A new frame is uploaded: mark the paused view for display so draw(in:)
+        // presents it. Called on the main actor (VideoClient.handleFrame is
+        // @MainActor), which is where AppKit expects needsDisplay to be set.
+        mtkView?.needsDisplay = true
     }
 }
 

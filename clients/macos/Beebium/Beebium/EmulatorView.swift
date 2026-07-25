@@ -57,6 +57,8 @@ struct EmulatorView: NSViewRepresentable {
             renderer.parScale = videoSettings.parScale
             context.coordinator.renderer = renderer
             mtkView.delegate = renderer
+            // The renderer marks this view for display when a frame arrives.
+            renderer.mtkView = mtkView
 
             // Wire up renderer to video client for direct frame updates
             videoClient.renderer = renderer
@@ -84,10 +86,13 @@ struct EmulatorView: NSViewRepresentable {
             context.coordinator.touchBarManager = touchBarManager
         }
 
-        // Enable display link for smooth updates
-        mtkView.isPaused = false
-        mtkView.enableSetNeedsDisplay = false
-        mtkView.preferredFramesPerSecond = 60
+        // Present on frame arrival, not from a free-running display link: the
+        // link stalls when the display sleeps and does not restart, freezing the
+        // window while frames keep arriving and the texture keeps updating. A
+        // paused, redraw-on-demand view presents whenever a new frame (via
+        // MetalRenderer.updateFrame) or a resize marks it for display.
+        mtkView.isPaused = true
+        mtkView.enableSetNeedsDisplay = true
 
         return mtkView
     }
@@ -101,6 +106,10 @@ struct EmulatorView: NSViewRepresentable {
         guard let renderer = context.coordinator.renderer else { return }
         renderer.setActiveStyle(videoSettings.activeStyle)
         renderer.parScale = videoSettings.parScale
+        // The view is paused: a settings change (style, pixel shape, background)
+        // must mark it for display, or it would not repaint until the next frame
+        // -- and never, if the emulator is paused.
+        nsView.needsDisplay = true
     }
 
     func makeCoordinator() -> Coordinator {
