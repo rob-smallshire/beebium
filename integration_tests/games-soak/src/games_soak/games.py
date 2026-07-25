@@ -124,7 +124,7 @@ _REVS_NAV: tuple[tuple[str, str], ...] = (
 GAMES: list[Game] = [
     Game(
         name="Revs",
-        disc="discs/games/Disc015-Revs.ssd",
+        disc="tests/assets/discs/Disc015-Revs.ssd",
         # The boot sequence itself is the landmark walk; no separate banner.
         nav=_REVS_NAV,
         landmark_timeout_seconds=60.0,
@@ -154,7 +154,7 @@ GAMES: list[Game] = [
     ),
     Game(
         name="Galaforce",
-        disc="discs/games/Disc025-Galaforce.ssd",
+        disc="tests/assets/discs/Disc025-Galaforce.ssd",
         # Mode 7 instructions screen; unique opening line of the story text.
         landmark="In the midst of the",
         # Press SPACE seven times at ~1s intervals to advance through the
@@ -163,7 +163,7 @@ GAMES: list[Game] = [
     ),
     Game(
         name="Galaforce 2",
-        disc="discs/games/Disc039-Galaforce2PIAS6.ssd",
+        disc="tests/assets/discs/Disc039-Galaforce2PIAS6.ssd",
         # Mode 7 instructions screen; unique opening line of the story text.
         landmark="Everything that Galaforce was",
         # Press SPACE four times at ~1s intervals to reach hi-scores/attract.
@@ -171,7 +171,7 @@ GAMES: list[Game] = [
     ),
     Game(
         name="Meteors",
-        disc="discs/games/Disc001-Meteors.ssd",
+        disc="tests/assets/discs/Disc001-Meteors.ssd",
         # Instruction pages each show "Press SPACE BAR to continue"; page through
         # them until the prompt is gone (reaches the game/attract). Robust to the
         # graphics title loading before the prompt appears -- a blind count lost
@@ -180,21 +180,21 @@ GAMES: list[Game] = [
     ),
     Game(
         name="Zalaga",
-        disc="discs/games/Disc003-Zalaga.ssd",
+        disc="tests/assets/discs/Disc003-Zalaga.ssd",
         landmark="Zalaga",  # Mode 7 title ("Aardvark Software presents... Zalaga")
         # Return x5 at ~1s intervals, then K, to reach the game.
         attract_keys=("\r", "\r", "\r", "\r", "\r", "K"),
     ),
     Game(
         name="Battlezone",
-        disc="discs/games/Disc173-BATTLEZONERSTD.ssd",
+        disc="tests/assets/discs/Disc173-BATTLEZONERSTD.ssd",
         landmark="BATTLEZONE",  # Mode 7 title ("ROCKETEER presents BATTLEZONE")
         # SPACE x7 at ~1s intervals to reach attract mode.
         attract_keys=(" ", " ", " ", " ", " ", " ", " "),
     ),
     Game(
         name="Cylon Attack",
-        disc="discs/games/Disc001-CylonAttackAFSTD.ssd",
+        disc="tests/assets/discs/Disc001-CylonAttackAFSTD.ssd",
         # The "A 3D Space battle" title takes a long time to appear. It then
         # asks "Do you want INSTRUCTIONS (Y/N)?" -- answer N -- and then "Load
         # high score table (Y/N)?" -- answer N -- to drop into the attract mode.
