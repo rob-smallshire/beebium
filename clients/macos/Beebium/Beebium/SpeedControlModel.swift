@@ -34,9 +34,33 @@ final class SpeedControlModel: ObservableObject {
     /// Whether the emulator is running unlimited (the 0.0 wire sentinel).
     @Published private(set) var isUnlimited: Bool = false
 
-    /// Running max of the server's estimated max-attainable speed over the
-    /// session. Seeds the scale; only ever grows.
+    /// Spike-robust maximum of the server's estimated max-attainable speed over
+    /// a recent window (see poll). Seeds the scale. It reassesses rather than
+    /// latching an all-time high, so a transient spike -- the estimate briefly
+    /// exploding when the emulator idles during a boot or reset -- ages out
+    /// instead of pinning the axis at its ceiling forever.
     @Published private(set) var sessionMaxAttainable: Double = 1.0
+
+    /// Recent max-attainable samples, one per poll, newest last. A trailing
+    /// window long enough that a genuinely sustained speed is well represented
+    /// while a one- or two-poll idle spike is a droppable minority.
+    private var recentSamples: [Double] = []
+    private static let sampleWindow = 120  // ~30 s at the 250 ms poll rate
+    /// Fraction of the highest samples treated as spikes and dropped. The
+    /// estimate is achieved / active-fraction, which spikes for a poll or two
+    /// whenever the emulator idles (a boot, a reset); dropping the top tenth
+    /// rejects those while keeping a genuinely sustained maximum.
+    private static let spikeFraction = 0.1
+
+    /// Highest sample after discarding the top spikeFraction as outliers. This
+    /// is what a boot/reset spike can't move: it would need to persist across a
+    /// tenth of the window to survive the cull.
+    private static func robustMax(_ samples: [Double]) -> Double {
+        guard !samples.isEmpty else { return 1.0 }
+        let sorted = samples.sorted()
+        let drop = Int(Double(sorted.count) * spikeFraction)
+        return max(1.0, sorted[sorted.count - 1 - drop])
+    }
 
     /// Ceiling on the axis coverage in log2 units: 2^9 = 512x, past any real
     /// host, so a spurious estimate (see poll) cannot overspread the axis.
@@ -106,17 +130,21 @@ final class SpeedControlModel: ObservableObject {
             achievedMultiplier = stats.achievedSpeedMultiplier
         }
 
-        // Grow the session max from the server's estimate (and the achieved rate
-        // as a floor). estimated is 0 until the first window completes. The
-        // estimate is achieved / active-fraction, which spikes arbitrarily high
-        // when the emulator is briefly near-idle (a boot, a reset); since the
-        // session max never shrinks, one such spike would permanently blow up
-        // the scale. Ignore non-finite values and clamp growth to the axis
-        // ceiling so the scale stays bounded and meaningful.
+        // Feed the trailing window from the server's estimate (with the achieved
+        // rate as a floor) and take a spike-robust max of it. estimated is 0
+        // until the first window completes. The estimate is achieved /
+        // active-fraction, which spikes arbitrarily high when the emulator is
+        // briefly near-idle (a boot, a reset); a trailing max that drops the top
+        // few samples reassesses instead of latching such a spike forever.
+        // Ignore non-finite values and clamp to the axis ceiling.
         let candidate = max(stats.estimatedMaxSpeedMultiplier, stats.achievedSpeedMultiplier)
-        let ceiling = pow(2.0, Double(Self.maxCoverageExponent))
-        if candidate.isFinite && candidate > sessionMaxAttainable {
-            sessionMaxAttainable = min(candidate, ceiling)
+        if candidate.isFinite {
+            let ceiling = pow(2.0, Double(Self.maxCoverageExponent))
+            recentSamples.append(min(max(candidate, 1.0), ceiling))
+            if recentSamples.count > Self.sampleWindow {
+                recentSamples.removeFirst(recentSamples.count - Self.sampleWindow)
+            }
+            sessionMaxAttainable = Self.robustMax(recentSamples)
         }
 
         // Adopt the server's configured speed once, at startup, so a machine
