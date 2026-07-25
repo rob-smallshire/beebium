@@ -467,6 +467,15 @@ std::vector<Band> bands_of(const FrameMetadata& metadata) {
             // The chip fills the whole cell; there are no blanked scanlines
             // between teletext rows.
             band.cell_height = band.row_pitch;
+            // The SAA5050 grid is exactly ROWS rows, so report the band as that
+            // many whole rows. A captured frame whose scanline count is not a
+            // clean multiple of ROWS -- interlace jitter, or a frame grabbed
+            // mid-reprogram during boot -- would otherwise make a client
+            // deriving rows as floor((bottom-top)/row_pitch) read 26 for a
+            // 25-row screen. Snapping the bottom to the grid keeps the derived
+            // count at ROWS without depending on the capture being pixel-clean.
+            band.bottom = band.top
+                + static_cast<uint32_t>(TeletextGrid::ROWS) * band.row_pitch;
         } else {
             band.cell_width = BITMAP_CELL_WIDTH;
             band.column_pitch = BITMAP_CELL_WIDTH;
