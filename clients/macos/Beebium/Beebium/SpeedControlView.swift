@@ -65,8 +65,11 @@ private struct SpeedScale: View {
         let inset = thumbRadius
         let usable = max(size.width - 2 * inset, 1)
         let axisY = size.height * 0.6
+        // Seven labels: three tick steps each side of 1x. scaleExponent is
+        // 3 * tickStep, so stepping by tickStep yields -3k,-2k,-k,0,k,2k,3k.
         let exponents = Array(stride(from: -model.scaleExponent,
-                                     through: model.scaleExponent, by: 1))
+                                     through: model.scaleExponent,
+                                     by: model.tickStep))
 
         return ZStack(alignment: .topLeading) {
             // Track

@@ -38,11 +38,29 @@ final class SpeedControlModel: ObservableObject {
     /// session. Seeds the scale; only ever grows.
     @Published private(set) var sessionMaxAttainable: Double = 1.0
 
-    /// Scale half-width N: the axis spans [2^-N, 2^N] with 1x centred. Floored at
-    /// 2 so even a slow host still gets a usable [1/4x, 4x] range.
-    var scaleExponent: Int {
-        max(2, Int(ceil(log2(max(sessionMaxAttainable, 1.0)))))
+    /// Ceiling on the axis coverage in log2 units: 2^9 = 512x, past any real
+    /// host, so a spurious estimate (see poll) cannot overspread the axis.
+    private static let maxCoverageExponent = 9
+
+    /// The axis shape: how many labels (seven or nine) and their log2 spacing k.
+    /// Labels sit at 2^(k*i) for i in -halfSpan...halfSpan, so seven labels span
+    /// [b^-3, b^3] and nine span [b^-4, b^4] for base b = 2^k. Both families are
+    /// candidates; the axis takes whichever covers the session max with the
+    /// tightest coverage, so it grows in small steps -- 8, 16, 64, 256, 512 --
+    /// rather than the 8, 64, 512 that the seven-label family alone would jump
+    /// through. A tie prefers nine (finer, smaller base). Floored at base 2.
+    private var scaleShape: (halfSpan: Int, step: Int) {
+        let l = log2(max(sessionMaxAttainable, 1.0))
+        let k7 = max(1, Int(ceil(l / 3.0)))  // seven labels: 2^(3*k7) >= max
+        let k9 = max(1, Int(ceil(l / 4.0)))  // nine labels:  2^(4*k9) >= max
+        return (4 * k9 <= 3 * k7) ? (4, k9) : (3, k7)
     }
+
+    /// Tick spacing in log2 units, k (base b = 2^k).
+    var tickStep: Int { scaleShape.step }
+
+    /// Scale half-width in log2 units: halfSpan tick steps each side of 1x.
+    var scaleExponent: Int { scaleShape.halfSpan * scaleShape.step }
 
     var scaleMax: Double { pow(2.0, Double(scaleExponent)) }
     var scaleMin: Double { 1.0 / scaleMax }
@@ -89,10 +107,16 @@ final class SpeedControlModel: ObservableObject {
         }
 
         // Grow the session max from the server's estimate (and the achieved rate
-        // as a floor). estimated is 0 until the first window completes.
+        // as a floor). estimated is 0 until the first window completes. The
+        // estimate is achieved / active-fraction, which spikes arbitrarily high
+        // when the emulator is briefly near-idle (a boot, a reset); since the
+        // session max never shrinks, one such spike would permanently blow up
+        // the scale. Ignore non-finite values and clamp growth to the axis
+        // ceiling so the scale stays bounded and meaningful.
         let candidate = max(stats.estimatedMaxSpeedMultiplier, stats.achievedSpeedMultiplier)
-        if candidate > sessionMaxAttainable {
-            sessionMaxAttainable = candidate
+        let ceiling = pow(2.0, Double(Self.maxCoverageExponent))
+        if candidate.isFinite && candidate > sessionMaxAttainable {
+            sessionMaxAttainable = min(candidate, ceiling)
         }
 
         // Adopt the server's configured speed once, at startup, so a machine
