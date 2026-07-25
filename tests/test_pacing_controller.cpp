@@ -260,3 +260,27 @@ TEST_CASE("PacingClock rebase after a reset does not crawl", "[pacing]") {
     // controller's ceiling (nominal 1000 * 3 = 3000 at 1x).
     REQUIRE(next >= 1000);
 }
+
+// steady_clock keeps advancing across an OS sleep, so a tick that spans a
+// suspend sees a wall gap of seconds. Charging that as owed emulation would
+// fast-forward the machine to catch the whole sleep back on wake. The clock
+// must drop such a gap and simply resume real-time pacing from the wake.
+TEST_CASE("PacingClock drops a long suspend gap instead of catching up",
+          "[pacing]") {
+    PacingConfig config{2'000'000, 500, 1.0};  // 2 MHz, real-time
+    PacingClock clock(config, std::chrono::microseconds(500), PlatformSleep{});
+
+    clock.rebase(1000);        // anchor baseline and wall clock to now
+    clock.report_cycles(1000);
+
+    // The process is suspended for over a second; the machine does not advance.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    clock.report_cycles(1000);  // no cycles ran during the "sleep"
+
+    uint64_t next = clock.cycles_for_next_tick();
+
+    // The gap is dropped, not emulated back: a single nominal tick (1000 at
+    // 2 MHz / 500 us), never the catch-up ceiling (nominal * 3 = 3000) that a
+    // multi-second deficit would otherwise demand.
+    REQUIRE(next <= 1500);
+}

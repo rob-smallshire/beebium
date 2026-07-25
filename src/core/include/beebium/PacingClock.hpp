@@ -142,6 +142,21 @@ public:
         double dt_ns = static_cast<double>(
             std::chrono::duration_cast<Duration>(now - last_pace_wall_).count());
         last_pace_wall_ = now;
+
+        // A gap far larger than a tick means the process was suspended -- an OS
+        // sleep, a debugger, a host stall. steady_clock keeps advancing across
+        // macOS sleep (mach_continuous_time), so charging that wall time as owed
+        // emulation would fast-forward the machine to "catch up" the whole sleep
+        // on wake. Drop the gap instead: re-anchor the baseline to now and run a
+        // single nominal tick, so real-time pacing simply resumes from here.
+        constexpr double kSuspendGapNs = 1'000'000'000.0;  // 1 s >> any real tick
+        if (dt_ns > kSuspendGapNs) {
+            baseline_cycles_ = total_cycles_.load(std::memory_order_acquire);
+            effective_elapsed_ns_ = 0.0;
+            controller_.reset();
+            return controller_.nominal_cycles();
+        }
+
         effective_elapsed_ns_ += s * dt_ns;
 
         uint64_t cycles =
