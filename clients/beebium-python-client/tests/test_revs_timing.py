@@ -127,20 +127,39 @@ def _navigate_to_gameplay(bbc: Beebium) -> bool:
 
     Returns True if all screens were found and navigated successfully.
     """
+    def dump_failure(step_num: int, waiting_for: str) -> None:
+        rows = read_mode7_screen(bbc)
+        print(f"\nStep {step_num}: Failed waiting for: {waiting_for}")
+        print("Current screen:")
+        for i, row in enumerate(rows):
+            print(f"  Row {i:2d}: [{row}]")
+
+    # If a screen never appears, the previous keypress was most likely dropped
+    # -- the press is server-paced over the keyboard matrix, but the fast-forward
+    # stops the machine between chunks, so under load a single press can miss the
+    # MOS scan and not register. Re-press the previous key and wait again. A
+    # screen that never appears even after re-pressing is a genuine navigation
+    # failure and still fails here, so this discriminates a real fault from a
+    # dropped keypress rather than masking it. (Text is not assumed to vanish on
+    # the next screen -- some Revs headings persist -- so advance is judged by
+    # the next screen appearing, not the current one leaving.)
+    prev_key: str | None = None
     for step_num, (wait_text, key) in enumerate(REVS_BOOT_SEQUENCE, 1):
-        found = bbc.run_until_or_timeout(
-            lambda text=wait_text: screen_contains(bbc, text),
-            emulated_seconds=60.0,
-            chunk_seconds=0.5,
-        )
+        found = False
+        for _ in range(3):
+            found = bbc.run_until_or_timeout(
+                lambda text=wait_text: screen_contains(bbc, text),
+                emulated_seconds=60.0,
+                chunk_seconds=0.5,
+            )
+            if found or prev_key is None:
+                break
+            bbc.keyboard.type(prev_key)  # re-drive the dropped press
         if not found:
-            rows = read_mode7_screen(bbc)
-            print(f"\nStep {step_num}: Failed waiting for: {wait_text!r}")
-            print("Current screen:")
-            for i, row in enumerate(rows):
-                print(f"  Row {i:2d}: [{row}]")
+            dump_failure(step_num, repr(wait_text))
             return False
         bbc.keyboard.type(key)
+        prev_key = key
     # Give the game time to enter its custom screen mode
     bbc.run_for_emulated_seconds(2.0)
     return True
