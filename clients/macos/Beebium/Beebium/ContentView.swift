@@ -727,6 +727,7 @@ struct ContentView_Previews: PreviewProvider {
             initialTarget: ConnectionTarget(host: "127.0.0.1", port: 50051),
             initialNeedsRun: false,
             initialProvenanceUUID: nil,
+            initialShowSidebar: nil,
             keyboardMappingManager: KeyboardMappingManager()
         )
     }
