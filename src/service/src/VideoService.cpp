@@ -358,14 +358,16 @@ grpc::Status VideoServiceImpl::GetTeletextScreen(
         region.columns = request->region().columns();
     }
 
-    // Clip to the grid, so the reported dimensions describe what is actually
-    // returned rather than what was asked for.
-    const size_t first_row = std::min<size_t>(region.row, TeletextGrid::ROWS);
-    const size_t first_column = std::min<size_t>(region.column, TeletextGrid::COLUMNS);
+    // Clip to the captured grid, so the reported dimensions describe what is
+    // actually returned rather than what was asked for. region.rows and
+    // region.columns can be the whole-screen sentinel, so they are clamped to
+    // what remains past the origin before being added, never first + sentinel.
+    const size_t first_row = std::min<size_t>(region.row, screen.rows);
+    const size_t first_column = std::min<size_t>(region.column, screen.columns);
     const size_t last_row =
-        std::min<size_t>(first_row + region.rows, TeletextGrid::ROWS);
+        first_row + std::min<size_t>(region.rows, screen.rows - first_row);
     const size_t last_column =
-        std::min<size_t>(first_column + region.columns, TeletextGrid::COLUMNS);
+        first_column + std::min<size_t>(region.columns, screen.columns - first_column);
 
     response->set_active(screen.active);
     response->set_frame_number(screen.frame_number);

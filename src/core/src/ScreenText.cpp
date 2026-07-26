@@ -131,8 +131,8 @@ BandReading read_teletext_band(const Band& band,
 
     const CellRange range = cells_covered(
         band, region,
-        static_cast<uint32_t>(TeletextGrid::COLUMNS),
-        static_cast<uint32_t>(TeletextGrid::ROWS));
+        static_cast<uint32_t>(teletext.columns),
+        static_cast<uint32_t>(teletext.rows));
     if (range.empty()) {
         return reading;
     }

@@ -64,15 +64,19 @@ BandReading unreadable_band() {
     return BandReading{};
 }
 
-// A 40x25 grid with the given rows written from column 0.
+// A standard 40x25 grid with the given rows written from column 0.
+//
+// Every cell is written, spaces included, the way a real MODE 7 capture fills
+// the whole display-enabled area rather than only the cells that carry text.
 TeletextGrid::Snapshot grid_of(const std::vector<std::string>& rows) {
     TeletextGrid grid;
-    for (size_t row = 0; row < rows.size() && row < TeletextGrid::ROWS; ++row) {
-        for (size_t column = 0;
-             column < rows[row].size() && column < TeletextGrid::COLUMNS;
-             ++column) {
+    for (size_t row = 0; row < TeletextGrid::DEFAULT_ROWS; ++row) {
+        const std::string& text = row < rows.size() ? rows[row] : std::string();
+        for (size_t column = 0; column < TeletextGrid::DEFAULT_COLUMNS; ++column) {
             TeletextCell cell;
-            cell.character = static_cast<uint8_t>(rows[row][column]);
+            cell.character = column < text.size()
+                                 ? static_cast<uint8_t>(text[column])
+                                 : static_cast<uint8_t>(' ');
             grid.set_cell(row, column, cell);
         }
     }
@@ -346,7 +350,7 @@ TEST_CASE("The teletext strategy reads a teletext band", "[screen-text]") {
             read_band(teletext_band(), whole_screen(), Search::Anywhere, teletext_sources(screen));
 
         REQUIRE(reading.supported);
-        REQUIRE(reading.runs.size() == TeletextGrid::ROWS);
+        REQUIRE(reading.runs.size() == TeletextGrid::DEFAULT_ROWS);
         REQUIRE(reading.runs[0].text == "BBC Computer 32K");
         REQUIRE(reading.runs[2].text == "BASIC");
         REQUIRE(reading.runs[4].text == ">");

@@ -132,17 +132,24 @@ char32_t teletext_cell_codepoint(const TeletextCell& cell,
 
 namespace {
 
-// Shared by the live grid and a snapshot: both expose cell(row, column).
+// Shared by the live grid and a snapshot: both expose cell(row, column) plus
+// the captured extent, passed in as grid_rows and grid_columns.
 template <typename Source>
 std::string convert(const Source& grid,
+                    size_t grid_rows,
+                    size_t grid_columns,
                     const TeletextRegion& region,
                     TeletextLinearisation linearisation,
                     TeletextCharacters characters) {
-    const size_t first_row = std::min(region.row, TeletextGrid::ROWS);
-    const size_t first_column = std::min(region.column, TeletextGrid::COLUMNS);
-    const size_t last_row = std::min(first_row + region.rows, TeletextGrid::ROWS);
+    // Clip the region to the grid. region.rows and region.columns can be the
+    // whole-screen sentinel, so they are clamped to what remains past the
+    // origin before being added -- never first + sentinel, which would wrap.
+    const size_t first_row = std::min(region.row, grid_rows);
+    const size_t first_column = std::min(region.column, grid_columns);
+    const size_t last_row =
+        first_row + std::min(region.rows, grid_rows - first_row);
     const size_t last_column =
-        std::min(first_column + region.columns, TeletextGrid::COLUMNS);
+        first_column + std::min(region.columns, grid_columns - first_column);
 
     std::string text;
     std::string line;
@@ -202,14 +209,16 @@ std::string teletext_text(const TeletextGrid& grid,
                           const TeletextRegion& region,
                           TeletextLinearisation linearisation,
                           TeletextCharacters characters) {
-    return convert(grid, region, linearisation, characters);
+    return convert(grid, grid.rows(), grid.columns(), region, linearisation,
+                   characters);
 }
 
 std::string teletext_text(const TeletextGrid::Snapshot& snapshot,
                           const TeletextRegion& region,
                           TeletextLinearisation linearisation,
                           TeletextCharacters characters) {
-    return convert(snapshot, region, linearisation, characters);
+    return convert(snapshot, snapshot.rows, snapshot.columns, region,
+                   linearisation, characters);
 }
 
 } // namespace beebium

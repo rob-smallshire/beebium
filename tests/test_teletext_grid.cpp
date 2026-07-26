@@ -87,26 +87,51 @@ TEST_CASE("A frame does not inherit cells from the one before",
     CHECK(grid.cell(10, 10).character == 0);
 }
 
-TEST_CASE("Cells outside the grid are dropped, not folded onto the edges",
+TEST_CASE("A display larger than the standard page grows the grid",
           "[teletext-grid]") {
-    // Unusual CRTC programming can produce a display larger than 40x25.
-    // Clamping would corrupt real cells; dropping merely omits the extra ones.
+    // Unusual CRTC programming can drive the SAA5050 past 40x25 -- a game may
+    // use 50 columns by 18 rows. The extra cells are captured at their true
+    // positions, the grid growing to fit, rather than folded onto the standard
+    // page's edges, which would corrupt real cells.
     TeletextGrid grid;
 
-    TeletextCell edge;
-    edge.character = 'E';
-    grid.set_cell(TeletextGrid::ROWS - 1, TeletextGrid::COLUMNS - 1, edge);
+    TeletextCell wide;
+    wide.character = 'W';
+    grid.set_cell(0, 49, wide);  // ten columns past the standard 40
 
-    TeletextCell beyond;
-    beyond.character = 'B';
-    grid.set_cell(TeletextGrid::ROWS, 0, beyond);
-    grid.set_cell(0, TeletextGrid::COLUMNS, beyond);
+    TeletextCell tall;
+    tall.character = 'T';
+    grid.set_cell(17, 0, tall);  // establishing an 18-row display
 
     grid.swap();
 
-    CHECK(grid.cell(TeletextGrid::ROWS - 1, TeletextGrid::COLUMNS - 1).character == 'E');
-    // Nothing landed at the edges as a result of the out-of-range writes.
+    CHECK(grid.columns() == 50);
+    CHECK(grid.rows() == 18);
+    CHECK(grid.cell(0, 49).character == 'W');
+    CHECK(grid.cell(17, 0).character == 'T');
+    // Nothing was folded onto the standard-page edge.
     CHECK(grid.cell(0, 0).character == 0);
+    CHECK(grid.cell(0, TeletextGrid::DEFAULT_COLUMNS - 1).character == 0);
+}
+
+TEST_CASE("Cells beyond the addressable maximum are dropped",
+          "[teletext-grid]") {
+    // The CRTC and the capture counters are byte-bounded, so nothing real
+    // reaches past MAX. A position beyond it is dropped rather than letting a
+    // bug grow the buffer without bound.
+    TeletextGrid grid;
+
+    TeletextCell beyond;
+    beyond.character = 'B';
+    grid.set_cell(TeletextGrid::MAX_ROWS, 0, beyond);
+    grid.set_cell(0, TeletextGrid::MAX_COLUMNS, beyond);
+
+    grid.swap();
+
+    // Neither write landed, so nothing was captured at all.
+    CHECK_FALSE(grid.active());
+    CHECK(grid.rows() == 0);
+    CHECK(grid.columns() == 0);
 }
 
 TEST_CASE("Reset returns the grid to empty and inactive", "[teletext-grid]") {
@@ -327,7 +352,7 @@ namespace {
 // test can assert on what a human would read.
 std::string row_text(const TeletextGrid& grid, size_t row) {
     std::string text;
-    for (size_t column = 0; column < TeletextGrid::COLUMNS; ++column) {
+    for (size_t column = 0; column < grid.columns(); ++column) {
         const auto& cell = grid.cell(row, column);
         const bool readable = !cell.is_control_code
                            && cell.charset == TeletextCellCharset::Alpha
@@ -341,7 +366,7 @@ std::string row_text(const TeletextGrid& grid, size_t row) {
 }
 
 bool grid_contains(const TeletextGrid& grid, const std::string& needle) {
-    for (size_t row = 0; row < TeletextGrid::ROWS; ++row) {
+    for (size_t row = 0; row < grid.rows(); ++row) {
         if (row_text(grid, row).find(needle) != std::string::npos) {
             return true;
         }
@@ -402,11 +427,15 @@ TEST_CASE("The grid captures the MODE 7 boot screen", "[teletext-grid][integrati
         CHECK(found_near_top);
     }
 
-    SECTION("no cells are captured beyond the display width") {
-        // Column tracking that ran on past 40 would silently drop cells; one
-        // that reset late would overwrite column 0 repeatedly.
+    SECTION("the captured extent is the standard MODE 7 page") {
+        // A standard boot screen is exactly 40 by 25. Column tracking that ran
+        // on past 40, or row tracking that overran 25, would grow the grid;
+        // one that reset late would leave it short.
+        CHECK(grid.columns() == TeletextGrid::DEFAULT_COLUMNS);
+        CHECK(grid.rows() == TeletextGrid::DEFAULT_ROWS);
+
         size_t non_blank_rows = 0;
-        for (size_t row = 0; row < TeletextGrid::ROWS; ++row) {
+        for (size_t row = 0; row < grid.rows(); ++row) {
             if (!row_text(grid, row).empty()) {
                 ++non_blank_rows;
             }

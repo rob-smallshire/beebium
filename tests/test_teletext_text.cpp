@@ -39,13 +39,15 @@ namespace {
 // emulation thread holds, so the tests exercise the same path the service does.
 TeletextGrid::Snapshot grid_of(const std::vector<std::string>& rows) {
     TeletextGrid grid;
-    for (size_t row = 0; row < rows.size() && row < TeletextGrid::ROWS; ++row) {
-        const std::string& text = rows[row];
-        for (size_t column = 0;
-             column < text.size() && column < TeletextGrid::COLUMNS;
-             ++column) {
+    // Fill the whole standard screen, spaces included, as a real capture does,
+    // rather than only the cells that carry text.
+    for (size_t row = 0; row < TeletextGrid::DEFAULT_ROWS; ++row) {
+        const std::string& text = row < rows.size() ? rows[row] : std::string();
+        for (size_t column = 0; column < TeletextGrid::DEFAULT_COLUMNS; ++column) {
             TeletextCell cell;
-            cell.character = static_cast<uint8_t>(text[column]);
+            cell.character = column < text.size()
+                                 ? static_cast<uint8_t>(text[column])
+                                 : static_cast<uint8_t>(' ');
             grid.set_cell(row, column, cell);
         }
     }
@@ -299,8 +301,8 @@ TEST_CASE("A region beyond the grid is clipped, not an error",
     const auto grid = grid_of({"ABC"});
 
     TeletextRegion region;
-    region.row = TeletextGrid::ROWS - 1;
-    region.column = TeletextGrid::COLUMNS - 2;
+    region.row = TeletextGrid::DEFAULT_ROWS - 1;
+    region.column = TeletextGrid::DEFAULT_COLUMNS - 2;
     region.rows = 100;
     region.columns = 100;
 
@@ -321,7 +323,7 @@ TEST_CASE("Rows linearisation keeps the shape of the selection",
 
 TEST_CASE("Flowed linearisation rejoins a wrapped line", "[teletext-text]") {
     // A row filled to the right edge wrapped, so it continues into the next.
-    std::string full_row(TeletextGrid::COLUMNS, 'A');
+    std::string full_row(TeletextGrid::DEFAULT_COLUMNS, 'A');
     const auto grid = grid_of({full_row, "BBB"});
 
     const std::string flowed = teletext_text(

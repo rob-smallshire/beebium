@@ -23,9 +23,15 @@ from pathlib import Path
 from beebium.client._proto import video_pb2, video_pb2_grpc
 from beebium.client.exceptions import TimeoutError
 
-# A MODE 7 display is always this size.
+# The standard MODE 7 page. A program can drive the SAA5050 into other shapes,
+# so this is the nominal size, not a bound on what a screen can be.
 TELETEXT_ROWS = 25
 TELETEXT_COLUMNS = 40
+
+# "To the far edge from the region's origin." The server clips a region to the
+# captured grid, so this reaches the edge whatever the screen's actual size --
+# unlike a fixed 40x25, which would truncate a custom-shaped display.
+_TELETEXT_TO_EDGE = 0xFFFFFFFF
 
 
 @dataclass(frozen=True)
@@ -432,8 +438,8 @@ class Video:
                 video_pb2.TeletextScreenRegion(
                     row=row,
                     column=column,
-                    rows=rows if rows is not None else TELETEXT_ROWS,
-                    columns=columns if columns is not None else TELETEXT_COLUMNS,
+                    rows=rows if rows is not None else _TELETEXT_TO_EDGE,
+                    columns=columns if columns is not None else _TELETEXT_TO_EDGE,
                 )
             )
 

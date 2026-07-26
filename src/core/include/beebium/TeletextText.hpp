@@ -15,16 +15,22 @@
 #include <beebium/TeletextGrid.hpp>
 
 #include <cstddef>
+#include <limits>
 #include <string>
 
 namespace beebium {
 
 // A rectangle of cells, in grid coordinates.
+//
+// The default extent is the whole grid, whatever its captured size: rows and
+// columns are a sentinel the reader clips to the actual dimensions, so a
+// default-constructed region reads a custom-shaped screen in full rather than
+// only its standard 40x25 corner.
 struct TeletextRegion {
     size_t row = 0;
     size_t column = 0;
-    size_t rows = TeletextGrid::ROWS;
-    size_t columns = TeletextGrid::COLUMNS;
+    size_t rows = std::numeric_limits<size_t>::max();
+    size_t columns = std::numeric_limits<size_t>::max();
 
     static TeletextRegion whole_screen() { return {}; }
 

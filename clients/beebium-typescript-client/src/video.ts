@@ -31,9 +31,19 @@ export interface VideoConfig {
     framerateHz: number;
 }
 
-/** A MODE 7 display is always this size. */
+/**
+ * The standard MODE 7 page. A program can drive the SAA5050 into other shapes,
+ * so this is the nominal size, not a bound on what a screen can be.
+ */
 export const TELETEXT_ROWS = 25;
 export const TELETEXT_COLUMNS = 40;
+
+/**
+ * "To the far edge from the region's origin." The server clips a region to the
+ * captured grid, so this reaches the edge whatever the screen's actual size --
+ * unlike a fixed 40x25, which would truncate a custom-shaped display.
+ */
+const TELETEXT_TO_EDGE = 0xffffffff;
 
 /** A MODE 7 screen, or a region of one, read as characters. */
 export interface TeletextScreen {
@@ -389,8 +399,8 @@ export class Video {
             request["region"] = {
                 row: options?.row ?? 0,
                 column: options?.column ?? 0,
-                rows: options?.rows ?? TELETEXT_ROWS,
-                columns: options?.columns ?? TELETEXT_COLUMNS,
+                rows: options?.rows ?? TELETEXT_TO_EDGE,
+                columns: options?.columns ?? TELETEXT_TO_EDGE,
             };
         }
 

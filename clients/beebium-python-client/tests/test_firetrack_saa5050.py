@@ -63,6 +63,34 @@ class TestFiretrackCustomSaa5050:
         assert "Aardvark" in text
         assert "Software Studios" in text
 
+    def test_teletext_screen_reports_the_full_custom_width(
+        self, bbc_firetrack: Beebium
+    ) -> None:
+        """The attribute API captures all 50 columns, not a 40-column corner.
+
+        The teletext grid grows to the displayed shape, so ``teletext_screen()``
+        reports 50 columns by 18 rows and carries the cells past column 40 that
+        a fixed 40x25 grid would have dropped.
+        """
+        bbc = bbc_firetrack
+        _at_intro(bbc)
+
+        screen = bbc.video.teletext_screen()
+        assert screen.active
+        assert screen.columns == CUSTOM_COLUMNS
+        assert screen.rows == CUSTOM_ROWS
+        assert len(screen.cells) == CUSTOM_ROWS * CUSTOM_COLUMNS
+
+        # Something is drawn past the standard 40-column edge -- proof the wide
+        # cells are captured rather than truncated.
+        STANDARD_COLUMNS = 40
+        beyond_the_standard_edge = any(
+            screen.cell(row, column).character not in (0, ord(" "))
+            for row in range(screen.rows)
+            for column in range(STANDARD_COLUMNS, screen.columns)
+        )
+        assert beyond_the_standard_edge
+
     def test_geometry_reports_the_custom_row_count(self, bbc_firetrack: Beebium) -> None:
         """The band derives the true 18 rows, not the standard-MODE-7 25.
 
