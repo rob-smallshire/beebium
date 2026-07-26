@@ -47,6 +47,13 @@ constexpr uint32_t BITMAP_CELL_HEIGHT = 8;
 // sixteen, not twelve.)
 constexpr uint32_t TELETEXT_CELL_WIDTH = 16;
 
+// The SAA5050 draws a character ten font rows tall -- the shape of the chip,
+// not a property of the mode -- which the renderer scanline-doubles to twenty
+// framebuffer pixels when the display is interlaced (as MODE 7 and the custom
+// teletext modes are). The row pitch is that cell height: the chip fills it
+// completely, leaving no blank scanlines between rows.
+constexpr uint32_t TELETEXT_FONT_ROWS = 10;
+
 void strip_trailing_spaces(std::string& line) {
     while (!line.empty() && line.back() == ' ') {
         line.pop_back();
@@ -452,20 +459,17 @@ std::vector<Band> bands_of(const FrameMetadata& metadata) {
         band.origin_y = region.start_line;
 
         if (region.is_teletext) {
-            // A teletext display is 40 by 25 cells, which is not an assumption
-            // about the mode but the shape of the chip: the SAA5050 has no
-            // other. Taking the pitch from the band rather than from R9 keeps
-            // it right through the interlacing that doubles the frame.
+            // The pitch is the SAA5050's own cell height, not the band divided
+            // by a row count: the chip always draws a ten-row character, and
+            // a mode that programs a different number of rows -- 50x18 as some
+            // games do, rather than 40x25 -- changes how many fit, not how tall
+            // each one is. Deriving it from the fixed cell keeps the row count
+            // correct for those custom shapes and through the interlacing that
+            // doubles the frame.
             band.cell_width = TELETEXT_CELL_WIDTH;
             band.column_pitch = TELETEXT_CELL_WIDTH;
-            const uint32_t height = region.end_line - region.start_line;
-            // A frame captured while the CRTC is being reprogrammed can be
-            // shorter than a whole screen, so the pitch is floored at one
-            // rather than allowed to reach zero and divide by it downstream.
-            band.row_pitch = std::max<uint32_t>(
-                1, height / static_cast<uint32_t>(TeletextGrid::ROWS));
-            // The chip fills the whole cell; there are no blanked scanlines
-            // between teletext rows.
+            const uint32_t interlace_factor = metadata.interlaced ? 2u : 1u;
+            band.row_pitch = TELETEXT_FONT_ROWS * interlace_factor;
             band.cell_height = band.row_pitch;
         } else {
             band.cell_width = BITMAP_CELL_WIDTH;

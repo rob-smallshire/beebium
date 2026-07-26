@@ -24,8 +24,6 @@ tests can reuse it.
 
 from __future__ import annotations
 
-import pytest
-
 from beebium.client import Beebium
 import firetrack
 
@@ -65,15 +63,13 @@ class TestFiretrackCustomSaa5050:
         assert "Aardvark" in text
         assert "Software Studios" in text
 
-    @pytest.mark.xfail(
-        reason="Teletext band geometry derives rows via height/25, assuming a "
-        "40x25 grid, so Firetrack's custom 50x18 SAA5050 mode is mis-reported "
-        "as 25 rows. The row pitch should come from the SAA5050 character height "
-        "(10) times the interlace factor, giving 18 here. Tracked; fix separately.",
-        strict=True,
-    )
     def test_geometry_reports_the_custom_row_count(self, bbc_firetrack: Beebium) -> None:
-        """The band should derive the true 18 rows, not the assumed 25."""
+        """The band derives the true 18 rows, not the standard-MODE-7 25.
+
+        The teletext row pitch comes from the SAA5050's fixed character height
+        (ten font rows, doubled to twenty by interlace), so the 360-scanline
+        custom mode reports 18 rows rather than 500/25's assumed 25.
+        """
         bbc = bbc_firetrack
         _at_intro(bbc)
         band = bbc.video.screen_geometry().bands[0]
