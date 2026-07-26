@@ -60,6 +60,41 @@ async function switchToMode(bbc: Beebium, mode: number, message: string): Promis
     throw new Error(`machine did not reach MODE ${mode}`);
 }
 
+/**
+ * Read screen geometry once it has stopped changing.
+ *
+ * While the CRTC is still being reprogrammed just after boot, a captured frame
+ * is briefly a scanline short of the settled screen -- 499 rather than 500 --
+ * which drops the derived row pitch from floor(500/25)=20 to floor(499/25)=19,
+ * so a client deriving rows as floor((bottom-top)/row_pitch) reads floor(499/19)
+ * =26 for a moment before the screen settles to 25 at height 500 (observed: the
+ * 26 shows at most once at the 100ms poll cadence, then the screen is steady).
+ * Wait for the derived row count of the first band to hold steady over a few
+ * reads before returning, so an assertion sees the settled screen -- while a
+ * geometry that settles at the wrong count still fails rather than being papered
+ * over.
+ */
+async function stableGeometry(bbc: Beebium) {
+    const deadline = Date.now() + 20000;
+    let lastRows = -1;
+    let steady = 0;
+    while (Date.now() < deadline) {
+        const geometry = await bbc.video.screenGeometry();
+        const band = geometry.bands[0];
+        const rows = band
+            ? Math.floor((band.bottom - band.top) / band.rowPitch)
+            : -1;
+        if (rows >= 0 && rows === lastRows) {
+            if (++steady >= 3) return geometry;
+        } else {
+            steady = 0;
+            lastRows = rows;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("screen geometry did not stabilise");
+}
+
 /** Advance the machine until the screen text satisfies a predicate. */
 async function waitFor(
     bbc: Beebium,
@@ -251,7 +286,10 @@ describe("holding a screen", () => {
 describe("screenGeometry", () => {
     it("reports one 40x25 band in teletext", async () => {
         const bbc = await launchAtPrompt();
-        const geometry = await bbc.video.screenGeometry();
+        // Read after the post-boot transition settles: a frame captured
+        // mid-reprogram is briefly a scanline short (499 vs 500), which lowers
+        // the derived pitch and makes the row count read 26 for a moment.
+        const geometry = await stableGeometry(bbc);
 
         expect(geometry.bands).toHaveLength(1);
         const band = geometry.bands[0]!;

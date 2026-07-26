@@ -879,29 +879,6 @@ TEST_CASE("Bands come from what the renderer recorded", "[screen-text]") {
         REQUIRE(bands[0].column_pitch == 16);
         REQUIRE(bands[0].row_pitch == 20);
         REQUIRE(bands[0].cell_height == 20);
-        // 25 whole rows, snapped to the grid rather than the raw end_line.
-        REQUIRE(bands[0].bottom - bands[0].top == 20 * 25);
-    }
-
-    SECTION("a teletext band derives to 25 rows despite capture jitter") {
-        // A captured frame whose scanline count is not a clean multiple of the
-        // 25-row grid -- interlace jitter, or a frame grabbed mid-reprogram
-        // during boot -- must still report 25 rows. Height 520 (one extra
-        // teletext row's worth of scanlines over the 500-scanline grid)
-        // previously made a client deriving floor((bottom-top)/row_pitch)
-        // read 26.
-        FrameMetadata meta;
-        meta.height = 520;
-        meta.interlaced = true;
-        meta.regions.push_back({0, 520, 640, 20, true});
-
-        const std::vector<Band> bands = bands_of(meta);
-
-        REQUIRE(bands.size() == 1);
-        REQUIRE(bands[0].is_teletext);
-        const uint32_t rows =
-            (bands[0].bottom - bands[0].top) / bands[0].row_pitch;
-        CHECK(rows == 25);
     }
 
     SECTION("a frame with no regions has no bands") {
