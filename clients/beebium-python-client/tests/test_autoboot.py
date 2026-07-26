@@ -46,6 +46,65 @@ _skip_windows_ci = pytest.mark.skipif(
 ELITE_DISC_FILENAME = "Disc999-EliteSNG45.ssd"
 ELITE_BANNER = "6502 Second Processor ELITE"
 
+# Confirming the *absence* of a boot is a non-event, so it cannot be waited for
+# by feedback: the machine is run for a settle period long enough that a boot,
+# if one were happening, would have shown its landmark, then the landmark is
+# checked once. The period must exceed the slowest real boot (Galaforce reaches
+# its instructions screen within the positive tests' budget), so it stays at
+# that budget rather than being trimmed -- running unpaced already makes the
+# settle nearly free in wall-clock, so there is nothing to gain by shortening it.
+_NO_BOOT_SETTLE_SECONDS = 25.0
+
+
+@contextlib.contextmanager
+def _unpaced(bbc: Beebium):
+    """Run the emulator flat-out for the block, restoring pacing afterwards.
+
+    The boot and settle waits here are pure fast-forwards -- nothing needs to
+    happen in real time -- so at 1x pacing they burn a wall-clock second per
+    emulated second. Running them unpaced turns a fifteen-emulated-second settle
+    from ~20s into a fraction of a second. Key presses stay *outside* this
+    block: their hold-past-break timing is real-time, and stretching it over an
+    unbounded number of emulated cycles would change what the reset reads.
+    """
+    # These machines launch at real-time (1x) and only this helper changes it,
+    # so restore to 1x rather than reading the prior value back over gRPC.
+    bbc.system.set_speed_multiplier(0.0)  # unlimited
+    try:
+        yield
+    finally:
+        bbc.system.set_speed_multiplier(1.0)
+
+
+def _run_until(bbc: Beebium, predicate, *, emulated_seconds: float,
+               chunk_seconds: float = 1.0) -> bool:
+    """Fast-forward, unpaced, until `predicate` or the emulated-time budget.
+
+    Every wait in this module is a fast-forward through boot or reset, so all of
+    them run the machine flat-out. The predicate is still the reliable feedback
+    signal -- the wait ends the moment the screen shows what it is looking for,
+    never on a fixed delay -- the emulator just gets there in less wall-clock.
+    """
+    with _unpaced(bbc):
+        return run_until_or_timeout(
+            bbc, predicate, emulated_seconds=emulated_seconds,
+            chunk_seconds=chunk_seconds,
+        )
+
+
+def _booted_within(bbc: Beebium, landmark: str, *, settle_seconds: float) -> bool:
+    """Run a settle period, then report whether `landmark` is on screen.
+
+    Used for the negative auto-boot cases. It runs the whole settle window as a
+    single chunk and checks once at the end, rather than recognising the screen
+    every emulated second: nothing needs to be observed *during* a non-event, so
+    the per-second glyph recognition would be pure cost.
+    """
+    return _run_until(
+        bbc, lambda: screen_contains(bbc, landmark),
+        emulated_seconds=settle_seconds, chunk_seconds=settle_seconds,
+    )
+
 
 def _find_elite_disc() -> Path | None:
     repo_root = Path(__file__).parent.parent.parent.parent
@@ -88,7 +147,7 @@ def bbc_tube(
             ],
             startup_timeout=20.0,
         ) as bbc:
-            if not run_until_or_timeout(
+            if not _run_until(
                 bbc, lambda: screen_contains(bbc, "Acorn TUBE"),
                 emulated_seconds=30.0,
             ):
@@ -110,7 +169,7 @@ def test_boot_disc_autoboots_via_shift_break(
 
     bbc_tube.boot_disc(elite_disc_filepath)
 
-    booted = run_until_or_timeout(
+    booted = _run_until(
         bbc_tube, lambda: screen_contains(bbc_tube, ELITE_BANNER),
         emulated_seconds=60.0,
     )
@@ -135,10 +194,8 @@ def test_naive_shift_break_without_hold_does_not_autoboot(
     # Hold Shift only during the break, release it the instant Break comes up.
     bbc_tube.keyboard.shift_break(hold_time=0.02, shift_hold_after=0.0)
 
-    booted = run_until_or_timeout(
-        bbc_tube, lambda: screen_contains(bbc_tube, ELITE_BANNER),
-        emulated_seconds=20.0,
-    )
+    booted = _booted_within(
+        bbc_tube, ELITE_BANNER, settle_seconds=_NO_BOOT_SETTLE_SECONDS)
     assert not booted, "expected no auto-boot when Shift is released too early"
 
 
@@ -187,7 +244,7 @@ def test_auto_boot_link_boots_at_power_on(tube_launch, elite_disc_filepath: Path
     """With the auto-boot link set (--auto-boot), the disc boots at power-on."""
     with tube_launch(["--auto-boot", "--floppy", f"0:{elite_disc_filepath}"]) as bbc:
         bbc.disc.set_spin_up_delay(False)
-        booted = run_until_or_timeout(
+        booted = _run_until(
             bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=60.0)
         if not booted:
             dump_diagnostics(bbc)
@@ -201,13 +258,13 @@ def test_auto_boot_link_makes_plain_break_boot(
     """With the auto-boot link set, a plain BREAK boots the disc (no Shift)."""
     with tube_launch(["--auto-boot"]) as bbc:
         bbc.disc.set_spin_up_delay(False)
-        assert run_until_or_timeout(
+        assert _run_until(
             bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
         bbc.disc.drive(0).insert(elite_disc_filepath)
         bbc.debugger.ensure_running()
         bbc.keyboard.press_break()  # plain BREAK, no Shift
         time.sleep(0.5)
-        booted = run_until_or_timeout(
+        booted = _run_until(
             bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=60.0)
         if not booted:
             dump_diagnostics(bbc)
@@ -221,15 +278,15 @@ def test_auto_boot_link_reverses_shift_break(
     """With the auto-boot link set, holding Shift across BREAK SUPPRESSES boot."""
     with tube_launch(["--auto-boot"]) as bbc:
         bbc.disc.set_spin_up_delay(False)
-        assert run_until_or_timeout(
+        assert _run_until(
             bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
         bbc.disc.drive(0).insert(elite_disc_filepath)
         bbc.debugger.ensure_running()
         # boot_disc holds Shift across the break; with the link set that inverts
         # to "do not boot".
         bbc.keyboard.shift_break()
-        booted = run_until_or_timeout(
-            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=25.0)
+        booted = _booted_within(
+            bbc, ELITE_BANNER, settle_seconds=_NO_BOOT_SETTLE_SECONDS)
         assert not booted, "Shift-Break should suppress boot when the link is set"
 
 
@@ -241,7 +298,7 @@ def test_runtime_auto_boot_link_honored_by_hard_reset(
     reset (debugger.reset(), a power-on-equivalent that re-reads the links)."""
     with tube_launch([]) as bbc:
         bbc.disc.set_spin_up_delay(False)
-        assert run_until_or_timeout(
+        assert _run_until(
             bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
         bbc.disc.drive(0).insert(elite_disc_filepath)
 
@@ -251,7 +308,7 @@ def test_runtime_auto_boot_link_honored_by_hard_reset(
 
         bbc.debugger.reset()          # hard reset: re-reads the links
         bbc.debugger.ensure_running()
-        booted = run_until_or_timeout(
+        booted = _run_until(
             bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=60.0)
         if not booted:
             dump_diagnostics(bbc)
@@ -273,15 +330,15 @@ def test_runtime_link_change_not_seen_by_soft_break(
     """
     with tube_launch([]) as bbc:  # no --auto-boot: link off at power-on
         bbc.disc.set_spin_up_delay(False)
-        assert run_until_or_timeout(
+        assert _run_until(
             bbc, lambda: screen_contains(bbc, "Acorn TUBE"), emulated_seconds=30.0)
         bbc.disc.drive(0).insert(elite_disc_filepath)
         bbc.keyboard.set_startup_auto_boot(True)  # changes the live link only
         bbc.debugger.ensure_running()
         bbc.keyboard.press_break()                # soft reset: reuses &028F
         time.sleep(0.5)
-        booted = run_until_or_timeout(
-            bbc, lambda: screen_contains(bbc, ELITE_BANNER), emulated_seconds=25.0)
+        booted = _booted_within(
+            bbc, ELITE_BANNER, settle_seconds=_NO_BOOT_SETTLE_SECONDS)
         assert not booted, (
             "plain BREAK booted after a runtime link change; OS 1.20 only "
             "commits the links to &028F on power-on / hard reset")
@@ -362,12 +419,12 @@ def _combo_break(bbc: Beebium, *, shift: bool, ctrl: bool,
 
 
 def _at_prompt(bbc: Beebium) -> None:
-    assert run_until_or_timeout(
+    assert _run_until(
         bbc, lambda: screen_contains(bbc, ">"), emulated_seconds=10.0)
 
 
 def _galaforce_booted(bbc: Beebium, emulated_seconds: float = 25.0) -> bool:
-    return run_until_or_timeout(
+    return _run_until(
         bbc, lambda: screen_contains(bbc, GALAFORCE_LANDMARK),
         emulated_seconds=emulated_seconds)
 
@@ -399,7 +456,8 @@ def test_ctrl_break_default_link_does_not_boot(
         bbc.disc.drive(0).insert(galaforce_disc_filepath)
         bbc.debugger.ensure_running()
         _combo_break(bbc, shift=False, ctrl=True)
-        assert not _galaforce_booted(bbc)
+        assert not _booted_within(
+            bbc, GALAFORCE_LANDMARK, settle_seconds=_NO_BOOT_SETTLE_SECONDS)
 
 
 # CTRL-SHIFT-BREAK: holding CTRL makes it the "reset without booting" gesture,
@@ -424,7 +482,8 @@ def test_ctrl_shift_break_default_link_does_not_boot(
         bbc.disc.drive(0).insert(galaforce_disc_filepath)
         bbc.debugger.ensure_running()
         _combo_break(bbc, shift=True, ctrl=True)
-        assert not _galaforce_booted(bbc), (
+        assert not _booted_within(
+            bbc, GALAFORCE_LANDMARK, settle_seconds=_NO_BOOT_SETTLE_SECONDS), (
             "CTRL held should suppress the SHIFT auto-boot (Ctrl-Break is the "
             "reset-without-booting gesture)")
 
