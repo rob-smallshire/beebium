@@ -53,8 +53,11 @@
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
+#include <io.h>
 #else
 #include <arpa/inet.h>
+#include <poll.h>
+#include <unistd.h>
 #endif
 
 #include <algorithm>
@@ -77,11 +80,43 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace beebium::server {
+
+// Whether stderr is an interactive terminal. The pacing log is human-readable
+// diagnostic output only worth streaming when someone is watching a terminal;
+// when stderr is a pipe or file (a front end that launched the server, a
+// redirect) it is just noise -- and the very thing that fills an undrained pipe
+// -- so it is not written there. Structured pacing data is on the gRPC API
+// regardless. Evaluated per log tick; cheap.
+inline bool stderr_is_terminal() {
+#ifdef _WIN32
+    return _isatty(_fileno(stderr)) != 0;
+#else
+    return ::isatty(STDERR_FILENO) != 0;
+#endif
+}
+
+// True only when a short line can be written to stderr without blocking. Even a
+// terminal can block -- output flow-controlled with Ctrl-S (XOFF) fills its
+// buffer -- and the emulation thread must never stall on I/O, so this is a
+// belt-and-braces check alongside stderr_is_terminal: poll for writability and
+// drop the line rather than block. A writable terminal/file reports POLLOUT; a
+// full one, an error or an ambiguous result is treated as "would block".
+inline bool stderr_accepts_nonblocking_write() {
+#ifdef _WIN32
+    return true;  // no server-launching front end pipes stderr on Windows yet
+#else
+    struct pollfd pfd{};
+    pfd.fd = STDERR_FILENO;
+    pfd.events = POLLOUT;
+    return ::poll(&pfd, 1, 0) > 0 && (pfd.revents & POLLOUT) != 0;
+#endif
+}
 
 // Types used by ServerConfig (must be outside anonymous namespace to avoid -Wsubobject-linkage)
 constexpr uint16_t DEFAULT_GRPC_PORT = 0xBEEB;  // 48875
@@ -1556,7 +1591,13 @@ void run_emulation_loop(MachineType& machine,
                 publish_run_duration = {};
             }
 
-            // Human-readable pacing log (every 5s).
+            // Human-readable pacing log (every 5s). Written only to an
+            // interactive terminal, and only if that will not block (see
+            // stderr_is_terminal / stderr_accepts_nonblocking_write): a front end
+            // that piped stderr and stopped draining would otherwise fill the
+            // pipe and freeze the emulation thread in write(). The vsync counter
+            // is consumed and the interval advanced whether or not the line goes
+            // out, so a dropped line never skews later stats.
             if (now - last_log_time >= log_interval) {
                 auto stats = pacing_clock.timing_stats();
                 uint64_t current_cycles = machine.cycle_count();
@@ -1567,17 +1608,21 @@ void run_emulation_loop(MachineType& machine,
                 double vsync_hz = static_cast<double>(vsync_edges) / elapsed_secs;
                 double run_secs = std::chrono::duration<double>(log_run_duration).count();
                 double run_pct = 100.0 * run_secs / elapsed_secs;
-                std::cerr << "Pacing: "
-                          << std::fixed << std::setprecision(3)
-                          << (actual_hz / 1e6) << " MHz"
-                          << " (target " << (target_hz / 1e6) << " MHz, "
-                          << std::setprecision(1)
-                          << (100.0 * actual_hz / target_hz) << "%)"
-                          << " | vsync " << std::setprecision(1) << vsync_hz << " Hz"
-                          << " | io " << stats.ticks_io_woken
-                          << " | deficit " << std::setprecision(0) << stats.controller_deficit
-                          << " | run " << std::setprecision(1) << run_pct << "%"
-                          << "\n";
+                std::ostringstream line;
+                line << "Pacing: "
+                     << std::fixed << std::setprecision(3)
+                     << (actual_hz / 1e6) << " MHz"
+                     << " (target " << (target_hz / 1e6) << " MHz, "
+                     << std::setprecision(1)
+                     << (100.0 * actual_hz / target_hz) << "%)"
+                     << " | vsync " << std::setprecision(1) << vsync_hz << " Hz"
+                     << " | io " << stats.ticks_io_woken
+                     << " | deficit " << std::setprecision(0) << stats.controller_deficit
+                     << " | run " << std::setprecision(1) << run_pct << "%"
+                     << "\n";
+                if (stderr_is_terminal() && stderr_accepts_nonblocking_write()) {
+                    std::cerr << line.str();
+                }
                 last_log_time = now;
                 last_log_cycle_count = current_cycles;
                 log_run_duration = {};

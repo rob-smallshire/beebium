@@ -480,8 +480,43 @@ TEST_CASE("signal handler: invoke_shutdown sets g_running false and interrupts w
 }
 
 #ifndef _WIN32
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+TEST_CASE("stderr_accepts_nonblocking_write reflects pipe writability",
+          "[server_main]") {
+    // The emulation loop calls this before its pacing log so a piped, undrained
+    // stderr that has filled up cannot block write() and freeze emulation --
+    // the fault that hangs an app-launched server. A full pipe must read as
+    // "would block" (skip the log); draining it must restore writability.
+    int saved_stderr = dup(STDERR_FILENO);
+    REQUIRE(saved_stderr >= 0);
+
+    int fds[2];
+    REQUIRE(pipe(fds) == 0);
+    // Non-blocking write end so filling it here cannot block the test itself.
+    fcntl(fds[1], F_SETFL, O_NONBLOCK);
+    char junk[4096];
+    while (write(fds[1], junk, sizeof(junk)) > 0) { /* fill the buffer */ }
+
+    // Point stderr at the now-full pipe.
+    REQUIRE(dup2(fds[1], STDERR_FILENO) >= 0);
+    // A pipe is not a terminal, so the log would be suppressed on this ground
+    // alone -- and it would block, so the writability gate rejects it too.
+    CHECK_FALSE(beebium::server::stderr_is_terminal());
+    CHECK_FALSE(beebium::server::stderr_accepts_nonblocking_write());
+
+    // Draining frees space, so it becomes writable again.
+    char sink[8192];
+    REQUIRE(read(fds[0], sink, sizeof(sink)) > 0);
+    CHECK(beebium::server::stderr_accepts_nonblocking_write());
+
+    dup2(saved_stderr, STDERR_FILENO);
+    close(saved_stderr);
+    close(fds[0]);
+    close(fds[1]);
+}
 
 TEST_CASE("SIGTERM: terminates server process within 2 seconds",
           "[server_main][signal][integration]") {
