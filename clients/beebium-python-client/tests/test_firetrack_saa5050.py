@@ -24,8 +24,25 @@ tests can reuse it.
 
 from __future__ import annotations
 
+import os
+
+import pytest
+
 from beebium.client import Beebium
 import firetrack
+
+# Firetrack drives a real game through its multi-minute instruction story in real
+# time before the custom SAA5050 intro appears. That end-to-end navigation is
+# slow and timing-fragile on shared CI runners -- a fast host can race past the
+# transient MODE 4 loader between screen samples -- while the teletext behaviour
+# it exercises is already covered by the C++ unit tests (test_teletext_grid,
+# test_screen_text). So it is skipped on CI, and kept for local and manual runs;
+# set BEEBIUM_RUN_SLOW_TESTS=1 to run it on CI anyway (e.g. a nightly job).
+pytestmark = pytest.mark.skipif(
+    bool(os.environ.get("CI")) and not os.environ.get("BEEBIUM_RUN_SLOW_TESTS"),
+    reason="Slow, timing-fragile game navigation; run locally or set "
+    "BEEBIUM_RUN_SLOW_TESTS=1",
+)
 
 # The custom mode Firetrack programs for its intro screens (CRTC registers).
 CUSTOM_COLUMNS = 50   # R1, horizontal displayed (standard MODE 7 is 40)
