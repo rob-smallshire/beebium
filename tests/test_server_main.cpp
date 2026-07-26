@@ -480,6 +480,7 @@ TEST_CASE("signal handler: invoke_shutdown sets g_running false and interrupts w
 }
 
 #ifndef _WIN32
+#include <cerrno>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -507,9 +508,15 @@ TEST_CASE("stderr_accepts_nonblocking_write reflects pipe writability",
     CHECK_FALSE(beebium::server::stderr_is_terminal());
     CHECK_FALSE(beebium::server::stderr_accepts_nonblocking_write());
 
-    // Draining frees space, so it becomes writable again.
+    // Draining frees space, so it becomes writable again. Retry a
+    // signal-interrupted read rather than mistaking EINTR for a drained pipe
+    // under load on a busy runner.
     char sink[8192];
-    REQUIRE(read(fds[0], sink, sizeof(sink)) > 0);
+    ssize_t drained;
+    do {
+        drained = read(fds[0], sink, sizeof(sink));
+    } while (drained < 0 && errno == EINTR);
+    REQUIRE(drained > 0);
     CHECK(beebium::server::stderr_accepts_nonblocking_write());
 
     dup2(saved_stderr, STDERR_FILENO);

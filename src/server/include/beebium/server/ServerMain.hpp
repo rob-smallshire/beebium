@@ -114,7 +114,13 @@ inline bool stderr_accepts_nonblocking_write() {
     struct pollfd pfd{};
     pfd.fd = STDERR_FILENO;
     pfd.events = POLLOUT;
-    return ::poll(&pfd, 1, 0) > 0 && (pfd.revents & POLLOUT) != 0;
+    int result;
+    // Retry a signal-interrupted poll rather than reading EINTR as "would
+    // block": a stray signal must not make the emulation loop drop its log.
+    do {
+        result = ::poll(&pfd, 1, 0);
+    } while (result < 0 && errno == EINTR);
+    return result > 0 && (pfd.revents & POLLOUT) != 0;
 #endif
 }
 
