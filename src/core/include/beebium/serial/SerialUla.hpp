@@ -41,9 +41,10 @@ namespace beebium {
 //     transmit bit rate, assembles the data bits (LSB first) into a byte, and
 //     delivers the byte to the sink on the stop bit.
 //   Receive (device -> Beeb): tick() pulls a byte from the source and clocks it
-//     into Mc6850::update_receive() one bit at a time (start, 8 data bits LSB
-//     first, stop) at the receive bit rate. When idle it drives the receive
-//     line high.
+//     into Mc6850::update_receive() one bit at a time at the receive bit rate,
+//     framed as the ACIA's Word Select field specifies (start, 7 or 8 data bits
+//     LSB first, an optional parity bit, 1 or 2 stop bits). When idle it drives
+//     the receive line high.
 //
 // Timing model: tick() is called once per 2MHz CPU cycle (see SerialSocket).
 // The number of ticks per serial bit is CPU_HZ / baud, so e.g. 19200 baud is
@@ -126,6 +127,10 @@ public:
         rx_state_ = RxByteState::Idle;
         rx_byte_ = 0;
         rx_bit_index_ = 0;
+        rx_data_bits_ = 8;
+        rx_stop_bits_ = 1;
+        rx_stop_index_ = 0;
+        rx_parity_ = Mc6850::Parity::None;
         rx_has_byte_ = false;
         rx_break_ = false;
         // Match the power-on latch (cassette select => /DCD high).
@@ -170,7 +175,7 @@ public:
 
 private:
     // Bytes-to-bits receive framing state.
-    enum class RxByteState : uint8_t { Idle, Start, Data, Stop };
+    enum class RxByteState : uint8_t { Idle, Start, Data, Parity, Stop };
 
     // Ticks (2MHz cycles) per serial bit at the given baud-select index.
     static uint32_t bit_period(uint8_t baud_index) {
@@ -240,6 +245,12 @@ private:
     }
 
     // One receive bit time: shift the next received byte into the ACIA.
+    //
+    // The frame follows the ACIA's Word Select field (7 or 8 data bits, an
+    // optional parity bit, 1 or 2 stop bits), captured when the frame starts so
+    // that a mid-character control-register write cannot corrupt it. Clocking a
+    // fixed 8N1 frame into a receiver configured for, say, 7E1 (the viewdata
+    // format) puts the two out of step and loses nearly every byte.
     void pump_receive() {
         uint8_t bit = 1;  // line idles high
         if (source_) {
@@ -251,15 +262,9 @@ private:
                     // the ACIA latches a Framing Error with data 0x00 -- exactly
                     // how the MC6850 represents a received break.
                     if (!rx_has_byte_ && source_->take_break()) {
-                        rx_byte_ = 0;
-                        rx_break_ = true;
-                        rx_has_byte_ = true;
-                        rx_state_ = RxByteState::Start;
+                        start_rx_frame(0, /*is_break=*/true);
                     } else if (!rx_has_byte_ && source_->has_data()) {
-                        rx_byte_ = source_->next_byte();
-                        rx_break_ = false;
-                        rx_has_byte_ = true;
-                        rx_state_ = RxByteState::Start;
+                        start_rx_frame(source_->next_byte(), /*is_break=*/false);
                     }
                     bit = 1;  // still idle this tick; start bit on the next
                     break;
@@ -269,22 +274,58 @@ private:
                     rx_state_ = RxByteState::Data;
                     break;
                 case RxByteState::Data:
-                    bit = (rx_byte_ >> rx_bit_index_) & 1;
-                    if (++rx_bit_index_ >= 8) {
-                        rx_state_ = RxByteState::Stop;
+                    // A break holds the line in the space state for the whole
+                    // frame, so every bit is clocked low.
+                    bit = rx_break_ ? 0 : ((rx_byte_ >> rx_bit_index_) & 1);
+                    if (++rx_bit_index_ >= rx_data_bits_) {
+                        rx_state_ = (rx_parity_ == Mc6850::Parity::None)
+                            ? RxByteState::Stop : RxByteState::Parity;
+                        rx_stop_index_ = 0;
                     }
+                    break;
+                case RxByteState::Parity:
+                    bit = rx_break_ ? 0 : parity_bit();
+                    rx_state_ = RxByteState::Stop;
+                    rx_stop_index_ = 0;
                     break;
                 case RxByteState::Stop:
                     // A genuine stop bit is high; a break frame forces it low to
                     // raise the receiver's Framing Error.
                     bit = rx_break_ ? 0 : 1;
-                    rx_state_ = RxByteState::Idle;
-                    rx_has_byte_ = false;
-                    rx_break_ = false;
+                    if (++rx_stop_index_ >= rx_stop_bits_) {
+                        rx_state_ = RxByteState::Idle;
+                        rx_has_byte_ = false;
+                        rx_break_ = false;
+                    }
                     break;
             }
         }
         acia_.update_receive(bit);
+    }
+
+    // Latch a byte and the ACIA's current frame shape, then start clocking it.
+    void start_rx_frame(uint8_t byte, bool is_break) {
+        rx_data_bits_ = acia_.eight_bit() ? 8 : 7;
+        rx_stop_bits_ = acia_.one_stop_bit() ? 1 : 2;
+        rx_parity_ = acia_.parity();
+        // A 7-bit line carries only seven bits; drop the eighth so the ACIA
+        // receives what the wire would really have delivered and the parity bit
+        // is computed over the same data.
+        rx_byte_ = (rx_data_bits_ == 8) ? byte : static_cast<uint8_t>(byte & 0x7F);
+        rx_break_ = is_break;
+        rx_has_byte_ = true;
+        rx_state_ = RxByteState::Start;
+    }
+
+    // The parity bit for the frame being clocked: even parity makes the total
+    // number of one bits (data plus parity) even, odd parity makes it odd.
+    uint8_t parity_bit() const {
+        uint8_t ones = 0;
+        for (uint8_t i = 0; i < rx_data_bits_; ++i) {
+            ones ^= static_cast<uint8_t>((rx_byte_ >> i) & 1);
+        }
+        return (rx_parity_ == Mc6850::Parity::Even) ? ones
+                                                    : static_cast<uint8_t>(ones ^ 1);
     }
 
     Mc6850& acia_;
@@ -299,10 +340,15 @@ private:
     uint8_t tx_byte_ = 0;
     uint8_t tx_bit_index_ = 0;
 
-    // Receive byte framing
+    // Receive byte framing. The shape fields are captured from the ACIA when a
+    // frame starts and hold for its duration.
     RxByteState rx_state_ = RxByteState::Idle;
     uint8_t rx_byte_ = 0;
     uint8_t rx_bit_index_ = 0;
+    uint8_t rx_data_bits_ = 8;
+    uint8_t rx_stop_bits_ = 1;
+    uint8_t rx_stop_index_ = 0;
+    Mc6850::Parity rx_parity_ = Mc6850::Parity::None;
     bool rx_has_byte_ = false;
     bool rx_break_ = false;  // current inbound frame is a break (stop bit low)
 

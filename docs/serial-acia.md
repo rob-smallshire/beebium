@@ -104,9 +104,13 @@ time, exactly as the real device does:
   (`Start`/`Data`/`Stop`/...). The `SerialUla` assembles the data bits (LSB
   first) into a byte and hands the byte to the sink on the stop bit.
 - `Mc6850::update_receive(bit)` is fed one bit at a time. The `SerialUla` pulls
-  a byte from the source and shifts it in as start + 8 data bits (LSB first) +
-  stop. On the closing stop bit the ACIA latches RDR, sets RDRF, and raises the
-  RX interrupt (subject to the receive-interrupt-enable bit).
+  a byte from the source and shifts it in as start + 7 or 8 data bits (LSB
+  first) + an optional parity bit + 1 or 2 stop bits, following the word format
+  the guest selected (captured when the frame starts, so a mid-character
+  control-register write cannot corrupt it). On the closing stop bit the ACIA
+  latches RDR, sets RDRF, and raises the RX interrupt (subject to the
+  receive-interrupt-enable bit). On a 7-bit format only the low seven bits of
+  the device's byte are carried, as on a real line.
 
 Framing errors (bad stop bit), parity errors, and receiver overrun (a new
 character arriving before RDR is read) are all modelled and surface in the

@@ -16,6 +16,7 @@
 #include <beebium/devices/Mc6850.hpp>
 #include <beebium/serial/SerialUla.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <cstdint>
 
@@ -25,6 +26,21 @@ namespace {
 
 constexpr uint8_t CONTROL_8N1 = Mc6850::COUNTER_DIVIDE_16
     | (0x05 << Mc6850::CR_WORD_SELECT_SHIFT);
+
+// Control-register value for a given Word Select code (the datasheet order:
+// 0=7E2, 1=7O2, 2=7E1, 3=7O1, 4=8N2, 5=8N1, 6=8E1, 7=8O1).
+constexpr uint8_t control_for_word_select(uint8_t word_select) {
+    return static_cast<uint8_t>(Mc6850::COUNTER_DIVIDE_16
+        | (word_select << Mc6850::CR_WORD_SELECT_SHIFT));
+}
+
+// Clock the ULA until the ACIA has a received byte, or the budget runs out.
+bool receive_byte(SerialUla& ula, Mc6850& acia, int max_ticks = 20000) {
+    for (int i = 0; i < max_ticks && !acia.rdrf(); ++i) {
+        ula.tick();
+    }
+    return acia.rdrf();
+}
 
 // RS423 selected, 19200 baud on both TX and RX (baud-select index 0).
 constexpr uint8_t ULA_RS423_19200 = SerialUla::RS423_SELECT | 0x00;
@@ -252,6 +268,71 @@ TEST_CASE("SerialUla shifts a received byte into the ACIA", "[serial][ula]") {
 
     REQUIRE(acia.rdrf());
     CHECK(acia.read_data() == 0x6A);
+}
+
+TEST_CASE("SerialUla receives in every ACIA word format", "[serial][ula]") {
+    // The receive framing must follow the ACIA's Word Select field, not a fixed
+    // 8N1 frame: viewdata software (Commstar's Prestel mode) selects 7E1, and a
+    // frame-length disagreement between the ULA and the ACIA loses nearly every
+    // byte.
+    struct Format {
+        uint8_t word_select;
+        const char* name;
+        uint8_t sent;
+        uint8_t expected;  // 7-bit formats carry only the low seven bits
+    };
+
+    const Format format = GENERATE(
+        Format{0, "7E2", 0x6A, 0x6A},
+        Format{1, "7O2", 0x6A, 0x6A},
+        Format{2, "7E1", 0x6A, 0x6A},
+        Format{3, "7O1", 0x6A, 0x6A},
+        Format{4, "8N2", 0xC3, 0xC3},
+        Format{5, "8N1", 0xC3, 0xC3},
+        Format{6, "8E1", 0xC3, 0xC3},
+        Format{7, "8O1", 0xC3, 0xC3});
+
+    INFO("word format " << format.name);
+
+    Mc6850 acia;
+    SerialUla ula(acia);
+    SerialTestDevice device;
+    ula.set_source(&device);
+
+    acia.write_control(control_for_word_select(format.word_select));
+    ula.write(0, ULA_RS423_19200);  // carrier present
+    device.push_from_device(format.sent);
+
+    REQUIRE(receive_byte(ula, acia));
+    CHECK(acia.read_data() == format.expected);
+    // Correct framing and parity: no error flags raised.
+    CHECK_FALSE((acia.read_status() & Mc6850::SR_FE) != 0);
+    CHECK_FALSE((acia.read_status() & Mc6850::SR_PE) != 0);
+}
+
+TEST_CASE("SerialUla receives consecutive bytes in a 7-bit parity format",
+          "[serial][ula]") {
+    // A framing mismatch tends to resynchronise by luck every few bytes, so a
+    // single successful byte is not enough to prove the frame is right.
+    Mc6850 acia;
+    SerialUla ula(acia);
+    SerialTestDevice device;
+    ula.set_source(&device);
+
+    acia.write_control(control_for_word_select(2));  // 7E1
+    ula.write(0, ULA_RS423_19200);
+
+    const uint8_t message[] = {'N', 'i', 'g', 'h', 't', 0x00, 0x7F, 0x2A};
+    for (uint8_t byte : message) {
+        device.push_from_device(byte);
+    }
+
+    for (uint8_t expected : message) {
+        REQUIRE(receive_byte(ula, acia));
+        CHECK(acia.read_data() == expected);
+        CHECK_FALSE((acia.read_status() & Mc6850::SR_PE) != 0);
+        CHECK_FALSE((acia.read_status() & Mc6850::SR_FE) != 0);
+    }
 }
 
 TEST_CASE("SerialUla full loopback echoes transmitted bytes back", "[serial][ula]") {
