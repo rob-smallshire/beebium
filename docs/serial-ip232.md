@@ -284,6 +284,55 @@ burst has ample headroom even though the guest drains it at 120 bytes a second.
 A frame takes about eight seconds to paint -- which is exactly what Prestel felt
 like.
 
+### Connecting to any other board
+
+The two examples above differ only in their details. The general procedure:
+
+**1. Find the board and read its terminal options.**
+[telnetbbsguide.com](https://www.telnetbbsguide.com/) lists active systems with
+hostnames, ports and opening hours. What matters is which *front door* to use: a
+board may offer several on different ports, and they are not equivalent to a BBC.
+
+| the board offers | use | why |
+|---|---|---|
+| viewdata / videotex (often 7E1) | Commstar Prestel mode | 40x24 teletext, exactly what Mode 7 renders |
+| ASCII / ANSI (usually 8N1) | Commstar Terminal mode | connects fine, but ANSI colour and 80 columns will not render well |
+| PETSCII, RIP, SSH | nothing useful | wrong machine |
+
+Prefer a viewdata port if one exists. Note the opening hours and whether the
+board is single-line -- a single line answers `BUSY` when someone else is on.
+
+**2. Point a virtual modem at it.** The BBC dials tcpser; tcpser dials the board.
+Match `-s` to the board's rate and put the address in the phonebook so it is
+typed once rather than through the emulated keyboard:
+
+```
+tcpser -v 25232 -s 2400 -l 4 -n 1=<host>:<port>
+```
+
+**3. Add a delay window if the board greets on connect** and you will need to
+change terminal mode after dialling -- see the proxy above. Over TCP there is no
+dial-and-train-up pause, so without one the first page arrives before the
+terminal is ready. Required rather than optional if the board does not honour
+the Prestel retransmit commands.
+
+**4. Dial from a mode that can send a carriage return.** AT commands need CR, and
+viewdata emulation does not transmit one (see above). So dial from Terminal mode
+and switch afterwards, during the delay window.
+
+**5. Leave the line settings to the terminal software.** IP232 carries bytes, not
+bits, so the guest's word format and baud only have to be self-consistent -- they
+need not match the board. Let Commstar's Prestel mode select 7E1 at 1200/75.
+
+**6. Log off through the board** rather than closing the emulator, so the line is
+freed at once. `+++` then `ATH0` hangs up at the modem if the board stops
+responding, and needs Terminal mode for the same CR reason.
+
+When it does not work, the `-t sS` trace answers most questions: it shows exactly
+what the BBC sent (so a mis-typed hostname is visible), and it distinguishes the
+modem's own result codes from text the board sent -- see
+[Troubleshooting](#troubleshooting).
+
 ### Raw mode
 
 For a plain socket peer that just wants bytes, with the connection gated on RTS:
