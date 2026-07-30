@@ -20,6 +20,7 @@
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -70,6 +71,18 @@ std::string socket_error_string() {
 }
 #endif
 
+// True when the last socket operation failed only because it would have
+// blocked. Distinguished from a real error so a congested link is not
+// reported as a fault.
+bool send_would_block() {
+#ifdef _WIN32
+    int err = WSAGetLastError();
+    return err == WSAEWOULDBLOCK || err == WSAENOBUFS;
+#else
+    return errno == EWOULDBLOCK || errno == EAGAIN || errno == ENOBUFS;
+#endif
+}
+
 }  // anonymous namespace
 
 AunBackend::AunBackend(uint8_t local_net, uint8_t local_stn, uint16_t local_port)
@@ -85,6 +98,31 @@ AunBackend::AunBackend(uint8_t local_net, uint8_t local_stn, uint16_t local_port
         std::cerr << "AunBackend: socket() failed: " << socket_error_string() << "\n";
         return;
     }
+
+    // Non-blocking, in both directions.
+    //
+    // receive_frame() guards its recvfrom with select(), so the read side was
+    // never at risk. sendto() was: on a blocking datagram socket it can stall
+    // when the send buffer fills or the interface is congested, and it is
+    // called on the emulation thread. No external peer may stall the emulator
+    // -- I/O on that thread has to be bounded and never-blocking, with
+    // back-pressure expressed through the protocol rather than through a
+    // parked syscall. A congested send now fails fast instead.
+#ifdef _WIN32
+    u_long non_blocking = 1;
+    if (::ioctlsocket(socket_fd_, FIONBIO, &non_blocking) != 0) {
+        std::cerr << "AunBackend: FIONBIO failed: " << socket_error_string() << "\n";
+        close_socket();
+        return;
+    }
+#else
+    int flags = ::fcntl(socket_fd_, F_GETFL, 0);
+    if (flags < 0 || ::fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
+        std::cerr << "AunBackend: O_NONBLOCK failed: " << socket_error_string() << "\n";
+        close_socket();
+        return;
+    }
+#endif
 
     // Allow rapid restart — avoids "Address already in use" after a crash.
     int reuse = 1;
@@ -136,6 +174,11 @@ AunBackend::~AunBackend() {
 void AunBackend::send_frame(const NetworkFrame& frame) {
     if (socket_fd_ == invalid_socket) return;
 
+    // Cable unplugged: the wire is severed, so nothing leaves. Reporting the
+    // link down while still emitting traffic would make the transport panel's
+    // "Disconnected" a lie. SpeedGate models the same idea for its own reason.
+    if (!connected_.load(std::memory_order_relaxed)) return;
+
     // Choose handle: echo for Ack/ImmReply, increment for everything else.
     uint32_t handle;
     if (frame.type == FrameType::Ack || frame.type == FrameType::ImmReply) {
@@ -170,8 +213,12 @@ void AunBackend::send_frame(const NetworkFrame& frame) {
                                  reinterpret_cast<const sockaddr*>(&dest_addr),
                                  sizeof(dest_addr));
             if (sent < 0) {
-                std::cerr << "AunBackend: sendto() broadcast failed: "
-                          << socket_error_string() << "\n";
+                if (send_would_block()) {
+                    ++send_would_block_count_;
+                } else {
+                    std::cerr << "AunBackend: sendto() broadcast failed: "
+                              << socket_error_string() << "\n";
+                }
             }
         }
         return;
@@ -208,7 +255,18 @@ void AunBackend::send_frame(const NetworkFrame& frame) {
                          reinterpret_cast<const sockaddr*>(&dest_addr),
                          sizeof(dest_addr));
     if (sent < 0) {
-        std::cerr << "AunBackend: sendto() failed: " << socket_error_string() << "\n";
+        // A would-block on a datagram socket means the send buffer is full:
+        // the frame is dropped rather than delayed, which is the correct
+        // trade for the emulation thread. Econet is a lossy medium and the
+        // guest's protocol already copes with a frame going missing.
+        if (send_would_block()) {
+            ++send_would_block_count_;
+            if (trace_) {
+                std::cerr << "AUN TX: dropped (send buffer full)\n";
+            }
+        } else {
+            std::cerr << "AunBackend: sendto() failed: " << socket_error_string() << "\n";
+        }
     } else if (trace_) {
         std::cerr << "AUN TX: type=" << static_cast<int>(frame.type)
                   << " port=" << static_cast<int>(frame.port)
@@ -221,6 +279,19 @@ void AunBackend::send_frame(const NetworkFrame& frame) {
 
 std::optional<NetworkFrame> AunBackend::receive_frame() {
     if (socket_fd_ == invalid_socket) return std::nullopt;
+
+    // Cable unplugged: nothing arrives either. This half matters more than the
+    // outbound one -- the guest's NFS usually declines to transmit when DCD
+    // reports no carrier, but nothing stops a peer driving our handshake while
+    // we present as unplugged.
+    //
+    // Datagrams that arrive while severed are read and discarded rather than
+    // left in the socket buffer, so reconnecting does not deliver a burst of
+    // frames belonging to handshakes that finished long ago.
+    if (!connected_.load(std::memory_order_relaxed)) {
+        drain_socket();
+        return std::nullopt;
+    }
 
     // Non-blocking check: is there data waiting?
     fd_set readfds;
@@ -415,6 +486,28 @@ uint16_t AunBackend::make_forward_key(uint8_t net, uint8_t stn) {
 
 uint64_t AunBackend::make_reverse_key(uint32_t ip_addr, uint16_t port) {
     return (static_cast<uint64_t>(ip_addr) << 16) | port;
+}
+
+void AunBackend::drain_socket() {
+    // Discard everything currently queued, bounded so a peer flooding us
+    // cannot hold the emulation thread here indefinitely. Whatever is left
+    // will be drained on the next call.
+    constexpr int MAX_DRAIN_PER_CALL = 64;
+    for (int i = 0; i < MAX_DRAIN_PER_CALL; ++i) {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(socket_fd_, &readfds);
+        timeval timeout{};
+        if (::select(static_cast<int>(socket_fd_ + 1), &readfds, nullptr,
+                     nullptr, &timeout) <= 0) {
+            return;
+        }
+        auto discarded = ::recvfrom(socket_fd_,
+                                    reinterpret_cast<char*>(recv_buffer_.data()),
+                                    static_cast<int>(recv_buffer_.size()), 0,
+                                    nullptr, nullptr);
+        if (discarded < 0) return;
+    }
 }
 
 void AunBackend::close_socket() {

@@ -739,3 +739,121 @@ TEST_CASE("AunBackend: local_port returns specified port when non-zero",
     }
     REQUIRE(backend.local_port() == probed_port);
 }
+
+// =============================================================================
+// Cable simulation (set_connected)
+// =============================================================================
+//
+// set_connected models unplugging the network cable. SpeedGate already models
+// severing the wire correctly -- it drops traffic in both directions and
+// reports the link down -- and set_connected must mean the same thing, or the
+// UI's "Disconnected" is a lie. See docs/discussion/aun-robustness.md defect 3.
+
+TEST_CASE("AunBackend: disconnected backend sends nothing",
+          "[econet][aun][backend][cable]") {
+    LoopbackPair pair;
+    if (!pair.ready) SKIP("Could not bind loopback sockets");
+
+    pair.a->set_connected(false);
+    CHECK_FALSE(pair.a->is_connected());
+
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.port = 0x99;
+    frame.dest_net = 0;
+    frame.dest_stn = 254;
+    frame.src_net = 0;
+    frame.src_stn = 1;
+    frame.data = {0x01};
+
+    pair.a->send_frame(frame);
+    brief_pause();
+
+    CHECK_FALSE(receive_with_timeout(
+        *pair.b, std::chrono::milliseconds(100)).has_value());
+}
+
+TEST_CASE("AunBackend: disconnected backend receives nothing",
+          "[econet][aun][backend][cable]") {
+    LoopbackPair pair;
+    if (!pair.ready) SKIP("Could not bind loopback sockets");
+
+    // The inbound half matters more than the outbound one: the guest's NFS
+    // usually declines to transmit when DCD says there is no carrier, but
+    // nothing stops a peer driving our handshake while we present as
+    // unplugged.
+    pair.b->set_connected(false);
+
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.port = 0x99;
+    frame.dest_net = 0;
+    frame.dest_stn = 254;
+    frame.src_net = 0;
+    frame.src_stn = 1;
+    frame.data = {0x02};
+
+    pair.a->send_frame(frame);
+    brief_pause();
+
+    CHECK_FALSE(receive_with_timeout(
+        *pair.b, std::chrono::milliseconds(100)).has_value());
+}
+
+TEST_CASE("AunBackend: reconnecting restores traffic in both directions",
+          "[econet][aun][backend][cable]") {
+    LoopbackPair pair;
+    if (!pair.ready) SKIP("Could not bind loopback sockets");
+
+    pair.a->set_connected(false);
+    pair.b->set_connected(false);
+    pair.a->set_connected(true);
+    pair.b->set_connected(true);
+
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.port = 0x99;
+    frame.dest_net = 0;
+    frame.dest_stn = 254;
+    frame.src_net = 0;
+    frame.src_stn = 1;
+    frame.data = {0x03};
+
+    pair.a->send_frame(frame);
+    brief_pause();
+
+    auto received = receive_with_timeout(*pair.b);
+    REQUIRE(received.has_value());
+    REQUIRE(received->data.size() == 1);
+    CHECK(received->data[0] == 0x03);
+}
+
+TEST_CASE("AunBackend: frames arriving while disconnected are not replayed",
+          "[econet][aun][backend][cable]") {
+    LoopbackPair pair;
+    if (!pair.ready) SKIP("Could not bind loopback sockets");
+
+    // A severed wire loses traffic; it does not queue it. Anything that
+    // arrived while the cable was out must not surface on reconnection, or
+    // the guest would receive a burst of stale frames belonging to handshakes
+    // that completed long ago.
+    pair.b->set_connected(false);
+
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.port = 0x99;
+    frame.dest_net = 0;
+    frame.dest_stn = 254;
+    frame.src_net = 0;
+    frame.src_stn = 1;
+    frame.data = {0x04};
+
+    pair.a->send_frame(frame);
+    brief_pause();
+    // Drain whatever the severed wire should have discarded.
+    (void)receive_with_timeout(*pair.b, std::chrono::milliseconds(100));
+
+    pair.b->set_connected(true);
+    CHECK_FALSE(receive_with_timeout(
+        *pair.b, std::chrono::milliseconds(100)).has_value());
+}

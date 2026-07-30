@@ -5,6 +5,10 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
+**Fixed so far:** 8 (inbound net translation), 3 (cable simulation), 4
+(blocking socket). **Outstanding:** 1 and 2, the two serious handshake
+defects, plus 5, 6 and 7.
+
 Defects 1-7 were found by reading. Defect 8 was found by the first test of the
 PiEconetBridge interop harness, within an hour of that harness existing, and is
 the only one so far confirmed against a real peer.
@@ -192,7 +196,7 @@ unmapped-peer case the same way.
 
 ## 3. Disconnecting the AUN cable does not disconnect it
 
-**Status:** open. **Severity:** medium.
+**Status:** FIXED. **Severity:** medium.
 
 `AunBackend::set_connected` flips the `connected_` flag and bumps the status
 sequence (`AunBackend.cpp:399-404`), and nothing else. Both `send_frame`
@@ -207,13 +211,23 @@ unmasked: a peer can still drive our handshake while we present as unplugged.
 `SpeedGate` models the intended semantics correctly — it severs traffic in both
 directions and reports the link down — which makes the inconsistency plain.
 
-**Fix.** Either early-return on `!connected_` in both methods, or extract
-`SpeedGate`'s shape into a `CableGate` decorator and drive it from
-`set_connected`, so there is one implementation of "the wire is severed".
+**Fix applied.** Both methods now return early while disconnected. The
+inbound path additionally *drains* whatever has queued on the socket, bounded
+per call, rather than leaving it buffered: a severed wire loses traffic, it
+does not store it, and reconnecting must not deliver a burst of frames
+belonging to handshakes that finished long ago.
+
+Extracting `SpeedGate`'s shape into a shared `CableGate` decorator was
+considered and rejected for now: the two severances differ in exactly this
+respect, since speed gating is transient and expected to resume, and folding
+them together would have obscured that.
+
+**Tests.** Four cases under `[cable]` in `tests/test_aun_backend.cpp`, covering
+each direction, restoration, and the no-replay property.
 
 ## 4. The AUN socket is blocking
 
-**Status:** open. **Severity:** medium — violates the no-stall rule.
+**Status:** FIXED. **Severity:** medium — violated the no-stall rule.
 
 The AUN socket is created with no `O_NONBLOCK` and no `FIONBIO`; `select()`
 guards the receive path only. `sendto()` on a blocking datagram socket can
@@ -226,9 +240,17 @@ through the real flow-control signal). It is also the failure mode most likely
 to appear precisely when the network is under the load that triggers defect 1,
 which makes the two hard to tell apart in the field.
 
-**Fix.** Set the socket non-blocking at construction and treat `EWOULDBLOCK`
-from `sendto` as a transmit failure — which, once defect 2 is fixed, is
-something we can honestly report to the guest.
+**Fix applied.** The socket is set non-blocking at construction, on both
+POSIX (`O_NONBLOCK`) and Windows (`FIONBIO`). A `sendto` that would block is
+distinguished from a real error and counted rather than logged as a fault:
+on a datagram socket it means the send buffer is full, so the frame is dropped
+rather than delayed, which is the correct trade for the emulation thread —
+Econet is a lossy medium and the guest's protocol copes with a lost frame.
+
+`AunBackend::send_would_block_count()` exposes the count. It is currently
+diagnostic only; once defect 2 gives us a failure channel, a would-block send
+becomes something we can report to the guest honestly instead of counting
+quietly.
 
 ## 5. `SubscribeEconetEvents` is unimplemented
 

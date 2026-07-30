@@ -119,6 +119,10 @@ public:
     // Enumerate all configured peers.
     std::vector<PeerInfo> list_peers() const;
 
+    // How many frames have been dropped because the socket's send buffer was
+    // full. Non-zero means a congested link is silently losing guest traffic.
+    uint64_t send_would_block_count() const { return send_would_block_count_; }
+
     // Simulate plugging/unplugging the network cable.
     // When disconnected, the ADLC sees DCD high (no carrier) and CTS high
     // (not clear to send). Takes effect on the next ADLC tick.
@@ -159,12 +163,22 @@ private:
     // Packet trace flag -- set once at construction from BEEBIUM_AUN_TRACE env var.
     bool trace_ = false;
 
+    // Frames dropped because the socket's send buffer was full. Read by
+    // diagnostics; a non-zero value means the link is congested enough that
+    // the guest is losing traffic it believes it sent.
+    uint64_t send_would_block_count_ = 0;
+
     // Reusable receive buffer (avoids allocation per receive_frame call).
     std::array<uint8_t, 2048> recv_buffer_;
 
     // Key construction helpers.
     static uint16_t make_forward_key(uint8_t net, uint8_t stn);
     static uint64_t make_reverse_key(uint32_t ip_addr, uint16_t port);
+
+    // Read and discard whatever is queued on the socket, bounded per call.
+    // Used while the simulated cable is unplugged so that reconnecting does
+    // not deliver a burst of frames from handshakes that have long finished.
+    void drain_socket();
 
     void close_socket();
 };
