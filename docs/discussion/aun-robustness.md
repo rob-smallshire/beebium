@@ -232,13 +232,55 @@ connected, simulating the clock box, so the line always looks alive — a
 ~100ms window was added during which flag fill is suppressed after a
 transmission to an absent station. The guest hung identically.
 
-**What this tells us.** The mechanism by which a real NFS ROM reaches "Not
-listening" is not simply "no scout ack arrives" nor "the line falls quiet".
-Finding it needs work in the ROM disassembly (`disassembly/nfs_334_v2_96dc_
-9fff_adlc_nmi_handlers.asm` and the OSWORD &10 path above it), identifying what
-the transmit path actually polls and how it decides a transmission failed.
-Until that is known, any change here is guesswork, and the guesses available
-all convert a wrong answer into a hang.
+**Root cause, from the ROM.** The annotated ANFS 4.18 disassembly
+(`/Users/rjs/Code/acornaeology/acorn-nfs/versions/anfs-4.18/output/`) settles
+it. The relevant path is:
+
+- `tx_line_idle_check` (&85E3) checks SR2 DCD, then `inactive_poll` (&85F4)
+  spins on **SR2 INACTIVE** with a three-byte counter on the stack, reporting
+  *Line jammed* on timeout. So INACTIVE gates transmission.
+- `nmi_error_dispatch` (&8236), reached from **twelve** call sites, reads the
+  TX flag and jumps to `tx_result_fail` (&88D4), which loads `#&41` — *Not
+  listening*.
+
+The decisive point is that `nmi_error_dispatch` is an **NMI** handler. NFS does
+not poll for the absence of a reply; it transmits its scout, enables the
+receiver, and waits for an interrupt. The interrupt that means "nobody
+answered" is the line going idle: on a real wire a replying station holds the
+line in flag fill, and if none does the line falls inactive, which the MC6854
+reports as an interrupt-causing condition.
+
+**Why we cannot produce it.** `Mc6854` excludes Rx Idle from S2RQ — the comment
+reads "INACTIVE and RDA do NOT participate in S2RQ" — and `idle_stored_` is
+cleared in three places but never latched. The condition NFS is waiting on can
+therefore never raise an NMI in Beebium, whatever the handshake does. That is
+why both attempted fixes hung: they were arranging for a signal the ADLC is
+structurally unable to deliver. The datasheet is explicit that Inactive Idle is
+stored and causes an interrupt, so this is a deviation, not a design choice.
+
+**Why the obvious fix is not enough.** Latching `idle_stored_` on the 0->1 edge
+of the idle condition, and admitting that latch (not the level) into S2RQ —
+exactly mirroring what DCD already does — was tried. It compiles, and the
+handshake, socket, boot and NMI-delivery suites stay green, but **16 of the 135
+`Mc6854` tests fail**. The reason is the PSE cascade: once latched, INACTIVE
+sits at priority 2 and masks AP (P3) and RDA (P4), so the ROM's frame-reading
+loops stop seeing the bits they read frames with. The latch is cleared only by
+CLR_RX_ST, so it persists across the arrival of a frame.
+
+That is not a reason to abandon the approach — real hardware has the same
+priority scheme and works, and NFS does issue CLR_RX_ST as part of both TX
+preparation (CR2=&67 at &860D) and its RX listen setup. It means the change has
+to account for when the latch is cleared relative to frame reception, and the
+PSE tests need to be reasoned through one at a time rather than bulk-updated.
+That is a careful piece of ADLC work in its own right, not a rider on a
+transport fix.
+
+**Next step.** Treat this as an ADLC defect rather than a handshake one: latch
+Rx Idle, admit it to S2RQ, and work through the PSE interaction until the
+`Mc6854` suite is green on its merits. Only then revisit the transport side,
+where the remaining question is much simpler — the handshake must let the line
+fall idle when a transmission has failed instead of unconditionally
+synthesising an acknowledgement.
 
 Note also the dependency on defect 1, which ran the opposite way: the
 unconditional synthetic ack was what stopped destroyed packets from
