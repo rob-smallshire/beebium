@@ -873,6 +873,22 @@ private:
         }
         prev_dcd_input_ = dcd_present;
 
+        // Rx Idle stored: latch on positive edge, exactly as DCD does. The
+        // datasheet describes the SR2 bit as the OR of the receiver idling
+        // detector and a stored inactive-idle condition, with the stored
+        // condition causing an interrupt and cleared by CLR Rx Status.
+        //
+        // The latch is what tells a transmitting station that nobody replied.
+        // NFS sends its scout, enables the receiver and waits on an NMI; a
+        // station that is listening holds the line in flag fill, and if none
+        // does the line falls idle. Without the latch that transition raises
+        // no interrupt, so NFS waits for ever instead of reporting "not
+        // listening". See docs/discussion/aun-robustness.md defect 2.
+        if (idle_present && !prev_idle_input_) {
+            idle_stored_ = true;
+        }
+        prev_idle_input_ = idle_present;
+
         // CTS stored: latch on positive edge
         if (cts_present && !prev_cts_input_) {
             cts_stored_ = true;
@@ -919,12 +935,18 @@ private:
 
         // --- Build SR1 ---
 
-        // S2RQ: OR of DCD, OVRN, ABT, FV, AP, ERR (per MC6854 datasheet).
-        // INACTIVE and RDA do NOT participate in S2RQ.
-        // Uses the edge-triggered DCD latch (not the level-sensitive SR2 DCD)
-        // to prevent NMI storms when carrier is continuously absent.
+        // S2RQ: OR of DCD, OVRN, ABT, FV, AP, ERR and Rx Idle. RDA does not
+        // participate.
+        //
+        // DCD and Rx Idle contribute through their edge-triggered latches
+        // rather than their level-sensitive SR2 bits. Both conditions persist
+        // for as long as the underlying state does -- an absent carrier, a
+        // quiet line -- so taking the level would hold IRQ asserted and storm
+        // the CPU with NMIs. The latch is set once on the transition and
+        // cleared by CLR Rx Status, which is both what the datasheet describes
+        // and what the NFS ROM relies on.
         bool s2rq_bits = (sr2_ & (SR2_OVRN | SR2_ABT | SR2_FV | SR2_AP | SR2_ERR)) != 0;
-        bool s2rq = s2rq_bits || dcd_for_s2rq;
+        bool s2rq = s2rq_bits || dcd_for_s2rq || idle_stored_;
 
         sr1_ = (rda ? SR1_RDA : 0)
              | (s2rq ? SR1_S2RQ : 0)
@@ -1048,6 +1070,7 @@ private:
     bool abt_stored_ = false;    // SR2: Rx Abort (stored component)
     bool ovrn_stored_ = false;   // SR2: Rx Overrun
     bool idle_stored_ = false;   // SR2: Rx Idle (stored component)
+    bool prev_idle_input_ = false;  // Edge detection for idle_stored_
     bool dcd_stored_ = false;    // SR2: DCD (stored positive-edge latch)
 
     // Edge detection state for dual-nature bits

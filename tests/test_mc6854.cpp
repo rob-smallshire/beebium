@@ -40,6 +40,21 @@ struct TestFixture {
         adlc.write(0, Mc6854::CR1_TX_RESET);  // Keep TX in reset, release RX
     }
 
+    // Take up the listening position, as the NFS ROM does before it expects
+    // to receive anything (sub_c96eb writes CR2=&67, which carries CLR Rx ST).
+    //
+    // This matters because a quiet line latches Inactive Idle, and Inactive
+    // Idle sits at priority 2 in the PSE tree -- above Address Present and
+    // Receiver Data Available -- so it inhibits both until software clears
+    // it. Real software always does; a test that receives a frame without
+    // clearing first is exercising a sequence no driver performs. Reading the
+    // status register first mirrors the hardware rule that a condition must
+    // have been read before CLR Rx ST will clear it.
+    void begin_listening(uint8_t extra_cr2_bits = 0) {
+        (void)adlc.sr2();
+        adlc.write(1, static_cast<uint8_t>(Mc6854::CR2_CLR_RX_ST | extra_cr2_bits));
+    }
+
     void tick() {
         adlc.tick_rising();
         adlc.tick_falling();
@@ -893,6 +908,10 @@ TEST_CASE("PSE: dynamic cascade - AP masks RDA, CLR_RX_ST reveals RDA", "[econet
     t.adlc.set_byte_period(4);
 
     // Inject a 4-byte frame (need >3 so tick after CLR_RX_ST doesn't push LAST)
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0xFF, 0x01, 0x80, 0x42});
 
     // Byte 0 arrives — AP present → P3 selected
@@ -923,6 +942,10 @@ TEST_CASE("PSE: FV at P1 masks RDA when inline refill pushes last byte", "[econe
     t.adlc.set_byte_period(4);
 
     // 4-byte frame: address + 3 data bytes
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0xFF, 0x01, 0x80, 0x42});
 
     // Byte 0 (AP) → P3
@@ -975,6 +998,10 @@ TEST_CASE("PSE: FV at P1 masks RDA when byte timer pushes last byte", "[econet][
 
     t.adlc.write(1, Mc6854::CR2_PSE);
     t.adlc.set_byte_period(4);
+
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
 
     t.backend.inject_rx_frame({0xFF, 0x01, 0x42});
 
@@ -1033,6 +1060,10 @@ TEST_CASE("PSE: multi-byte data frame - FV set when last byte pushed", "[econet]
     t.adlc.set_byte_period(4);
 
     // 5-byte frame: 1 address + 4 data
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0xFF, 0x01, 0x02, 0x03, 0x04});
 
     // Byte 0 (AP) → P3
@@ -1093,6 +1124,10 @@ TEST_CASE("PSE: RX reset resets PSE level", "[econet][mc6854][pse]") {
     // Get PSE into a non-zero state via frame reception
     t.adlc.write(1, Mc6854::CR2_PSE);
     t.adlc.set_byte_period(4);
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0xFF, 0x01});
     t.tick_byte_periods(1);
     CHECK(t.adlc.pse_level() == 3);  // AP active
@@ -1118,6 +1153,10 @@ TEST_CASE("NFS Path 1: scout data loop sees FV after penultimate byte read", "[e
     t.adlc.set_byte_period(4);
 
     // 6-byte scout frame: dest_net, dest_stn, src_net, src_stn, control, port
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0x00, 0xFE, 0x00, 0x01, 0x80, 0x99});
 
     // Byte 0 (AP) pushed by timer → P3
@@ -1169,6 +1208,10 @@ TEST_CASE("NFS Path 2: reply scout handler reads bytes then checks FV", "[econet
     t.adlc.set_byte_period(4);
 
     // 4-byte frame
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0x00, 0x01, 0x00, 0xFE});
 
     // Byte 0 (AP) pushed by timer → P3
@@ -1785,6 +1828,12 @@ TEST_CASE("SR2: INACTIVE clear when RX frame data pending", "[econet][mc6854][st
     t.release_reset();
     t.adlc.set_byte_period(4);
 
+    // Clear the Inactive Idle the quiet line has already latched. SR2's
+    // INACTIVE bit is the OR of that latch and the live idling detector, so
+    // without this the latch would keep the bit set and this test would be
+    // measuring the wrong one of the two.
+    t.begin_listening();
+
     // Inject a frame — once the byte trickle loads data into the RX FIFO,
     // INACTIVE should clear because there is pending frame data.
     t.backend.inject_rx_frame({0x01, 0x02, 0x03, 0x04});
@@ -1792,6 +1841,31 @@ TEST_CASE("SR2: INACTIVE clear when RX frame data pending", "[econet][mc6854][st
 
     uint8_t sr2 = t.adlc.read(1);
     CHECK_FALSE(sr2 & Mc6854::SR2_INACTIVE);
+}
+
+TEST_CASE("SR2: INACTIVE latch survives until software clears it",
+          "[econet][mc6854][status]") {
+    // The companion to the test above. SR2 INACTIVE is the OR of a stored
+    // condition and the live idling detector; the stored half is what tells a
+    // transmitting station that nobody answered, so it must persist across
+    // the arrival of a frame and yield only to CLR Rx Status.
+    TestFixture t;
+    t.backend.set_connected(true);
+    t.release_reset();
+    t.adlc.set_byte_period(4);
+    t.tick();
+
+    // A quiet line latches the condition.
+    CHECK(t.adlc.sr2() & Mc6854::SR2_INACTIVE);
+
+    // A frame arrives. The live detector drops, but the latch holds.
+    t.backend.inject_rx_frame({0x01, 0x02, 0x03, 0x04});
+    t.tick_byte_periods(1);
+    CHECK(t.adlc.sr2() & Mc6854::SR2_INACTIVE);
+
+    // Only software clears it.
+    t.begin_listening();
+    CHECK_FALSE(t.adlc.sr2() & Mc6854::SR2_INACTIVE);
 }
 
 // =============================================================================
@@ -2823,6 +2897,10 @@ TEST_CASE("NFS S2RQ: AP present triggers S2RQ which fires IRQ via RIE", "[econet
     t.adlc.write(1, Mc6854::CR2_PSE | Mc6854::CR2_2_1_BYTE | Mc6854::CR2_FLAG_IDLE);
     t.adlc.set_byte_period(4);
 
+    // Clear the Inactive Idle latched by the quiet line before
+    // expecting a frame -- it sits above AP and RDA in the PSE tree.
+    t.begin_listening(Mc6854::CR2_PSE);
+
     t.backend.inject_rx_frame({0xFF, 0x01, 0x80, 0x42});
     t.tick_byte_periods(1);
 
@@ -2880,17 +2958,33 @@ TEST_CASE("NFS S2RQ: RDA alone does NOT trigger S2RQ", "[econet][mc6854][nfs]") 
     CHECK(t.adlc.irq_output());
 }
 
-TEST_CASE("NFS S2RQ: INACTIVE alone does NOT trigger S2RQ", "[econet][mc6854][nfs]") {
-    // Line idle: INACTIVE set in SR2 but S2RQ clear.
-    // INACTIVE does not participate in S2RQ per MC6854 datasheet.
+TEST_CASE("NFS S2RQ: INACTIVE does trigger S2RQ", "[econet][mc6854][nfs]") {
+    // This test previously asserted the opposite, citing the datasheet. The
+    // datasheet says otherwise: SR1 b1 is "All the status bits (stored
+    // conditions) of status register #2 (except RDA bit) ... logically ORed",
+    // and Inactive Idle Received is a stored condition of SR2. Only RDA is
+    // excluded.
+    //
+    // It matters well beyond pedantry. This is the interrupt by which a
+    // transmitting station learns that nobody answered its scout: NFS enables
+    // the receiver and waits, and a line that falls idle is the signal it
+    // turns into "not listening". Suppressing it here left the ROM waiting
+    // for ever. See docs/discussion/aun-robustness.md defect 2.
     TestFixture t;
     t.release_reset();
     t.tick();
 
-    // No data, RX active, line idle → INACTIVE present
+    // No data, RX active, line idle → Inactive Idle latched
     CHECK(t.adlc.sr2() & Mc6854::SR2_INACTIVE);
-    // S2RQ should be clear: INACTIVE is not one of the S2RQ participants
-    // (DCD, OVRN, ABT, FV, AP, ERR)
+    CHECK(t.adlc.sr1() & Mc6854::SR1_S2RQ);
+
+    // ... and it is a latch, so clearing status clears it, and a line that
+    // simply stays idle does not re-assert it. That is what keeps a quiet
+    // network from storming the CPU with NMIs.
+    t.begin_listening();
+    CHECK_FALSE(t.adlc.sr1() & Mc6854::SR1_S2RQ);
+    t.tick();
+    t.tick();
     CHECK_FALSE(t.adlc.sr1() & Mc6854::SR1_S2RQ);
 }
 

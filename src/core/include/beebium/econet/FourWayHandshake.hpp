@@ -198,12 +198,27 @@ public:
     }
 
     bool is_expecting_frame() const override {
-        // During an RX handshake, the gap between scout delivery and data
-        // delivery is bridged by flag fill on real Econet. The ADLC should
-        // not report INACTIVE during this gap. ScoutAckSent is the state
-        // where the Beeb has acknowledged the scout and we're waiting for
-        // the timer to deliver the data frame.
-        return stage_ == Stage::ScoutAckSent;
+        // On a real wire, flag fill covers a four-way exchange from end to
+        // end: at every step whichever station owes the next frame holds the
+        // line while it prepares one, so the line never falls inactive
+        // mid-transaction. The ADLC must not report it inactive either, or
+        // the guest concludes the exchange has collapsed -- and under
+        // prioritised status a latched Inactive Idle would additionally mask
+        // Address Present and Receiver Data Available, hiding the very frames
+        // the transaction consists of.
+        //
+        // Frames still queued for the guest mean the line is still carrying
+        // the tail of an exchange, whatever the stage says. WaitForIdle in
+        // particular is reached the moment the closing acknowledgement is
+        // enqueued, well before the ADLC has trickled its bytes across.
+        if (!rx_queue_.empty()) return true;
+
+        // Otherwise: any stage but the two that mean no transaction is in
+        // flight. Idle and a drained WaitForIdle report inactive, because a
+        // genuinely quiet network must -- NFS polls for it before
+        // transmitting, and its onset is how a transmitting station learns
+        // that nobody answered.
+        return stage_ != Stage::Idle && stage_ != Stage::WaitForIdle;
     }
 
     // --- Timer tick (called once per 2MHz rising edge) ---
