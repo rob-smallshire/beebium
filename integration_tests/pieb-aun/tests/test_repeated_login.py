@@ -55,21 +55,50 @@ from pieb_test_support.topology import BRIDGE_FS_STATION, BRIDGE_NET
 # into a coffee break. Raise it when chasing a suspected ordering bug.
 ITERATIONS = 25
 
-ECONET_FAILURES = ("No reply", "Not listening", "No clock", "Net error")
+ECONET_FAILURES = ("No reply", "Not listening", "No clock", "Net error",
+                   "not present", "not listening")
 
 
-def _wait_for_quiet_prompt(bbc, timeout_seconds=45.0):
-    """Wait for a prompt, failing fast on any Econet error message."""
+def _wait_for_boot_prompt(bbc, timeout_seconds=30.0):
+    """Wait for the machine to reach a BASIC prompt after boot."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        screen = "\n".join(read_mode7_screen(bbc))
+        rows = read_mode7_screen(bbc)
+        if any(row.strip() == ">" for row in rows):
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def _wait_for_command_outcome(bbc, command_text, timeout_seconds=45.0):
+    """Wait for a typed command to finish, and report how it went.
+
+    Returns None on success, or the Econet error text that appeared.
+
+    Waiting for "the screen ends with a prompt" is not enough: the prompt from
+    *before* the command is still there the instant it is typed, so a naive
+    check returns immediately and the caller races on to the next command
+    without any traffic having happened. This looks for a prompt on a line
+    *after* the command's own echo, which only appears once the command has
+    actually completed.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        rows = read_mode7_screen(bbc)
+        screen = "\n".join(rows)
         for failure in ECONET_FAILURES:
             if failure in screen:
                 return failure
-        if screen.rstrip().endswith(">"):
-            return None
+
+        seen_command = False
+        for row in rows:
+            stripped = row.strip()
+            if command_text in stripped:
+                seen_command = True
+            elif seen_command and stripped == ">":
+                return None
         time.sleep(0.2)
-    return "timed out waiting for a prompt"
+    return f"timed out waiting for {command_text!r} to complete"
 
 
 @pytest.mark.slow
@@ -85,27 +114,27 @@ def test_repeated_login_and_catalogue(
         extra_args=beebium_args,
         startup_timeout=30.0,
     ) as bbc:
-        assert _wait_for_quiet_prompt(bbc) is None, dump_screen(bbc)
+        assert _wait_for_boot_prompt(bbc), dump_screen(bbc)
         bbc.keyboard.type("*NET\r")
-        assert _wait_for_quiet_prompt(bbc) is None, dump_screen(bbc)
+        assert _wait_for_command_outcome(bbc, "*NET") is None, dump_screen(bbc)
 
         for iteration in range(ITERATIONS):
             bbc.keyboard.type(f"*I AM {BRIDGE_NET}.{BRIDGE_FS_STATION} SYST\r")
-            failure = _wait_for_quiet_prompt(bbc)
+            failure = _wait_for_command_outcome(bbc, "*I AM")
             assert failure is None, (
                 f"Login failed on iteration {iteration} with {failure!r}:\n"
                 f"{dump_screen(bbc)}"
             )
 
             bbc.keyboard.type("*CAT\r")
-            failure = _wait_for_quiet_prompt(bbc)
+            failure = _wait_for_command_outcome(bbc, "*CAT")
             assert failure is None, (
                 f"*CAT failed on iteration {iteration} with {failure!r}:\n"
                 f"{dump_screen(bbc)}"
             )
 
             bbc.keyboard.type("*BYE\r")
-            failure = _wait_for_quiet_prompt(bbc)
+            failure = _wait_for_command_outcome(bbc, "*BYE")
             assert failure is None, (
                 f"*BYE failed on iteration {iteration} with {failure!r}:\n"
                 f"{dump_screen(bbc)}"

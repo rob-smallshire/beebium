@@ -40,6 +40,7 @@ from pieb_test_support.bridge import (
     free_udp_port,
     native_binary,
 )
+from pieb_test_support.perturb import PerturbationProxy
 from pieb_test_support.topology import (
     BEEBIUM_BRIDGE_SIDE_NET,
     BEEBIUM_NET_DEFAULT,
@@ -282,13 +283,42 @@ def pytest_runtest_makereport(item, call):
 @pytest.fixture
 def beebium_args(bridge, beebium_aun_port, beebium_net, nfs_filepath):
     """Command-line arguments for a Beebium station peered with the bridge."""
+    return _beebium_args(beebium_aun_port, beebium_net, nfs_filepath,
+                         bridge.beebium_map_entry())
+
+
+@pytest.fixture
+def perturbing_proxy(bridge):
+    """A relay between Beebium and the bridge, perturbing under test control.
+
+    The traffic stays genuine -- real scout timing, real fileserver replies --
+    and only its arrival order becomes ours to choose. Nothing reorders on a
+    loopback path by itself, so a scenario that needs reordering needs this.
+    """
+    proxy = PerturbationProxy(bridge.peer_address(), bridge.aun_port)
+    try:
+        yield proxy
+    finally:
+        proxy.stop()
+
+
+@pytest.fixture
+def beebium_args_via_proxy(bridge, perturbing_proxy, beebium_aun_port,
+                           beebium_net, nfs_filepath):
+    """Beebium pointed at the proxy rather than straight at the bridge."""
+    net, station = bridge.fileserver
+    map_entry = f"{net}.{station}@{perturbing_proxy.address}@{perturbing_proxy.port}"
+    return _beebium_args(beebium_aun_port, beebium_net, nfs_filepath, map_entry)
+
+
+def _beebium_args(aun_port, net, nfs_filepath, map_entry):
     return [
         "--sideways", f"9:rom:{nfs_filepath}",
         "--station", str(BEEBIUM_STATION),
         "--aun", (
-            f"port={beebium_aun_port}"
-            f":net={beebium_net}"
-            f":map={bridge.beebium_map_entry()}"
+            f"port={aun_port}"
+            f":net={net}"
+            f":map={map_entry}"
         ),
         "--machine-name", f"Station {BEEBIUM_STATION}",
     ]

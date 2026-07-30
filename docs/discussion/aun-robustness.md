@@ -5,7 +5,10 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
-**All eight are fixed.** 1 (packet destruction), 2 (transmit failures reported
+**All eight are fixed.** A ninth, found by the perturbation proxy once it
+existed, is open — see "9. A transaction stalls when acks are reordered" below.
+
+ 1 (packet destruction), 2 (transmit failures reported
 as success), 3 (cable simulation), 4 (blocking socket), 5 (frame-level event
 streaming), 6 (documentation drift), 7 (teardown order), 8 (inbound net
 translation).
@@ -509,3 +512,42 @@ weak handle rather than a raw reference.
   test programme intended to catch defects 1-4 automatically.
 - `docs/discussion/pieconetbridge-investigation.md` — a separate, unresolved
   problem on the Piconet/real-wire path.
+
+---
+
+## 9. A transaction stalls when acknowledgements are reordered
+
+**Status:** open, reproducible on demand. **Severity:** unknown until the
+cause is located.
+
+Found immediately by the perturbation proxy, which is what that instrument was
+built for. With every acknowledgement from the bridge held until one further
+datagram has overtaken it — the ordering a loaded network produces and a
+loopback one never does — a session logs in successfully and `*CAT` prints its
+full catalogue, but the transaction never completes and the prompt does not
+return.
+
+**What is already established:**
+
+- The perturbation is doing real work: four holds, all four released by
+  traffic overtaking them rather than by their deadline (`expired_holds=0`),
+  so the proxy is not simply capturing a datagram and deadlocking the
+  conversation. An earlier version did exactly that, which is why held
+  datagrams now have a release deadline.
+- The holding queue from defect 1 is genuinely active — `redelivered=1` — so
+  reordered frames are being caught and re-offered rather than destroyed. This
+  is the first evidence of that mechanism working against a real peer, and it
+  is not the thing that is failing.
+- The failure is at the *end* of the transaction. The catalogue data arrives
+  and renders; what is missing is whatever completes the exchange.
+
+**What is not established:** whether the fault is in Beebium or in how
+PiEconetBridge reacts to an acknowledgement that arrives later than it expects.
+A delayed ack may prompt a retransmission from the bridge that our stack then
+mishandles, or the bridge may itself be waiting. The frame-level event stream
+from defect 5 is the natural instrument for settling this — it can show what
+crossed the wire, in what order, at the point the exchange stops.
+
+**Test.** `integration_tests/pieb-aun/tests/test_reordered_reply.py`,
+`xfail(strict=True)`. It will flip to an unexpected pass the moment this is
+fixed.
