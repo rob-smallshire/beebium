@@ -1435,3 +1435,131 @@ TEST_CASE("FourWayHandshake: a system reset does discard held frames",
     hs.reset();
     CHECK(hs.held_frame_count() == 0);
 }
+
+// =============================================================================
+// Retransmitted data frames
+// =============================================================================
+//
+// A peer that gets no acknowledgement retransmits, reusing the AUN handle. If
+// the guest has already consumed that reply and closed its receive block, it
+// has no reason to answer the copy -- so nothing acknowledges it and the peer
+// retransmits for ever. Observed against a real bridge as one frame arriving
+// five times in five seconds, handle unchanged, each copy costing a watchdog
+// reset. See docs/discussion/aun-robustness.md defect 9.
+//
+// Upstream has the mirror of this: PiEconetBridge's AUTOACK exists because
+// emulators re-send what is really a retry as a fresh packet, and the bridge
+// acknowledges on their behalf to stop it. The case here is the same
+// asymmetry pointing the other way.
+
+namespace {
+
+NetworkFrame make_unicast_with_handle(std::uint32_t handle,
+                                      std::vector<uint8_t> payload = {0xAA}) {
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.port = 0x90;
+    frame.control_byte = 0x00;
+    frame.dest_net = 0;
+    frame.dest_stn = 1;
+    frame.src_net = 0;
+    frame.src_stn = 254;
+    frame.handle = handle;
+    frame.data = std::move(payload);
+    return frame;
+}
+
+// Drive a complete inbound transaction: scout delivered, guest acknowledges,
+// data delivered, guest final-acknowledges.
+void complete_inbound_transaction(FourWayHandshake& hs) {
+    auto scout = drain_until_frame(hs, 200);
+    REQUIRE(scout.has_value());
+    hs.send_frame(make_raw_frame({1, 0, 254, 0, 0x00}));   // guest's scout ack
+    tick_n(hs, FourWayHandshake::SCOUT_ACK_TIMEOUT);
+    auto data = drain_until_frame(hs, 200);
+    REQUIRE(data.has_value());
+    hs.send_frame(make_raw_frame({1, 0, 254, 0, 0x00}));   // guest's final ack
+}
+
+}  // namespace
+
+TEST_CASE("FourWayHandshake: a retransmitted data frame is acknowledged, not redelivered",
+          "[econet][handshake][duplicate]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    backend.inject_rx_network_frame(make_unicast_with_handle(16404));
+    complete_inbound_transaction(hs);
+
+    const auto acks_after_first = backend.sent_network_frames().size();
+    REQUIRE(acks_after_first >= 1);
+    CHECK(backend.sent_network_frames().back().type == FrameType::Ack);
+
+    // The peer retransmits: same handle, same bytes.
+    tick_n(hs, FourWayHandshake::IDLE_COOLDOWN + 10);
+    backend.inject_rx_network_frame(make_unicast_with_handle(16404));
+
+    // It must be acknowledged straight away rather than handed to the guest,
+    // which has no reason to answer a reply it has already consumed.
+    auto redelivered = drain_until_frame(hs, 400);
+    CHECK_FALSE(redelivered.has_value());
+    CHECK(hs.duplicate_frames_acked_count() == 1);
+    REQUIRE(backend.sent_network_frames().size() == acks_after_first + 1);
+    CHECK(backend.sent_network_frames().back().type == FrameType::Ack);
+}
+
+TEST_CASE("FourWayHandshake: a fresh transaction with the same bytes is still delivered",
+          "[econet][handshake][duplicate]") {
+    // Only the handle distinguishes a retransmission from a peer legitimately
+    // sending the same thing twice. Matching on content would swallow real
+    // traffic.
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    backend.inject_rx_network_frame(make_unicast_with_handle(16404));
+    complete_inbound_transaction(hs);
+
+    tick_n(hs, FourWayHandshake::IDLE_COOLDOWN + 10);
+    backend.inject_rx_network_frame(make_unicast_with_handle(16408));
+
+    auto scout = drain_until_frame(hs, 400);
+    REQUIRE(scout.has_value());
+    CHECK(hs.duplicate_frames_acked_count() == 0);
+}
+
+TEST_CASE("FourWayHandshake: a retransmission arriving mid-transaction is dropped",
+          "[econet][handshake][duplicate]") {
+    // While the guest is still working through the original there is nothing
+    // to say yet: acknowledging early would claim delivery the guest has not
+    // made, and delivering again would start a second handshake for one frame.
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    backend.inject_rx_network_frame(make_unicast_with_handle(16404));
+    auto scout = drain_until_frame(hs, 200);
+    REQUIRE(scout.has_value());
+    REQUIRE(hs.stage() == FourWayHandshake::Stage::ScoutReceived);
+
+    const auto sent_before = backend.sent_network_frames().size();
+    backend.inject_rx_network_frame(make_unicast_with_handle(16404));
+    tick_n(hs, 100);
+
+    CHECK(hs.held_frame_count() == 0);   // not parked for later either
+    CHECK(backend.sent_network_frames().size() == sent_before);
+}
+
+TEST_CASE("FourWayHandshake: handle memory is bounded",
+          "[econet][handshake][duplicate]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    for (int i = 0; i < FourWayHandshake::MAX_REMEMBERED_HANDLES * 3; ++i) {
+        backend.inject_rx_network_frame(
+            make_unicast_with_handle(static_cast<std::uint32_t>(1000 + i * 4)));
+        complete_inbound_transaction(hs);
+        tick_n(hs, FourWayHandshake::IDLE_COOLDOWN + 10);
+    }
+
+    CHECK(hs.remembered_handle_count()
+          <= static_cast<std::size_t>(FourWayHandshake::MAX_REMEMBERED_HANDLES));
+}

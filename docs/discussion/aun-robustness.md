@@ -517,8 +517,8 @@ weak handle rather than a raw reference.
 
 ## 9. A transaction stalls when acknowledgements are reordered
 
-**Status:** partly diagnosed; one contributing defect fixed, root cause not yet
-settled. **Severity:** unknown.
+**Status:** FIXED. **Severity:** high — a stalled session, on any network
+where acknowledgements can be delayed.
 
 Found by the perturbation proxy, which is what that instrument was built for.
 With every acknowledgement from the bridge held until one further datagram has
@@ -577,35 +577,90 @@ frames that can never be delivered, and under heavier reordering that is
 capacity spent on nothing. An `Ack` arriving with no transaction outstanding
 could be recognised as stale and discarded immediately rather than held.
 
-### The open question, and the strongest hypothesis
+### Root cause, confirmed by the AUN handle
 
-Why does NFS not acknowledge the scout it is handed?
+The handle settled it. A peer retransmitting an unacknowledged frame reuses
+it, so it distinguishes a retransmission from a peer legitimately sending the
+same thing twice — something no amount of staring at payloads can do. Adding it
+to the event stream produced this immediately:
 
-The likeliest explanation is that it is a **duplicate**. The trace shows the
-same 39-byte reply delivered twice (11.356 and again at 12.866, after a
-retransmission), with the guest acknowledging the second. If NFS has already
-consumed a reply and closed its receive block, a retransmission of it is
-traffic the guest has no reason to answer -- and PiEconetBridge will retransmit
-unacknowledged data indefinitely.
+```
+14.959  RX unicast port=0x90 len=5  handle=16404
+15.958  RX unicast port=0x90 len=5  handle=16404
+16.960  RX unicast port=0x90 len=5  handle=16404
+17.966  RX unicast port=0x90 len=5  handle=16404
+18.966  RX unicast port=0x90 len=5  handle=16404
+```
 
-Upstream documents exactly this asymmetry from the other side. Its `AUTOACK`
-option exists because "emulators ... will send what appears to be a whole new
-packet with a new sequence number when the BBC they are emulating puts what is
-actually a re-tried packet on the Econet", and it acknowledges such traffic on
-the emulator's behalf to stop the retransmissions. The mirror case -- a
-retransmission *to* an emulator that the guest will not answer -- is the one
-here, and nothing currently breaks the loop.
+One frame, five times, handle unchanged. Every "new" reply after the first was
+a retransmission, and we were handing each copy to the guest as a fresh scout
+for a fresh four-way handshake.
 
-If that is right, the fix is for the transport to recognise a retransmitted
-data frame it has already delivered and acknowledge it itself, rather than
-handing the guest a duplicate and waiting for an answer that will not come.
-That needs the AUN handle to be tracked per transaction, which we currently
-echo but do not otherwise use.
+The full mechanism:
 
-**Next step.** Confirm the duplicate hypothesis by recording AUN handles in the
-event stream -- they are in the header already and would settle it immediately.
-Then decide whether de-duplicating and self-acknowledging belongs in
-`FourWayHandshake` or `AunBackend`.
+1. Reordering delays an acknowledgement, so a reply lands while the handshake
+   is in `DataSent` and is held.
+2. It is redelivered correctly — but by then the guest has often been given an
+   earlier copy already.
+3. NFS has consumed that reply and closed its receive block, so the duplicate
+   is traffic it has no reason to answer.
+4. Nothing acknowledges it. The peer retransmits indefinitely, and every copy
+   costs a watchdog reset.
 
-**Test.** `integration_tests/pieb-aun/tests/test_reordered_reply.py`,
-`xfail(strict=True)`.
+### Fix
+
+`FourWayHandshake` remembers the handles of inbound data frames the guest has
+acknowledged, and answers a retransmission itself instead of delivering it
+again. Three cases, and they differ:
+
+- **Already acknowledged** — acknowledge it directly. The guest has consumed
+  it and will not answer a copy.
+- **Still in flight** — drop it. Acknowledging would claim a delivery the
+  guest has not made; redelivering would start a second handshake for one
+  frame.
+- **Handle unseen, or zero** — ordinary traffic. Zero means the transport has
+  no handles (Piconet, whose firmware owns the wire handshake), so nothing can
+  be concluded and nothing is.
+
+Matching is on the handle alone. Matching on content would swallow a peer
+legitimately sending the same bytes twice. The memory is a fixed window of the
+32 most recent handles: peers retry for as long as they choose — PiEconetBridge
+retries once a second, indefinitely — so what is needed is to outlast a burst
+of traffic rather than a span of time, and handles advance monotonically, so no
+timer is involved.
+
+This is the mirror of upstream's `AUTOACK`, which exists because emulators
+re-send what is really a retry as a fresh packet and the bridge acknowledges on
+their behalf. The same asymmetry, pointing the other way.
+
+### Contributing defect, also fixed: abandoning a transaction discarded held frames
+
+`reset_handshake()` cleared the holding queue. Held frames are by definition
+*not* part of the transaction in flight — that is the whole reason they are
+held — so a watchdog timeout, a reported transmit failure, or an unexpected
+transmission threw away traffic that had arrived and was waiting for a stage
+that could accept it. With six watchdog resets in a twelve-second run, that was
+destroying frames steadily.
+
+Fixed: only `reset()`, a machine reset where forgetting everything is the
+point, discards them. Self-inflicted, introduced with the defect 1 fix and
+invisible until reordering made watchdog resets common. It was necessary but
+not sufficient — `redelivered` went from 1 to 2 and the stall remained.
+
+### Secondary finding: stale acks occupy the holding queue
+
+An `Ack` for a transaction that has already completed is accepted by no stage,
+so it sits in the holding queue until its TTL expires a second later. Harmless
+— it no longer appears now that transactions complete — but it means the queue
+can carry frames that will never be delivered, and under heavier reordering
+that is capacity spent on nothing. An `Ack` with no transaction outstanding
+could be recognised as stale and discarded on arrival. Left alone for now,
+since inventing more special cases in the receive path is exactly how this area
+became hard to reason about.
+
+**Tests.** Four cases tagged `[duplicate]` in `tests/test_four_way_handshake.cpp`
+(acknowledge a retransmission, do not confuse a fresh transaction carrying the
+same bytes, drop one arriving mid-transaction, bound the memory), two under
+`[holding]` for the reset behaviour, and
+`integration_tests/pieb-aun/tests/test_reordered_reply.py` against a real
+bridge with acks deliberately reordered.

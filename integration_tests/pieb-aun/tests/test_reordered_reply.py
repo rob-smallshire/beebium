@@ -23,6 +23,11 @@ real bridge on loopback produce a holding-queue count of exactly zero, because
 nothing reorders by itself. So the ordering is imposed deliberately, through a
 proxy that leaves the traffic genuine and only changes when it arrives.
 
+This found defect 9 as soon as it existed, and now guards the fix: reordering
+delays an ack, the guest is handed a reply it has already consumed, and the
+transport must recognise the retransmission and answer it rather than leaving
+the peer to retry for ever.
+
 See docs/discussion/aun-robustness.md defect 1.
 """
 
@@ -105,20 +110,6 @@ def _wait_for_command_outcome(bbc, command_text, timeout_seconds=45.0):
 
 @pytest.mark.slow
 @pytest.mark.timeout(600)
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Reproduces a residual defect the proxy was built to find. With every "
-        "acknowledgement held one datagram back, the login succeeds and *CAT "
-        "prints its full catalogue, but the transaction never completes and "
-        "the prompt does not return. The perturbation is doing real work and "
-        "is not deadlocking: all holds are released by traffic overtaking "
-        "them (expired_holds=0), and the holding queue is demonstrably active "
-        "(redelivered=1). Whether the cause is in Beebium or in how the "
-        "bridge reacts to a delayed ack is not yet established. See "
-        "docs/discussion/aun-robustness.md."
-    ),
-)
 def test_reply_overtaking_its_ack_still_reaches_the_guest(
     bridge, perturbing_proxy, beebium_args_via_proxy,
     server_filepath, mos_filepath, basic_filepath,

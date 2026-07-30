@@ -82,6 +82,16 @@ public:
     // segment where nobody is listening.
     static constexpr int LINE_BUSY_AFTER_TX = 500;
 
+    // How many recently-acknowledged transaction handles are remembered, so a
+    // retransmission can be recognised as one.
+    //
+    // A peer retries an unacknowledged frame for as long as it cares to --
+    // PiEconetBridge retries once a second, indefinitely -- so this needs to
+    // outlast a burst of traffic rather than a fixed span of time. Handles
+    // advance monotonically, so a fixed-size window of the most recent ones is
+    // both bounded and sufficient; no timer is involved.
+    static constexpr int MAX_REMEMBERED_HANDLES = 32;
+
     // Econet frame byte offsets
     static constexpr int FRAME_DEST_STN = 0;
     static constexpr int FRAME_DEST_NET = 1;
@@ -346,6 +356,15 @@ public:
     // after the fact, by delivering a Nack.
     uint32_t failed_tx_count() const { return failed_tx_count_; }
 
+    // Retransmitted data frames acknowledged on the guest's behalf rather
+    // than delivered to it a second time.
+    uint32_t duplicate_frames_acked_count() const {
+        return duplicate_frames_acked_count_;
+    }
+
+    // How many transaction handles are currently remembered.
+    size_t remembered_handle_count() const { return acked_handles_.size(); }
+
     // Number of extra scout payload bytes for a given control byte value.
     static int scout_payload_size(uint8_t ctrl) {
         switch (ctrl & CTRL_FUNCTION_MASK) {
@@ -499,6 +518,8 @@ private:
         nf.src_stn = saved_dest_stn_;   // FROM us (we were the original destination)
         nf.src_net = saved_dest_net_;
         backend_.send_frame(nf);
+        remember_acked_handle(in_flight_handle_);
+        in_flight_handle_ = 0;
         clear_flag_fill();
         watchdog_timer_ = 0;  // Cancel watchdog -- handshake completed normally
         stage_ = Stage::WaitForIdle;
@@ -529,6 +550,31 @@ private:
 
     // Route an incoming AUN packet based on current handshake stage.
     bool handle_incoming(const NetworkFrame& packet) {
+        // A retransmission is recognised before anything else, because what
+        // to do about it does not depend on the stage.
+        //
+        // Only the handle can tell one apart from a peer legitimately sending
+        // the same thing twice; matching on content would swallow real
+        // traffic. Handle 0 means the transport has no such concept, so
+        // nothing can be concluded.
+        if (packet.type == FrameType::Unicast && packet.handle != 0) {
+            if (packet.handle == in_flight_handle_ && stage_ != Stage::Idle) {
+                // The guest is still working through the original. There is
+                // nothing to say yet: acknowledging would claim a delivery it
+                // has not made, and delivering again would start a second
+                // handshake for one frame.
+                return true;
+            }
+            if (has_acked_handle(packet.handle)) {
+                // The guest has already consumed this and has no reason to
+                // answer a copy, so answer it ourselves. Otherwise the peer
+                // retransmits for ever and every copy costs a watchdog reset.
+                send_ack_for(packet);
+                ++duplicate_frames_acked_count_;
+                return true;
+            }
+        }
+
         switch (stage_) {
             case Stage::Idle:
                 return handle_rx_in_idle(packet);
@@ -601,6 +647,7 @@ private:
     bool handle_rx_in_idle(const NetworkFrame& packet) {
         switch (packet.type) {
             case FrameType::Unicast: {
+                in_flight_handle_ = packet.handle;
                 // Construct scout frame for the Beeb
                 int extra = scout_payload_size(packet.control_byte);
                 int available = std::min(extra, static_cast<int>(packet.data.size()));
@@ -775,6 +822,39 @@ private:
         }
     }
 
+    // --- Retransmission memory ---
+
+    bool has_acked_handle(uint32_t handle) const {
+        return std::find(acked_handles_.begin(), acked_handles_.end(), handle)
+               != acked_handles_.end();
+    }
+
+    void remember_acked_handle(uint32_t handle) {
+        if (handle == 0) return;
+        if (has_acked_handle(handle)) return;
+        if (acked_handles_.size()
+                >= static_cast<size_t>(MAX_REMEMBERED_HANDLES)) {
+            acked_handles_.pop_front();
+        }
+        acked_handles_.push_back(handle);
+    }
+
+    // Acknowledge a frame directly, without involving the guest. The
+    // addressing is taken from the frame itself rather than from saved
+    // transaction state, since there may be no transaction in flight.
+    void send_ack_for(const NetworkFrame& packet) {
+        NetworkFrame ack;
+        ack.type = FrameType::Ack;
+        ack.port = packet.port;
+        ack.control_byte = packet.control_byte;
+        ack.dest_stn = packet.src_stn;
+        ack.dest_net = packet.src_net;
+        ack.src_stn = packet.dest_stn;
+        ack.src_net = packet.dest_net;
+        ack.handle = packet.handle;
+        backend_.send_frame(ack);
+    }
+
     void enqueue_rx_frame(std::vector<uint8_t> data) {
         NetworkFrame frame;
         frame.type = FrameType::RawFrame;
@@ -878,6 +958,12 @@ private:
     uint32_t held_frames_dropped_count_ = 0;
     uint32_t unreachable_tx_count_ = 0;
     uint32_t failed_tx_count_ = 0;
+    uint32_t duplicate_frames_acked_count_ = 0;
+
+    // Handles of inbound data frames the guest has acknowledged, most recent
+    // last, and the handle of the one it is working through now.
+    std::deque<uint32_t> acked_handles_;
+    uint32_t in_flight_handle_ = 0;
 
     uint8_t saved_dest_stn_ = 0;
     uint8_t saved_dest_net_ = 0;
