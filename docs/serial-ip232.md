@@ -118,7 +118,9 @@ single-quote too:
 An unquoted `url=ip232://host:port` is caught with a message telling you to
 quote it. `url=` and `host=`/`port=` cannot be combined.
 
-### Worked example: dial a BBS through tcpser
+### Worked example: a bare Hayes session from BBC BASIC
+
+No comms ROM required — enough to prove the link and talk to the virtual modem.
 
 1. Start a tcpser virtual modem (in another terminal):
 
@@ -142,6 +144,98 @@ quote it. `url=` and `host=`/`port=` cannot be combined.
 
    Then type Hayes commands, e.g. `ATDT bbs.example.com:23` to have tcpser dial a
    telnet BBS. (`*FX2,0` / `*FX3,0` restore the keyboard and screen.)
+
+### Worked example: Commstar to a viewdata BBS (Night Owl)
+
+A full session with real period software, dialling a real board. [Night Owl
+BBS](https://www.telnetbbsguide.com/bbs/night-owl-bbs/) runs Premiere BBS on a
+BBC Master 128 in Glasgow, reachable at `nightowlbbs.ddns.net:6400`: a viewdata
+(Prestel-style) system, 2400 baud, one line, open roughly 19:30-23:00 GMT, guest
+login `GUEST` / `GUEST` / `NIGHTOWL`. The BBC end is Pace **Commstar** in a
+sideways ROM slot.
+
+**1. Start tcpser with a phonebook entry.** `-n <number>=<host:port>` maps a
+dialled "phone number" onto an address, so the hostname is typed once here
+rather than through the emulated keyboard on every call:
+
+```
+tcpser -v 25232 -s 2400 -l 4 -n 1=nightowlbbs.ddns.net:6400
+```
+
+`-s 2400` matches the board's rate, so tcpser paces bytes at something the
+emulated ACIA absorbs comfortably. Add `-t sS` for a byte-level trace of the
+serial side when diagnosing. Typing the address inline as
+`ATDT nightowlbbs.ddns.net:6400` also works, but a single mistyped character
+costs a whole redial, so the phonebook is the friendlier default.
+
+**2. Start the server** with Commstar fitted and the IP232 bridge pointed at
+tcpser:
+
+```
+beebium-model-b start \
+  --sideways 13:rom:commstar_1_40.rom \
+  --ip232-serial host=localhost:port=25232
+```
+
+**3. Dial from Commstar's Terminal mode — not Prestel mode.** At the main menu
+check the top line reads `Emulate : Terminal` (`<#>` toggles). Then:
+
+- `<I>` to initialise the RS423: word format option **5** (8 bits, no parity, 1
+  stop) with `<R>` and `<S>` both cycled to **2400**. `<RETURN>` to go back.
+- `<C>` for chat mode, then type `ATDT1` and press `<RETURN>`.
+
+tcpser logs the dial and answers `CONNECT 2400`.
+
+**Why Terminal mode matters:** in Prestel mode Commstar maps `<RETURN>` onto the
+viewdata "proceed to next frame" character — which is *not* ASCII CR, but the
+code Prestel uses for `#` (ASCII underscore, `0x5F`). An AT command typed from
+Prestel mode therefore never receives its carriage return, and the modem sits
+waiting forever. Commstar's own manual documents the mapping in section 5.3.
+
+`CTRL-M` is reported to transmit a genuine CR from Prestel mode, which would let
+AT commands be issued without leaving viewdata emulation; on Commstar 1.40 it
+appears to send the viewdata character like `<RETURN>` does. Treat it as
+unconfirmed until someone reproduces it.
+
+**4. Switch to Prestel emulation once connected.** Viewdata pages are teletext,
+so they only render correctly in Prestel mode: `<ESCAPE>` back to the menu (the
+line stays up and incoming data is buffered), `<#>` to select
+`Emulate : Prestel`, then `<C>` to return to chat. If a page arrived while you
+were still in Terminal mode it will look like mosaic characters printed as
+ASCII; `<f8>` asks the board to retransmit the current frame.
+
+Entering Prestel mode reconfigures the line to viewdata's **7E1 at 1200/75**.
+That is correct and expected — Commstar's manual is explicit that the word format
+should *not* be altered while using Prestel — and Beebium receives it properly.
+The BBC's rate need not match the board's: IP232 is a byte pipe with no bit
+timing of its own, so the guest's receive rate only governs how fast the socket
+queue drains.
+
+**5. Log off properly.** `*90#` is the conventional viewdata logoff (the board
+shows a goodbye frame and drops the line). Walking away instead leaves the line
+held until the board times out, which on a single-line system locks everyone else
+out. If the board is unresponsive, hang up at the modem instead: type `+++` (no
+RETURN), wait for `OK`, then `ATH0` to go on-hook. `ATH0` needs a real carriage
+return, so return to Terminal mode first — the same restriction that applies to
+dialling.
+
+#### Optional: a dialling delay
+
+Over TCP, `CONNECT` is instantaneous, so there is no dial-and-train-up pause in
+which to do the Terminal-to-Prestel hop that a real modem would have given you.
+A proxy that accepts at once but bridges onward after a pause restores the
+window — tcpser reports `CONNECT` as soon as *its* connection succeeds, so the
+delay lands after the result code and before the first byte of the login page:
+
+```
+socat TCP-LISTEN:6401,reuseaddr,fork \
+  SYSTEM:'sleep 15; exec socat STDIO TCP\:nightowlbbs.ddns.net\:6400'
+```
+
+Point the phonebook at the proxy (`-n 1=localhost:6401`). `fork` gives each
+redial a fresh delay, and the board does not see the call until the pause
+expires. This is a convenience, not a requirement: Commstar buffers incoming
+data while at the menu, and `<f8>` recovers a page that arrived too early.
 
 ### Raw mode
 
@@ -167,14 +261,38 @@ Like any extension, it can be pinned in a preset; `create-preset` captures the
 - **The link drops and does not come back in `raw` mode.** Raw mode follows RTS;
   it reconnects when the guest re-asserts RTS. `ip232` mode reconnects
   automatically.
+- **The call is dropped when the guest changes serial settings.** Software that
+  re-initialises the ACIA mid-session (Commstar does this when switching between
+  Terminal and Prestel emulation) can glitch RTS, which tcpser reads as the
+  terminal going on-hook: the log shows `DTR has gone low` followed by
+  `Disconnecting modem`, and the guest sees `NO CARRIER`. Set `handshake=false`
+  so the BBC's RTS is not conveyed; nothing is lost, since a telnet host has no
+  use for it.
+- **`BUSY` after a successful `CONNECT`.** Check which side said it. tcpser's own
+  result codes are wrapped in `0d 0a` on both sides and come from its modem
+  thread; text forwarded from the remote host arrives on the IP reader thread,
+  typically with different line endings. In a `-t sS` trace:
+
+  ```
+  6159380480: SR->|0d 0a| |CONNECT 2400| |0d 0a|   <- tcpser's result code
+  6161100800: SR->|42 55 53 59 0a|  BUSY.          <- the remote host's own text
+  6161100800: No socket data read, assume closed peer
+  ```
+
+  A preceding `Connection to <host> established` confirms the TCP connect
+  succeeded, so this is the *board* refusing the call — a single-line BBS with
+  its line in use — not a network or emulation fault. Redialling will not help
+  until the far end frees up; note that a session abandoned without a proper
+  logoff can hold the line until the board's own timeout expires.
 
 ## Relationship to RFC 2217
 
 IP232 is a thin retro-comms hack (tunnel bytes + a couple of modem lines). RFC
 2217 is the IETF "Telnet Com Port Control Option" — a standards-based way to
 drive a *real* remote serial port (set its baud/parity, read its line states).
-Beebium plans `rfc2217-client-serial` and `rfc2217-server-serial` as further
+Beebium ships `rfc2217-client-serial` and `rfc2217-server-serial` as further
 serial extensions reusing the same `beebium::net` TCP transport; see
+[serial-rfc2217.md](serial-rfc2217.md) and the research notes in
 [serial-network-ip232-rfc2217.md](discussion/serial-network-ip232-rfc2217.md).
 
 ## Implementation

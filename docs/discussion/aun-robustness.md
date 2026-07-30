@@ -5,9 +5,9 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
-**Fixed so far:** 8 (inbound net translation), 3 (cable simulation), 4
-(blocking socket). **Outstanding:** 1 and 2, the two serious handshake
-defects, plus 5, 6 and 7.
+**Fixed so far:** 1 (packet destruction), 8 (inbound net translation), 3
+(cable simulation), 4 (blocking socket). **Outstanding:** 2 — transmit
+failures still reported to the guest as success — plus 5, 6 and 7.
 
 Defects 1-7 were found by reading. Defect 8 was found by the first test of the
 PiEconetBridge interop harness, within an hour of that harness existing, and is
@@ -23,13 +23,14 @@ The unifying theme of the first two is that `FourWayHandshake` is optimistic:
 it assumes the transaction it is bridging will succeed, and it has no memory of
 anything that does not fit the transaction currently in flight. Both
 assumptions hold on a quiet loopback link between two emulators. Neither holds
-on a loaded LAN with a bridge, a fileserver, and a third station on it.
+on a loaded LAN with a bridge, a fileserver, and a third station on it. The
+second half of that — the missing memory — is now fixed; the optimism is not.
 
 ---
 
 ## 1. Out-of-order and interleaved packets are destroyed
 
-**Status:** open. **Severity:** high — silent data loss.
+**Status:** FIXED. **Severity:** high — silent data loss.
 
 `FourWayHandshake::receive_frame()` takes exactly one datagram from the backend
 and offers it to `handle_incoming()`. If the packet does not match what the
@@ -70,28 +71,51 @@ addresses us during our transaction has its frame destroyed. On a segment with
 more than two participants this scales badly: the busier we are, the more of
 everyone else's traffic we discard.
 
-The behaviour is currently asserted as correct.
-`tests/test_four_way_handshake.cpp:855`, *"unexpected AUN packet type in
-DataSent is ignored"*, injects a Unicast while in `DataSent` and asserts that
-`receive_frame()` returns nothing and no state changes — which is precisely the
-overtaking-reply case above.
+The behaviour was asserted as correct: a test named *"unexpected AUN packet
+type in DataSent is ignored"* injected a Unicast while in `DataSent` and
+asserted that `receive_frame()` returned nothing and no state changed — which
+is precisely the overtaking-reply case above. It has been renamed to
+*"... is held, not dropped"* and now additionally asserts the frame was
+retained.
 
-We are partly shielded from the worst form of this by defect 2: because the
-final ack is synthesised unconditionally, a destroyed `Ack` cannot deadlock the
-state machine, and the 250ms watchdog resets anything that does get stuck. That
-is luck rather than design, and it converts a hang into silent loss.
+We were partly shielded from the worst form of this by defect 2: because the
+final ack is synthesised unconditionally, a destroyed `Ack` could not deadlock
+the state machine, and the 250ms watchdog reset anything that did get stuck.
+That was luck rather than design, and it converted a hang into silent loss.
+Note the dependency runs the wrong way round: fixing defect 2 without this one
+would have turned some of that silent loss back into hangs.
 
-**Fix.** Give `FourWayHandshake` a bounded inbound holding queue. A packet
-that does not match the current stage is parked with an arrival tick and a TTL
-rather than dropped, and re-offered when the stage next changes. Two
-refinements:
+**Fix applied.** `FourWayHandshake` now holds packets the current stage
+cannot use, in a bounded queue, and re-offers them oldest-first before taking
+anything new off the backend. `HELD_FRAME_TTL` (~1s) discards anything nobody
+becomes ready for — generous next to a handshake, short of the multi-second
+timeouts NFS applies to an OSWORD, so a held frame is either redelivered while
+it still means something or dropped before it can surface wildly out of
+context. `MAX_HELD_FRAMES` (32) caps the queue, dropping oldest-first.
 
-- Broadcasts and inbound Immediates addressed to us need no handshake context
-  and should be deliverable from any stage, subject to the ADLC being able to
-  accept a frame — park them only when the ADLC is mid-frame, not when the
-  handshake is mid-transaction.
-- Cap the queue and drop oldest-first when full, so a hostile or broken peer
-  cannot grow it without bound. Count the drops and expose the counter.
+One refinement from the original sketch was **not** taken. The intention was to
+deliver broadcasts and inbound immediates from any stage, on the grounds that
+they need no handshake context. In the code they do: `handle_rx_in_idle`
+transitions to `ImmediateReceived` for an immediate and clobbers the saved
+addressing, and even a broadcast — which changes no stage — would interleave a
+frame into `rx_queue_` in the middle of a scout/data sequence the guest is
+part-way through reading. Both are held and re-offered like everything else.
+That is a little less prompt and considerably safer.
+
+Replay stops at the first accepted packet, because accepting one can change the
+stage and the rest must be re-evaluated against the new stage rather than the
+one just left.
+
+Four counters — held, redelivered, expired, dropped — are exposed for tests to
+assert on the mechanism rather than only the outcome. They are not yet reachable
+from a client; that arrives with defect 5.
+
+**Tests.** Six cases tagged `[holding]` in `tests/test_four_way_handshake.cpp`
+covering the overtaking reply, a third station's traffic, a broadcast, TTL
+expiry, the bound, and reset. Against a real bridge,
+`integration_tests/pieb-aun/tests/test_repeated_login.py` loops login /
+`*CAT` / `*BYE`; it is a smoke test rather than a proof until the counters are
+reachable.
 
 ## 8. `--aun net=N` is unusable for any non-zero N
 

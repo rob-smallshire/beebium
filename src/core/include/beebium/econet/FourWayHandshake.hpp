@@ -56,6 +56,20 @@ public:
     static constexpr int FLAG_FILL_TIMEOUT = 500000;    // ~250ms — assume peer finished
     static constexpr int IDLE_COOLDOWN     = 5000;      // ~2.5ms — gap between handshakes
 
+    // How long a frame that did not fit the current stage may wait to be
+    // re-offered before it is discarded. Generous next to a handshake (which
+    // the watchdog abandons after ~250ms) but far short of the multi-second
+    // timeouts NFS applies to an OSWORD, so a held frame is either redelivered
+    // while it still means something or dropped before it can surface wildly
+    // out of context.
+    static constexpr int HELD_FRAME_TTL = 2000000;      // ~1s
+
+    // Upper bound on frames held at once. A peer that floods us -- broken,
+    // hostile, or merely very busy -- must not be able to grow our memory
+    // without bound. Sized well above any legitimate burst: a handshake
+    // involves a handful of frames, not dozens.
+    static constexpr int MAX_HELD_FRAMES = 32;
+
     // Econet frame byte offsets
     static constexpr int FRAME_DEST_STN = 0;
     static constexpr int FRAME_DEST_NET = 1;
@@ -140,14 +154,28 @@ public:
         // rather than blocking all backend polling.
         if (idle_cooldown_ > 0) return std::nullopt;
 
-        // 3. Check backend for incoming AUN packets
+        // 3. Re-offer anything held from earlier, oldest first, before taking
+        // anything new off the backend. Held frames arrived first and must
+        // keep their place in the order.
+        if (replay_held_frames() && !rx_queue_.empty()) {
+            auto frame = std::move(rx_queue_.front());
+            rx_queue_.pop_front();
+            return frame;
+        }
+
+        // 4. Check backend for incoming AUN packets
         auto packet = backend_.receive_frame();
         if (!packet) return std::nullopt;
 
-        // 4. Route through handshake state machine
-        if (!handle_incoming(*packet)) return std::nullopt;
+        // 5. Route through handshake state machine. A packet the current
+        // stage cannot use is held rather than destroyed -- it has already
+        // been taken off the socket, so dropping it here loses it for good.
+        if (!handle_incoming(*packet)) {
+            hold_frame(std::move(*packet));
+            return std::nullopt;
+        }
 
-        // 5. Return first generated frame
+        // 6. Return first generated frame
         if (!rx_queue_.empty()) {
             auto frame = std::move(rx_queue_.front());
             rx_queue_.pop_front();
@@ -203,6 +231,8 @@ public:
             }
         }
 
+        age_held_frames();
+
         // WaitForIdle → Idle when all queued frames have been consumed.
         // Start a cooldown to prevent the next incoming AUN packet from
         // arriving before the foreground code has processed the completion.
@@ -244,6 +274,31 @@ public:
     // Diagnostic: stages at each send_frame call (up to 8)
     const Stage* send_stage_log() const { return send_stage_log_; }
     uint32_t send_stage_log_count() const { return send_stage_log_count_; }
+
+    // --- Holding queue inspection ---
+    //
+    // Exposed so a test can assert on the mechanism rather than only on the
+    // outcome: "the reply arrived" can pass by luck, "the reply arrived and
+    // was redelivered from the holding queue" cannot.
+
+    // Frames currently held awaiting a stage that can accept them.
+    size_t held_frame_count() const { return held_frames_.size(); }
+
+    // Frames that were held and later successfully redelivered.
+    uint32_t held_frames_redelivered_count() const {
+        return held_frames_redelivered_count_;
+    }
+
+    // Frames discarded because no stage accepted them within HELD_FRAME_TTL.
+    uint32_t held_frames_expired_count() const {
+        return held_frames_expired_count_;
+    }
+
+    // Frames discarded because the holding queue was full. Non-zero means a
+    // peer is offering traffic faster than the handshake can consume it.
+    uint32_t held_frames_dropped_count() const {
+        return held_frames_dropped_count_;
+    }
 
     // Number of extra scout payload bytes for a given control byte value.
     static int scout_payload_size(uint8_t ctrl) {
@@ -596,6 +651,47 @@ private:
 
     // --- Helpers ---
 
+    // --- Holding queue ---
+
+    // Park a packet the current stage could not use.
+    void hold_frame(NetworkFrame packet) {
+        if (held_frames_.size() >= static_cast<size_t>(MAX_HELD_FRAMES)) {
+            // Drop the oldest rather than refusing the newest: the oldest is
+            // the one most likely to have outlived its usefulness, and a
+            // fresh arrival is the more informative of the two.
+            held_frames_.pop_front();
+            ++held_frames_dropped_count_;
+        }
+        held_frames_.push_back(HeldFrame{std::move(packet), 0});
+    }
+
+    // Re-offer held frames to the state machine, oldest first. Returns true
+    // when one was accepted. Stops at the first acceptance: a single accepted
+    // packet can change the stage, and the rest must be re-evaluated against
+    // the new one rather than against the stage that has just been left.
+    bool replay_held_frames() {
+        for (auto it = held_frames_.begin(); it != held_frames_.end(); ++it) {
+            if (handle_incoming(it->packet)) {
+                held_frames_.erase(it);
+                ++held_frames_redelivered_count_;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Age held frames and discard those that have waited too long.
+    void age_held_frames() {
+        for (auto it = held_frames_.begin(); it != held_frames_.end();) {
+            if (++it->age_ticks > HELD_FRAME_TTL) {
+                it = held_frames_.erase(it);
+                ++held_frames_expired_count_;
+            } else {
+                ++it;
+            }
+        }
+    }
+
     void enqueue_rx_frame(std::vector<uint8_t> data) {
         NetworkFrame frame;
         frame.type = FrameType::RawFrame;
@@ -639,6 +735,7 @@ private:
         saved_scout_.clear();
         cached_rx_data_.clear();
         rx_queue_.clear();
+        held_frames_.clear();
     }
 
     // --- State ---
@@ -668,6 +765,19 @@ private:
     std::vector<uint8_t> saved_scout_;       // TX path: saved scout frame
     std::vector<uint8_t> cached_rx_data_;    // RX path: cached AUN payload for data delivery
     std::deque<NetworkFrame> rx_queue_;       // Frames waiting for ADLC to receive
+
+    // Packets that arrived while the handshake was in a stage that could not
+    // use them, held for re-offering rather than destroyed. UDP does not
+    // guarantee ordering and a peer may address us at any time, so this is
+    // ordinary traffic, not an error case.
+    struct HeldFrame {
+        NetworkFrame packet;
+        int age_ticks;
+    };
+    std::deque<HeldFrame> held_frames_;
+    uint32_t held_frames_redelivered_count_ = 0;
+    uint32_t held_frames_expired_count_ = 0;
+    uint32_t held_frames_dropped_count_ = 0;
 
     uint8_t saved_dest_stn_ = 0;
     uint8_t saved_dest_net_ = 0;

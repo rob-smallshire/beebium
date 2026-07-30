@@ -852,7 +852,8 @@ TEST_CASE("FourWayHandshake: unexpected TX in wrong state resets handshake", "[e
     CHECK(hs.stage() == FourWayHandshake::Stage::Idle);
 }
 
-TEST_CASE("FourWayHandshake: unexpected AUN packet type in DataSent is ignored", "[econet][handshake]") {
+TEST_CASE("FourWayHandshake: unexpected AUN packet type in DataSent is held, not dropped",
+          "[econet][handshake]") {
     TestBackend backend;
     FourWayHandshake hs(backend);
 
@@ -863,7 +864,10 @@ TEST_CASE("FourWayHandshake: unexpected AUN packet type in DataSent is ignored",
     hs.send_frame(make_raw_frame({254, 0, 1, 0, 0xDD}));
     CHECK(hs.stage() == FourWayHandshake::Stage::DataSent);
 
-    // Inject a Unicast instead of Ack — should be ignored
+    // A Unicast arrives where only an Ack can be used. It must not reach the
+    // ADLC now -- the guest is mid-transaction -- but it must not be thrown
+    // away either: it has already been taken off the socket, so discarding it
+    // loses it for good. This test previously asserted the discard.
     NetworkFrame wrong;
     wrong.type = FrameType::Unicast;
     wrong.data = {0x42};
@@ -872,6 +876,7 @@ TEST_CASE("FourWayHandshake: unexpected AUN packet type in DataSent is ignored",
     auto frame = hs.receive_frame();
     CHECK_FALSE(frame.has_value());
     CHECK(hs.stage() == FourWayHandshake::Stage::DataSent);  // Unchanged
+    CHECK(hs.held_frame_count() == 1);                       // ... and retained
 }
 
 TEST_CASE("FourWayHandshake: WaitForIdle transitions to Idle when queue drains", "[econet][handshake]") {
@@ -1195,3 +1200,185 @@ TEST_CASE("FourWayHandshake: watchdog race -- processing time nearly equals watc
     CHECK(hs.stage() == FourWayHandshake::Stage::ScoutAckReceived);
 }
 
+
+// =============================================================================
+// Inbound holding queue (out-of-order and interleaved packets)
+// =============================================================================
+//
+// UDP does not guarantee ordering, and nothing constrains a peer to speak only
+// while we are listening for it. A packet that does not match the stage the
+// handshake happens to be in must be held and re-offered, not destroyed --
+// destroying it loses a fileserver reply, an inbound immediate, or another
+// station's traffic outright. See docs/discussion/aun-robustness.md defect 1.
+
+namespace {
+
+// Drive the handshake through a TX transaction as far as DataSent, where it
+// is waiting for the peer's Ack. This is the window in which a reply that
+// overtook its own ack arrives.
+void advance_to_data_sent(FourWayHandshake& hs) {
+    hs.send_frame(make_raw_frame({254, 0, 1, 0, 0x80, 0x99}));
+    tick_n(hs, FourWayHandshake::SCOUT_ACK_TIMEOUT);
+    hs.receive_frame();  // consume the synthetic scout ack
+    hs.send_frame(make_raw_frame({254, 0, 1, 0, 0xAA}));
+    REQUIRE(hs.stage() == FourWayHandshake::Stage::DataSent);
+}
+
+// A Unicast as a fileserver would send its reply.
+NetworkFrame make_reply_unicast(uint8_t from_stn = 254, uint8_t port = 0x90) {
+    NetworkFrame reply;
+    reply.type = FrameType::Unicast;
+    reply.port = port;
+    reply.control_byte = 0x00;
+    reply.dest_net = 0;
+    reply.dest_stn = 1;
+    reply.src_net = 0;
+    reply.src_stn = from_stn;
+    reply.data = {0xDE, 0xAD};
+    return reply;
+}
+
+// Pull frames until one arrives or the budget is exhausted, ticking as we go.
+std::optional<NetworkFrame> drain_until_frame(FourWayHandshake& hs, int budget) {
+    for (int i = 0; i < budget; ++i) {
+        if (auto frame = hs.receive_frame()) return frame;
+        hs.tick();
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+TEST_CASE("FourWayHandshake: reply that overtakes its ack is not lost",
+          "[econet][handshake][holding]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    advance_to_data_sent(hs);
+
+    // The peer's reply overtakes the ack for the data we just sent. Before
+    // the holding queue this was read off the socket and destroyed, and the
+    // guest waited out its OSWORD timeout for a reply that no longer existed.
+    backend.inject_rx_network_frame(make_reply_unicast());
+    NetworkFrame ack;
+    ack.type = FrameType::Ack;
+    backend.inject_rx_network_frame(ack);
+
+    // The ack completes our transaction ...
+    auto final_ack = drain_until_frame(hs, 200);
+    REQUIRE(final_ack.has_value());
+    CHECK(final_ack->data.size() == 4);   // synthetic final ack
+
+    // ... and the held reply is then delivered as an inbound scout.
+    auto scout = drain_until_frame(hs, FourWayHandshake::IDLE_COOLDOWN + 200);
+    REQUIRE(scout.has_value());
+    REQUIRE(scout->data.size() >= 6);
+    CHECK(scout->data[DEST_STN] == 1);      // addressed to us
+    CHECK(scout->data[SRC_STN] == 254);     // from the fileserver
+    CHECK(scout->data[PORT] == 0x90);
+    CHECK(hs.held_frames_redelivered_count() == 1);
+}
+
+TEST_CASE("FourWayHandshake: third station's traffic during a transaction survives",
+          "[econet][handshake][holding]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    advance_to_data_sent(hs);
+
+    // A station we are not talking to addresses us mid-transaction. On a
+    // segment with more than two participants this is ordinary traffic, and
+    // discarding it means the busier we are the more of everyone else's
+    // frames we destroy.
+    backend.inject_rx_network_frame(make_reply_unicast(/*from_stn=*/200,
+                                                       /*port=*/0x91));
+    NetworkFrame ack;
+    ack.type = FrameType::Ack;
+    backend.inject_rx_network_frame(ack);
+
+    REQUIRE(drain_until_frame(hs, 200).has_value());  // our final ack
+
+    auto scout = drain_until_frame(hs, FourWayHandshake::IDLE_COOLDOWN + 200);
+    REQUIRE(scout.has_value());
+    REQUIRE(scout->data.size() >= 6);
+    CHECK(scout->data[SRC_STN] == 200);
+    CHECK(scout->data[PORT] == 0x91);
+}
+
+TEST_CASE("FourWayHandshake: broadcast arriving mid-transaction survives",
+          "[econet][handshake][holding]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    advance_to_data_sent(hs);
+
+    NetworkFrame bcast;
+    bcast.type = FrameType::Broadcast;
+    bcast.port = 0x9C;
+    bcast.control_byte = 0x00;
+    bcast.dest_stn = 0xFF;
+    bcast.dest_net = 0xFF;
+    bcast.src_stn = 200;
+    bcast.src_net = 0;
+    bcast.data = {0x01, 0x02};
+    backend.inject_rx_network_frame(bcast);
+
+    NetworkFrame ack;
+    ack.type = FrameType::Ack;
+    backend.inject_rx_network_frame(ack);
+
+    REQUIRE(drain_until_frame(hs, 200).has_value());  // our final ack
+
+    auto delivered = drain_until_frame(hs, FourWayHandshake::IDLE_COOLDOWN + 200);
+    REQUIRE(delivered.has_value());
+    REQUIRE(delivered->data.size() >= 6);
+    CHECK(delivered->data[DEST_STN] == 0xFF);
+    CHECK(delivered->data[SRC_STN] == 200);
+}
+
+TEST_CASE("FourWayHandshake: held frames expire rather than accumulating",
+          "[econet][handshake][holding]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    advance_to_data_sent(hs);
+
+    // A frame nobody ever becomes ready for must not sit in the queue for
+    // ever: it would eventually be delivered wildly out of context, long
+    // after the conversation it belonged to ended.
+    backend.inject_rx_network_frame(make_reply_unicast());
+    hs.receive_frame();                       // parks it
+    CHECK(hs.held_frame_count() == 1);
+
+    tick_n(hs, FourWayHandshake::HELD_FRAME_TTL + 1);
+    CHECK(hs.held_frame_count() == 0);
+    CHECK(hs.held_frames_expired_count() == 1);
+}
+
+TEST_CASE("FourWayHandshake: holding queue is bounded",
+          "[econet][handshake][holding]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    advance_to_data_sent(hs);
+
+    // A peer that floods us -- broken, hostile, or just very busy -- must not
+    // be able to grow our memory without bound.
+    const int flood = FourWayHandshake::MAX_HELD_FRAMES * 3;
+    for (int i = 0; i < flood; ++i) {
+        backend.inject_rx_network_frame(make_reply_unicast());
+        hs.receive_frame();
+    }
+
+    CHECK(hs.held_frame_count() <= FourWayHandshake::MAX_HELD_FRAMES);
+    CHECK(hs.held_frames_dropped_count() > 0);
+}
+
+TEST_CASE("FourWayHandshake: reset clears held frames",
+          "[econet][handshake][holding]") {
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    advance_to_data_sent(hs);
+
+    backend.inject_rx_network_frame(make_reply_unicast());
+    hs.receive_frame();
+    REQUIRE(hs.held_frame_count() == 1);
+
+    hs.reset();
+    CHECK(hs.held_frame_count() == 0);
+}
