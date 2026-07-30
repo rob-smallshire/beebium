@@ -164,9 +164,15 @@ tcpser -v 25232 -s 2400 -l 4 -n 1=nightowlbbs.ddns.net:6400
 
 `-s 2400` matches the board's rate, so tcpser paces bytes at something the
 emulated ACIA absorbs comfortably. Add `-t sS` for a byte-level trace of the
-serial side when diagnosing. Typing the address inline as
-`ATDT nightowlbbs.ddns.net:6400` also works, but a single mistyped character
-costs a whole redial, so the phonebook is the friendlier default.
+serial side when diagnosing.
+
+The phonebook is optional: it is a lookup, not a restriction, so a dial string
+that matches no entry is used as the address directly. `ATDTnightowlbbs.ddns.net:6400`
+works just as well and needs no `-n`. The phonebook simply spares you typing a
+long hostname through the emulated keyboard on every call — and a single
+mistyped character costs a full redial, since Hayes command-line editing is not
+to be relied on. Retype the whole line rather than backspacing, and use the
+`SR<-` bytes in a `-t sS` trace to see exactly what the BBC sent.
 
 **2. Start the server** with Commstar fitted and the IP232 bridge pointed at
 tcpser:
