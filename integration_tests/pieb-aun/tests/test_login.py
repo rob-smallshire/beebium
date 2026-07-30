@@ -18,7 +18,9 @@ satisfies an independently written AUN implementation rather than only
 satisfying another Beebium.
 
 The same scenario runs twice, differing only in what Beebium declares with
-``--aun net=``. The flat-cloud declaration works; the multi-net one does not.
+``--aun net=``: the flat-cloud declaration of net 0, and a declaration matching
+the non-zero net the bridge knows us by. The second was the reproducer for
+defect 8 and is kept as its regression test.
 See docs/discussion/pieconetbridge-aun-interop-testing.md.
 """
 
@@ -118,23 +120,19 @@ def test_login_with_flat_net_declaration(
 @pytest.mark.slow
 @pytest.mark.timeout(180)
 @pytest.mark.parametrize("beebium_net", [BEEBIUM_BRIDGE_SIDE_NET], indirect=True)
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "AunBackend presents inbound frames with dest_net = local_net, but "
-        "the guest believes it is on net 0 and rejects them as not addressed "
-        "to it. The fileserver's reply is retransmitted and dropped, and NFS "
-        "reports 'No reply'. See docs/discussion/aun-robustness.md defect 8."
-    ),
-)
 def test_login_with_matching_non_zero_net_declaration(
     bridge, beebium_args, server_filepath, mos_filepath, basic_filepath,
 ):
     """The honest multi-net arrangement: Beebium declares the net it is on.
 
     Identical to the flat-cloud case in every respect except ``--aun net=``,
-    which here matches the net the bridge knows us by. That is precisely the
-    configuration ``--aun net=N`` exists to support, and it does not work.
+    which here matches the net the bridge knows us by. This is precisely the
+    configuration ``--aun net=N`` exists to support.
+
+    It did not work until defect 8 was fixed: inbound frames were delivered
+    with ``dest_net`` set to our declared net, which the guest -- which can
+    only ever believe it is on net 0 -- discarded as not addressed to it. See
+    docs/discussion/aun-robustness.md.
     """
     with Beebium.launch(
         mos_filepath=mos_filepath,

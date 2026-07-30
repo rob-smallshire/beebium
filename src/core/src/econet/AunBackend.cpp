@@ -288,13 +288,19 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
     // BBC software expects local-segment frames to carry src_net=0 (the
     // historical wire-protocol sentinel). The peer table holds absolute
     // net numbers; translate the local-segment case back to 0 for the
-    // benefit of the BBC. dest_net is delivered as local_net_ so the
-    // BBC sees frames addressed to its own segment in the same form an
-    // outgoing frame would have used (after our send-side translation).
+    // benefit of the BBC. A sender on a genuinely different net keeps its
+    // absolute net number, because to the BBC it really is elsewhere.
+    //
+    // dest_net is always 0, whatever local_net_ is. An inbound frame is by
+    // definition addressed to this station, and this station is always on
+    // "this segment" from the guest's point of view -- a BBC has no way to
+    // learn its own net number, so net 0 is the only form in which it will
+    // recognise a frame as its own. Delivering local_net_ here instead makes
+    // NFS discard every inbound frame the moment --aun net= is non-zero.
     uint8_t peer_net = sender_addr_econet.first;
     result.frame.src_net = (peer_net == local_net_) ? 0 : peer_net;
     result.frame.src_stn = sender_addr_econet.second;
-    result.frame.dest_net = local_net_;
+    result.frame.dest_net = 0;
     result.frame.dest_stn = local_stn_;
 
     last_received_handle_ = result.handle;

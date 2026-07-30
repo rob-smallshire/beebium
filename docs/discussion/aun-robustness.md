@@ -9,6 +9,12 @@ Defects 1-7 were found by reading. Defect 8 was found by the first test of the
 PiEconetBridge interop harness, within an hour of that harness existing, and is
 the only one so far confirmed against a real peer.
 
+**Numbering.** The number in each heading is a stable identifier, assigned in
+the order defects were found and never reused or reassigned. The *order* of the
+sections is severity. The two therefore do not agree, and are not meant to:
+renumbering on each new finding would silently invalidate every reference from
+a test, a commit message, or an `xfail` reason.
+
 The unifying theme of the first two is that `FourWayHandshake` is optimistic:
 it assumes the transaction it is bridging will succeed, and it has no memory of
 anything that does not fit the transaction currently in flight. Both
@@ -83,10 +89,9 @@ refinements:
 - Cap the queue and drop oldest-first when full, so a hostile or broken peer
   cannot grow it without bound. Count the drops and expose the counter.
 
-## 1a. `--aun net=N` is unusable for any non-zero N (defect 8)
+## 8. `--aun net=N` is unusable for any non-zero N
 
-**Status:** open, reproduced end-to-end. **Severity:** high — the feature does
-not work at all.
+**Status:** FIXED. **Severity:** high — the feature did not work at all.
 
 `AunBackend::receive_frame` presents every inbound frame to the guest with
 `dest_net` set to our own `local_net_` (`AunBackend.cpp:297`):
@@ -129,22 +134,20 @@ accidentally right. `net=` was added with the mDNS work specifically so Beebium
 could join multi-net deployments, and its inbound path has never carried
 traffic from a peer that numbers its nets.
 
-**Fix.** Mirror the `src_net` treatment:
+**Fix applied.** `dest_net` is now always 0, mirroring the `src_net`
+treatment. An inbound frame is by definition addressed to this station, and
+this station is always on the guest's own segment.
 
-```cpp
-result.frame.dest_net = 0;  // always: the frame is addressed to us, and
-                            // "us" is always net 0 from the guest's view
-```
+Two existing unit tests asserted the old behaviour (`AunBackend: BBC dest_net=0
+routes via local_net for peer lookup` and `AunBackend: cross-net unicast
+preserves source net`, both checking `dest_net == local_net_`) and were
+inverted. A new `AunBackend: inbound dest_net is 0 for every local_net` covers
+nets 0, 1, 3 and 127 at the backend seam, where no bridge is needed; the
+interop test covers it against a real peer.
 
-Inbound frames are by definition addressed to this station, so the destination
-net is always the guest's own segment, always 0. Guard it with a unit test at
-the `AunBackend` seam as well as the interop test, since the interop test needs
-a bridge and the unit test does not.
-
-**Test.** `integration_tests/pieb-aun/tests/test_login.py::
-test_login_with_matching_non_zero_net_declaration`, currently `xfail(strict)`.
-It will start failing as an unexpected pass the moment this is fixed, which is
-the signal to drop the marker.
+**Tests.** `tests/test_aun_backend.cpp` and
+`integration_tests/pieb-aun/tests/test_login.py::
+test_login_with_matching_non_zero_net_declaration`, both passing.
 
 ## 2. Transmit failures are reported to the guest as success
 

@@ -513,11 +513,57 @@ TEST_CASE("AunBackend: BBC dest_net=0 routes via local_net for peer lookup",
     // src_net presented as 0 (peer is on the local net 3, BBC expects 0).
     CHECK(received->src_net == 0);
     CHECK(received->src_stn == 1);
-    CHECK(received->dest_net == 3);   // local_net_ of the receiver
+    // dest_net presented as 0: the frame is addressed to us, and the guest
+    // only ever recognises its own address on net 0.
+    CHECK(received->dest_net == 0);
     CHECK(received->dest_stn == 254);
     REQUIRE(received->data.size() == 2);
     CHECK(received->data[0] == 0xAA);
     CHECK(received->data[1] == 0xBB);
+}
+
+TEST_CASE("AunBackend: inbound dest_net is 0 for every local_net",
+          "[econet][aun][backend][net]") {
+    // Regression for the defect that made --aun net=N unusable for any
+    // non-zero N: inbound frames were delivered with dest_net = local_net_,
+    // but a BBC has no way to learn its own net number and recognises its
+    // own address only on net 0. NFS therefore discarded every inbound
+    // frame, and against a real peer the symptom was a fileserver that
+    // completed the login and retransmitted an unacknowledged reply while
+    // the guest reported "No reply".
+    //
+    // See docs/discussion/aun-robustness.md defect 8.
+    for (uint8_t net : {uint8_t{0}, uint8_t{1}, uint8_t{3}, uint8_t{127}}) {
+        CAPTURE(net);
+        auto sender = std::make_unique<AunBackend>(/*local_net=*/net,
+                                                   /*local_stn=*/1, 0);
+        auto receiver = std::make_unique<AunBackend>(/*local_net=*/net,
+                                                     /*local_stn=*/254, 0);
+        REQUIRE(sender->is_connected());
+        REQUIRE(receiver->is_connected());
+
+        sender->add_peer(net, 254, loopback_ip(), receiver->local_port());
+        receiver->add_peer(net, 1, loopback_ip(), sender->local_port());
+
+        NetworkFrame frame;
+        frame.type = FrameType::Unicast;
+        frame.port = 0x99;
+        frame.dest_net = 0;     // BBC view: "this segment"
+        frame.dest_stn = 254;
+        frame.src_net = 0;
+        frame.src_stn = 1;
+        frame.data = {0x2A};
+
+        sender->send_frame(frame);
+        brief_pause();
+
+        auto received = receive_with_timeout(*receiver);
+        REQUIRE(received.has_value());
+        CHECK(received->dest_net == 0);
+        CHECK(received->dest_stn == 254);
+        CHECK(received->src_net == 0);
+        CHECK(received->src_stn == 1);
+    }
 }
 
 TEST_CASE("AunBackend: cross-net unicast preserves source net",
@@ -549,7 +595,8 @@ TEST_CASE("AunBackend: cross-net unicast preserves source net",
     REQUIRE(received.has_value());
     CHECK(received->src_net == 3);    // Cross-net: pass through unchanged
     CHECK(received->src_stn == 1);
-    CHECK(received->dest_net == 5);   // local_net_ of the receiver
+    // Still 0: the destination is us, wherever the sender was.
+    CHECK(received->dest_net == 0);
     CHECK(received->dest_stn == 200);
     REQUIRE(received->data.size() == 1);
     CHECK(received->data[0] == 0xCC);

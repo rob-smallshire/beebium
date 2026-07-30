@@ -85,11 +85,11 @@ verified in the wrong direction.
    acknowledged.
 
    Its sibling — the identical scenario with `--aun net=` set to the net the
-   bridge knows us by — **fails**, and led straight to defect 8 in
-   `aun-robustness.md`. It is checked in as `xfail(strict=True)`. That the very
-   first interop test found a defect no amount of Beebium-to-Beebium testing
-   could reach is the argument for this whole programme, made earlier than
-   expected.
+   bridge knows us by — failed, and led straight to defect 8 in
+   `aun-robustness.md`. That defect is now fixed and the test passes; it stays
+   as the regression test. That the very first interop test found a defect no
+   amount of Beebium-to-Beebium testing could reach is the argument for this
+   whole programme, made earlier than expected.
 2. **Catalogue and file transfer.** `*CAT`, then load a file large enough to
    span multiple data frames. Exercises the scout-extra split, the byte
    trickle, and repeated back-to-back transactions through the idle cooldown.
