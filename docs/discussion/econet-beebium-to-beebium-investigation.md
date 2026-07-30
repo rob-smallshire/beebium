@@ -11,7 +11,12 @@ Status: **root cause identified**. Three bugs found:
    incoming RX handshake not cancelled on normal completion. Fix
    applied in `handle_tx_final_ack_from_beeb()`.
 
-2. **Inline R3 read stretch loop (ROOT CAUSE, UNFIXED):** The
+2. **Inline R3 read stretch loop (ROOT CAUSE, since FIXED):** Fixed by the
+   single-process Tube migration. `TubeSocket::read()` no longer stretches at
+   all -- reads complete immediately, an empty R3 P-to-H returning stale latch
+   data, which is what B2, BeebEm, jsbeeb and B-Em all do. The scenario below
+   has not been re-run since, so it is unverified rather than known-good.
+   Original diagnosis follows. The
    `TubeSocket::read()` inline stretch loop (TubeSocket.hpp lines
    124-136) ticks the parasite in a tight busy-wait without
    incrementing host `cycle_count` or ticking peripherals. During

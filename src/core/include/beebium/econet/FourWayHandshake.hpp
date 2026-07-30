@@ -756,8 +756,10 @@ private:
                 // On real Econet, the final ack comes within microseconds if
                 // the scout succeeded. In AUN mode, the scout always succeeds
                 // (locally faked), so we must also provide the final ack.
-                // The NFS ROM has no software timeout for this phase — it
-                // relies entirely on the ADLC NMI.
+                // The NFS ROM has no escape from this phase of its own:
+                // poll_adlc_tx_status spins unbounded on a flag written only
+                // by NMI paths, so its 255 retries bound nothing. It has
+                // watchdogs either side of the handshake, but not inside it.
                 // If a real AUN Ack arrived first (handle_incoming), the stage
                 // already transitioned to WaitForIdle and this case won't fire.
                 enqueue_rx_frame({

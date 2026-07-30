@@ -1188,7 +1188,7 @@ FourWayHandshake (decorator: sits between Mc6854 and AunBackend)
 │   ├── flag_fill_timer_             // Pseudo flag fill timeout (~250ms)
 │   └── idle_cooldown_               // Inter-handshake gap (~2.5ms)
 ├── is_receiving_flags()             // Drives ADLC SR1 FD (flag fill simulation)
-├── is_expecting_frame()             // Suppresses INACTIVE during inter-frame gaps
+├── is_expecting_frame()             // Suppresses INACTIVE for the whole transaction
 ├── tick()                           // Called once per 2MHz rising edge, before ADLC tick
 └── NetworkBackend& backend_         // The real backend (AunBackend)
 
@@ -1207,7 +1207,7 @@ NetworkBackend (abstract interface)
 ├── receive_frame() -> optional      // Non-blocking receive
 ├── is_connected() -> bool           // Carrier/clock status for DCD
 ├── is_receiving_flags() -> bool     // Flag fill for SR1 FD (default: false)
-└── is_expecting_frame() -> bool     // Suppress INACTIVE in handshake gaps (default: false)
+└── is_expecting_frame() -> bool     // Suppress INACTIVE while a transaction is live (default: false)
 
 TestBackend (test double — implements NetworkBackend)
 ├── inject_rx_frame() / inject_rx_network_frame()  // Queue frames for ADLC to receive
@@ -1492,8 +1492,12 @@ The core Econet/AUN implementation is complete. This section summarises what was
    - Timeout: 500,000 cycles (~250ms)
 
 4. **Idle detection**
-   - Idle = RX not reset AND FIFO empty AND no FV AND no pending data
-   - Drives SR2b2 (Inactive Idle) when `Idle && !FlagFillActive`
+   - Idle = RX not reset AND FIFO empty AND no FV AND no pending data AND no
+     frame expected imminently
+   - Drives SR2b2 (Inactive Idle). Independent of flag fill: on real hardware
+     FD (SR1b3) and INACTIVE (SR2b2) are separate signals, and both are set
+     when a network is idle with a working clock box. The original design
+     gated INACTIVE on `!FlagFillActive`; that is not what the hardware does.
 
 **All items above are implemented.** Key implementation difference: the four-way handshake is implemented as a **decorator** (`FourWayHandshake`) that implements `NetworkBackend`, rather than being embedded in the `Mc6854`. The ADLC talks to `FourWayHandshake` using raw Econet frames; `FourWayHandshake` translates to/from typed AUN packets on the wrapped `AunBackend`. This keeps the ADLC pure hardware emulation and the protocol bridging in a separate, testable class.
 
@@ -1720,7 +1724,7 @@ All of these routines are in `disassembly/nfs_334_v2_96dc_9fff_adlc_nmi_handlers
 
 6. **Self-send prevention**: Not explicitly handled. The AunBackend will send packets to any configured peer address, including one that maps to the local station. In practice this hasn't caused problems because Beebium instances use different UDP ports.
 
-7. **NACK handling**: Beebium follows BeebEm's pragmatic approach — NACKs are not explicitly handled. The `FourWayHandshake` watchdog timeout resets hung transactions regardless of the cause.
+7. ~~**NACK handling**~~ **Resolved.** A `Nack` arriving in `DataSent` now abandons the transaction rather than letting the timer synthesise a successful acknowledgement, and the line is left to fall idle so the guest learns the transmission failed. This is the route by which a transport that cannot know a station is absent until it has tried — Piconet, whose firmware runs the wire handshake — reports failure after the fact; `PiconetBackend` emits a `Nack` for every non-OK `TX_RESULT`. See `docs/discussion/aun-robustness.md` defect 2.
 
 8. ~~**Immediate operation data sizes**~~ **Resolved.** Verified against the NFS 3.34 ROM disassembly and BeebEm's implementation. Implemented in `FourWayHandshake::scout_payload_size()`: control byte 0x02 (POKE) → 8 bytes, 0x03-0x05 (JSR, UserProc, OSProc) → 4 bytes, all others → 0 bytes.
 
@@ -1873,6 +1877,31 @@ beebium-model-b --drive0 games.ssd
   - (&A0): Block to be transmitted (NMI workspace)
   - (&9E): Private workspace 2 — receive buffers at offsets &00, &0C, &18, &24 (12-byte structures)
   - (&A4): Open port buffer pointer
+
+- **What the ROM requires of the ADLC** — confirmed against the annotated
+  disassemblies at `/Users/rjs/Code/acornaeology/acorn-nfs` (ANFS 4.18
+  addresses). Read this before changing anything in `Mc6854`'s interrupt path:
+
+  - **The handshake window has no software escape.** `poll_adlc_tx_status`
+    opens with `ASL tx_complete_flag / BCC` (&98C9-&98CC), an unbounded spin on
+    a flag written only by NMI paths. The ROM has watchdogs either side — the
+    pre-transmit INACTIVE poll (24-bit counter → "Line Jammed") and
+    `wait_net_tx_ack` (~22s → "No reply") — but `tx_retry_count`'s 255 retries
+    bound nothing, because each attempt's spin is itself unbounded. An
+    emulator that gets the TX-completion or line-idle interrupt wrong
+    therefore produces a **hung machine**, not a wrong error.
+  - **A receive control block is one-shot.** `rx_complete_update_rxcb` ORs &80
+    into byte 0 of the RXCB (&83D8), and the slot scanner at
+    `scout_ctrl_check` matches only control byte &7F exactly — so &FF matches
+    nothing. A retransmitted reply walks the port list, matches no slot, and
+    is discarded silently at `discard_no_match`. The guest can never answer a
+    duplicate; the transport must.
+  - **"not present" vs "not listening" names the reporting code path, not the
+    failure.** `*I AM` probes with a MachinePeek (ctrl &88, port 0) whose
+    return path `fixup_reply_status_a` rewrites &41 to &42 and selects
+    " not present" (&982A) unconditionally; the general `send_net_packet` path
+    selects " not listening" (&980F) at `classify_reply_error`. Neither string
+    is diagnostic of what actually went wrong.
 
 - **Page &0D Usage** (J.G. Harston): https://mdfs.net/Misc/Source/Acorn/NFS/PageD
   - &0D3D-&0D40: Incoming scout data (src_stn, src_net, ctrl, port)
