@@ -67,6 +67,13 @@ DartConfiguration.tcl
 xcuserdata/
 *.xcuserstate
 
+# Xcode build trees. Anywhere, under any suffix: an in-tree DerivedData holds
+# tens of thousands of files including checked-out SwiftPM dependencies, each
+# of which is its own git repository, so a stray `git add -A` both bloats the
+# history and creates accidental embedded repositories.
+DerivedData/
+DerivedData-*/
+
 # Editor swap/backup files
 *~
 *.swp
