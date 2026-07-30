@@ -182,7 +182,8 @@ test_login_with_matching_non_zero_net_declaration`, both passing.
 
 ## 2. Transmit failures are reported to the guest as success
 
-**Status:** open. **Severity:** high — the guest is actively misinformed.
+**Status:** open — the ADLC prerequisite is fixed; a transport change remains.
+**Severity:** high — the guest is actively misinformed.
 
 `handle_tx_data_after_scout_ack()` arms `FINAL_ACK_TIMEOUT`
 (`FourWayHandshake.hpp:358`). When that timer fires in `DataSent`, the code
@@ -278,12 +279,46 @@ PSE tests need to be reasoned through one at a time rather than bulk-updated.
 That is a careful piece of ADLC work in its own right, not a rider on a
 transport fix.
 
-**Next step.** Treat this as an ADLC defect rather than a handshake one: latch
-Rx Idle, admit it to S2RQ, and work through the PSE interaction until the
-`Mc6854` suite is green on its merits. Only then revisit the transport side,
-where the remaining question is much simpler — the handshake must let the line
-fall idle when a transmission has failed instead of unconditionally
-synthesising an acknowledgement.
+**ADLC half: DONE.** Rx Idle now latches on the 0->1 edge and reaches S2RQ
+through that latch, as the datasheet requires and as DCD already did. The
+datasheet pages were read directly rather than trusting our transcription: SR1
+b1 is "All the status bits (stored conditions) of status register #2 (except
+RDA bit) ... logically ORed", so only RDA is excluded, and Figure 10's priority
+tree places Rx Idle above AP and RDA.
+
+The PSE interaction needed no compromise in the end. Two things resolved it:
+
+- Tests that received a frame without first clearing status were relying on the
+  absent latch. Real software always clears -- NFS's listen setup writes
+  CR2=&67, which carries CLR Rx ST -- so they now take up the listening
+  position the same way, through a `begin_listening()` fixture helper that says
+  why.
+- More interestingly, it exposed a second bug. `is_expecting_frame()` reported
+  the line inactive during a transaction, whereas a real wire is held in flag
+  fill from end to end: at every step whichever station owes the next frame
+  holds the line. Once Rx Idle latched, that error became visible as a latched
+  INACTIVE masking AP and RDA mid-exchange -- hiding the very frames the
+  transaction consists of. It now reports the line held for any stage with a
+  transaction in flight *or* frames still queued for the guest, and inactive
+  only when genuinely quiet.
+
+The full 2775-test suite is green, as is the interop suite.
+
+**Transport half: still open, and now precisely specified.** The ADLC can
+deliver the interrupt, but that alone is not sufficient -- established by
+experiment rather than argument: re-applying the reachability pre-flight on top
+of the fixed ADLC still leaves the guest silent.
+
+The reason is the edge. The latch fires on a 0->1 transition of the idle
+condition, and with the pre-flight the handshake never leaves `Idle`, so the
+line is idle before the transmission and idle after. No transition, no
+interrupt. On a real wire the act of transmitting makes the line busy and it
+then *falls* idle, and it is that fall the receiver latches.
+
+The remaining requirement is therefore: model our own transmission as making
+the line busy, and let it fall idle when the transmission has failed, instead
+of unconditionally synthesising an acknowledgement. That is a transport change,
+testable at the `FourWayHandshake` seam, and no longer blocked on the ADLC.
 
 Note also the dependency on defect 1, which ran the opposite way: the
 unconditional synthetic ack was what stopped destroyed packets from
