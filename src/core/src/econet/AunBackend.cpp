@@ -374,6 +374,7 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
     result.frame.dest_net = 0;
     result.frame.dest_stn = local_stn_;
 
+    result.frame.handle = result.handle;
     last_received_handle_ = result.handle;
 
     if (trace_) {

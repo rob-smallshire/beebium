@@ -361,6 +361,7 @@ private:
         frame->set_src_stn(event.src_stn);
         frame->set_port(event.port);
         frame->set_control_byte(event.control_byte);
+        frame->set_handle(event.handle);
         frame->set_data_length(event.data_length);
         frame->set_data(event.data, event.data_captured);
     }

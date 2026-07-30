@@ -254,6 +254,12 @@ message EconetFrameInfo {
     // The payload's true size, which may exceed what `data` carries.
     uint32 data_length = 8;
 
+    // The AUN transaction handle. A peer retransmitting an unacknowledged
+    // frame reuses its handle, so two frames with the same handle are the
+    // same transmission rather than two transactions carrying like bytes.
+    // Zero for transports with no such concept, and on the send path.
+    uint32 handle = 10;
+
     // The leading bytes of the payload, truncated to keep the event stream
     // from becoming a packet capture. Compare with data_length to tell
     // whether anything was dropped.

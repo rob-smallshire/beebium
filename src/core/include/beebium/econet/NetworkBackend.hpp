@@ -45,6 +45,15 @@ struct NetworkFrame {
     uint8_t src_net = 0;
     uint8_t src_stn = 0;
     std::vector<uint8_t> data;
+
+    // The AUN transaction handle, for transports that have one.
+    //
+    // Populated on receive; a peer that retransmits an unacknowledged frame
+    // reuses the handle, which is what distinguishes a retransmission from a
+    // fresh transaction carrying the same bytes. Zero for transports with no
+    // such concept (Piconet, whose firmware owns the wire handshake) and on
+    // the send path, where AunBackend assigns the handle itself.
+    uint32_t handle = 0;
 };
 
 // Abstract network transport for the MC6854 ADLC.

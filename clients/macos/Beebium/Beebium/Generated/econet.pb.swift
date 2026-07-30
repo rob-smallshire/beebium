@@ -450,6 +450,12 @@ struct Beebium_EconetFrameInfo: Sendable {
   /// The payload's true size, which may exceed what `data` carries.
   var dataLength: UInt32 = 0
 
+  /// The AUN transaction handle. A peer retransmitting an unacknowledged
+  /// frame reuses its handle, so two frames with the same handle are the
+  /// same transmission rather than two transactions carrying like bytes.
+  /// Zero for transports with no such concept, and on the send path.
+  var handle: UInt32 = 0
+
   /// The leading bytes of the payload, truncated to keep the event stream
   /// from becoming a packet capture. Compare with data_length to tell
   /// whether anything was dropped.
@@ -1158,7 +1164,7 @@ extension Beebium_SubscribeEconetEventsRequest: SwiftProtobuf.Message, SwiftProt
 
 extension Beebium_EconetFrameInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".EconetFrameInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}frame_type\0\u{3}dest_net\0\u{3}dest_stn\0\u{3}src_net\0\u{3}src_stn\0\u{1}port\0\u{3}control_byte\0\u{3}data_length\0\u{1}data\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}frame_type\0\u{3}dest_net\0\u{3}dest_stn\0\u{3}src_net\0\u{3}src_stn\0\u{1}port\0\u{3}control_byte\0\u{3}data_length\0\u{1}data\0\u{1}handle\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1175,6 +1181,7 @@ extension Beebium_EconetFrameInfo: SwiftProtobuf.Message, SwiftProtobuf._Message
       case 7: try { try decoder.decodeSingularUInt32Field(value: &self.controlByte) }()
       case 8: try { try decoder.decodeSingularUInt32Field(value: &self.dataLength) }()
       case 9: try { try decoder.decodeSingularBytesField(value: &self.data) }()
+      case 10: try { try decoder.decodeSingularUInt32Field(value: &self.handle) }()
       default: break
       }
     }
@@ -1208,6 +1215,9 @@ extension Beebium_EconetFrameInfo: SwiftProtobuf.Message, SwiftProtobuf._Message
     if !self.data.isEmpty {
       try visitor.visitSingularBytesField(value: self.data, fieldNumber: 9)
     }
+    if self.handle != 0 {
+      try visitor.visitSingularUInt32Field(value: self.handle, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1220,6 +1230,7 @@ extension Beebium_EconetFrameInfo: SwiftProtobuf.Message, SwiftProtobuf._Message
     if lhs.port != rhs.port {return false}
     if lhs.controlByte != rhs.controlByte {return false}
     if lhs.dataLength != rhs.dataLength {return false}
+    if lhs.handle != rhs.handle {return false}
     if lhs.data != rhs.data {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

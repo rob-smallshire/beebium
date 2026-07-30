@@ -60,6 +60,13 @@ export interface EconetFrameInfo {
     dataLength: number;
 
     /**
+     * The AUN transaction handle. A peer retransmitting an unacknowledged
+     * frame reuses its handle, so two frames sharing one are the same
+     * transmission rather than two transactions carrying like bytes.
+     */
+    handle: number;
+
+    /**
      * The leading bytes of the payload. Compare with `dataLength` to tell
      * whether the server truncated it.
      */
@@ -161,6 +168,7 @@ function toEconetEvent(proto: ProtoEconetEvent): EconetEvent {
                   port: proto.frame.port,
                   controlByte: proto.frame.controlByte,
                   dataLength: proto.frame.dataLength,
+                  handle: proto.frame.handle,
                   data: proto.frame.data,
               }
             : undefined,

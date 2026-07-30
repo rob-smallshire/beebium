@@ -503,6 +503,7 @@ class EconetFrameInfo(_message.Message):
     PORT_FIELD_NUMBER: _builtins.int
     CONTROL_BYTE_FIELD_NUMBER: _builtins.int
     DATA_LENGTH_FIELD_NUMBER: _builtins.int
+    HANDLE_FIELD_NUMBER: _builtins.int
     DATA_FIELD_NUMBER: _builtins.int
     frame_type: _builtins.str
     """"raw", "broadcast", "unicast", "ack", "nack", "immediate", "imm_reply"."""
@@ -514,6 +515,12 @@ class EconetFrameInfo(_message.Message):
     control_byte: _builtins.int
     data_length: _builtins.int
     """The payload's true size, which may exceed what `data` carries."""
+    handle: _builtins.int
+    """The AUN transaction handle. A peer retransmitting an unacknowledged
+    frame reuses its handle, so two frames with the same handle are the
+    same transmission rather than two transactions carrying like bytes.
+    Zero for transports with no such concept, and on the send path.
+    """
     data: _builtins.bytes
     """The leading bytes of the payload, truncated to keep the event stream
     from becoming a packet capture. Compare with data_length to tell
@@ -530,11 +537,12 @@ class EconetFrameInfo(_message.Message):
         port: _builtins.int = ...,
         control_byte: _builtins.int = ...,
         data_length: _builtins.int = ...,
+        handle: _builtins.int = ...,
         data: _builtins.bytes = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_byte", b"control_byte", "data", b"data", "data_length", b"data_length", "dest_net", b"dest_net", "dest_stn", b"dest_stn", "frame_type", b"frame_type", "port", b"port", "src_net", b"src_net", "src_stn", b"src_stn"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_byte", b"control_byte", "data", b"data", "data_length", b"data_length", "dest_net", b"dest_net", "dest_stn", b"dest_stn", "frame_type", b"frame_type", "handle", b"handle", "port", b"port", "src_net", b"src_net", "src_stn", b"src_stn"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

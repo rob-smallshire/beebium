@@ -71,6 +71,11 @@ class EconetFrameInfo:
     #: whether the server truncated it.
     data: bytes
 
+    #: The AUN transaction handle. A peer retransmitting an unacknowledged
+    #: frame reuses its handle, so two frames sharing one are the same
+    #: transmission rather than two transactions carrying like bytes.
+    handle: int = 0
+
     @property
     def truncated(self) -> bool:
         """True if the payload was longer than the bytes retained."""
@@ -163,6 +168,7 @@ def _response_to_event(response) -> EconetEvent:
             port=f.port,
             control_byte=f.control_byte,
             data_length=f.data_length,
+            handle=f.handle,
             data=f.data,
         )
     return EconetEvent(

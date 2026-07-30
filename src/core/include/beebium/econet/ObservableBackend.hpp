@@ -68,6 +68,7 @@ public:
         std::uint8_t dest_stn = 0;
         std::uint8_t src_net = 0;
         std::uint8_t src_stn = 0;
+        std::uint32_t handle = 0;        // AUN transaction handle, if any
         std::uint32_t data_length = 0;   // true length, before truncation
         std::uint8_t data[MAX_PAYLOAD] = {};
         std::uint8_t data_captured = 0;  // bytes actually retained
@@ -175,6 +176,7 @@ private:
         event.dest_stn = frame.dest_stn;
         event.src_net = frame.src_net;
         event.src_stn = frame.src_stn;
+        event.handle = frame.handle;
         event.data_length = static_cast<std::uint32_t>(frame.data.size());
         const std::size_t captured = std::min(frame.data.size(), MAX_PAYLOAD);
         for (std::size_t i = 0; i < captured; ++i) event.data[i] = frame.data[i];
