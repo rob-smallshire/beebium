@@ -80,7 +80,16 @@ verified in the wrong direction.
 1. **Login.** Boot with NFS, `*NET`, `*I AM 1.254 SYST`, assert the
    fileserver's response on screen. This is the baseline the rest depend on,
    and it is the first automated proof that our four-way synthesis satisfies a
-   non-Beebium peer.
+   non-Beebium peer. **Built, and passing** with a flat net-0 declaration:
+   login and `*CAT` complete against a real bridge with every reply
+   acknowledged.
+
+   Its sibling — the identical scenario with `--aun net=` set to the net the
+   bridge knows us by — **fails**, and led straight to defect 8 in
+   `aun-robustness.md`. It is checked in as `xfail(strict=True)`. That the very
+   first interop test found a defect no amount of Beebium-to-Beebium testing
+   could reach is the argument for this whole programme, made earlier than
+   expected.
 2. **Catalogue and file transfer.** `*CAT`, then load a file large enough to
    span multiple data frames. Exercises the scout-extra split, the byte
    trickle, and repeated back-to-back transactions through the idle cooldown.
@@ -231,13 +240,39 @@ and a clean stop. Tests never learn which one they got.
 
 Practical points the fixture must handle:
 
-- **Addressing between host and container.** The bridge must be able to send
-  UDP *back* to Beebium, so a NAT'd container is not enough — the return path
-  needs a stable address. On Linux, `--network host` is simplest. On macOS and
-  Windows, Docker Desktop's `host.docker.internal` gives the container a route
-  back to the host; the config template needs the bridge's view of our address,
-  which differs from our view of the bridge's. Make that a single fixture-level
-  indirection rather than something each test reasons about.
+- **Addressing between host and container — the hard part.** Measured, not
+  assumed: Docker Desktop's published-port forwarder rewrites **both** the
+  source address and the source port of host-to-container UDP. A datagram sent
+  from the host's port 45454 to `127.0.0.1:39999` arrives in the container from
+  `192.168.65.1:55981`. The rewritten port is stable for the life of a flow but
+  is not knowable before the first datagram is sent.
+
+  This is fatal to any static peer configuration, because AUN peers are matched
+  by `(address, port)` at *both* ends — PiEconetBridge's `AUN MAP HOST` and
+  Beebium's `AunBackend` reverse map alike. A `AUN MAP HOST 2.1 ON
+  host.docker.internal PORT <our port>` entry cannot match traffic arriving
+  from the NAT, and the bridge logs `Traffic received from unknown source ...
+  Unable to allocate dynamic host` and drops it.
+
+  Two paths follow:
+
+  - **Clean path (Linux):** `--network host`. No NAT, the static `AUN MAP HOST`
+    entry matches, and our station identity is pinned by configuration. This is
+    the stricter arrangement and the one CI should run.
+  - **NAT'd path (Docker Desktop):** add upstream's `DYNAMIC <net> NONE` to the
+    bridge config. A dynamic net is upstream's own answer to an unrecognised
+    AUN source: the bridge allocates a station for it on first contact. The
+    return direction needs nothing special, because replies traverse the same
+    forwarder in reverse and reach Beebium from the published address and port
+    it already has in its peer map.
+
+  The fixture picks between them; tests are unaffected. The cost of the NAT'd
+  path is that our station number is bridge-assigned rather than declared,
+  which is a small loss of fidelity in exchange for a working developer loop on
+  macOS. A future option, and the better one for both platforms, is to run a
+  Linux Beebium in a sibling container on the same user-defined network, so
+  there is no NAT in the path at all and the gRPC control channel — being TCP —
+  does not care that it is forwarded.
 - **Port allocation.** Bind Beebium's AUN port from an ephemeral range chosen
   by the fixture and interpolate it into the bridge config, so parallel runs
   and leftover sockets do not collide. The bridge's own listener can stay on

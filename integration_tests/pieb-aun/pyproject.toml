@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "beebium-pieb-aun-tests"
+version = "0.1.0"
+description = "PiEconetBridge AUN interop integration tests for the Beebium BBC Micro emulator"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+authors = [
+    { name = "Robert Smallshire", email = "robert@smallshire.org.uk" }
+]
+dependencies = [
+    "beebium",
+    "grpcio>=1.60.0",
+    "protobuf>=4.0.0",
+    "pytest>=7.0.0",
+    "pytest-timeout>=2.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pieb_test_support"]
+
+[tool.uv.sources]
+beebium = { path = "../../clients/beebium-python-client", editable = true }
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: long-running tests requiring a PiEconetBridge (native binary or Docker)",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true

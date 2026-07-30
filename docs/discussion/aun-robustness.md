@@ -1,9 +1,13 @@
 # AUN robustness: defects in the transport and handshake layers
 
 An audit of the Econet transport stack against the question "what does the
-guest see when the network misbehaves?" Seven defects, in descending order of
-severity. Four are correctness bugs with user-visible consequences; three are
+guest see when the network misbehaves?" Eight defects, in descending order of
+severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
+
+Defects 1-7 were found by reading. Defect 8 was found by the first test of the
+PiEconetBridge interop harness, within an hour of that harness existing, and is
+the only one so far confirmed against a real peer.
 
 The unifying theme of the first two is that `FourWayHandshake` is optimistic:
 it assumes the transaction it is bridging will succeed, and it has no memory of
@@ -78,6 +82,69 @@ refinements:
   handshake is mid-transaction.
 - Cap the queue and drop oldest-first when full, so a hostile or broken peer
   cannot grow it without bound. Count the drops and expose the counter.
+
+## 1a. `--aun net=N` is unusable for any non-zero N (defect 8)
+
+**Status:** open, reproduced end-to-end. **Severity:** high — the feature does
+not work at all.
+
+`AunBackend::receive_frame` presents every inbound frame to the guest with
+`dest_net` set to our own `local_net_` (`AunBackend.cpp:297`):
+
+```cpp
+result.frame.src_net  = (peer_net == local_net_) ? 0 : peer_net;   // correct
+result.frame.dest_net = local_net_;                                // wrong
+result.frame.dest_stn = local_stn_;
+```
+
+The `src_net` line is right: a peer on our own segment is presented as net 0,
+because that is what "this segment" means from the guest's point of view. The
+`dest_net` line then contradicts it. The guest believes it is station N on net
+0 — that is the only thing a BBC can believe, since the wire protocol has no
+way to tell it otherwise — so a frame addressed to `local_net_.N` is not
+addressed to it, and NFS discards it.
+
+The in-code comment rationalises the current behaviour as matching "the form an
+outgoing frame would have used", but an outgoing frame from the guest uses
+`dest_net=0` for a local destination, which is exactly what this line fails to
+produce.
+
+**Observed.** Against a PiEconetBridge fileserver at 1.254, with Beebium
+declaring `--aun net=2`, `*I AM 1.254 SYST` produces:
+
+- the immediate MachinePeek exchange completes normally;
+- our command datagram is sent and the bridge acks it;
+- the bridge's fileserver **processes the login successfully** — its log shows
+  user handles allocated;
+- the reply arrives at Beebium five times, retransmitted, and is never
+  acknowledged;
+- the guest reports `No reply from station 1.254`.
+
+The identical scenario with `--aun net=0` completes cleanly, every reply
+acked, through login and `*CAT`. The two runs differ in nothing else.
+
+**Why it survived this long.** Beebium-to-Beebium testing has only ever used
+the flat net-0 topology, where `local_net_` is 0 and the wrong line is
+accidentally right. `net=` was added with the mDNS work specifically so Beebium
+could join multi-net deployments, and its inbound path has never carried
+traffic from a peer that numbers its nets.
+
+**Fix.** Mirror the `src_net` treatment:
+
+```cpp
+result.frame.dest_net = 0;  // always: the frame is addressed to us, and
+                            // "us" is always net 0 from the guest's view
+```
+
+Inbound frames are by definition addressed to this station, so the destination
+net is always the guest's own segment, always 0. Guard it with a unit test at
+the `AunBackend` seam as well as the interop test, since the interop test needs
+a bridge and the unit test does not.
+
+**Test.** `integration_tests/pieb-aun/tests/test_login.py::
+test_login_with_matching_non_zero_net_declaration`, currently `xfail(strict)`.
+It will start failing as an unexpected pass the moment this is fixed, which is
+the signal to drop the marker.
 
 ## 2. Transmit failures are reported to the guest as success
 
