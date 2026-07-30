@@ -117,11 +117,14 @@ public:
 private:
     AunBackend* backend_ = nullptr;  // non-owning; lives in EconetSocket
     std::unique_ptr<AunDispatcher> dispatcher_;  // lazily constructed
-    // Owned by the extension so its lifetime ends with the extension
-    // (the backend lives inside EconetSocket and outlives the
-    // extension only briefly during shutdown). nullptr until
-    // create_backend() succeeds; nullptr on platforms without mDNS or
-    // when the announcer fails to start.
+    // Owned by the extension so its lifetime ends with the extension.
+    // The backend lives inside EconetSocket and outlives us: ServerMain
+    // declares the machine before the transport registry precisely so
+    // that reverse destruction order stops these collaborators -- which
+    // hold a reference to that backend and run callbacks on the mDNS
+    // browser thread -- before the backend itself goes away. nullptr
+    // until create_backend() succeeds; nullptr on platforms without
+    // mDNS or when the announcer fails to start.
     std::unique_ptr<AunDiscoveryAnnouncer> announcer_;
     // Subscribes to peer announcements and feeds them into the
     // backend. Same lifetime model as announcer_.

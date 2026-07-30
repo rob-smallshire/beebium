@@ -5,9 +5,12 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
-**Fixed so far:** 1 (packet destruction), 8 (inbound net translation), 3
-(cable simulation), 4 (blocking socket). **Outstanding:** 2 — transmit
-failures still reported to the guest as success — plus 5, 6 and 7.
+**Fixed:** 1 (packet destruction), 3 (cable simulation), 4 (blocking socket),
+6 (documentation drift), 7 (teardown order), 8 (inbound net translation).
+**Outstanding:** 2 — transmit failures reported to the guest as success, now
+traced to an ADLC interrupt-model deviation rather than a transport bug — and
+5, frame-level event streaming, of which the holding-queue counters on
+`EconetStatus` are a first instalment.
 
 Defects 1-7 were found by reading. Defect 8 was found by the first test of the
 PiEconetBridge interop harness, within an hour of that harness existing, and is
@@ -370,7 +373,7 @@ retracting it.
 
 ## 6. Documentation drift
 
-**Status:** open. **Severity:** low.
+**Status:** FIXED. **Severity:** low.
 
 - `docs/howto_write_an_econet_transport.md` describes mDNS support as "macOS
   bidirectional, Windows advertise-only, Linux none today". All three platforms
@@ -384,7 +387,7 @@ retracting it.
 
 ## 7. Extension/backend teardown order is load-bearing and unmarked
 
-**Status:** latent. **Severity:** low.
+**Status:** FIXED (documented; the order was already correct). **Severity:** low.
 
 `AunDiscoverySubscriber` holds a reference to `AunBackend` and invokes
 callbacks from the mDNS browser thread. The subscriber is owned by the
@@ -400,9 +403,14 @@ in a very long function, and the header comment on
 `AunEconetTransportExtension` asserts the opposite — that the backend outlives
 the extension.
 
-**Fix.** A comment at both declaration sites stating the dependency. Consider
-having the extension hold a weak handle rather than a raw reference if the
-ordering ever needs to change.
+**Fix applied.** Both sites now state the dependency: the declaration in
+`ServerMain::start()` explains why the machine must be declared first, and
+`AunEconetTransportExtension`'s member comment — which previously asserted the
+opposite — now agrees with it. No behaviour changed; the ordering was already
+correct, just undocumented and contradicted.
+
+If the ordering ever needs to change, the answer is for the extension to hold a
+weak handle rather than a raw reference.
 
 ---
 

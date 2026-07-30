@@ -1524,7 +1524,9 @@ The flag fill and idle detection are also in `FourWayHandshake` (via `is_receivi
    - Handle bridge-specific behaviors
    - Bridge provides access to real Econet stations
 
-**Items 1 and 3 are implemented.** Item 2 (local subnet discovery) is **not implemented** — all peer mappings are currently explicit via `--aun map=...`. Item 4 (Pi Econet Bridge) is **untested** — the AUN implementation should be compatible but no dedicated extension exists yet. The port in a `map=` entry must be specified explicitly (no default).
+**Items 1, 2 and 3 are implemented.** Item 2 arrived as mDNS peer discovery rather than the AUN broadcast announcement originally sketched — see "AUN peer discovery via mDNS" above — so `--aun map=` is optional on a LAN and required only for hermetic tests, hosts without a working responder, and WAN deployments. The port in a `map=` entry must be specified explicitly (no default).
+
+Item 4 (Pi Econet Bridge) is **implemented and tested**, though not as a dedicated extension: PiEconetBridge speaks AUN, so `AunBackend` talks to it directly. `integration_tests/pieb-aun/` runs a real bridge — with no Pi, no Econet HAT and no kernel module — and drives login and catalogue operations against its emulated fileserver. See `docs/discussion/pieconetbridge-aun-interop-testing.md`.
 
 ### Partially Complete: Configuration and Integration (originally Phase 4)
 
@@ -1714,7 +1716,7 @@ All of these routines are in `disassembly/nfs_334_v2_96dc_9fff_adlc_nmi_handlers
 
 4. ~~**ROM licensing**~~ **Resolved.** The original copyright holder (Acorn Computers) is defunct. While the ROMs are technically still under copyright, there is no entity to enforce it. Widespread retro-computing community practice (distribution via mdfs.net, stardot.org.uk, etc.) demonstrates essentially zero risk. Beebium does not currently bundle NFS/ANFS ROMs but could do so if convenient.
 
-5. ~~**Broadcast announcement format**~~ **Deferred.** Local subnet discovery was not implemented. All peer mappings are currently explicit via `--aun map=...`. May be revisited in a future phase.
+5. ~~**Broadcast announcement format**~~ **Resolved differently.** Rather than an AUN broadcast announcement, peer discovery is done with mDNS / DNS-SD under the vendor-neutral `_aun._udp` service type, reusing the discovery machinery Beebium already had. See `docs/discussion/aun-mdns-peer-discovery.md`.
 
 6. **Self-send prevention**: Not explicitly handled. The AunBackend will send packets to any configured peer address, including one that maps to the local station. In practice this hasn't caused problems because Beebium instances use different UDP ports.
 
@@ -1740,7 +1742,7 @@ beebium-model-b                  # No Econet hardware fitted
 This mirrors physical hardware — you either have the Econet interface fitted or you don't. The NFS ROM auto-detects hardware presence and behaves accordingly.
 
 **Peer configuration:**
-Currently all peer mappings are explicit via `--aun map=...`. Local subnet discovery was planned but not implemented.
+Peers are discovered over mDNS on a LAN; `--aun map=` remains for hermetic tests, hosts without a working mDNS responder, and WAN deployments.
 
 **Future enhancements:**
 - Preset integration (JSON format) for Econet configuration — see `docs/econet-integration.md`

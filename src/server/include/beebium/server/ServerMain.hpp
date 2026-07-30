@@ -1749,6 +1749,14 @@ public:
             // Transport-extension instances are removed from
             // config.extension_instances; the later peripheral-extension
             // load loop only sees peripherals.
+            // Declared after `machine` deliberately, and the order is
+            // load-bearing. A transport extension may own collaborators that
+            // hold a reference to the backend living inside the machine's
+            // EconetSocket -- AunDiscoverySubscriber does, and invokes
+            // callbacks from the mDNS browser thread. Reverse destruction
+            // order tears the registry down first, so those collaborators stop
+            // before the backend they reference dies. Moving this declaration
+            // above `machine` would be a use-after-free.
             beebium::EconetTransportRegistry transport_registry;
             {
                 std::vector<typename ServerConfig<MachineType>::ExtensionInstance> remaining;
