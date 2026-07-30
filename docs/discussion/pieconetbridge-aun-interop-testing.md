@@ -145,7 +145,13 @@ genuine, independently written AUN implementation get on with us?". Realistic,
 non-deterministic, and the only instrument that can find problems we have not
 thought to model.
 
-**2. A perturbation proxy — deterministic ordering faults.** A small UDP relay
+**2. A perturbation proxy — deterministic ordering faults.** *Confirmed
+necessary by measurement:* 25 login/`*CAT`/`*BYE` iterations against a real
+containerised bridge produced a holding-queue count of exactly zero — held,
+redelivered, expired and dropped all nil. On a loopback path nothing reorders,
+so the scenario that motivated the whole programme does not occur naturally.
+Without deliberate perturbation, tier 2 scenario 4 can only ever be a smoke
+test. A small UDP relay
 sitting between Beebium and the real bridge, holding and reordering datagrams
 under test control: "delay the next Ack until one further datagram has passed",
 "drop exactly one Ack", "duplicate this datagram". The traffic is genuine

@@ -246,17 +246,41 @@ class HandshakeStatus(_message.Message):
 
     STAGE_FIELD_NUMBER: _builtins.int
     FLAG_FILL_ACTIVE_FIELD_NUMBER: _builtins.int
+    FRAMES_HELD_FIELD_NUMBER: _builtins.int
+    FRAMES_REDELIVERED_FIELD_NUMBER: _builtins.int
+    FRAMES_EXPIRED_FIELD_NUMBER: _builtins.int
+    FRAMES_DROPPED_FIELD_NUMBER: _builtins.int
     stage: _builtins.str
     flag_fill_active: _builtins.bool
+    frames_held: _builtins.int
+    """Inbound holding queue. Packets that arrive while the handshake is in a
+    stage that cannot use them are held and re-offered rather than dropped;
+    these counters make that visible, so a test or a diagnostic can assert
+    on the mechanism rather than only on the outcome.
+
+    frames_held      -- currently waiting for a stage that can accept them
+    frames_redelivered -- held and later successfully delivered
+    frames_expired   -- discarded after waiting too long
+    frames_dropped   -- discarded because the queue was full; non-zero
+                        means a peer is offering traffic faster than the
+                        handshake can consume it
+    """
+    frames_redelivered: _builtins.int
+    frames_expired: _builtins.int
+    frames_dropped: _builtins.int
     def __init__(
         self,
         *,
         stage: _builtins.str = ...,
         flag_fill_active: _builtins.bool = ...,
+        frames_held: _builtins.int = ...,
+        frames_redelivered: _builtins.int = ...,
+        frames_expired: _builtins.int = ...,
+        frames_dropped: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["flag_fill_active", b"flag_fill_active", "stage", b"stage"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["flag_fill_active", b"flag_fill_active", "frames_dropped", b"frames_dropped", "frames_expired", b"frames_expired", "frames_held", b"frames_held", "frames_redelivered", b"frames_redelivered", "stage", b"stage"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

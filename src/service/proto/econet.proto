@@ -135,6 +135,22 @@ message AdlcStatus {
 message HandshakeStatus {
     string stage = 1;
     bool flag_fill_active = 2;
+
+    // Inbound holding queue. Packets that arrive while the handshake is in a
+    // stage that cannot use them are held and re-offered rather than dropped;
+    // these counters make that visible, so a test or a diagnostic can assert
+    // on the mechanism rather than only on the outcome.
+    //
+    // frames_held      -- currently waiting for a stage that can accept them
+    // frames_redelivered -- held and later successfully delivered
+    // frames_expired   -- discarded after waiting too long
+    // frames_dropped   -- discarded because the queue was full; non-zero
+    //                     means a peer is offering traffic faster than the
+    //                     handshake can consume it
+    uint32 frames_held = 3;
+    uint64 frames_redelivered = 4;
+    uint64 frames_expired = 5;
+    uint64 frames_dropped = 6;
 }
 
 // --- Enable/Disable ---

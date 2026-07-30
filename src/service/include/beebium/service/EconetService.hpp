@@ -346,6 +346,12 @@ private:
                 auto* hs_status = response.mutable_handshake();
                 hs_status->set_stage(handshake_stage_to_string(hs->stage()));
                 hs_status->set_flag_fill_active(hs->flag_fill_active());
+                hs_status->set_frames_held(
+                    static_cast<uint32_t>(hs->held_frame_count()));
+                hs_status->set_frames_redelivered(
+                    hs->held_frames_redelivered_count());
+                hs_status->set_frames_expired(hs->held_frames_expired_count());
+                hs_status->set_frames_dropped(hs->held_frames_dropped_count());
             }
 
             response.set_tick_count(econet.tick_count());

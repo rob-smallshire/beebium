@@ -47,6 +47,17 @@ export interface AdlcStatus {
 export interface HandshakeStatus {
     stage: string;
     flagFillActive: boolean;
+
+    /**
+     * Inbound holding queue. Packets arriving while the handshake is in a
+     * stage that cannot use them are held and re-offered rather than dropped.
+     * A non-zero `framesDropped` means a peer is offering traffic faster than
+     * the handshake can consume it.
+     */
+    framesHeld: number;
+    framesRedelivered: number;
+    framesExpired: number;
+    framesDropped: number;
 }
 
 export interface EconetStatus {
@@ -85,6 +96,10 @@ function toHandshakeStatus(proto: ProtoHandshakeStatus | undefined): HandshakeSt
     return {
         stage: proto.stage,
         flagFillActive: proto.flagFillActive,
+        framesHeld: proto.framesHeld,
+        framesRedelivered: Number(proto.framesRedelivered),
+        framesExpired: Number(proto.framesExpired),
+        framesDropped: Number(proto.framesDropped),
     };
 }
 

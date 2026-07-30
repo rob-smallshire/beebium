@@ -66,9 +66,15 @@ class MockAdlcStatus:
 class MockHandshakeStatus:
     """Mock handshake status from proto."""
 
-    def __init__(self, stage="idle", flag_fill_active=False):
+    def __init__(self, stage="idle", flag_fill_active=False,
+                 frames_held=0, frames_redelivered=0,
+                 frames_expired=0, frames_dropped=0):
         self.stage = stage
         self.flag_fill_active = flag_fill_active
+        self.frames_held = frames_held
+        self.frames_redelivered = frames_redelivered
+        self.frames_expired = frames_expired
+        self.frames_dropped = frames_dropped
 
 
 class MockGetEconetStatusResponse:
@@ -227,12 +233,20 @@ class TestEconetStatus:
             handshake=MockHandshakeStatus(
                 stage="scout_ack_sent",
                 flag_fill_active=True,
+                frames_held=2,
+                frames_redelivered=7,
+                frames_expired=1,
+                frames_dropped=3,
             ),
         )
         status = econet.status
         assert status.handshake is not None
         assert status.handshake.stage == "scout_ack_sent"
         assert status.handshake.flag_fill_active is True
+        assert status.handshake.frames_held == 2
+        assert status.handshake.frames_redelivered == 7
+        assert status.handshake.frames_expired == 1
+        assert status.handshake.frames_dropped == 3
 
 
 class TestWatchStatus:

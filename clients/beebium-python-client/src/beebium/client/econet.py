@@ -59,6 +59,15 @@ class HandshakeStatus:
     stage: str
     flag_fill_active: bool
 
+    # Inbound holding queue. Packets arriving while the handshake is in a
+    # stage that cannot use them are held and re-offered rather than dropped.
+    # ``frames_dropped`` being non-zero means a peer is offering traffic
+    # faster than the handshake can consume it.
+    frames_held: int = 0
+    frames_redelivered: int = 0
+    frames_expired: int = 0
+    frames_dropped: int = 0
+
 
 @dataclass(frozen=True)
 class EconetStatus:
@@ -120,6 +129,10 @@ def _response_to_status(response: econet_pb2.GetEconetStatusResponse) -> EconetS
         handshake = HandshakeStatus(
             stage=h.stage,
             flag_fill_active=h.flag_fill_active,
+            frames_held=h.frames_held,
+            frames_redelivered=h.frames_redelivered,
+            frames_expired=h.frames_expired,
+            frames_dropped=h.frames_dropped,
         )
 
     return EconetStatus(

@@ -19,17 +19,23 @@ the handshake is still waiting for that ack -- the window in which
 ``FourWayHandshake`` used to destroy it, leaving NFS waiting for a response
 that no longer existed.
 
-One iteration proves nothing: the reordering is load-dependent. This loops.
+One iteration proves nothing: the reordering is load-dependent. This loops, and
+reports the holding queue's counters at the end so a run can be told apart from
+one in which no reordering happened to occur. It also asserts that nothing was
+dropped for want of queue space and nothing expired unredelivered -- either
+would mean traffic was lost even with the queue in place.
 
-It asserts only on the outcome, which makes it a weaker test than it should be:
-a run in which no reordering happened to occur passes identically to one in
-which the holding queue saved every reply. `FourWayHandshake` counts frames
-held, redelivered, expired and dropped, but those counters are not yet
-reachable from a client. Once they are, this test should assert the
-redelivery count is non-zero, so that it cannot pass vacuously. Until then the
-deterministic proof lives in the unit tests tagged `[holding]` in
-tests/test_four_way_handshake.cpp, and this scenario is a smoke test against a
-real peer.
+**Observed:** on a loopback path to a containerised bridge, 25 iterations
+produce `held=0 redelivered=0 expired=0 dropped=0` -- no reordering occurs at
+all, so this scenario does not currently exercise the holding queue. That is
+not a reason to delete it (it is still a real multi-transaction interop test)
+but it is the reason a perturbation proxy is needed: only deliberate,
+controlled reordering will make defect 1 reproducible on demand. See
+docs/discussion/pieconetbridge-aun-interop-testing.md, "Reproducing the
+defects".
+
+The deterministic proof that the queue works lives in the unit tests tagged
+`[holding]` in tests/test_four_way_handshake.cpp.
 
 See docs/discussion/aun-robustness.md defect 1.
 """
@@ -104,3 +110,27 @@ def test_repeated_login_and_catalogue(
                 f"*BYE failed on iteration {iteration} with {failure!r}:\n"
                 f"{dump_screen(bbc)}"
             )
+
+        handshake = bbc.econet.status.handshake
+        assert handshake is not None, "No handshake status reported"
+        print(
+            f"\nHolding queue after {ITERATIONS} iterations: "
+            f"held={handshake.frames_held} "
+            f"redelivered={handshake.frames_redelivered} "
+            f"expired={handshake.frames_expired} "
+            f"dropped={handshake.frames_dropped}"
+        )
+
+        # Redelivery is not asserted: whether any packet arrived out of order
+        # depends on load and timing, and demanding it would make this flaky.
+        # What must hold is that the queue never lost anything -- a drop means
+        # it overflowed, an expiry means a frame waited out its TTL with no
+        # stage ever willing to take it.
+        assert handshake.frames_dropped == 0, (
+            f"{handshake.frames_dropped} frames dropped: the holding queue "
+            "overflowed, so traffic was lost despite the queue"
+        )
+        assert handshake.frames_expired == 0, (
+            f"{handshake.frames_expired} frames expired unredelivered: held "
+            "traffic was never accepted by any stage"
+        )
