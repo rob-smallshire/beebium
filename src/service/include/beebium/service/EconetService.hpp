@@ -13,6 +13,7 @@
 #ifndef BEEBIUM_SERVICE_ECONET_SERVICE_HPP
 #define BEEBIUM_SERVICE_ECONET_SERVICE_HPP
 
+#include <beebium/econet/ObservableBackend.hpp>
 #include "econet.grpc.pb.h"
 #include "beebium/econet/EconetConcepts.hpp"
 #include "beebium/econet/EconetSocket.hpp"
@@ -285,14 +286,98 @@ public:
         const SubscribeEconetEventsRequest* request,
         grpc::ServerWriter<EconetEvent>* writer) override
     {
-        (void)context;
-        (void)request;
-        (void)writer;
-        return grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
-                            "Event streaming not yet implemented");
+        using Memory = typename MachineType::Memory;
+
+        if constexpr (!HasEconetSocket<Memory>) {
+            return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                                "This machine has no Econet socket");
+        } else {
+            auto* observable =
+                machine_.state().memory.econet_socket.observable();
+            if (observable == nullptr) {
+                return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                                    "Econet hardware is not fitted");
+            }
+
+            auto interval = std::chrono::milliseconds(
+                request->min_interval_ms() > 0 ? request->min_interval_ms() : 20);
+            const std::size_t max_batch =
+                request->max_batch() > 0 ? request->max_batch() : 64;
+
+            // Start from now rather than replaying the ring: a subscriber
+            // asks what happens next, and history it never asked for would be
+            // indistinguishable from live traffic.
+            uint64_t next = observable->next_sequence();
+
+            while (!context->IsCancelled()) {
+                auto events = observable->collect_since(next, max_batch);
+                if (events.empty()) {
+                    std::this_thread::sleep_for(interval);
+                    continue;
+                }
+
+                for (const auto& event : events) {
+                    EconetEvent message;
+                    populate_event_(event, message);
+                    if (!writer->Write(message)) {
+                        return grpc::Status::OK;  // Client disconnected.
+                    }
+                }
+                next = events.back().sequence + 1;
+
+                // Only pause once caught up, so a burst drains promptly
+                // instead of being metered out one interval at a time.
+                if (events.size() < max_batch) {
+                    std::this_thread::sleep_for(interval);
+                }
+            }
+            return grpc::Status::OK;
+        }
     }
 
 private:
+    // Translate a recorded frame event into its wire form.
+    static void populate_event_(const beebium::ObservableBackend::Event& event,
+                                EconetEvent& message) {
+        message.set_sequence(event.sequence);
+        switch (event.type) {
+            case beebium::ObservableBackend::EventType::FrameSent:
+                message.set_type(ECONET_EVENT_FRAME_SENT);
+                break;
+            case beebium::ObservableBackend::EventType::FrameReceived:
+                message.set_type(ECONET_EVENT_FRAME_RECEIVED);
+                break;
+            case beebium::ObservableBackend::EventType::ConnectionChanged:
+                message.set_type(ECONET_EVENT_CONNECTION_CHANGE);
+                message.set_connected(event.connected);
+                return;
+        }
+
+        auto* frame = message.mutable_frame();
+        frame->set_frame_type(frame_type_to_string(event.frame_type));
+        frame->set_dest_net(event.dest_net);
+        frame->set_dest_stn(event.dest_stn);
+        frame->set_src_net(event.src_net);
+        frame->set_src_stn(event.src_stn);
+        frame->set_port(event.port);
+        frame->set_control_byte(event.control_byte);
+        frame->set_data_length(event.data_length);
+        frame->set_data(event.data, event.data_captured);
+    }
+
+    static const char* frame_type_to_string(beebium::FrameType type) {
+        switch (type) {
+            case beebium::FrameType::RawFrame:  return "raw";
+            case beebium::FrameType::Broadcast: return "broadcast";
+            case beebium::FrameType::Unicast:   return "unicast";
+            case beebium::FrameType::Ack:       return "ack";
+            case beebium::FrameType::Nack:      return "nack";
+            case beebium::FrameType::Immediate: return "immediate";
+            case beebium::FrameType::ImmReply:  return "imm_reply";
+        }
+        return "unknown";
+    }
+
     // Fill `response` with the current Econet status snapshot. Caller
     // must hold mutex_ while any mutating RPC may run; this helper
     // reads state without taking the lock itself so it can be reused

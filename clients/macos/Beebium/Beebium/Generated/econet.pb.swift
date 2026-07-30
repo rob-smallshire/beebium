@@ -8,6 +8,7 @@
 // For information on using the generated types, please see the documentation:
 //   https://github.com/apple/swift-protobuf/
 
+import Foundation
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -408,11 +409,51 @@ struct Beebium_WatchEconetStatusRequest: Sendable {
   init() {}
 }
 
-/// Future: filter by event type.
 struct Beebium_SubscribeEconetEventsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  /// Maximum events per message. Defaults to 64 server-side.
+  var maxBatch: UInt32 = 0
+
+  /// Minimum interval between pushes in milliseconds. Defaults to 20ms.
+  /// Caps the rate rather than forcing periodic traffic: a quiet network
+  /// produces nothing.
+  var minIntervalMs: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_EconetFrameInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// "raw", "broadcast", "unicast", "ack", "nack", "immediate", "imm_reply".
+  var frameType: String = String()
+
+  var destNet: UInt32 = 0
+
+  var destStn: UInt32 = 0
+
+  var srcNet: UInt32 = 0
+
+  var srcStn: UInt32 = 0
+
+  var port: UInt32 = 0
+
+  var controlByte: UInt32 = 0
+
+  /// The payload's true size, which may exceed what `data` carries.
+  var dataLength: UInt32 = 0
+
+  /// The leading bytes of the payload, truncated to keep the event stream
+  /// from becoming a packet capture. Compare with data_length to tell
+  /// whether anything was dropped.
+  var data: Data = Data()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -426,11 +467,30 @@ struct Beebium_EconetEvent: Sendable {
 
   var type: Beebium_EconetEventType = .econetEventUnknown
 
-  var timestampCycles: UInt64 = 0
+  /// Monotonic, assigned when the event was recorded. Gaps mean a subscriber
+  /// fell further behind than the server's ring buffer reaches, and events
+  /// were lost -- reported rather than hidden, so a diagnosis is never built
+  /// on a stream with silent holes in it.
+  var sequence: UInt64 = 0
+
+  /// Set for FRAME_SENT and FRAME_RECEIVED.
+  var frame: Beebium_EconetFrameInfo {
+    get {return _frame ?? Beebium_EconetFrameInfo()}
+    set {_frame = newValue}
+  }
+  /// Returns true if `frame` has been explicitly set.
+  var hasFrame: Bool {return self._frame != nil}
+  /// Clears the value of `frame`. Subsequent reads from it will return its default value.
+  mutating func clearFrame() {self._frame = nil}
+
+  /// Set for CONNECTION_CHANGE.
+  var connected: Bool = false
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
+
+  fileprivate var _frame: Beebium_EconetFrameInfo? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -1063,18 +1123,104 @@ extension Beebium_WatchEconetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_SubscribeEconetEventsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SubscribeEconetEventsRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}max_batch\0\u{3}min_interval_ms\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.maxBatch) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.minIntervalMs) }()
+      default: break
+      }
+    }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.maxBatch != 0 {
+      try visitor.visitSingularUInt32Field(value: self.maxBatch, fieldNumber: 1)
+    }
+    if self.minIntervalMs != 0 {
+      try visitor.visitSingularUInt32Field(value: self.minIntervalMs, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_SubscribeEconetEventsRequest, rhs: Beebium_SubscribeEconetEventsRequest) -> Bool {
+    if lhs.maxBatch != rhs.maxBatch {return false}
+    if lhs.minIntervalMs != rhs.minIntervalMs {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EconetFrameInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EconetFrameInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}frame_type\0\u{3}dest_net\0\u{3}dest_stn\0\u{3}src_net\0\u{3}src_stn\0\u{1}port\0\u{3}control_byte\0\u{3}data_length\0\u{1}data\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.frameType) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.destNet) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.destStn) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.srcNet) }()
+      case 5: try { try decoder.decodeSingularUInt32Field(value: &self.srcStn) }()
+      case 6: try { try decoder.decodeSingularUInt32Field(value: &self.port) }()
+      case 7: try { try decoder.decodeSingularUInt32Field(value: &self.controlByte) }()
+      case 8: try { try decoder.decodeSingularUInt32Field(value: &self.dataLength) }()
+      case 9: try { try decoder.decodeSingularBytesField(value: &self.data) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.frameType.isEmpty {
+      try visitor.visitSingularStringField(value: self.frameType, fieldNumber: 1)
+    }
+    if self.destNet != 0 {
+      try visitor.visitSingularUInt32Field(value: self.destNet, fieldNumber: 2)
+    }
+    if self.destStn != 0 {
+      try visitor.visitSingularUInt32Field(value: self.destStn, fieldNumber: 3)
+    }
+    if self.srcNet != 0 {
+      try visitor.visitSingularUInt32Field(value: self.srcNet, fieldNumber: 4)
+    }
+    if self.srcStn != 0 {
+      try visitor.visitSingularUInt32Field(value: self.srcStn, fieldNumber: 5)
+    }
+    if self.port != 0 {
+      try visitor.visitSingularUInt32Field(value: self.port, fieldNumber: 6)
+    }
+    if self.controlByte != 0 {
+      try visitor.visitSingularUInt32Field(value: self.controlByte, fieldNumber: 7)
+    }
+    if self.dataLength != 0 {
+      try visitor.visitSingularUInt32Field(value: self.dataLength, fieldNumber: 8)
+    }
+    if !self.data.isEmpty {
+      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 9)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EconetFrameInfo, rhs: Beebium_EconetFrameInfo) -> Bool {
+    if lhs.frameType != rhs.frameType {return false}
+    if lhs.destNet != rhs.destNet {return false}
+    if lhs.destStn != rhs.destStn {return false}
+    if lhs.srcNet != rhs.srcNet {return false}
+    if lhs.srcStn != rhs.srcStn {return false}
+    if lhs.port != rhs.port {return false}
+    if lhs.controlByte != rhs.controlByte {return false}
+    if lhs.dataLength != rhs.dataLength {return false}
+    if lhs.data != rhs.data {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1082,7 +1228,7 @@ extension Beebium_SubscribeEconetEventsRequest: SwiftProtobuf.Message, SwiftProt
 
 extension Beebium_EconetEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".EconetEvent"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{3}timestamp_cycles\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{1}sequence\0\u{1}frame\0\u{1}connected\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1091,25 +1237,39 @@ extension Beebium_EconetEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularEnumField(value: &self.type) }()
-      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.timestampCycles) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.sequence) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._frame) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.connected) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if self.type != .econetEventUnknown {
       try visitor.visitSingularEnumField(value: self.type, fieldNumber: 1)
     }
-    if self.timestampCycles != 0 {
-      try visitor.visitSingularUInt64Field(value: self.timestampCycles, fieldNumber: 2)
+    if self.sequence != 0 {
+      try visitor.visitSingularUInt64Field(value: self.sequence, fieldNumber: 2)
+    }
+    try { if let v = self._frame {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    if self.connected != false {
+      try visitor.visitSingularBoolField(value: self.connected, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_EconetEvent, rhs: Beebium_EconetEvent) -> Bool {
     if lhs.type != rhs.type {return false}
-    if lhs.timestampCycles != rhs.timestampCycles {return false}
+    if lhs.sequence != rhs.sequence {return false}
+    if lhs._frame != rhs._frame {return false}
+    if lhs.connected != rhs.connected {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

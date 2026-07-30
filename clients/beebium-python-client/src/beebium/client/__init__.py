@@ -38,6 +38,8 @@ from beebium.client.audio import (
 )
 from beebium.client.client import Beebium
 from beebium.client.econet import (
+    EconetEvent,
+    EconetFrameInfo,
     AdlcStatus,
     EconetStatus,
     HandshakeStatus,
@@ -124,6 +126,8 @@ __all__ = [
     "DiscError",
     "DispatchResult",
     "EconetError",
+    "EconetEvent",
+    "EconetFrameInfo",
     "EconetStatus",
     "EconetTransportAdapter",
     "ExtensionAdapter",

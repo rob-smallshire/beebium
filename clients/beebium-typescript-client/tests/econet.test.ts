@@ -295,4 +295,61 @@ describe("Econet", () => {
             expect(await econet.getStationId()).toBe(42);
         });
     });
+
+    describe("events", () => {
+        it("maps frame events, preserving the true payload size", async () => {
+            const stream = new FakeStream();
+            const stub = { subscribeEconetEvents: vi.fn(() => stream) };
+            const econet = new Econet(stub as any);
+
+            const iter = econet.events();
+            stream.drive([
+                {
+                    type: 1, // FRAME_SENT
+                    sequence: 7n,
+                    connected: false,
+                    frame: {
+                        frameType: "unicast",
+                        destNet: 0,
+                        destStn: 254,
+                        srcNet: 0,
+                        srcStn: 101,
+                        port: 0x99,
+                        controlByte: 0x80,
+                        dataLength: 200,
+                        data: new Uint8Array([1, 2, 3]),
+                    },
+                },
+            ] as any);
+
+            const events = [];
+            for await (const event of iter) events.push(event);
+
+            expect(events).toHaveLength(1);
+            expect(events[0].type).toBe("frameSent");
+            expect(events[0].sequence).toBe(7);
+            expect(events[0].frame?.destStn).toBe(254);
+            // Truncated payload; dataLength still reports the true size.
+            expect(events[0].frame?.dataLength).toBe(200);
+            expect(events[0].frame?.data).toHaveLength(3);
+        });
+
+        it("maps connection changes, which carry no frame", async () => {
+            const stream = new FakeStream();
+            const stub = { subscribeEconetEvents: vi.fn(() => stream) };
+            const econet = new Econet(stub as any);
+
+            const iter = econet.events();
+            stream.drive([
+                { type: 4, sequence: 1n, connected: true, frame: undefined },
+            ] as any);
+
+            const events = [];
+            for await (const event of iter) events.push(event);
+
+            expect(events[0].type).toBe("connectionChange");
+            expect(events[0].connected).toBe(true);
+            expect(events[0].frame).toBeUndefined();
+        });
+    });
 });

@@ -553,7 +553,11 @@ TEST_CASE("EconetService WatchEconetStatus exits on client cancel",
              status.error_code() == grpc::StatusCode::OK));
 }
 
-TEST_CASE("EconetService SubscribeEconetEvents returns UNIMPLEMENTED", "[grpc][econet]") {
+TEST_CASE("EconetService SubscribeEconetEvents refuses when no hardware is fitted",
+          "[grpc][econet]") {
+    // Without Econet hardware there is no backend chain and so nothing to
+    // observe. Saying so is better than opening a stream that can only ever
+    // be silent, which a caller cannot tell from a quiet network.
     EconetTestFixture fixture;
 
     grpc::ClientContext context;
@@ -561,10 +565,102 @@ TEST_CASE("EconetService SubscribeEconetEvents returns UNIMPLEMENTED", "[grpc][e
 
     auto reader = fixture.stub().SubscribeEconetEvents(&context, request);
     beebium::EconetEvent event;
-    // The stream should immediately end with UNIMPLEMENTED
-    bool read_result = reader->Read(&event);
-    REQUIRE_FALSE(read_result);
+    REQUIRE_FALSE(reader->Read(&event));
 
     auto status = reader->Finish();
-    REQUIRE(status.error_code() == grpc::StatusCode::UNIMPLEMENTED);
+    REQUIRE(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+}
+
+TEST_CASE("EconetService SubscribeEconetEvents reports frames crossing the wire",
+          "[grpc][econet]") {
+    EconetTestFixture fixture;
+
+    auto backend = std::make_unique<beebium::TestBackend>();
+    auto* raw_backend = backend.get();
+    fixture.machine().state().memory.econet_socket.enable(
+        101, std::move(backend), /*aun_mode=*/false);
+
+    grpc::ClientContext context;
+    beebium::SubscribeEconetEventsRequest request;
+    request.set_min_interval_ms(5);
+    auto reader = fixture.stub().SubscribeEconetEvents(&context, request);
+
+    // Give the subscriber a moment to establish its starting sequence, so the
+    // frames below are genuinely "what happens next" rather than a race.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto& socket = fixture.machine().state().memory.econet_socket;
+
+    // A frame the guest transmits, and one arriving from the network.
+    beebium::NetworkFrame outgoing;
+    outgoing.type = beebium::FrameType::Unicast;
+    outgoing.port = 0x99;
+    outgoing.control_byte = 0x80;
+    outgoing.dest_net = 0;
+    outgoing.dest_stn = 254;
+    outgoing.src_net = 0;
+    outgoing.src_stn = 101;
+    outgoing.data = {0xDE, 0xAD, 0xBE, 0xEF};
+    socket.backend_chain_for_test()->send_frame(outgoing);
+
+    beebium::NetworkFrame incoming;
+    incoming.type = beebium::FrameType::Ack;
+    incoming.dest_stn = 101;
+    incoming.src_stn = 254;
+    raw_backend->inject_rx_network_frame(incoming);
+    (void)socket.backend_chain_for_test()->receive_frame();
+
+    beebium::EconetEvent sent;
+    REQUIRE(reader->Read(&sent));
+    CHECK(sent.type() == beebium::ECONET_EVENT_FRAME_SENT);
+    CHECK(sent.frame().frame_type() == "unicast");
+    CHECK(sent.frame().dest_stn() == 254);
+    CHECK(sent.frame().src_stn() == 101);
+    CHECK(sent.frame().port() == 0x99);
+    CHECK(sent.frame().data_length() == 4);
+    CHECK(sent.frame().data() == std::string("\xDE\xAD\xBE\xEF", 4));
+
+    beebium::EconetEvent received;
+    REQUIRE(reader->Read(&received));
+    CHECK(received.type() == beebium::ECONET_EVENT_FRAME_RECEIVED);
+    CHECK(received.frame().frame_type() == "ack");
+
+    // Sequence numbers are monotonic, so a client can tell a gap from a lull.
+    CHECK(received.sequence() == sent.sequence() + 1);
+
+    context.TryCancel();
+    (void)reader->Finish();
+}
+
+TEST_CASE("EconetService SubscribeEconetEvents truncates long payloads but "
+          "reports their true size",
+          "[grpc][econet]") {
+    EconetTestFixture fixture;
+
+    auto backend = std::make_unique<beebium::TestBackend>();
+    fixture.machine().state().memory.econet_socket.enable(
+        101, std::move(backend), /*aun_mode=*/false);
+
+    grpc::ClientContext context;
+    beebium::SubscribeEconetEventsRequest request;
+    request.set_min_interval_ms(5);
+    auto reader = fixture.stub().SubscribeEconetEvents(&context, request);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    const std::size_t payload_size =
+        beebium::ObservableBackend::MAX_PAYLOAD * 3;
+    beebium::NetworkFrame big;
+    big.type = beebium::FrameType::Unicast;
+    big.dest_stn = 254;
+    big.data.assign(payload_size, 0x5A);
+    fixture.machine().state().memory.econet_socket
+        .backend_chain_for_test()->send_frame(big);
+
+    beebium::EconetEvent event;
+    REQUIRE(reader->Read(&event));
+    CHECK(event.frame().data_length() == payload_size);
+    CHECK(event.frame().data().size() == beebium::ObservableBackend::MAX_PAYLOAD);
+
+    context.TryCancel();
+    (void)reader->Finish();
 }

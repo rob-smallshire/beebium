@@ -21,7 +21,9 @@ import type {
     EnableEconetResponse as ProtoEnableEconetResponse,
     DisableEconetResponse as ProtoDisableEconetResponse,
     SetStationIdResponse as ProtoSetStationIdResponse,
+    EconetEvent as ProtoEconetEvent,
 } from "./generated/econet.js";
+import { EconetEventType } from "./generated/econet.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable } from "./stream-utils.js";
 import { EconetError } from "./exceptions.js";
@@ -42,6 +44,41 @@ export interface AdlcStatus {
     rxFrameField: string;
     pseLevel: number;
     ctsInput: boolean;
+}
+
+/** A frame observed crossing the transport. */
+export interface EconetFrameInfo {
+    frameType: string;
+    destNet: number;
+    destStn: number;
+    srcNet: number;
+    srcStn: number;
+    port: number;
+    controlByte: number;
+
+    /** The payload's true size, which may exceed `data.length`. */
+    dataLength: number;
+
+    /**
+     * The leading bytes of the payload. Compare with `dataLength` to tell
+     * whether the server truncated it.
+     */
+    data: Uint8Array;
+}
+
+/** Something that happened on the Econet transport. */
+export interface EconetEvent {
+    /** "frameSent", "frameReceived", "connectionChange", or "unknown". */
+    type: string;
+
+    /** Monotonic. A gap means events were lost. */
+    sequence: number;
+
+    /** Present for frameSent and frameReceived. */
+    frame?: EconetFrameInfo;
+
+    /** Meaningful for connectionChange. */
+    connected: boolean;
 }
 
 export interface HandshakeStatus {
@@ -100,6 +137,34 @@ function toHandshakeStatus(proto: ProtoHandshakeStatus | undefined): HandshakeSt
         framesRedelivered: Number(proto.framesRedelivered),
         framesExpired: Number(proto.framesExpired),
         framesDropped: Number(proto.framesDropped),
+    };
+}
+
+const EVENT_TYPE_NAMES: Record<number, string> = {
+    [EconetEventType.ECONET_EVENT_FRAME_SENT]: "frameSent",
+    [EconetEventType.ECONET_EVENT_FRAME_RECEIVED]: "frameReceived",
+    [EconetEventType.ECONET_EVENT_HANDSHAKE_CHANGE]: "handshakeChange",
+    [EconetEventType.ECONET_EVENT_CONNECTION_CHANGE]: "connectionChange",
+};
+
+function toEconetEvent(proto: ProtoEconetEvent): EconetEvent {
+    return {
+        type: EVENT_TYPE_NAMES[proto.type] ?? "unknown",
+        sequence: Number(proto.sequence),
+        frame: proto.frame
+            ? {
+                  frameType: proto.frame.frameType,
+                  destNet: proto.frame.destNet,
+                  destStn: proto.frame.destStn,
+                  srcNet: proto.frame.srcNet,
+                  srcStn: proto.frame.srcStn,
+                  port: proto.frame.port,
+                  controlByte: proto.frame.controlByte,
+                  dataLength: proto.frame.dataLength,
+                  data: proto.frame.data,
+              }
+            : undefined,
+        connected: proto.connected,
     };
 }
 
@@ -163,6 +228,33 @@ export class Econet {
         });
         for await (const proto of toAsyncIterable(stream)) {
             yield toEconetStatus(proto);
+        }
+    }
+
+    /**
+     * Stream frames as they cross the transport.
+     *
+     * The view the emulated screen cannot give: what actually went out on the
+     * network and what came back. Frames are observed just above the wire, so
+     * they are typed frames after the four-way handshake has translated them.
+     *
+     * Starts from the moment of subscription rather than replaying history,
+     * and a quiet network produces nothing. `sequence` is monotonic; a gap
+     * means events were lost because this subscriber fell further behind than
+     * the server's ring buffer reaches.
+     *
+     * Rejects with FAILED_PRECONDITION if no Econet hardware is fitted, since
+     * there would be nothing to observe.
+     */
+    async *events(
+        options?: { maxBatch?: number; minIntervalMs?: number },
+    ): AsyncIterable<EconetEvent> {
+        const stream = this.stub.subscribeEconetEvents({
+            maxBatch: options?.maxBatch ?? 0,
+            minIntervalMs: options?.minIntervalMs ?? 0,
+        });
+        for await (const proto of toAsyncIterable(stream)) {
+            yield toEconetEvent(proto);
         }
     }
 

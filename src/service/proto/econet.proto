@@ -216,10 +216,21 @@ message WatchEconetStatusRequest {
     uint32 min_interval_ms = 1;
 }
 
-// --- Event Streaming (reserved for future implementation) ---
+// --- Event Streaming ---
+//
+// Frames as they cross the transport, which is the view the guest's screen
+// cannot give: what actually went out and what actually came back. Recorded
+// just above the wire, so these are typed frames after the four-way handshake
+// has done its translation.
 
 message SubscribeEconetEventsRequest {
-    // Future: filter by event type.
+    // Maximum events per message. Defaults to 64 server-side.
+    uint32 max_batch = 1;
+
+    // Minimum interval between pushes in milliseconds. Defaults to 20ms.
+    // Caps the rate rather than forcing periodic traffic: a quiet network
+    // produces nothing.
+    uint32 min_interval_ms = 2;
 }
 
 enum EconetEventType {
@@ -230,7 +241,37 @@ enum EconetEventType {
     ECONET_EVENT_CONNECTION_CHANGE = 4;
 }
 
+message EconetFrameInfo {
+    // "raw", "broadcast", "unicast", "ack", "nack", "immediate", "imm_reply".
+    string frame_type = 1;
+    uint32 dest_net = 2;
+    uint32 dest_stn = 3;
+    uint32 src_net = 4;
+    uint32 src_stn = 5;
+    uint32 port = 6;
+    uint32 control_byte = 7;
+
+    // The payload's true size, which may exceed what `data` carries.
+    uint32 data_length = 8;
+
+    // The leading bytes of the payload, truncated to keep the event stream
+    // from becoming a packet capture. Compare with data_length to tell
+    // whether anything was dropped.
+    bytes data = 9;
+}
+
 message EconetEvent {
     EconetEventType type = 1;
-    uint64 timestamp_cycles = 2;
+
+    // Monotonic, assigned when the event was recorded. Gaps mean a subscriber
+    // fell further behind than the server's ring buffer reaches, and events
+    // were lost -- reported rather than hidden, so a diagnosis is never built
+    // on a stream with silent holes in it.
+    uint64 sequence = 2;
+
+    // Set for FRAME_SENT and FRAME_RECEIVED.
+    EconetFrameInfo frame = 3;
+
+    // Set for CONNECTION_CHANGE.
+    bool connected = 4;
 }

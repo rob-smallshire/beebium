@@ -5,11 +5,10 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
-**Fixed:** 1 (packet destruction), 2 (transmit failures reported as success),
-3 (cable simulation), 4 (blocking socket), 6 (documentation drift), 7 (teardown
-order), 8 (inbound net translation). **Outstanding:** 5 alone — frame-level
-event streaming, of which the holding-queue counters on `EconetStatus` are a
-first instalment.
+**All eight are fixed.** 1 (packet destruction), 2 (transmit failures reported
+as success), 3 (cable simulation), 4 (blocking socket), 5 (frame-level event
+streaming), 6 (documentation drift), 7 (teardown order), 8 (inbound net
+translation).
 
 Fixing 2 also turned up and fixed two ADLC defects it was resting on: Rx Idle
 never latching or reaching S2RQ, and the handshake reporting the line inactive
@@ -423,7 +422,7 @@ quietly.
 
 ## 5. `SubscribeEconetEvents` is unimplemented
 
-**Status:** open. **Severity:** low, but misleading.
+**Status:** FIXED. **Severity:** low, but misleading.
 
 `EconetService.hpp:283-293` returns `UNIMPLEMENTED`, and no `ObservableBackend`
 exists in the tree. `docs/econet-integration.md` presents both the streaming
@@ -436,7 +435,29 @@ Frame-level observability would also be the natural instrument for diagnosing
 defects 1 and 2 in the field, which argues for building it rather than
 retracting it.
 
-**Fix.** Build it, or mark it plainly as not-built in both documents.
+**Fix applied.** Built, as an `ObservableBackend` decorator sitting directly
+above the wire-side backend and below the speed gate — so it records what
+actually crossed the transport rather than what the handshake intended, and a
+gated transport shows as the silence it is.
+
+The emulation thread never allocates on this path: payloads are truncated into
+an inline array rather than copied into a vector, and the ring buffer is fixed
+at 256 events. Subscribers poll by sequence number rather than being pushed to,
+so a slow or vanished one cannot hold up emulation — it misses events instead,
+which the sequence gap makes visible rather than hiding. `data_length` always
+reports a payload's true size even when the bytes are truncated, so a reader
+can tell a short frame from a clipped one.
+
+The stream starts from the moment of subscription rather than replaying the
+ring: a subscriber asks what happens next, and history it never asked for would
+be indistinguishable from live traffic. Subscribing with no Econet hardware
+fitted is refused with `FAILED_PRECONDITION` rather than opening a stream that
+could only ever be silent, which a caller cannot tell from a quiet network.
+
+**Tests.** Three cases in `tests/test_grpc_econet.cpp` (refusal without
+hardware, frames in both directions with monotonic sequencing, and payload
+truncation reporting its true size); mock-stub tests in the Python and
+TypeScript clients.
 
 ## 6. Documentation drift
 

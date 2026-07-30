@@ -15,6 +15,7 @@
 #include "FourWayHandshake.hpp"
 #include "Mc6854.hpp"
 #include "NetworkBackend.hpp"
+#include "ObservableBackend.hpp"
 #include "SpeedGate.hpp"
 
 #include <atomic>
@@ -69,9 +70,15 @@ public:
         // SpeedGate decorator that severs the wire when the emulation is not at
         // 1x. Transports that work at any speed (AUN) skip it, keeping the ADLC's
         // per-tick backend polling free of the extra indirection.
-        NetworkBackend* wire = backend_.get();
+        // Observation sits directly above the wire, so it records what
+        // actually crossed the transport rather than what the handshake
+        // intended -- and below the speed gate, so a gated transport shows as
+        // silence, which is what it is.
+        observable_ = std::make_unique<ObservableBackend>(*backend_);
+
+        NetworkBackend* wire = observable_.get();
         if (requires_real_time_) {
-            speed_gate_ = std::make_unique<SpeedGate>(*backend_, speed_gated_);
+            speed_gate_ = std::make_unique<SpeedGate>(*observable_, speed_gated_);
             wire = speed_gate_.get();
         } else {
             speed_gate_.reset();
@@ -94,6 +101,7 @@ public:
         adlc_.reset();
         handshake_.reset();
         speed_gate_.reset();
+        observable_.reset();
         backend_.reset();
         enabled_ = false;
         requires_real_time_ = false;
@@ -278,6 +286,19 @@ public:
 
     NetworkBackend* backend() { return backend_.get(); }
     const NetworkBackend* backend() const { return backend_.get(); }
+
+    // The frame recorder in the backend chain, or nullptr when no Econet
+    // hardware is fitted. Read by EconetService to serve SubscribeEconetEvents.
+    ObservableBackend* observable() { return observable_.get(); }
+    const ObservableBackend* observable() const { return observable_.get(); }
+
+    // The top of the backend chain -- what the ADLC talks to. Exposed for
+    // tests that want to drive frames through the chain without an ADLC.
+    NetworkBackend* backend_chain_for_test() {
+        if (handshake_) return handshake_.get();
+        if (speed_gate_) return speed_gate_.get();
+        return observable_.get();
+    }
     bool aun_mode() const { return handshake_ != nullptr; }
 
     uint64_t tick_count() const { return tick_count_; }
@@ -340,6 +361,7 @@ private:
     }
 
     std::unique_ptr<NetworkBackend> backend_;
+    std::unique_ptr<ObservableBackend> observable_;  // records the wire traffic
     std::unique_ptr<SpeedGate> speed_gate_;  // present only when requires_real_time_
     std::unique_ptr<FourWayHandshake> handshake_;
     std::unique_ptr<Mc6854> adlc_;

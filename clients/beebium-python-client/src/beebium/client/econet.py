@@ -53,6 +53,48 @@ class AdlcStatus:
 
 
 @dataclass(frozen=True)
+class EconetFrameInfo:
+    """A frame observed crossing the transport."""
+
+    frame_type: str
+    dest_net: int
+    dest_stn: int
+    src_net: int
+    src_stn: int
+    port: int
+    control_byte: int
+
+    #: The payload's true size, which may exceed ``len(data)``.
+    data_length: int
+
+    #: The leading bytes of the payload. Compare with ``data_length`` to tell
+    #: whether the server truncated it.
+    data: bytes
+
+    @property
+    def truncated(self) -> bool:
+        """True if the payload was longer than the bytes retained."""
+        return self.data_length > len(self.data)
+
+
+@dataclass(frozen=True)
+class EconetEvent:
+    """Something that happened on the Econet transport."""
+
+    #: "frame_sent", "frame_received", "connection_change", or "unknown".
+    type: str
+
+    #: Monotonic. A gap means events were lost.
+    sequence: int
+
+    #: Present for frame_sent and frame_received.
+    frame: EconetFrameInfo | None = None
+
+    #: Meaningful for connection_change.
+    connected: bool = False
+
+
+@dataclass(frozen=True)
 class HandshakeStatus:
     """Four-way handshake state."""
 
@@ -98,6 +140,37 @@ class EconetStatus:
     send_stage_log: str = ""
     ticks_with_timer_active: int = 0
     read_stretch_parasite_ticks: int = 0
+
+
+_EVENT_TYPE_NAMES = {
+    econet_pb2.ECONET_EVENT_FRAME_SENT: "frame_sent",
+    econet_pb2.ECONET_EVENT_FRAME_RECEIVED: "frame_received",
+    econet_pb2.ECONET_EVENT_HANDSHAKE_CHANGE: "handshake_change",
+    econet_pb2.ECONET_EVENT_CONNECTION_CHANGE: "connection_change",
+}
+
+
+def _response_to_event(response) -> EconetEvent:
+    frame = None
+    if response.HasField("frame"):
+        f = response.frame
+        frame = EconetFrameInfo(
+            frame_type=f.frame_type,
+            dest_net=f.dest_net,
+            dest_stn=f.dest_stn,
+            src_net=f.src_net,
+            src_stn=f.src_stn,
+            port=f.port,
+            control_byte=f.control_byte,
+            data_length=f.data_length,
+            data=f.data,
+        )
+    return EconetEvent(
+        type=_EVENT_TYPE_NAMES.get(response.type, "unknown"),
+        sequence=response.sequence,
+        frame=frame,
+        connected=response.connected,
+    )
 
 
 def _response_to_status(response: econet_pb2.GetEconetStatusResponse) -> EconetStatus:
@@ -223,6 +296,42 @@ class Econet:
         request = econet_pb2.WatchEconetStatusRequest(min_interval_ms=min_interval_ms)
         for response in self._stub.WatchEconetStatus(request):
             yield _response_to_status(response)
+
+    def events(self, *, max_batch: int = 0,
+               min_interval_ms: int = 0) -> Iterator[EconetEvent]:
+        """Stream frames as they cross the transport.
+
+        This is the view the emulated screen cannot give: what actually went
+        out on the network and what actually came back. Frames are observed
+        just above the wire, so they are typed frames after the four-way
+        handshake has done its translation.
+
+        The stream starts from the moment of subscription rather than
+        replaying history, and a quiet network produces nothing at all.
+
+        Args:
+            max_batch: Maximum events the server sends per push (0 = server
+                default, 64).
+            min_interval_ms: Minimum interval between pushes (0 = server
+                default, 20ms). The server only pauses once it has caught
+                up, so a burst drains promptly.
+
+        Yields:
+            EconetEvent for each frame or connection change. ``sequence`` is
+            monotonic: a gap means events were lost because this subscriber
+            fell further behind than the server's ring buffer reaches, which
+            is worth noticing rather than papering over.
+
+        Raises:
+            grpc.RpcError: FAILED_PRECONDITION if no Econet hardware is
+                fitted, since there would be nothing to observe.
+        """
+        request = econet_pb2.SubscribeEconetEventsRequest(
+            max_batch=max_batch,
+            min_interval_ms=min_interval_ms,
+        )
+        for response in self._stub.SubscribeEconetEvents(request):
+            yield _response_to_event(response)
 
     @property
     def is_enabled(self) -> bool:

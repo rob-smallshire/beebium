@@ -458,41 +458,120 @@ Global___WatchEconetStatusRequest: _TypeAlias = WatchEconetStatusRequest  # noqa
 
 @_typing.final
 class SubscribeEconetEventsRequest(_message.Message):
-    """--- Event Streaming (reserved for future implementation) ---
+    """--- Event Streaming ---
 
-    Future: filter by event type.
+    Frames as they cross the transport, which is the view the guest's screen
+    cannot give: what actually went out and what actually came back. Recorded
+    just above the wire, so these are typed frames after the four-way handshake
+    has done its translation.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
 
+    MAX_BATCH_FIELD_NUMBER: _builtins.int
+    MIN_INTERVAL_MS_FIELD_NUMBER: _builtins.int
+    max_batch: _builtins.int
+    """Maximum events per message. Defaults to 64 server-side."""
+    min_interval_ms: _builtins.int
+    """Minimum interval between pushes in milliseconds. Defaults to 20ms.
+    Caps the rate rather than forcing periodic traffic: a quiet network
+    produces nothing.
+    """
     def __init__(
         self,
+        *,
+        max_batch: _builtins.int = ...,
+        min_interval_ms: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["max_batch", b"max_batch", "min_interval_ms", b"min_interval_ms"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___SubscribeEconetEventsRequest: _TypeAlias = SubscribeEconetEventsRequest  # noqa: Y015
 
 @_typing.final
+class EconetFrameInfo(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    FRAME_TYPE_FIELD_NUMBER: _builtins.int
+    DEST_NET_FIELD_NUMBER: _builtins.int
+    DEST_STN_FIELD_NUMBER: _builtins.int
+    SRC_NET_FIELD_NUMBER: _builtins.int
+    SRC_STN_FIELD_NUMBER: _builtins.int
+    PORT_FIELD_NUMBER: _builtins.int
+    CONTROL_BYTE_FIELD_NUMBER: _builtins.int
+    DATA_LENGTH_FIELD_NUMBER: _builtins.int
+    DATA_FIELD_NUMBER: _builtins.int
+    frame_type: _builtins.str
+    """"raw", "broadcast", "unicast", "ack", "nack", "immediate", "imm_reply"."""
+    dest_net: _builtins.int
+    dest_stn: _builtins.int
+    src_net: _builtins.int
+    src_stn: _builtins.int
+    port: _builtins.int
+    control_byte: _builtins.int
+    data_length: _builtins.int
+    """The payload's true size, which may exceed what `data` carries."""
+    data: _builtins.bytes
+    """The leading bytes of the payload, truncated to keep the event stream
+    from becoming a packet capture. Compare with data_length to tell
+    whether anything was dropped.
+    """
+    def __init__(
+        self,
+        *,
+        frame_type: _builtins.str = ...,
+        dest_net: _builtins.int = ...,
+        dest_stn: _builtins.int = ...,
+        src_net: _builtins.int = ...,
+        src_stn: _builtins.int = ...,
+        port: _builtins.int = ...,
+        control_byte: _builtins.int = ...,
+        data_length: _builtins.int = ...,
+        data: _builtins.bytes = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_byte", b"control_byte", "data", b"data", "data_length", b"data_length", "dest_net", b"dest_net", "dest_stn", b"dest_stn", "frame_type", b"frame_type", "port", b"port", "src_net", b"src_net", "src_stn", b"src_stn"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___EconetFrameInfo: _TypeAlias = EconetFrameInfo  # noqa: Y015
+
+@_typing.final
 class EconetEvent(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     TYPE_FIELD_NUMBER: _builtins.int
-    TIMESTAMP_CYCLES_FIELD_NUMBER: _builtins.int
+    SEQUENCE_FIELD_NUMBER: _builtins.int
+    FRAME_FIELD_NUMBER: _builtins.int
+    CONNECTED_FIELD_NUMBER: _builtins.int
     type: Global___EconetEventType.ValueType
-    timestamp_cycles: _builtins.int
+    sequence: _builtins.int
+    """Monotonic, assigned when the event was recorded. Gaps mean a subscriber
+    fell further behind than the server's ring buffer reaches, and events
+    were lost -- reported rather than hidden, so a diagnosis is never built
+    on a stream with silent holes in it.
+    """
+    connected: _builtins.bool
+    """Set for CONNECTION_CHANGE."""
+    @_builtins.property
+    def frame(self) -> Global___EconetFrameInfo:
+        """Set for FRAME_SENT and FRAME_RECEIVED."""
+
     def __init__(
         self,
         *,
         type: Global___EconetEventType.ValueType = ...,
-        timestamp_cycles: _builtins.int = ...,
+        sequence: _builtins.int = ...,
+        frame: Global___EconetFrameInfo | None = ...,
+        connected: _builtins.bool = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["frame", b"frame"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["timestamp_cycles", b"timestamp_cycles", "type", b"type"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["connected", b"connected", "frame", b"frame", "sequence", b"sequence", "type", b"type"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
