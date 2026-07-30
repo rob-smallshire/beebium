@@ -3166,3 +3166,177 @@ TEST_CASE("NFS Ack Frame: 4-byte ack frame sets FV after all bytes pushed", "[ec
     // FV should be set after reading the last byte (re-triggered by was_last)
     CHECK(t.adlc.sr2() & Mc6854::SR2_FV);
 }
+
+// =============================================================================
+// Unreachable destinations
+// =============================================================================
+//
+// The four-way handshake synthesises its scout acknowledgement before anything
+// has left the machine, so a transmission to a station that does not exist is
+// reported to the guest as a success. Telling it the truth means letting the
+// line fall idle, which the ADLC latches and turns into the interrupt NFS
+// reads as "not listening".
+//
+// The transition is the whole point: transmitting makes the line busy, and it
+// is the *fall* back to idle that latches. A transaction that is simply never
+// started leaves the line idle throughout, produces no edge, and so produces
+// no interrupt -- which is why suppressing the scout ack on its own merely
+// hung the guest. See docs/discussion/aun-robustness.md defect 2.
+
+namespace {
+
+// A backend that can be told which stations exist.
+class ReachabilityBackend : public TestBackend {
+public:
+    void set_reachable(bool reachable) { reachable_ = reachable; }
+    bool is_reachable(uint8_t, uint8_t) const override { return reachable_; }
+
+private:
+    bool reachable_ = true;
+};
+
+// A HandshakeFixture whose backend can report a station absent.
+struct UnreachableFixture {
+    ReachabilityBackend backend;
+    FourWayHandshake handshake;
+    Mc6854 adlc;
+
+    UnreachableFixture() : handshake(backend), adlc(handshake) {
+        adlc.set_byte_period(4);
+    }
+
+    void tick() {
+        handshake.tick();
+        adlc.tick_rising();
+        adlc.tick_falling();
+    }
+
+    void tick_n(int n) {
+        for (int i = 0; i < n; ++i) tick();
+    }
+
+    // Put the ADLC in the listening posture the NFS ROM uses, with receive
+    // interrupts enabled and the idle latched by the quiet line cleared.
+    void begin_listening() {
+        adlc.write(0, Mc6854::CR1_TX_RESET | Mc6854::CR1_RIE);
+        (void)adlc.sr2();
+        adlc.write(1, Mc6854::CR2_CLR_RX_ST);
+    }
+
+    // Hand the handshake a scout frame directly, as the ADLC would once it
+    // had assembled one.
+    // Consume a frame the way the ROM's NMI handler does: read the bytes out
+    // of the FIFO, then read status and clear it. Both halves matter. Until
+    // the FIFO is drained the ADLC has nowhere to put new data, and until
+    // Frame Valid is cleared it will not accept another frame at all -- so a
+    // test that skips either one leaves the ADLC deaf to whatever the
+    // transport says next.
+    void consume_frame(int max_bytes = 16) {
+        for (int i = 0; i < max_bytes; ++i) {
+            if (!(adlc.sr1() & Mc6854::SR1_RDA)) {
+                tick();
+                if (!(adlc.sr1() & Mc6854::SR1_RDA)) break;
+            }
+            (void)adlc.read(2);
+            tick();
+        }
+        (void)adlc.sr2();
+        adlc.write(1, Mc6854::CR2_CLR_RX_ST);
+        tick();
+    }
+
+    void transmit_scout(uint8_t dest_stn, uint8_t dest_net) {
+        NetworkFrame frame;
+        frame.type = FrameType::RawFrame;
+        frame.data = {dest_stn, dest_net, 1, 0, 0x80, 0x99};
+        handshake.send_frame(frame);
+    }
+};
+
+}  // namespace
+
+TEST_CASE("Unreachable: no scout ack is synthesised for an absent station",
+          "[econet][mc6854][handshake][reachability]") {
+    UnreachableFixture t;
+    t.begin_listening();
+    t.backend.set_reachable(false);
+
+    t.transmit_scout(99, 0);
+    t.tick_n(FourWayHandshake::SCOUT_ACK_TIMEOUT * 2);
+
+    // Nothing was sent, and the guest was not told its scout was answered.
+    CHECK(t.backend.sent_network_frames().empty());
+    CHECK(t.handshake.scout_ack_generated_count() == 0);
+}
+
+TEST_CASE("Unreachable: the line falls idle, raising the interrupt NFS reads "
+          "as not listening",
+          "[econet][mc6854][handshake][reachability]") {
+    UnreachableFixture t;
+    t.begin_listening();
+    t.backend.set_reachable(false);
+
+    // Nothing latched yet: the listening posture cleared it, and a line that
+    // merely stays idle does not re-assert.
+    t.tick_n(4);
+    REQUIRE_FALSE(t.adlc.sr1() & Mc6854::SR1_S2RQ);
+
+    t.transmit_scout(99, 0);
+
+    // The transmission holds the line, then it falls idle. That fall is the
+    // edge the ADLC latches, and with RIE set it raises IRQ -- the signal the
+    // ROM's NMI error path turns into "not listening".
+    t.tick_n(FourWayHandshake::SCOUT_ACK_TIMEOUT);
+
+    CHECK(t.adlc.sr2() & Mc6854::SR2_INACTIVE);
+    CHECK(t.adlc.sr1() & Mc6854::SR1_S2RQ);
+    CHECK(t.adlc.irq_output());
+}
+
+TEST_CASE("Unreachable: a reachable station is unaffected",
+          "[econet][mc6854][handshake][reachability]") {
+    UnreachableFixture t;
+    t.begin_listening();
+    t.backend.set_reachable(true);
+
+    t.transmit_scout(254, 0);
+    CHECK(t.handshake.stage() == FourWayHandshake::Stage::ScoutSent);
+
+    t.tick_n(FourWayHandshake::SCOUT_ACK_TIMEOUT);
+    CHECK(t.handshake.scout_ack_generated_count() == 1);
+}
+
+TEST_CASE("Unreachable: a transport that reports failure afterwards is believed",
+          "[econet][mc6854][handshake][reachability]") {
+    // Piconet cannot know a station is absent before trying -- its firmware
+    // runs the wire handshake and reports the result afterwards -- so it says
+    // so with a Nack. The handshake must abandon the transaction rather than
+    // let its timer synthesise a successful acknowledgement.
+    UnreachableFixture t;
+    t.begin_listening();
+    t.backend.set_reachable(true);
+
+    t.transmit_scout(254, 0);
+    t.tick_n(FourWayHandshake::SCOUT_ACK_TIMEOUT);
+    t.consume_frame();  // the guest reads the scout ack and clears status
+    REQUIRE(t.handshake.stage() == FourWayHandshake::Stage::ScoutAckReceived);
+
+    // The guest sends its data, which reaches the wire and fails there.
+    NetworkFrame data;
+    data.type = FrameType::RawFrame;
+    data.data = {254, 0, 1, 0, 0xAA};
+    t.handshake.send_frame(data);
+    REQUIRE(t.handshake.stage() == FourWayHandshake::Stage::DataSent);
+
+    NetworkFrame nack;
+    nack.type = FrameType::Nack;
+    t.backend.inject_rx_network_frame(nack);
+
+    // Well past the point at which a final ack would have been synthesised.
+    t.tick_n(FourWayHandshake::FINAL_ACK_TIMEOUT * 2);
+
+    CHECK(t.handshake.failed_tx_count() == 1);
+    CHECK(t.handshake.stage() == FourWayHandshake::Stage::Idle);
+    CHECK(t.adlc.sr1() & Mc6854::SR1_S2RQ);
+    CHECK(t.adlc.irq_output());
+}

@@ -61,6 +61,10 @@ public:
         return !gated() && wrapped_.is_expecting_frame();
     }
 
+    bool is_reachable(uint8_t net, uint8_t stn) const override {
+        return !gated() && wrapped_.is_reachable(net, stn);
+    }
+
     void on_station_id_changed(uint8_t new_station_id) override {
         // Station identity is configuration, not wire traffic -- always forward.
         wrapped_.on_station_id_changed(new_station_id);

@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "beebium/econet/PiconetBackend.hpp"
 #include "beebium/econet/piconet/Base64.hpp"
@@ -216,16 +217,35 @@ TEST_CASE("PiconetBackend reader emits a bare Ack on TX_RESULT OK",
     CHECK(frame->type == FrameType::Ack);
 }
 
-TEST_CASE("PiconetBackend reader does not emit Ack on TX_RESULT failure codes",
+TEST_CASE("PiconetBackend reader emits a Nack, not an Ack, on TX_RESULT failures",
           "[piconet][backend][rx]") {
-    // Non-OK results are dropped at the backend; FourWayHandshake's
-    // watchdog times out and resets the handshake. (Future: surface the
-    // failure code via diagnostics.)
-    auto w = make_backend();
-    w.mock->stage_read_chunk("TX_RESULT NO_SCOUT_ACK\n");
+    // A non-OK result used to be dropped, which left FourWayHandshake's timer
+    // to synthesise a successful final ack -- so a frame that failed on the
+    // wire was reported to the guest as delivered. Piconet cannot know a
+    // station is absent before trying, since its firmware runs the wire
+    // handshake and reports afterwards, so saying so afterwards is the only
+    // honest option it has. See docs/discussion/aun-robustness.md defect 2.
+    auto codes = GENERATE(
+        "NO_SCOUT_ACK", "NO_DATA_ACK", "NOT_LISTENING",
+        "LINE_JAMMED", "NO_CLOCK", "TIMEOUT", "OVERFLOW", "UNDERRUN");
+    CAPTURE(codes);
 
-    auto frame = wait_for_frame(*w.backend, std::chrono::milliseconds(150));
-    CHECK_FALSE(frame.has_value());
+    auto w = make_backend();
+    w.mock->stage_read_chunk(std::string("TX_RESULT ") + codes + "\n");
+
+    auto frame = wait_for_frame(*w.backend, std::chrono::milliseconds(250));
+    REQUIRE(frame.has_value());
+    CHECK(frame->type == FrameType::Nack);
+}
+
+TEST_CASE("PiconetBackend reader emits an Ack on TX_RESULT OK",
+          "[piconet][backend][rx]") {
+    auto w = make_backend();
+    w.mock->stage_read_chunk("TX_RESULT OK\n");
+
+    auto frame = wait_for_frame(*w.backend, std::chrono::milliseconds(250));
+    REQUIRE(frame.has_value());
+    CHECK(frame->type == FrameType::Ack);
 }
 
 TEST_CASE("PiconetBackend reader ignores STATUS / ERROR / unknown lines without crashing",

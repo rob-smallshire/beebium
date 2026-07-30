@@ -388,6 +388,15 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
     return std::move(result.frame);
 }
 
+bool AunBackend::is_reachable(uint8_t net, uint8_t stn) const {
+    if (!connected_.load(std::memory_order_relaxed)) return false;
+    // A broadcast goes to every peer, so it is deliverable if anyone is known.
+    if (stn == 0xFF) return peer_count() > 0;
+    uint8_t lookup_net = (net == 0) ? local_net_ : net;
+    std::lock_guard lock(peer_table_mutex_);
+    return forward_map_.count(make_forward_key(lookup_net, stn)) == 1;
+}
+
 bool AunBackend::is_connected() const {
     return connected_.load(std::memory_order_relaxed);
 }

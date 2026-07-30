@@ -87,6 +87,24 @@ public:
     // during inter-frame handshake gaps.
     virtual bool is_expecting_frame() const { return false; }
 
+    // Whether a frame addressed to (net, stn) could be delivered at all.
+    //
+    // Asked before the four-way handshake commits to a transaction, because
+    // its scout acknowledgement is synthesised before anything leaves the
+    // machine: without this the guest is told a station that does not exist
+    // answered it. A backend that can know in advance -- AunBackend has a peer
+    // table -- answers honestly, and the handshake then lets the line fall
+    // idle so the guest reaches the conclusion it would reach on a real wire.
+    //
+    // Backends that cannot know until they have tried (Piconet, whose
+    // firmware performs the wire handshake) leave this true and report failure
+    // afterwards instead, by delivering a Nack. Answering optimistically is
+    // the safe default: a false negative refuses traffic that would have been
+    // delivered.
+    virtual bool is_reachable(uint8_t /*net*/, uint8_t /*stn*/) const {
+        return true;
+    }
+
     // Notify the backend that EconetSocket's station ID has changed. The
     // initial station ID is communicated via the backend's constructor or
     // configuration, NOT via this hook -- enable() does not call it. Backends

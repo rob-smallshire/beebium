@@ -70,6 +70,18 @@ public:
     // involves a handful of frames, not dozens.
     static constexpr int MAX_HELD_FRAMES = 32;
 
+    // How long the line stays busy after the guest transmits a frame that
+    // goes nowhere. Roughly the wire time of a scout: six bytes at Econet's
+    // ~200 kbit/s is about 240us, or ~480 ticks of the 2MHz clock.
+    //
+    // The duration barely matters; the transition does. The ADLC latches
+    // Inactive Idle on the 0->1 edge of the idle condition, so the line must
+    // be busy for a while in order to fall idle afterwards. Without that fall
+    // there is no edge, no interrupt, and the guest waits for ever -- which is
+    // exactly what happens on a real wire when a station transmits into a
+    // segment where nobody is listening.
+    static constexpr int LINE_BUSY_AFTER_TX = 500;
+
     // Econet frame byte offsets
     static constexpr int FRAME_DEST_STN = 0;
     static constexpr int FRAME_DEST_NET = 1;
@@ -207,6 +219,11 @@ public:
         // Address Present and Receiver Data Available, hiding the very frames
         // the transaction consists of.
         //
+        // The tail of a transmission that went nowhere still occupies the
+        // line, and must: only a line that has been busy can then be seen to
+        // fall idle, and it is that fall the ADLC latches.
+        if (line_busy_timer_ > 0) return true;
+
         // Frames still queued for the guest mean the line is still carrying
         // the tail of an exchange, whatever the stage says. WaitForIdle in
         // particular is reached the moment the closing acknowledgement is
@@ -257,6 +274,7 @@ public:
         }
 
         if (idle_cooldown_ > 0) --idle_cooldown_;
+        if (line_busy_timer_ > 0) --line_busy_timer_;
     }
 
     // Reset all handshake state (called on system reset).
@@ -315,6 +333,14 @@ public:
         return held_frames_dropped_count_;
     }
 
+    // Transmissions abandoned before any acknowledgement was synthesised,
+    // because the backend reported the destination unreachable.
+    uint32_t unreachable_tx_count() const { return unreachable_tx_count_; }
+
+    // Transmissions abandoned because the transport reported them failed
+    // after the fact, by delivering a Nack.
+    uint32_t failed_tx_count() const { return failed_tx_count_; }
+
     // Number of extra scout payload bytes for a given control byte value.
     static int scout_payload_size(uint8_t ctrl) {
         switch (ctrl & CTRL_FUNCTION_MASK) {
@@ -372,6 +398,12 @@ private:
         uint8_t masked_ctrl = ctrl & CTRL_FUNCTION_MASK;
         bool is_port0_unicast = (masked_ctrl >= CTRL_POKE && masked_ctrl <= CTRL_OSPROC);
         if (port == 0x00 && !is_port0_unicast) {
+            if (!backend_.is_reachable(dest_net, dest_stn)) {
+                ++unreachable_tx_count_;
+                reset_handshake();
+                begin_line_busy();
+                return;
+            }
             NetworkFrame nf;
             nf.type = FrameType::Immediate;
             nf.port = 0;
@@ -387,6 +419,20 @@ private:
             save_addressing(dest_stn, dest_net, src_stn, src_net, ctrl, port);
             arm_watchdog();
             stage_ = Stage::ImmediateSent;
+            return;
+        }
+
+        // Unicast scout to a station the backend already knows is not there.
+        // Starting the transaction would synthesise a scout acknowledgement
+        // from a station that does not exist, and the guest would go on to
+        // report the transmission a success. Instead let the transmission
+        // occupy the line and then let the line fall idle, which is what the
+        // guest would observe on a real wire and what its NMI error path
+        // reads as "not listening".
+        if (!backend_.is_reachable(dest_net, dest_stn)) {
+            ++unreachable_tx_count_;
+            reset_handshake();
+            begin_line_busy();
             return;
         }
 
@@ -495,6 +541,23 @@ private:
                 return false;
 
             case Stage::DataSent:
+                if (packet.type == FrameType::Nack) {
+                    // The peer, or the transport on its behalf, says the
+                    // transmission failed. Abandon the transaction rather than
+                    // letting the timer synthesise an acknowledgement: the
+                    // line falls idle instead, and the guest reaches the same
+                    // conclusion it would on a real wire.
+                    //
+                    // This is the route by which a transport that cannot know
+                    // in advance whether a station exists -- Piconet, whose
+                    // firmware performs the wire handshake and reports
+                    // afterwards -- gets to tell the truth.
+                    ++failed_tx_count_;
+                    clear_flag_fill();
+                    reset_handshake();
+                    begin_line_busy();
+                    return true;
+                }
                 if (packet.type == FrameType::Ack) {
                     // Remote acknowledged our data — generate fake final ack for Beeb
                     enqueue_rx_frame({
@@ -731,6 +794,13 @@ private:
     void arm_final_ack_timer() { handshake_timer_ = FINAL_ACK_TIMEOUT; }
     void arm_watchdog() { watchdog_timer_ = WATCHDOG_TIMEOUT; }
 
+    // Leave the line occupied by a transmission that has just failed, so that
+    // its return to idle presents the ADLC with an edge to latch. Called after
+    // reset_handshake(), which clears every other timer.
+    void begin_line_busy() {
+        line_busy_timer_ = LINE_BUSY_AFTER_TX;
+    }
+
     void set_flag_fill() {
         flag_fill_active_ = true;
         flag_fill_timer_ = FLAG_FILL_TIMEOUT;
@@ -763,6 +833,7 @@ private:
     int watchdog_timer_ = 0;
     int flag_fill_timer_ = 0;
     int idle_cooldown_ = 0;
+    int line_busy_timer_ = 0;
     bool flag_fill_active_ = false;
 
     // Diagnostic counters
@@ -793,6 +864,8 @@ private:
     uint32_t held_frames_redelivered_count_ = 0;
     uint32_t held_frames_expired_count_ = 0;
     uint32_t held_frames_dropped_count_ = 0;
+    uint32_t unreachable_tx_count_ = 0;
+    uint32_t failed_tx_count_ = 0;
 
     uint8_t saved_dest_stn_ = 0;
     uint8_t saved_dest_net_ = 0;

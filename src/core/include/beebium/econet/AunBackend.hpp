@@ -80,6 +80,11 @@ public:
     std::optional<NetworkFrame> receive_frame() override;
     bool is_connected() const override;
 
+    // A destination is reachable when the peer table can resolve it. Applies
+    // the same dest_net=0 -> local_net translation send_frame does, so the
+    // answer matches what a send would actually do.
+    bool is_reachable(uint8_t net, uint8_t stn) const override;
+
     // --- Peer management ---
     //
     // The peer table is the only AunBackend state that has multiple

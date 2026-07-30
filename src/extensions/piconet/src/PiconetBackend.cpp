@@ -136,6 +136,18 @@ NetworkFrame make_ack() {
     return nf;
 }
 
+// Construct a bare Nack for FourWayHandshake to consume when the firmware
+// reports a transmission failed on the wire. Without it the handshake's timer
+// synthesises a successful final ack and the guest is told a frame arrived
+// that never did. Piconet cannot know a station is absent in advance -- its
+// firmware runs the wire handshake and reports afterwards -- so reporting
+// after the fact is the only honest option available to it.
+NetworkFrame make_nack() {
+    NetworkFrame nf;
+    nf.type = FrameType::Nack;
+    return nf;
+}
+
 }  // namespace
 
 PiconetBackend::PiconetBackend(piconet::PiconetConfig config,
@@ -341,15 +353,19 @@ void PiconetBackend::reader_loop() {
                         rx_queue_.try_enqueue(std::move(*nf));
                     }
                 } else if constexpr (std::is_same_v<T, piconet::TxResultEvent>) {
-                    // OK: short-circuit the synthetic final-ack timer in
-                    // FourWayHandshake (handle_incoming() Stage::DataSent)
-                    // by enqueueing a bare Ack. Other codes are dropped --
-                    // FourWayHandshake's watchdog times out and resets.
+                    // OK short-circuits the synthetic final-ack timer in
+                    // FourWayHandshake (handle_incoming() Stage::DataSent);
+                    // anything else abandons the transaction there, so the
+                    // line falls idle and the guest learns the transmission
+                    // failed rather than being told it succeeded.
                     if (ev.result == piconet::TxResult::Ok) {
                         rx_queue_.try_enqueue(make_ack());
-                    } else if (trace_enabled()) {
-                        std::cerr << "PiconetBackend: TX failed: "
-                                  << piconet::to_string(ev.result) << "\n";
+                    } else {
+                        if (trace_enabled()) {
+                            std::cerr << "PiconetBackend: TX failed: "
+                                      << piconet::to_string(ev.result) << "\n";
+                        }
+                        rx_queue_.try_enqueue(make_nack());
                     }
                 } else if constexpr (std::is_same_v<T, piconet::ErrorEvent>) {
                     if (trace_enabled()) {

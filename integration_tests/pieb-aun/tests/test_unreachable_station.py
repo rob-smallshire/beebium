@@ -12,10 +12,10 @@
 
 """Tier 2, scenario 7: transmitting to a station that is not there.
 
-The four-way handshake synthesises its scout acknowledgement before anything
-has left the machine. Without a reachability check the guest is told its scout
-was answered by a station that does not exist, and OSWORD &10 reports &00
-"Transmitted OK" for a frame that went nowhere.
+The four-way handshake used to synthesise its scout acknowledgement before
+anything had left the machine, so the guest was told its scout was answered by
+a station that does not exist and OSWORD &10 reported &00 "Transmitted OK" for
+a frame that went nowhere.
 
 A guest talking to absent hardware must be told so. What it must never be told
 is that the transmission succeeded.
@@ -39,21 +39,21 @@ from pieb_test_support.topology import BRIDGE_NET
 ABSENT_STATION = 99
 
 # Any of these is an acceptable outcome: the guest has been told the truth.
-# Which one appears depends on how far the ROM gets before giving up.
-FAILURE_MESSAGES = ("Not listening", "No reply", "Net error", "Line jammed")
+# Which one appears depends on how far the ROM gets before giving up. Taken
+# from the ANFS 4.18 string table rather than guessed -- the compound "Station
+# n.n <suffix>" forms are built from suffixes at &980F and &982A, and it is
+# "not present" that this scenario actually produces.
+FAILURE_MESSAGES = (
+    "not present",
+    "not listening",
+    "Net error",
+    "Line jammed",
+    "No Clock",
+)
 
 
 @pytest.mark.slow
 @pytest.mark.timeout(300)
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Defect 2 is open. The synthetic final ack is unconditional, so a "
-        "transmission that went nowhere reports success. Two attempted fixes "
-        "were reverted after this test showed they made matters worse -- see "
-        "docs/discussion/aun-robustness.md defect 2 for what was tried."
-    ),
-)
 def test_transmission_to_absent_station_is_reported_as_failure(
     bridge, beebium_args, server_filepath, mos_filepath, basic_filepath,
 ):

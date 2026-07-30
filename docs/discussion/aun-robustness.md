@@ -5,12 +5,15 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
-**Fixed:** 1 (packet destruction), 3 (cable simulation), 4 (blocking socket),
-6 (documentation drift), 7 (teardown order), 8 (inbound net translation).
-**Outstanding:** 2 — transmit failures reported to the guest as success, now
-traced to an ADLC interrupt-model deviation rather than a transport bug — and
-5, frame-level event streaming, of which the holding-queue counters on
-`EconetStatus` are a first instalment.
+**Fixed:** 1 (packet destruction), 2 (transmit failures reported as success),
+3 (cable simulation), 4 (blocking socket), 6 (documentation drift), 7 (teardown
+order), 8 (inbound net translation). **Outstanding:** 5 alone — frame-level
+event streaming, of which the holding-queue counters on `EconetStatus` are a
+first instalment.
+
+Fixing 2 also turned up and fixed two ADLC defects it was resting on: Rx Idle
+never latching or reaching S2RQ, and the handshake reporting the line inactive
+mid-transaction where a real wire holds flag fill throughout.
 
 Defects 1-7 were found by reading. Defect 8 was found by the first test of the
 PiEconetBridge interop harness, within an hour of that harness existing, and is
@@ -26,8 +29,8 @@ The unifying theme of the first two is that `FourWayHandshake` is optimistic:
 it assumes the transaction it is bridging will succeed, and it has no memory of
 anything that does not fit the transaction currently in flight. Both
 assumptions hold on a quiet loopback link between two emulators. Neither holds
-on a loaded LAN with a bridge, a fileserver, and a third station on it. The
-second half of that — the missing memory — is now fixed; the optimism is not.
+on a loaded LAN with a bridge, a fileserver, and a third station on it. Both
+halves are now fixed.
 
 ---
 
@@ -182,8 +185,7 @@ test_login_with_matching_non_zero_net_declaration`, both passing.
 
 ## 2. Transmit failures are reported to the guest as success
 
-**Status:** open — the ADLC prerequisite is fixed; a transport change remains.
-**Severity:** high — the guest is actively misinformed.
+**Status:** FIXED. **Severity:** high — the guest was actively misinformed.
 
 `handle_tx_data_after_scout_ack()` arms `FINAL_ACK_TIMEOUT`
 (`FourWayHandshake.hpp:358`). When that timer fires in `DataSent`, the code
@@ -315,10 +317,40 @@ line is idle before the transmission and idle after. No transition, no
 interrupt. On a real wire the act of transmitting makes the line busy and it
 then *falls* idle, and it is that fall the receiver latches.
 
-The remaining requirement is therefore: model our own transmission as making
-the line busy, and let it fall idle when the transmission has failed, instead
-of unconditionally synthesising an acknowledgement. That is a transport change,
-testable at the `FourWayHandshake` seam, and no longer blocked on the ADLC.
+**Transport half: DONE.** Two routes, because transports differ in when they
+can know:
+
+- *Known in advance.* `NetworkBackend::is_reachable(net, stn)` is asked before
+  the handshake commits to a transaction. `AunBackend` answers from its peer
+  table, applying the same `dest_net=0 -> local_net` translation `send_frame`
+  uses so the answer matches what a send would actually do. Backends that
+  cannot know leave it `true`.
+- *Known afterwards.* A transport that has already tried reports failure by
+  delivering a `Nack`, which the handshake accepts in `DataSent` and treats as
+  the end of the transaction. `PiconetBackend` now does this for every non-OK
+  `TX_RESULT` instead of dropping it, which is the only honest option open to
+  it: its firmware runs the wire handshake and reports after the fact.
+
+Both routes converge on the same thing: abandon the transaction, and leave the
+line busy for `LINE_BUSY_AFTER_TX` (~250us, roughly a scout's wire time) so
+that it then *falls* idle. That fall is the edge the ADLC latches, and the
+interrupt it raises is what NFS turns into an error.
+
+**Confirmed against a real bridge.** `*I AM 1.99 SYST` to a station neither the
+bridge nor our peer table knows now produces `Station 1.99 not present` and
+returns to a prompt. The message came as a mild surprise: the acceptance test
+had been written against a guessed list of failure strings, none of which
+matched, so it kept reporting failure after the defect was already fixed. The
+list is now taken from the ANFS 4.18 string table (the compound `Station n.n
+<suffix>` forms are built from suffixes at &980F and &982A) rather than
+guessed.
+
+**Tests.** Four cases tagged `[reachability]` in `tests/test_mc6854.cpp`,
+covering no-synthetic-ack, the busy-then-idle edge raising IRQ, an unaffected
+reachable station, and the after-the-fact `Nack` route; the `TX_RESULT` cases
+in `tests/test_piconet_backend_rx.cpp`; and
+`integration_tests/pieb-aun/tests/test_unreachable_station.py` against a real
+bridge, no longer `xfail`.
 
 Note also the dependency on defect 1, which ran the opposite way: the
 unconditional synthetic ack was what stopped destroyed packets from
