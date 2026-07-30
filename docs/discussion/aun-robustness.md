@@ -229,9 +229,23 @@ timeout would then conclude "not listening", as on a real wire.
 It does not. Against the interop harness, `*I AM 1.99 SYST` to a station
 nobody knows produced **no output at all** — no error, no returned prompt —
 and stayed that way for the full 60-second window. Nothing was transmitted, so
-the pre-flight worked exactly as intended; the guest simply hung. NFS has no
-timeout it can apply here: it is waiting on an ADLC event that never arrives.
-This is worse than the defect, which at least leaves the machine usable.
+the pre-flight worked exactly as intended; the guest simply hung. This is worse
+than the defect, which at least leaves the machine usable.
+
+The reason is narrower than "NFS has no timeout", which is how this was first
+written and is wrong. The ROM has software watchdogs on *either side* of the
+handshake: the pre-transmit INACTIVE poll with its 24-bit counter (→ "Line
+Jammed"), and `wait_net_tx_ack` at roughly 22 seconds (→ "No reply"). What it
+has no escape from is the handshake window itself. `poll_adlc_tx_status` opens
+with `ASL tx_complete_flag / BCC` (&98C9-&98CC) — an unbounded spin on a flag
+written only by NMI paths — so every retry attempt blocks there waiting for an
+interrupt. The 255 retries in `tx_retry_count` bound nothing, because each
+attempt's spin is itself unbounded.
+
+That makes ADLC interrupt fidelity load-bearing in an unusual way: an emulator
+that gets the TX-completion or line-idle interrupt wrong does not produce a
+wrong error, it produces a hung machine with no ROM-level recovery. We
+discovered this twice before understanding it.
 
 *Attempt 2 — quiet line.* On the theory that NFS concludes "not listening"
 from the *absence of flag fill* after an unanswered scout — our
@@ -346,6 +360,22 @@ matched, so it kept reporting failure after the defect was already fixed. The
 list is now taken from the ANFS 4.18 string table (the compound `Station n.n
 <suffix>` forms are built from suffixes at &980F and &982A) rather than
 guessed.
+
+**Why "not present" and not "not listening".** The two suffixes distinguish
+*which code path reported the failure*, not which failure occurred. `*I AM`
+probes with a MachinePeek (ctrl &88, port 0) via `init_tx_ptr_for_pass`, and
+that path returns through `fixup_reply_status_a`, which rewrites &41 (the
+not-listening TX code, class 1 "Net error") to &42 (class 2 "Station") and
+then `CLV`s to select the "not present" suffix. The general `send_net_packet`
+path instead enters at `classify_reply_error`, where a `BIT` sets V and selects
+"not listening". So a MachinePeek probe always says "not present" whatever went
+wrong — which is worth knowing before reading either string as diagnostic.
+
+(That explanation, and the two confirmations below, come from the maintainers
+of the annotated NFS/ANFS disassemblies at
+`/Users/rjs/Code/acornaeology/acorn-nfs`, in response to findings from this
+work. Their disassembly is the authority here; ours were black-box
+observations.)
 
 **Tests.** Four cases tagged `[reachability]` in `tests/test_mc6854.cpp`,
 covering no-synthetic-ack, the busy-then-idle edge raising IRQ, an unaffected
@@ -603,7 +633,17 @@ The full mechanism:
 2. It is redelivered correctly — but by then the guest has often been given an
    earlier copy already.
 3. NFS has consumed that reply and closed its receive block, so the duplicate
-   is traffic it has no reason to answer.
+   is traffic it has no reason to answer. This was inferred from black-box
+   behaviour and has since been confirmed in the ROM:
+   `rx_complete_update_rxcb` ORs &80 into byte 0 of the receive control block
+   (&83D8), and the slot scanner at `scout_ctrl_check` matches only a control
+   byte of exactly &7F — so &FF matches nothing and an RXCB is **one-shot**. A
+   retransmitted reply walks the port list, matches no slot, and is discarded
+   silently at `discard_no_match`.
+
+   That makes acknowledging the duplicate ourselves the correct fix rather than
+   a workaround: there is no arrangement of the ROM's receive blocks under
+   which a retransmission could be answered by the guest.
 4. Nothing acknowledges it. The peer retransmits indefinitely, and every copy
    costs a watchdog reset.
 
