@@ -198,10 +198,18 @@ code Prestel uses for `#` (ASCII underscore, `0x5F`). An AT command typed from
 Prestel mode therefore never receives its carriage return, and the modem sits
 waiting forever. Commstar's own manual documents the mapping in section 5.3.
 
-`CTRL-M` is reported to transmit a genuine CR from Prestel mode, which would let
-AT commands be issued without leaving viewdata emulation; on Commstar 1.40 it
-appears to send the viewdata character like `<RETURN>` does. Treat it as
-unconfirmed until someone reproduces it.
+`CTRL-M` does **not** help, despite the folklore. On a BBC the MOS delivers
+character code 13 for both `CTRL-M` and `<RETURN>`, so by the time Commstar sees
+a keypress the two are indistinguishable; the same key emits `0x0D` in Terminal
+mode and `0x5F` in Prestel mode purely because the translation is applied to the
+character code. Verified on Commstar 1.40 by watching the bytes on the wire.
+
+tcpser's `-D` direct connection looks like the way to avoid dialling (and hence
+the mode switch) altogether, but it **does not work** with the ip232 virtual
+serial device: it connects the line and reports `DTR has gone high`, then never
+forwards inbound data to the serial side. Verified on tcpser 1.1.4 with a client
+that raises DTR and a board that sends only after the client has attached, with
+and without a proxy in the chain: zero bytes delivered. Dial with `ATDT`.
 
 **4. Switch to Prestel emulation once connected.** Viewdata pages are teletext,
 so they only render correctly in Prestel mode: `<ESCAPE>` back to the menu (the
@@ -240,8 +248,41 @@ socat TCP-LISTEN:6401,reuseaddr,fork \
 
 Point the phonebook at the proxy (`-n 1=localhost:6401`). `fork` gives each
 redial a fresh delay, and the board does not see the call until the pause
-expires. This is a convenience, not a requirement: Commstar buffers incoming
-data while at the menu, and `<f8>` recovers a page that arrived too early.
+expires.
+
+On a board whose viewdata module does not implement the Prestel star commands,
+this stops being a convenience and becomes the only way to get a clean first
+page: `<f8>` and `*00#` ask the host to retransmit, and a host that ignores them
+leaves you with the mosaic-garbled copy that arrived while Commstar was still in
+Terminal mode. The delay window sidesteps the problem by having Commstar already
+in Prestel mode when the first byte lands.
+
+### Worked example: EOTL viewdata, with the delay window
+
+[End Of The Line](https://www.endofthelinebbs.com/) runs Synchronet with a
+viewdata front door on port **6502**, at 7E1. Unlike a single-line board it is
+always up and multi-user, which makes it the better target for testing. Guest
+access is username `Guest` with an empty password.
+
+```
+socat TCP-LISTEN:6401,reuseaddr,fork \
+  SYSTEM:'sleep 20; exec socat STDIO TCP\:endofthelinebbs.com\:6502'
+
+tcpser -v 25232 -s 2400 -l 4 -n 1=127.0.0.1:6401
+```
+
+Dial `ATDT1` from Commstar's Terminal mode; `CONNECT 2400` comes back at once
+because the proxy accepts immediately and the board has not been contacted yet.
+Then `<ESCAPE>` → `<#>` → `<C>` inside the twenty seconds, and the login frame
+paints into a terminal that is already in viewdata mode. Raise the `sleep` if
+that feels tight.
+
+Leave the line settings alone throughout: Prestel mode selects 7E1 at 1200/75
+and that is correct. The BBC's rate need not match the board's, and a 40x24
+frame is under 1 KB against a 4 KB receive queue, so a page arriving in one
+burst has ample headroom even though the guest drains it at 120 bytes a second.
+A frame takes about eight seconds to paint -- which is exactly what Prestel felt
+like.
 
 ### Raw mode
 
