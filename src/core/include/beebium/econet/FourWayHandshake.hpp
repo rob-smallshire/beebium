@@ -278,8 +278,13 @@ public:
     }
 
     // Reset all handshake state (called on system reset).
+    //
+    // Unlike abandoning a transaction, this also discards held frames: a
+    // machine reset means "forget everything", and delivering pre-reset
+    // traffic to a freshly booted guest would be worse than losing it.
     void reset() {
         reset_handshake();
+        held_frames_.clear();
     }
 
     // --- State inspection ---
@@ -811,6 +816,14 @@ private:
         flag_fill_timer_ = 0;
     }
 
+    // Abandon the transaction in flight and return to Idle.
+    //
+    // Held frames deliberately survive. They are by definition *not* part of
+    // the transaction being abandoned -- that is the whole reason they were
+    // held -- and discarding them here loses network traffic that has arrived
+    // and is simply waiting for a stage that can accept it. The peer then
+    // retransmits it unanswered for ever. Use reset() for a machine reset,
+    // where forgetting everything is the point.
     void reset_handshake() {
         stage_ = Stage::Idle;
         handshake_timer_ = 0;
@@ -820,7 +833,6 @@ private:
         saved_scout_.clear();
         cached_rx_data_.clear();
         rx_queue_.clear();
-        held_frames_.clear();
     }
 
     // --- State ---

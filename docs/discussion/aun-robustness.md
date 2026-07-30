@@ -517,37 +517,95 @@ weak handle rather than a raw reference.
 
 ## 9. A transaction stalls when acknowledgements are reordered
 
-**Status:** open, reproducible on demand. **Severity:** unknown until the
-cause is located.
+**Status:** partly diagnosed; one contributing defect fixed, root cause not yet
+settled. **Severity:** unknown.
 
-Found immediately by the perturbation proxy, which is what that instrument was
-built for. With every acknowledgement from the bridge held until one further
-datagram has overtaken it — the ordering a loaded network produces and a
-loopback one never does — a session logs in successfully and `*CAT` prints its
-full catalogue, but the transaction never completes and the prompt does not
-return.
+Found by the perturbation proxy, which is what that instrument was built for.
+With every acknowledgement from the bridge held until one further datagram has
+overtaken it, a session logs in and `*CAT` prints its full catalogue, but the
+transaction never completes and the prompt does not return.
 
-**What is already established:**
+### What the event stream shows
 
-- The perturbation is doing real work: four holds, all four released by
-  traffic overtaking them rather than by their deadline (`expired_holds=0`),
-  so the proxy is not simply capturing a datagram and deadlocking the
-  conversation. An earlier version did exactly that, which is why held
-  datagrams now have a release deadline.
-- The holding queue from defect 1 is genuinely active — `redelivered=1` — so
-  reordered frames are being caught and re-offered rather than destroyed. This
-  is the first evidence of that mechanism working against a real peer, and it
-  is not the thing that is failing.
-- The failure is at the *end* of the transaction. The catalogue data arrives
-  and renders; what is missing is whatever completes the exchange.
+Subscribing to `SubscribeEconetEvents` and sampling the handshake's internal
+state alongside it gives the whole picture. From the point of failure:
 
-**What is not established:** whether the fault is in Beebium or in how
-PiEconetBridge reacts to an acknowledgement that arrives later than it expects.
-A delayed ack may prompt a retransmission from the bridge that our stack then
-mishandles, or the bridge may itself be waiting. The frame-level event stream
-from defect 5 is the natural instrument for settling this — it can show what
-crossed the wire, in what order, at the point the exchange stops.
+```
+12.877  WIRE  RX unicast 1.254->0.1 port=0x90 len=5     the reply
+12.877  WIRE  RX ack     1.254->0.1 port=0x99 len=0     its ack, arriving after
+12.891  STATE stage=scout_received held=1
+13.400  STATE stage=idle          wd=2                  watchdog abandoned it
+13.875  WIRE  RX unicast 1.254->0.1 port=0x90 len=5     bridge retransmits
+13.876  STATE stage=scout_received
+14.395  STATE stage=idle          wd=3                  abandoned again
+...     the same, once a second, indefinitely
+```
+
+So the handshake **is** delivering the fileserver's reply to the guest, as a
+scout. The guest never acknowledges it. The watchdog abandons the transaction
+250ms later, the bridge retransmits because it was never acked, and the loop
+repeats for ever. Each cycle costs a watchdog reset — six in a twelve-second
+run.
+
+That relocates the question. It is not that the reply is lost, nor that the
+holding queue failed: `redelivered=2` shows reordered frames being caught and
+re-offered correctly. It is that the guest declines to answer.
+
+### Contributing defect, fixed: abandoning a transaction discarded held frames
+
+`reset_handshake()` cleared the holding queue. Held frames are by definition
+*not* part of the transaction in flight -- that is the whole reason they are
+held -- so a watchdog timeout, a reported transmit failure, or an unexpected
+transmission would throw away network traffic that had arrived and was simply
+waiting for a stage that could accept it. With six watchdog resets in this
+scenario, that was destroying frames steadily.
+
+Fixed: `reset_handshake()` now leaves held frames alone, and only the public
+`reset()` -- a machine reset, where forgetting everything is the point --
+discards them. This was self-inflicted, introduced with the defect 1 fix and
+invisible until reordering made watchdog resets common.
+
+It improved matters (`redelivered` went from 1 to 2) but did not resolve the
+stall, so it was a contributing defect rather than the cause.
+
+### Secondary finding: stale acks occupy the holding queue
+
+An `Ack` for a transaction that has already completed is accepted by no stage,
+so it sits in the holding queue until its TTL expires a second later
+(`expired=1` in every run). Harmless today, but it means the queue carries
+frames that can never be delivered, and under heavier reordering that is
+capacity spent on nothing. An `Ack` arriving with no transaction outstanding
+could be recognised as stale and discarded immediately rather than held.
+
+### The open question, and the strongest hypothesis
+
+Why does NFS not acknowledge the scout it is handed?
+
+The likeliest explanation is that it is a **duplicate**. The trace shows the
+same 39-byte reply delivered twice (11.356 and again at 12.866, after a
+retransmission), with the guest acknowledging the second. If NFS has already
+consumed a reply and closed its receive block, a retransmission of it is
+traffic the guest has no reason to answer -- and PiEconetBridge will retransmit
+unacknowledged data indefinitely.
+
+Upstream documents exactly this asymmetry from the other side. Its `AUTOACK`
+option exists because "emulators ... will send what appears to be a whole new
+packet with a new sequence number when the BBC they are emulating puts what is
+actually a re-tried packet on the Econet", and it acknowledges such traffic on
+the emulator's behalf to stop the retransmissions. The mirror case -- a
+retransmission *to* an emulator that the guest will not answer -- is the one
+here, and nothing currently breaks the loop.
+
+If that is right, the fix is for the transport to recognise a retransmitted
+data frame it has already delivered and acknowledge it itself, rather than
+handing the guest a duplicate and waiting for an answer that will not come.
+That needs the AUN handle to be tracked per transaction, which we currently
+echo but do not otherwise use.
+
+**Next step.** Confirm the duplicate hypothesis by recording AUN handles in the
+event stream -- they are in the header already and would settle it immediately.
+Then decide whether de-duplicating and self-acknowledging belongs in
+`FourWayHandshake` or `AunBackend`.
 
 **Test.** `integration_tests/pieb-aun/tests/test_reordered_reply.py`,
-`xfail(strict=True)`. It will flip to an unexpected pass the moment this is
-fixed.
+`xfail(strict=True)`.

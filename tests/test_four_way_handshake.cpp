@@ -1382,3 +1382,56 @@ TEST_CASE("FourWayHandshake: reset clears held frames",
     hs.reset();
     CHECK(hs.held_frame_count() == 0);
 }
+
+TEST_CASE("FourWayHandshake: abandoning a transaction does not discard held frames",
+          "[econet][handshake][holding]") {
+    // Held frames are by definition *not* part of the transaction in flight --
+    // that is the whole reason they are held. Abandoning that transaction, for
+    // whatever reason, must not take them with it.
+    //
+    // Observed against a real bridge with acks reordered: a reply overtook its
+    // ack and was held, a later transaction was abandoned, and the reset threw
+    // the held reply away. The fileserver then retransmitted it unanswered
+    // once a second for ever, and *CAT printed its whole catalogue and never
+    // returned to a prompt. See docs/discussion/aun-robustness.md defect 9.
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    advance_to_data_sent(hs);
+    backend.inject_rx_network_frame(make_reply_unicast());
+    hs.receive_frame();  // the reply overtakes its ack, and is held
+    REQUIRE(hs.held_frame_count() == 1);
+
+    // Abandon the transaction. An unexpected transmission is the most direct
+    // route to it; the watchdog and a reported transmit failure take the same
+    // path and must behave the same way.
+    hs.send_frame(make_raw_frame({254, 0, 1, 0, 0x99}));
+    REQUIRE(hs.unexpected_tx_reset_count() == 1);
+    REQUIRE(hs.stage() == FourWayHandshake::Stage::Idle);
+
+    // The reply must have survived, and must still be deliverable.
+    CHECK(hs.held_frame_count() == 1);
+
+    auto scout = drain_until_frame(hs, FourWayHandshake::IDLE_COOLDOWN + 200);
+    REQUIRE(scout.has_value());
+    REQUIRE(scout->data.size() >= 6);
+    CHECK(scout->data[SRC_STN] == 254);
+    CHECK(hs.held_frames_redelivered_count() == 1);
+}
+
+TEST_CASE("FourWayHandshake: a system reset does discard held frames",
+          "[econet][handshake][holding]") {
+    // The counterpart. A machine reset is not "abandon this transaction" but
+    // "forget everything", and delivering pre-reset traffic to a freshly
+    // booted guest would be worse than losing it.
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    advance_to_data_sent(hs);
+    backend.inject_rx_network_frame(make_reply_unicast());
+    hs.receive_frame();
+    REQUIRE(hs.held_frame_count() == 1);
+
+    hs.reset();
+    CHECK(hs.held_frame_count() == 0);
+}
