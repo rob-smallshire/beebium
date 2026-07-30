@@ -208,15 +208,48 @@ for a reply that was never going to come.
 
 `tests/test_four_way_handshake.cpp:702` locks the unconditional synthesis in.
 
-**Fix.** Add a failure channel to `NetworkBackend` so a transport can report
-that a specific transmission failed — either by injecting a `Nack` frame or via
-an explicit `send_result` hook. In `DataSent`, a reported failure should
-suppress the synthetic final ack and instead drive the ADLC into the state the
-NFS ROM reads as the corresponding OSWORD status. Retain the timeout-driven
-synthetic ack purely as the fallback for transports that cannot report
-(silence is still better than a hang). `PiconetBackend` already has the result
-codes in hand and needs only to forward them; `AunBackend` should report the
-unmapped-peer case the same way.
+**Two attempted fixes, both reverted.** Recorded because each looked
+obviously right and each made things worse; the next attempt should not
+rediscover them.
+
+*Attempt 1 — reachability pre-flight.* Added `NetworkBackend::is_reachable(net,
+stn)`, answered from `AunBackend`'s peer table, and had `FourWayHandshake`
+decline to start a transaction to a destination that could not be resolved,
+suppressing the synthetic scout ack. The reasoning was that the guest's own
+timeout would then conclude "not listening", as on a real wire.
+
+It does not. Against the interop harness, `*I AM 1.99 SYST` to a station
+nobody knows produced **no output at all** — no error, no returned prompt —
+and stayed that way for the full 60-second window. Nothing was transmitted, so
+the pre-flight worked exactly as intended; the guest simply hung. NFS has no
+timeout it can apply here: it is waiting on an ADLC event that never arrives.
+This is worse than the defect, which at least leaves the machine usable.
+
+*Attempt 2 — quiet line.* On the theory that NFS concludes "not listening"
+from the *absence of flag fill* after an unanswered scout — our
+`is_receiving_flags()` reports continuous flag fill whenever idle and
+connected, simulating the clock box, so the line always looks alive — a
+~100ms window was added during which flag fill is suppressed after a
+transmission to an absent station. The guest hung identically.
+
+**What this tells us.** The mechanism by which a real NFS ROM reaches "Not
+listening" is not simply "no scout ack arrives" nor "the line falls quiet".
+Finding it needs work in the ROM disassembly (`disassembly/nfs_334_v2_96dc_
+9fff_adlc_nmi_handlers.asm` and the OSWORD &10 path above it), identifying what
+the transmit path actually polls and how it decides a transmission failed.
+Until that is known, any change here is guesswork, and the guesses available
+all convert a wrong answer into a hang.
+
+Note also the dependency on defect 1, which ran the opposite way: the
+unconditional synthetic ack was what stopped destroyed packets from
+deadlocking the state machine. That prop is no longer needed now the holding
+queue exists, which makes this a better time to revisit it than before — but
+not without the ROM work first.
+
+**Test.** `integration_tests/pieb-aun/tests/test_unreachable_station.py`,
+`xfail(strict=True)`. It addresses a station neither the bridge nor our peer
+table knows, and requires that the guest be told *something*. It will flip to
+an unexpected pass the moment this is genuinely fixed.
 
 ## 3. Disconnecting the AUN cable does not disconnect it
 
