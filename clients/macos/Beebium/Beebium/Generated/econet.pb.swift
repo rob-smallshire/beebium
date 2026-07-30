@@ -277,6 +277,25 @@ struct Beebium_HandshakeStatus: Sendable {
 
   var flagFillActive: Bool = false
 
+  /// Inbound holding queue. Packets that arrive while the handshake is in a
+  /// stage that cannot use them are held and re-offered rather than dropped;
+  /// these counters make that visible, so a test or a diagnostic can assert
+  /// on the mechanism rather than only on the outcome.
+  ///
+  /// frames_held      -- currently waiting for a stage that can accept them
+  /// frames_redelivered -- held and later successfully delivered
+  /// frames_expired   -- discarded after waiting too long
+  /// frames_dropped   -- discarded because the queue was full; non-zero
+  ///                     means a peer is offering traffic faster than the
+  ///                     handshake can consume it
+  var framesHeld: UInt32 = 0
+
+  var framesRedelivered: UInt64 = 0
+
+  var framesExpired: UInt64 = 0
+
+  var framesDropped: UInt64 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -760,7 +779,7 @@ extension Beebium_AdlcStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Beebium_HandshakeStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".HandshakeStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}stage\0\u{3}flag_fill_active\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}stage\0\u{3}flag_fill_active\0\u{3}frames_held\0\u{3}frames_redelivered\0\u{3}frames_expired\0\u{3}frames_dropped\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -770,6 +789,10 @@ extension Beebium_HandshakeStatus: SwiftProtobuf.Message, SwiftProtobuf._Message
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.stage) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.flagFillActive) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.framesHeld) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.framesRedelivered) }()
+      case 5: try { try decoder.decodeSingularUInt64Field(value: &self.framesExpired) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.framesDropped) }()
       default: break
       }
     }
@@ -782,12 +805,28 @@ extension Beebium_HandshakeStatus: SwiftProtobuf.Message, SwiftProtobuf._Message
     if self.flagFillActive != false {
       try visitor.visitSingularBoolField(value: self.flagFillActive, fieldNumber: 2)
     }
+    if self.framesHeld != 0 {
+      try visitor.visitSingularUInt32Field(value: self.framesHeld, fieldNumber: 3)
+    }
+    if self.framesRedelivered != 0 {
+      try visitor.visitSingularUInt64Field(value: self.framesRedelivered, fieldNumber: 4)
+    }
+    if self.framesExpired != 0 {
+      try visitor.visitSingularUInt64Field(value: self.framesExpired, fieldNumber: 5)
+    }
+    if self.framesDropped != 0 {
+      try visitor.visitSingularUInt64Field(value: self.framesDropped, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_HandshakeStatus, rhs: Beebium_HandshakeStatus) -> Bool {
     if lhs.stage != rhs.stage {return false}
     if lhs.flagFillActive != rhs.flagFillActive {return false}
+    if lhs.framesHeld != rhs.framesHeld {return false}
+    if lhs.framesRedelivered != rhs.framesRedelivered {return false}
+    if lhs.framesExpired != rhs.framesExpired {return false}
+    if lhs.framesDropped != rhs.framesDropped {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
