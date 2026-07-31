@@ -162,9 +162,10 @@ rather than through the emulated keyboard on every call:
 tcpser -v 25232 -s 2400 -l 4 -n 1=nightowlbbs.ddns.net:6400
 ```
 
-`-s 2400` matches the board's rate, so tcpser paces bytes at something the
-emulated ACIA absorbs comfortably. Add `-t sS` for a byte-level trace of the
-serial side when diagnosing.
+`-s` is the rate tcpser paces the serial side at; match it to whatever the BBC
+end is set to, not to the board's advertised speed (see step 4 -- `-s 9600` is
+the comfortable choice). Add `-t sS` for a byte-level trace of the serial side
+when diagnosing.
 
 The phonebook is optional: it is a lookup, not a restriction, so a dial string
 that matches no entry is used as the address directly. `ATDTnightowlbbs.ddns.net:6400`
