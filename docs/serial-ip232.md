@@ -344,8 +344,9 @@ bits, so the guest's word format and baud only have to be self-consistent -- the
 need not match the board. Let Commstar's Prestel mode select 7E1 at 1200/75.
 
 **6. Log off through the board** rather than closing the emulator, so the line is
-freed at once. `+++` then `ATH0` hangs up at the modem if the board stops
-responding -- terminated with a CR the same way the dial string was.
+freed at once -- `*90#` on a viewdata system, which on Commstar means `*`, `9`,
+`0`, `<RETURN>`. If the board stops responding, hang up at the modem instead:
+`+++`, wait for `OK`, then `ATH0` terminated with `CTRL-M`.
 
 When it does not work, the `-t sS` trace answers most questions: it shows exactly
 what the BBC sent (so a mis-typed hostname is visible), and it distinguishes the
