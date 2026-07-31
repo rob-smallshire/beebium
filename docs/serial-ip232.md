@@ -198,11 +198,22 @@ code Prestel uses for `#` (ASCII underscore, `0x5F`). An AT command typed from
 Prestel mode therefore never receives its carriage return, and the modem sits
 waiting forever. Commstar's own manual documents the mapping in section 5.3.
 
-`CTRL-M` does **not** help, despite the folklore. On a BBC the MOS delivers
-character code 13 for both `CTRL-M` and `<RETURN>`, so by the time Commstar sees
-a keypress the two are indistinguishable; the same key emits `0x0D` in Terminal
-mode and `0x5F` in Prestel mode purely because the translation is applied to the
-character code. Verified on Commstar 1.40 by watching the bytes on the wire.
+**`CTRL-M` avoids the mode switch entirely**: it transmits a genuine carriage
+return from Prestel mode, so an AT command can be typed without leaving viewdata
+emulation. In Prestel mode the three keys that look alike are:
+
+| keypress | transmits | as viewdata | as ASCII |
+|----------|-----------|-------------|----------|
+| `SHIFT-3` | `0x23` | `£` | `#` |
+| `RETURN` | `0x5F` | `#` | `_` |
+| `CTRL-M` | `0x0D` | CR | CR |
+
+Both `CTRL-M` and `RETURN` produce MOS character code 13, so Commstar cannot be
+choosing between them on the character. It calls `OSBYTE 122` to ask which key
+is physically held (the scan starts at key 16, skipping SHIFT and CTRL) and
+substitutes the viewdata `#` only for RETURN, whose internal key number is
+`0x49`. Confirmed on real hardware, and pinned by
+`clients/beebium-python-client/tests/test_commstar_prestel_keys.py`.
 
 tcpser's `-D` direct connection looks like the way to avoid dialling (and hence
 the mode switch) altogether, but it **does not work** with the ip232 virtual

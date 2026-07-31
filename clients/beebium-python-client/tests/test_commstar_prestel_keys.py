@@ -23,6 +23,11 @@ That makes these tests an end-to-end exercise of the keyboard matrix, the MOS
 keyboard scan, the Serial ULA at viewdata's 7E1 word format, and a serial
 device extension -- with real period software as the oracle. The expected bytes
 were confirmed against Commstar 1.40 running on real hardware.
+
+They drive the keyboard matrix directly, so they cover the emulator and nothing
+above it. A front-end can still resolve CTRL-M to the wrong physical key and
+these tests stay green: the macOS client did exactly that until it was fixed to
+stop resolving keys through CTRL (see rule R9 in docs/frontend-modifier-keys.md).
 """
 
 import time
