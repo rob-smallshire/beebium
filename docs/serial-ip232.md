@@ -234,12 +234,19 @@ while you were still in Terminal mode appears as mosaic characters printed as
 ASCII; `<f8>` asks the board to retransmit the current frame, though not every
 board honours it.
 
-Entering Prestel mode reconfigures the line to viewdata's **7E1 at 1200/75**.
-That is correct and expected — Commstar's manual is explicit that the word format
-should *not* be altered while using Prestel — and Beebium receives it properly.
-The BBC's rate need not match the board's: IP232 is a byte pipe with no bit
-timing of its own, so the guest's receive rate only governs how fast the socket
-queue drains.
+Entering Prestel mode reconfigures the line to viewdata's **7E1 at 1200/75**,
+which Beebium receives correctly. Keep the **word format** at 7E1 -- Commstar's
+manual is explicit that it should not be altered while using Prestel -- but the
+**rates are yours to raise**, and doing so transforms the experience.
+
+IP232 is a byte pipe with no bit timing of its own, so the guest's rate need not
+match the board's; it only governs how fast the BBC drains the socket queue. At
+1200 baud a 40x24 frame of about 960 characters takes some eight seconds to
+paint, which is authentically what Prestel felt like. Cycling `<R>` and `<S>` in
+`<I>` up to **9600** (Commstar's maximum) brings that under a second, and
+running tcpser with `-s 9600` to match keeps it from becoming the new
+bottleneck. The manual leaves `<I>` available in Prestel mode for exactly this
+kind of adjustment.
 
 **5. Log off properly.** `*90#` is the conventional viewdata logoff (the board
 shows a goodbye frame and drops the line). Walking away instead leaves the line
@@ -293,12 +300,11 @@ arrives while Commstar is still rendering ASCII, and EOTL does not honour the
 Prestel retransmit commands that would redraw it -- so pair that route with the
 delay proxy above, pointing the phonebook at `127.0.0.1:6401`.
 
-Leave the line settings alone throughout: Prestel mode selects 7E1 at 1200/75
-and that is correct. The BBC's rate need not match the board's, and a 40x24
-frame is under 1 KB against a 4 KB receive queue, so a page arriving in one
-burst has ample headroom even though the guest drains it at 120 bytes a second.
-A frame takes about eight seconds to paint -- which is exactly what Prestel felt
-like.
+Keep the word format at the 7E1 Prestel mode selects, but raise the rates: at
+the default 1200/75 a frame takes some eight seconds to paint, and at 9600/9600
+(with `tcpser -s 9600`) it is under a second. A 40x24 frame is under 1 KB
+against a 4 KB receive queue, so a page arriving in one burst has headroom at
+either speed.
 
 ### Connecting to any other board
 
@@ -339,9 +345,12 @@ Commstar use `CTRL-M`, which sends a real CR and lets you dial without leaving
 viewdata mode. Other terminal software will differ; if it has no such key, dial
 from its ASCII/terminal mode and switch afterwards, during the delay window.
 
-**5. Leave the line settings to the terminal software.** IP232 carries bytes, not
-bits, so the guest's word format and baud only have to be self-consistent -- they
-need not match the board. Let Commstar's Prestel mode select 7E1 at 1200/75.
+**5. Keep the word format, raise the rates.** IP232 carries bytes, not bits, so
+the guest's word format and baud only have to be self-consistent -- they need not
+match the board. Let Commstar's Prestel mode select 7E1 and leave that alone,
+but cycle `<R>` and `<S>` in `<I>` up to 9600 (matching `tcpser -s`): the
+default 1200/75 is faithful to Prestel and painfully slow, and nothing about the
+link requires it.
 
 **6. Log off through the board** rather than closing the emulator, so the line is
 freed at once -- `*90#` on a viewdata system, which on Commstar means `*`, `9`,
