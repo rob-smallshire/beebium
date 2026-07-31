@@ -218,9 +218,10 @@ final class KeyboardMapping: Identifiable {
             }
         }
 
-        // 2. Fall back to character mapping if enabled
+        // 2. Fall back to character mapping if enabled. The lookup character
+        // ignores CTRL, which names a control code rather than a key.
         if characterMapping,
-           let char = input.primaryCharacter,
+           let char = input.lookupCharacter,
            let entry = cache.lookup(character: char) {
             return ResolvedKey(
                 bbcKeyName: entry.name,

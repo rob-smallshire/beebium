@@ -90,6 +90,16 @@ enum BBCModifierState {
     }
 
     /// Symmetric to shiftFlagsForCharacter for BBC CTRL.
+    /// CTRL flags for a character-mapped key. Unlike SHIFT, a character never
+    /// *forbids* BBC CTRL.
+    ///
+    /// SHIFT selects which character a key produces, so a character that
+    /// resolves to an unshifted BBC face must suppress a physically-held
+    /// SHIFT. CTRL does not select characters: the host has already folded it
+    /// into a control code, and the BBC folds it again in hardware. Suppressing
+    /// it would mean the guest never sees CTRL held -- indistinguishable, to
+    /// software that scans the keyboard matrix, from the user not having
+    /// pressed it. So CTRL is left to follow the physical state.
     static func ctrlFlagsForCharacter(
         bbcCtrlRequired: Bool,
         physicalCtrlHeld: Bool
@@ -97,7 +107,7 @@ enum BBCModifierState {
         if bbcCtrlRequired {
             return (needsSynthetic: !physicalCtrlHeld, forbids: false)
         } else {
-            return (needsSynthetic: false, forbids: physicalCtrlHeld)
+            return (needsSynthetic: false, forbids: false)
         }
     }
 

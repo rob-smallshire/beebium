@@ -52,6 +52,26 @@ struct KeyInput {
         characters.first
     }
 
+    /// The character to resolve this key by when using logical (character)
+    /// mapping.
+    ///
+    /// SHIFT and ALT generate characters -- `Shift+3` is how a UK host types
+    /// `£` -- so resolving those from `characters` is right. CTRL does not:
+    /// the host reports `Ctrl+M` as `"\r"`, which names a control code rather
+    /// than the key that was pressed, and the BBC folds CTRL into a control
+    /// code itself. Resolving `"\r"` would apply CTRL twice and press the BBC
+    /// RETURN key, which is a different physical key -- visible to any guest
+    /// software that scans the keyboard matrix.
+    ///
+    /// So while CTRL is held we resolve by the *unmodified* character and let
+    /// CTRL reach the BBC on its own.
+    var lookupCharacter: Character? {
+        if modifiers.contains(.control) {
+            return charactersIgnoringModifiers.first ?? characters.first
+        }
+        return characters.first
+    }
+
     /// Create a KeyInput from an NSEvent
     /// - Parameters:
     ///   - event: The keyboard event
@@ -73,6 +93,21 @@ struct KeyInput {
         self.characters = ""
         self.charactersIgnoringModifiers = ""
         self.modifiers = []
+        self.source = source
+    }
+
+    /// Create a KeyInput from its parts, for synthesised events and tests.
+    init(
+        keyCode: UInt16,
+        characters: String,
+        charactersIgnoringModifiers: String,
+        modifiers: NSEvent.ModifierFlags,
+        source: KeyInputSource = .physicalKeyboard
+    ) {
+        self.keyCode = keyCode
+        self.characters = characters
+        self.charactersIgnoringModifiers = charactersIgnoringModifiers
+        self.modifiers = modifiers
         self.source = source
     }
 

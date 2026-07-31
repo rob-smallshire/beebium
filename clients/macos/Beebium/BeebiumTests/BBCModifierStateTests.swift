@@ -195,4 +195,29 @@ final class BBCModifierStateTests: XCTestCase {
         XCTAssertTrue(a.needsSyntheticCtrl)
         XCTAssertTrue(BBCModifierState.desiredCtrl(pressedKeys: [a]))
     }
+
+    // MARK: - A character never suppresses CTRL
+
+    func testCharacterKeyDoesNotForbidHeldCtrl() {
+        // CTRL is not a character-generating modifier: the host has already
+        // folded it into a control code and the BBC folds it again itself.
+        // Suppressing it would hide the CTRL key from guest software that
+        // scans the keyboard matrix.
+        let flags = BBCModifierState.ctrlFlagsForCharacter(
+            bbcCtrlRequired: false,
+            physicalCtrlHeld: true
+        )
+
+        XCTAssertFalse(flags.forbids)
+        XCTAssertFalse(flags.needsSynthetic)
+    }
+
+    func testHeldCtrlSurvivesACharacterKeyPress() {
+        // The BBC must see CTRL down while a character key resolved through
+        // the character map is held.
+        let m = characterKey("m", bbcShiftRequired: false, physicalShiftHeld: false,
+                             bbcCtrlRequired: false, physicalCtrlHeld: true)
+
+        XCTAssertTrue(BBCModifierState.desiredCtrl(pressedKeys: [directCtrl(), m]))
+    }
 }

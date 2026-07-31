@@ -111,6 +111,29 @@ you actually recorded as `down`. An up for a key that is not held becomes a
 no-op. This keeps an accidental unbalanced up (e.g. left over from a suppression
 path) from disturbing the emulated matrix.
 
+**R9 -- CTRL is not a character-generating modifier; never resolve a key
+through it.** SHIFT and ALT select *which character* a key produces -- `Shift+3`
+is how a UK host types `£` -- so resolving those from the host's
+modifier-applied character is correct. CTRL is different: a host reports
+`Ctrl+M` as `"\r"`, which names a control code rather than the key that was
+pressed, and the BBC performs that same folding itself in hardware and the MOS.
+Resolving on it applies CTRL twice and presses a *different physical key*
+(`Ctrl+M` -> RETURN, `Ctrl+I` -> TAB, `Ctrl+H` -> backspace, `Ctrl+[` ->
+ESCAPE).
+
+The character usually comes out the same either way, which is why this hides
+easily -- but guest software that scans the keyboard matrix sees the wrong key.
+Commstar's viewdata mode is a real example: it takes character 13, then calls
+OSBYTE 122 to ask which key is held, and substitutes the viewdata `#` only for
+RETURN. With CTRL mis-resolved, `Ctrl+M` became indistinguishable from RETURN
+and no AT command could be typed.
+
+So: resolve the base key from the *unmodified* character (or the physical key
+code) whenever CTRL is held, and let CTRL reach the BBC independently. It
+follows that a character-mapped key must never *forbid* CTRL either -- unlike
+SHIFT, which legitimately suppresses a physically-held modifier when the
+resolved character is the unshifted face.
+
 
 ## 3. The server contract
 
@@ -184,6 +207,8 @@ functions).
       overlay) takes over input -- do not selectively suppress edges (R5).
 - [ ] Drop auto-repeat (R7); guard ups by the held-set (R8); serialise sends in
       generation order (section 3).
+- [ ] Resolve by the unmodified character (or key code) while CTRL is held, and
+      never let a character suppress CTRL (R9).
 - [ ] Treat Caps Lock as a toggle with its own sync, not a key.
 - [ ] Deliver correct key state at reset and let the ROM decide booting
       (section 3); do not special-case SHIFT/CTRL-Break in the front-end.

@@ -65,6 +65,33 @@ final class KeyboardMappingResolveTests: XCTestCase {
         upperZ.name = "Z"
         resp.mappings.append(upperZ)
 
+        // m / M pair -- the key at the heart of the CTRL regression.
+        var lowerM = Beebium_KeyMappingEntry()
+        lowerM.found = true
+        lowerM.character = "m"
+        lowerM.ikNumber = 0x65
+        lowerM.needsShift = false
+        lowerM.name = "m"
+        resp.mappings.append(lowerM)
+
+        var upperM = Beebium_KeyMappingEntry()
+        upperM.found = true
+        upperM.character = "M"
+        upperM.ikNumber = 0x65
+        upperM.needsShift = true
+        upperM.name = "M"
+        resp.mappings.append(upperM)
+
+        // RETURN, which is what Ctrl+M must NOT resolve to: the host reports
+        // that combination as "\r", the character RETURN also produces.
+        var ret = Beebium_KeyMappingEntry()
+        ret.found = true
+        ret.character = "\r"
+        ret.ikNumber = 0x49
+        ret.needsShift = false
+        ret.name = "Return"
+        resp.mappings.append(ret)
+
         // Modifier-style names (no character).
         var shift = Beebium_KeyMappingEntry()
         shift.found = true
@@ -148,5 +175,72 @@ final class KeyboardMappingResolveTests: XCTestCase {
         let resolved = mapping.resolve(keyInput(keyCode: 0), cache: cache)
 
         XCTAssertEqual(resolved?.bbcShift, true)
+    }
+
+    // MARK: - CTRL is not a character-generating modifier
+
+    /// A mapping with character mapping on and no direct keyCode entries, so
+    /// resolution must go through the character path.
+    private func makeCharacterOnlyMapping() -> KeyboardMapping {
+        let json: [String: Any] = [
+            "version": 1,
+            "id": UUID().uuidString,
+            "name": "CharacterOnly",
+            "characterMapping": true,
+            "synchronizeCapsLock": false,
+            "keyMappings": []
+        ]
+        return KeyboardMapping(json: json)
+    }
+
+    func testCtrlM_ResolvesToTheMKey_NotReturn() {
+        // macOS reports Ctrl+M with characters "\r" -- the same character the
+        // RETURN key produces. Resolving on that would press a different
+        // physical key, which guest software scanning the keyboard matrix can
+        // see (Commstar's viewdata mode does exactly that).
+        let cache = makeBBCKeyCache()
+        let mapping = makeCharacterOnlyMapping()
+        let input = KeyInput(
+            keyCode: 46,
+            characters: "\r",
+            charactersIgnoringModifiers: "m",
+            modifiers: [.control]
+        )
+
+        let resolved = mapping.resolve(input, cache: cache)
+
+        XCTAssertEqual(resolved?.ikNumber, 0x65, "Ctrl+M must press the M key")
+        XCTAssertNotEqual(resolved?.ikNumber, 0x49, "Ctrl+M must not press RETURN")
+    }
+
+    func testPlainReturn_StillResolvesToReturn() {
+        let cache = makeBBCKeyCache()
+        let mapping = makeCharacterOnlyMapping()
+        let input = KeyInput(
+            keyCode: 36,
+            characters: "\r",
+            charactersIgnoringModifiers: "\r",
+            modifiers: []
+        )
+
+        XCTAssertEqual(mapping.resolve(input, cache: cache)?.ikNumber, 0x49)
+    }
+
+    func testShiftStillGeneratesCharacters() {
+        // SHIFT genuinely selects which character a key produces, so it must
+        // still be resolved from the modified character.
+        let cache = makeBBCKeyCache()
+        let mapping = makeCharacterOnlyMapping()
+        let input = KeyInput(
+            keyCode: 46,
+            characters: "M",
+            charactersIgnoringModifiers: "m",
+            modifiers: [.shift]
+        )
+
+        let resolved = mapping.resolve(input, cache: cache)
+
+        XCTAssertEqual(resolved?.ikNumber, 0x65)
+        XCTAssertEqual(resolved?.bbcShift, true, "the shifted face was requested")
     }
 }
