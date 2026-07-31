@@ -183,24 +183,25 @@ beebium-model-b start \
   --ip232-serial host=localhost:port=25232
 ```
 
-**3. Dial from Commstar's Terminal mode — not Prestel mode.** At the main menu
-check the top line reads `Emulate : Terminal` (`<#>` toggles). Then:
+**3. Dial.** An AT command has to be terminated with a carriage return, and in
+Prestel mode `<RETURN>` does not send one — it sends the viewdata "proceed to
+next frame" character. There are two ways round that.
+
+*Either* stay in viewdata mode and terminate with **`CTRL-M`**, which does send a
+real CR (see the table below). Press `<#>` for `Emulate : Prestel`, `<C>` for
+chat, type `ATDT1` and press `CTRL-M`. Nothing further is needed: the terminal is
+already in the mode the board's pages want.
+
+*Or* dial from **Terminal** mode and switch afterwards. Check the top line reads
+`Emulate : Terminal` (`<#>` toggles), then:
 
 - `<I>` to initialise the RS423: word format option **5** (8 bits, no parity, 1
   stop) with `<R>` and `<S>` both cycled to **2400**. `<RETURN>` to go back.
 - `<C>` for chat mode, then type `ATDT1` and press `<RETURN>`.
 
-tcpser logs the dial and answers `CONNECT 2400`.
+Either way tcpser logs the dial and answers `CONNECT 2400`.
 
-**Why Terminal mode matters:** in Prestel mode Commstar maps `<RETURN>` onto the
-viewdata "proceed to next frame" character — which is *not* ASCII CR, but the
-code Prestel uses for `#` (ASCII underscore, `0x5F`). An AT command typed from
-Prestel mode therefore never receives its carriage return, and the modem sits
-waiting forever. Commstar's own manual documents the mapping in section 5.3.
-
-**`CTRL-M` avoids the mode switch entirely**: it transmits a genuine carriage
-return from Prestel mode, so an AT command can be typed without leaving viewdata
-emulation. In Prestel mode the three keys that look alike are:
+**Why `CTRL-M` works.** In Prestel mode the three keys that look alike are:
 
 | keypress | transmits | as viewdata | as ASCII |
 |----------|-----------|-------------|----------|
@@ -222,12 +223,16 @@ forwards inbound data to the serial side. Verified on tcpser 1.1.4 with a client
 that raises DTR and a board that sends only after the client has attached, with
 and without a proxy in the chain: zero bytes delivered. Dial with `ATDT`.
 
-**4. Switch to Prestel emulation once connected.** Viewdata pages are teletext,
-so they only render correctly in Prestel mode: `<ESCAPE>` back to the menu (the
-line stays up and incoming data is buffered), `<#>` to select
-`Emulate : Prestel`, then `<C>` to return to chat. If a page arrived while you
-were still in Terminal mode it will look like mosaic characters printed as
-ASCII; `<f8>` asks the board to retransmit the current frame.
+**4. Be in Prestel emulation when the first page arrives.** Viewdata pages are
+teletext and render correctly only in Prestel mode. Dialling with `CTRL-M`
+leaves you there already, so this step is nothing but a check.
+
+If you dialled from Terminal mode you must now switch, and quickly: `<ESCAPE>`
+back to the menu (the line stays up and incoming data is buffered), `<#>` to
+select `Emulate : Prestel`, then `<C>` to return to chat. A page that arrived
+while you were still in Terminal mode appears as mosaic characters printed as
+ASCII; `<f8>` asks the board to retransmit the current frame, though not every
+board honours it.
 
 Entering Prestel mode reconfigures the line to viewdata's **7E1 at 1200/75**.
 That is correct and expected — Commstar's manual is explicit that the word format
@@ -240,17 +245,17 @@ queue drains.
 shows a goodbye frame and drops the line). Walking away instead leaves the line
 held until the board times out, which on a single-line system locks everyone else
 out. If the board is unresponsive, hang up at the modem instead: type `+++` (no
-RETURN), wait for `OK`, then `ATH0` to go on-hook. `ATH0` needs a real carriage
-return, so return to Terminal mode first — the same restriction that applies to
-dialling.
+RETURN), wait for `OK`, then `ATH0` terminated with `CTRL-M` — the same carriage
+return an AT command always needs, available without leaving viewdata mode.
 
 #### Optional: a dialling delay
 
-Over TCP, `CONNECT` is instantaneous, so there is no dial-and-train-up pause in
-which to do the Terminal-to-Prestel hop that a real modem would have given you.
-A proxy that accepts at once but bridges onward after a pause restores the
-window — tcpser reports `CONNECT` as soon as *its* connection succeeds, so the
-delay lands after the result code and before the first byte of the login page:
+Only needed if you dial from Terminal mode. Over TCP, `CONNECT` is
+instantaneous, so there is no dial-and-train-up pause in which to do the
+Terminal-to-Prestel hop that a real modem would have given you. A proxy that
+accepts at once but bridges onward after a pause restores the window — tcpser
+reports `CONNECT` as soon as *its* connection succeeds, so the delay lands after
+the result code and before the first byte of the login page:
 
 ```
 socat TCP-LISTEN:6401,reuseaddr,fork \
@@ -261,14 +266,14 @@ Point the phonebook at the proxy (`-n 1=localhost:6401`). `fork` gives each
 redial a fresh delay, and the board does not see the call until the pause
 expires.
 
-On a board whose viewdata module does not implement the Prestel star commands,
-this stops being a convenience and becomes the only way to get a clean first
-page: `<f8>` and `*00#` ask the host to retransmit, and a host that ignores them
-leaves you with the mosaic-garbled copy that arrived while Commstar was still in
-Terminal mode. The delay window sidesteps the problem by having Commstar already
-in Prestel mode when the first byte lands.
+This mattered more before `CTRL-M` was known to work. Dialling from Terminal
+mode on a board whose viewdata module ignores the Prestel star commands left no
+way to recover the garbled first page -- `<f8>` and `*00#` ask the host to
+retransmit, and a host that ignores them leaves you with the mosaic copy that
+arrived during the hop. Dialling from Prestel mode avoids the situation
+entirely, since Commstar is never in the wrong mode.
 
-### Worked example: EOTL viewdata, with the delay window
+### Worked example: EOTL viewdata
 
 [End Of The Line](https://www.endofthelinebbs.com/) runs Synchronet with a
 viewdata front door on port **6502**, at 7E1. Unlike a single-line board it is
@@ -276,17 +281,17 @@ always up and multi-user, which makes it the better target for testing. Guest
 access is username `Guest` with an empty password.
 
 ```
-socat TCP-LISTEN:6401,reuseaddr,fork \
-  SYSTEM:'sleep 20; exec socat STDIO TCP\:endofthelinebbs.com\:6502'
-
-tcpser -v 25232 -s 2400 -l 4 -n 1=127.0.0.1:6401
+tcpser -v 25232 -s 2400 -l 4 -n 1=endofthelinebbs.com:6502
 ```
 
-Dial `ATDT1` from Commstar's Terminal mode; `CONNECT 2400` comes back at once
-because the proxy accepts immediately and the board has not been contacted yet.
-Then `<ESCAPE>` → `<#>` → `<C>` inside the twenty seconds, and the login frame
-paints into a terminal that is already in viewdata mode. Raise the `sleep` if
-that feels tight.
+Put Commstar in Prestel mode (`<#>`), enter chat (`<C>`), type `ATDT1` and press
+`CTRL-M`. The login frame arrives into a terminal already in viewdata mode, so
+there is no hop to race and no delay proxy to arrange.
+
+Dialling from Terminal mode instead works too, but then the board's greeting
+arrives while Commstar is still rendering ASCII, and EOTL does not honour the
+Prestel retransmit commands that would redraw it -- so pair that route with the
+delay proxy above, pointing the phonebook at `127.0.0.1:6401`.
 
 Leave the line settings alone throughout: Prestel mode selects 7E1 at 1200/75
 and that is correct. The BBC's rate need not match the board's, and a 40x24
@@ -321,15 +326,18 @@ typed once rather than through the emulated keyboard:
 tcpser -v 25232 -s 2400 -l 4 -n 1=<host>:<port>
 ```
 
-**3. Add a delay window if the board greets on connect** and you will need to
-change terminal mode after dialling -- see the proxy above. Over TCP there is no
-dial-and-train-up pause, so without one the first page arrives before the
-terminal is ready. Required rather than optional if the board does not honour
-the Prestel retransmit commands.
+**3. Add a delay window only if you must change terminal mode after dialling**
+-- see the proxy above. Over TCP there is no dial-and-train-up pause, so the
+board's first page arrives while the terminal is still in the wrong mode, and a
+board that does not honour the Prestel retransmit commands gives you no way to
+redraw it. Terminal software that can send a CR without leaving viewdata mode
+(on Commstar, `CTRL-M`) sidesteps this entirely.
 
-**4. Dial from a mode that can send a carriage return.** AT commands need CR, and
-viewdata emulation does not transmit one (see above). So dial from Terminal mode
-and switch afterwards, during the delay window.
+**4. Terminate the AT command with a carriage return the terminal can actually
+send.** Viewdata emulation maps `<RETURN>` to the "next frame" character, so on
+Commstar use `CTRL-M`, which sends a real CR and lets you dial without leaving
+viewdata mode. Other terminal software will differ; if it has no such key, dial
+from its ASCII/terminal mode and switch afterwards, during the delay window.
 
 **5. Leave the line settings to the terminal software.** IP232 carries bytes, not
 bits, so the guest's word format and baud only have to be self-consistent -- they
@@ -337,7 +345,7 @@ need not match the board. Let Commstar's Prestel mode select 7E1 at 1200/75.
 
 **6. Log off through the board** rather than closing the emulator, so the line is
 freed at once. `+++` then `ATH0` hangs up at the modem if the board stops
-responding, and needs Terminal mode for the same CR reason.
+responding -- terminated with a CR the same way the dial string was.
 
 When it does not work, the `-t sS` trace answers most questions: it shows exactly
 what the BBC sent (so a mis-typed hostname is visible), and it distinguishes the
