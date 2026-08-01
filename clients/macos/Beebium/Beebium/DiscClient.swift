@@ -220,25 +220,4 @@ final class DiscClient: ObservableObject, Disconnectable {
             break
         }
     }
-
-    /// Refresh drive status from the server
-    func refreshStatus() async {
-        guard let client = client else { return }
-
-        do {
-            let request = Beebium_GetDriveStatusRequest()
-            let response = try await client.getDriveStatus(request).response.get()
-
-            await MainActor.run {
-                self.hasDiscController = response.hasDiscController_p
-                self.controllerType = response.controllerType
-                self.drives = response.drives
-                self.errorMessage = nil
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "Failed to refresh: \(error.localizedDescription)"
-            }
-        }
-    }
 }

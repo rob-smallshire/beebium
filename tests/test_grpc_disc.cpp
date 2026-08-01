@@ -663,3 +663,75 @@ TEST_CASE("DiscService insert event carries the disc source URL", "[grpc][disc]"
     CHECK(event.drive() == 0);
     CHECK(event.disc_url() == disc_path.string());
 }
+
+
+TEST_CASE("DiscService reports a disc swapped in an occupied drive", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    // A second image with a distinct path; the contents don't matter, only
+    // that the drive's source URL changes.
+    auto replacement_path =
+        std::filesystem::temp_directory_path() / "beebium-replacement-disc.ssd";
+    std::filesystem::copy_file(disc_path, replacement_path,
+                               std::filesystem::copy_options::overwrite_existing);
+
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    grpc::ClientContext stream_context;
+    stream_context.set_deadline(std::chrono::system_clock::now() +
+                                std::chrono::seconds(5));
+    beebium::SubscribeDiscEventsRequest stream_request;
+    auto reader = fixture.stub().SubscribeDiscEvents(&stream_context, stream_request);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // InsertDisc into an occupied drive ejects and re-inserts under a single
+    // lock, so the drive reads Loaded both before and after: a subscriber
+    // watching state alone would see nothing happen at all.
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(replacement_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    bool saw_eject = false;
+    bool saw_insert = false;
+    std::string inserted_url;
+    beebium::DiscEvent event;
+    while (reader->Read(&event)) {
+        if (event.type() == beebium::DISC_EVENT_EJECTED) {
+            saw_eject = true;
+        } else if (event.type() == beebium::DISC_EVENT_INSERTED) {
+            saw_insert = true;
+            inserted_url = event.disc_url();
+            break;
+        }
+    }
+    stream_context.TryCancel();
+
+    // The swap is reported as the ejection and insertion it really was, in
+    // that order, so a client tracking the stream ends up showing the disc
+    // that is actually in the drive.
+    CHECK(saw_eject);
+    REQUIRE(saw_insert);
+    CHECK(inserted_url == replacement_path.string());
+
+    std::filesystem::remove(replacement_path);
+}

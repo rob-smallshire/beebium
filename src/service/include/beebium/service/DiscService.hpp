@@ -230,6 +230,8 @@ public:
             DriveState prev_state_1 = DriveState::Empty;
             bool prev_motor_0 = false;
             bool prev_motor_1 = false;
+            std::string prev_url_0;
+            std::string prev_url_1;
 
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -237,6 +239,8 @@ public:
                 prev_state_1 = machine_.state().memory.disc_drive_1.state();
                 prev_motor_0 = machine_.state().memory.disc_drive_0.motor_on();
                 prev_motor_1 = machine_.state().memory.disc_drive_1.motor_on();
+                prev_url_0 = machine_.state().memory.disc_drive_0.source_url();
+                prev_url_1 = machine_.state().memory.disc_drive_1.source_url();
             }
 
             while (!context->IsCancelled()) {
@@ -251,12 +255,12 @@ public:
                 // Check drive 0
                 check_and_send_events(writer, 0,
                     machine_.state().memory.disc_drive_0,
-                    prev_state_0, prev_motor_0);
+                    prev_state_0, prev_motor_0, prev_url_0);
 
                 // Check drive 1
                 check_and_send_events(writer, 1,
                     machine_.state().memory.disc_drive_1,
-                    prev_state_1, prev_motor_1);
+                    prev_state_1, prev_motor_1, prev_url_1);
             }
 
             return grpc::Status::OK;
@@ -413,21 +417,45 @@ private:
                                uint32_t drive_num,
                                DiscDrive& drive,
                                DriveState& prev_state,
-                               bool& prev_motor) {
+                               bool& prev_motor,
+                               std::string& prev_url) {
         DriveState curr_state = drive.state();
         bool curr_motor = drive.motor_on();
+        const std::string& curr_url = drive.source_url();
         uint64_t cycle = machine_.cycle_count();
 
+        // A disc can be swapped without the drive state ever changing:
+        // InsertDisc into an occupied drive ejects and re-inserts under a
+        // single lock, so the whole swap completes between two polls and
+        // the drive reads Loaded both before and after. Detecting change by
+        // state alone therefore misses it entirely (Loaded -> Loaded), or
+        // misreports it as a cancelled eject (Ejecting -> Loaded). The
+        // source URL says which disc is actually in the drive, so use that
+        // to recognise a swap and report it as the ejection and insertion
+        // it really was.
+        const bool replaced = (curr_state == DriveState::Loaded &&
+                               prev_state != DriveState::Empty &&
+                               curr_url != prev_url);
+
+        if (replaced) {
+            DiscEvent ejected;
+            ejected.set_drive(drive_num);
+            ejected.set_timestamp_cycles(cycle);
+            ejected.set_type(DISC_EVENT_EJECTED);
+            writer->Write(ejected);
+        }
+
         // State change events
-        if (curr_state != prev_state) {
+        if (curr_state != prev_state || replaced) {
             DiscEvent event;
             event.set_drive(drive_num);
             event.set_timestamp_cycles(cycle);
 
-            if (prev_state == DriveState::Empty && curr_state == DriveState::Loaded) {
+            if (replaced ||
+                (prev_state == DriveState::Empty && curr_state == DriveState::Loaded)) {
                 event.set_type(DISC_EVENT_INSERTED);
                 fill_disc_metadata(event.mutable_disc(), drive.disc());
-                event.set_disc_url(drive.source_url());
+                event.set_disc_url(curr_url);
             } else if (prev_state == DriveState::Loaded && curr_state == DriveState::Ejecting) {
                 event.set_type(DISC_EVENT_EJECT_REQUESTED);
             } else if (prev_state == DriveState::Ejecting && curr_state == DriveState::Empty) {
@@ -446,6 +474,8 @@ private:
             writer->Write(event);
             prev_state = curr_state;
         }
+
+        prev_url = curr_url;
 
         // Motor change events
         if (curr_motor != prev_motor) {
