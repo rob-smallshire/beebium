@@ -119,6 +119,17 @@ you actually recorded as `down`. An up for a key that is not held becomes a
 no-op. This keeps an accidental unbalanced up (e.g. left over from a suppression
 path) from disturbing the emulated matrix.
 
+**R10 -- One held-key set, for every way keys can be pressed.** A front-end
+usually grows more than one input path: the physical keyboard, an on-screen or
+Touch Bar keyboard, a macro or scripting hook. Route them all through the same
+held-key set and the same send queue, keyed by a physical identity broad enough
+to tell them apart (the host key code for one, the BBC key name for another).
+A path that sends straight to the wire is invisible to R4 and R8 -- releasing
+everything will not release its keys, and its own down and up can reach the
+machine out of order. Note that a key without a matrix position, such as BREAK,
+needs its own release message; releasing it as if it were a matrix key leaves
+it asserted.
+
 **R9 -- CTRL is not a character-generating modifier; never resolve a key
 through it.** SHIFT and ALT select *which character* a key produces -- `Shift+3`
 is how a UK host types `£` -- so resolving those from the host's
@@ -198,6 +209,12 @@ resolved character is the unshifted face.
 - **Caps Lock** is a toggle, not a held key -- handle it via its own
   (rate-limited) sync path, never as a normal down/up.
 - **Auto-repeat (R7):** drop events where `event.isARepeat`.
+- **Touch Bar (R10).** The Touch Bar pictures BBC keys, so it names them
+  directly (`KeyboardClient.touchBarKeyDown(bbcKeyName:ikNumber:)`) instead of
+  resolving a host key code through the active mapping. It shares the one
+  held-key set, keyed by `PressedKeyID.touchBar(name)` against the physical
+  keyboard's `.host(keyCode)`, so R4 and R8 cover it too. BREAK is identified
+  by name and released with `breakUp`, not a matrix `KeyUp`.
 
 Reference files: `KeyboardMTKView.swift` (event handling, `modifierKeyIsDown`,
 focus/selection release), `KeyboardClient.swift` (held-key set, `releaseAllKeys`,
@@ -219,6 +236,9 @@ functions).
       overlay) takes over input -- do not selectively suppress edges (R5).
 - [ ] Drop auto-repeat (R7); guard ups by the held-set (R8); serialise sends in
       generation order (section 3).
+- [ ] Route every input path -- physical keyboard, on-screen keys, scripting --
+      through that one held-key set, and give a non-matrix key such as BREAK
+      its own release message (R10).
 - [ ] Resolve by the unmodified character (or key code) while CTRL is held, and
       never let a character suppress CTRL (R9).
 - [ ] Treat Caps Lock as a toggle with its own sync, not a key.

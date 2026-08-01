@@ -107,33 +107,31 @@ class BeebiumButtonRowView: BeebiumDiagnosticView {
         return nil
     }
 
-    /// Send a key event to the keyboard client
+    /// Send a key event to the keyboard client.
+    ///
+    /// Synchronously, from the touch callback: the client's own bookkeeping is
+    /// what orders the wire sends, and a Task per touch would let a fast tap's
+    /// down and up race each other to the BBC.
     private func sendKeyEvent(key: BeebiumTouchBarKey, isDown: Bool) {
-        // Break key uses special handling
-        if key.isBreakKey {
-            Task { @MainActor in
-                if isDown {
-                    await keyboardClient?.touchBarBreakDown()
-                } else {
-                    await keyboardClient?.touchBarBreakUp()
-                }
-            }
+        guard let keyboardClient = keyboardClient else { return }
+
+        if !isDown {
+            keyboardClient.touchBarKeyUp(bbcKeyName: key.bbcKeyName)
             return
         }
 
-        // Look up the BBC key by name
-        guard let entry = bbcKeyCache?.lookup(name: key.bbcKeyName) else {
-            print("[TouchBar] Key not found in cache: \(key.bbcKeyName)")
-            return
+        // BREAK is a reset line rather than a matrix position, so it has no
+        // cache entry and needs no ikNumber.
+        var ikNumber: UInt8 = 0
+        if !key.isBreakKey {
+            guard let entry = bbcKeyCache?.lookup(name: key.bbcKeyName) else {
+                print("[TouchBar] Key not found in cache: \(key.bbcKeyName)")
+                return
+            }
+            ikNumber = entry.ikNumber
         }
 
-        Task { @MainActor in
-            if isDown {
-                await keyboardClient?.touchBarKeyDown(ikNumber: entry.ikNumber)
-            } else {
-                await keyboardClient?.touchBarKeyUp(ikNumber: entry.ikNumber)
-            }
-        }
+        keyboardClient.touchBarKeyDown(bbcKeyName: key.bbcKeyName, ikNumber: ikNumber)
     }
 
     // MARK: - Direct TouchBar Touch Event Handling

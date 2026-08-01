@@ -26,11 +26,31 @@ private enum BBCModifierKey {
 
 /// Tracks a pressed key. The fact captures everything the modifier-state
 /// decision function needs; ikNumber and isBreak handle the actual key
-/// press / release on the BBC matrix.
-private struct PressedKeyState {
+/// press / release on the BBC matrix. `ikNumber` is meaningless when
+/// `isBreak` -- BREAK is a reset line, not a matrix position.
+struct PressedKeyState {
     let ikNumber: UInt8
     let isBreak: Bool
     let fact: PressedKeyFact
+}
+
+/// What identifies a held key, so its release can be matched to its press.
+///
+/// Rule R1 of `docs/frontend-modifier-keys.md` asks for a held-key set keyed
+/// by physical identity. The two input paths have different notions of it: the
+/// physical keyboard knows host virtual key codes, while the Touch Bar names
+/// BBC keys directly and never sees a key code. They share one set, so that
+/// releasing everything (R4) releases everything.
+enum PressedKeyID: Hashable {
+    case host(UInt16)
+    case touchBar(String)
+}
+
+/// One wire operation in a bulk release. BREAK has its own message rather than
+/// a matrix position, so it cannot be expressed as an ikNumber.
+enum KeyReleaseOperation: Equatable {
+    case key(UInt8)
+    case breakUp
 }
 
 /// Client for sending keyboard input to beebium-server via gRPC.
@@ -44,14 +64,14 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     private static let log = Logger(subsystem: "com.beebium", category: "keyboard")
 
     private var channel: GRPCChannel?
-    private var client: Beebium_KeyboardServiceClient?
+    private var client: Beebium_KeyboardServiceNIOClient?
 
     /// The keyboard mapping manager (provides cache and active mapping)
     weak var mappingManager: KeyboardMappingManager?
 
-    /// Track pressed keys by their keyCode (for proper release matching)
-    /// Maps keyCode to the state of the pressed key
-    private var pressedKeys: [UInt16: PressedKeyState] = [:]
+    /// Track pressed keys by their physical identity (for proper release
+    /// matching), across every input path -- physical keyboard and Touch Bar.
+    private var pressedKeys: [PressedKeyID: PressedKeyState] = [:]
 
     /// Last BBC SHIFT / CTRL state we sent. Used to suppress redundant
     /// keyDown / keyUp messages on the wire.
@@ -89,7 +109,7 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     /// - Parameter channel: The gRPC channel (shared with VideoClient)
     func connect(channel: GRPCChannel) {
         self.channel = channel
-        self.client = Beebium_KeyboardServiceClient(channel: channel)
+        self.client = Beebium_KeyboardServiceNIOClient(channel: channel)
         pressedKeys.removeAll()
         bbcShiftIsDown = false
         bbcCtrlIsDown = false
@@ -112,23 +132,7 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     func disconnect() {
         // Drain everything through the same serialised send queue so the
         // wire sees the releases in a coherent order.
-        let pressedSnapshot = pressedKeys
-        let shiftWasDown = bbcShiftIsDown
-        let ctrlWasDown = bbcCtrlIsDown
-        enqueueSend { [weak self] in
-            guard let self = self else { return }
-            for (_, state) in pressedSnapshot {
-                if !self.isModifierIK(state.ikNumber) {
-                    await self.sendKeyUp(ikNumber: state.ikNumber)
-                }
-            }
-            if shiftWasDown {
-                await self.sendKeyUp(ikNumber: BBCModifierKey.shift)
-            }
-            if ctrlWasDown {
-                await self.sendKeyUp(ikNumber: BBCModifierKey.ctrl)
-            }
-        }
+        enqueueReleaseOfEverythingHeld()
 
         // Clean up disabled key sound
         if disabledKeySoundID != 0 {
@@ -168,22 +172,55 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     /// whatever they are still physically holding, generating fresh downs.
     func releaseAllKeys() {
         guard hasKeysHeld else { return }
-        let pressedSnapshot = pressedKeys
-        let shiftWasDown = bbcShiftIsDown
-        let ctrlWasDown = bbcCtrlIsDown
+        enqueueReleaseOfEverythingHeld()
         pressedKeys.removeAll()
         bbcShiftIsDown = false
         bbcCtrlIsDown = false
+    }
+
+    /// The wire operations that releasing `pressed` requires, in the order the
+    /// BBC must see them.
+    ///
+    /// The BBC SHIFT and CTRL matrix positions are owned by the modifier
+    /// reconciler, so a held modifier contributes no release of its own; the
+    /// two modifier releases come last, after the keys they were qualifying.
+    static func releaseOperations(
+        pressed: [PressedKeyState],
+        shiftWasDown: Bool,
+        ctrlWasDown: Bool
+    ) -> [KeyReleaseOperation] {
+        var operations: [KeyReleaseOperation] = []
+        for state in pressed {
+            if state.isBreak {
+                // BREAK is a reset line, not a matrix position. Releasing it
+                // with a KeyUp for its ikNumber would leave it asserted.
+                operations.append(.breakUp)
+            } else if !isModifierIK(state.ikNumber) {
+                operations.append(.key(state.ikNumber))
+            }
+        }
+        if shiftWasDown { operations.append(.key(BBCModifierKey.shift)) }
+        if ctrlWasDown { operations.append(.key(BBCModifierKey.ctrl)) }
+        return operations
+    }
+
+    /// Queue the release of everything currently held, without touching the
+    /// local bookkeeping -- callers clear that themselves, synchronously, so a
+    /// following event is decided against the cleared state (rule R4).
+    private func enqueueReleaseOfEverythingHeld() {
+        let operations = Self.releaseOperations(
+            pressed: Array(pressedKeys.values),
+            shiftWasDown: bbcShiftIsDown,
+            ctrlWasDown: bbcCtrlIsDown
+        )
+        guard !operations.isEmpty else { return }
         enqueueSend { [weak self] in
             guard let self = self else { return }
-            for (_, state) in pressedSnapshot where !self.isModifierIK(state.ikNumber) {
-                await self.sendKeyUp(ikNumber: state.ikNumber)
-            }
-            if shiftWasDown {
-                await self.sendKeyUp(ikNumber: BBCModifierKey.shift)
-            }
-            if ctrlWasDown {
-                await self.sendKeyUp(ikNumber: BBCModifierKey.ctrl)
+            for operation in operations {
+                switch operation {
+                case .key(let ikNumber): await self.sendKeyUp(ikNumber: ikNumber)
+                case .breakUp: await self.sendBreakUp()
+                }
             }
         }
     }
@@ -240,27 +277,43 @@ final class KeyboardClient: ObservableObject, Disconnectable {
             return
         }
 
-        // Check if already pressed (by keyCode)
-        if pressedKeys[input.keyCode] != nil {
-            print("[KBD][resolve] -> already pressed, ignoring")
+        press(
+            id: .host(input.keyCode),
+            ikNumber: resolved.ikNumber,
+            isBreak: resolved.isBreak,
+            fact: makeFact(for: resolved)
+        )
+    }
+
+    /// Handle a key up event
+    /// - Parameter input: The key input event
+    func keyUp(input: KeyInput) {
+        release(id: .host(input.keyCode))
+    }
+
+    // MARK: - Press / release core
+
+    /// Register a press and dispatch it.
+    ///
+    /// Shared by every input path: the physical keyboard reaches here after
+    /// resolving through the active mapping, the Touch Bar after naming a BBC
+    /// key directly. They differ only in how they arrive at the key, and one
+    /// held-key set is what makes releasing everything (R4) mean everything.
+    private func press(id: PressedKeyID, ikNumber: UInt8, isBreak: Bool, fact: PressedKeyFact) {
+        if pressedKeys[id] != nil {
+            print("[KBD][press] \(describe(id)) -> already pressed, ignoring")
             return
         }
 
         // Synchronous bookkeeping: capture this press, then decide which
         // modifier transitions it triggers. Doing this synchronously (not
         // inside a Task) is what makes the decision race-free against a
-        // fast keyUp arriving immediately afterwards. The actual gRPC
+        // fast release arriving immediately afterwards. The actual gRPC
         // sends are dispatched onto a serialised task chain so the BBC
         // sees them in submission order.
-        let fact = makeFact(for: resolved)
-        let state = PressedKeyState(
-            ikNumber: resolved.ikNumber,
-            isBreak: resolved.isBreak,
-            fact: fact
-        )
-        pressedKeys[input.keyCode] = state
+        pressedKeys[id] = PressedKeyState(ikNumber: ikNumber, isBreak: isBreak, fact: fact)
 
-        print("[KBD][fact] ik=\(formatIk(fact.bbcKeyName, ik: resolved.ikNumber))"
+        print("[KBD][fact] ik=\(formatIk(fact.bbcKeyName, ik: ikNumber))"
               + " needsSyntheticShift=\(fact.needsSyntheticShift)"
               + " forbidsShift=\(fact.forbidsShift)"
               + " needsSyntheticCtrl=\(fact.needsSyntheticCtrl)"
@@ -268,11 +321,10 @@ final class KeyboardClient: ObservableObject, Disconnectable {
 
         let shiftAction = computeShiftAction()
         let ctrlAction = computeCtrlAction()
-        let isBreak = resolved.isBreak
-        let ikNumber = resolved.ikNumber
-        let isModifier = isModifierIK(ikNumber)
+        let isModifier = Self.isModifierIK(ikNumber)
 
-        print("[KBD][decide.down] desired shiftAction=\(describe(shiftAction))"
+        print("[KBD][decide.down] \(describe(id))"
+              + " desired shiftAction=\(describe(shiftAction))"
               + " ctrlAction=\(describe(ctrlAction))"
               + " ikToSend=\(isBreak ? "BREAK" : (isModifier ? "(reconciler-owned)" : formatIk(ikNumber)))")
 
@@ -292,11 +344,13 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
-    /// Handle a key up event
-    /// - Parameter input: The key input event
-    func keyUp(input: KeyInput) {
-        guard let state = pressedKeys.removeValue(forKey: input.keyCode) else {
-            print("[KBD][keyUp] keyCode=\(input.keyCode) was not tracked, ignoring")
+    /// Release a key previously registered by `press`, if it is still held.
+    ///
+    /// An untracked release is dropped rather than forwarded (rule R8). That
+    /// is what makes a key-up arriving after `releaseAllKeys` harmless.
+    private func release(id: PressedKeyID) {
+        guard let state = pressedKeys.removeValue(forKey: id) else {
+            print("[KBD][release] \(describe(id)) was not tracked, ignoring")
             return
         }
 
@@ -304,9 +358,9 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         let ctrlAction = computeCtrlAction()
         let ikNumber = state.ikNumber
         let isBreak = state.isBreak
-        let isModifier = isModifierIK(ikNumber)
+        let isModifier = Self.isModifierIK(ikNumber)
 
-        print("[KBD][decide.up] keyCode=\(input.keyCode)"
+        print("[KBD][decide.up] \(describe(id))"
               + " released ik=\(formatIk(ikNumber))"
               + " desired shiftAction=\(describe(shiftAction))"
               + " ctrlAction=\(describe(ctrlAction))"
@@ -330,7 +384,7 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
-    private func isModifierIK(_ ikNumber: UInt8) -> Bool {
+    private static func isModifierIK(_ ikNumber: UInt8) -> Bool {
         ikNumber == BBCModifierKey.shift || ikNumber == BBCModifierKey.ctrl
     }
 
@@ -639,28 +693,41 @@ final class KeyboardClient: ObservableObject, Disconnectable {
 
     // MARK: - Touch Bar Support
 
-    /// Send a key down event directly by ikNumber (bypasses mapping system).
-    /// Used by TouchBar to send keys by their BBC internal key number.
-    func touchBarKeyDown(ikNumber: UInt8) async {
-        await sendKeyDown(ikNumber: ikNumber)
+    /// Press a BBC key named by the Touch Bar, which pictures BBC keys and so
+    /// names them directly instead of resolving a host key through the active
+    /// mapping.
+    ///
+    /// `ikNumber` is ignored for BREAK, which is a reset line rather than a
+    /// matrix position and therefore has no cache entry to look one up in.
+    ///
+    /// These go through the same held-key set and the same serialised send
+    /// queue as the physical keyboard. That is what makes a Touch Bar key held
+    /// at focus loss get released with everything else (rule R4), and what
+    /// keeps a fast tap's down and up in that order on the wire.
+    func touchBarKeyDown(bbcKeyName: String, ikNumber: UInt8) {
+        press(
+            id: .touchBar(bbcKeyName),
+            ikNumber: ikNumber,
+            isBreak: bbcKeyName == "Break",
+            // A Touch Bar key is its own BBC key, pressed as drawn: it never
+            // stands in for a shifted character, so it synthesises nothing and
+            // forbids nothing. Holding host SHIFT alongside it still works --
+            // that is a separate held key with its own fact.
+            fact: PressedKeyFact(
+                bbcKeyName: bbcKeyName,
+                fromCharacterMapping: false,
+                needsSyntheticShift: false,
+                forbidsShift: false,
+                needsSyntheticCtrl: false,
+                forbidsCtrl: false
+            )
+        )
     }
 
-    /// Send a key up event directly by ikNumber (bypasses mapping system).
-    /// Used by TouchBar to send keys by their BBC internal key number.
-    func touchBarKeyUp(ikNumber: UInt8) async {
-        await sendKeyUp(ikNumber: ikNumber)
-    }
-
-    /// Send a BREAK key down event (bypasses mapping system).
-    /// Used by TouchBar BREAK key.
-    func touchBarBreakDown() async {
-        await sendBreakDown()
-    }
-
-    /// Send a BREAK key up event (bypasses mapping system).
-    /// Used by TouchBar BREAK key.
-    func touchBarBreakUp() async {
-        await sendBreakUp()
+    /// Release a Touch Bar key. Dropped if it is no longer held -- which is
+    /// what happens to the finger-up after a focus loss released everything.
+    func touchBarKeyUp(bbcKeyName: String) {
+        release(id: .touchBar(bbcKeyName))
     }
 
     // MARK: - Private gRPC Methods
@@ -721,6 +788,14 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     /// Render an ikNumber alongside the BBC key name we resolved it from.
     private func formatIk(_ bbcKeyName: String, ik ikNumber: UInt8) -> String {
         return "\(formatIk(ikNumber))[\(bbcKeyName)]"
+    }
+
+    /// Render a held-key identity, naming the input path it came from.
+    private func describe(_ id: PressedKeyID) -> String {
+        switch id {
+        case .host(let keyCode):     return "keyCode=\(keyCode)"
+        case .touchBar(let name):    return "touchBar=\(name)"
+        }
     }
 
     /// Render the optional Bool result of computeShiftAction / computeCtrlAction.

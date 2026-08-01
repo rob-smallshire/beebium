@@ -178,6 +178,115 @@ final class FocusLossKeyReleaseTests: XCTestCase {
         XCTAssertFalse(client.hasKeysHeld)
     }
 
+    // MARK: - Touch Bar keys share the held-key set
+
+    func testTouchBarKeyIsHeldUntilReleased() {
+        client.touchBarKeyDown(bbcKeyName: "f0", ikNumber: 0x20)
+        XCTAssertTrue(client.hasKeysHeld)
+
+        client.touchBarKeyUp(bbcKeyName: "f0")
+        XCTAssertFalse(client.hasKeysHeld)
+    }
+
+    func testReleaseAllKeysReleasesTouchBarKeys() {
+        // The regression: Touch Bar keys used to go straight to the wire
+        // without being tracked, so R4 could not see them and a key held when
+        // focus moved away stayed down on the BBC.
+        client.touchBarKeyDown(bbcKeyName: "f0", ikNumber: 0x20)
+        XCTAssertTrue(client.hasKeysHeld)
+
+        client.releaseAllKeys()
+
+        XCTAssertFalse(client.hasKeysHeld,
+                       "R4 must cover Touch Bar keys, not just the physical keyboard")
+    }
+
+    func testTouchBarKeyUpAfterFocusLossIsIgnored() {
+        // The finger comes up after the window has lost focus. The release
+        // already happened; this must not be forwarded as a second one.
+        client.touchBarKeyDown(bbcKeyName: "f0", ikNumber: 0x20)
+        client.releaseAllKeys()
+
+        client.touchBarKeyUp(bbcKeyName: "f0")
+
+        XCTAssertFalse(client.hasKeysHeld)
+    }
+
+    func testTouchBarAndHostKeysAreDistinctIdentities() {
+        // A Touch Bar key and a host key that happen to reach the same BBC key
+        // are separate presses, and releasing one leaves the other held.
+        press(0)
+        client.touchBarKeyDown(bbcKeyName: "A", ikNumber: 0x41)
+
+        release(0)
+        XCTAssertTrue(client.hasKeysHeld, "the Touch Bar key is still down")
+
+        client.touchBarKeyUp(bbcKeyName: "A")
+        XCTAssertFalse(client.hasKeysHeld)
+    }
+
+    func testTouchBarBreakIsHeldAndReleased() {
+        client.touchBarKeyDown(bbcKeyName: "Break", ikNumber: 0)
+        XCTAssertTrue(client.hasKeysHeld)
+
+        client.touchBarKeyUp(bbcKeyName: "Break")
+        XCTAssertFalse(client.hasKeysHeld)
+    }
+
+    // MARK: - What a bulk release puts on the wire
+
+    private func releasePlan(_ pressed: [PressedKeyState],
+                             shift: Bool = false,
+                             ctrl: Bool = false) -> [KeyReleaseOperation] {
+        KeyboardClient.releaseOperations(
+            pressed: pressed, shiftWasDown: shift, ctrlWasDown: ctrl)
+    }
+
+    private func held(ik: UInt8, isBreak: Bool = false, name: String = "k") -> PressedKeyState {
+        PressedKeyState(
+            ikNumber: ik,
+            isBreak: isBreak,
+            fact: PressedKeyFact(
+                bbcKeyName: name,
+                fromCharacterMapping: false,
+                needsSyntheticShift: false,
+                forbidsShift: false,
+                needsSyntheticCtrl: false,
+                forbidsCtrl: false
+            )
+        )
+    }
+
+    func testBulkReleaseSendsAKeyUpPerHeldKey() {
+        XCTAssertEqual(releasePlan([held(ik: 0x41)]), [.key(0x41)])
+    }
+
+    func testBulkReleaseSendsBreakUpForAHeldBreak() {
+        // The regression: BREAK was released with a KeyUp for its (meaningless)
+        // ikNumber, which leaves the reset line asserted. It has its own
+        // message and must get it.
+        XCTAssertEqual(releasePlan([held(ik: 0, isBreak: true, name: "Break")]), [.breakUp])
+    }
+
+    func testBulkReleaseLeavesModifierPositionsToTheReconciler() {
+        // A held BBC SHIFT contributes no release of its own -- the trailing
+        // modifier release below is the one that clears the matrix position.
+        let operations = releasePlan([held(ik: 0x00, name: "Shift")], shift: true)
+        XCTAssertEqual(operations, [.key(0x00)])
+    }
+
+    func testBulkReleaseClearsModifiersLastAndOnlyWhenDown() {
+        let operations = releasePlan([held(ik: 0x41)], shift: true, ctrl: true)
+        XCTAssertEqual(operations, [.key(0x41), .key(0x00), .key(0x01)])
+
+        XCTAssertEqual(releasePlan([held(ik: 0x41)]), [.key(0x41)],
+                       "no modifier release when neither was down")
+    }
+
+    func testBulkReleaseOfNothingIsNoOperations() {
+        XCTAssertEqual(releasePlan([]), [])
+    }
+
     // MARK: - KeyboardMTKView.releaseHeldKeysOnFocusLoss
 
     func testFocusLossHandlerReleasesTheKeyboard() {

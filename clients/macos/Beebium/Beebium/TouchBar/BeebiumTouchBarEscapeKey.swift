@@ -84,16 +84,19 @@ class BeebiumTouchBarEscapeKey: BeebiumTouchBarComponent {
             return
         }
 
-        // Send key down event
-        Task { @MainActor in
-            await keyboardClient?.touchBarKeyDown(ikNumber: entry.ikNumber)
+        // Press now, so the key is registered as held before this returns; the
+        // release is the only part that has to wait.
+        keyboardClient?.touchBarKeyDown(bbcKeyName: "Escape", ikNumber: entry.ikNumber)
 
+        Task { @MainActor in
             // Send key up event after a brief delay to avoid state confusion
             // The BBC MOS maintains internal state about pressed keys,
             // and sending up immediately after down can cause the up event to fail
             try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
-            await keyboardClient?.touchBarKeyUp(ikNumber: entry.ikNumber)
+            // A focus loss during the delay will already have released it, and
+            // this becomes a no-op rather than a stray key-up.
+            self.keyboardClient?.touchBarKeyUp(bbcKeyName: "Escape")
         }
     }
 }
