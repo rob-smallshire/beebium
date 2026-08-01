@@ -31,108 +31,22 @@ stop resolving keys through CTRL (see rule R9 in docs/frontend-modifier-keys.md)
 """
 
 import time
-from pathlib import Path
 
-import pytest
-
-from beebium.client import Beebium
-from beebium.client.exceptions import ServerNotFoundError
-from beebium.ext.peripheral.rpc_serial import RpcSerial
-
-COMMSTAR_ROM_FILENAME = "commstar_1_40_SN882A.rom"
-
-# Prestel transmits at 75 baud: a single 10-bit frame takes about 130ms of
-# emulated time, so allow generous settling before reading the wire.
-TRANSMIT_SETTLE_SECONDS = 2.0
-
-# Commstar samples the keyboard *after* taking the character, so a key must
-# stay down long enough to be seen by that scan. The MOS scans on the 100Hz
-# interrupt; 150ms is several scans' worth.
-KEY_HOLD_SECONDS = 0.15
-
-VIEWDATA_HASH = b"_"  # 0x5F -- '#' in the teletext repertoire
-CARRIAGE_RETURN = b"\r"
-
-
-@pytest.fixture(scope="module")
-def commstar_rom_filepath(beebium_roms_dirpath: Path) -> Path:
-    """Path to the Commstar comms ROM."""
-    path = beebium_roms_dirpath / COMMSTAR_ROM_FILENAME
-    if not path.exists():
-        pytest.skip(f"Commstar ROM not found: {path}")
-    return path
-
-
-@pytest.fixture
-def commstar_prestel_bbc(
-    mos_filepath: Path,
-    basic_filepath: Path | None,
-    beebium_server_filepath: Path | None,
-    commstar_rom_filepath: Path,
-):
-    """A BBC running Commstar in Prestel chat mode, its serial port on rpc-serial."""
-    try:
-        with Beebium.launch(
-            mos_filepath=mos_filepath,
-            basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
-            extra_args=[
-                "--rpc-serial",
-                "--sideways",
-                f"13:rom:{commstar_rom_filepath}",
-            ],
-        ) as bbc:
-            _enter_prestel_chat(bbc)
-            yield bbc
-    except ServerNotFoundError as e:
-        pytest.skip(str(e))
-
-
-def _screen(bbc: Beebium) -> str:
-    """The whole screen as one string, for substring assertions."""
-    text = bbc.video.screen_text().text
-    return "\n".join(text) if isinstance(text, list) else text
-
-
-def _wait_for_screen(bbc: Beebium, needle: str, timeout: float = 10.0) -> None:
-    """Poll the screen until `needle` appears, rather than sleeping blind."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if needle in _screen(bbc):
-            return
-        time.sleep(0.1)
-    pytest.fail(f"{needle!r} did not appear on screen. Screen was:\n{_screen(bbc)}")
-
-
-def _enter_prestel_chat(bbc: Beebium) -> None:
-    """Start Commstar, select Prestel emulation, and enter chat mode."""
-    _wait_for_screen(bbc, "BASIC")
-    bbc.keyboard.type("*COMMSTAR\r")
-    _wait_for_screen(bbc, "Select ?")
-
-    # The Comms/Prestel toggle. Commstar's own menu renders the key as '_',
-    # since 0x5F is '#' in the teletext repertoire it displays in.
-    bbc.keyboard.type("#")
-    _wait_for_screen(bbc, "Prestel")
-
-    bbc.keyboard.type("C")
-    time.sleep(1.0)  # chat mode clears the screen; nothing specific to await
-
-
-def _transmitted(bbc: Beebium) -> bytes:
-    """Bytes the BBC has put on the wire since the last read."""
-    time.sleep(TRANSMIT_SETTLE_SECONDS)
-    return bytes(bbc.extensions[RpcSerial].receive())
-
+from conftest import (
+    CARRIAGE_RETURN,
+    KEY_HOLD_SECONDS,
+    VIEWDATA_HASH,
+    transmitted,
+)
 
 def test_return_transmits_the_viewdata_hash(commstar_prestel_bbc):
     """RETURN in Prestel mode sends 0x5F -- viewdata's 'proceed to next frame'."""
     bbc = commstar_prestel_bbc
-    _transmitted(bbc)  # discard anything from entering chat mode
+    transmitted(bbc)  # discard anything from entering chat mode
 
     bbc.keyboard.press_return()
 
-    assert _transmitted(bbc) == VIEWDATA_HASH
+    assert transmitted(bbc) == VIEWDATA_HASH
 
 
 def test_ctrl_m_transmits_a_carriage_return(commstar_prestel_bbc):
@@ -143,7 +57,7 @@ def test_ctrl_m_transmits_a_carriage_return(commstar_prestel_bbc):
     M (not RETURN) held when Commstar's OSBYTE 122 scan runs.
     """
     bbc = commstar_prestel_bbc
-    _transmitted(bbc)
+    transmitted(bbc)
 
     keyboard = bbc.keyboard
     keyboard.ctrl_down()
@@ -153,4 +67,4 @@ def test_ctrl_m_transmits_a_carriage_return(commstar_prestel_bbc):
     keyboard.key_up("m")
     keyboard.ctrl_up()
 
-    assert _transmitted(bbc) == CARRIAGE_RETURN
+    assert transmitted(bbc) == CARRIAGE_RETURN

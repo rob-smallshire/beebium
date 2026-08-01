@@ -186,6 +186,71 @@ TEST_CASE("ACIA flags overrun when RDR not read", "[serial][mc6850]") {
     CHECK((acia.status() & Mc6850::SR_OVRN) != 0);
 }
 
+TEST_CASE("ACIA overrun does not survive the next character", "[serial][mc6850]") {
+    // "Character synchronization is maintained during the Overrun condition":
+    // the receiver keeps delivering, so a character arriving after the gap is
+    // presented with clean flags rather than inheriting the error.
+    Mc6850 acia;
+    acia.write_control(CONTROL_8N1);
+    acia.set_not_dcd(false);
+
+    receive_byte(acia, 0x11);
+    receive_byte(acia, 0x22);   // arrives before RDR is read: overrun
+    CHECK(acia.read_data() == 0x11);
+    CHECK((acia.status() & Mc6850::SR_OVRN) != 0);
+
+    receive_byte(acia, 0x33);   // a fresh character, after the guest caught up
+
+    CHECK(acia.rdrf());
+    CHECK((acia.status() & Mc6850::SR_OVRN) == 0);
+    CHECK(acia.read_data() == 0x33);
+}
+
+TEST_CASE("ACIA overrun costs the second character, not the first",
+          "[serial][mc6850]") {
+    // Datasheet: "The overrun condition begins at the midpoint of the last bit
+    // of the second character received in succession without a read of the RDR
+    // having occurred." Double buffering buys one character time of slack while
+    // the next character is in flight -- it is not an extra queue slot, so the
+    // second completed character is lost and the first is preserved.
+    Mc6850 acia;
+    acia.write_control(CONTROL_8N1);
+    acia.set_not_dcd(false);
+
+    receive_byte(acia, 0x41);
+    receive_byte(acia, 0x42);
+
+    CHECK(acia.read_data() == 0x41);              // the older character survives
+    CHECK((acia.status() & Mc6850::SR_OVRN) != 0);
+}
+
+TEST_CASE("ACIA overrun does not outlive the read that clears it",
+          "[serial][mc6850]") {
+    // The regression behind issue #59: a burst arriving with nobody reading
+    // must not cause a later, unrelated character to be lost. Once the guest
+    // has drained the receiver, a fresh character arrives with clean flags.
+    Mc6850 acia;
+    acia.write_control(CONTROL_8N1);
+    acia.set_not_dcd(false);
+
+    for (uint8_t b : {0x0D, 0x0A, 0x4F, 0x4B, 0x0D, 0x0A}) {  // "\r\nOK\r\n"
+        receive_byte(acia, b);
+    }
+    // Drain the way a guest does: keep reading while RDRF is set. The overrun
+    // is reported, and the guest is welcome to leave the flag standing -- it
+    // has nothing more to read.
+    for (int i = 0; i < 8 && acia.rdrf(); ++i) {
+        acia.read_data();
+    }
+    CHECK_FALSE(acia.rdrf());
+
+    receive_byte(acia, 0x41);  // 'A', long after the burst
+
+    CHECK(acia.rdrf());
+    CHECK((acia.status() & Mc6850::SR_OVRN) == 0);
+    CHECK(acia.read_data() == 0x41);
+}
+
 TEST_CASE("ACIA holds receiver idle while /DCD high", "[serial][mc6850]") {
     Mc6850 acia;
     acia.write_control(CONTROL_8N1);

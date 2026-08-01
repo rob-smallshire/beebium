@@ -239,6 +239,17 @@ public:
                     rx_framing_error_ = true;
                 }
                 if (advance_stop_mask(rx_mask_, rx_state_, RxState::StartBit)) {
+                    // A newly received character clears a stale overrun.
+                    // "Character synchronization is maintained during the
+                    // Overrun condition": the receiver keeps delivering, so the
+                    // flag describes the gap in the data stream just past, not
+                    // a condition the next character inherits. Leaving it set
+                    // across an idle line makes the guest discard the next
+                    // character to arrive as an error (issue #59), and holding
+                    // RDRF set instead -- the datasheet's literal wording --
+                    // wedges the receiver against a MOS that only reads on
+                    // interrupt.
+                    ovrn_ = false;
                     if (rdrf_) {
                         // Previous byte not yet read: overrun. The byte that was
                         // already in RDR is preserved; OVRN surfaces on the next
