@@ -171,6 +171,9 @@ private:
     MachineIdentity identity_;
     ConnectionTracker* connection_tracker_;
     discovery::Advertiser* advertiser_;
+
+    discovery::ServiceInfo build_service_info();
+    void republish_advertisement();
     ShutdownPolicyEvaluator policy_evaluator_;
     ShutdownCoordinator* shutdown_coordinator_;
     ShutdownCallback shutdown_callback_;
@@ -268,6 +271,51 @@ grpc::Status SystemServiceImpl<MachineType>::GetSystemInfo(
     return grpc::Status::OK;
 }
 
+// The service advertisement as it should stand right now.
+template<typename MachineType>
+discovery::ServiceInfo SystemServiceImpl<MachineType>::build_service_info() {
+    discovery::ServiceInfo info;
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        info.instance_name = identity_.name;
+    }
+    info.port = server_port_;
+    info.txt_records["uuid"] = identity_.uuid;
+    info.txt_records["model"] = identity_.model_type;
+    info.txt_records["provenance"] = provenance_.type;
+
+    using Memory = typename MachineType::Memory;
+    if constexpr (HasEconetSocket<Memory>) {
+        auto& econet = machine_.state().memory.econet_socket;
+        if (econet.enabled()) {
+            info.txt_records["econet_station"] = std::to_string(econet.station_id());
+            if (auto* aun = dynamic_cast<AunBackend*>(econet.backend())) {
+                info.txt_records["econet_net"] = std::to_string(aun->local_net());
+                info.txt_records["econet_aun_port"] = std::to_string(aun->local_port());
+            }
+        }
+    }
+    return info;
+}
+
+// Re-announce this machine under the name it now has.
+//
+// A machine's name is its mDNS service instance name, and an instance cannot
+// be renamed in place: the old registration has to go and a new one take its
+// place. Peers therefore see the machine disappear and reappear, which is the
+// honest description of what happened to its name.
+//
+// Only when already advertising. Renaming a machine whose advertisement the
+// user turned off must not turn it back on.
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::republish_advertisement() {
+    if (!advertiser_ || !advertiser_->state().advertising) {
+        return;
+    }
+    advertiser_->stop();
+    advertiser_->start(build_service_info());
+}
+
 template<typename MachineType>
 grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
     grpc::ServerContext* /*context*/,
@@ -285,6 +333,11 @@ grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
         identity_.name = request->name();
         populate_identity_proto(response->mutable_identity());
     }
+
+    // The name on the network is the name in the title bar of anyone looking
+    // at this machine, so it has to follow the rename rather than wait for a
+    // restart.
+    republish_advertisement();
 
     // Notify watchers of the change
     notify_identity_changed();
@@ -505,31 +558,7 @@ grpc::Status SystemServiceImpl<MachineType>::SetAdvertisement(
     }
 
     if (request->enabled()) {
-        // Start advertising
-        // Build ServiceInfo from current identity
-        discovery::ServiceInfo info;
-        {
-            std::lock_guard<std::mutex> lock(watchers_mutex_);
-            info.instance_name = identity_.name;
-        }
-        info.port = server_port_;
-        info.txt_records["uuid"] = identity_.uuid;
-        info.txt_records["model"] = identity_.model_type;
-        info.txt_records["provenance"] = provenance_.type;
-
-        using Memory = typename MachineType::Memory;
-        if constexpr (HasEconetSocket<Memory>) {
-            auto& econet = machine_.state().memory.econet_socket;
-            if (econet.enabled()) {
-                info.txt_records["econet_station"] = std::to_string(econet.station_id());
-                if (auto* aun = dynamic_cast<AunBackend*>(econet.backend())) {
-                    info.txt_records["econet_net"] = std::to_string(aun->local_net());
-                    info.txt_records["econet_aun_port"] = std::to_string(aun->local_port());
-                }
-            }
-        }
-
-        advertiser_->start(info);
+        advertiser_->start(build_service_info());
     } else {
         // Stop advertising
         advertiser_->stop();
