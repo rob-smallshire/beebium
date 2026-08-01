@@ -199,20 +199,23 @@ inline bool is_stdout_tty() {
 namespace detail {
     inline std::atomic<pid_t> g_child_pid{-1};
 
-    // Written by the signal handler, read by the dispatch thread. Held as an
-    // atomic because the handler may run on any thread at any time; -1 means
-    // no handler is installed.
+    // Write end of the self-pipe, read by the dispatch thread. Atomic because
+    // the signal handler may run on any thread at any time; -1 until the pipe
+    // exists. The pipe and its thread are created once and last for the life of
+    // the process, so the handler can never write to a stale descriptor.
     inline std::atomic<int> g_wakeup_write_fd{-1};
     inline int g_wakeup_read_fd = -1;
+    // The process the dispatch thread belongs to. fork() does not carry threads
+    // into the child, but it does carry this module's state, so a child that
+    // installs a handler must be given a thread of its own rather than inherit
+    // the belief that one is already running.
+    inline pid_t g_dispatch_thread_pid = -1;
 
+    // The callback runs with this held, so clearing it (which also takes the
+    // mutex) waits out an invocation already in progress -- the caller can then
+    // safely destroy whatever the callback captured.
     inline std::mutex g_callback_mutex;
     inline ShutdownCallback g_shutdown_callback;  // guarded by g_callback_mutex
-    inline std::thread g_dispatch_thread;
-
-    // Byte written by remove_shutdown_handler() to retire the dispatch thread,
-    // distinct from the byte a signal writes.
-    constexpr char kSignalByte = 'S';
-    constexpr char kStopByte = 'Q';
 
     inline void signal_handler(int /*signal*/) {
         // Forward the signal to the child subprocess (if any) so it begins
@@ -225,14 +228,14 @@ namespace detail {
         }
         int fd = g_wakeup_write_fd.load(std::memory_order_relaxed);
         if (fd >= 0) {
-            const char byte = kSignalByte;
+            const char byte = 'S';
             ssize_t written = ::write(fd, &byte, 1);
             (void)written;  // Nothing useful to do about a failure here.
         }
     }
 
-    /// Body of the dispatch thread: block until the signal handler (or
-    /// remove_shutdown_handler) writes to the self-pipe.
+    /// Body of the dispatch thread: block until the signal handler writes to
+    /// the self-pipe, then run the shutdown callback.
     inline void dispatch_loop() {
         for (;;) {
             char byte = 0;
@@ -243,21 +246,48 @@ namespace detail {
                 }
                 return;
             }
-            if (count == 0 || byte == kStopByte) {
-                return;  // Write end closed, or asked to retire.
+            if (count == 0) {
+                return;  // Write end closed: nothing can wake us again.
             }
-            // Copy the callback out before invoking it: remove_shutdown_handler()
-            // joins this thread, and would deadlock if the callback ran with
-            // the mutex held.
-            ShutdownCallback callback;
-            {
-                std::lock_guard<std::mutex> lock(g_callback_mutex);
-                callback = g_shutdown_callback;
-            }
-            if (callback) {
-                callback();
+            std::lock_guard<std::mutex> lock(g_callback_mutex);
+            if (g_shutdown_callback) {
+                g_shutdown_callback();
             }
         }
+    }
+
+    /// Create the self-pipe and start the dispatch thread, unless this process
+    /// already has one. The thread is detached: it outlives every handler
+    /// installed on it and spends its life blocked in read().
+    inline void ensure_dispatch_thread() {
+        const pid_t self = ::getpid();
+        if (g_dispatch_thread_pid == self) {
+            return;
+        }
+        if (g_dispatch_thread_pid != -1) {
+            // Inherited across a fork: the descriptors are open but the thread
+            // that read them is not in this process.
+            int stale_write_fd = g_wakeup_write_fd.exchange(-1, std::memory_order_relaxed);
+            if (stale_write_fd >= 0) {
+                ::close(stale_write_fd);
+            }
+            if (g_wakeup_read_fd >= 0) {
+                ::close(g_wakeup_read_fd);
+                g_wakeup_read_fd = -1;
+            }
+        }
+        int fds[2];
+        if (::pipe(fds) != 0) {
+            return;
+        }
+        g_wakeup_read_fd = fds[0];
+        // Non-blocking write end: a signal must never block, however unlikely a
+        // full one-byte-at-a-time pipe is.
+        int flags = ::fcntl(fds[1], F_GETFL, 0);
+        ::fcntl(fds[1], F_SETFL, flags | O_NONBLOCK);
+        g_wakeup_write_fd.store(fds[1], std::memory_order_relaxed);
+        g_dispatch_thread_pid = self;
+        std::thread(dispatch_loop).detach();
     }
 }  // namespace detail
 
@@ -265,19 +295,7 @@ inline void install_shutdown_handler(ShutdownCallback callback) {
     {
         std::lock_guard<std::mutex> lock(detail::g_callback_mutex);
         detail::g_shutdown_callback = std::move(callback);
-    }
-    if (!detail::g_dispatch_thread.joinable()) {
-        int fds[2];
-        if (::pipe(fds) != 0) {
-            return;  // No wakeup pipe means no handler; leave signals defaulted.
-        }
-        detail::g_wakeup_read_fd = fds[0];
-        // Non-blocking write end: a signal must never block, however unlikely
-        // a full one-byte-at-a-time pipe is.
-        int flags = ::fcntl(fds[1], F_GETFL, 0);
-        ::fcntl(fds[1], F_SETFL, flags | O_NONBLOCK);
-        detail::g_wakeup_write_fd.store(fds[1], std::memory_order_relaxed);
-        detail::g_dispatch_thread = std::thread(detail::dispatch_loop);
+        detail::ensure_dispatch_thread();
     }
     std::signal(SIGINT, detail::signal_handler);
     std::signal(SIGTERM, detail::signal_handler);
@@ -286,22 +304,7 @@ inline void install_shutdown_handler(ShutdownCallback callback) {
 inline void remove_shutdown_handler() {
     std::signal(SIGINT, SIG_DFL);
     std::signal(SIGTERM, SIG_DFL);
-    if (detail::g_dispatch_thread.joinable()) {
-        int fd = detail::g_wakeup_write_fd.exchange(-1, std::memory_order_relaxed);
-        if (fd >= 0) {
-            const char byte = detail::kStopByte;
-            ssize_t written = ::write(fd, &byte, 1);
-            (void)written;
-        }
-        // Joining guarantees no callback is still in flight when this returns,
-        // so the caller may then destroy whatever the callback referenced.
-        detail::g_dispatch_thread.join();
-        if (fd >= 0) {
-            ::close(fd);
-        }
-        ::close(detail::g_wakeup_read_fd);
-        detail::g_wakeup_read_fd = -1;
-    }
+    // Blocks until any callback currently running has returned.
     std::lock_guard<std::mutex> lock(detail::g_callback_mutex);
     detail::g_shutdown_callback = nullptr;
 }
