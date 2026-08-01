@@ -307,8 +307,15 @@ export class Drive {
     /**
      * Wait for the drive to become empty after an eject request.
      *
-     * @param timeoutMs - Maximum time to wait.
-     * @returns true if the drive became empty, false if timed out.
+     * A safe eject completes when the drive falls quiet, and waits for as
+     * long as that takes -- the server never gives up on its own. So a false
+     * here does not mean the eject failed; it means the drive is still busy
+     * and will stay pending until this caller decides otherwise, by forcing
+     * it (`eject({immediate: true})`) or abandoning it ({@link cancelEject}).
+     *
+     * @param timeoutMs - Maximum time to wait. An arbitrary bound on this
+     *   caller's patience, not a property of the eject.
+     * @returns true if the drive became empty, false if still pending.
      */
     async waitForEject(timeoutMs: number = 15000): Promise<boolean> {
         const deadline = Date.now() + timeoutMs;

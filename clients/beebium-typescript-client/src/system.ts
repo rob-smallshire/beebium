@@ -299,6 +299,35 @@ export class System {
         return info.executablePath;
     }
 
+    /**
+     * An opaque token identifying the host the server is running on.
+     *
+     * Compare it with a token derived the same way on this host to learn
+     * whether the two processes share a filesystem -- which is what any
+     * exchange of paths depends on. `Drive.insert` sends a path for the
+     * server to open, and a drive's `discUrl` is a path on the server, so
+     * both are meaningless across hosts.
+     *
+     * Network addresses cannot answer this: a client may reach a server on
+     * its own machine over loopback, over that machine's LAN address, or
+     * through a Bonjour ".local" name that resolves back to itself.
+     *
+     * The token is `sha256("beebium-host-v1:" + hostIdentifier)` in
+     * lowercase hex, where the host identifier is `gethostuuid()` on macOS,
+     * `/etc/machine-id` on Linux and the `MachineGuid` registry value on
+     * Windows. Deriving this host's own is left to the caller: Node reaches
+     * none of those directly on every platform, and an automation script is
+     * usually running alongside its server anyway. See
+     * docs/frontend-local-server-gating.md.
+     *
+     * Empty if the server's host will not identify itself, which must be
+     * read as "unknown" rather than as matching another empty value.
+     */
+    async getHostFingerprint(): Promise<string> {
+        const info = await this.getSystemInfo();
+        return info.hostFingerprint;
+    }
+
     /** Get the number of connected clients. */
     async getClientCount(): Promise<number> {
         const info = await this.getSystemInfo();

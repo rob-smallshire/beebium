@@ -340,13 +340,21 @@ class Drive:
             raise DiscError(f"Failed to cancel eject: {response.error}")
 
     def wait_for_eject(self, timeout: float = 15.0) -> bool:
-        """Block until disc is ejected.
+        """Block until the disc has been ejected.
+
+        A safe eject completes when the drive falls quiet, and waits for as
+        long as that takes -- the server never gives up on its own. So a
+        False here does not mean the eject failed; it means the drive is
+        still busy and will stay pending until this caller decides
+        otherwise, by forcing it (``eject(immediate=True)``) or abandoning
+        it (:meth:`cancel_eject`).
 
         Args:
-            timeout: Maximum time to wait in seconds.
+            timeout: Maximum time to wait in seconds. An arbitrary bound on
+                this caller's patience, not a property of the eject.
 
         Returns:
-            True if ejected, False on timeout.
+            True if ejected, False if still pending when the timeout expired.
         """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:

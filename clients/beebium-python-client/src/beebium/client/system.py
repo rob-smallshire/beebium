@@ -357,6 +357,34 @@ class System:
         return response.executable_path
 
     @property
+    def host_fingerprint(self) -> str:
+        """An opaque token identifying the host the server is running on.
+
+        Compare it with a token derived the same way on this host to learn
+        whether the two processes share a filesystem -- which is what any
+        exchange of paths depends on. :meth:`Disc.Drive.insert` sends a path
+        for the server to open, and a drive's ``disc_url`` is a path on the
+        server, so both are meaningless across hosts.
+
+        Network addresses cannot answer this: a client may reach a server on
+        its own machine over loopback, over that machine's LAN address, or
+        through a Bonjour ".local" name that resolves back to itself.
+
+        The token is ``sha256("beebium-host-v1:" + host_identifier)`` in
+        lowercase hex, where the host identifier is ``gethostuuid()`` on
+        macOS, ``/etc/machine-id`` on Linux and the ``MachineGuid`` registry
+        value on Windows. Deriving this host's own is left to the caller: an
+        automation script is usually running alongside its server and does
+        not need to ask. See docs/frontend-local-server-gating.md.
+
+        Empty if the server's host will not identify itself, which must be
+        read as "unknown" rather than as matching another empty value.
+        """
+        request = system_pb2.GetSystemInfoRequest()
+        response = self._stub.GetSystemInfo(request)
+        return response.host_fingerprint
+
+    @property
     def client_count(self) -> int:
         """Number of clients with active WatchServerStatus streams.
 
