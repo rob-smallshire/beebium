@@ -75,10 +75,9 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
-#include <limits>
-#include <mutex>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -212,8 +211,8 @@ inline void invoke_shutdown() {
 /// Registers the machine's shutdown callback for as long as it is in scope,
 /// so a signal arriving before (or instead of) the emulation loop can still
 /// stop a paused machine. Declared alongside the machine it refers to: on
-/// destruction it removes the platform handler first, which joins the dispatch
-/// thread and so guarantees no callback is still running.
+/// destruction it removes the platform handler first, which waits out any
+/// callback still running, so the machine cannot die under one.
 template<typename MachineType>
 class ScopedShutdownHandler {
 public:
