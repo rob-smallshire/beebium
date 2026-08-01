@@ -405,55 +405,219 @@ TEST_CASE("apply_startup_options: sets auto-boot when specified", "[server_main]
 // ============================================================================
 
 #include <beebium/server/Platform.hpp>
+#include <chrono>
 #include <csignal>
+#include <future>
+#include <thread>
 
-#ifndef _WIN32
-TEST_CASE("signal handler: sets atomic flag without calling callback directly",
+namespace {
+
+// Deliver a shutdown request the way the operating system would, so these
+// tests exercise the real handler rather than calling the callback directly.
+// On Windows the console control handler is what the OS invokes, and it runs
+// on a thread of the OS's choosing; raising a console event from a test
+// process is unreliable, so the handler is entered directly.
+void raise_shutdown_signal() {
+#ifdef _WIN32
+    beebium::server::platform::detail::console_ctrl_handler(CTRL_BREAK_EVENT);
+#else
+    std::raise(SIGTERM);
+#endif
+}
+
+}  // namespace
+
+TEST_CASE("shutdown handler: callback runs without the main thread polling",
           "[server_main][signal]") {
-    // Reset state
-    beebium::server::platform::detail::g_signal_received.store(false);
+    // The signal handler may do only async-signal-safe work, so the callback
+    // runs on a dispatch thread. Nothing here polls or pumps a loop: the point
+    // is that shutdown does not depend on the main thread making progress.
+    std::promise<void> called;
+    auto called_future = called.get_future();
+    std::atomic<bool> fired{false};
+    beebium::server::platform::install_shutdown_handler([&called, &fired] {
+        if (!fired.exchange(true)) {
+            called.set_value();
+        }
+    });
 
-    bool callback_called = false;
+    raise_shutdown_signal();
+
+    REQUIRE(called_future.wait_for(std::chrono::seconds(2)) ==
+            std::future_status::ready);
+
+    beebium::server::platform::remove_shutdown_handler();
+}
+
+TEST_CASE("shutdown handler: no callback runs without a signal",
+          "[server_main][signal]") {
+    std::atomic<bool> callback_called{false};
     beebium::server::platform::install_shutdown_handler([&callback_called] {
         callback_called = true;
     });
 
-    // Simulate what the kernel does: call the signal handler function
-    beebium::server::platform::detail::signal_handler(SIGTERM);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-    // The handler should have set the atomic flag but NOT called the callback
-    REQUIRE(beebium::server::platform::detail::g_signal_received.load());
-    REQUIRE_FALSE(callback_called);
+    REQUIRE_FALSE(callback_called.load());
 
-    // Now dispatch the pending signal (as the main loop would)
-    beebium::server::platform::dispatch_pending_signal();
-
-    // Now the callback should have been called
-    REQUIRE(callback_called);
-    // And the flag should be cleared
-    REQUIRE_FALSE(beebium::server::platform::detail::g_signal_received.load());
-
-    // Clean up
     beebium::server::platform::remove_shutdown_handler();
 }
 
-TEST_CASE("signal handler: dispatch_pending_signal is a no-op when no signal received",
+TEST_CASE("shutdown handler: remove_shutdown_handler leaves no callback in flight",
           "[server_main][signal]") {
-    beebium::server::platform::detail::g_signal_received.store(false);
+    // Callbacks capture objects owned by the caller's stack frame, so the
+    // caller must be able to destroy them once the handler is removed. That
+    // requires removal to wait out any invocation already running.
+    std::atomic<bool> inside_callback{false};
+    std::atomic<bool> callback_finished{false};
+    beebium::server::platform::install_shutdown_handler(
+        [&inside_callback, &callback_finished] {
+            inside_callback = true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            callback_finished = true;
+        });
 
-    bool callback_called = false;
-    beebium::server::platform::install_shutdown_handler([&callback_called] {
-        callback_called = true;
+    raise_shutdown_signal();
+    // Wait until the callback is definitely running, then remove the handler.
+    for (int i = 0; i < 200 && !inside_callback.load(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(inside_callback.load());
+
+    beebium::server::platform::remove_shutdown_handler();
+
+    REQUIRE(callback_finished.load());
+}
+
+TEST_CASE("shutdown handler: stops a machine paused before the emulation loop",
+          "[server_main][signal]") {
+    // Reproduces the paused-server hang: a machine paused by --wait=api or by
+    // the debugger blocks in wait_if_paused(), whose only exit condition is
+    // request_shutdown(). If shutdown dispatch needed the emulation loop to
+    // cycle, this wait could never end.
+    MachineType machine;
+    beebium::server::platform::install_shutdown_handler(
+        [&machine] { machine.request_shutdown(); });
+
+    machine.pause();
+    auto waiting = std::async(std::launch::async,
+                              [&machine] { return machine.wait_if_paused(); });
+
+    raise_shutdown_signal();
+
+    bool released = waiting.wait_for(std::chrono::seconds(2)) ==
+                    std::future_status::ready;
+    if (!released) {
+        // Release the blocked thread so this test cannot hang the run when it
+        // fails, then report the failure.
+        machine.request_shutdown();
+        waiting.wait();
+    }
+    beebium::server::platform::remove_shutdown_handler();
+    REQUIRE(released);
+    REQUIRE(machine.shutdown_requested());
+}
+
+// ============================================================================
+// Interruptible stdin wait (WaitMode::Cli)
+// ============================================================================
+
+namespace {
+
+// Redirects stdin to a pipe for the duration of the scope, so the wait under
+// test can be fed a line -- or starved of one -- deterministically.
+class StdinPipe {
+public:
+    StdinPipe() {
+#ifdef _WIN32
+        saved_ = GetStdHandle(STD_INPUT_HANDLE);
+        CreatePipe(&read_, &write_, NULL, 0);
+        SetStdHandle(STD_INPUT_HANDLE, read_);
+#else
+        saved_ = dup(STDIN_FILENO);
+        int fds[2];
+        REQUIRE(pipe(fds) == 0);
+        read_ = fds[0];
+        write_ = fds[1];
+        dup2(read_, STDIN_FILENO);
+#endif
+    }
+
+    ~StdinPipe() {
+#ifdef _WIN32
+        SetStdHandle(STD_INPUT_HANDLE, saved_);
+        CloseHandle(write_);
+        CloseHandle(read_);
+#else
+        dup2(saved_, STDIN_FILENO);
+        close(saved_);
+        close(write_);
+        close(read_);
+#endif
+    }
+
+    void write_line() {
+        const char line[] = "\n";
+#ifdef _WIN32
+        DWORD written = 0;
+        WriteFile(write_, line, 1, &written, NULL);
+#else
+        ssize_t written = ::write(write_, line, 1);
+        (void)written;
+#endif
+    }
+
+    StdinPipe(const StdinPipe&) = delete;
+    StdinPipe& operator=(const StdinPipe&) = delete;
+
+private:
+#ifdef _WIN32
+    HANDLE saved_ = INVALID_HANDLE_VALUE;
+    HANDLE read_ = INVALID_HANDLE_VALUE;
+    HANDLE write_ = INVALID_HANDLE_VALUE;
+#else
+    int saved_ = -1;
+    int read_ = -1;
+    int write_ = -1;
+#endif
+};
+
+}  // namespace
+
+TEST_CASE("Cli wait: abandons the wait when asked to stop", "[server_main][signal]") {
+    // --wait=cli blocks before the emulation loop exists. A blocking read is
+    // restarted after a handled signal, so the wait has to poll the flag the
+    // shutdown handler clears -- otherwise a server waiting for RETURN can
+    // never be told to stop.
+    StdinPipe stdin_pipe;
+    std::atomic<bool> keep_waiting{true};
+
+    auto waiting = std::async(std::launch::async, [&keep_waiting] {
+        return beebium::server::platform::wait_for_line_or_abandon(keep_waiting);
     });
 
-    // Dispatch without any signal having been received
-    beebium::server::platform::dispatch_pending_signal();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    keep_waiting = false;
 
-    REQUIRE_FALSE(callback_called);
-
-    beebium::server::platform::remove_shutdown_handler();
+    REQUIRE(waiting.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    REQUIRE_FALSE(waiting.get());
 }
-#endif  // !_WIN32
+
+TEST_CASE("Cli wait: returns when a line arrives", "[server_main][signal]") {
+    StdinPipe stdin_pipe;
+    std::atomic<bool> keep_waiting{true};
+
+    auto waiting = std::async(std::launch::async, [&keep_waiting] {
+        return beebium::server::platform::wait_for_line_or_abandon(keep_waiting);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    stdin_pipe.write_line();
+
+    REQUIRE(waiting.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    REQUIRE(waiting.get());
+    REQUIRE(keep_waiting.load());
+}
 
 TEST_CASE("signal handler: invoke_shutdown sets g_running false and interrupts waits",
           "[server_main][signal]") {
@@ -525,24 +689,22 @@ TEST_CASE("stderr_accepts_nonblocking_write reflects pipe writability",
     close(fds[1]);
 }
 
-TEST_CASE("SIGTERM: terminates server process within 2 seconds",
+TEST_CASE("SIGTERM: terminates a paused server process within 2 seconds",
           "[server_main][signal][integration]") {
-    // Fork a child that installs the shutdown handler and blocks in a loop
+    // Fork a child that parks in the wait a paused machine uses, with nothing
+    // polling. This is the shape of a server started with --wait=api, or one
+    // the debugger has stopped: if signal dispatch depended on the emulation
+    // loop cycling, the child would need SIGKILL.
     pid_t child = fork();
     REQUIRE(child >= 0);
 
     if (child == 0) {
-        // Child process: install handler and block
-        std::atomic<bool> running{true};
-        beebium::server::platform::install_shutdown_handler([&running] {
-            running = false;
-        });
+        MachineType machine;
+        beebium::server::platform::install_shutdown_handler(
+            [&machine] { machine.request_shutdown(); });
 
-        // Simulate the main loop: poll for pending signals with bounded waits
-        while (running) {
-            beebium::server::platform::dispatch_pending_signal();
-            usleep(10000);  // 10ms
-        }
+        machine.pause();
+        machine.wait_if_paused();  // Returns only once shutdown is requested.
 
         _exit(0);
     }

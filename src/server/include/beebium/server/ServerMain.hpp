@@ -76,6 +76,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <map>
 #include <memory>
 #include <optional>
@@ -180,8 +181,13 @@ namespace {
 
 std::atomic<bool> g_running{true};
 
-// Function pointers for shutdown handler to interrupt blocking waits.
-// These are set before the main loop starts and cleared on shutdown.
+// Callbacks the shutdown handler uses to interrupt blocking waits. They
+// capture objects that live on the main thread's stack (the machine, the
+// pacing clock, the gRPC server), but run on the platform's shutdown dispatch
+// thread, which may fire at any moment -- so the mutex guards both the
+// concurrent access and the objects' lifetimes: clearing a callback blocks
+// until any in-flight invocation of it has finished.
+std::mutex g_shutdown_callbacks_mutex;
 std::function<void()> g_request_machine_shutdown;
 std::function<void()> g_request_pacing_stop;
 std::function<void()> g_notify_clients_shutdown;
@@ -189,6 +195,7 @@ std::function<void()> g_notify_clients_shutdown;
 // Shutdown handler logic invoked by platform::install_shutdown_handler()
 inline void invoke_shutdown() {
     g_running = false;
+    std::lock_guard<std::mutex> lock(g_shutdown_callbacks_mutex);
     // Notify connected clients that shutdown is starting
     if (g_notify_clients_shutdown) {
         g_notify_clients_shutdown();
@@ -201,6 +208,32 @@ inline void invoke_shutdown() {
         g_request_pacing_stop();
     }
 }
+
+/// Registers the machine's shutdown callback for as long as it is in scope,
+/// so a signal arriving before (or instead of) the emulation loop can still
+/// stop a paused machine. Declared alongside the machine it refers to: on
+/// destruction it removes the platform handler first, which joins the dispatch
+/// thread and so guarantees no callback is still running.
+template<typename MachineType>
+class ScopedShutdownHandler {
+public:
+    explicit ScopedShutdownHandler(MachineType& machine) {
+        {
+            std::lock_guard<std::mutex> lock(g_shutdown_callbacks_mutex);
+            g_request_machine_shutdown = [&machine]() { machine.request_shutdown(); };
+        }
+        platform::install_shutdown_handler(invoke_shutdown);
+    }
+
+    ~ScopedShutdownHandler() {
+        platform::remove_shutdown_handler();
+        std::lock_guard<std::mutex> lock(g_shutdown_callbacks_mutex);
+        g_request_machine_shutdown = nullptr;
+    }
+
+    ScopedShutdownHandler(const ScopedShutdownHandler&) = delete;
+    ScopedShutdownHandler& operator=(const ScopedShutdownHandler&) = delete;
+};
 
 inline std::vector<uint8_t> load_file(const std::filesystem::path& filepath) {
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
@@ -1431,15 +1464,20 @@ void apply_startup_options(MachineType& machine, const ServerConfig<MachineType>
 
 // Handle wait mode for controlled startup.
 // Must be called after machine.reset() and before the main emulation loop.
+// Returns false if a shutdown signal arrived while waiting, in which case the
+// caller must not start the emulation loop.
 template<typename MachineType>
-void handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
+bool handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
     switch (wait_mode) {
         case WaitMode::Cli:
             // Wait for user to press RETURN before starting emulation
             // "Now press RETURN." is a reference to Roger McGough's electronic poem
             // from the original BBC Micro Welcome cassette.
             std::cout << "Now press RETURN." << std::flush;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            if (!platform::wait_for_line_or_abandon(g_running)) {
+                std::cout << "\n";
+                return false;
+            }
             std::cout << "\n";
             break;
 
@@ -1460,6 +1498,7 @@ void handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
             // Start immediately
             break;
     }
+    return g_running.load();
 }
 
 // Run the main emulation loop with pacing.
@@ -1501,11 +1540,25 @@ void run_emulation_loop(MachineType& machine,
         server.set_pacing_clock(&pacing_clock);
     }
 
-    // Set up shutdown callbacks so signal handler can interrupt blocked waits
-    // and notify clients of impending shutdown
-    g_request_machine_shutdown = [&machine]() { machine.request_shutdown(); };
-    g_request_pacing_stop = [&pacing_clock]() { pacing_clock.request_stop(); };
-    g_notify_clients_shutdown = [&server]() { server.notify_shutdown(5000); };
+    // Set up shutdown callbacks so the signal handler can interrupt blocked
+    // waits and notify clients of impending shutdown. Both capture objects
+    // owned by this frame, so they are cleared before it returns (below); the
+    // mutex makes that clearing wait out any invocation already running on the
+    // shutdown dispatch thread.
+    {
+        std::lock_guard<std::mutex> lock(g_shutdown_callbacks_mutex);
+        g_request_machine_shutdown = [&machine]() { machine.request_shutdown(); };
+        g_request_pacing_stop = [&pacing_clock]() { pacing_clock.request_stop(); };
+        g_notify_clients_shutdown = [&server]() { server.notify_shutdown(5000); };
+    }
+    // Clear them again however this function is left.
+    struct CallbackScope {
+        ~CallbackScope() {
+            std::lock_guard<std::mutex> lock(g_shutdown_callbacks_mutex);
+            g_request_pacing_stop = nullptr;
+            g_notify_clients_shutdown = nullptr;
+        }
+    } callback_scope;
 
     // Main emulation loop
     constexpr uint64_t cycles_per_frame = 40000;  // For non-paced mode
@@ -1526,12 +1579,6 @@ void run_emulation_loop(MachineType& machine,
     // Reset VSYNC edge counter for frequency measurement
     machine.memory().system_via_peripheral.consume_vsync_rising_edges();
     while (g_running) {
-        // Check for pending SIGINT/SIGTERM and dispatch shutdown callback.
-        // The signal handler only sets an atomic flag (async-signal-safe);
-        // the actual shutdown work (notifying CVs, etc.) happens here
-        // in a normal context where mutex operations are safe.
-        platform::dispatch_pending_signal();
-
         // Block if debugger has paused execution. If we actually blocked, the
         // wall time spent paused (a debugger reset, a run_until_or_timeout step
         // sequence, etc.) must not be charged to the pacing clock as owed
@@ -1636,11 +1683,6 @@ void run_emulation_loop(MachineType& machine,
         }
     }
 
-    // Clean up shutdown callbacks
-    g_request_machine_shutdown = nullptr;
-    g_request_pacing_stop = nullptr;
-    g_notify_clients_shutdown = nullptr;
-
     if (use_pacing) {
         pacing_clock.stop();
     }
@@ -1701,9 +1743,6 @@ public:
         }
         auto timestamp = std::chrono::system_clock::now();
 
-        // Set up shutdown handler (handles SIGINT/SIGTERM on POSIX, console events on Windows)
-        platform::install_shutdown_handler(invoke_shutdown);
-
         try {
             // Set ROM directory if specified
             if (!config.rom_dirpath.empty()) {
@@ -1713,6 +1752,14 @@ public:
             // Create and initialize machine
             std::cout << "Initializing " << Memory::MACHINE_DISPLAY_NAME << "...\n";
             MachineType machine;
+
+            // Set up the shutdown handler (SIGINT/SIGTERM on POSIX, console
+            // events on Windows). Installed here, with the machine in hand, so
+            // that a machine paused before the emulation loop starts -- by
+            // --wait=api, say -- can still be told to stop. Removed when this
+            // scope ends, which is after everything declared below it has been
+            // destroyed and while the machine is still alive.
+            ScopedShutdownHandler<MachineType> shutdown_handler(machine);
 
             // Load ROMs
             load_roms(machine, config);
@@ -2150,11 +2197,13 @@ public:
                 }
             }
 
-            // Handle wait mode
-            handle_wait_mode(machine, config.wait_mode);
-
-            // Run main emulation loop (blocks until shutdown)
-            run_emulation_loop(machine, server, config);
+            // Handle wait mode. A shutdown signal during the wait means the
+            // emulation loop is never entered: the machine was asked to stop
+            // before it was ever asked to run.
+            if (handle_wait_mode(machine, config.wait_mode)) {
+                // Run main emulation loop (blocks until shutdown)
+                run_emulation_loop(machine, server, config);
+            }
 
             std::cout << "\nShutting down...\n";
 

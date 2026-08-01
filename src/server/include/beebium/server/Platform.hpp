@@ -25,8 +25,17 @@
 #define NOMINMAX
 #include <windows.h>
 #include <io.h>
+#include <chrono>
+#include <string>
+#include <thread>
 #else
+#include <cerrno>
 #include <csignal>
+#include <fcntl.h>
+#include <mutex>
+#include <poll.h>
+#include <thread>
+#include <unistd.h>
 #endif
 
 namespace beebium::server::platform {
@@ -101,14 +110,74 @@ inline void unregister_child_process() {
     LeaveCriticalSection(&detail::g_callback_lock);
 }
 
-/// No-op on Windows. The console control handler dispatches the callback
-/// directly from its own thread (protected by a critical section).
-inline void dispatch_pending_signal() {}
-
 inline bool is_stdin_tty() {
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     DWORD mode;
     return GetConsoleMode(h, &mode) != 0;
+}
+
+/// Wait for a line on stdin, giving up if `keep_waiting` becomes false.
+/// Returns true if a line (or end of input) arrived, false if the wait was
+/// abandoned. The console control handler runs on its own thread, so it can
+/// clear `keep_waiting` while this is waiting -- but only a polling wait can
+/// notice: a blocking read of stdin is not interrupted by a console event.
+inline bool wait_for_line_or_abandon(const std::atomic<bool>& keep_waiting) {
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    if (h == NULL || h == INVALID_HANDLE_VALUE) {
+        return true;  // No stdin to wait on; do not stall startup.
+    }
+    const bool console = is_stdin_tty();
+    for (;;) {
+        if (!keep_waiting.load()) {
+            return false;
+        }
+        if (console) {
+            // A console handle is signalled for every input event (key up,
+            // mouse, focus), so consume events until RETURN goes down rather
+            // than blocking in a read that any event could unblock.
+            if (WaitForSingleObject(h, 100) != WAIT_OBJECT_0) {
+                continue;
+            }
+            INPUT_RECORD record;
+            DWORD read_count = 0;
+            while (PeekConsoleInputW(h, &record, 1, &read_count) && read_count > 0) {
+                if (!ReadConsoleInputW(h, &record, 1, &read_count) || read_count == 0) {
+                    break;
+                }
+                if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown &&
+                    record.Event.KeyEvent.wVirtualKeyCode == VK_RETURN) {
+                    return true;
+                }
+            }
+        } else {
+            // A pipe or file handle is not usefully waitable, so poll for
+            // available bytes and sleep between attempts.
+            DWORD available = 0;
+            if (!PeekNamedPipe(h, NULL, 0, NULL, &available, NULL)) {
+                // Not a pipe (a redirected file, say): a read will not block.
+                char byte = 0;
+                DWORD read_count = 0;
+                while (ReadFile(h, &byte, 1, &read_count, NULL) && read_count > 0) {
+                    if (byte == '\n') {
+                        return true;
+                    }
+                }
+                return true;  // End of input, or an error: treat as "go".
+            }
+            if (available == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+            char byte = 0;
+            DWORD read_count = 0;
+            while (ReadFile(h, &byte, 1, &read_count, NULL) && read_count > 0) {
+                if (byte == '\n') {
+                    return true;
+                }
+            }
+            return true;
+        }
+    }
 }
 
 inline bool is_stdout_tty() {
@@ -119,38 +188,97 @@ inline bool is_stdout_tty() {
 
 #else  // POSIX
 
+// The signal handler itself may do only async-signal-safe work, so it hands
+// the signal to a dedicated dispatch thread over a self-pipe. That thread runs
+// the shutdown callback, which means shutdown is delivered whatever the main
+// thread is doing -- including when it is blocked in a paused machine's wait,
+// or reading a line from stdin. Dispatching from the emulation loop instead
+// would make "the process can be asked to stop" conditional on the emulation
+// loop still cycling, which is exactly what a paused machine does not do.
+
 namespace detail {
-    inline std::atomic<bool> g_signal_received{false};
     inline std::atomic<pid_t> g_child_pid{-1};
-    inline ShutdownCallback g_shutdown_callback;
+
+    // Written by the signal handler, read by the dispatch thread. Held as an
+    // atomic because the handler may run on any thread at any time; -1 means
+    // no handler is installed.
+    inline std::atomic<int> g_wakeup_write_fd{-1};
+    inline int g_wakeup_read_fd = -1;
+
+    inline std::mutex g_callback_mutex;
+    inline ShutdownCallback g_shutdown_callback;  // guarded by g_callback_mutex
+    inline std::thread g_dispatch_thread;
+
+    // Byte written by remove_shutdown_handler() to retire the dispatch thread,
+    // distinct from the byte a signal writes.
+    constexpr char kSignalByte = 'S';
+    constexpr char kStopByte = 'Q';
 
     inline void signal_handler(int /*signal*/) {
-        // Set the atomic flag for the main loop to pick up.
-        g_signal_received.store(true, std::memory_order_relaxed);
-        // Also forward the signal to the child subprocess (if any) so it
-        // begins shutting down immediately, even if this process is killed
-        // before reaching the normal cleanup path.
-        // Both kill() and atomic load are async-signal-safe.
+        // Forward the signal to the child subprocess (if any) so it begins
+        // shutting down immediately, even if this process is killed before
+        // reaching the normal cleanup path. kill(), atomic loads and write()
+        // are all async-signal-safe.
         pid_t child = g_child_pid.load(std::memory_order_relaxed);
         if (child > 0) {
             kill(child, SIGTERM);
         }
+        int fd = g_wakeup_write_fd.load(std::memory_order_relaxed);
+        if (fd >= 0) {
+            const char byte = kSignalByte;
+            ssize_t written = ::write(fd, &byte, 1);
+            (void)written;  // Nothing useful to do about a failure here.
+        }
     }
 
-    /// Call from the main loop to check for pending signals and dispatch
-    /// the shutdown callback. Safe to call from any non-signal context.
-    inline void dispatch_pending_signal() {
-        if (g_signal_received.load(std::memory_order_relaxed)) {
-            g_signal_received.store(false, std::memory_order_relaxed);
-            if (g_shutdown_callback) {
-                g_shutdown_callback();
+    /// Body of the dispatch thread: block until the signal handler (or
+    /// remove_shutdown_handler) writes to the self-pipe.
+    inline void dispatch_loop() {
+        for (;;) {
+            char byte = 0;
+            ssize_t count = ::read(g_wakeup_read_fd, &byte, 1);
+            if (count < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                return;
+            }
+            if (count == 0 || byte == kStopByte) {
+                return;  // Write end closed, or asked to retire.
+            }
+            // Copy the callback out before invoking it: remove_shutdown_handler()
+            // joins this thread, and would deadlock if the callback ran with
+            // the mutex held.
+            ShutdownCallback callback;
+            {
+                std::lock_guard<std::mutex> lock(g_callback_mutex);
+                callback = g_shutdown_callback;
+            }
+            if (callback) {
+                callback();
             }
         }
     }
 }  // namespace detail
 
 inline void install_shutdown_handler(ShutdownCallback callback) {
-    detail::g_shutdown_callback = std::move(callback);
+    {
+        std::lock_guard<std::mutex> lock(detail::g_callback_mutex);
+        detail::g_shutdown_callback = std::move(callback);
+    }
+    if (!detail::g_dispatch_thread.joinable()) {
+        int fds[2];
+        if (::pipe(fds) != 0) {
+            return;  // No wakeup pipe means no handler; leave signals defaulted.
+        }
+        detail::g_wakeup_read_fd = fds[0];
+        // Non-blocking write end: a signal must never block, however unlikely
+        // a full one-byte-at-a-time pipe is.
+        int flags = ::fcntl(fds[1], F_GETFL, 0);
+        ::fcntl(fds[1], F_SETFL, flags | O_NONBLOCK);
+        detail::g_wakeup_write_fd.store(fds[1], std::memory_order_relaxed);
+        detail::g_dispatch_thread = std::thread(detail::dispatch_loop);
+    }
     std::signal(SIGINT, detail::signal_handler);
     std::signal(SIGTERM, detail::signal_handler);
 }
@@ -158,6 +286,23 @@ inline void install_shutdown_handler(ShutdownCallback callback) {
 inline void remove_shutdown_handler() {
     std::signal(SIGINT, SIG_DFL);
     std::signal(SIGTERM, SIG_DFL);
+    if (detail::g_dispatch_thread.joinable()) {
+        int fd = detail::g_wakeup_write_fd.exchange(-1, std::memory_order_relaxed);
+        if (fd >= 0) {
+            const char byte = detail::kStopByte;
+            ssize_t written = ::write(fd, &byte, 1);
+            (void)written;
+        }
+        // Joining guarantees no callback is still in flight when this returns,
+        // so the caller may then destroy whatever the callback referenced.
+        detail::g_dispatch_thread.join();
+        if (fd >= 0) {
+            ::close(fd);
+        }
+        ::close(detail::g_wakeup_read_fd);
+        detail::g_wakeup_read_fd = -1;
+    }
+    std::lock_guard<std::mutex> lock(detail::g_callback_mutex);
     detail::g_shutdown_callback = nullptr;
 }
 
@@ -172,10 +317,38 @@ inline void unregister_child_process() {
     detail::g_child_pid.store(-1, std::memory_order_relaxed);
 }
 
-/// Check for pending shutdown signal and dispatch the callback if received.
-/// Call this from the main emulation loop (non-signal context).
-inline void dispatch_pending_signal() {
-    detail::dispatch_pending_signal();
+/// Wait for a line on stdin, giving up if `keep_waiting` becomes false.
+/// Returns true if a line (or end of input) arrived, false if the wait was
+/// abandoned. Polling rather than blocking in read() is what lets a shutdown
+/// signal end the wait: a blocking read is restarted after a handled signal
+/// (BSD semantics), so it would never return.
+inline bool wait_for_line_or_abandon(const std::atomic<bool>& keep_waiting) {
+    for (;;) {
+        if (!keep_waiting.load()) {
+            return false;
+        }
+        struct pollfd pfd{STDIN_FILENO, POLLIN, 0};
+        int ready = ::poll(&pfd, 1, 100);
+        if (ready < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return true;  // Cannot wait on this stdin; do not stall startup.
+        }
+        if (ready == 0) {
+            continue;  // Timed out; re-check keep_waiting.
+        }
+        char byte = 0;
+        for (;;) {
+            ssize_t count = ::read(STDIN_FILENO, &byte, 1);
+            if (count <= 0) {
+                return true;  // End of input, or an error: treat as "go".
+            }
+            if (byte == '\n') {
+                return true;
+            }
+        }
+    }
 }
 
 inline bool is_stdin_tty() {

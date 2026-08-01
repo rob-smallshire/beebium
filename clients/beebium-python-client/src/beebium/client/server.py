@@ -90,6 +90,11 @@ class ServerProcess:
         return self._port
 
     @property
+    def server_filepath(self) -> Path:
+        """Path to the resolved beebium-model-b executable."""
+        return self._server_filepath
+
+    @property
     def target(self) -> str:
         """gRPC target string (host:port)."""
         return f"localhost:{self._port}"
@@ -205,6 +210,14 @@ class ServerProcess:
             try:
                 proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
+                # A server that ignores SIGTERM is a server-side defect, and
+                # killing it quietly hides that: say so, then force the issue
+                # so a stuck server cannot outlive the session.
+                print(
+                    f"beebium: server (pid {proc.pid}) ignored a shutdown request for "
+                    f"{timeout}s; killing it",
+                    file=sys.stderr,
+                )
                 proc.kill()  # force kill if graceful shutdown didn't work
                 proc.wait(timeout=1.0)
 
