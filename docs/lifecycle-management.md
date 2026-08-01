@@ -183,6 +183,38 @@ implementations are idempotent.
   disc flush runs, which is one reason DFS write-back also flushes on the
   in-emulation paths (step-away, write-inactivity) rather than only at shutdown.
 
+### A server can always be asked to stop
+
+Shutdown must not depend on the emulation loop making progress. The states in
+which a server is *not* cycling are exactly the states in which someone is most
+likely to want it stopped: paused by the debugger, paused at the first
+instruction by `--wait=api`, or still waiting for RETURN under `--wait=cli`.
+
+The POSIX signal handler may only do async-signal-safe work, so it writes a byte
+to a self-pipe and a **dedicated dispatch thread** runs the shutdown callback.
+(The Windows console control handler already ran on its own thread; this gives
+POSIX the same contract.) Dispatching from the emulation loop instead produces a
+deadlock: `wait_if_paused()` exits only when the shutdown flag is set, the flag
+is set only by the callback, and the callback would run only at the top of a
+loop the wait is blocking.
+
+Two consequences fall out of a callback that can fire at any moment:
+
+- The callbacks capture the machine, the pacing clock and the gRPC server, all
+  owned by the main thread's stack. `g_shutdown_callbacks_mutex` guards them, so
+  clearing a callback waits out an invocation already running, and
+  `remove_shutdown_handler()` joins the dispatch thread — after it returns, no
+  callback is in flight and the captured objects may be destroyed.
+- The machine's callback is registered **before** the wait-mode gate, not inside
+  the emulation loop, so a machine that has never been asked to run can still be
+  asked to stop.
+
+Any future "wait for X before running" gate inherits this: it must be
+interruptible, and it must be able to report that it was abandoned so the
+emulation loop is skipped. This is the internal twin of the rule that no
+external peer may stall the emulator — here it is an internal wait ignoring
+termination.
+
 ### Recovery semantics
 
 Two layers. **Passive**, for `unreachable`: while heartbeats have stopped but the
@@ -253,3 +285,6 @@ fingerprint; all four constants were regenerated together.
    collapse the three into one "disconnected" state; they mean different things
    and the user needs to know which.
 7. **Run `sync_protocol_fingerprint.py` after any proto change.**
+8. **Never make shutdown conditional on the emulation loop running.** A blocking
+   wait on the main thread must be interruptible, and its exit condition must
+   never be something only code downstream of that wait can set.
