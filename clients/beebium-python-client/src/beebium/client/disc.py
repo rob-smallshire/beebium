@@ -89,6 +89,7 @@ class DiscEvent:
     drive: int
     timestamp_cycles: int
     disc: DiscMetadata | None
+    disc_url: str
 
 
 @dataclass(frozen=True)
@@ -526,6 +527,7 @@ class Disc:
                 drive=proto_event.drive,
                 timestamp_cycles=proto_event.timestamp_cycles,
                 disc=disc_metadata,
+                disc_url=proto_event.disc_url,
             )
 
     def start_background_events(self, callback: Callable[[DiscEvent], None]) -> EventStreamHandle:

@@ -36,17 +36,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ndisc.proto\x12\x07\x62\x65\x65\x62ium\"O\n\x11InsertDiscRequest\x12\r\n\x05\x64rive\x18\x01 \x01(\r\x12\x0b\n\x03url\x18\x02 \x01(\t\x12\x1e\n\x16write_protect_override\x18\x03 \x01(\x08\"Y\n\x12InsertDiscResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12#\n\x04\x64isc\x18\x03 \x01(\x0b\x32\x15.beebium.DiscMetadata\"c\n\x10\x45jectDiscRequest\x12\r\n\x05\x64rive\x18\x01 \x01(\r\x12\x11\n\timmediate\x18\x02 \x01(\x08\x12\x15\n\rquiescence_ms\x18\x03 \x01(\r\x12\x16\n\x0e\x66orce_after_ms\x18\x04 \x01(\r\"4\n\x11\x45jectDiscResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x17\n\x15GetDriveStatusRequest\"\xaa\x01\n\x16GetDriveStatusResponse\x12\x1b\n\x13has_disc_controller\x18\x01 \x01(\x08\x12\x17\n\x0f\x63ontroller_type\x18\x02 \x01(\t\x12$\n\x06\x64rives\x18\x03 \x03(\x0b\x32\x14.beebium.DriveStatus\x12\x13\n\x0bis_socketed\x18\x04 \x01(\x08\x12\x1f\n\x17installed_controller_id\x18\x05 \x01(\t\"\xd0\x01\n\x0b\x44riveStatus\x12\r\n\x05\x64rive\x18\x01 \x01(\r\x12&\n\x05state\x18\x02 \x01(\x0e\x32\x17.beebium.DiscDriveState\x12\x11\n\tdisc_name\x18\x03 \x01(\t\x12\x10\n\x08\x64isc_url\x18\x04 \x01(\t\x12\x10\n\x08motor_on\x18\x05 \x01(\x08\x12\x15\n\rcurrent_track\x18\x06 \x01(\r\x12\x17\n\x0fwrite_protected\x18\x07 \x01(\x08\x12#\n\x04\x64isc\x18\x08 \x01(\x0b\x32\x15.beebium.DiscMetadata\"T\n\x0c\x44iscMetadata\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05sides\x18\x02 \x01(\r\x12\x17\n\x0fwrite_protected\x18\x06 \x01(\x08\x12\x0e\n\x06\x66ormat\x18\x07 \x01(\t\"\x1c\n\x1aSubscribeDiscEventsRequest\"\x7f\n\tDiscEvent\x12$\n\x04type\x18\x01 \x01(\x0e\x32\x16.beebium.DiscEventType\x12\r\n\x05\x64rive\x18\x02 \x01(\r\x12\x18\n\x10timestamp_cycles\x18\x03 \x01(\x04\x12#\n\x04\x64isc\x18\x04 \x01(\x0b\x32\x15.beebium.DiscMetadata\"(\n\x15SetSpinUpDelayRequest\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"8\n\x16SetSpinUpDelayResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x17\n\x15GetSpinUpDelayRequest\")\n\x16GetSpinUpDelayResponse\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"!\n\x1fListAvailableControllersRequest\"X\n ListAvailableControllersResponse\x12\x34\n\x0b\x63ontrollers\x18\x01 \x03(\x0b\x32\x1f.beebium.DiscControllerTypeInfo\"a\n\x16\x44iscControllerTypeInfo\x12\n\n\x02id\x18\x01 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x02 \x01(\t\x12\x10\n\x08\x66\x64\x63_chip\x18\x03 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\"5\n\x1cInstallDiscControllerRequest\x12\x15\n\rcontroller_id\x18\x01 \x01(\t\"X\n\x1dInstallDiscControllerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x17\n\x0f\x63ontroller_type\x18\x03 \x01(\t*h\n\x0e\x44iscDriveState\x12\x1a\n\x16\x44ISC_DRIVE_STATE_EMPTY\x10\x00\x12\x1b\n\x17\x44ISC_DRIVE_STATE_LOADED\x10\x01\x12\x1d\n\x19\x44ISC_DRIVE_STATE_EJECTING\x10\x02*\xe9\x01\n\rDiscEventType\x12\x16\n\x12\x44ISC_EVENT_UNKNOWN\x10\x00\x12\x17\n\x13\x44ISC_EVENT_INSERTED\x10\x01\x12\x16\n\x12\x44ISC_EVENT_EJECTED\x10\x02\x12\x1c\n\x18\x44ISC_EVENT_FORCE_EJECTED\x10\x03\x12\x1e\n\x1a\x44ISC_EVENT_EJECT_REQUESTED\x10\x04\x12\x1e\n\x1a\x44ISC_EVENT_EJECT_CANCELLED\x10\x05\x12\x17\n\x13\x44ISC_EVENT_MOTOR_ON\x10\x06\x12\x18\n\x14\x44ISC_EVENT_MOTOR_OFF\x10\x07\x32\xbc\x05\n\x0b\x44iscService\x12\x45\n\nInsertDisc\x12\x1a.beebium.InsertDiscRequest\x1a\x1b.beebium.InsertDiscResponse\x12\x42\n\tEjectDisc\x12\x19.beebium.EjectDiscRequest\x1a\x1a.beebium.EjectDiscResponse\x12Q\n\x0eGetDriveStatus\x12\x1e.beebium.GetDriveStatusRequest\x1a\x1f.beebium.GetDriveStatusResponse\x12P\n\x13SubscribeDiscEvents\x12#.beebium.SubscribeDiscEventsRequest\x1a\x12.beebium.DiscEvent0\x01\x12Q\n\x0eSetSpinUpDelay\x12\x1e.beebium.SetSpinUpDelayRequest\x1a\x1f.beebium.SetSpinUpDelayResponse\x12Q\n\x0eGetSpinUpDelay\x12\x1e.beebium.GetSpinUpDelayRequest\x1a\x1f.beebium.GetSpinUpDelayResponse\x12o\n\x18ListAvailableControllers\x12(.beebium.ListAvailableControllersRequest\x1a).beebium.ListAvailableControllersResponse\x12\x66\n\x15InstallDiscController\x12%.beebium.InstallDiscControllerRequest\x1a&.beebium.InstallDiscControllerResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ndisc.proto\x12\x07\x62\x65\x65\x62ium\"O\n\x11InsertDiscRequest\x12\r\n\x05\x64rive\x18\x01 \x01(\r\x12\x0b\n\x03url\x18\x02 \x01(\t\x12\x1e\n\x16write_protect_override\x18\x03 \x01(\x08\"Y\n\x12InsertDiscResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12#\n\x04\x64isc\x18\x03 \x01(\x0b\x32\x15.beebium.DiscMetadata\"c\n\x10\x45jectDiscRequest\x12\r\n\x05\x64rive\x18\x01 \x01(\r\x12\x11\n\timmediate\x18\x02 \x01(\x08\x12\x15\n\rquiescence_ms\x18\x03 \x01(\r\x12\x16\n\x0e\x66orce_after_ms\x18\x04 \x01(\r\"4\n\x11\x45jectDiscResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x17\n\x15GetDriveStatusRequest\"\xaa\x01\n\x16GetDriveStatusResponse\x12\x1b\n\x13has_disc_controller\x18\x01 \x01(\x08\x12\x17\n\x0f\x63ontroller_type\x18\x02 \x01(\t\x12$\n\x06\x64rives\x18\x03 \x03(\x0b\x32\x14.beebium.DriveStatus\x12\x13\n\x0bis_socketed\x18\x04 \x01(\x08\x12\x1f\n\x17installed_controller_id\x18\x05 \x01(\t\"\xd0\x01\n\x0b\x44riveStatus\x12\r\n\x05\x64rive\x18\x01 \x01(\r\x12&\n\x05state\x18\x02 \x01(\x0e\x32\x17.beebium.DiscDriveState\x12\x11\n\tdisc_name\x18\x03 \x01(\t\x12\x10\n\x08\x64isc_url\x18\x04 \x01(\t\x12\x10\n\x08motor_on\x18\x05 \x01(\x08\x12\x15\n\rcurrent_track\x18\x06 \x01(\r\x12\x17\n\x0fwrite_protected\x18\x07 \x01(\x08\x12#\n\x04\x64isc\x18\x08 \x01(\x0b\x32\x15.beebium.DiscMetadata\"T\n\x0c\x44iscMetadata\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05sides\x18\x02 \x01(\r\x12\x17\n\x0fwrite_protected\x18\x06 \x01(\x08\x12\x0e\n\x06\x66ormat\x18\x07 \x01(\t\"\x1c\n\x1aSubscribeDiscEventsRequest\"\x91\x01\n\tDiscEvent\x12$\n\x04type\x18\x01 \x01(\x0e\x32\x16.beebium.DiscEventType\x12\r\n\x05\x64rive\x18\x02 \x01(\r\x12\x18\n\x10timestamp_cycles\x18\x03 \x01(\x04\x12#\n\x04\x64isc\x18\x04 \x01(\x0b\x32\x15.beebium.DiscMetadata\x12\x10\n\x08\x64isc_url\x18\x05 \x01(\t\"(\n\x15SetSpinUpDelayRequest\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"8\n\x16SetSpinUpDelayResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x17\n\x15GetSpinUpDelayRequest\")\n\x16GetSpinUpDelayResponse\x12\x0f\n\x07\x65nabled\x18\x01 \x01(\x08\"!\n\x1fListAvailableControllersRequest\"X\n ListAvailableControllersResponse\x12\x34\n\x0b\x63ontrollers\x18\x01 \x03(\x0b\x32\x1f.beebium.DiscControllerTypeInfo\"a\n\x16\x44iscControllerTypeInfo\x12\n\n\x02id\x18\x01 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x02 \x01(\t\x12\x10\n\x08\x66\x64\x63_chip\x18\x03 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\"5\n\x1cInstallDiscControllerRequest\x12\x15\n\rcontroller_id\x18\x01 \x01(\t\"X\n\x1dInstallDiscControllerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x17\n\x0f\x63ontroller_type\x18\x03 \x01(\t*h\n\x0e\x44iscDriveState\x12\x1a\n\x16\x44ISC_DRIVE_STATE_EMPTY\x10\x00\x12\x1b\n\x17\x44ISC_DRIVE_STATE_LOADED\x10\x01\x12\x1d\n\x19\x44ISC_DRIVE_STATE_EJECTING\x10\x02*\xe9\x01\n\rDiscEventType\x12\x16\n\x12\x44ISC_EVENT_UNKNOWN\x10\x00\x12\x17\n\x13\x44ISC_EVENT_INSERTED\x10\x01\x12\x16\n\x12\x44ISC_EVENT_EJECTED\x10\x02\x12\x1c\n\x18\x44ISC_EVENT_FORCE_EJECTED\x10\x03\x12\x1e\n\x1a\x44ISC_EVENT_EJECT_REQUESTED\x10\x04\x12\x1e\n\x1a\x44ISC_EVENT_EJECT_CANCELLED\x10\x05\x12\x17\n\x13\x44ISC_EVENT_MOTOR_ON\x10\x06\x12\x18\n\x14\x44ISC_EVENT_MOTOR_OFF\x10\x07\x32\xbc\x05\n\x0b\x44iscService\x12\x45\n\nInsertDisc\x12\x1a.beebium.InsertDiscRequest\x1a\x1b.beebium.InsertDiscResponse\x12\x42\n\tEjectDisc\x12\x19.beebium.EjectDiscRequest\x1a\x1a.beebium.EjectDiscResponse\x12Q\n\x0eGetDriveStatus\x12\x1e.beebium.GetDriveStatusRequest\x1a\x1f.beebium.GetDriveStatusResponse\x12P\n\x13SubscribeDiscEvents\x12#.beebium.SubscribeDiscEventsRequest\x1a\x12.beebium.DiscEvent0\x01\x12Q\n\x0eSetSpinUpDelay\x12\x1e.beebium.SetSpinUpDelayRequest\x1a\x1f.beebium.SetSpinUpDelayResponse\x12Q\n\x0eGetSpinUpDelay\x12\x1e.beebium.GetSpinUpDelayRequest\x1a\x1f.beebium.GetSpinUpDelayResponse\x12o\n\x18ListAvailableControllers\x12(.beebium.ListAvailableControllersRequest\x1a).beebium.ListAvailableControllersResponse\x12\x66\n\x15InstallDiscController\x12%.beebium.InstallDiscControllerRequest\x1a&.beebium.InstallDiscControllerResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'disc_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_DISCDRIVESTATE']._serialized_start=1541
-  _globals['_DISCDRIVESTATE']._serialized_end=1645
-  _globals['_DISCEVENTTYPE']._serialized_start=1648
-  _globals['_DISCEVENTTYPE']._serialized_end=1881
+  _globals['_DISCDRIVESTATE']._serialized_start=1560
+  _globals['_DISCDRIVESTATE']._serialized_end=1664
+  _globals['_DISCEVENTTYPE']._serialized_start=1667
+  _globals['_DISCEVENTTYPE']._serialized_end=1900
   _globals['_INSERTDISCREQUEST']._serialized_start=23
   _globals['_INSERTDISCREQUEST']._serialized_end=102
   _globals['_INSERTDISCRESPONSE']._serialized_start=104
@@ -65,26 +65,26 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DISCMETADATA']._serialized_end=843
   _globals['_SUBSCRIBEDISCEVENTSREQUEST']._serialized_start=845
   _globals['_SUBSCRIBEDISCEVENTSREQUEST']._serialized_end=873
-  _globals['_DISCEVENT']._serialized_start=875
-  _globals['_DISCEVENT']._serialized_end=1002
-  _globals['_SETSPINUPDELAYREQUEST']._serialized_start=1004
-  _globals['_SETSPINUPDELAYREQUEST']._serialized_end=1044
-  _globals['_SETSPINUPDELAYRESPONSE']._serialized_start=1046
-  _globals['_SETSPINUPDELAYRESPONSE']._serialized_end=1102
-  _globals['_GETSPINUPDELAYREQUEST']._serialized_start=1104
-  _globals['_GETSPINUPDELAYREQUEST']._serialized_end=1127
-  _globals['_GETSPINUPDELAYRESPONSE']._serialized_start=1129
-  _globals['_GETSPINUPDELAYRESPONSE']._serialized_end=1170
-  _globals['_LISTAVAILABLECONTROLLERSREQUEST']._serialized_start=1172
-  _globals['_LISTAVAILABLECONTROLLERSREQUEST']._serialized_end=1205
-  _globals['_LISTAVAILABLECONTROLLERSRESPONSE']._serialized_start=1207
-  _globals['_LISTAVAILABLECONTROLLERSRESPONSE']._serialized_end=1295
-  _globals['_DISCCONTROLLERTYPEINFO']._serialized_start=1297
-  _globals['_DISCCONTROLLERTYPEINFO']._serialized_end=1394
-  _globals['_INSTALLDISCCONTROLLERREQUEST']._serialized_start=1396
-  _globals['_INSTALLDISCCONTROLLERREQUEST']._serialized_end=1449
-  _globals['_INSTALLDISCCONTROLLERRESPONSE']._serialized_start=1451
-  _globals['_INSTALLDISCCONTROLLERRESPONSE']._serialized_end=1539
-  _globals['_DISCSERVICE']._serialized_start=1884
-  _globals['_DISCSERVICE']._serialized_end=2584
+  _globals['_DISCEVENT']._serialized_start=876
+  _globals['_DISCEVENT']._serialized_end=1021
+  _globals['_SETSPINUPDELAYREQUEST']._serialized_start=1023
+  _globals['_SETSPINUPDELAYREQUEST']._serialized_end=1063
+  _globals['_SETSPINUPDELAYRESPONSE']._serialized_start=1065
+  _globals['_SETSPINUPDELAYRESPONSE']._serialized_end=1121
+  _globals['_GETSPINUPDELAYREQUEST']._serialized_start=1123
+  _globals['_GETSPINUPDELAYREQUEST']._serialized_end=1146
+  _globals['_GETSPINUPDELAYRESPONSE']._serialized_start=1148
+  _globals['_GETSPINUPDELAYRESPONSE']._serialized_end=1189
+  _globals['_LISTAVAILABLECONTROLLERSREQUEST']._serialized_start=1191
+  _globals['_LISTAVAILABLECONTROLLERSREQUEST']._serialized_end=1224
+  _globals['_LISTAVAILABLECONTROLLERSRESPONSE']._serialized_start=1226
+  _globals['_LISTAVAILABLECONTROLLERSRESPONSE']._serialized_end=1314
+  _globals['_DISCCONTROLLERTYPEINFO']._serialized_start=1316
+  _globals['_DISCCONTROLLERTYPEINFO']._serialized_end=1413
+  _globals['_INSTALLDISCCONTROLLERREQUEST']._serialized_start=1415
+  _globals['_INSTALLDISCCONTROLLERREQUEST']._serialized_end=1468
+  _globals['_INSTALLDISCCONTROLLERRESPONSE']._serialized_start=1470
+  _globals['_INSTALLDISCCONTROLLERRESPONSE']._serialized_end=1558
+  _globals['_DISCSERVICE']._serialized_start=1903
+  _globals['_DISCSERVICE']._serialized_end=2603
 # @@protoc_insertion_point(module_scope)

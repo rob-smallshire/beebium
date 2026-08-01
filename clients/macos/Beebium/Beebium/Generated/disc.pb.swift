@@ -357,6 +357,9 @@ struct Beebium_DiscEvent: Sendable {
   /// Clears the value of `disc`. Subsequent reads from it will return its default value.
   mutating func clearDisc() {self._disc = nil}
 
+  /// Source URL of the disc (insert events)
+  var discURL: String = String()
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -874,7 +877,7 @@ extension Beebium_SubscribeDiscEventsRequest: SwiftProtobuf.Message, SwiftProtob
 
 extension Beebium_DiscEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".DiscEvent"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{1}drive\0\u{3}timestamp_cycles\0\u{1}disc\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{1}drive\0\u{3}timestamp_cycles\0\u{1}disc\0\u{3}disc_url\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -886,6 +889,7 @@ extension Beebium_DiscEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       case 2: try { try decoder.decodeSingularUInt32Field(value: &self.drive) }()
       case 3: try { try decoder.decodeSingularUInt64Field(value: &self.timestampCycles) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._disc) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.discURL) }()
       default: break
       }
     }
@@ -908,6 +912,9 @@ extension Beebium_DiscEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     try { if let v = self._disc {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
     } }()
+    if !self.discURL.isEmpty {
+      try visitor.visitSingularStringField(value: self.discURL, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -916,6 +923,7 @@ extension Beebium_DiscEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if lhs.drive != rhs.drive {return false}
     if lhs.timestampCycles != rhs.timestampCycles {return false}
     if lhs._disc != rhs._disc {return false}
+    if lhs.discURL != rhs.discURL {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

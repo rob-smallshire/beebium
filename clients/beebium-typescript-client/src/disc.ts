@@ -75,6 +75,7 @@ export interface DiscEvent {
     drive: number;
     timestampCycles: number;
     disc: DiscMetadata | undefined;
+    discUrl: string;
 }
 
 export interface DiscControllerInfo {
@@ -146,6 +147,7 @@ function toDiscEvent(proto: ProtoDiscEvent): DiscEvent {
         drive: proto.drive,
         timestampCycles: proto.timestampCycles,
         disc: toDiscMetadata(proto.disc),
+        discUrl: proto.discUrl,
     };
 }
 

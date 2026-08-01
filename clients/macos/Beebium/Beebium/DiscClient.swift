@@ -176,6 +176,7 @@ final class DiscClient: ObservableObject, Disconnectable {
             // Update drive state to loaded
             if driveIndex < drives.count {
                 drives[driveIndex].state = .loaded
+                drives[driveIndex].discURL = event.discURL
                 if event.hasDisc {
                     drives[driveIndex].disc = event.disc
                     drives[driveIndex].discName = event.disc.name

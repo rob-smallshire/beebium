@@ -427,6 +427,7 @@ private:
             if (prev_state == DriveState::Empty && curr_state == DriveState::Loaded) {
                 event.set_type(DISC_EVENT_INSERTED);
                 fill_disc_metadata(event.mutable_disc(), drive.disc());
+                event.set_disc_url(drive.source_url());
             } else if (prev_state == DriveState::Loaded && curr_state == DriveState::Ejecting) {
                 event.set_type(DISC_EVENT_EJECT_REQUESTED);
             } else if (prev_state == DriveState::Ejecting && curr_state == DriveState::Empty) {

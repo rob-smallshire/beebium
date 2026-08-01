@@ -25,8 +25,10 @@
 #include "disc.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -611,4 +613,53 @@ TEST_CASE("DiscService GetDriveStatus reports is_socketed correctly", "[grpc][di
 
         CHECK(response.is_socketed());
     }
+}
+
+TEST_CASE("DiscService insert event carries the disc source URL", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    DiscTestFixtureBPlus fixture;
+
+    // Subscribe before inserting, so the stream observes the Empty -> Loaded
+    // transition. A client that only ever sees the event stream (rather than
+    // re-polling GetDriveStatus) must be able to learn where the disc came
+    // from; without disc_url on the event it cannot.
+    grpc::ClientContext stream_context;
+    // The stream is open-ended, so bound the read loop: on regression the
+    // insert event never arrives and Read() would otherwise block forever.
+    stream_context.set_deadline(std::chrono::system_clock::now() +
+                                std::chrono::seconds(5));
+    beebium::SubscribeDiscEventsRequest stream_request;
+    auto reader = fixture.stub().SubscribeDiscEvents(&stream_context, stream_request);
+
+    // The subscription samples drive state every 50ms; give it a beat to
+    // record the pre-insert baseline before changing it.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    bool saw_insert = false;
+    beebium::DiscEvent event;
+    while (reader->Read(&event)) {
+        if (event.type() == beebium::DISC_EVENT_INSERTED) {
+            saw_insert = true;
+            break;
+        }
+    }
+    stream_context.TryCancel();
+
+    REQUIRE(saw_insert);
+    CHECK(event.drive() == 0);
+    CHECK(event.disc_url() == disc_path.string());
 }

@@ -126,6 +126,7 @@ message DiscEvent {
     uint32 drive = 2;                  // Which drive (0 or 1)
     uint64 timestamp_cycles = 3;       // Emulator cycle count
     DiscMetadata disc = 4;             // Disc info (for insert/eject events)
+    string disc_url = 5;               // Source URL of the disc (insert events)
 }
 
 // --- Spin-Up Delay Configuration ---

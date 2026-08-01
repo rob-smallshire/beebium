@@ -387,11 +387,14 @@ class DiscEvent(_message.Message):
     DRIVE_FIELD_NUMBER: _builtins.int
     TIMESTAMP_CYCLES_FIELD_NUMBER: _builtins.int
     DISC_FIELD_NUMBER: _builtins.int
+    DISC_URL_FIELD_NUMBER: _builtins.int
     type: Global___DiscEventType.ValueType
     drive: _builtins.int
     """Which drive (0 or 1)"""
     timestamp_cycles: _builtins.int
     """Emulator cycle count"""
+    disc_url: _builtins.str
+    """Source URL of the disc (insert events)"""
     @_builtins.property
     def disc(self) -> Global___DiscMetadata:
         """Disc info (for insert/eject events)"""
@@ -403,10 +406,11 @@ class DiscEvent(_message.Message):
         drive: _builtins.int = ...,
         timestamp_cycles: _builtins.int = ...,
         disc: Global___DiscMetadata | None = ...,
+        disc_url: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["disc", b"disc"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["disc", b"disc", "drive", b"drive", "timestamp_cycles", b"timestamp_cycles", "type", b"type"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["disc", b"disc", "disc_url", b"disc_url", "drive", b"drive", "timestamp_cycles", b"timestamp_cycles", "type", b"type"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
