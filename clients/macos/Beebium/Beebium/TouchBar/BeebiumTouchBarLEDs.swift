@@ -257,8 +257,14 @@ class BeebiumIndicatorPanelView: BeebiumDiagnosticView {
     }
 
     deinit {
-        // Timer must be invalidated on the thread where it was scheduled
-        let timer = updateTimer
+        // The timer was scheduled on the main run loop and must be invalidated
+        // there, but deinit can run on whichever thread drops the last
+        // reference, so the timer has to cross a queue boundary to get home.
+        // Timer is not Sendable and never will be; nonisolated(unsafe) states
+        // that this particular crossing is safe, and it is: we are the last
+        // owner (nothing else can touch this timer once we are deallocating)
+        // and the receiving block does nothing but invalidate it.
+        nonisolated(unsafe) let timer = updateTimer
         DispatchQueue.main.async {
             timer?.invalidate()
         }
@@ -269,7 +275,11 @@ class BeebiumIndicatorPanelView: BeebiumDiagnosticView {
     /// Start periodic LED state updates
     func startUpdates() {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
+            // The timer is scheduled on the main run loop, so this already
+            // fires on the main thread. Hopping to it again only delayed each
+            // LED update by a turn -- and re-captured the weak self inside a
+            // second escaping closure, which is what the compiler objected to.
+            MainActor.assumeIsolated {
                 self?.updateLEDStates()
             }
         }

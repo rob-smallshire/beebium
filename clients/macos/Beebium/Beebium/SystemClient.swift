@@ -76,6 +76,11 @@ final class SystemClient: ObservableObject, Disconnectable {
     private let heartbeatTimeout: TimeInterval = 2.0
     private var heartbeatWatchdog: Timer?
 
+    /// Bumped every time the watchdog is armed. A timer that fires carrying a
+    /// stale generation has been superseded by an arriving status event, and
+    /// its verdict is void.
+    private var heartbeatGeneration: UInt64 = 0
+
     // MARK: - Connection State
 
     /// Whether system info has been successfully loaded
@@ -303,11 +308,17 @@ final class SystemClient: ObservableObject, Disconnectable {
     /// escalates from a healthy connection -- `.stopped`/`.died` are terminal.
     private func armHeartbeatWatchdog() {
         heartbeatWatchdog?.invalidate()
+        heartbeatGeneration &+= 1
+        let generation = heartbeatGeneration
         heartbeatWatchdog = Timer.scheduledTimer(
             withTimeInterval: heartbeatTimeout, repeats: false
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            // Synchronously, on the main run loop that fired us. A Task would
+            // defer the verdict past a heartbeat that has already arrived and
+            // re-armed the watchdog, declaring a reachable server unreachable;
+            // running here lets the generation check below be conclusive.
+            MainActor.assumeIsolated {
+                guard let self, self.heartbeatGeneration == generation else { return }
                 if self.liveness == .active {
                     self.liveness = .unreachable
                     NSLog("[SystemClient] No heartbeat within %.0fs -- server unreachable",

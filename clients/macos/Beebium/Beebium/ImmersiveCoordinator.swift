@@ -87,7 +87,14 @@ final class ImmersiveCoordinator {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            // Synchronously, like the other callbacks here: the observer asks
+            // for queue: .main, so assumeIsolated states what is already true
+            // instead of deferring the work. Deferring matters -- until this
+            // runs, states[id] still says the window is immersive, so an
+            // enterImmersive() arriving in between would hit the idempotence
+            // guard and be silently dropped, leaving the window out of
+            // fullscreen with the UI believing it entered.
+            MainActor.assumeIsolated {
                 self?.handleNativeExit(id: id, window: window)
             }
         }
@@ -97,7 +104,7 @@ final class ImmersiveCoordinator {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.handleWindowClosed(id: id)
             }
         }
@@ -191,7 +198,11 @@ final class ImmersiveCoordinator {
             matching: [.mouseMoved, .leftMouseDown, .rightMouseDown,
                        .otherMouseDown, .scrollWheel, .keyDown]
         ) { [weak self] event in
-            Task { @MainActor in
+            // Local event monitors are called on the main thread, on the event
+            // path. Handling the activity here rather than in a Task also
+            // spares an allocation per mouse-moved event, which in Immersive
+            // Mode is every frame the user moves the mouse.
+            MainActor.assumeIsolated {
                 self?.cursorActivity()
             }
             return event
@@ -226,7 +237,8 @@ final class ImmersiveCoordinator {
             withTimeInterval: Self.cursorIdleSeconds,
             repeats: false
         ) { [weak self] _ in
-            Task { @MainActor in
+            // Scheduled on the main run loop, so it fires on the main thread.
+            MainActor.assumeIsolated {
                 self?.hideCursorNow()
             }
         }

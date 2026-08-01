@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -90,7 +90,11 @@ final class AudioMixerState: ObservableObject {
     func startMeterUpdates() {
         meterTimer?.invalidate()
         meterTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            // Scheduled on the main run loop, so it fires on the main thread;
+            // assumeIsolated reads the levels there and then. A Task would put
+            // a fresh allocation and a run-loop hop between every meter frame
+            // and the UI, thirty times a second, for no gain.
+            MainActor.assumeIsolated {
                 self?.updateMeterLevels()
             }
         }
