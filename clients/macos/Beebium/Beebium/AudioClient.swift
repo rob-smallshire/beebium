@@ -102,6 +102,14 @@ final class AudioClient: ObservableObject, Disconnectable {
     func connect(channel: GRPCChannel) {
         client = Beebium_AudioServiceNIOClient(channel: channel)
 
+        // Retire an engine left by an earlier connect through the same queue.
+        // AudioEngine's confinement contract is that stop() and deallocation
+        // happen on engineQueue and never overlap a start; simply overwriting
+        // self.engine would deallocate the old one here on the main actor.
+        if let previous = engine {
+            engineQueue.async { previous.stop() }
+        }
+
         // Start the audio engine off the main thread (see engineQueue): its
         // CoreAudio setup can block, and must not freeze the UI.
         let engine = AudioEngine(renderer: renderer)

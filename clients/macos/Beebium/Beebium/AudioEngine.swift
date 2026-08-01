@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -11,13 +11,28 @@
 // Beebium. If not, see <https://www.gnu.org/licenses/>.
 
 import AVFAudio
+import Atomics
 import Foundation
 
 /// AVAudioEngine wrapper for audio playback.
 ///
 /// Uses AVAudioSourceNode for push-based audio rendering with minimal latency.
 /// The render callback is called from a high-priority audio thread.
-final class AudioEngine {
+///
+/// Sendability is unchecked because the safety comes from a confinement
+/// contract the compiler cannot see, not from the types involved:
+///
+///  * `start()`, `stop()`, `pause()` and `resume()` -- and therefore every
+///    mutation of `sourceNode` and `isRunning` -- run only on `AudioClient`'s
+///    serial `engineQueue`. AVAudioEngine does not tolerate an overlapping
+///    start and stop, so that queue is load-bearing regardless of Swift
+///    concurrency; the owner must not call these from anywhere else.
+///  * `deinit` calls `stop()`. `AudioClient` hands the last strong reference
+///    to a block on `engineQueue`, so deallocation happens there too.
+///  * `renderCallback` runs on the audio thread and touches only the
+///    renderer (itself `@unchecked Sendable`, atomics inside) and the
+///    underrun counter, which is atomic for that reason.
+final class AudioEngine: @unchecked Sendable {
 
     // MARK: - Audio Engine Components
 
@@ -38,7 +53,9 @@ final class AudioEngine {
 
     // MARK: - Statistics
 
-    private var underrunCount: Int = 0
+    /// Incremented on the audio thread, read from wherever the statistics are
+    /// wanted, so it is atomic rather than a plain `Int`.
+    private let underrunCount = ManagedAtomic<Int>(0)
 
     // MARK: - Initialization
 
@@ -158,7 +175,7 @@ final class AudioEngine {
 
         // Fill remaining samples with silence if underrun
         if samplesRendered < Int(frameCount) {
-            underrunCount += 1
+            underrunCount.wrappingIncrement(ordering: .relaxed)
             for i in samplesRendered..<Int(frameCount) {
                 leftBuffer[i] = 0
                 rightBuffer[i] = 0
@@ -175,11 +192,11 @@ final class AudioEngine {
 
     /// Number of buffer underruns since engine started
     var bufferUnderruns: Int {
-        return underrunCount
+        return underrunCount.load(ordering: .relaxed)
     }
 
     /// Reset underrun counter
     func resetUnderrunCount() {
-        underrunCount = 0
+        underrunCount.store(0, ordering: .relaxed)
     }
 }
