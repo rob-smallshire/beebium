@@ -51,15 +51,6 @@ class PresetManager: ObservableObject {
     /// Cached user presets directory path (retrieved from CLI)
     private var cachedUserPresetsDirpath: String?
 
-    /// Machine names handed out this session, so a second machine does not
-    /// arrive with the name of one already on screen.
-    ///
-    /// Only grows: a name is not returned to the pool when its machine exits,
-    /// because a window may still be showing it and reusing the name would
-    /// undo the point of having one. Twenty-nine launches in a single session
-    /// exhausts the pool, after which names gain a numeric suffix.
-    private var issuedMachineNames: Set<String> = []
-
     private init() {}
 
     /// Discover preset files and build system and user presets.
@@ -635,6 +626,9 @@ class PresetManager: ObservableObject {
         let process: Process
         let port: Int
         let provenanceUUID: String
+        /// The name the core was launched with, to be passed to
+        /// MachineManager.register so the name and the machine stay together.
+        let machineName: String
     }
 
     /// Launch a core process for the given preset.
@@ -654,8 +648,12 @@ class PresetManager: ObservableObject {
         // and leave several windows indistinguishable. The name belongs to
         // this instance, not to the preset, so it is decided here at launch
         // and can be changed afterwards.
-        let machineName = MachineNames.next(avoiding: issuedMachineNames)
-        issuedMachineNames.insert(machineName)
+        //
+        // Reserved from MachineManager, which is what knows the machines that
+        // exist and so is what can say which names are still spoken for. It
+        // must be handed back on every path that fails to produce a running
+        // machine, or the name leaves the pool for good.
+        let machineName = MachineManager.shared.reserveName()
 
         var arguments = [
             "start",
@@ -699,6 +697,7 @@ class PresetManager: ObservableObject {
         do {
             try process.run()
         } catch {
+            await MachineManager.shared.releaseName(machineName)
             return .failure(.launchFailed("Failed to launch: \(error.localizedDescription)"))
         }
 
@@ -723,6 +722,9 @@ class PresetManager: ObservableObject {
                         let errorMsg = stderrText.isEmpty
                             ? "Process exited with status \(process.terminationStatus)"
                             : stderrText
+                        Task { @MainActor in
+                            MachineManager.shared.releaseName(machineName)
+                        }
                         continuation.resume(returning: .failure(.processExited(errorMsg)))
                         return
                     }
@@ -742,7 +744,7 @@ class PresetManager: ObservableObject {
                        let portRange = Range(match.range(at: 1), in: text),
                        let port = Int(text[portRange]) {
                         NSLog("[PresetManager] Core listening on port \(port)")
-                        continuation.resume(returning: .success(LaunchedCore(process: process, port: port, provenanceUUID: provenanceUUID)))
+                        continuation.resume(returning: .success(LaunchedCore(process: process, port: port, provenanceUUID: provenanceUUID, machineName: machineName)))
                         return
                     }
                 }
@@ -750,6 +752,9 @@ class PresetManager: ObservableObject {
                 // Timeout - kill the process
                 NSLog("[PresetManager] Timeout waiting for port, terminating process")
                 process.terminate()
+                Task { @MainActor in
+                    MachineManager.shared.releaseName(machineName)
+                }
                 continuation.resume(returning: .failure(.timeout))
             }
         }

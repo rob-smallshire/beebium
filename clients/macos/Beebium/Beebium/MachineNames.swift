@@ -64,27 +64,68 @@ enum MachineNames {
         "Wolfson",
     ]
 
-    /// A name not among those already taken.
-    ///
-    /// Picked at random from whatever is left, rather than in order, so that
-    /// two machines started one after the other do not get names that look
-    /// alike. Once the pool is used up, names repeat with a numeric suffix --
-    /// "Trinity 2" and so on -- which is a worse name but still a distinct
-    /// one, and only reachable after twenty-nine machines in one session.
-    static func next(avoiding taken: Set<String>) -> String {
-        let free = pool.filter { !taken.contains($0) }
-        if let name = free.randomElement() {
-            return name
-        }
+}
 
-        // Every name is in use. Find the lowest suffix that is not.
-        for suffix in 2... {
-            let candidates = pool.map { "\($0) \(suffix)" }.filter { !taken.contains($0) }
-            if let name = candidates.randomElement() {
-                return name
-            }
-        }
-        // Unreachable: the loop above only ends by returning.
-        return pool[0]
+/// Hands out machine names, and takes them back.
+///
+/// A shuffled circular queue: names are issued from the front and returned to
+/// the back. Shuffling means the first machine of a session is not always the
+/// same college, and returning to the back means a name freed by a closed
+/// window is the last to be reused rather than the first -- so a new machine
+/// does not arrive wearing the name of the one you just closed.
+///
+/// When the queue runs dry the vocabulary is extended with the next numeric
+/// suffix -- "Trinity 2" and so on -- shuffled in its turn. Names are always
+/// distinct; they only ever get uglier.
+final class MachineNameAllocator {
+    private var free: [String]
+    /// Every name this allocator has ever minted, so that a name handed back
+    /// can be told apart from one the user typed. Returning "Fred" to the
+    /// queue would put a name in the pool that was never ours to give.
+    private var minted: Set<String>
+    private let pool: [String]
+    private var suffix = 1
+
+    init(pool: [String] = MachineNames.pool) {
+        self.pool = pool
+        self.free = pool.shuffled()
+        self.minted = Set(pool)
     }
+
+    /// Take the next name.
+    func issue() -> String {
+        if free.isEmpty {
+            extendVocabulary()
+        }
+        return free.removeFirst()
+    }
+
+    /// Mark a specific name as in use, if it is one of ours.
+    ///
+    /// For a machine renamed by hand onto a name we might otherwise have
+    /// issued. A name that was never ours is ignored: the user is free to
+    /// call a machine anything, and it does not consume the pool.
+    func claim(_ name: String) {
+        free.removeAll { $0 == name }
+    }
+
+    /// Give a name back, for reuse after everything else.
+    ///
+    /// Ignores names this allocator never minted, and names already free, so
+    /// releasing twice cannot put a duplicate in the queue.
+    func release(_ name: String) {
+        guard minted.contains(name), !free.contains(name) else { return }
+        free.append(name)
+    }
+
+    /// Names still available, for tests.
+    var freeCount: Int { free.count }
+
+    private func extendVocabulary() {
+        suffix += 1
+        let suffixed = pool.map { "\($0) \(suffix)" }
+        minted.formUnion(suffixed)
+        free = suffixed.shuffled()
+    }
+
 }

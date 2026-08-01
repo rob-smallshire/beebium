@@ -23,47 +23,124 @@ final class MachineNamesTests: XCTestCase {
         XCTAssertTrue(MachineNames.pool.allSatisfy { !$0.isEmpty })
     }
 
-    func testPicksFromThePoolWhenNothingIsTaken() {
-        XCTAssertTrue(MachineNames.pool.contains(MachineNames.next(avoiding: [])))
-    }
-
-    func testNeverPicksATakenName() {
-        // The whole point: a second machine must not arrive wearing the name
-        // of one already on screen.
-        var taken: Set<String> = []
-        for _ in MachineNames.pool.indices {
-            let name = MachineNames.next(avoiding: taken)
-            XCTAssertFalse(taken.contains(name), "reissued \(name)")
-            taken.insert(name)
-        }
-        XCTAssertEqual(taken.count, MachineNames.pool.count)
-    }
-
-    func testExhaustingThePoolFallsBackToSuffixes() {
-        let taken = Set(MachineNames.pool)
-        let name = MachineNames.next(avoiding: taken)
-
-        XCTAssertFalse(taken.contains(name))
-        XCTAssertTrue(name.hasSuffix(" 2"), "expected a suffixed name, got \(name)")
-        XCTAssertTrue(MachineNames.pool.contains(String(name.dropLast(2))))
-    }
-
-    func testSuffixesKeepClimbingWhileNamesAreTaken() {
-        var taken = Set(MachineNames.pool)
-        taken.formUnion(MachineNames.pool.map { "\($0) 2" })
-
-        let name = MachineNames.next(avoiding: taken)
-
-        XCTAssertFalse(taken.contains(name))
-        XCTAssertTrue(name.hasSuffix(" 3"), "expected a 3-suffixed name, got \(name)")
-    }
-
     func testHonoursAcornsFontNaming() {
         // Acorn named the RISC OS outline fonts after Cambridge colleges;
         // these three are the ones everyone remembers, so losing them would
         // lose the reference.
         for name in ["Trinity", "Corpus", "Homerton"] {
             XCTAssertTrue(MachineNames.pool.contains(name), "\(name) missing")
+        }
+    }
+}
+
+
+final class MachineNameAllocatorTests: XCTestCase {
+    func testIssuesEveryNameBeforeRepeatingAny() {
+        let allocator = MachineNameAllocator()
+        var issued: [String] = []
+        for _ in MachineNames.pool.indices {
+            issued.append(allocator.issue())
+        }
+        XCTAssertEqual(Set(issued), Set(MachineNames.pool))
+    }
+
+    func testOrderIsShuffled() {
+        // The first machine of a session should not always be the same
+        // college. Two allocators agreeing throughout would mean a fixed
+        // order; across several the chance of coincidence is negligible.
+        let orders = (0..<8).map { _ -> [String] in
+            let allocator = MachineNameAllocator()
+            return MachineNames.pool.indices.map { _ in allocator.issue() }
+        }
+        XCTAssertGreaterThan(Set(orders).count, 1, "issue order looks fixed")
+    }
+
+    func testAReleasedNameGoesToTheBack() {
+        // A name freed by closing a window must be the last to come round
+        // again, so a new machine is not handed the name just vacated.
+        let allocator = MachineNameAllocator(pool: ["A", "B", "C"])
+        let first = allocator.issue()
+        allocator.release(first)
+
+        XCTAssertNotEqual(allocator.issue(), first)
+        XCTAssertNotEqual(allocator.issue(), first)
+        XCTAssertEqual(allocator.issue(), first, "released name should come last")
+    }
+
+    func testReleasingTwiceDoesNotDuplicate() {
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+        let name = allocator.issue()
+        allocator.release(name)
+        allocator.release(name)
+
+        XCTAssertEqual(allocator.freeCount, 2)
+    }
+
+    func testIgnoresNamesItNeverMinted() {
+        // The user may call a machine anything; that must not put a foreign
+        // name into the pool.
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+        allocator.release("Fred")
+
+        XCTAssertEqual(allocator.freeCount, 2)
+        XCTAssertFalse([allocator.issue(), allocator.issue()].contains("Fred"))
+    }
+
+    func testClaimTakesANameOutOfCirculation() {
+        // A machine renamed by hand onto a pool name must not be duplicated
+        // by a later generated one.
+        let allocator = MachineNameAllocator(pool: ["A", "B", "C"])
+        allocator.claim("B")
+
+        let issued = [allocator.issue(), allocator.issue()]
+        XCTAssertFalse(issued.contains("B"))
+        XCTAssertEqual(Set(issued), ["A", "C"])
+    }
+
+    func testClaimingAnUnknownNameChangesNothing() {
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+        allocator.claim("Fred")
+        XCTAssertEqual(allocator.freeCount, 2)
+    }
+
+    func testExhaustionFallsBackToSuffixes() {
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+        _ = allocator.issue()
+        _ = allocator.issue()
+
+        let overflow = [allocator.issue(), allocator.issue()]
+        XCTAssertEqual(Set(overflow), ["A 2", "B 2"])
+    }
+
+    func testSuffixesKeepClimbing() {
+        let allocator = MachineNameAllocator(pool: ["A"])
+        XCTAssertEqual(allocator.issue(), "A")
+        XCTAssertEqual(allocator.issue(), "A 2")
+        XCTAssertEqual(allocator.issue(), "A 3")
+    }
+
+    func testSuffixedNamesAreReusableToo() {
+        let allocator = MachineNameAllocator(pool: ["A"])
+        _ = allocator.issue()
+        let second = allocator.issue()
+        allocator.release(second)
+
+        XCTAssertEqual(allocator.issue(), second)
+    }
+
+    func testNeverIssuesTheSameNameTwiceWhileInUse() {
+        // The property that matters, across a long run of churn.
+        let allocator = MachineNameAllocator(pool: ["A", "B", "C"])
+        var inUse: Set<String> = []
+        for step in 0..<200 {
+            if step % 3 == 2, let victim = inUse.randomElement() {
+                inUse.remove(victim)
+                allocator.release(victim)
+            } else {
+                let name = allocator.issue()
+                XCTAssertFalse(inUse.contains(name), "reissued \(name) while in use")
+                inUse.insert(name)
+            }
         }
     }
 }

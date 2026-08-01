@@ -460,7 +460,8 @@ struct NewMachineDialog: View {
             MachineManager.shared.register(
                 process: core.process,
                 port: core.port,
-                provenanceUUID: core.provenanceUUID
+                provenanceUUID: core.provenanceUUID,
+                name: core.machineName
             )
             let target = ConnectionTarget(host: "127.0.0.1", port: core.port)
             windowState.pendingTarget = target
