@@ -42,9 +42,20 @@ struct OpenNewWindowActionKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+// Renaming acts on the machine in the focused window, so like New Window it is
+// a focused value rather than a shared action: it means nothing without one.
+struct RenameMachineActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
 extension FocusedValues {
     var openNewWindow: (() -> Void)? {
         get { self[OpenNewWindowActionKey.self] }
         set { self[OpenNewWindowActionKey.self] = newValue }
+    }
+
+    var renameMachine: (() -> Void)? {
+        get { self[RenameMachineActionKey.self] }
+        set { self[RenameMachineActionKey.self] = newValue }
     }
 }

@@ -15,6 +15,10 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct FileCommands: Commands {
+    /// Renaming needs a machine, so this is nil unless an emulator window has
+    /// focus, and the menu item is disabled accordingly. It puts the cursor in
+    /// the title bar's name field rather than opening a dialog of its own.
+    @FocusedValue(\.renameMachine) private var renameMachine
     @ObservedObject private var appActions = AppActions.shared
     @FocusedValue(\.openNewWindow) private var openNewWindow
 
@@ -44,6 +48,14 @@ struct FileCommands: Commands {
                 Text("No Recent Items")
             }
             .disabled(true)
+
+            Divider()
+
+            Button("Rename Machine...") {
+                renameMachine?()
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .disabled(renameMachine == nil)
 
             Divider()
 

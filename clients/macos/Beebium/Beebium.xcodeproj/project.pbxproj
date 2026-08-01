@@ -138,6 +138,7 @@
 		C5D7C5C9382566ADEAA92341 /* video.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B269A5937DAC1914CA8BF39 /* video.grpc.swift */; };
 		C6AED867FD53B569CAD5A945 /* ConfigurationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */; };
 		CBC5ABA53015DE535C5F17A4 /* video.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 642BEA30A8664289314B2D9E /* video.pb.swift */; };
+		CF14C58D43FF2929691D72F7 /* MachineRenameSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6CA75F1656304E8ABDC0E9 /* MachineRenameSheet.swift */; };
 		D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */; };
 		D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */; };
 		D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */; };
@@ -305,6 +306,7 @@
 		9DE8C83B31D707C9E30C491D /* AVFAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFAudio.framework; path = System/Library/Frameworks/AVFAudio.framework; sourceTree = SDKROOT; };
 		9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingManager.swift; sourceTree = "<group>"; };
 		9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineManagerTests.swift; sourceTree = "<group>"; };
+		9F6CA75F1656304E8ABDC0E9 /* MachineRenameSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineRenameSheet.swift; sourceTree = "<group>"; };
 		A16BD17340EC98E2C5EF1127 /* audio.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = audio.proto; sourceTree = "<group>"; };
 		A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorView.swift; sourceTree = "<group>"; };
 		A32A705682AF714B2B54471F /* aun.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.grpc.swift; sourceTree = "<group>"; };
@@ -563,6 +565,7 @@
 				FF6041795434C164F849A27B /* KeyInput.swift */,
 				7319BB6A760A9042161B98EB /* MachineManager.swift */,
 				4F12FAA03C7C95012C4CD79D /* MachineNames.swift */,
+				9F6CA75F1656304E8ABDC0E9 /* MachineRenameSheet.swift */,
 				8502E9114AB10B2200A2F6F9 /* MacKeyCode.swift */,
 				F309AF35B280ABE8DDCE6E15 /* MemoryModeView.swift */,
 				76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */,
@@ -862,6 +865,7 @@
 				0DA8A667A8A7A3861F00B88F /* MachineManager.swift in Sources */,
 				A16526EF2B425C9CE263353C /* MachineNames.swift in Sources */,
 				82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */,
+				CF14C58D43FF2929691D72F7 /* MachineRenameSheet.swift in Sources */,
 				2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */,
 				910A258FD1C89BFB7CFDFC71 /* MemoryConfigurationState.swift in Sources */,
 				6B8C451CD0B6221566DBEF56 /* MemoryModeView.swift in Sources */,

@@ -70,6 +70,8 @@ struct ContentView: View {
     /// Watched so the duplicate-name warning appears and clears as machines
     /// come and go on the network.
     @ObservedObject private var discoveryClient = DiscoveryClient.shared
+    /// Whether the rename sheet is up.
+    @State private var isRenamingMachine = false
     @StateObject private var videoClient = VideoClient()
     @StateObject private var keyboardClient = KeyboardClient()
     @StateObject private var systemClient = SystemClient()
@@ -153,40 +155,25 @@ struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    /// The window title, and the way it is renamed.
+    /// What the window is called elsewhere in the system.
     ///
-    /// Falls back to the app name before the server has said who it is, so a
-    /// window that is still connecting is not briefly nameless. An empty or
-    /// unchanged edit is dropped: the server rejects an empty name, and
-    /// sending one it already has would be a needless round trip.
-    private var machineNameBinding: Binding<String> {
-        Binding(
-            get: {
-                systemClient.machineName.isEmpty ? "Beebium" : systemClient.machineName
-            },
-            set: { newName in
-                let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, trimmed != systemClient.machineName else { return }
-                systemClient.setMachineName(trimmed)
-                // Keep the name pool honest: renaming onto a name it could
-                // otherwise have issued must take that name out of
-                // circulation, and frees the one being given up.
-                MachineManager.shared.renamed(address: videoClient.target.address,
-                                              to: trimmed)
-            }
-        )
+    /// Machine name first, app name second: window switchers truncate from
+    /// the right, and the machine name is the part that distinguishes one
+    /// window from another.
+    private var windowTitle: String {
+        let name = systemClient.machineName
+        return name.isEmpty ? "Beebium" : "\(name) \u{2014} Beebium"
     }
 
     /// A warning that this machine's name is not unique, or "" if it is.
     ///
-    /// Only machines discovery can currently see are considered, and only
-    /// those that are not this one -- a machine advertises itself, so it will
-    /// always find its own name out on the network. The UUID tells the
-    /// difference.
+    /// Only machines discovery can currently see count, and only those that
+    /// are not this one -- a machine advertises itself, so it always finds its
+    /// own name on the network. The UUID tells the difference.
     ///
     /// Duplicate names are allowed: they live on a network nobody owns, so
     /// preventing them is somewhere between hard and impossible, and renaming
-    /// is a click away. Saying so is enough.
+    /// is a menu item away. Saying so is enough.
     private var duplicateNameWarning: String {
         let name = systemClient.machineName
         guard !name.isEmpty else { return "" }
@@ -291,12 +278,25 @@ struct ContentView: View {
         // several emulator windows apart -- the model is already in the status
         // bar and is the same across instances. Binding it makes the title
         // editable in place, the way a document is renamed.
-        .navigationTitle(machineNameBinding)
-        // Said beside the name, which is both the thing that is wrong and the
-        // control that fixes it: the title is editable, so the warning and its
-        // remedy are in the same place. Empty when there is nothing to say, so
-        // an ordinary window still carries the name alone.
+        // Not drawn -- the title bar shows the accessory instead -- but read by
+        // the Window menu, Mission Control and every window switcher, so it
+        // still has to say which machine this is.
+        .navigationTitle(windowTitle)
+        // Beside the name, which is the thing that is not unique. Empty when
+        // there is nothing to say, so an ordinary window carries the name
+        // alone.
         .navigationSubtitle(duplicateNameWarning)
+        .focusedValue(\.renameMachine, { isRenamingMachine = true })
+        .sheet(isPresented: $isRenamingMachine) {
+            MachineRenameSheet(currentName: systemClient.machineName) { newName in
+                systemClient.setMachineName(newName)
+                // Keep the name pool honest: renaming onto a name it could
+                // otherwise have issued must take that name out of
+                // circulation, and frees the one being given up.
+                MachineManager.shared.renamed(address: videoClient.target.address,
+                                              to: newName)
+            }
+        }
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(
@@ -439,7 +439,11 @@ struct ContentView: View {
         // close. All cleanup (shutdown decisions, client disconnection) is handled by
         // WindowCloseCoordinator, which intercepts both the close button and Cmd+W.
         .background(WindowAccessor(window: $currentWindow, configure: { window in
-            // Undo what the Welcome content did to this window. A window is
+            // Undo what the Welcome content did to this window: a window is
+            // reused when it stops showing the welcome screen and starts
+            // showing a machine, and the welcome screen makes the titlebar
+            // transparent.
+            // Undo what the Welcome content did to this window: a window is
             // reused when it stops showing the welcome screen and starts
             // showing a machine, and the welcome screen hides the title --
             // which would leave the machine's name, the one thing telling
