@@ -35,6 +35,14 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.9"
+        # Concurrency checking one notch above the default "minimal", so an
+        # isolation mistake in code that already touches Sendable types is a
+        # warning now rather than a build failure at the next toolchain bump.
+        # "complete" is the destination but not yet reachable: it reports ~45
+        # further diagnostics, mostly AppKit views that predate the main-actor
+        # annotations (TouchBar, EditableChoiceField, ConnectDialog). That is
+        # its own piece of work.
+        SWIFT_STRICT_CONCURRENCY: targeted
     # Explicit Info.plist (rather than GENERATE_INFOPLIST_FILE) because the
     # beebium:// URL scheme needs CFBundleURLTypes, an array-of-dictionaries
     # that cannot be expressed through INFOPLIST_KEY_* build settings. XcodeGen
@@ -150,5 +158,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.beebium.BeebiumTests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "5.9"
+        SWIFT_STRICT_CONCURRENCY: targeted
     dependencies:
       - target: Beebium

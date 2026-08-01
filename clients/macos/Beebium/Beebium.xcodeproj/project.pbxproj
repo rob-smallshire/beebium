@@ -102,6 +102,7 @@
 		A005244A2347799984C194E6 /* audio.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0CD29C9A89B375C692C019 /* audio.pb.swift */; };
 		A218ADC630D92D0A18D300CF /* PeripheralsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */; };
 		A2664558176937A26B30748C /* StorageConfigurationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AFDA16D57D7C85C963EBC4 /* StorageConfigurationState.swift */; };
+		A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */; };
 		A4E82812655C69808291E22A /* StorageSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */; };
 		A577F46504594230B85A9932 /* AudioMixerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D1F9F6D43714BB3F5B5CEB /* AudioMixerView.swift */; };
 		A994E213FE38477C0CF26811 /* PixelShapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1D75896DF179CEC420018F /* PixelShapeTests.swift */; };
@@ -266,6 +267,7 @@
 		86F2683BAFB4C72B6644F473 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
 		87E7F7F1255B32F8C85FAFDA /* indicator.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = indicator.proto; sourceTree = "<group>"; };
 		899F340E434ACDCAA75F913F /* EditableChoiceField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableChoiceField.swift; sourceTree = "<group>"; };
+		89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLossKeyReleaseTests.swift; sourceTree = "<group>"; };
 		8ADC7C5C44D2AAF8D8920E36 /* VideoSettingsCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsCache.swift; sourceTree = "<group>"; };
 		8B269A5937DAC1914CA8BF39 /* video.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = video.grpc.swift; sourceTree = "<group>"; };
 		8C179B6CADA71E65979BE60C /* BeebiumTouchBarEscapeKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarEscapeKey.swift; sourceTree = "<group>"; };
@@ -603,6 +605,7 @@
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
+				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
 				BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */,
@@ -752,6 +755,7 @@
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
+				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
 				D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */,
@@ -928,6 +932,7 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beebium.Beebium;
 				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.9;
 			};
 			name = Debug;
@@ -946,6 +951,7 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beebium.Beebium;
 				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
@@ -963,6 +969,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.beebium.BeebiumTests;
 				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.9;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beebium.app/Contents/MacOS/Beebium";
 			};
@@ -981,6 +988,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.beebium.BeebiumTests;
 				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.9;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beebium.app/Contents/MacOS/Beebium";
 			};
