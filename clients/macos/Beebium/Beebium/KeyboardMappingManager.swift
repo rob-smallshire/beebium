@@ -87,7 +87,7 @@ final class KeyboardMappingManager: ObservableObject {
             if macOSSpec.requiredModifiers.contains(.option) { components.append("⌥") }
             if macOSSpec.requiredModifiers.contains(.shift) { components.append("⇧") }
             if macOSSpec.requiredModifiers.contains(.command) { components.append("⌘") }
-            let keyName = MacKeyCode.name(for: macOSSpec.keyCode) ?? "?"
+            let keyName = MacKeyCode.name(for: macOSSpec.keyCode)
             components.append(keyName)
             return components.joined()
         }
@@ -111,7 +111,7 @@ final class KeyboardMappingManager: ObservableObject {
             if modifiers.contains(.command) { components.append("⌘") }
 
             // Get base key name from keyCode
-            let keyName = MacKeyCode.name(for: keyCode) ?? "?"
+            let keyName = MacKeyCode.name(for: keyCode)
             components.append(keyName)
 
             return components.joined()

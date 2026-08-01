@@ -284,15 +284,17 @@ class PresetManager: ObservableObject {
     /// This queries the preset's core executable for its schema and extracts
     /// the storage section, which includes FDC options and floppy drive configuration.
     func fetchStorageSchema(for preset: MachinePreset) async -> StorageSchemaSection? {
-        let (schema, error) = await fetchPresetSchema(from: preset.coreExecutablePath)
-        guard let schema = schema else {
-            NSLog("[PresetManager] Failed to fetch schema for \(preset.presetId): \(error ?? "unknown error")")
+        // fetchStorageSectionFromSchema runs `describe-preset-schema` itself
+        // and returns nil for every reason the fetch can fail, so probing with
+        // fetchPresetSchema first only ran the core executable a second time
+        // and discarded the answer. It logs its own failures.
+        guard let section = await fetchStorageSectionFromSchema(
+            executablePath: preset.coreExecutablePath
+        ) else {
+            NSLog("[PresetManager] Failed to fetch storage schema for \(preset.presetId)")
             return nil
         }
-
-        // Find and decode the storage section from the raw JSON
-        // We need to re-decode the sections array to get the full storage section
-        return await fetchStorageSectionFromSchema(executablePath: preset.coreExecutablePath)
+        return section
     }
 
     /// Fetch the storage section with full detail from the schema JSON.

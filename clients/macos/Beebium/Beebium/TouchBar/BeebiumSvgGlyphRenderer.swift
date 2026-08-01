@@ -277,14 +277,13 @@ class BeebiumSvgGlyphRenderer {
         print("[BeebiumSvgGlyphRenderer] Cached \(glyphCache.count) glyph(s) from \(svgResourceName).\(svgResourceType)")
     }
 
-    private static func parseSVGPath(_ pathData: String) -> NSBezierPath? {
+    static func parseSVGPath(_ pathData: String) -> NSBezierPath? {
         let path = NSBezierPath()
         let scanner = Scanner(string: pathData)
         scanner.charactersToBeSkipped = CharacterSet.whitespacesAndNewlines
 
         while !scanner.isAtEnd {
-            var nsString: NSString?
-            if scanner.scanCharacters(from: CharacterSet.letters, into: &nsString), let command = nsString as String? {
+            if let command = scanner.scanCharacters(from: CharacterSet.letters) {
                 switch command.uppercased() {
                 case "M": // Move to
                     if let point = scanPoint(scanner) {
@@ -308,11 +307,11 @@ class BeebiumSvgGlyphRenderer {
 
                 default:
                     // Skip unknown commands by scanning to next letter
-                    _ = scanner.scanUpToCharacters(from: CharacterSet.letters, into: nil)
+                    _ = scanner.scanUpToCharacters(from: CharacterSet.letters)
                 }
             } else {
                 // Skip non-command content
-                _ = scanner.scanUpToCharacters(from: CharacterSet.letters, into: nil)
+                _ = scanner.scanUpToCharacters(from: CharacterSet.letters)
             }
         }
 
@@ -320,9 +319,7 @@ class BeebiumSvgGlyphRenderer {
     }
 
     private static func scanPoint(_ scanner: Scanner) -> NSPoint? {
-        var x: Double = 0
-        var y: Double = 0
-        guard scanner.scanDouble(&x), scanner.scanDouble(&y) else {
+        guard let x = scanner.scanDouble(), let y = scanner.scanDouble() else {
             return nil
         }
         return NSPoint(x: x, y: y)

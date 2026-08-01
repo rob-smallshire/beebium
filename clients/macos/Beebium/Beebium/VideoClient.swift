@@ -115,7 +115,7 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// same frame by construction.
     func holdScreen(includeFrame: Bool) async -> ScreenHold? {
         guard let channel = _channel else { return nil }
-        let client = Beebium_VideoServiceClient(channel: channel)
+        let client = Beebium_VideoServiceNIOClient(channel: channel)
 
         var request = Beebium_HoldScreenRequest()
         request.includeFrame = includeFrame
@@ -166,7 +166,7 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// survivable; saying so returns the memory at once.
     func releaseScreen(_ holdID: UInt64) async {
         guard let channel = _channel else { return }
-        let client = Beebium_VideoServiceClient(channel: channel)
+        let client = Beebium_VideoServiceNIOClient(channel: channel)
         var request = Beebium_ReleaseScreenRequest()
         request.holdID = holdID
         do {
@@ -185,7 +185,7 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// when the display has no band to report or the call fails.
     func screenGeometry(holdID: UInt64? = nil) async -> [ScreenBandGeometry] {
         guard let channel = _channel else { return [] }
-        let client = Beebium_VideoServiceClient(channel: channel)
+        let client = Beebium_VideoServiceNIOClient(channel: channel)
         var request = Beebium_GetScreenGeometryRequest()
         if let holdID { request.holdID = holdID }
         do {
@@ -221,7 +221,7 @@ final class VideoClient: ObservableObject, Disconnectable {
                     characters: ScreenTextCharactersMode,
                     holdID: UInt64? = nil) async -> ScreenTextReading? {
         guard let channel = _channel else { return nil }
-        let client = Beebium_VideoServiceClient(channel: channel)
+        let client = Beebium_VideoServiceNIOClient(channel: channel)
 
         var request = Beebium_GetScreenTextRequest()
         request.search = search.proto

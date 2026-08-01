@@ -176,7 +176,8 @@ enum MacKeyCode {
     // MARK: - Display Names
 
     /// Short name for a key code (for compact display in reference tables)
-    /// Uses symbols for special keys where appropriate
+    /// Uses symbols for special keys where appropriate. An unrecognised code
+    /// yields "?", so callers never need a fallback of their own.
     static func name(for keyCode: UInt16) -> String {
         switch keyCode {
         // Letters
