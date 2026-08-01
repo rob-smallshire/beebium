@@ -72,6 +72,7 @@ function makeDiscStub(overrides?: Record<string, (req: any) => any>) {
             },
         }),
         ejectDisc: () => ({ accepted: true, error: "" }),
+        cancelEject: () => ({ cancelled: true, error: "" }),
         listAvailableControllers: () => ({
             controllers: [
                 {
@@ -268,18 +269,37 @@ describe("Drive", () => {
         });
     });
 
+    describe("cancelEject", () => {
+        it("asks the server to abandon a pending eject", async () => {
+            const stub = makeDiscStub();
+            const disc = new Disc(stub as any);
+            await disc.drive(1).cancelEject();
+            expect(stub.cancelEject).toHaveBeenCalledWith(
+                { drive: 1 },
+                expect.any(Function),
+            );
+        });
+
+        it("throws when there was nothing to cancel", async () => {
+            const stub = makeDiscStub({
+                cancelEject: () => ({ cancelled: false, error: "No eject pending" }),
+            });
+            const disc = new Disc(stub as any);
+            await expect(disc.drive(0).cancelEject()).rejects.toThrow(/No eject pending/);
+        });
+    });
+
     describe("eject", () => {
         it("sends correct eject options", async () => {
             const stub = makeDiscStub();
             const disc = new Disc(stub as any);
             const d = disc.drive(0);
-            await d.eject({ immediate: true, quiescenceMs: 500, forceAfterMs: 10000 });
+            await d.eject({ immediate: true, quiescenceMs: 500 });
             expect(stub.ejectDisc).toHaveBeenCalledWith(
                 {
                     drive: 0,
                     immediate: true,
                     quiescenceMs: 500,
-                    forceAfterMs: 10000,
                 },
                 expect.any(Function),
             );
@@ -295,7 +315,6 @@ describe("Drive", () => {
                     drive: 0,
                     immediate: false,
                     quiescenceMs: 0,
-                    forceAfterMs: 0,
                 },
                 expect.any(Function),
             );

@@ -13,6 +13,7 @@
 #pragma once
 
 #include "Disc.hpp"
+#include "DiscDriveEvent.hpp"
 #include "beebium/PlatformUtils.hpp"
 #include "beebium/indicators/IndicatorFilter.hpp"
 #include "beebium/indicators/Indicators.hpp"
@@ -35,9 +36,6 @@ enum class DriveState {
 struct EjectOptions {
     // Minimum time motor must be off before ejecting (default: 500ms)
     std::chrono::milliseconds quiescence_duration{500};
-
-    // Force eject after this timeout regardless of motor state (default: 10s)
-    std::chrono::milliseconds force_after{10000};
 };
 
 // Physical floppy disc drive emulation with pulse-level access.
@@ -55,9 +53,14 @@ struct EjectOptions {
 // State transitions:
 //   Empty -> Loaded      (via insert())
 //   Loaded -> Ejecting   (via request_eject())
-//   Ejecting -> Empty    (via tick_eject() when quiescent or timeout)
+//   Ejecting -> Empty    (via tick_eject() once the drive is quiet)
 //   Ejecting -> Loaded   (via cancel_eject())
 //   Any -> Empty         (via eject_immediate())
+//
+// A pending safe eject waits as long as it takes. The drive never decides on
+// its own to pull a disc out of a still-spinning drive: giving up on waiting
+// is a decision for whoever asked for the eject, taken by calling
+// eject_immediate() or abandoned with cancel_eject().
 class DiscDrive {
 public:
     static constexpr uint8_t MAX_TRACK = 79;
@@ -92,6 +95,12 @@ public:
     DriveState state() const { return state_; }
     bool has_disc() const { return state_ != DriveState::Empty; }
 
+    // Install the observer told of every change to this drive. Setting it
+    // replaces any previous one; see DiscDriveObserver for what it may do.
+    void set_observer(DiscDriveObserver observer) {
+        observer_ = std::move(observer);
+    }
+
     // =========================================================================
     // Disc Insertion
     // =========================================================================
@@ -100,19 +109,27 @@ public:
     // Only valid when state is Empty.
     // Transitions: Empty -> Loaded
     void insert(std::unique_ptr<Disc> disc) {
-        disc_ = std::move(disc);
-        if (disc_) {
-            state_ = DriveState::Loaded;
-            source_url_.clear();
-            head_position_ = 0;
-            pulse_sub_position_ = 0;
-        }
+        insert(std::move(disc), std::string());
     }
 
     // Insert a disc and record its source URL
     void insert(std::unique_ptr<Disc> disc, const std::string& url) {
-        insert(std::move(disc));
+        disc_ = std::move(disc);
+        if (!disc_) {
+            return;
+        }
+        state_ = DriveState::Loaded;
         source_url_ = url;
+        head_position_ = 0;
+        pulse_sub_position_ = 0;
+
+        DiscDriveEvent event{DiscDriveEventType::Inserted};
+        event.source_url = source_url_;
+        event.disc_name = disc_->name();
+        event.format = std::string(disc_->format_name());
+        event.sides = disc_->is_double_sided() ? 2u : 1u;
+        event.write_protected = disc_->is_write_protected();
+        notify(event);
     }
 
     // =========================================================================
@@ -130,27 +147,23 @@ public:
         state_ = DriveState::Ejecting;
         pending_eject_ = opts;
         eject_requested_at_ = clock::now();
+        notify(DiscDriveEvent{DiscDriveEventType::EjectRequested});
         return true;
     }
 
-    // Check quiescence and perform ejection if ready.
-    // Call this periodically (e.g., every 100ms) from the server loop.
-    // Returns the ejected disc if ejection occurred, nullptr otherwise.
+    // Advance a pending safe eject, completing it once the drive is quiet.
+    //
+    // Must be called periodically by whoever owns the machine's time -- the
+    // emulation loop -- and not by an observer of the drive. An eject that
+    // only progresses while something happens to be watching is an eject that
+    // silently never finishes.
+    //
+    // Returns the ejected disc if the ejection completed, nullptr otherwise.
     std::unique_ptr<Disc> tick_eject() {
         if (state_ != DriveState::Ejecting) {
             return nullptr;
         }
 
-        auto now = clock::now();
-        auto elapsed = now - eject_requested_at_;
-
-        // Check for force timeout
-        if (elapsed >= pending_eject_.force_after) {
-            was_forced_eject_ = true;
-            return complete_eject();
-        }
-
-        // Check for quiescence (motor off long enough)
         if (is_quiescent(pending_eject_.quiescence_duration)) {
             was_forced_eject_ = false;
             return complete_eject();
@@ -161,10 +174,13 @@ public:
 
     // Cancel a pending eject request.
     // Transitions: Ejecting -> Loaded
-    void cancel_eject() {
-        if (state_ == DriveState::Ejecting) {
-            state_ = DriveState::Loaded;
+    bool cancel_eject() {
+        if (state_ != DriveState::Ejecting) {
+            return false;
         }
+        state_ = DriveState::Loaded;
+        notify(DiscDriveEvent{DiscDriveEventType::EjectCancelled});
+        return true;
     }
 
     // Immediate eject - bypasses quiescence, ejects now.
@@ -240,6 +256,8 @@ public:
             if (indicators_) {
                 indicators_->set(activity_led_id_, on ? 255 : 0);
             }
+            notify(DiscDriveEvent{on ? DiscDriveEventType::MotorOn
+                                     : DiscDriveEventType::MotorOff});
         }
     }
 
@@ -356,7 +374,16 @@ private:
         source_url_.clear();
         head_position_ = 0;
         pulse_sub_position_ = 0;
-        return std::move(disc_);
+        auto disc = std::move(disc_);
+        notify(DiscDriveEvent{was_forced_eject_ ? DiscDriveEventType::ForceEjected
+                                                : DiscDriveEventType::Ejected});
+        return disc;
+    }
+
+    void notify(const DiscDriveEvent& event) const {
+        if (observer_) {
+            observer_(event);
+        }
     }
 
     bool check_index_wrap() {
@@ -400,6 +427,10 @@ private:
     EjectOptions pending_eject_;
     clock::time_point eject_requested_at_;
     bool was_forced_eject_ = false;
+
+    // Told of every change as it happens; see DiscDriveObserver for the
+    // contract it must keep.
+    DiscDriveObserver observer_;
 
     // Indicator integration (optional)
     Indicators* indicators_ = nullptr;

@@ -71,7 +71,7 @@ class _DiscEventTypeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_DiscEve
     DISC_EVENT_EJECTED: _DiscEventType.ValueType  # 2
     """Disc was ejected (graceful)"""
     DISC_EVENT_FORCE_EJECTED: _DiscEventType.ValueType  # 3
-    """Disc was force-ejected (timeout)"""
+    """Disc was ejected without waiting"""
     DISC_EVENT_EJECT_REQUESTED: _DiscEventType.ValueType  # 4
     """Eject requested (state -> Ejecting)"""
     DISC_EVENT_EJECT_CANCELLED: _DiscEventType.ValueType  # 5
@@ -89,7 +89,7 @@ DISC_EVENT_INSERTED: DiscEventType.ValueType  # 1
 DISC_EVENT_EJECTED: DiscEventType.ValueType  # 2
 """Disc was ejected (graceful)"""
 DISC_EVENT_FORCE_EJECTED: DiscEventType.ValueType  # 3
-"""Disc was force-ejected (timeout)"""
+"""Disc was ejected without waiting"""
 DISC_EVENT_EJECT_REQUESTED: DiscEventType.ValueType  # 4
 """Eject requested (state -> Ejecting)"""
 DISC_EVENT_EJECT_CANCELLED: DiscEventType.ValueType  # 5
@@ -168,26 +168,22 @@ class EjectDiscRequest(_message.Message):
     DRIVE_FIELD_NUMBER: _builtins.int
     IMMEDIATE_FIELD_NUMBER: _builtins.int
     QUIESCENCE_MS_FIELD_NUMBER: _builtins.int
-    FORCE_AFTER_MS_FIELD_NUMBER: _builtins.int
     drive: _builtins.int
     """Drive number (0 or 1)"""
     immediate: _builtins.bool
     """If true, eject now (skip quiescence wait)"""
     quiescence_ms: _builtins.int
     """Motor-off time required (default: 500)"""
-    force_after_ms: _builtins.int
-    """Force eject after timeout (default: 10000)"""
     def __init__(
         self,
         *,
         drive: _builtins.int = ...,
         immediate: _builtins.bool = ...,
         quiescence_ms: _builtins.int = ...,
-        force_after_ms: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["drive", b"drive", "force_after_ms", b"force_after_ms", "immediate", b"immediate", "quiescence_ms", b"quiescence_ms"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["drive", b"drive", "immediate", b"immediate", "quiescence_ms", b"quiescence_ms"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -216,6 +212,52 @@ class EjectDiscResponse(_message.Message):
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___EjectDiscResponse: _TypeAlias = EjectDiscResponse  # noqa: Y015
+
+@_typing.final
+class CancelEjectRequest(_message.Message):
+    """--- Cancel Eject ---"""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    DRIVE_FIELD_NUMBER: _builtins.int
+    drive: _builtins.int
+    """Drive number (0 or 1)"""
+    def __init__(
+        self,
+        *,
+        drive: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["drive", b"drive"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CancelEjectRequest: _TypeAlias = CancelEjectRequest  # noqa: Y015
+
+@_typing.final
+class CancelEjectResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    CANCELLED_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    cancelled: _builtins.bool
+    """True if a pending eject was abandoned"""
+    error: _builtins.str
+    """Error if !cancelled (e.g., "no eject pending")"""
+    def __init__(
+        self,
+        *,
+        cancelled: _builtins.bool = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cancelled", b"cancelled", "error", b"error"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CancelEjectResponse: _TypeAlias = CancelEjectResponse  # noqa: Y015
 
 @_typing.final
 class GetDriveStatusRequest(_message.Message):

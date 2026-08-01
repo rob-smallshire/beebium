@@ -50,9 +50,19 @@ class DiscServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> DiscServiceAsyncStub: ...
     InsertDisc: _grpc.UnaryUnaryMultiCallable[_disc_pb2.InsertDiscRequest, _disc_pb2.InsertDiscResponse]
-    """Insert a disc image from URL (file: scheme for local files)"""
+    """Insert a disc image from URL (file: scheme for local files).
+    Fails if the drive already holds a disc: removing one is a separate,
+    deliberate EjectDisc, so that it goes through the safe eject path.
+    """
     EjectDisc: _grpc.UnaryUnaryMultiCallable[_disc_pb2.EjectDiscRequest, _disc_pb2.EjectDiscResponse]
-    """Request disc ejection (non-blocking, safe eject by default)"""
+    """Request disc ejection (non-blocking, safe eject by default).
+    A safe eject waits as long as it takes for the drive to fall quiet;
+    the server never gives up on its own. Giving up is the caller's
+    decision, made by ejecting again with immediate set, or abandoned
+    with CancelEject.
+    """
+    CancelEject: _grpc.UnaryUnaryMultiCallable[_disc_pb2.CancelEjectRequest, _disc_pb2.CancelEjectResponse]
+    """Abandon a pending safe eject, leaving the disc in the drive"""
     GetDriveStatus: _grpc.UnaryUnaryMultiCallable[_disc_pb2.GetDriveStatusRequest, _disc_pb2.GetDriveStatusResponse]
     """Query status of all drives"""
     SubscribeDiscEvents: _grpc.UnaryStreamMultiCallable[_disc_pb2.SubscribeDiscEventsRequest, _disc_pb2.DiscEvent]
@@ -76,9 +86,19 @@ class DiscServiceAsyncStub(DiscServiceStub):
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     InsertDisc: _aio.UnaryUnaryMultiCallable[_disc_pb2.InsertDiscRequest, _disc_pb2.InsertDiscResponse]  # type: ignore[assignment]
-    """Insert a disc image from URL (file: scheme for local files)"""
+    """Insert a disc image from URL (file: scheme for local files).
+    Fails if the drive already holds a disc: removing one is a separate,
+    deliberate EjectDisc, so that it goes through the safe eject path.
+    """
     EjectDisc: _aio.UnaryUnaryMultiCallable[_disc_pb2.EjectDiscRequest, _disc_pb2.EjectDiscResponse]  # type: ignore[assignment]
-    """Request disc ejection (non-blocking, safe eject by default)"""
+    """Request disc ejection (non-blocking, safe eject by default).
+    A safe eject waits as long as it takes for the drive to fall quiet;
+    the server never gives up on its own. Giving up is the caller's
+    decision, made by ejecting again with immediate set, or abandoned
+    with CancelEject.
+    """
+    CancelEject: _aio.UnaryUnaryMultiCallable[_disc_pb2.CancelEjectRequest, _disc_pb2.CancelEjectResponse]  # type: ignore[assignment]
+    """Abandon a pending safe eject, leaving the disc in the drive"""
     GetDriveStatus: _aio.UnaryUnaryMultiCallable[_disc_pb2.GetDriveStatusRequest, _disc_pb2.GetDriveStatusResponse]  # type: ignore[assignment]
     """Query status of all drives"""
     SubscribeDiscEvents: _aio.UnaryStreamMultiCallable[_disc_pb2.SubscribeDiscEventsRequest, _disc_pb2.DiscEvent]  # type: ignore[assignment]
@@ -105,7 +125,10 @@ class DiscServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _disc_pb2.InsertDiscRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_disc_pb2.InsertDiscResponse, _abc.Awaitable[_disc_pb2.InsertDiscResponse]]:
-        """Insert a disc image from URL (file: scheme for local files)"""
+        """Insert a disc image from URL (file: scheme for local files).
+        Fails if the drive already holds a disc: removing one is a separate,
+        deliberate EjectDisc, so that it goes through the safe eject path.
+        """
 
     @_abc_1.abstractmethod
     def EjectDisc(
@@ -113,7 +136,20 @@ class DiscServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _disc_pb2.EjectDiscRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_disc_pb2.EjectDiscResponse, _abc.Awaitable[_disc_pb2.EjectDiscResponse]]:
-        """Request disc ejection (non-blocking, safe eject by default)"""
+        """Request disc ejection (non-blocking, safe eject by default).
+        A safe eject waits as long as it takes for the drive to fall quiet;
+        the server never gives up on its own. Giving up is the caller's
+        decision, made by ejecting again with immediate set, or abandoned
+        with CancelEject.
+        """
+
+    @_abc_1.abstractmethod
+    def CancelEject(
+        self,
+        request: _disc_pb2.CancelEjectRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_disc_pb2.CancelEjectResponse, _abc.Awaitable[_disc_pb2.CancelEjectResponse]]:
+        """Abandon a pending safe eject, leaving the disc in the drive"""
 
     @_abc_1.abstractmethod
     def GetDriveStatus(

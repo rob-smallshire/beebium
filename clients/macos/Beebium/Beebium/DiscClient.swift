@@ -97,9 +97,15 @@ final class DiscClient: ObservableObject, Disconnectable {
     }
 
     /// Eject a disc from the specified drive
+    ///
+    /// A safe eject waits for the drive to fall quiet, for as long as that
+    /// takes. The server never gives up on its own, so ending the wait is
+    /// this client's decision: eject again with `immediate` to force it, or
+    /// `cancelEject` to leave the disc where it is.
+    ///
     /// - Parameters:
     ///   - drive: Drive number (0 or 1)
-    ///   - immediate: If true, eject immediately without waiting for motor to stop
+    ///   - immediate: If true, eject now, whatever the drive is doing
     /// - Returns: Result indicating success or error
     func ejectDisc(drive: Int, immediate: Bool = false) async -> Result<Void, DiscError> {
         guard let client = client else {
@@ -113,6 +119,29 @@ final class DiscClient: ObservableObject, Disconnectable {
         do {
             let response = try await client.ejectDisc(request).response.get()
             if response.accepted {
+                return .success(())
+            } else {
+                return .failure(.operationFailed(response.error))
+            }
+        } catch {
+            return .failure(.operationFailed(error.localizedDescription))
+        }
+    }
+
+    /// Abandon a pending safe eject, leaving the disc in the drive
+    /// - Parameter drive: Drive number (0 or 1)
+    /// - Returns: Result indicating success or error
+    func cancelEject(drive: Int) async -> Result<Void, DiscError> {
+        guard let client = client else {
+            return .failure(.notConnected)
+        }
+
+        var request = Beebium_CancelEjectRequest()
+        request.drive = UInt32(drive)
+
+        do {
+            let response = try await client.cancelEject(request).response.get()
+            if response.cancelled {
                 return .success(())
             } else {
                 return .failure(.operationFailed(response.error))

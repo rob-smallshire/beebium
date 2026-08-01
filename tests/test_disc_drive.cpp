@@ -15,6 +15,9 @@
 #include <beebium/disc/TrackBuilder.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
+#include <vector>
+
 using namespace beebium;
 using namespace beebium::ibm_disc_format;
 
@@ -353,4 +356,171 @@ TEST_CASE("DiscDrive is_write_protected delegates to disc", "[disc][pulsedrive]"
 TEST_CASE("DiscDrive is_write_protected false with no disc", "[disc][pulsedrive]") {
     DiscDrive drive;
     CHECK_FALSE(drive.is_write_protected());
+}
+
+// =============================================================================
+// Safe eject and change reporting
+// =============================================================================
+
+namespace {
+
+// Collects the types a drive reports, in order.
+std::vector<DiscDriveEventType> record_events(DiscDrive& drive,
+                                              std::vector<DiscDriveEventType>& into) {
+    drive.set_observer([&into](const DiscDriveEvent& event) {
+        into.push_back(event.type);
+    });
+    return into;
+}
+
+} // namespace
+
+TEST_CASE("DiscDrive reports an insert as it happens", "[disc][pulsedrive][events]") {
+    DiscDrive drive;
+    std::vector<DiscDriveEventType> seen;
+    record_events(drive, seen);
+
+    drive.insert(make_test_disc(), "file:///discs/elite.ssd");
+
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0] == DiscDriveEventType::Inserted);
+}
+
+TEST_CASE("DiscDrive insert event carries the disc it is announcing",
+          "[disc][pulsedrive][events]") {
+    // The observer runs while the drive is mid-change and may be on another
+    // thread, so the event has to describe the disc itself rather than leave
+    // the observer to go and look.
+    DiscDrive drive;
+    DiscDriveEvent captured{DiscDriveEventType::MotorOff};
+    drive.set_observer([&captured](const DiscDriveEvent& event) { captured = event; });
+
+    drive.insert(make_test_disc(), "file:///discs/elite.ssd");
+
+    CHECK(captured.type == DiscDriveEventType::Inserted);
+    CHECK(captured.source_url == "file:///discs/elite.ssd");
+    CHECK_FALSE(captured.format.empty());
+}
+
+TEST_CASE("DiscDrive reports motor transitions", "[disc][pulsedrive][events]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+
+    std::vector<DiscDriveEventType> seen;
+    record_events(drive, seen);
+
+    drive.spin_up();
+    drive.spin_up();  // no change, no event
+    drive.spin_down();
+
+    REQUIRE(seen.size() == 2);
+    CHECK(seen[0] == DiscDriveEventType::MotorOn);
+    CHECK(seen[1] == DiscDriveEventType::MotorOff);
+}
+
+TEST_CASE("DiscDrive safe eject waits for the motor to stop",
+          "[disc][pulsedrive][eject]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+    drive.spin_up();
+
+    EjectOptions opts;
+    opts.quiescence_duration = std::chrono::milliseconds(0);
+
+    REQUIRE(drive.request_eject(opts));
+    CHECK(drive.state() == DriveState::Ejecting);
+
+    // Motor still running: the disc stays put however often it is ticked.
+    for (int i = 0; i < 5; ++i) {
+        CHECK(drive.tick_eject() == nullptr);
+        CHECK(drive.state() == DriveState::Ejecting);
+    }
+
+    drive.spin_down();
+    CHECK(drive.tick_eject() != nullptr);
+    CHECK(drive.state() == DriveState::Empty);
+}
+
+TEST_CASE("DiscDrive never forces an eject on its own",
+          "[disc][pulsedrive][eject]") {
+    // Giving up on waiting is the caller's decision. A drive that decided for
+    // itself would pull a disc out from under a running machine, and would do
+    // it silently.
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+    drive.spin_up();
+
+    REQUIRE(drive.request_eject());
+
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(300)) {
+        CHECK(drive.tick_eject() == nullptr);
+    }
+    CHECK(drive.state() == DriveState::Ejecting);
+
+    // The caller forcing it is what ends the wait.
+    CHECK(drive.eject_immediate() != nullptr);
+    CHECK(drive.state() == DriveState::Empty);
+}
+
+TEST_CASE("DiscDrive reports a forced eject as forced", "[disc][pulsedrive][eject]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+    drive.spin_up();
+
+    std::vector<DiscDriveEventType> seen;
+    record_events(drive, seen);
+
+    drive.eject_immediate();
+
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0] == DiscDriveEventType::ForceEjected);
+    CHECK(drive.was_forced_eject());
+}
+
+TEST_CASE("DiscDrive reports a quiescent eject as graceful",
+          "[disc][pulsedrive][eject]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+
+    std::vector<DiscDriveEventType> seen;
+    record_events(drive, seen);
+
+    EjectOptions opts;
+    opts.quiescence_duration = std::chrono::milliseconds(0);
+    REQUIRE(drive.request_eject(opts));
+    REQUIRE(drive.tick_eject() != nullptr);
+
+    REQUIRE(seen.size() == 2);
+    CHECK(seen[0] == DiscDriveEventType::EjectRequested);
+    CHECK(seen[1] == DiscDriveEventType::Ejected);
+    CHECK_FALSE(drive.was_forced_eject());
+}
+
+TEST_CASE("DiscDrive cancel_eject returns the disc to rest",
+          "[disc][pulsedrive][eject]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+    drive.spin_up();
+    REQUIRE(drive.request_eject());
+
+    std::vector<DiscDriveEventType> seen;
+    record_events(drive, seen);
+
+    CHECK(drive.cancel_eject());
+    CHECK(drive.state() == DriveState::Loaded);
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0] == DiscDriveEventType::EjectCancelled);
+
+    // Nothing to cancel the second time.
+    CHECK_FALSE(drive.cancel_eject());
+}
+
+TEST_CASE("DiscDrive cancel_eject does nothing to a drive at rest",
+          "[disc][pulsedrive][eject]") {
+    DiscDrive drive;
+    drive.insert(make_test_disc());
+
+    CHECK_FALSE(drive.cancel_eject());
+    CHECK(drive.state() == DriveState::Loaded);
 }

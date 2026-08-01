@@ -233,6 +233,13 @@ private struct DriveRowView: View {
     /// attempt. A request the server turned down has to be visible: the row
     /// would otherwise simply not change and look like nothing was tried.
     @State private var actionError: String?
+    /// True once a pending eject has been waiting long enough that the drive
+    /// is evidently busy. The server waits indefinitely rather than pulling
+    /// the disc out of a spinning drive, so this is where the user is offered
+    /// that decision.
+    @State private var ejectIsStalled = false
+    /// Counts the wait so the offer appears at a steady delay.
+    @State private var ejectWaitTask: Task<Void, Never>?
 
     private var isEmpty: Bool {
         drive.state == .empty
@@ -278,12 +285,24 @@ private struct DriveRowView: View {
             HStack(spacing: 8) {
                 browseButton
                 Spacer()
+                if isEjecting {
+                    cancelEjectButton
+                    if ejectIsStalled {
+                        forceEjectButton
+                    }
+                }
                 ejectButton
             }
         }
         .padding(12)
         .background(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
         .contentShape(Rectangle())
+        .onAppear { trackEjectProgress() }
+        .onDisappear {
+            ejectWaitTask?.cancel()
+            ejectWaitTask = nil
+        }
+        .onChange(of: drive.state) { _ in trackEjectProgress() }
         .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
             isSlotEmpty: isEmpty,
             occupiedReason: "Eject disc first",
@@ -388,10 +407,13 @@ private struct DriveRowView: View {
         HStack(spacing: 8) {
             ProgressView()
                 .scaleEffect(0.7)
-            Text("Ejecting...")
+            Text(ejectIsStalled ? "Ejecting - drive busy" : "Ejecting...")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
+        .help(ejectIsStalled
+              ? "Waiting for the drive to stop. Force Eject removes the disc now."
+              : "Waiting for the drive to stop")
     }
 
     // MARK: - Buttons
@@ -421,6 +443,29 @@ private struct DriveRowView: View {
         .controlSize(.regular)
         .disabled(isEmpty || isEjecting || isProcessing)
         .help("Eject disc")
+    }
+
+    private var cancelEjectButton: some View {
+        Button("Cancel") {
+            cancelEject()
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(isProcessing)
+        .help("Stop ejecting and keep the disc in the drive")
+    }
+
+    private var forceEjectButton: some View {
+        // Only offered once waiting has plainly not worked. Forcing takes the
+        // disc out from under whatever the drive is doing, so it is never
+        // something the machine decides by itself.
+        Button("Force Eject") {
+            forceEject()
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(isProcessing)
+        .help("Remove the disc now, without waiting for the drive to stop")
     }
 
     // MARK: - Actions
@@ -473,6 +518,59 @@ private struct DriveRowView: View {
             }
         }
     }
+
+    private func forceEject() {
+        actionError = nil
+        isProcessing = true
+        Task {
+            let result = await discClient.ejectDisc(drive: Int(drive.drive), immediate: true)
+            await MainActor.run {
+                isProcessing = false
+                if case .failure(let error) = result {
+                    NSLog("[StorageModeView] Force eject failed: \(error.localizedDescription)")
+                    actionError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func cancelEject() {
+        actionError = nil
+        isProcessing = true
+        Task {
+            let result = await discClient.cancelEject(drive: Int(drive.drive))
+            await MainActor.run {
+                isProcessing = false
+                if case .failure(let error) = result {
+                    NSLog("[StorageModeView] Cancel eject failed: \(error.localizedDescription)")
+                    actionError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Start or stop the wait that decides when to offer Force Eject.
+    private func trackEjectProgress() {
+        ejectWaitTask?.cancel()
+        ejectWaitTask = nil
+
+        guard isEjecting else {
+            ejectIsStalled = false
+            return
+        }
+
+        ejectIsStalled = false
+        ejectWaitTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(Self.stalledEjectDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { ejectIsStalled = true }
+        }
+    }
+
+    /// How long an eject may be pending before the drive counts as busy. Long
+    /// enough that an ordinary eject -- which waits 500ms for the motor --
+    /// completes without ever showing the offer.
+    private static let stalledEjectDelay: Double = 2.0
 }
 
 #if DEBUG

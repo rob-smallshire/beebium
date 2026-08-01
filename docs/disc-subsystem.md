@@ -798,6 +798,46 @@ through a format `write_track_callback` (`SsdFormatHandler`/`AdfsFormatHandler`/
   emulation loop has stopped, as a backstop for quitting just after a write.
 - **Eject** -- `complete_eject` flushes all dirty tracks before the disc leaves.
 
+### Ejecting
+
+A safe eject (`EjectDisc`) puts the drive into `Ejecting` and returns at once.
+The **emulation loop** completes it, via `tick_disc_drives` in
+`run_emulation_loop`, once the motor has been off for the quiescence period
+(500 ms by default). That placement matters twice over: the emulation thread
+owns the drives, so completing an eject there does not free the disc out from
+under the disc controller; and it is the one thread that always exists.
+Progress used to be a side effect of the `SubscribeDiscEvents` handler, which
+meant a server nobody was streaming from left a disc in `Ejecting` for ever.
+The loop keeps ticking across a debugger pause too -- a standing-still drive is
+exactly when it is safe for a disc to leave.
+
+**The server never forces an eject.** A pending safe eject waits as long as the
+drive stays busy. Giving up is the caller's decision: eject again with
+`immediate` to take the disc now, or `CancelEject` to leave it where it is. The
+macOS sidebar offers both once an eject has been pending for about two seconds,
+so forcing is always something a person chose.
+
+### Reporting drive changes
+
+`DiscEvent`s are raised where the state changes -- `DiscDrive` notifies a
+`DiscDriveObserver` from `insert`, `request_eject`, `cancel_eject`,
+`complete_eject` and `set_motor` -- and the service fans them out to the open
+`SubscribeDiscEvents` streams. Nothing samples drive state on a timer.
+
+This is not merely tidier. A drive sampled periodically cannot show an
+excursion that begins and ends between two samples: an eject followed straight
+away by an insert reads `Loaded` both times, so a subscriber went on displaying
+a disc that had already been swapped. Raising the event where the change
+happens also keeps a forced eject distinguishable from a graceful one, which no
+reconstruction from sampled state could recover.
+
+Because the drives are mutated from more than one thread -- the emulation
+thread for motor transitions and for a safe eject completing, an RPC thread for
+an insert or an immediate eject -- the fan-out uses a short lock per subscriber
+rather than the single-producer queue used for debugger events. Publishing
+never waits on a subscriber; a client that stops reading loses its oldest
+events rather than holding up the emulation thread.
+
 ### Changing a disc
 
 `InsertDisc` fails if the drive already holds one. Loading over an occupied
@@ -811,6 +851,11 @@ the motor to be off for 500 ms first.
 it risks is an operation in flight rather than data already written to a track.
 It remains available through `EjectDisc` with `immediate` set, for callers that
 have decided they want it.
+
+Both `InsertDisc` and `EjectDisc` run their mutation inside
+`Machine::with_emulation_paused`. They arrive on RPC threads, and swapping or
+freeing the disc while the disc controller is reading pulses from it is a race
+on a pointer that is about to be freed.
 
 Front-ends follow the same rule: the macOS Storage sidebar refuses a drop onto
 an occupied drive, saying so while the drag is still in the air, rather than

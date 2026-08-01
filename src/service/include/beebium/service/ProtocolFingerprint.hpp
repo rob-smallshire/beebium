@@ -18,7 +18,7 @@
 
 namespace beebium::service {
 
-inline constexpr std::string_view PROTOCOL_FINGERPRINT = "599afe4672f922c0ea43d3b07a66262fa4df9c6c0c9fc8d9cd7dec19708ffeb2";
+inline constexpr std::string_view PROTOCOL_FINGERPRINT = "e947b4012de9aa15770f585502c540058fc4ad36498716dbf57762ff77695504";
 
 }  // namespace beebium::service
 

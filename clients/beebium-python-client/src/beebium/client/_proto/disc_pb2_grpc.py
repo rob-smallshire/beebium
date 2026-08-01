@@ -60,6 +60,11 @@ class DiscServiceStub(object):
                 request_serializer=disc__pb2.EjectDiscRequest.SerializeToString,
                 response_deserializer=disc__pb2.EjectDiscResponse.FromString,
                 _registered_method=True)
+        self.CancelEject = channel.unary_unary(
+                '/beebium.DiscService/CancelEject',
+                request_serializer=disc__pb2.CancelEjectRequest.SerializeToString,
+                response_deserializer=disc__pb2.CancelEjectResponse.FromString,
+                _registered_method=True)
         self.GetDriveStatus = channel.unary_unary(
                 '/beebium.DiscService/GetDriveStatus',
                 request_serializer=disc__pb2.GetDriveStatusRequest.SerializeToString,
@@ -100,14 +105,27 @@ class DiscServiceServicer(object):
     """
 
     def InsertDisc(self, request, context):
-        """Insert a disc image from URL (file: scheme for local files)
+        """Insert a disc image from URL (file: scheme for local files).
+        Fails if the drive already holds a disc: removing one is a separate,
+        deliberate EjectDisc, so that it goes through the safe eject path.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def EjectDisc(self, request, context):
-        """Request disc ejection (non-blocking, safe eject by default)
+        """Request disc ejection (non-blocking, safe eject by default).
+        A safe eject waits as long as it takes for the drive to fall quiet;
+        the server never gives up on its own. Giving up is the caller's
+        decision, made by ejecting again with immediate set, or abandoned
+        with CancelEject.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelEject(self, request, context):
+        """Abandon a pending safe eject, leaving the disc in the drive
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -167,6 +185,11 @@ def add_DiscServiceServicer_to_server(servicer, server):
                     servicer.EjectDisc,
                     request_deserializer=disc__pb2.EjectDiscRequest.FromString,
                     response_serializer=disc__pb2.EjectDiscResponse.SerializeToString,
+            ),
+            'CancelEject': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelEject,
+                    request_deserializer=disc__pb2.CancelEjectRequest.FromString,
+                    response_serializer=disc__pb2.CancelEjectResponse.SerializeToString,
             ),
             'GetDriveStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDriveStatus,
@@ -257,6 +280,33 @@ class DiscService(object):
             '/beebium.DiscService/EjectDisc',
             disc__pb2.EjectDiscRequest.SerializeToString,
             disc__pb2.EjectDiscResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelEject(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DiscService/CancelEject',
+            disc__pb2.CancelEjectRequest.SerializeToString,
+            disc__pb2.CancelEjectResponse.FromString,
             options,
             channel_credentials,
             insecure,

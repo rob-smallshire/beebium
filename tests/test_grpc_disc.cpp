@@ -724,7 +724,7 @@ TEST_CASE("DiscService insert event carries the disc source URL", "[grpc][disc]"
 
 
 
-TEST_CASE("DiscService reports a disc changed between polls", "[grpc][disc]") {
+TEST_CASE("DiscService reports an eject and insert in quick succession", "[grpc][disc]") {
     auto disc_path = get_test_disc_path();
     if (!std::filesystem::exists(disc_path)) {
         SKIP("Test disc image not available");
@@ -756,10 +756,11 @@ TEST_CASE("DiscService reports a disc changed between polls", "[grpc][disc]") {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    // Drive state is sampled every 50ms. An immediate eject followed straight
-    // away by an insert goes Loaded -> Empty -> Loaded well inside one
-    // interval, so both samples read Loaded and the excursion is invisible to
-    // a subscriber watching state alone.
+    // An immediate eject followed straight away by an insert goes
+    // Loaded -> Empty -> Loaded in well under a millisecond. Anything that
+    // sampled drive state periodically would read Loaded on both sides and
+    // see nothing happen at all; events raised where the state changes cannot
+    // miss it.
     {
         grpc::ClientContext context;
         beebium::EjectDiscRequest request;
@@ -784,7 +785,9 @@ TEST_CASE("DiscService reports a disc changed between polls", "[grpc][disc]") {
     std::string inserted_url;
     beebium::DiscEvent event;
     while (reader->Read(&event)) {
-        if (event.type() == beebium::DISC_EVENT_EJECTED) {
+        // An immediate eject is a forced one, and says so. A reconstruction
+        // from sampled state could not tell the two apart.
+        if (event.type() == beebium::DISC_EVENT_FORCE_EJECTED) {
             saw_eject = true;
         } else if (event.type() == beebium::DISC_EVENT_INSERTED) {
             saw_insert = true;
@@ -794,12 +797,195 @@ TEST_CASE("DiscService reports a disc changed between polls", "[grpc][disc]") {
     }
     stream_context.TryCancel();
 
-    // Reported as the ejection and insertion that must have happened, in that
-    // order, so a client folding the stream into its own state ends up
-    // showing the disc that is actually in the drive.
+    // Both halves arrive, in order, so a client folding the stream into its
+    // own state ends up showing the disc that is actually in the drive.
     CHECK(saw_eject);
     REQUIRE(saw_insert);
     CHECK(inserted_url == replacement_path.string());
 
     std::filesystem::remove(replacement_path);
+}
+
+TEST_CASE("DiscService never forces a pending eject on its own", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    // A quiescence longer than this test keeps the eject pending. Nothing
+    // else may end it: the server used to force after ten seconds, taking a
+    // decision that belongs to whoever asked for the eject.
+    {
+        grpc::ClientContext context;
+        beebium::EjectDiscRequest request;
+        request.set_drive(0);
+        request.set_quiescence_ms(60000);
+        beebium::EjectDiscResponse response;
+        fixture.stub().EjectDisc(&context, request, &response);
+        REQUIRE(response.accepted());
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    grpc::ClientContext context;
+    beebium::GetDriveStatusRequest request;
+    beebium::GetDriveStatusResponse response;
+    fixture.stub().GetDriveStatus(&context, request, &response);
+
+    REQUIRE(response.drives_size() == 2);
+    CHECK(response.drives(0).state() == beebium::DISC_DRIVE_STATE_EJECTING);
+}
+
+TEST_CASE("DiscService CancelEject returns the disc to rest", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+    {
+        grpc::ClientContext context;
+        beebium::EjectDiscRequest request;
+        request.set_drive(0);
+        request.set_quiescence_ms(60000);
+        beebium::EjectDiscResponse response;
+        fixture.stub().EjectDisc(&context, request, &response);
+        REQUIRE(response.accepted());
+    }
+
+    {
+        grpc::ClientContext context;
+        beebium::CancelEjectRequest request;
+        request.set_drive(0);
+        beebium::CancelEjectResponse response;
+
+        auto status = fixture.stub().CancelEject(&context, request, &response);
+
+        REQUIRE(status.ok());
+        CHECK(response.cancelled());
+    }
+
+    grpc::ClientContext context;
+    beebium::GetDriveStatusRequest request;
+    beebium::GetDriveStatusResponse response;
+    fixture.stub().GetDriveStatus(&context, request, &response);
+
+    REQUIRE(response.drives_size() == 2);
+    CHECK(response.drives(0).state() == beebium::DISC_DRIVE_STATE_LOADED);
+    CHECK(response.drives(0).disc_url() == disc_path.string());
+}
+
+TEST_CASE("DiscService CancelEject refuses when no eject is pending", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    grpc::ClientContext context;
+    beebium::CancelEjectRequest request;
+    request.set_drive(0);
+    beebium::CancelEjectResponse response;
+
+    auto status = fixture.stub().CancelEject(&context, request, &response);
+
+    REQUIRE(status.ok());
+    CHECK_FALSE(response.cancelled());
+    CHECK_FALSE(response.error().empty());
+}
+
+TEST_CASE("DiscService reports a cancelled eject to subscribers", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    grpc::ClientContext stream_context;
+    stream_context.set_deadline(std::chrono::system_clock::now() +
+                                std::chrono::seconds(5));
+    beebium::SubscribeDiscEventsRequest stream_request;
+    auto reader = fixture.stub().SubscribeDiscEvents(&stream_context, stream_request);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    {
+        grpc::ClientContext context;
+        beebium::EjectDiscRequest request;
+        request.set_drive(0);
+        request.set_quiescence_ms(60000);
+        beebium::EjectDiscResponse response;
+        fixture.stub().EjectDisc(&context, request, &response);
+        REQUIRE(response.accepted());
+    }
+    {
+        grpc::ClientContext context;
+        beebium::CancelEjectRequest request;
+        request.set_drive(0);
+        beebium::CancelEjectResponse response;
+        fixture.stub().CancelEject(&context, request, &response);
+        REQUIRE(response.cancelled());
+    }
+
+    // Both halves reach the stream. Until cancelling was reachable at all,
+    // DISC_EVENT_EJECT_CANCELLED was an event every client handled and no
+    // server could ever send.
+    bool saw_requested = false;
+    bool saw_cancelled = false;
+    beebium::DiscEvent event;
+    while (reader->Read(&event)) {
+        if (event.type() == beebium::DISC_EVENT_EJECT_REQUESTED) {
+            saw_requested = true;
+        } else if (event.type() == beebium::DISC_EVENT_EJECT_CANCELLED) {
+            saw_cancelled = true;
+            break;
+        }
+    }
+    stream_context.TryCancel();
+
+    CHECK(saw_requested);
+    CHECK(saw_cancelled);
 }

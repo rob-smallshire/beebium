@@ -76,7 +76,7 @@ enum Beebium_DiscEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// Disc was ejected (graceful)
   case discEventEjected // = 2
 
-  /// Disc was force-ejected (timeout)
+  /// Disc was ejected without waiting
   case discEventForceEjected // = 3
 
   /// Eject requested (state -> Ejecting)
@@ -198,9 +198,6 @@ struct Beebium_EjectDiscRequest: Sendable {
   /// Motor-off time required (default: 500)
   var quiescenceMs: UInt32 = 0
 
-  /// Force eject after timeout (default: 10000)
-  var forceAfterMs: UInt32 = 0
-
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -215,6 +212,35 @@ struct Beebium_EjectDiscResponse: Sendable {
   var accepted: Bool = false
 
   /// Error if !accepted (e.g., "drive empty")
+  var error: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_CancelEjectRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Drive number (0 or 1)
+  var drive: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_CancelEjectResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// True if a pending eject was abandoned
+  var cancelled: Bool = false
+
+  /// Error if !cancelled (e.g., "no eject pending")
   var error: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -595,7 +621,7 @@ extension Beebium_InsertDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 extension Beebium_EjectDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".EjectDiscRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}drive\0\u{1}immediate\0\u{3}quiescence_ms\0\u{3}force_after_ms\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}drive\0\u{1}immediate\0\u{3}quiescence_ms\0\u{b}force_after_ms\0\u{c}\u{4}\u{1}")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -606,7 +632,6 @@ extension Beebium_EjectDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
       case 1: try { try decoder.decodeSingularUInt32Field(value: &self.drive) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.immediate) }()
       case 3: try { try decoder.decodeSingularUInt32Field(value: &self.quiescenceMs) }()
-      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.forceAfterMs) }()
       default: break
       }
     }
@@ -622,9 +647,6 @@ extension Beebium_EjectDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
     if self.quiescenceMs != 0 {
       try visitor.visitSingularUInt32Field(value: self.quiescenceMs, fieldNumber: 3)
     }
-    if self.forceAfterMs != 0 {
-      try visitor.visitSingularUInt32Field(value: self.forceAfterMs, fieldNumber: 4)
-    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -632,7 +654,6 @@ extension Beebium_EjectDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
     if lhs.drive != rhs.drive {return false}
     if lhs.immediate != rhs.immediate {return false}
     if lhs.quiescenceMs != rhs.quiescenceMs {return false}
-    if lhs.forceAfterMs != rhs.forceAfterMs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -667,6 +688,71 @@ extension Beebium_EjectDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
   static func ==(lhs: Beebium_EjectDiscResponse, rhs: Beebium_EjectDiscResponse) -> Bool {
     if lhs.accepted != rhs.accepted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CancelEjectRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CancelEjectRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}drive\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.drive) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.drive != 0 {
+      try visitor.visitSingularUInt32Field(value: self.drive, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CancelEjectRequest, rhs: Beebium_CancelEjectRequest) -> Bool {
+    if lhs.drive != rhs.drive {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CancelEjectResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CancelEjectResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cancelled\0\u{1}error\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.cancelled) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.cancelled != false {
+      try visitor.visitSingularBoolField(value: self.cancelled, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CancelEjectResponse, rhs: Beebium_CancelEjectResponse) -> Bool {
+    if lhs.cancelled != rhs.cancelled {return false}
     if lhs.error != rhs.error {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

@@ -1418,6 +1418,21 @@ void flush_disc_drives(MachineType& machine) {
     }
 }
 
+// Advance any pending safe eject on the floppy drives.
+//
+// This belongs to the emulation loop because the emulation thread owns the
+// drives: completing an eject frees the disc the disc controller reads pulses
+// from, so it must not happen underneath a running machine. It is also the
+// only thread guaranteed to exist -- an eject driven from a streaming RPC
+// handler stops progressing the moment nobody is listening.
+template<typename MachineType>
+void tick_disc_drives(MachineType& machine) {
+    if constexpr (requires { machine.state().memory.disc_drive_0; }) {
+        machine.state().memory.disc_drive_0.tick_eject();
+        machine.state().memory.disc_drive_1.tick_eject();
+    }
+}
+
 // Load disc images into floppy drives.
 // Returns an exit code on error, or std::nullopt on success.
 template<typename MachineType>
@@ -1586,7 +1601,7 @@ void run_emulation_loop(MachineType& machine,
         // count on resume: a hard reset zeroes that counter, so the baseline
         // must follow it or the deficit accounting underflows and paces the
         // machine down to a crawl.
-        if (machine.wait_if_paused() && use_pacing) {
+        if (machine.wait_if_paused([&] { tick_disc_drives(machine); }) && use_pacing) {
             pacing_clock.rebase(machine.cycle_count());
         }
 
@@ -1594,6 +1609,10 @@ void run_emulation_loop(MachineType& machine,
         if (machine.shutdown_requested()) {
             break;
         }
+
+        // A pending safe eject completes here, on the thread that owns the
+        // drives, once the motor has been off long enough.
+        tick_disc_drives(machine);
 
         // Keep the Econet socket informed of the current speed so a transport
         // that requires real time (Piconet) is gated whenever speed != 1x. Cheap

@@ -10,6 +10,7 @@ import type {
     DiscServiceClient,
     InsertDiscResponse as ProtoInsertDiscResponse,
     EjectDiscResponse as ProtoEjectDiscResponse,
+    CancelEjectResponse as ProtoCancelEjectResponse,
     GetDriveStatusResponse as ProtoGetDriveStatusResponse,
     DriveStatus as ProtoDriveStatus,
     DiscMetadata as ProtoDiscMetadata,
@@ -252,25 +253,27 @@ export class Drive {
     /**
      * Eject the disc from this drive.
      *
-     * @param options.immediate - Skip quiescence wait.
+     * A safe eject waits for the drive to fall quiet, for as long as that
+     * takes: the server never gives up and pulls the disc out of a spinning
+     * drive on its own. Ending the wait is this caller's decision -- eject
+     * again with `immediate` to force it, or {@link cancelEject} to leave the
+     * disc where it is.
+     *
+     * @param options.immediate - Eject now, whatever the drive is doing.
      * @param options.quiescenceMs - Motor-off time required before ejecting.
-     * @param options.forceAfterMs - Force eject after this timeout.
      */
     async eject(options?: {
         immediate?: boolean;
         quiescenceMs?: number;
-        forceAfterMs?: number;
     }): Promise<void> {
         const request: {
             drive: number;
             immediate: boolean;
             quiescenceMs: number;
-            forceAfterMs: number;
         } = {
             drive: this.driveNum,
             immediate: options?.immediate ?? false,
             quiescenceMs: options?.quiescenceMs ?? 0,
-            forceAfterMs: options?.forceAfterMs ?? 0,
         };
         const response = await promisify<typeof request, ProtoEjectDiscResponse>(
             this.discService.stub as unknown as Record<string, Function>,
@@ -279,6 +282,25 @@ export class Drive {
         );
         if (!response.accepted) {
             throw new DiscError(`Eject failed on drive ${this.driveNum}: ${response.error}`);
+        }
+    }
+
+    /**
+     * Abandon a pending safe eject, leaving the disc in the drive.
+     *
+     * @throws DiscError - If no eject was pending.
+     */
+    async cancelEject(): Promise<void> {
+        const request = { drive: this.driveNum };
+        const response = await promisify<typeof request, ProtoCancelEjectResponse>(
+            this.discService.stub as unknown as Record<string, Function>,
+            "cancelEject",
+            request,
+        );
+        if (!response.cancelled) {
+            throw new DiscError(
+                `Cancel eject failed on drive ${this.driveNum}: ${response.error}`,
+            );
         }
     }
 

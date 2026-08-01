@@ -544,11 +544,24 @@ public:
     /// Block while the debugger has paused execution. Returns true if it
     /// actually blocked (the machine was paused), so the caller can re-anchor
     /// timing that must not count the paused interval (see the pacing clock).
-    bool wait_if_paused() {
+    // `on_wake` runs on each pass of the wait, so housekeeping the emulation
+    // loop would otherwise perform every iteration keeps running while the
+    // machine is paused. A safe eject, for instance, must still complete on a
+    // paused machine: the drive is standing still, which is precisely when it
+    // is safe to let the disc go.
+    bool wait_if_paused(const std::function<void()>& on_wake = {}) {
         std::unique_lock<std::mutex> lock(debug_mutex_);
         bool blocked = false;
         while (paused_.load() && !shutdown_requested_.load()) {
             blocked = true;
+            if (on_wake) {
+                lock.unlock();
+                on_wake();
+                lock.lock();
+                if (!paused_.load() || shutdown_requested_.load()) {
+                    break;
+                }
+            }
             debug_cv_.wait_for(lock, std::chrono::milliseconds(100));
         }
         return blocked;

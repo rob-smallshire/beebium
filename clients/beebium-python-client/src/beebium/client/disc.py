@@ -301,17 +301,20 @@ class Drive:
         self,
         immediate: bool = False,
         quiescence_ms: int = 500,
-        force_after_ms: int = 10000,
     ) -> None:
         """Eject the disc (safe eject by default).
 
-        Safe eject waits for motor to be off for quiescence_ms before
-        ejecting. Force eject after force_after_ms if still spinning.
+        A safe eject waits for the motor to have been off for
+        ``quiescence_ms`` and then completes. It waits for as long as that
+        takes: the server never gives up and pulls the disc out of a
+        spinning drive on its own. Ending the wait is this caller's
+        decision -- eject again with ``immediate=True`` to force it, or
+        :meth:`cancel_eject` to leave the disc where it is.
 
         Args:
-            immediate: Skip quiescence wait, eject now.
+            immediate: Skip the quiescence wait and eject now, whatever the
+                drive is doing.
             quiescence_ms: Motor-off time required (default 500).
-            force_after_ms: Force eject timeout (default 10000).
 
         Raises:
             DiscError: If drive is empty or request fails.
@@ -320,11 +323,21 @@ class Drive:
             drive=self._drive_num,
             immediate=immediate,
             quiescence_ms=quiescence_ms,
-            force_after_ms=force_after_ms,
         )
         response = self._disc._stub.EjectDisc(request)
         if not response.accepted:
             raise DiscError(f"Failed to eject disc: {response.error}")
+
+    def cancel_eject(self) -> None:
+        """Abandon a pending safe eject, leaving the disc in the drive.
+
+        Raises:
+            DiscError: If no eject was pending.
+        """
+        request = disc_pb2.CancelEjectRequest(drive=self._drive_num)
+        response = self._disc._stub.CancelEject(request)
+        if not response.cancelled:
+            raise DiscError(f"Failed to cancel eject: {response.error}")
 
     def wait_for_eject(self, timeout: float = 15.0) -> bool:
         """Block until disc is ejected.

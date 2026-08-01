@@ -12,8 +12,15 @@ service DiscService {
     // deliberate EjectDisc, so that it goes through the safe eject path.
     rpc InsertDisc(InsertDiscRequest) returns (InsertDiscResponse);
 
-    // Request disc ejection (non-blocking, safe eject by default)
+    // Request disc ejection (non-blocking, safe eject by default).
+    // A safe eject waits as long as it takes for the drive to fall quiet;
+    // the server never gives up on its own. Giving up is the caller's
+    // decision, made by ejecting again with immediate set, or abandoned
+    // with CancelEject.
     rpc EjectDisc(EjectDiscRequest) returns (EjectDiscResponse);
+
+    // Abandon a pending safe eject, leaving the disc in the drive
+    rpc CancelEject(CancelEjectRequest) returns (CancelEjectResponse);
 
     // Query status of all drives
     rpc GetDriveStatus(GetDriveStatusRequest) returns (GetDriveStatusResponse);
@@ -61,15 +68,28 @@ message InsertDiscResponse {
 // --- Eject ---
 
 message EjectDiscRequest {
+    reserved 4;
+    reserved "force_after_ms";         // The server no longer forces on a timer
+
     uint32 drive = 1;                  // Drive number (0 or 1)
     bool immediate = 2;                // If true, eject now (skip quiescence wait)
     uint32 quiescence_ms = 3;          // Motor-off time required (default: 500)
-    uint32 force_after_ms = 4;         // Force eject after timeout (default: 10000)
 }
 
 message EjectDiscResponse {
     bool accepted = 1;                 // Request accepted (transitions to Ejecting)
     string error = 2;                  // Error if !accepted (e.g., "drive empty")
+}
+
+// --- Cancel Eject ---
+
+message CancelEjectRequest {
+    uint32 drive = 1;                  // Drive number (0 or 1)
+}
+
+message CancelEjectResponse {
+    bool cancelled = 1;                // True if a pending eject was abandoned
+    string error = 2;                  // Error if !cancelled (e.g., "no eject pending")
 }
 
 // --- Status Query ---
@@ -116,7 +136,7 @@ enum DiscEventType {
     DISC_EVENT_UNKNOWN = 0;
     DISC_EVENT_INSERTED = 1;           // Disc was inserted
     DISC_EVENT_EJECTED = 2;            // Disc was ejected (graceful)
-    DISC_EVENT_FORCE_EJECTED = 3;      // Disc was force-ejected (timeout)
+    DISC_EVENT_FORCE_EJECTED = 3;      // Disc was ejected without waiting
     DISC_EVENT_EJECT_REQUESTED = 4;    // Eject requested (state -> Ejecting)
     DISC_EVENT_EJECT_CANCELLED = 5;    // Eject cancelled (state -> Loaded)
     DISC_EVENT_MOTOR_ON = 6;           // Motor started

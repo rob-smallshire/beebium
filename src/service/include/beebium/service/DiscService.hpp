@@ -20,7 +20,11 @@
 #include "beebium/disc/DiscControllerRegistry.hpp"
 
 #include <grpcpp/grpcpp.h>
+#include <condition_variable>
+#include <deque>
+#include <memory>
 #include <mutex>
+#include <vector>
 
 namespace beebium::service {
 
@@ -35,9 +39,23 @@ template<typename MachineType>
 class DiscServiceImpl final : public DiscService::Service {
 public:
     explicit DiscServiceImpl(MachineType& machine)
-        : machine_(machine) {}
+        : machine_(machine)
+    {
+        if constexpr (HasDiscDrives<typename MachineType::Memory>) {
+            attach_observer(machine_.state().memory.disc_drive_0, 0);
+            attach_observer(machine_.state().memory.disc_drive_1, 1);
+        }
+    }
 
-    ~DiscServiceImpl() override = default;
+    ~DiscServiceImpl() override {
+        // The drives outlive this service, so stop them calling into a
+        // half-destroyed object.
+        if constexpr (HasDiscDrives<typename MachineType::Memory>) {
+            machine_.state().memory.disc_drive_0.set_observer(nullptr);
+            machine_.state().memory.disc_drive_1.set_observer(nullptr);
+        }
+        broker_.close();
+    }
 
     // Non-copyable
     DiscServiceImpl(const DiscServiceImpl&) = delete;
@@ -104,8 +122,13 @@ public:
             // Fill metadata before inserting (since insert moves the disc)
             fill_disc_metadata(response->mutable_disc(), result.disc.get());
 
-            // Insert the new disc
-            drive.insert(std::move(result.disc), request->url());
+            // Park the emulation loop first. This runs on an RPC thread, and
+            // the disc controller reads pulses out of the drive from the
+            // emulation thread; swapping the drive's disc underneath it is a
+            // data race on a pointer that is about to be freed.
+            machine_.with_emulation_paused([&] {
+                drive.insert(std::move(result.disc), request->url());
+            });
 
             response->set_success(true);
             return grpc::Status::OK;
@@ -143,26 +166,73 @@ public:
             }
 
             if (request->immediate()) {
-                // Immediate eject
-                drive.eject_immediate();
+                // Forcing is the caller's decision, and this is where it is
+                // taken: the disc leaves whatever the drive is doing. Park
+                // the emulation loop, since completing the eject frees the
+                // disc the controller may be reading (see InsertDisc).
+                machine_.with_emulation_paused([&] {
+                    drive.eject_immediate();
+                });
                 response->set_accepted(true);
             } else {
-                // Safe eject with quiescence
+                // Safe eject: ask, then let the emulation loop finish it once
+                // the drive falls quiet. It waits indefinitely; the server
+                // never decides on the caller's behalf to force.
                 EjectOptions opts;
                 if (request->quiescence_ms() > 0) {
                     opts.quiescence_duration = std::chrono::milliseconds(request->quiescence_ms());
                 }
-                if (request->force_after_ms() > 0) {
-                    opts.force_after = std::chrono::milliseconds(request->force_after_ms());
-                }
 
-                bool accepted = drive.request_eject(opts);
+                bool accepted = false;
+                machine_.with_emulation_paused([&] {
+                    accepted = drive.request_eject(opts);
+                });
                 response->set_accepted(accepted);
                 if (!accepted) {
                     response->set_error("Eject already in progress");
                 }
             }
 
+            return grpc::Status::OK;
+        }
+    }
+
+    grpc::Status CancelEject(
+        grpc::ServerContext* context,
+        const CancelEjectRequest* request,
+        CancelEjectResponse* response) override
+    {
+        (void)context;
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
+            response->set_cancelled(false);
+            response->set_error("Machine has no disc controller");
+            return grpc::Status::OK;
+        } else {
+            uint32_t drive_num = request->drive();
+            if (drive_num > 1) {
+                response->set_cancelled(false);
+                response->set_error("Invalid drive number (must be 0 or 1)");
+                return grpc::Status::OK;
+            }
+
+            DiscDrive& drive = (drive_num == 0)
+                ? machine_.state().memory.disc_drive_0
+                : machine_.state().memory.disc_drive_1;
+
+            // Only touches the drive's state word, but it shares a thread
+            // with everything else that does, so it is serialised the same
+            // way. See InsertDisc for why.
+            bool cancelled = false;
+            machine_.with_emulation_paused([&] {
+                cancelled = drive.cancel_eject();
+            });
+
+            response->set_cancelled(cancelled);
+            if (!cancelled) {
+                response->set_error("No eject pending");
+            }
             return grpc::Status::OK;
         }
     }
@@ -230,47 +300,28 @@ public:
         (void)request;
 
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
-            // No disc controller - just return immediately
+            // No disc controller - nothing will ever happen
             return grpc::Status::OK;
         } else {
-            // Track previous state for change detection
-            DriveState prev_state_0 = DriveState::Empty;
-            DriveState prev_state_1 = DriveState::Empty;
-            bool prev_motor_0 = false;
-            bool prev_motor_1 = false;
-            std::string prev_url_0;
-            std::string prev_url_1;
+            auto subscriber = broker_.subscribe();
 
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                prev_state_0 = machine_.state().memory.disc_drive_0.state();
-                prev_state_1 = machine_.state().memory.disc_drive_1.state();
-                prev_motor_0 = machine_.state().memory.disc_drive_0.motor_on();
-                prev_motor_1 = machine_.state().memory.disc_drive_1.motor_on();
-                prev_url_0 = machine_.state().memory.disc_drive_0.source_url();
-                prev_url_1 = machine_.state().memory.disc_drive_1.source_url();
-            }
-
+            // Events arrive from the drives themselves, so nothing here
+            // samples drive state and nothing here can miss a change that
+            // began and ended between two looks. The wait has a timeout only
+            // because a cancelled RPC cannot wake a condition variable.
+            std::vector<DiscEvent> batch;
             while (!context->IsCancelled()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-                std::lock_guard<std::mutex> lock(mutex_);
-
-                // Tick safe eject for both drives (checks quiescence, completes ejection)
-                machine_.state().memory.disc_drive_0.tick_eject();
-                machine_.state().memory.disc_drive_1.tick_eject();
-
-                // Check drive 0
-                check_and_send_events(writer, 0,
-                    machine_.state().memory.disc_drive_0,
-                    prev_state_0, prev_motor_0, prev_url_0);
-
-                // Check drive 1
-                check_and_send_events(writer, 1,
-                    machine_.state().memory.disc_drive_1,
-                    prev_state_1, prev_motor_1, prev_url_1);
+                subscriber->wait_for_events(std::chrono::milliseconds(100), batch);
+                for (const auto& event : batch) {
+                    if (!writer->Write(event)) {
+                        broker_.unsubscribe(subscriber);
+                        return grpc::Status::OK;
+                    }
+                }
+                batch.clear();
             }
 
+            broker_.unsubscribe(subscriber);
             return grpc::Status::OK;
         }
     }
@@ -421,82 +472,132 @@ private:
         status->set_write_protected(drive.is_write_protected());
     }
 
-    void check_and_send_events(grpc::ServerWriter<DiscEvent>* writer,
-                               uint32_t drive_num,
-                               DiscDrive& drive,
-                               DriveState& prev_state,
-                               bool& prev_motor,
-                               std::string& prev_url) {
-        DriveState curr_state = drive.state();
-        bool curr_motor = drive.motor_on();
-        const std::string curr_url = drive.source_url();
-        uint64_t cycle = machine_.cycle_count();
-
-        // Drive state is sampled every 50ms, so a drive can leave a state and
-        // return to it between two samples and look as though nothing
-        // happened. An immediate eject followed straight away by an insert
-        // does exactly that: Loaded -> Empty -> Loaded, all inside one poll
-        // interval, which a client watching state alone would never see. The
-        // source URL is what survives the excursion to reveal it, so a
-        // different URL under a still-loaded drive is reported as the
-        // ejection and insertion that must have happened in between.
-        const bool replaced = (curr_state == DriveState::Loaded &&
-                               prev_state != DriveState::Empty &&
-                               curr_url != prev_url);
-
-        if (replaced) {
-            DiscEvent ejected;
-            ejected.set_drive(drive_num);
-            ejected.set_timestamp_cycles(cycle);
-            ejected.set_type(DISC_EVENT_EJECTED);
-            writer->Write(ejected);
-        }
-
-        // State change events
-        if (curr_state != prev_state || replaced) {
-            DiscEvent event;
-            event.set_drive(drive_num);
-            event.set_timestamp_cycles(cycle);
-
-            if (replaced ||
-                (prev_state == DriveState::Empty && curr_state == DriveState::Loaded)) {
-                event.set_type(DISC_EVENT_INSERTED);
-                fill_disc_metadata(event.mutable_disc(), drive.disc());
-                event.set_disc_url(curr_url);
-            } else if (prev_state == DriveState::Loaded && curr_state == DriveState::Ejecting) {
-                event.set_type(DISC_EVENT_EJECT_REQUESTED);
-            } else if (prev_state == DriveState::Ejecting && curr_state == DriveState::Empty) {
-                if (drive.was_forced_eject()) {
-                    event.set_type(DISC_EVENT_FORCE_EJECTED);
-                } else {
-                    event.set_type(DISC_EVENT_EJECTED);
+    // Fan-out of drive events to the open SubscribeDiscEvents streams.
+    //
+    // A drive announces a change on whichever thread made it -- the emulation
+    // thread for a motor transition or a safe eject completing, an RPC thread
+    // for an insert or an immediate eject -- so there are several producers
+    // and this cannot be the single-producer queue used elsewhere. Publishing
+    // takes a short lock per subscriber to append a small value and signal;
+    // it never waits on a subscriber, so a client that stops reading cannot
+    // hold up the emulation thread. Such a client loses its oldest events
+    // rather than growing the queue without bound.
+    class Broker {
+    public:
+        class Subscription {
+        public:
+            // Wait for events, then hand over everything queued. Returns
+            // having waited at most `timeout`, possibly with nothing.
+            void wait_for_events(std::chrono::milliseconds timeout,
+                                 std::vector<DiscEvent>& out) {
+                std::unique_lock<std::mutex> lock(mutex_);
+                cv_.wait_for(lock, timeout, [this] { return !queue_.empty(); });
+                while (!queue_.empty()) {
+                    out.push_back(std::move(queue_.front()));
+                    queue_.pop_front();
                 }
-            } else if (prev_state == DriveState::Ejecting && curr_state == DriveState::Loaded) {
-                event.set_type(DISC_EVENT_EJECT_CANCELLED);
-            } else if (curr_state == DriveState::Empty) {
-                // Any other transition to empty (e.g., immediate eject from Loaded)
-                event.set_type(DISC_EVENT_EJECTED);
             }
 
-            writer->Write(event);
-            prev_state = curr_state;
+            void post(const DiscEvent& event) {
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    if (queue_.size() >= MAX_QUEUED) {
+                        queue_.pop_front();
+                    }
+                    queue_.push_back(event);
+                }
+                cv_.notify_one();
+            }
+
+            void wake() { cv_.notify_all(); }
+
+        private:
+            // Deep enough for any burst a drive can produce; a subscriber
+            // this far behind is not reading at all.
+            static constexpr size_t MAX_QUEUED = 256;
+
+            std::mutex mutex_;
+            std::condition_variable cv_;
+            std::deque<DiscEvent> queue_;
+        };
+
+        std::shared_ptr<Subscription> subscribe() {
+            auto sub = std::make_shared<Subscription>();
+            std::lock_guard<std::mutex> lock(mutex_);
+            subscriptions_.push_back(sub);
+            return sub;
         }
 
-        prev_url = curr_url;
+        void unsubscribe(const std::shared_ptr<Subscription>& sub) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            std::erase(subscriptions_, sub);
+        }
 
-        // Motor change events
-        if (curr_motor != prev_motor) {
+        void publish(const DiscEvent& event) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (auto& sub : subscriptions_) {
+                sub->post(event);
+            }
+        }
+
+        // Wake every subscriber so an in-progress stream notices it should
+        // wind up, rather than sitting out its timeout.
+        void close() {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (auto& sub : subscriptions_) {
+                sub->wake();
+            }
+        }
+
+    private:
+        std::mutex mutex_;
+        std::vector<std::shared_ptr<Subscription>> subscriptions_;
+    };
+
+    // Bridge one drive's changes onto the wire. The drive knows nothing of
+    // protobuf or of which drive number it is; both are supplied here.
+    void attach_observer(DiscDrive& drive, uint32_t drive_num) {
+        drive.set_observer([this, drive_num](const DiscDriveEvent& change) {
             DiscEvent event;
             event.set_drive(drive_num);
-            event.set_timestamp_cycles(cycle);
-            event.set_type(curr_motor ? DISC_EVENT_MOTOR_ON : DISC_EVENT_MOTOR_OFF);
-            writer->Write(event);
-            prev_motor = curr_motor;
-        }
+            event.set_timestamp_cycles(machine_.cycle_count());
+
+            switch (change.type) {
+                case DiscDriveEventType::Inserted:
+                    event.set_type(DISC_EVENT_INSERTED);
+                    event.set_disc_url(change.source_url);
+                    event.mutable_disc()->set_name(change.disc_name);
+                    event.mutable_disc()->set_sides(change.sides);
+                    event.mutable_disc()->set_write_protected(change.write_protected);
+                    event.mutable_disc()->set_format(change.format);
+                    break;
+                case DiscDriveEventType::EjectRequested:
+                    event.set_type(DISC_EVENT_EJECT_REQUESTED);
+                    break;
+                case DiscDriveEventType::EjectCancelled:
+                    event.set_type(DISC_EVENT_EJECT_CANCELLED);
+                    break;
+                case DiscDriveEventType::Ejected:
+                    event.set_type(DISC_EVENT_EJECTED);
+                    break;
+                case DiscDriveEventType::ForceEjected:
+                    event.set_type(DISC_EVENT_FORCE_EJECTED);
+                    break;
+                case DiscDriveEventType::MotorOn:
+                    event.set_type(DISC_EVENT_MOTOR_ON);
+                    break;
+                case DiscDriveEventType::MotorOff:
+                    event.set_type(DISC_EVENT_MOTOR_OFF);
+                    break;
+            }
+
+            broker_.publish(event);
+        });
     }
 
     MachineType& machine_;
     std::mutex mutex_;
+    Broker broker_;
 };
 
 } // namespace beebium::service

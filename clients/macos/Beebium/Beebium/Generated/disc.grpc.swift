@@ -31,6 +31,11 @@ internal protocol Beebium_DiscServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_EjectDiscRequest, Beebium_EjectDiscResponse>
 
+  func cancelEject(
+    _ request: Beebium_CancelEjectRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_CancelEjectRequest, Beebium_CancelEjectResponse>
+
   func getDriveStatus(
     _ request: Beebium_GetDriveStatusRequest,
     callOptions: CallOptions?
@@ -68,7 +73,9 @@ extension Beebium_DiscServiceClientProtocol {
     return "beebium.DiscService"
   }
 
-  /// Insert a disc image from URL (file: scheme for local files)
+  /// Insert a disc image from URL (file: scheme for local files).
+  /// Fails if the drive already holds a disc: removing one is a separate,
+  /// deliberate EjectDisc, so that it goes through the safe eject path.
   ///
   /// - Parameters:
   ///   - request: Request to send to InsertDisc.
@@ -86,7 +93,11 @@ extension Beebium_DiscServiceClientProtocol {
     )
   }
 
-  /// Request disc ejection (non-blocking, safe eject by default)
+  /// Request disc ejection (non-blocking, safe eject by default).
+  /// A safe eject waits as long as it takes for the drive to fall quiet;
+  /// the server never gives up on its own. Giving up is the caller's
+  /// decision, made by ejecting again with immediate set, or abandoned
+  /// with CancelEject.
   ///
   /// - Parameters:
   ///   - request: Request to send to EjectDisc.
@@ -101,6 +112,24 @@ extension Beebium_DiscServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeEjectDiscInterceptors() ?? []
+    )
+  }
+
+  /// Abandon a pending safe eject, leaving the disc in the drive
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to CancelEject.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func cancelEject(
+    _ request: Beebium_CancelEjectRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_CancelEjectRequest, Beebium_CancelEjectResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.cancelEject.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCancelEjectInterceptors() ?? []
     )
   }
 
@@ -292,6 +321,11 @@ internal protocol Beebium_DiscServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_EjectDiscRequest, Beebium_EjectDiscResponse>
 
+  func makeCancelEjectCall(
+    _ request: Beebium_CancelEjectRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_CancelEjectRequest, Beebium_CancelEjectResponse>
+
   func makeGetDriveStatusCall(
     _ request: Beebium_GetDriveStatusRequest,
     callOptions: CallOptions?
@@ -354,6 +388,18 @@ extension Beebium_DiscServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeEjectDiscInterceptors() ?? []
+    )
+  }
+
+  internal func makeCancelEjectCall(
+    _ request: Beebium_CancelEjectRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_CancelEjectRequest, Beebium_CancelEjectResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.cancelEject.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCancelEjectInterceptors() ?? []
     )
   }
 
@@ -456,6 +502,18 @@ extension Beebium_DiscServiceAsyncClientProtocol {
     )
   }
 
+  internal func cancelEject(
+    _ request: Beebium_CancelEjectRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CancelEjectResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DiscServiceClientMetadata.Methods.cancelEject.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeCancelEjectInterceptors() ?? []
+    )
+  }
+
   internal func getDriveStatus(
     _ request: Beebium_GetDriveStatusRequest,
     callOptions: CallOptions? = nil
@@ -554,6 +612,9 @@ internal protocol Beebium_DiscServiceClientInterceptorFactoryProtocol: Sendable 
   /// - Returns: Interceptors to use when invoking 'ejectDisc'.
   func makeEjectDiscInterceptors() -> [ClientInterceptor<Beebium_EjectDiscRequest, Beebium_EjectDiscResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'cancelEject'.
+  func makeCancelEjectInterceptors() -> [ClientInterceptor<Beebium_CancelEjectRequest, Beebium_CancelEjectResponse>]
+
   /// - Returns: Interceptors to use when invoking 'getDriveStatus'.
   func makeGetDriveStatusInterceptors() -> [ClientInterceptor<Beebium_GetDriveStatusRequest, Beebium_GetDriveStatusResponse>]
 
@@ -580,6 +641,7 @@ internal enum Beebium_DiscServiceClientMetadata {
     methods: [
       Beebium_DiscServiceClientMetadata.Methods.insertDisc,
       Beebium_DiscServiceClientMetadata.Methods.ejectDisc,
+      Beebium_DiscServiceClientMetadata.Methods.cancelEject,
       Beebium_DiscServiceClientMetadata.Methods.getDriveStatus,
       Beebium_DiscServiceClientMetadata.Methods.subscribeDiscEvents,
       Beebium_DiscServiceClientMetadata.Methods.setSpinUpDelay,
@@ -599,6 +661,12 @@ internal enum Beebium_DiscServiceClientMetadata {
     internal static let ejectDisc = GRPCMethodDescriptor(
       name: "EjectDisc",
       path: "/beebium.DiscService/EjectDisc",
+      type: GRPCCallType.unary
+    )
+
+    internal static let cancelEject = GRPCMethodDescriptor(
+      name: "CancelEject",
+      path: "/beebium.DiscService/CancelEject",
       type: GRPCCallType.unary
     )
 
@@ -649,11 +717,20 @@ internal enum Beebium_DiscServiceClientMetadata {
 internal protocol Beebium_DiscServiceProvider: CallHandlerProvider {
   var interceptors: Beebium_DiscServiceServerInterceptorFactoryProtocol? { get }
 
-  /// Insert a disc image from URL (file: scheme for local files)
+  /// Insert a disc image from URL (file: scheme for local files).
+  /// Fails if the drive already holds a disc: removing one is a separate,
+  /// deliberate EjectDisc, so that it goes through the safe eject path.
   func insertDisc(request: Beebium_InsertDiscRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_InsertDiscResponse>
 
-  /// Request disc ejection (non-blocking, safe eject by default)
+  /// Request disc ejection (non-blocking, safe eject by default).
+  /// A safe eject waits as long as it takes for the drive to fall quiet;
+  /// the server never gives up on its own. Giving up is the caller's
+  /// decision, made by ejecting again with immediate set, or abandoned
+  /// with CancelEject.
   func ejectDisc(request: Beebium_EjectDiscRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_EjectDiscResponse>
+
+  /// Abandon a pending safe eject, leaving the disc in the drive
+  func cancelEject(request: Beebium_CancelEjectRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CancelEjectResponse>
 
   /// Query status of all drives
   func getDriveStatus(request: Beebium_GetDriveStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_GetDriveStatusResponse>
@@ -702,6 +779,15 @@ extension Beebium_DiscServiceProvider {
         responseSerializer: ProtobufSerializer<Beebium_EjectDiscResponse>(),
         interceptors: self.interceptors?.makeEjectDiscInterceptors() ?? [],
         userFunction: self.ejectDisc(request:context:)
+      )
+
+    case "CancelEject":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CancelEjectRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CancelEjectResponse>(),
+        interceptors: self.interceptors?.makeCancelEjectInterceptors() ?? [],
+        userFunction: self.cancelEject(request:context:)
       )
 
     case "GetDriveStatus":
@@ -775,17 +861,29 @@ internal protocol Beebium_DiscServiceAsyncProvider: CallHandlerProvider, Sendabl
   static var serviceDescriptor: GRPCServiceDescriptor { get }
   var interceptors: Beebium_DiscServiceServerInterceptorFactoryProtocol? { get }
 
-  /// Insert a disc image from URL (file: scheme for local files)
+  /// Insert a disc image from URL (file: scheme for local files).
+  /// Fails if the drive already holds a disc: removing one is a separate,
+  /// deliberate EjectDisc, so that it goes through the safe eject path.
   func insertDisc(
     request: Beebium_InsertDiscRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_InsertDiscResponse
 
-  /// Request disc ejection (non-blocking, safe eject by default)
+  /// Request disc ejection (non-blocking, safe eject by default).
+  /// A safe eject waits as long as it takes for the drive to fall quiet;
+  /// the server never gives up on its own. Giving up is the caller's
+  /// decision, made by ejecting again with immediate set, or abandoned
+  /// with CancelEject.
   func ejectDisc(
     request: Beebium_EjectDiscRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_EjectDiscResponse
+
+  /// Abandon a pending safe eject, leaving the disc in the drive
+  func cancelEject(
+    request: Beebium_CancelEjectRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CancelEjectResponse
 
   /// Query status of all drives
   func getDriveStatus(
@@ -862,6 +960,15 @@ extension Beebium_DiscServiceAsyncProvider {
         wrapping: { try await self.ejectDisc(request: $0, context: $1) }
       )
 
+    case "CancelEject":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CancelEjectRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_CancelEjectResponse>(),
+        interceptors: self.interceptors?.makeCancelEjectInterceptors() ?? [],
+        wrapping: { try await self.cancelEject(request: $0, context: $1) }
+      )
+
     case "GetDriveStatus":
       return GRPCAsyncServerHandler(
         context: context,
@@ -932,6 +1039,10 @@ internal protocol Beebium_DiscServiceServerInterceptorFactoryProtocol: Sendable 
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeEjectDiscInterceptors() -> [ServerInterceptor<Beebium_EjectDiscRequest, Beebium_EjectDiscResponse>]
 
+  /// - Returns: Interceptors to use when handling 'cancelEject'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeCancelEjectInterceptors() -> [ServerInterceptor<Beebium_CancelEjectRequest, Beebium_CancelEjectResponse>]
+
   /// - Returns: Interceptors to use when handling 'getDriveStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetDriveStatusInterceptors() -> [ServerInterceptor<Beebium_GetDriveStatusRequest, Beebium_GetDriveStatusResponse>]
@@ -964,6 +1075,7 @@ internal enum Beebium_DiscServiceServerMetadata {
     methods: [
       Beebium_DiscServiceServerMetadata.Methods.insertDisc,
       Beebium_DiscServiceServerMetadata.Methods.ejectDisc,
+      Beebium_DiscServiceServerMetadata.Methods.cancelEject,
       Beebium_DiscServiceServerMetadata.Methods.getDriveStatus,
       Beebium_DiscServiceServerMetadata.Methods.subscribeDiscEvents,
       Beebium_DiscServiceServerMetadata.Methods.setSpinUpDelay,
@@ -983,6 +1095,12 @@ internal enum Beebium_DiscServiceServerMetadata {
     internal static let ejectDisc = GRPCMethodDescriptor(
       name: "EjectDisc",
       path: "/beebium.DiscService/EjectDisc",
+      type: GRPCCallType.unary
+    )
+
+    internal static let cancelEject = GRPCMethodDescriptor(
+      name: "CancelEject",
+      path: "/beebium.DiscService/CancelEject",
       type: GRPCCallType.unary
     )
 
