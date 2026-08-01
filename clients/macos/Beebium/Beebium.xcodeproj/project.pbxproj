@@ -86,6 +86,7 @@
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
 		8248344928EA9782B944178F /* SidebarMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992C39260909EB85C84D2C20 /* SidebarMode.swift */; };
 		82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28ED949DB593C8353954F7B1 /* MachinePreset.swift */; };
+		838B9FA71F4995836B03D3AD /* SvgPathParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */; };
 		8690CAE33C1969FE969DCD06 /* econet_transport.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5635C71D7BCFDC74AE40070B /* econet_transport.grpc.swift */; };
 		8BDB7D234471A8C37A8B027C /* econet.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2624275BB5D5286D790AF3 /* econet.grpc.swift */; };
 		8C6EF54139165E4D6F07941C /* ExtensionPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9DB980150AF613F28EA04D /* ExtensionPanelView.swift */; };
@@ -250,6 +251,7 @@
 		69144892FD8EBDC0F0D9230E /* video.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = video.proto; sourceTree = "<group>"; };
 		69DA862227C857FDE208AF04 /* ScreenSelectionGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSelectionGeometry.swift; sourceTree = "<group>"; };
 		6AA9C1D32F71A0E3DD2F7D8E /* SpeedControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedControlView.swift; sourceTree = "<group>"; };
+		6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParser.swift; sourceTree = "<group>"; };
 		7319BB6A760A9042161B98EB /* MachineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineManager.swift; sourceTree = "<group>"; };
 		74AEA0430FDD370E37C07678 /* VideoSettingsLoadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsLoadTests.swift; sourceTree = "<group>"; };
 		757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralsClient.swift; sourceTree = "<group>"; };
@@ -595,6 +597,7 @@
 				B9D68557079BA374D2FAD131 /* BeebiumTouchBarKeys.swift */,
 				0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */,
 				0787829BB8681E1354B9C585 /* BeebiumTouchBarManager.swift */,
+				6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */,
 			);
 			path = TouchBar;
 			sourceTree = "<group>";
@@ -872,6 +875,7 @@
 				8E648F53A0DD1B04A0E1F08E /* StorageModeView.swift in Sources */,
 				A4E82812655C69808291E22A /* StorageSchemaSection.swift in Sources */,
 				AE3969E0CE7F7D5F7C57513A /* StorageSectionView.swift in Sources */,
+				838B9FA71F4995836B03D3AD /* SvgPathParser.swift in Sources */,
 				E275D2F57760944D93A67635 /* SystemClient.swift in Sources */,
 				14F3A975FA057C10313A9E3E /* SystemPowerMonitor.swift in Sources */,
 				F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */,

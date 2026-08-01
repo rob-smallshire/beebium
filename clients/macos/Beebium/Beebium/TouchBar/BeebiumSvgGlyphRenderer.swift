@@ -30,16 +30,16 @@
 //  - Maintainability: Simple code is easier to understand and debug
 //
 //  WHAT THIS PARSER SUPPORTS:
-//  - Basic path commands: M (moveto), L (lineto), C (cubic bezier), Z (closepath)
+//  - Path data in full: see SvgPathParser, which implements the whole path
+//    grammar of SVG 1.1 section 8.3. Path data is drawing-tool output and
+//    every tool spells it differently, so this is not the place to take a
+//    subset -- an unsupported spelling means a glyph silently missing.
 //  - Very basic CSS styles via style="..." attributes with stroke-width and fill properties
 //  - Groups with ID attributes for glyph identification
 //
 //  WHAT THIS PARSER DOES NOT SUPPORT:
 //  - Advanced SVG features (gradients, filters, masks, patterns)
-//  - Relative path commands (m, l, c, etc.)
-//  - Arc commands (A, a)
-//  - Quadratic bezier curves (Q, q)
-//  - Transformations in path data
+//  - Transformations (the transform attribute, on any element)
 //  - Text elements
 //  - External references
 //
@@ -127,7 +127,7 @@ class BeebiumSvgGlyphRenderer {
                     strokeWidth = max(4.0, proportionalStroke)
                 }
 
-                if let bezierPath = Self.parseSVGPath(pathString.trimmingCharacters(in: .whitespaces)) {
+                if let bezierPath = SvgPathParser.path(from: pathString) {
                     Self.renderPath(bezierPath, strokeWidth: strokeWidth, isFill: isFill)
                 }
             }
@@ -275,54 +275,6 @@ class BeebiumSvgGlyphRenderer {
         glyphCache = delegate.allGroups
 
         print("[BeebiumSvgGlyphRenderer] Cached \(glyphCache.count) glyph(s) from \(svgResourceName).\(svgResourceType)")
-    }
-
-    static func parseSVGPath(_ pathData: String) -> NSBezierPath? {
-        let path = NSBezierPath()
-        let scanner = Scanner(string: pathData)
-        scanner.charactersToBeSkipped = CharacterSet.whitespacesAndNewlines
-
-        while !scanner.isAtEnd {
-            if let command = scanner.scanCharacters(from: CharacterSet.letters) {
-                switch command.uppercased() {
-                case "M": // Move to
-                    if let point = scanPoint(scanner) {
-                        path.move(to: point)
-                    }
-
-                case "L": // Line to
-                    if let point = scanPoint(scanner) {
-                        path.line(to: point)
-                    }
-
-                case "C": // Cubic bezier curve
-                    if let cp1 = scanPoint(scanner),
-                       let cp2 = scanPoint(scanner),
-                       let end = scanPoint(scanner) {
-                        path.curve(to: end, controlPoint1: cp1, controlPoint2: cp2)
-                    }
-
-                case "Z": // Close path
-                    path.close()
-
-                default:
-                    // Skip unknown commands by scanning to next letter
-                    _ = scanner.scanUpToCharacters(from: CharacterSet.letters)
-                }
-            } else {
-                // Skip non-command content
-                _ = scanner.scanUpToCharacters(from: CharacterSet.letters)
-            }
-        }
-
-        return path.isEmpty ? nil : path
-    }
-
-    private static func scanPoint(_ scanner: Scanner) -> NSPoint? {
-        guard let x = scanner.scanDouble(), let y = scanner.scanDouble() else {
-            return nil
-        }
-        return NSPoint(x: x, y: y)
     }
 
     private static func drawFunctionKeyText(_ title: String, in rect: NSRect) {
