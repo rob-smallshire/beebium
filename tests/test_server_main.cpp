@@ -672,16 +672,27 @@ TEST_CASE("stderr_accepts_nonblocking_write reflects pipe writability",
     CHECK_FALSE(beebium::server::stderr_is_terminal());
     CHECK_FALSE(beebium::server::stderr_accepts_nonblocking_write());
 
-    // Draining frees space, so it becomes writable again. Retry a
-    // signal-interrupted read rather than mistaking EINTR for a drained pipe
-    // under load on a busy runner.
+    // Draining frees space, so it becomes writable again -- but how much has to
+    // go before the kernel says so scales with the pipe's capacity, which is not
+    // the same everywhere (64 KiB on most hosts, 256 KiB on a Raspberry Pi
+    // kernel). So drain until it reports writable rather than assuming one read
+    // is enough, and bound the attempts so a genuine never-writable pipe fails
+    // the test instead of hanging it. Retry a signal-interrupted read rather
+    // than mistaking EINTR for a drained pipe under load on a busy runner.
     char sink[8192];
-    ssize_t drained;
-    do {
-        drained = read(fds[0], sink, sizeof(sink));
-    } while (drained < 0 && errno == EINTR);
-    REQUIRE(drained > 0);
-    CHECK(beebium::server::stderr_accepts_nonblocking_write());
+    bool writable = false;
+    long total_drained = 0;
+    for (int attempt = 0; attempt < 64 && !writable; ++attempt) {
+        ssize_t drained;
+        do {
+            drained = read(fds[0], sink, sizeof(sink));
+        } while (drained < 0 && errno == EINTR);
+        REQUIRE(drained > 0);
+        total_drained += drained;
+        writable = beebium::server::stderr_accepts_nonblocking_write();
+    }
+    INFO("drained " << total_drained << " bytes");
+    CHECK(writable);
 
     dup2(saved_stderr, STDERR_FILENO);
     close(saved_stderr);
