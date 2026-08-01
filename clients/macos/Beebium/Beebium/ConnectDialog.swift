@@ -51,7 +51,7 @@ class ConnectWindowState: ObservableObject {
 
 struct ConnectWindowContent: View {
     @ObservedObject var windowState = ConnectWindowState.shared
-    @StateObject private var discoveryClient = DiscoveryClient()
+    @ObservedObject private var discoveryClient = DiscoveryClient.shared
     @ObservedObject private var recentManager = RecentConnectionsManager.shared
     @ObservedObject private var connectionRegistry = ConnectionRegistry.shared
     @Environment(\.openWindow) private var openWindow
@@ -86,9 +86,9 @@ struct ConnectWindowContent: View {
             discoveryClient.startDiscovery()
             recentManager.load()
         }
-        .onDisappear {
-            discoveryClient.stopDiscovery()
-        }
+        // No onDisappear teardown: the browser is shared and outlives this
+        // dialog, because naming a new machine and flagging duplicate names
+        // both depend on it still running. startDiscovery() is idempotent.
     }
 
     // MARK: - Discovered Machines Section

@@ -28,6 +28,12 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
     private let powerMonitor: SystemPowerMonitoring = MacSystemPowerMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Start browsing now rather than when something first asks. Naming a
+        // new machine consults what is on the network but will not wait for
+        // it, so discovery needs a head start to be of any use to the first
+        // machine created.
+        DiscoveryClient.shared.startDiscovery()
+
         // Tooltips drive much of Beebium's secondary information (per-row
         // socket details in the Memory sidebar, parsed ROM kinds, slot
         // numbers, source filepaths). macOS's default tooltip delay is

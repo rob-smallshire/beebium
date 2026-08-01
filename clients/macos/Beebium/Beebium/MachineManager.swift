@@ -157,8 +157,13 @@ class MachineManager: ObservableObject {
     /// Reserved before the process starts, because the name is a command-line
     /// argument to it. If the launch then fails, hand it back with
     /// `releaseName` rather than letting it leak out of the pool.
-    func reserveName() -> String {
-        nameAllocator.issue()
+    ///
+    /// `avoiding` carries names known to be in use beyond this app's own
+    /// machines -- what Bonjour has seen. It is passed in rather than looked
+    /// up here so that this stays a plain bookkeeper, testable without a
+    /// network.
+    func reserveName(avoiding unavailable: Set<String> = []) -> String {
+        nameAllocator.issue(avoiding: unavailable)
     }
 
     /// Return a name to the pool, for reuse after every other free name.

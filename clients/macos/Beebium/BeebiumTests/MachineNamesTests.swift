@@ -128,6 +128,48 @@ final class MachineNameAllocatorTests: XCTestCase {
         XCTAssertEqual(allocator.issue(), second)
     }
 
+    func testAvoidsNamesSeenElsewhere() {
+        let allocator = MachineNameAllocator(pool: ["A", "B", "C"])
+
+        XCTAssertEqual(allocator.issue(avoiding: ["A", "B"]), "C")
+    }
+
+    func testAvoidedNamesStayAvailable() {
+        // A name in use on the network is skipped, not consumed: the machine
+        // holding it may well be gone by the time we look again.
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+
+        XCTAssertEqual(allocator.issue(avoiding: ["A"]), "B")
+        XCTAssertEqual(allocator.issue(avoiding: []), "A")
+    }
+
+    func testExtendsRatherThanDuplicatingWhenEverythingIsTaken() {
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+
+        let name = allocator.issue(avoiding: ["A", "B"])
+
+        XCTAssertEqual(Set(["A 2", "B 2"]).contains(name), true, "got \(name)")
+    }
+
+    func testAcceptsADuplicateRatherThanFailingToName() {
+        // If even the extended vocabulary is spoken for, a duplicate name is
+        // the lesser evil: a machine with an awkward name beats no machine.
+        let allocator = MachineNameAllocator(pool: ["A"])
+        let everything: Set<String> = ["A", "A 2", "A 3", "A 4", "A 5"]
+
+        let name = allocator.issue(avoiding: everything)
+
+        XCTAssertFalse(name.isEmpty)
+    }
+
+    func testAnEmptyAvoidSetChangesNothing() {
+        // What happens when Bonjour is unavailable: naming carries on.
+        let allocator = MachineNameAllocator(pool: ["A", "B"])
+
+        XCTAssertEqual(Set([allocator.issue(avoiding: []), allocator.issue(avoiding: [])]),
+                       ["A", "B"])
+    }
+
     func testNeverIssuesTheSameNameTwiceWhileInUse() {
         // The property that matters, across a long run of churn.
         let allocator = MachineNameAllocator(pool: ["A", "B", "C"])

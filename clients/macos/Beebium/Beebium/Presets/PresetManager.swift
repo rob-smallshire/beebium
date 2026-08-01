@@ -653,7 +653,11 @@ class PresetManager: ObservableObject {
         // exist and so is what can say which names are still spoken for. It
         // must be handed back on every path that fails to produce a running
         // machine, or the name leaves the pool for good.
-        let machineName = MachineManager.shared.reserveName()
+        // Whatever discovery knows this instant. Never waited for: if Bonjour
+        // is unavailable or has not found anything yet, this is empty and the
+        // machine is named anyway, at the risk of a duplicate.
+        let namesOnNetwork = DiscoveryClient.shared.knownMachineNames
+        let machineName = MachineManager.shared.reserveName(avoiding: namesOnNetwork)
 
         var arguments = [
             "start",

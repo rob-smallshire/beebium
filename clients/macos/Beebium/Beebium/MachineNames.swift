@@ -92,10 +92,26 @@ final class MachineNameAllocator {
         self.minted = Set(pool)
     }
 
-    /// Take the next name.
-    func issue() -> String {
-        if free.isEmpty {
-            extendVocabulary()
+    /// Take the next name, preferring one not in `unavailable`.
+    ///
+    /// `unavailable` is what is known to be spoken for beyond this app's own
+    /// machines -- names seen on the network. It is a preference, not a
+    /// constraint: skipped names stay at the front of the queue, since the
+    /// machine holding one elsewhere may well go away before we next look.
+    ///
+    /// If everything free is spoken for, the vocabulary is extended rather
+    /// than a duplicate handed out. Only if that too collides is a duplicate
+    /// accepted, because a duplicate name is a nuisance and refusing to name
+    /// a machine at all is worse.
+    func issue(avoiding unavailable: Set<String> = []) -> String {
+        if let index = free.firstIndex(where: { !unavailable.contains($0) }) {
+            return free.remove(at: index)
+        }
+
+        extendVocabulary()
+
+        if let index = free.firstIndex(where: { !unavailable.contains($0) }) {
+            return free.remove(at: index)
         }
         return free.removeFirst()
     }
