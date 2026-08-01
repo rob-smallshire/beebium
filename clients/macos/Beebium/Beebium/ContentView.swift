@@ -67,6 +67,9 @@ struct MainWindowRouter: View {
 
 /// Main content view displaying the emulator output
 struct ContentView: View {
+    /// Watched so the duplicate-name warning appears and clears as machines
+    /// come and go on the network.
+    @ObservedObject private var discoveryClient = DiscoveryClient.shared
     @StateObject private var videoClient = VideoClient()
     @StateObject private var keyboardClient = KeyboardClient()
     @StateObject private var systemClient = SystemClient()
@@ -174,6 +177,26 @@ struct ContentView: View {
         )
     }
 
+    /// A warning that this machine's name is not unique, or "" if it is.
+    ///
+    /// Only machines discovery can currently see are considered, and only
+    /// those that are not this one -- a machine advertises itself, so it will
+    /// always find its own name out on the network. The UUID tells the
+    /// difference.
+    ///
+    /// Duplicate names are allowed: they live on a network nobody owns, so
+    /// preventing them is somewhere between hard and impossible, and renaming
+    /// is a click away. Saying so is enough.
+    private var duplicateNameWarning: String {
+        let name = systemClient.machineName
+        guard !name.isEmpty else { return "" }
+        let clash = discoveryClient
+            .machinesOtherThan(uuid: systemClient.machineUUID)
+            .first { $0.instanceName == name }
+        guard let clash else { return "" }
+        return "\u{26A0}\u{FE0E} name also used on \(clash.displayHost)"
+    }
+
     private var emulatorView: some View {
         EmulatorView(
             videoClient: videoClient,
@@ -269,6 +292,11 @@ struct ContentView: View {
         // bar and is the same across instances. Binding it makes the title
         // editable in place, the way a document is renamed.
         .navigationTitle(machineNameBinding)
+        // Said beside the name, which is both the thing that is wrong and the
+        // control that fixes it: the title is editable, so the warning and its
+        // remedy are in the same place. Empty when there is nothing to say, so
+        // an ordinary window still carries the name alone.
+        .navigationSubtitle(duplicateNameWarning)
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(

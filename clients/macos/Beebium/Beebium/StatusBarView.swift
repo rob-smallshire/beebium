@@ -20,7 +20,6 @@ struct StatusBarView: View {
     @ObservedObject var keyboardClient: KeyboardClient
     @ObservedObject var keyboardMappingManager: KeyboardMappingManager
     @ObservedObject var machineManager: MachineManager
-    @ObservedObject var discoveryClient: DiscoveryClient = .shared
     var connectionTarget: ConnectionTarget
     var onToggleUnlink: (() -> Void)?
 
@@ -86,19 +85,6 @@ struct StatusBarView: View {
 
             // Machine name on right
             if systemClient.isLoaded {
-                if let sharedWith = machineSharingThisName {
-                    // Duplicate names are allowed -- preventing them across a
-                    // network nobody owns is not really possible, and renaming
-                    // is a click away. Saying so is enough.
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .help("""
-                              Another machine is also called \
-                              "\(systemClient.machineName)" (on \(sharedWith)). \
-                              Rename this one by clicking its name in the title bar.
-                              """)
-                }
                 Text(systemClient.machineDisplayName)
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
@@ -107,21 +93,6 @@ struct StatusBarView: View {
         .frame(height: 22)
         .padding(.horizontal, 8)
         .background(.bar)
-    }
-
-    /// Where else this machine's name is in use, if anywhere.
-    ///
-    /// Only considers machines discovery can currently see, and only those
-    /// that are not this one -- a machine advertises itself, so it will always
-    /// find its own name out on the network. The UUID is what tells the
-    /// difference.
-    private var machineSharingThisName: String? {
-        let name = systemClient.machineName
-        guard !name.isEmpty else { return nil }
-        let clash = discoveryClient
-            .machinesOtherThan(uuid: systemClient.machineUUID)
-            .first { $0.instanceName == name }
-        return clash?.displayHost
     }
 
     private func handleIndicatorTap(name: String, keyName: String?) {
