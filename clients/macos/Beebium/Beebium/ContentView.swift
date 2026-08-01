@@ -438,7 +438,15 @@ struct ContentView: View {
         // No onDisappear: SwiftUI's WindowGroup does not fire onDisappear on window
         // close. All cleanup (shutdown decisions, client disconnection) is handled by
         // WindowCloseCoordinator, which intercepts both the close button and Cmd+W.
-        .background(WindowAccessor(window: $currentWindow))
+        .background(WindowAccessor(window: $currentWindow, configure: { window in
+            // Undo what the Welcome content did to this window. A window is
+            // reused when it stops showing the welcome screen and starts
+            // showing a machine, and the welcome screen hides the title --
+            // which would leave the machine's name, the one thing telling
+            // several windows apart, permanently invisible.
+            window.titlebarAppearsTransparent = false
+            window.titleVisibility = .visible
+        }))
         .onChange(of: currentWindow) { window in
             guard let window = window else { return }
             // Capture the NSWindow once; never update it. Used by Immersive Mode to
