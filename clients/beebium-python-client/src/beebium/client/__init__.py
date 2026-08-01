@@ -38,9 +38,9 @@ from beebium.client.audio import (
 )
 from beebium.client.client import Beebium
 from beebium.client.econet import (
+    AdlcStatus,
     EconetEvent,
     EconetFrameInfo,
-    AdlcStatus,
     EconetStatus,
     HandshakeStatus,
 )
@@ -89,6 +89,11 @@ from beebium.client.extensions import (
     StorageDevice,
     StorageKind,
 )
+from beebium.client.host import (
+    host_identifier,
+    is_local_host,
+    local_host_fingerprint,
+)
 from beebium.client.system import (
     AdvertisementState,
     MachineIdentity,
@@ -118,7 +123,10 @@ __all__ = [
     "Control",
     "ExtensionInfo",
     "Extensions",
+    "host_identifier",
     "PROTOCOL_FINGERPRINT",
+    "is_local_host",
+    "local_host_fingerprint",
     "ProtocolMismatchError",
     "ControlKind",
     "DebuggerError",

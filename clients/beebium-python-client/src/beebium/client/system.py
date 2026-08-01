@@ -20,6 +20,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from beebium.client._proto import system_pb2, system_pb2_grpc
+from beebium.client.host import is_local_host
 
 if TYPE_CHECKING:
     pass
@@ -383,6 +384,27 @@ class System:
         request = system_pb2.GetSystemInfoRequest()
         response = self._stub.GetSystemInfo(request)
         return response.host_fingerprint
+
+    @property
+    def is_local(self) -> bool:
+        """Whether the server is running on this same host.
+
+        True when the two processes share a filesystem, which is what any
+        exchange of paths depends on: :meth:`Drive.insert` sends a path for
+        the server to open, and a drive's ``disc_url`` is a path on the
+        server's host.
+
+        False if the server's host will not identify itself, or this one
+        will not: an unknown is never taken for a match, since that would
+        licence exactly the path exchanges that break.
+
+        This is a fact about a connection, not a permission. Nothing in this
+        API is withheld when it is False -- inserting by path against a
+        server elsewhere remains available, and will simply fail if the path
+        means nothing there. Use it to decide whether offering a path is
+        sensible, as the macOS front end does.
+        """
+        return is_local_host(self.host_fingerprint)
 
     @property
     def client_count(self) -> int:
