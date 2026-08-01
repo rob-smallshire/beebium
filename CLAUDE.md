@@ -231,6 +231,7 @@ WD1770 controller with:
 - `screen-text-library.md` - Reading text off the screen: the standalone recognition library and its CLI
 - `keyboard.md` - Keyboard matrix and input handling
 - `frontend-modifier-keys.md` - How a front-end must translate host modifier keys (SHIFT/CTRL) to avoid stuck-modifier desync; platform-independent rules plus macOS specifics, for future front-ends
+- `frontend-local-server-gating.md` - How a front-end discovers whether the server shares its filesystem (SystemInfo.host_fingerprint), and which path-exchanging features must be gated on it; platform-independent rules plus macOS specifics, for future front-ends
 - `frontend-sleep-wake.md` - How a front-end survives host sleep: present-on-frame for display sleep, and a platform-abstracted wake signal driving active reconnect for full system sleep; for future front-ends
 - `indicators.md` - LED status indicators
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links

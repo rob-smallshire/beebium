@@ -241,6 +241,7 @@ class SystemInfo(_message.Message):
     CLOCK_SPEED_HZ_FIELD_NUMBER: _builtins.int
     PROTOCOL_FINGERPRINT_FIELD_NUMBER: _builtins.int
     EXECUTABLE_PATH_FIELD_NUMBER: _builtins.int
+    HOST_FINGERPRINT_FIELD_NUMBER: _builtins.int
     clock_speed_hz: _builtins.int
     """Nominal CPU clock frequency in Hz (e.g. 2000000 for 2 MHz)."""
     protocol_fingerprint: _builtins.str
@@ -260,6 +261,27 @@ class SystemInfo(_message.Message):
     identical from the client. The path answers it directly.
 
     Empty if the path cannot be determined.
+    """
+    host_fingerprint: _builtins.str
+    """An opaque token identifying the host the server is running on, for
+    comparison against the client's own. Equal tokens mean the two
+    processes share a filesystem; unequal ones mean they do not.
+
+    This exists because several client features exchange filesystem paths
+    -- inserting a disc image sends the server a path to open, and
+    revealing one in a file manager opens a path the server reported --
+    and a path is only meaningful to a process on the same host. Network
+    addresses cannot answer the question: a client may reach a server on
+    its own machine over loopback, over that machine's LAN address, or
+    through a Bonjour ".local" name that resolves back to itself.
+
+    A digest rather than the underlying identifier, which is a hardware or
+    OS-installation value that identifies the machine to anything else
+    that asks. See HostFingerprint.hpp for how it is derived; a client must
+    derive its own the same way.
+
+    Empty if the host will not identify itself, which a client must read as
+    "not the same host" rather than as matching another empty value.
     """
     @_builtins.property
     def provenance(self) -> Global___LaunchProvenance:
@@ -282,10 +304,11 @@ class SystemInfo(_message.Message):
         clock_speed_hz: _builtins.int = ...,
         protocol_fingerprint: _builtins.str = ...,
         executable_path: _builtins.str = ...,
+        host_fingerprint: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["connections", b"connections", "identity", b"identity", "provenance", b"provenance"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["clock_speed_hz", b"clock_speed_hz", "connections", b"connections", "executable_path", b"executable_path", "identity", b"identity", "protocol_fingerprint", b"protocol_fingerprint", "provenance", b"provenance"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["clock_speed_hz", b"clock_speed_hz", "connections", b"connections", "executable_path", b"executable_path", "host_fingerprint", b"host_fingerprint", "identity", b"identity", "protocol_fingerprint", b"protocol_fingerprint", "provenance", b"provenance"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

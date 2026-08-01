@@ -25,6 +25,8 @@ enum DiscDropRefusal: Equatable {
     case notADiscImage
     /// The drive already holds a disc.
     case slotOccupied(String)
+    /// The server is on another host, so it cannot open a file from this one.
+    case serverElsewhere
 
     var message: String {
         switch self {
@@ -34,6 +36,8 @@ enum DiscDropRefusal: Equatable {
             return "Not a disc image"
         case .slotOccupied(let reason):
             return reason
+        case .serverElsewhere:
+            return "Server is on another host"
         }
     }
 }
@@ -50,12 +54,19 @@ enum DiscDropCandidate: Equatable {
 
 /// Whether a drag may be dropped, and if not, why not.
 ///
-/// The file's own suitability is judged before the state of the drive: told
-/// "eject disc first", a user would reasonably expect that ejecting makes the
-/// drop work, which is not true of a file that was never a disc image.
+/// Reasons are ordered by how fundamental they are. A server on another host
+/// cannot open a file from this one whatever the file is or whatever the
+/// drive is doing, so that is reported first; and the file's own suitability
+/// comes before the state of the drive, because told "eject disc first" a
+/// user would reasonably expect that ejecting makes the drop work, which is
+/// not true of a file that was never a disc image.
 func discDropRefusal(for candidate: DiscDropCandidate,
                      isSlotEmpty: Bool,
-                     occupiedReason: String) -> DiscDropRefusal? {
+                     occupiedReason: String,
+                     isServerLocal: Bool = true) -> DiscDropRefusal? {
+    if !isServerLocal {
+        return .serverElsewhere
+    }
     switch candidate {
     case .none:
         return .notADiscImage
@@ -81,6 +92,9 @@ struct DiscImageDropDelegate: DropDelegate {
     let isSlotEmpty: Bool
     /// What to say when it cannot, e.g. "Eject disc first".
     let occupiedReason: String
+    /// Whether the server is on this host. A path is only meaningful to a
+    /// process that shares this filesystem.
+    var isServerLocal: Bool = true
     /// Set while a droppable drag hovers, for the target highlight.
     @Binding var isTargeted: Bool
     /// Set while a refused drag hovers, to show the reason.
@@ -149,7 +163,8 @@ struct DiscImageDropDelegate: DropDelegate {
     private func currentRefusal(for info: DropInfo) -> DiscDropRefusal? {
         discDropRefusal(for: candidate(in: info),
                         isSlotEmpty: isSlotEmpty,
-                        occupiedReason: occupiedReason)
+                        occupiedReason: occupiedReason,
+                        isServerLocal: isServerLocal)
     }
 
     private func candidate(in info: DropInfo) -> DiscDropCandidate {

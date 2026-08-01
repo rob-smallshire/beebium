@@ -17,6 +17,7 @@
 		0519CCA0392852CB2C422286 /* DiscImageTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40DDCC33A2B6BB3F4A015E4 /* DiscImageTypes.swift */; };
 		06B9C1E897D9DB39E8392078 /* SidebarModeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7386122C0E5009AE250FECD /* SidebarModeContent.swift */; };
 		07C91006D788A614860664BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4635C74CA6E1654868006CA6 /* Assets.xcassets */; };
+		089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66676E0A17481C9E2BE66969 /* HostFingerprint.swift */; };
 		0C9F21B8F3D60663F6BC11BD /* VideoSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E101DD75E1EF0B125CB46B1 /* VideoSettingsPane.swift */; };
 		0DA8A667A8A7A3861F00B88F /* MachineManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7319BB6A760A9042161B98EB /* MachineManager.swift */; };
 		0DB84CA71C7998BEE8527F1B /* DiscImageDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */; };
@@ -251,6 +252,7 @@
 		642BEA30A8664289314B2D9E /* video.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = video.pb.swift; sourceTree = "<group>"; };
 		6595E1ACFB74733DA1DDB653 /* Beebium.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Beebium.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloppyDriveConfigView.swift; sourceTree = "<group>"; };
+		66676E0A17481C9E2BE66969 /* HostFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostFingerprint.swift; sourceTree = "<group>"; };
 		6694597902ECB3A929A58055 /* peripheral_extension.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = peripheral_extension.pb.swift; sourceTree = "<group>"; };
 		69144892FD8EBDC0F0D9230E /* video.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = video.proto; sourceTree = "<group>"; };
 		69DA862227C857FDE208AF04 /* ScreenSelectionGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSelectionGeometry.swift; sourceTree = "<group>"; };
@@ -545,6 +547,7 @@
 				9D59B36AC9E2A59CA68F4FD3 /* ExtensionViewRenderer.swift */,
 				1031975F4050BF5875549DFA /* FileCommands.swift */,
 				C432ADD4B509CA5A4D3462C0 /* FocusedDialogKeys.swift */,
+				66676E0A17481C9E2BE66969 /* HostFingerprint.swift */,
 				93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */,
 				F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */,
 				2CE550723A13DFA9A20EB302 /* IndicatorView.swift */,
@@ -838,6 +841,7 @@
 				162D791FD0BE2D5F6E75CB72 /* FloppyDriveConfigView.swift in Sources */,
 				B41DE38A258D6C2E68314C5D /* FocusedDialogKeys.swift in Sources */,
 				6115EAB5B469DD1B9242F92E /* GeneralSettingsPane.swift in Sources */,
+				089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */,
 				4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */,
 				40F2A089FF91784C67231853 /* IndicatorClient.swift in Sources */,
 				7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */,

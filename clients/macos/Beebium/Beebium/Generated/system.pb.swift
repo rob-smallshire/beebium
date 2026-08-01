@@ -257,6 +257,27 @@ struct Beebium_SystemInfo: Sendable {
   /// Empty if the path cannot be determined.
   var executablePath: String = String()
 
+  /// An opaque token identifying the host the server is running on, for
+  /// comparison against the client's own. Equal tokens mean the two
+  /// processes share a filesystem; unequal ones mean they do not.
+  ///
+  /// This exists because several client features exchange filesystem paths
+  /// -- inserting a disc image sends the server a path to open, and
+  /// revealing one in a file manager opens a path the server reported --
+  /// and a path is only meaningful to a process on the same host. Network
+  /// addresses cannot answer the question: a client may reach a server on
+  /// its own machine over loopback, over that machine's LAN address, or
+  /// through a Bonjour ".local" name that resolves back to itself.
+  ///
+  /// A digest rather than the underlying identifier, which is a hardware or
+  /// OS-installation value that identifies the machine to anything else
+  /// that asks. See HostFingerprint.hpp for how it is derived; a client must
+  /// derive its own the same way.
+  ///
+  /// Empty if the host will not identify itself, which a client must read as
+  /// "not the same host" rather than as matching another empty value.
+  var hostFingerprint: String = String()
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -745,7 +766,7 @@ extension Beebium_ConnectionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
 extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SystemInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{3}executable_path\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}provenance\0\u{1}identity\0\u{1}connections\0\u{3}clock_speed_hz\0\u{3}protocol_fingerprint\0\u{3}executable_path\0\u{3}host_fingerprint\0\u{b}machine_type\0\u{b}machine_display_name\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -759,6 +780,7 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       case 6: try { try decoder.decodeSingularUInt32Field(value: &self.clockSpeedHz) }()
       case 7: try { try decoder.decodeSingularStringField(value: &self.protocolFingerprint) }()
       case 8: try { try decoder.decodeSingularStringField(value: &self.executablePath) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self.hostFingerprint) }()
       default: break
       }
     }
@@ -787,6 +809,9 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if !self.executablePath.isEmpty {
       try visitor.visitSingularStringField(value: self.executablePath, fieldNumber: 8)
     }
+    if !self.hostFingerprint.isEmpty {
+      try visitor.visitSingularStringField(value: self.hostFingerprint, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -797,6 +822,7 @@ extension Beebium_SystemInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if lhs.clockSpeedHz != rhs.clockSpeedHz {return false}
     if lhs.protocolFingerprint != rhs.protocolFingerprint {return false}
     if lhs.executablePath != rhs.executablePath {return false}
+    if lhs.hostFingerprint != rhs.hostFingerprint {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

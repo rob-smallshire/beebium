@@ -83,6 +83,32 @@ final class DiscDropRefusalTests: XCTestCase {
                        .notADiscImage)
     }
 
+    func testRefusesEverythingWhenTheServerIsElsewhere() {
+        // A path is only meaningful to a process sharing this filesystem, so
+        // a perfectly good disc image is still not droppable.
+        XCTAssertEqual(discDropRefusal(for: .one(isDiscImage: true),
+                                       isSlotEmpty: true,
+                                       occupiedReason: occupied,
+                                       isServerLocal: false),
+                       .serverElsewhere)
+    }
+
+    func testRemoteServerIsReportedAheadOfEveryOtherReason() {
+        // Nothing the user does to the file or the drive can make this work,
+        // so saying anything else would send them off fixing the wrong thing.
+        for candidate: DiscDropCandidate in [.none, .several,
+                                             .one(isDiscImage: false),
+                                             .one(isDiscImage: true)] {
+            for isSlotEmpty in [true, false] {
+                XCTAssertEqual(discDropRefusal(for: candidate,
+                                               isSlotEmpty: isSlotEmpty,
+                                               occupiedReason: occupied,
+                                               isServerLocal: false),
+                               .serverElsewhere)
+            }
+        }
+    }
+
     func testRefusesADragCarryingNoFiles() {
         XCTAssertEqual(discDropRefusal(for: .none,
                                        isSlotEmpty: true,
@@ -92,8 +118,44 @@ final class DiscDropRefusalTests: XCTestCase {
 
     func testEveryRefusalCarriesAReason() {
         for refusal: DiscDropRefusal in [.severalFiles, .notADiscImage,
-                                         .slotOccupied(occupied)] {
+                                         .slotOccupied(occupied),
+                                         .serverElsewhere] {
             XCTAssertFalse(refusal.message.isEmpty)
         }
+    }
+}
+
+
+final class HostFingerprintTests: XCTestCase {
+    func testThisHostHasAFingerprint() {
+        // macOS answers gethostuuid on an unsandboxed process, so a nil here
+        // means the derivation broke, not that the platform declined.
+        XCTAssertNotNil(HostFingerprint.current)
+    }
+
+    func testFingerprintIsASha256Digest() throws {
+        let fingerprint = try XCTUnwrap(HostFingerprint.current)
+        XCTAssertEqual(fingerprint.count, 64)
+        XCTAssertTrue(fingerprint.allSatisfy { $0.isHexDigit && !$0.isUppercase })
+    }
+
+    func testFingerprintIsStable() {
+        // Two processes on one host must agree, so it cannot vary per call.
+        XCTAssertEqual(HostFingerprint.current, HostFingerprint.current)
+    }
+
+    func testThisHostMatchesItsOwnFingerprint() throws {
+        let fingerprint = try XCTUnwrap(HostFingerprint.current)
+        XCTAssertTrue(HostFingerprint.isThisHost(fingerprint))
+    }
+
+    func testAnotherHostDoesNotMatch() {
+        XCTAssertFalse(HostFingerprint.isThisHost(String(repeating: "a", count: 64)))
+    }
+
+    func testUnknownIsNotAMatch() {
+        // A server that will not say where it is must not be taken for a
+        // local one: that would enable precisely the features that break.
+        XCTAssertFalse(HostFingerprint.isThisHost(""))
     }
 }

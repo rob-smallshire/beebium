@@ -45,6 +45,7 @@ struct SidebarModeContent: View {
     @ObservedObject var peripheralsClient: PeripheralsClient
     @ObservedObject var transportsClient: EconetTransportsClient
     @ObservedObject var sidewaysClient: SidewaysClient
+    @ObservedObject var systemClient: SystemClient
     @ObservedObject var videoSettings: VideoSettings
     @ObservedObject var speedModel: SpeedControlModel
 
@@ -56,7 +57,8 @@ struct SidebarModeContent: View {
             case .storage:
                 StorageModeView(discClient: discClient,
                                 peripheralsClient: peripheralsClient,
-                                indicatorClient: indicatorClient)
+                                indicatorClient: indicatorClient,
+                                systemClient: systemClient)
             case .memory:
                 MemoryModeView(sidewaysClient: sidewaysClient)
             case .peripherals:
@@ -644,6 +646,7 @@ struct SidebarModeContent_Previews: PreviewProvider {
             peripheralsClient: PeripheralsClient(),
             transportsClient: EconetTransportsClient(),
             sidewaysClient: SidewaysClient(),
+            systemClient: SystemClient(),
             videoSettings: VideoSettings(),
             speedModel: SpeedControlModel()
         )

@@ -27,6 +27,15 @@ struct StorageModeView: View {
     @ObservedObject var discClient: DiscClient
     @ObservedObject var peripheralsClient: PeripheralsClient
     @ObservedObject var indicatorClient: IndicatorClient
+    @ObservedObject var systemClient: SystemClient
+
+    /// Whether the server is on this host.
+    ///
+    /// Everything that hands the server a path, or opens a path the server
+    /// reported, depends on the two processes sharing a filesystem.
+    private var isServerLocal: Bool {
+        systemClient.isServerLocal
+    }
 
     var body: some View {
         if !discClient.isLoaded || !peripheralsClient.isLoaded {
@@ -124,7 +133,8 @@ struct StorageModeView: View {
             ForEach(Array(discClient.drives.enumerated()), id: \.offset) { index, drive in
                 DriveRowView(
                     drive: drive,
-                    discClient: discClient
+                    discClient: discClient,
+                    isServerLocal: isServerLocal
                 )
                 if index < discClient.drives.count - 1 {
                     Divider()
@@ -143,7 +153,8 @@ struct StorageModeView: View {
             ForEach(Array(peripheralStorage.enumerated()),
                     id: \.element.id) { i, device in
                 StorageDeviceRowView(device: device,
-                                     indicatorClient: indicatorClient)
+                                     indicatorClient: indicatorClient,
+                                     isServerLocal: isServerLocal)
                 if i < peripheralStorage.count - 1 {
                     Divider().padding(.horizontal, 12)
                 }
@@ -160,6 +171,7 @@ struct StorageModeView: View {
 private struct StorageDeviceRowView: View {
     let device: PeripheralStorageDevice
     @ObservedObject var indicatorClient: IndicatorClient
+    let isServerLocal: Bool
 
     /// The indicator value is a brightness 0-255; treat any non-zero
     /// value as "active" for the simple dot rendering. The 250ms
@@ -206,11 +218,13 @@ private struct StorageDeviceRowView: View {
                         } label: {
                             Label("Copy Path", systemImage: "doc.on.doc")
                         }
-                        Button {
-                            let url = URL(fileURLWithPath: device.backingPath)
-                            NSWorkspace.shared.activateFileViewerSelecting([url])
-                        } label: {
-                            Label("Reveal in Finder", systemImage: "folder")
+                        if isServerLocal {
+                            Button {
+                                let url = URL(fileURLWithPath: device.backingPath)
+                                NSWorkspace.shared.activateFileViewerSelecting([url])
+                            } label: {
+                                Label("Reveal in Finder", systemImage: "folder")
+                            }
                         }
                     }
             }
@@ -225,6 +239,8 @@ private struct StorageDeviceRowView: View {
 private struct DriveRowView: View {
     let drive: Beebium_DriveStatus
     @ObservedObject var discClient: DiscClient
+    /// See StorageModeView.isServerLocal.
+    let isServerLocal: Bool
     @State private var isDropTargeted = false
     @State private var isProcessing = false
     /// Reason a hovering drag will not be accepted, shown while it hovers.
@@ -306,6 +322,7 @@ private struct DriveRowView: View {
         .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
             isSlotEmpty: isEmpty,
             occupiedReason: "Eject disc first",
+            isServerLocal: isServerLocal,
             isTargeted: $isDropTargeted,
             refusal: $dropRefusal,
             accept: { url in insertDisc(url: url) },
@@ -335,7 +352,9 @@ private struct DriveRowView: View {
     // MARK: - Content Views
 
     private var emptyContent: some View {
-        Text("Empty - Drop disc image here")
+        Text(isServerLocal
+             ? "Empty - Drop disc image here"
+             : "Empty - server is on another host")
             .font(.caption)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -358,10 +377,16 @@ private struct DriveRowView: View {
                             Label("Copy Path", systemImage: "doc.on.doc")
                         }
 
-                        Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                        } label: {
-                            Label("Reveal in Finder", systemImage: "folder")
+                        // The path names a file on the server's host, so
+                        // Finder can only find it when that is this host.
+                        // Copy Path stays either way: the path is still what
+                        // the server reported, and still worth quoting.
+                        if isServerLocal {
+                            Button {
+                                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                            } label: {
+                                Label("Reveal in Finder", systemImage: "folder")
+                            }
                         }
                     }
             }
@@ -419,7 +444,9 @@ private struct DriveRowView: View {
     // MARK: - Buttons
 
     private var browseButton: some View {
-        let isEnabled = isEmpty && !isProcessing
+        // Browsing picks a file on this host and sends its path for the
+        // server to open, which only works when the server is here too.
+        let isEnabled = isEmpty && !isProcessing && isServerLocal
         return Button {
             browseForDisc()
         } label: {
@@ -429,7 +456,14 @@ private struct DriveRowView: View {
         }
         .buttonStyle(.borderless)
         .disabled(!isEnabled)
-        .help(isEmpty ? "Browse for disc image" : "Eject disc first")
+        .help(browseHelp)
+    }
+
+    private var browseHelp: String {
+        if !isServerLocal {
+            return "The server is on another host, so it cannot open a disc image from this one"
+        }
+        return isEmpty ? "Browse for disc image" : "Eject disc first"
     }
 
     private var ejectButton: some View {
@@ -578,7 +612,8 @@ struct StorageModeView_Previews: PreviewProvider {
     static var previews: some View {
         StorageModeView(discClient: DiscClient(),
                         peripheralsClient: PeripheralsClient(),
-                        indicatorClient: IndicatorClient())
+                        indicatorClient: IndicatorClient(),
+                        systemClient: SystemClient())
             .frame(width: 220, height: 300)
             .background(Color(nsColor: .windowBackgroundColor))
     }

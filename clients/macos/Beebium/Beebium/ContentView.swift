@@ -142,6 +142,7 @@ struct ContentView: View {
                 peripheralsClient: peripheralsClient,
                 transportsClient: transportsClient,
                 sidewaysClient: sidewaysClient,
+                systemClient: systemClient,
                 videoSettings: videoSettings,
                 speedModel: speedModel
             )

@@ -38,6 +38,14 @@ final class SystemClient: ObservableObject, Disconnectable {
     /// Number of clients with active WatchServerStatus streams on the server
     @Published private(set) var clientCount: Int = 0
 
+    /// Whether the server is running on this same host.
+    ///
+    /// Features that exchange filesystem paths -- inserting a disc image by
+    /// path, revealing one in Finder -- only mean anything when this is true.
+    /// False until the server has said otherwise, so a control that cannot
+    /// work is never offered: withholding one briefly is the better failure.
+    @Published private(set) var isServerLocal: Bool = false
+
     /// Whether the server has signaled it is shutting down
     @Published private(set) var isServerShuttingDown: Bool = false
 
@@ -123,6 +131,7 @@ final class SystemClient: ObservableObject, Disconnectable {
         isLoaded = false
         clientCount = 0
         isServerShuttingDown = false
+        isServerLocal = false
         machineUUID = ""
         machineName = ""
         machineType = ""
@@ -342,6 +351,8 @@ final class SystemClient: ObservableObject, Disconnectable {
                         response.protocolFingerprint,
                         executablePath: response.executablePath)
                     self?.updateIdentity(response.identity)
+                    self?.isServerLocal =
+                        HostFingerprint.isThisHost(response.hostFingerprint)
                     self?.clientCount = Int(response.connections.clientCount)
                     self?.isLoaded = true
                     self?.errorMessage = nil
