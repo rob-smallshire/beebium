@@ -116,6 +116,65 @@ Framing errors (bad stop bit), parity errors, and receiver overrun (a new
 character arriving before RDR is read) are all modelled and surface in the
 status register.
 
+### Receiver overrun
+
+The overrun rules repay careful reading, because the datasheet's sentences pull
+in different directions and one of them cannot be implemented literally against
+the BBC's MOS. What the MC6850 datasheet says, in the Receiver Overrun (OVRN,
+Bit 5) description and the RECEIVE section:
+
+1. *"A character or a number of characters were received but not read from the
+   Receive Data Register prior to subsequent characters being received. The
+   overrun condition begins at the midpoint of the last bit of the second
+   character received in succession without a read of the RDR having
+   occurred."*
+2. *"The Overrun does not occur in the Status Register until the valid character
+   prior to Overrun has been read."*
+3. *"The RDRF bit remains set until the Overrun is reset."*
+4. *"Character synchronization is maintained during the Overrun condition. The
+   Overrun indication is reset after the reading of data from the Receive Data
+   Register or by a Master Reset."*
+5. *"The receiver is also double buffered so that a character can be read from
+   the data register as another character is being received in the shift
+   register."*
+
+How `Mc6850` models them:
+
+- **The second character in succession is lost, not the first** (1). When RDR is
+  full the transfer from the shift register is inhibited and *"the RDR contents
+  remain valid"*, so the older character survives and the newer one is dropped.
+- **Double buffering is one character time of slack, not a queue slot** (5). It
+  lets the guest read RDR while the next character is *in flight*; it does not
+  let two completed characters queue. Modelling it as a second slot makes two
+  characters in succession both arrive, which contradicts (1).
+- **The flag surfaces late** (2), via a `rx_ovrn_pending_` latch: the overrun is
+  reported on the read that takes the last good character before the gap, not
+  when the loss happened.
+- **A newly received character clears the flag** (4). `OVRN` describes the gap
+  in the data stream just past; the receiver keeps delivering, so the next
+  character does not inherit the error.
+
+That last point is the one that matters in practice, and it is where rule (3)
+had to be set aside. Holding `RDRF` set until the overrun is reset assumes a
+guest that polls the status register: it will notice `RDRF` and read again, and
+that second read clears the condition. **The BBC's MOS reads the ACIA only on
+interrupt.** With `RDRF` held set and no new character to raise one, no further
+read ever comes -- the receiver wedges, every subsequent character is rejected
+as an overrun, and the serial port goes permanently deaf. Implemented literally,
+it is far worse than the bug it would fix.
+
+Leaving `OVRN` set instead is the milder failure that issue #59 reported: a
+burst arriving while nobody is listening (a modem's `OK` reaching a machine
+still at the BASIC prompt) leaves the flag standing across an idle line, and the
+next character to arrive -- minutes later, entirely unrelated -- is discarded by
+the guest as an error. Clearing on arrival ends the condition at the moment the
+data stream resumes, which is both what (4) describes and what BeebEm does
+(`Status &= ~MC6850_STATUS_OVRN` at the top of its receive path).
+
+The rules are pinned by tests in `tests/test_mc6850.cpp`, and the end-to-end
+consequence by `test_commstar_serial_receive.py`, which drives real comms
+software over `rpc-serial` and checks what actually reached the screen.
+
 ### Timing
 
 `SerialUla::tick()` is called once per 2MHz CPU cycle from `Machine::step()`
