@@ -150,6 +150,25 @@ struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    /// The window title, and the way it is renamed.
+    ///
+    /// Falls back to the app name before the server has said who it is, so a
+    /// window that is still connecting is not briefly nameless. An empty or
+    /// unchanged edit is dropped: the server rejects an empty name, and
+    /// sending one it already has would be a needless round trip.
+    private var machineNameBinding: Binding<String> {
+        Binding(
+            get: {
+                systemClient.machineName.isEmpty ? "Beebium" : systemClient.machineName
+            },
+            set: { newName in
+                let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, trimmed != systemClient.machineName else { return }
+                systemClient.setMachineName(trimmed)
+            }
+        )
+    }
+
     private var emulatorView: some View {
         EmulatorView(
             videoClient: videoClient,
@@ -240,7 +259,11 @@ struct ContentView: View {
                 navigationLayout
             }
         }
-        .navigationTitle("Beebium")
+        // The window is titled with the machine's name, which is what tells
+        // several emulator windows apart -- the model is already in the status
+        // bar and is the same across instances. Binding it makes the title
+        // editable in place, the way a document is renamed.
+        .navigationTitle(machineNameBinding)
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(

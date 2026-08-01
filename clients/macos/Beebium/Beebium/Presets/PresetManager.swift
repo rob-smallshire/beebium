@@ -51,6 +51,15 @@ class PresetManager: ObservableObject {
     /// Cached user presets directory path (retrieved from CLI)
     private var cachedUserPresetsDirpath: String?
 
+    /// Machine names handed out this session, so a second machine does not
+    /// arrive with the name of one already on screen.
+    ///
+    /// Only grows: a name is not returned to the pool when its machine exits,
+    /// because a window may still be showing it and reusing the name would
+    /// undo the point of having one. Twenty-nine launches in a single session
+    /// exhausts the pool, after which names gain a numeric suffix.
+    private var issuedMachineNames: Set<String> = []
+
     private init() {}
 
     /// Discover preset files and build system and user presets.
@@ -640,12 +649,21 @@ class PresetManager: ObservableObject {
 
         let provenanceUUID = UUID().uuidString
 
+        // Name the machine rather than letting the server fall back to the
+        // model's display name, which would call every Model B the same thing
+        // and leave several windows indistinguishable. The name belongs to
+        // this instance, not to the preset, so it is decided here at launch
+        // and can be changed afterwards.
+        let machineName = MachineNames.next(avoiding: issuedMachineNames)
+        issuedMachineNames.insert(machineName)
+
         var arguments = [
             "start",
             "--preset", preset.presetFilepath,
             "--port", "0",
             "--advertise",
             "--wait=api",
+            "--machine-name", machineName,
             "--provenance-type", "macos-gui",
             "--provenance-uuid", provenanceUUID
         ]

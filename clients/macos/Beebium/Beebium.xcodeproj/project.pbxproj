@@ -105,6 +105,7 @@
 		9BD942F6034AE7F95F5D4B88 /* PasteCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941A103B3E9E8B477D32DF75 /* PasteCoordinator.swift */; };
 		9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E27CCAEA2B3295D30B7E900 /* KeyboardMappingManager.swift */; };
 		A005244A2347799984C194E6 /* audio.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0CD29C9A89B375C692C019 /* audio.pb.swift */; };
+		A16526EF2B425C9CE263353C /* MachineNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F12FAA03C7C95012C4CD79D /* MachineNames.swift */; };
 		A218ADC630D92D0A18D300CF /* PeripheralsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */; };
 		A2664558176937A26B30748C /* StorageConfigurationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AFDA16D57D7C85C963EBC4 /* StorageConfigurationState.swift */; };
 		A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */; };
@@ -131,6 +132,7 @@
 		C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12818B1698A8D15AE8A63653 /* DeepLink.swift */; };
 		C29A1601A7336A71D236BAFB /* sideways.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC4EB31EFDD95098F6DE936 /* sideways.grpc.swift */; };
 		C33A98EC584EB6432A7CE7AD /* Atomics in Frameworks */ = {isa = PBXBuildFile; productRef = CDFCBD9064C78D1ABC230708 /* Atomics */; };
+		C39DF4B1A3101F1124458288 /* MachineNamesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */; };
 		C3ED514E6ED1E2D44FD407BF /* StandardDisplayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B7611FB75A31FE7201B3F30 /* StandardDisplayStyle.swift */; };
 		C3F9E318AA63A0215FDA1793 /* BeebiumTouchBarEscapeKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C179B6CADA71E65979BE60C /* BeebiumTouchBarEscapeKey.swift */; };
 		C5D7C5C9382566ADEAA92341 /* video.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B269A5937DAC1914CA8BF39 /* video.grpc.swift */; };
@@ -232,6 +234,7 @@
 		4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralTreeTests.swift; sourceTree = "<group>"; };
 		4E0CD29C9A89B375C692C019 /* audio.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.pb.swift; sourceTree = "<group>"; };
 		4E49E6333D48600C4C8E1BD9 /* SpeedControlModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedControlModel.swift; sourceTree = "<group>"; };
+		4F12FAA03C7C95012C4CD79D /* MachineNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNames.swift; sourceTree = "<group>"; };
 		5123F0FA32B3711748D351D7 /* DebugDisplayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDisplayStyle.swift; sourceTree = "<group>"; };
 		5635C71D7BCFDC74AE40070B /* econet_transport.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet_transport.grpc.swift; sourceTree = "<group>"; };
 		57967139EC7DEA91FCF67161 /* debugger.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = debugger.pb.swift; sourceTree = "<group>"; };
@@ -313,6 +316,7 @@
 		B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConnections.swift; sourceTree = "<group>"; };
 		B6C4FBFCE12BD6DED30E2E24 /* GeneralSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsPane.swift; sourceTree = "<group>"; };
 		B79C08E01A7BA46EE2246BF7 /* SidewaysSchemaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSchemaTests.swift; sourceTree = "<group>"; };
+		B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNamesTests.swift; sourceTree = "<group>"; };
 		B86FF568406281481A0E0D88 /* AudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRenderer.swift; sourceTree = "<group>"; };
 		B98CF59648104556C3677412 /* KeyboardMTKView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMTKView.swift; sourceTree = "<group>"; };
 		B9D68557079BA374D2FAD131 /* BeebiumTouchBarKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarKeys.swift; sourceTree = "<group>"; };
@@ -558,6 +562,7 @@
 				B98CF59648104556C3677412 /* KeyboardMTKView.swift */,
 				FF6041795434C164F849A27B /* KeyInput.swift */,
 				7319BB6A760A9042161B98EB /* MachineManager.swift */,
+				4F12FAA03C7C95012C4CD79D /* MachineNames.swift */,
 				8502E9114AB10B2200A2F6F9 /* MacKeyCode.swift */,
 				F309AF35B280ABE8DDCE6E15 /* MemoryModeView.swift */,
 				76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */,
@@ -625,6 +630,7 @@
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
+				B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */,
 				BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */,
 				7D2677DED8933B5E1A7D11D4 /* ModifierKeyStateTests.swift */,
 				D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */,
@@ -777,6 +783,7 @@
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
+				C39DF4B1A3101F1124458288 /* MachineNamesTests.swift in Sources */,
 				D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */,
 				6686F47B251CF78AF9C5F329 /* ModifierKeyStateTests.swift in Sources */,
 				406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */,
@@ -853,6 +860,7 @@
 				1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */,
 				F8E43B3F7BBA3554BE190043 /* MacKeyCode.swift in Sources */,
 				0DA8A667A8A7A3861F00B88F /* MachineManager.swift in Sources */,
+				A16526EF2B425C9CE263353C /* MachineNames.swift in Sources */,
 				82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */,
 				2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */,
 				910A258FD1C89BFB7CFDFC71 /* MemoryConfigurationState.swift in Sources */,
