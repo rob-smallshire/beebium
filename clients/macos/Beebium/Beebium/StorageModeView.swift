@@ -27,15 +27,11 @@ struct StorageModeView: View {
     @ObservedObject var discClient: DiscClient
     @ObservedObject var peripheralsClient: PeripheralsClient
     @ObservedObject var indicatorClient: IndicatorClient
-    @ObservedObject var systemClient: SystemClient
-
     /// Whether the server is on this host.
     ///
     /// Everything that hands the server a path, or opens a path the server
     /// reported, depends on the two processes sharing a filesystem.
-    private var isServerLocal: Bool {
-        systemClient.isServerLocal
-    }
+    let isServerLocal: Bool
 
     var body: some View {
         if !discClient.isLoaded || !peripheralsClient.isLoaded {
@@ -613,7 +609,7 @@ struct StorageModeView_Previews: PreviewProvider {
         StorageModeView(discClient: DiscClient(),
                         peripheralsClient: PeripheralsClient(),
                         indicatorClient: IndicatorClient(),
-                        systemClient: SystemClient())
+                        isServerLocal: true)
             .frame(width: 220, height: 300)
             .background(Color(nsColor: .windowBackgroundColor))
     }

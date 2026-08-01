@@ -86,10 +86,23 @@ every peer look as though it is somewhere else.
 | Browse for a disc image | Yes | Picks a path on this host for the server to open |
 | Drag and drop a disc image | Yes | Same, from the file manager |
 | Reveal in file manager | Yes | Opens a path the server reported |
+| Reveal a sideways ROM image | Yes | Opens a path the server reported |
 | Copy path | **No** | Still the path the server reported, and still worth quoting -- to paste into a terminal on that host, or into a bug report |
 
 Copy Path is the useful boundary case: it hands the user a string rather than
 acting on it, so it stays honest whatever host the server is on.
+
+### An existence check is not a gate
+
+The tempting shortcut is to test whether the path exists before offering to
+reveal it. That question is asked of the *client's* filesystem about a path
+from the *server's*, so it is wrong in both directions: it hides the command
+for a local server whose file has since moved, and -- worse -- it succeeds
+against a remote server whose host has a similar install layout, revealing a
+different file that merely shares a path. Silence would have been better.
+
+Check `isServerLocal` first. An existence check is still worth keeping after
+it, to catch a file deleted since the server loaded it.
 
 ## macOS specifics
 
@@ -103,11 +116,28 @@ acting on it, so it stays honest whatever host the server is on.
   hovers, so the refusal is visible before the pointer is released), the
   empty-drive prompt, and Reveal in Finder on both floppy rows and
   peripheral-published storage rows such as hard discs.
+- `MemoryModeView` gates Reveal in Finder on a sideways slot's image. The
+  Memory sidebar is read-only -- the client never calls `ConfigureSlot` -- so
+  the slot's `image_name` only ever travels server-to-client.
+- Views take `isServerLocal` as a plain parameter rather than a `SystemClient`
+  to consult, so what they depend on is visible in their signature.
 
-## Not yet gated
+## What does not need gating, and why
 
-Other paths cross the same boundary and have not been audited: sideways ROM
-loading, extension configuration that names files, and the preset editor.
-The preset editor is arguably exempt -- presets configure a server this client
-is about to launch locally -- but that reasoning should be written down where
-the code is, not assumed.
+Not every path in a front end crosses the boundary. Three cases recur:
+
+- **Pre-launch configuration.** The macOS `ConfigurationEditor` picks disc and
+  sideways ROM images before any server exists; the machine it configures is
+  spawned afterwards as a local process, and the paths become its command-line
+  arguments. They always mean here. This holds only while launching is local:
+  a flow that ever started a machine on another host would break it, so the
+  reasoning is recorded in the editor itself rather than left to be
+  rediscovered.
+- **The client's own files.** Keyboard mappings and preset import/export read
+  and write files belonging to the client. The server never sees them.
+- **Read-only server paths that are only displayed.** Showing a path, in a
+  row or a tooltip, is as honest as copying one.
+
+The audit behind this list covered every `NSOpenPanel`, file drop, reveal and
+path-carrying request in the macOS client. A front end for another platform
+should do the same sweep rather than assume this list transfers.

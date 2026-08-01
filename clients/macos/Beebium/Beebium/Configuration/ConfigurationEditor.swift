@@ -14,6 +14,18 @@ import SwiftUI
 
 /// Configuration editor with sidebar navigation.
 ///
+/// The file paths chosen here -- disc images, sideways ROM images -- need no
+/// local-server gating, unlike their equivalents in the live sidebars. This
+/// editor runs before there is a server to talk to: it is presented from
+/// NewMachineDialog, and the machine it configures is spawned afterwards as a
+/// local Process reached at 127.0.0.1 (see PresetManager.launchCore and
+/// MachineManager.register). The paths become command-line arguments to a
+/// process on this host, so they always mean here.
+///
+/// If a future flow ever launches or configures a machine on another host,
+/// that assumption breaks and these panels need the same treatment as the
+/// Storage and Memory sidebars. See docs/frontend-local-server-gating.md.
+///
 /// Shows a sidebar with configuration sections on the left and the
 /// selected section's content on the right. Currently only Storage
 /// is implemented; other sections will be added in future phases.

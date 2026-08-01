@@ -58,9 +58,10 @@ struct SidebarModeContent: View {
                 StorageModeView(discClient: discClient,
                                 peripheralsClient: peripheralsClient,
                                 indicatorClient: indicatorClient,
-                                systemClient: systemClient)
+                                isServerLocal: systemClient.isServerLocal)
             case .memory:
-                MemoryModeView(sidewaysClient: sidewaysClient)
+                MemoryModeView(sidewaysClient: sidewaysClient,
+                               isServerLocal: systemClient.isServerLocal)
             case .peripherals:
                 PeripheralsModeView(client: peripheralsClient,
                                     extensionUiClient: extensionUiClient,

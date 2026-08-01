@@ -26,6 +26,11 @@ import SwiftUI
 struct MemoryModeView: View {
     @ObservedObject var sidewaysClient: SidewaysClient
 
+    /// Whether the server is on this host. A slot's image name is an
+    /// absolute path on the server, so opening it here only means anything
+    /// when "here" and "there" are the same filesystem.
+    let isServerLocal: Bool
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -168,7 +173,13 @@ struct MemoryModeView: View {
             }
             .disabled(socket.imageName.isEmpty)
 
-            if isExistingFile(socket.imageName) {
+            // Both conditions matter, and the file check alone is not
+            // enough. It asks whether the path exists on *this* host while
+            // the path came from the server's, so against a remote server
+            // with a similar install layout it can succeed and reveal a
+            // different file that merely shares a path -- worse than not
+            // offering the command at all.
+            if isServerLocal && isExistingFile(socket.imageName) {
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting(
                         [URL(fileURLWithPath: socket.imageName)])
