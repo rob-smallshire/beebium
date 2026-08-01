@@ -13,19 +13,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Supported disc image file types
-/// TODO: Query server for supported extensions via gRPC API (Phase 9a)
-private let discImageTypes: [UTType] = [
-    UTType(filenameExtension: "ssd") ?? .data,  // DFS single-sided disc
-    UTType(filenameExtension: "dsd") ?? .data,  // DFS double-sided disc
-    UTType(filenameExtension: "adf") ?? .data,  // ADFS disc (auto-detect geometry)
-    UTType(filenameExtension: "adl") ?? .data,  // ADFS large
-    UTType(filenameExtension: "adm") ?? .data,  // ADFS medium
-    UTType(filenameExtension: "ads") ?? .data,  // ADFS small
-    UTType(filenameExtension: "hfe") ?? .data,  // HFE flux-level disc image
-    UTType(filenameExtension: "img") ?? .data,  // Raw disc image
-]
-
 /// Storage mode view: floppy drives at the top (powered by DiscClient
 /// as before), then a section per media type for storage devices
 /// published by peripheral extensions (hard discs today; RAM discs,
@@ -240,6 +227,12 @@ private struct DriveRowView: View {
     @ObservedObject var discClient: DiscClient
     @State private var isDropTargeted = false
     @State private var isProcessing = false
+    /// Reason a hovering drag will not be accepted, shown while it hovers.
+    @State private var dropRefusal: DiscDropRefusal?
+    /// Reason the last insert or eject did not happen, shown until the next
+    /// attempt. A request the server turned down has to be visible: the row
+    /// would otherwise simply not change and look like nothing was tried.
+    @State private var actionError: String?
 
     private var isEmpty: Bool {
         drive.state == .empty
@@ -277,6 +270,10 @@ private struct DriveRowView: View {
                 emptyContent
             }
 
+            if let message = statusMessage {
+                statusLine(message)
+            }
+
             // Actions row
             HStack(spacing: 8) {
                 browseButton
@@ -287,9 +284,33 @@ private struct DriveRowView: View {
         .padding(12)
         .background(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
         .contentShape(Rectangle())
-        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
-            handleDrop(providers)
+        .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
+            isSlotEmpty: isEmpty,
+            occupiedReason: "Eject disc first",
+            isTargeted: $isDropTargeted,
+            refusal: $dropRefusal,
+            accept: { url in insertDisc(url: url) },
+            report: { message in actionError = message }
+        ))
+    }
+
+    /// The refusal for a drag in flight wins over an older failure: it is
+    /// about what the user is doing right now.
+    private var statusMessage: String? {
+        dropRefusal?.message ?? actionError
+    }
+
+    private func statusLine(_ message: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: dropRefusal != nil
+                  ? "nosign" : "exclamationmark.triangle.fill")
+                .font(.caption2)
+            Text(message)
+                .font(.caption)
+                .lineLimit(2)
         }
+        .foregroundColor(.red)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Content Views
@@ -407,7 +428,7 @@ private struct DriveRowView: View {
     private func browseForDisc() {
         let panel = NSOpenPanel()
         panel.title = "Select Disc Image"
-        panel.allowedContentTypes = discImageTypes
+        panel.allowedContentTypes = DiscImageTypes.contentTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
 
@@ -417,8 +438,12 @@ private struct DriveRowView: View {
     }
 
     private func insertDisc(url: URL) {
-        guard isEmpty else { return }
+        guard isEmpty else {
+            actionError = "Eject disc first"
+            return
+        }
 
+        actionError = nil
         isProcessing = true
         Task {
             let result = await discClient.insertDisc(drive: Int(drive.drive), url: url)
@@ -426,6 +451,7 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Insert failed: \(error.localizedDescription)")
+                    actionError = error.localizedDescription
                 }
             }
         }
@@ -434,6 +460,7 @@ private struct DriveRowView: View {
     private func ejectDisc() {
         guard isLoaded else { return }
 
+        actionError = nil
         isProcessing = true
         Task {
             let result = await discClient.ejectDisc(drive: Int(drive.drive), immediate: false)
@@ -441,32 +468,10 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Eject failed: \(error.localizedDescription)")
+                    actionError = error.localizedDescription
                 }
             }
         }
-    }
-
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard isEmpty else { return false }
-
-        for provider in providers {
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-                    if let data = item as? Data,
-                       let url = URL(dataRepresentation: data, relativeTo: nil) {
-                        // Check if file extension is supported
-                        let ext = url.pathExtension.lowercased()
-                        if ["ssd", "dsd", "adf", "adl", "adm", "ads", "hfe", "img"].contains(ext) {
-                            Task { @MainActor in
-                                self.insertDisc(url: url)
-                            }
-                        }
-                    }
-                }
-                return true
-            }
-        }
-        return false
     }
 }
 

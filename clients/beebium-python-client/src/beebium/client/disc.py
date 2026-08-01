@@ -271,6 +271,10 @@ class Drive:
     ) -> DiscMetadata:
         """Insert a disc image.
 
+        The drive must be empty. Removing a disc is a deliberate
+        :meth:`eject`, so that it goes through the safe eject path rather
+        than being pulled out from under a spinning motor.
+
         Args:
             path_or_url: Local path or file:// URL to disc image.
             write_protect: Force write-protect regardless of file permissions.
@@ -279,7 +283,8 @@ class Drive:
             Metadata of inserted disc.
 
         Raises:
-            DiscError: If insertion fails.
+            DiscError: If the drive already holds a disc, or the image
+                cannot be loaded.
         """
         url = _path_to_url(path_or_url)
         request = disc_pb2.InsertDiscRequest(

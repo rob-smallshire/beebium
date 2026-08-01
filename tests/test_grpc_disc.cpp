@@ -406,7 +406,7 @@ TEST_CASE("DiscService GetDriveStatus shows inserted disc info", "[grpc][disc]")
     CHECK(response.drives(1).state() == beebium::DISC_DRIVE_STATE_EMPTY);
 }
 
-TEST_CASE("DiscService InsertDisc replaces existing disc", "[grpc][disc]") {
+TEST_CASE("DiscService InsertDisc refuses an occupied drive", "[grpc][disc]") {
     auto disc_path = get_test_disc_path();
     if (!std::filesystem::exists(disc_path)) {
         SKIP("Test disc image not available");
@@ -414,7 +414,6 @@ TEST_CASE("DiscService InsertDisc replaces existing disc", "[grpc][disc]") {
 
     DiscTestFixtureBPlus fixture;
 
-    // Insert disc first time
     {
         grpc::ClientContext context;
         beebium::InsertDiscRequest request;
@@ -425,20 +424,79 @@ TEST_CASE("DiscService InsertDisc replaces existing disc", "[grpc][disc]") {
         REQUIRE(response.success());
     }
 
-    // Insert disc again (should replace)
+    // Loading over a disc that is already there would have to eject it, and
+    // the only eject available here is the immediate one that skips the
+    // quiescence wait. Ejecting is the user's decision, so refuse instead.
     {
         grpc::ClientContext context;
         beebium::InsertDiscRequest request;
         request.set_drive(0);
         request.set_url(disc_path.string());
-        request.set_write_protect_override(true);  // Different options
         beebium::InsertDiscResponse response;
 
         auto status = fixture.stub().InsertDisc(&context, request, &response);
 
         REQUIRE(status.ok());
-        CHECK(response.success());
-        CHECK(response.disc().write_protected());  // New disc has different options
+        CHECK_FALSE(response.success());
+        CHECK(response.error().find("eject") != std::string::npos);
+    }
+
+    // The disc that was there is untouched and still loaded.
+    {
+        grpc::ClientContext context;
+        beebium::GetDriveStatusRequest request;
+        beebium::GetDriveStatusResponse response;
+        fixture.stub().GetDriveStatus(&context, request, &response);
+
+        REQUIRE(response.drives_size() == 2);
+        CHECK(response.drives(0).state() == beebium::DISC_DRIVE_STATE_LOADED);
+        CHECK(response.drives(0).disc_url() == disc_path.string());
+    }
+}
+
+TEST_CASE("DiscService InsertDisc succeeds once the drive is ejected", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(response.success());
+    }
+
+    {
+        grpc::ClientContext context;
+        beebium::EjectDiscRequest request;
+        request.set_drive(0);
+        request.set_immediate(true);
+        beebium::EjectDiscResponse response;
+        fixture.stub().EjectDisc(&context, request, &response);
+        REQUIRE(response.accepted());
+    }
+
+    // A deliberate eject is what makes room for the next disc, and the
+    // options on the new insert take effect as they would on a fresh drive.
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        request.set_write_protect_override(true);
+        beebium::InsertDiscResponse response;
+
+        auto status = fixture.stub().InsertDisc(&context, request, &response);
+
+        REQUIRE(status.ok());
+        REQUIRE(response.success());
+        CHECK(response.disc().write_protected());
     }
 }
 
@@ -665,14 +723,14 @@ TEST_CASE("DiscService insert event carries the disc source URL", "[grpc][disc]"
 }
 
 
-TEST_CASE("DiscService reports a disc swapped in an occupied drive", "[grpc][disc]") {
+
+TEST_CASE("DiscService reports a disc changed between polls", "[grpc][disc]") {
     auto disc_path = get_test_disc_path();
     if (!std::filesystem::exists(disc_path)) {
         SKIP("Test disc image not available");
     }
 
-    // A second image with a distinct path; the contents don't matter, only
-    // that the drive's source URL changes.
+    // A second image with a distinct path; only the source URL matters here.
     auto replacement_path =
         std::filesystem::temp_directory_path() / "beebium-replacement-disc.ssd";
     std::filesystem::copy_file(disc_path, replacement_path,
@@ -698,9 +756,19 @@ TEST_CASE("DiscService reports a disc swapped in an occupied drive", "[grpc][dis
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    // InsertDisc into an occupied drive ejects and re-inserts under a single
-    // lock, so the drive reads Loaded both before and after: a subscriber
-    // watching state alone would see nothing happen at all.
+    // Drive state is sampled every 50ms. An immediate eject followed straight
+    // away by an insert goes Loaded -> Empty -> Loaded well inside one
+    // interval, so both samples read Loaded and the excursion is invisible to
+    // a subscriber watching state alone.
+    {
+        grpc::ClientContext context;
+        beebium::EjectDiscRequest request;
+        request.set_drive(0);
+        request.set_immediate(true);
+        beebium::EjectDiscResponse response;
+        fixture.stub().EjectDisc(&context, request, &response);
+        REQUIRE(response.accepted());
+    }
     {
         grpc::ClientContext context;
         beebium::InsertDiscRequest request;
@@ -726,9 +794,9 @@ TEST_CASE("DiscService reports a disc swapped in an occupied drive", "[grpc][dis
     }
     stream_context.TryCancel();
 
-    // The swap is reported as the ejection and insertion it really was, in
-    // that order, so a client tracking the stream ends up showing the disc
-    // that is actually in the drive.
+    // Reported as the ejection and insertion that must have happened, in that
+    // order, so a client folding the stream into its own state ends up
+    // showing the disc that is actually in the drive.
     CHECK(saw_eject);
     REQUIRE(saw_insert);
     CHECK(inserted_url == replacement_path.string());

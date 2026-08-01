@@ -13,20 +13,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Supported disc image file types for the file picker.
-/// Matches the types in StorageModeView for consistency.
-/// TODO: Query server for supported extensions via gRPC API (Phase 9a)
-private let discImageTypes: [UTType] = [
-    UTType(filenameExtension: "ssd") ?? .data,
-    UTType(filenameExtension: "dsd") ?? .data,
-    UTType(filenameExtension: "adf") ?? .data,
-    UTType(filenameExtension: "adl") ?? .data,
-    UTType(filenameExtension: "adm") ?? .data,
-    UTType(filenameExtension: "ads") ?? .data,
-    UTType(filenameExtension: "hfe") ?? .data,
-    UTType(filenameExtension: "img") ?? .data,
-]
-
 /// Configuration view for a single floppy drive slot.
 ///
 /// Matches the visual style of DriveRowView in StorageModeView but for
@@ -40,6 +26,12 @@ struct FloppyDriveConfigView: View {
 
     /// Whether drag-drop is currently targeted
     @State private var isDropTargeted = false
+
+    /// Reason a hovering drag will not be accepted, shown while it hovers.
+    @State private var dropRefusal: DiscDropRefusal?
+
+    /// Reason the last drop could not be read.
+    @State private var dropError: String?
 
     private var isEmpty: Bool {
         imageFilepath == nil
@@ -61,6 +53,19 @@ struct FloppyDriveConfigView: View {
                 loadedContent
             }
 
+            if let message = dropRefusal?.message ?? dropError {
+                HStack(spacing: 4) {
+                    Image(systemName: dropRefusal != nil
+                          ? "nosign" : "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                    Text(message)
+                        .font(.caption)
+                        .lineLimit(2)
+                }
+                .foregroundColor(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             // Actions row - matches StorageModeView layout
             HStack(spacing: 8) {
                 browseButton
@@ -71,9 +76,17 @@ struct FloppyDriveConfigView: View {
         .padding(12)
         .background(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
         .contentShape(Rectangle())
-        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
-            handleDrop(providers)
-        }
+        .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
+            isSlotEmpty: isEmpty,
+            occupiedReason: "Clear disc first",
+            isTargeted: $isDropTargeted,
+            refusal: $dropRefusal,
+            accept: { url in
+                dropError = nil
+                imageFilepath = url.path
+            },
+            report: { message in dropError = message }
+        ))
     }
 
     // MARK: - Content Views
@@ -146,7 +159,7 @@ struct FloppyDriveConfigView: View {
     private func browseForDisc() {
         let panel = NSOpenPanel()
         panel.title = "Select Disc Image"
-        panel.allowedContentTypes = discImageTypes
+        panel.allowedContentTypes = DiscImageTypes.contentTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
 
@@ -155,25 +168,4 @@ struct FloppyDriveConfigView: View {
         }
     }
 
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard isEmpty else { return false }
-
-        for provider in providers {
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-                    if let data = item as? Data,
-                       let url = URL(dataRepresentation: data, relativeTo: nil) {
-                        let ext = url.pathExtension.lowercased()
-                        if ["ssd", "dsd", "adf", "adl", "adm", "ads", "hfe", "img"].contains(ext) {
-                            Task { @MainActor in
-                                self.imageFilepath = url.path
-                            }
-                        }
-                    }
-                }
-                return true
-            }
-        }
-        return false
-    }
 }

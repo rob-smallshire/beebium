@@ -7,7 +7,9 @@ package beebium;
 // Provides insert/eject operations with safe eject support,
 // drive status queries, and event streaming for multiple clients.
 service DiscService {
-    // Insert a disc image from URL (file: scheme for local files)
+    // Insert a disc image from URL (file: scheme for local files).
+    // Fails if the drive already holds a disc: removing one is a separate,
+    // deliberate EjectDisc, so that it goes through the safe eject path.
     rpc InsertDisc(InsertDiscRequest) returns (InsertDiscResponse);
 
     // Request disc ejection (non-blocking, safe eject by default)

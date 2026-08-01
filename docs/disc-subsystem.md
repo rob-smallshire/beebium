@@ -798,6 +798,24 @@ through a format `write_track_callback` (`SsdFormatHandler`/`AdfsFormatHandler`/
   emulation loop has stopped, as a backstop for quitting just after a write.
 - **Eject** -- `complete_eject` flushes all dirty tracks before the disc leaves.
 
+### Changing a disc
+
+`InsertDisc` fails if the drive already holds one. Loading over an occupied
+drive would have to eject the disc that is there, and the only eject available
+synchronously is `eject_immediate`, which skips the quiescence wait and so can
+remove a disc from under a spinning motor mid-command. Removing a disc is the
+user's decision, so it is a separate `EjectDisc`, whose default path waits for
+the motor to be off for 500 ms first.
+
+`eject_immediate` does still flush dirty tracks (via `complete_eject`), so what
+it risks is an operation in flight rather than data already written to a track.
+It remains available through `EjectDisc` with `immediate` set, for callers that
+have decided they want it.
+
+Front-ends follow the same rule: the macOS Storage sidebar refuses a drop onto
+an occupied drive, saying so while the drag is still in the air, rather than
+swapping the disc silently.
+
 The in-memory dirty layer is why this machinery is needed: without it, a track
 written and then stepped away from would sit unflushed in process memory and be
 invisible to external tools. (This was a real bug; see the

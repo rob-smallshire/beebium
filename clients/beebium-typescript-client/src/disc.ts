@@ -219,9 +219,15 @@ export class Drive {
     /**
      * Insert a disc image into this drive.
      *
+     * The drive must be empty. Removing a disc is a deliberate {@link eject},
+     * so that it goes through the safe eject path rather than being pulled
+     * out from under a spinning motor.
+     *
      * @param pathOrUrl - Local filepath or URL to the disc image.
      * @param writeProtect - Force write protection on the disc.
      * @returns Metadata of the inserted disc.
+     * @throws DiscError - If the drive already holds a disc, or the image
+     *   cannot be loaded.
      */
     async insert(pathOrUrl: string, writeProtect: boolean = false): Promise<DiscMetadata> {
         const url = toDiscUrl(pathOrUrl);

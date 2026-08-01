@@ -70,6 +70,24 @@ public:
                 return grpc::Status::OK;
             }
 
+            DiscDrive& drive = (drive_num == 0)
+                ? machine_.state().memory.disc_drive_0
+                : machine_.state().memory.disc_drive_1;
+
+            // Loading into an occupied drive is refused rather than made to
+            // work. Doing it for the caller would mean ejecting the disc
+            // that is there, and the only eject available synchronously is
+            // the immediate one, which skips the quiescence wait and so can
+            // pull a disc out from under a spinning motor mid-command.
+            // Removing a disc is the user's decision and needs the safe
+            // eject path, so it has to be a separate, deliberate request.
+            if (drive.state() != DriveState::Empty) {
+                response->set_success(false);
+                response->set_error("Drive " + std::to_string(drive_num) +
+                                    " already holds a disc; eject it first");
+                return grpc::Status::OK;
+            }
+
             // Load disc from URL
             auto result = load_disc_from_url_or_filepath(request->url());
             if (!result) {
@@ -81,16 +99,6 @@ public:
             // Apply write protection override if requested
             if (request->write_protect_override()) {
                 result.disc->set_write_protected(true);
-            }
-
-            // Get the target drive
-            DiscDrive& drive = (drive_num == 0)
-                ? machine_.state().memory.disc_drive_0
-                : machine_.state().memory.disc_drive_1;
-
-            // Eject any existing disc first
-            if (drive.state() != DriveState::Empty) {
-                drive.eject_immediate();
             }
 
             // Fill metadata before inserting (since insert moves the disc)
@@ -421,18 +429,17 @@ private:
                                std::string& prev_url) {
         DriveState curr_state = drive.state();
         bool curr_motor = drive.motor_on();
-        const std::string& curr_url = drive.source_url();
+        const std::string curr_url = drive.source_url();
         uint64_t cycle = machine_.cycle_count();
 
-        // A disc can be swapped without the drive state ever changing:
-        // InsertDisc into an occupied drive ejects and re-inserts under a
-        // single lock, so the whole swap completes between two polls and
-        // the drive reads Loaded both before and after. Detecting change by
-        // state alone therefore misses it entirely (Loaded -> Loaded), or
-        // misreports it as a cancelled eject (Ejecting -> Loaded). The
-        // source URL says which disc is actually in the drive, so use that
-        // to recognise a swap and report it as the ejection and insertion
-        // it really was.
+        // Drive state is sampled every 50ms, so a drive can leave a state and
+        // return to it between two samples and look as though nothing
+        // happened. An immediate eject followed straight away by an insert
+        // does exactly that: Loaded -> Empty -> Loaded, all inside one poll
+        // interval, which a client watching state alone would never see. The
+        // source URL is what survives the excursion to reveal it, so a
+        // different URL under a still-loaded drive is reported as the
+        // ejection and insertion that must have happened in between.
         const bool replaced = (curr_state == DriveState::Loaded &&
                                prev_state != DriveState::Empty &&
                                curr_url != prev_url);
