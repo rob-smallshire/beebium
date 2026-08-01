@@ -146,6 +146,16 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         channel = nil
     }
 
+    /// Whether anything at all is currently held down on the emulated keyboard:
+    /// a mapped key, BBC SHIFT, or BBC CTRL.
+    ///
+    /// This is the quantity rule R4 of `docs/frontend-modifier-keys.md` is
+    /// about -- once the window is no longer key, it must be false, or whatever
+    /// is still down stays down on the BBC.
+    var hasKeysHeld: Bool {
+        !pressedKeys.isEmpty || bbcShiftIsDown || bbcCtrlIsDown
+    }
+
     /// Release every key and modifier currently held on the emulated keyboard,
     /// without disconnecting.
     ///
@@ -157,7 +167,7 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     /// focus loss makes regaining focus a clean slate; the user re-presses
     /// whatever they are still physically holding, generating fresh downs.
     func releaseAllKeys() {
-        guard !pressedKeys.isEmpty || bbcShiftIsDown || bbcCtrlIsDown else { return }
+        guard hasKeysHeld else { return }
         let pressedSnapshot = pressedKeys
         let shiftWasDown = bbcShiftIsDown
         let ctrlWasDown = bbcCtrlIsDown

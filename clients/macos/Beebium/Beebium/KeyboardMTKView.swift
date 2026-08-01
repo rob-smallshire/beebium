@@ -386,6 +386,23 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
         lastModifiers = NSEvent.modifierFlags
     }
 
+    /// Release everything held on the emulated keyboard because focus is
+    /// leaving this view -- rule R4 of `docs/frontend-modifier-keys.md`.
+    ///
+    /// macOS delivers the matching key-up / flagsChanged to whoever gains
+    /// focus, so a key or modifier held at this moment would stay stuck down
+    /// on the BBC (the "sticky SHIFT" seen mid-game after Cmd-Tab, an alert,
+    /// etc.). Local modifier tracking is resynced too, so a later flagsChanged
+    /// is diffed against reality rather than stale state.
+    ///
+    /// This must run synchronously with the focus-loss notification, ahead of
+    /// whatever events follow it. Callers must not defer it.
+    @MainActor
+    func releaseHeldKeysOnFocusLoss() {
+        keyboardClient?.releaseAllKeys()
+        lastModifiers = []
+    }
+
     // MARK: - Edit Menu
 
     /// Type the clipboard's text on the emulated keyboard.
@@ -521,19 +538,23 @@ final class KeyboardMTKView: MTKView, NSMenuItemValidation {
                 self?.resetModifierTracking()
             }
 
-            // Observe window losing key focus to release any held keys. macOS
-            // sends the matching key-up / flagsChanged to whoever gains focus,
-            // so a key or modifier held now would stay stuck down on the BBC
-            // (the "sticky SHIFT" seen mid-game after Cmd-Tab, an alert, etc.).
-            // Also resync local modifier tracking so a later flagsChanged is
-            // diffed against reality, not stale state.
+            // Observe window losing key focus to release any held keys.
+            //
+            // The body runs synchronously, via assumeIsolated rather than a
+            // `Task { @MainActor in ... }`. The observer already asks for
+            // queue: .main, so it is on the main actor in fact; assumeIsolated
+            // supplies the compiler's proof of that without moving the work.
+            // A Task would defer the release to a later turn of the run loop,
+            // behind the events that accompany focus loss -- which is exactly
+            // the race rule R4 exists to win. See releaseHeldKeysOnFocusLoss.
             windowDidResignKeyObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.didResignKeyNotification,
                 object: window,
                 queue: .main
             ) { [weak self] _ in
-                self?.keyboardClient?.releaseAllKeys()
-                self?.lastModifiers = []
+                MainActor.assumeIsolated {
+                    self?.releaseHeldKeysOnFocusLoss()
+                }
             }
         }
     }

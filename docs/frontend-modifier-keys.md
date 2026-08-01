@@ -86,6 +86,14 @@ matrix, and reset your local tracking. This is the single most important rule:
 it is the classic mid-game "stuck SHIFT after Cmd-Tab / a notification / an
 alert", and it needs no Copy/Paste or special feature to trigger.
 
+Do the release **synchronously**, in the focus-loss callback itself. Posting it
+to a queue, a later run-loop turn, or an async task puts it behind the events
+that accompany focus loss -- which is precisely the race this rule exists to
+win. If a concurrency checker objects to the callback touching UI-thread state,
+assert the isolation you already have rather than introduce a hop: on macOS,
+`MainActor.assumeIsolated` inside an observer that already asked for the main
+queue, never `Task { @MainActor in ... }`.
+
 **R5 -- When a host interaction takes over input, release everything; do not
 selectively suppress.** Front-ends legitimately withhold some keys from the
 emulator -- a menu shortcut, a drag-to-select gesture, an overlay. The trap is
@@ -178,9 +186,13 @@ resolved character is the unshifted face.
 - **Command combinations** are returned to the menu system via
   `performKeyEquivalent(with:)`; `keyDown` early-returns while Command is held.
 - **Focus (R4).** Observe `NSWindow.didResignKeyNotification` -> release all
-  keys (`KeyboardClient.releaseAllKeys()`); observe `didBecomeKeyNotification`
-  -> reset modifier tracking. There is *no* `onDisappear`/lifecycle callback you
-  can rely on for a `WindowGroup` window, so use these notifications.
+  keys (`KeyboardMTKView.releaseHeldKeysOnFocusLoss()`, which calls
+  `KeyboardClient.releaseAllKeys()`); observe `didBecomeKeyNotification` ->
+  reset modifier tracking. There is *no* `onDisappear`/lifecycle callback you
+  can rely on for a `WindowGroup` window, so use these notifications. Both
+  observers take `queue: .main` and run their body synchronously, the resign
+  one through `MainActor.assumeIsolated`; `FocusLossKeyReleaseTests` fails if
+  the release is deferred instead.
 - **Selection / host takeover (R5).** When a Cmd-drag selection begins, release
   all held keys before it starts swallowing qualifier `flagsChanged`.
 - **Caps Lock** is a toggle, not a held key -- handle it via its own
