@@ -155,14 +155,17 @@ struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    /// What the window is called elsewhere in the system.
+    /// What the window is called, here and everywhere else in the system.
     ///
-    /// Machine name first, app name second: window switchers truncate from
-    /// the right, and the machine name is the part that distinguishes one
-    /// window from another.
+    /// The machine's name alone. macOS names a window after the thing it
+    /// shows and leaves the app's own name to the menu bar, so appending it
+    /// here would only crowd out the part that tells one window from another.
+    ///
+    /// Falls back to the app name before the server has said who it is, so a
+    /// window that is still connecting is not briefly nameless.
     private var windowTitle: String {
         let name = systemClient.machineName
-        return name.isEmpty ? "Beebium" : "\(name) \u{2014} Beebium"
+        return name.isEmpty ? "Beebium" : name
     }
 
     /// A warning that this machine's name is not unique, or "" if it is.
