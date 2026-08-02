@@ -18,10 +18,6 @@ struct ManagedMachine: Identifiable {
     let target: ConnectionTarget
     let process: Process
     let provenanceUUID: String
-    /// The machine's name, as this app last knew it. Kept here because the
-    /// manager is what knows which machines exist, and so is what can say
-    /// which names are still spoken for.
-    var name: String
     var lifetimeLinked: Bool
     var unlinkRequested: Bool = false
     /// Last known number of WatchServerStatus clients on the server.
@@ -64,9 +60,6 @@ class MachineManager: ObservableObject {
 
     @Published private(set) var machines: [UUID: ManagedMachine] = [:]
 
-    /// The source of machine names, held here so that a name is released
-    /// exactly when its machine stops existing.
-    private let nameAllocator = MachineNameAllocator()
 
     /// Non-private init for testing. Production code uses `.shared`.
     init() {}
@@ -75,19 +68,14 @@ class MachineManager: ObservableObject {
 
     /// Register a launched core process and return its tracking ID
     @discardableResult
-    func register(process: Process, port: Int, provenanceUUID: String,
-                  name: String = "") -> UUID {
+    func register(process: Process, port: Int, provenanceUUID: String) -> UUID {
         let id = UUID()
         let target = ConnectionTarget(host: "127.0.0.1", port: port)
-        // A name reserved before launch is already out of the queue; one that
-        // arrived some other way is claimed now so it cannot be issued twice.
-        nameAllocator.claim(name)
         let machine = ManagedMachine(
             id: id,
             target: target,
             process: process,
             provenanceUUID: provenanceUUID,
-            name: name,
             lifetimeLinked: true
         )
         machines[id] = machine
@@ -142,47 +130,8 @@ class MachineManager: ObservableObject {
     /// Remove tracking for a machine entirely (after shutdown or process exit)
     func unregister(id: UUID) {
         if let machine = machines.removeValue(forKey: id) {
-            // The machine is gone, so its name is free -- but goes to the back
-            // of the queue, so the next machine is not immediately given the
-            // name of the one just closed.
-            releaseName(machine.name)
             NSLog("[MachineManager] Unregistered machine %@ at %@", machine.id.uuidString, machine.target.address)
         }
-    }
-
-    // MARK: - Names
-
-    /// Take a name for a machine about to be launched.
-    ///
-    /// Reserved before the process starts, because the name is a command-line
-    /// argument to it. If the launch then fails, hand it back with
-    /// `releaseName` rather than letting it leak out of the pool.
-    ///
-    /// `avoiding` carries names known to be in use beyond this app's own
-    /// machines -- what Bonjour has seen. It is passed in rather than looked
-    /// up here so that this stays a plain bookkeeper, testable without a
-    /// network.
-    func reserveName(avoiding unavailable: Set<String> = []) -> String {
-        nameAllocator.issue(avoiding: unavailable)
-    }
-
-    /// Return a name to the pool, for reuse after every other free name.
-    func releaseName(_ name: String) {
-        nameAllocator.release(name)
-    }
-
-    /// Record that a machine has been renamed, so the pool keeps up.
-    ///
-    /// The old name becomes available again and the new one is spoken for.
-    /// Without this a machine renamed by hand onto a pool name could later be
-    /// duplicated by a generated one.
-    func renamed(address: String, to newName: String) {
-        guard let machine = machine(forAddress: address), machine.name != newName else {
-            return
-        }
-        machines[machine.id]?.name = newName
-        nameAllocator.claim(newName)
-        releaseName(machine.name)
     }
 
     /// Update the cached client count for a machine

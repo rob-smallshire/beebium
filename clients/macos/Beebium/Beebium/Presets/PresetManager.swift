@@ -51,6 +51,9 @@ class PresetManager: ObservableObject {
     /// Cached user presets directory path (retrieved from CLI)
     private var cachedUserPresetsDirpath: String?
 
+    /// Numbers machines per preset, for this run of the app only.
+    private let nameSequence = MachineNameSequence()
+
     private init() {}
 
     /// Discover preset files and build system and user presets.
@@ -626,9 +629,6 @@ class PresetManager: ObservableObject {
         let process: Process
         let port: Int
         let provenanceUUID: String
-        /// The name the core was launched with, to be passed to
-        /// MachineManager.register so the name and the machine stay together.
-        let machineName: String
     }
 
     /// Launch a core process for the given preset.
@@ -649,15 +649,9 @@ class PresetManager: ObservableObject {
         // this instance, not to the preset, so it is decided here at launch
         // and can be changed afterwards.
         //
-        // Reserved from MachineManager, which is what knows the machines that
-        // exist and so is what can say which names are still spoken for. It
-        // must be handed back on every path that fails to produce a running
-        // machine, or the name leaves the pool for good.
-        // Whatever discovery knows this instant. Never waited for: if Bonjour
-        // is unavailable or has not found anything yet, this is empty and the
-        // machine is named anyway, at the risk of a duplicate.
-        let namesOnNetwork = DiscoveryClient.shared.knownMachineNames
-        let machineName = MachineManager.shared.reserveName(avoiding: namesOnNetwork)
+        // A number that fails to become a running machine is simply skipped;
+        // nothing needs handing back, because numbers are never reused.
+        let machineName = nameSequence.next(forPreset: preset.name)
 
         var arguments = [
             "start",
@@ -701,7 +695,6 @@ class PresetManager: ObservableObject {
         do {
             try process.run()
         } catch {
-            await MachineManager.shared.releaseName(machineName)
             return .failure(.launchFailed("Failed to launch: \(error.localizedDescription)"))
         }
 
@@ -726,9 +719,6 @@ class PresetManager: ObservableObject {
                         let errorMsg = stderrText.isEmpty
                             ? "Process exited with status \(process.terminationStatus)"
                             : stderrText
-                        Task { @MainActor in
-                            MachineManager.shared.releaseName(machineName)
-                        }
                         continuation.resume(returning: .failure(.processExited(errorMsg)))
                         return
                     }
@@ -748,7 +738,7 @@ class PresetManager: ObservableObject {
                        let portRange = Range(match.range(at: 1), in: text),
                        let port = Int(text[portRange]) {
                         NSLog("[PresetManager] Core listening on port \(port)")
-                        continuation.resume(returning: .success(LaunchedCore(process: process, port: port, provenanceUUID: provenanceUUID, machineName: machineName)))
+                        continuation.resume(returning: .success(LaunchedCore(process: process, port: port, provenanceUUID: provenanceUUID)))
                         return
                     }
                 }
@@ -756,9 +746,6 @@ class PresetManager: ObservableObject {
                 // Timeout - kill the process
                 NSLog("[PresetManager] Timeout waiting for port, terminating process")
                 process.terminate()
-                Task { @MainActor in
-                    MachineManager.shared.releaseName(machineName)
-                }
                 continuation.resume(returning: .failure(.timeout))
             }
         }

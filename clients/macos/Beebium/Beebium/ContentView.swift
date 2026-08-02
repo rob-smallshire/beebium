@@ -290,11 +290,6 @@ struct ContentView: View {
         .sheet(isPresented: $isRenamingMachine) {
             MachineRenameSheet(currentName: systemClient.machineName) { newName in
                 systemClient.setMachineName(newName)
-                // Keep the name pool honest: renaming onto a name it could
-                // otherwise have issued must take that name out of
-                // circulation, and frees the one being given up.
-                MachineManager.shared.renamed(address: videoClient.target.address,
-                                              to: newName)
             }
         }
         .alert(

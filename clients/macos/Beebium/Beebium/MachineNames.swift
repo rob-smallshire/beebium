@@ -16,132 +16,28 @@ import Foundation
 /// apart at a glance.
 ///
 /// A machine's name is per instance, not part of a preset: two machines built
-/// from one preset are still two machines. The server will happily default the
-/// name to the model's display name, but then every Model B is called "BBC
-/// Model B 32K" and the windows are indistinguishable -- which is the problem
-/// this exists to solve. So a name is chosen at launch rather than left to
-/// that default, and the user can rename it afterwards.
+/// from one preset are still two machines. Left to itself the server names a
+/// machine after its model, so every Model B would be called the same thing
+/// and the windows would be indistinguishable -- which is what this exists to
+/// prevent.
 ///
-/// Cambridge colleges, for a machine designed in Cambridge -- and following
-/// Acorn's own habit, which named the RISC OS outline fonts Trinity, Corpus
-/// and Homerton. Proper names are distinct at a glance and easy to say out
-/// loud, in a way that "Model B 2" and "Model B 3" are not.
-enum MachineNames {
-    /// Single words, so a title bar reads cleanly: the distinguishing part of
-    /// each college's name, with "St" dropped. Clare Hall and Trinity Hall
-    /// have no distinguishing word of their own -- shortening them would
-    /// duplicate Clare and Trinity -- so they are left out rather than
-    /// admitted as two more names that look like ones already here.
-    static let pool: [String] = [
-        "Caius",
-        "Catharine's",
-        "Cavendish",
-        "Christ's",
-        "Churchill",
-        "Clare",
-        "Corpus",
-        "Darwin",
-        "Downing",
-        "Edmund's",
-        "Edwards",
-        "Emmanuel",
-        "Fitzwilliam",
-        "Girton",
-        "Homerton",
-        "Hughes",
-        "Jesus",
-        "John's",
-        "King's",
-        "Magdalene",
-        "Newnham",
-        "Pembroke",
-        "Peterhouse",
-        "Queens'",
-        "Robinson",
-        "Selwyn",
-        "Sussex",
-        "Trinity",
-        "Wolfson",
-    ]
-
-}
-
-/// Hands out machine names, and takes them back.
+/// The name is the preset's, with an ordinal: "BBC Model B #1",
+/// "BBC Model B #2", "BBC Model B (Disc) #1". It says what a machine is as
+/// well as which one it is.
 ///
-/// A shuffled circular queue: names are issued from the front and returned to
-/// the back. Shuffling means the first machine of a session is not always the
-/// same college, and returning to the back means a name freed by a closed
-/// window is the last to be reused rather than the first -- so a new machine
-/// does not arrive wearing the name of the one you just closed.
-///
-/// When the queue runs dry the vocabulary is extended with the next numeric
-/// suffix -- "Trinity 2" and so on -- shuffled in its turn. Names are always
-/// distinct; they only ever get uglier.
-final class MachineNameAllocator {
-    private var free: [String]
-    /// Every name this allocator has ever minted, so that a name handed back
-    /// can be told apart from one the user typed. Returning "Fred" to the
-    /// queue would put a name in the pool that was never ours to give.
-    private var minted: Set<String>
-    private let pool: [String]
-    private var suffix = 1
+/// Counting is per preset, and per run of the app. Numbers are never reused
+/// within a session -- closing #1 does not free the number for the next
+/// machine, because a name that has been on screen should not come back on a
+/// different machine -- and never persisted, so a fresh launch starts at #1
+/// again.
+@MainActor
+final class MachineNameSequence {
+    private var issued: [String: Int] = [:]
 
-    init(pool: [String] = MachineNames.pool) {
-        self.pool = pool
-        self.free = pool.shuffled()
-        self.minted = Set(pool)
+    /// The next name for a machine built from this preset.
+    func next(forPreset presetName: String) -> String {
+        let ordinal = (issued[presetName] ?? 0) + 1
+        issued[presetName] = ordinal
+        return "\(presetName) #\(ordinal)"
     }
-
-    /// Take the next name, preferring one not in `unavailable`.
-    ///
-    /// `unavailable` is what is known to be spoken for beyond this app's own
-    /// machines -- names seen on the network. It is a preference, not a
-    /// constraint: skipped names stay at the front of the queue, since the
-    /// machine holding one elsewhere may well go away before we next look.
-    ///
-    /// If everything free is spoken for, the vocabulary is extended rather
-    /// than a duplicate handed out. Only if that too collides is a duplicate
-    /// accepted, because a duplicate name is a nuisance and refusing to name
-    /// a machine at all is worse.
-    func issue(avoiding unavailable: Set<String> = []) -> String {
-        if let index = free.firstIndex(where: { !unavailable.contains($0) }) {
-            return free.remove(at: index)
-        }
-
-        extendVocabulary()
-
-        if let index = free.firstIndex(where: { !unavailable.contains($0) }) {
-            return free.remove(at: index)
-        }
-        return free.removeFirst()
-    }
-
-    /// Mark a specific name as in use, if it is one of ours.
-    ///
-    /// For a machine renamed by hand onto a name we might otherwise have
-    /// issued. A name that was never ours is ignored: the user is free to
-    /// call a machine anything, and it does not consume the pool.
-    func claim(_ name: String) {
-        free.removeAll { $0 == name }
-    }
-
-    /// Give a name back, for reuse after everything else.
-    ///
-    /// Ignores names this allocator never minted, and names already free, so
-    /// releasing twice cannot put a duplicate in the queue.
-    func release(_ name: String) {
-        guard minted.contains(name), !free.contains(name) else { return }
-        free.append(name)
-    }
-
-    /// Names still available, for tests.
-    var freeCount: Int { free.count }
-
-    private func extendVocabulary() {
-        suffix += 1
-        let suffixed = pool.map { "\($0) \(suffix)" }
-        minted.formUnion(suffixed)
-        free = suffixed.shuffled()
-    }
-
 }

@@ -49,23 +49,13 @@ class DiscoveryClient: ObservableObject {
     /// The app-wide browser.
     ///
     /// Shared because more than one thing needs to know what is on the
-    /// network: the Connect dialog lists it, naming a new machine avoids it,
-    /// and a window says so when its machine's name is not unique. Browsing
-    /// once for all of them beats a browser per dialog.
+    /// network: the Connect dialog lists it, and a window says so when its
+    /// machine's name is not unique. Browsing once for both beats a browser
+    /// per dialog.
     static let shared = DiscoveryClient()
 
     @Published private(set) var machines: [DiscoveredMachine] = []
     @Published private(set) var isDiscoveryAvailable: Bool = true
-
-    /// Names of machines currently visible on the network.
-    ///
-    /// Whatever discovery happens to know this instant -- never a wait for it
-    /// to find more. A name is worth avoiding if we already know about it,
-    /// but not worth stalling a machine's launch for, and if Bonjour is
-    /// unavailable this is simply empty and naming carries on regardless.
-    var knownMachineNames: Set<String> {
-        Set(machines.map(\.instanceName).filter { !$0.isEmpty })
-    }
 
     /// Machines on the network other than the one with this UUID.
     ///
