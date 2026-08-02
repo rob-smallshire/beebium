@@ -70,8 +70,8 @@ struct ContentView: View {
     /// Watched so the duplicate-name warning appears and clears as machines
     /// come and go on the network.
     @ObservedObject private var discoveryClient = DiscoveryClient.shared
-    /// Whether the rename sheet is up.
-    @State private var isRenamingMachine = false
+    /// Shows the rename field in a popover pointing at the window's title.
+    @State private var renamePopover = MachineRenamePopover()
     /// Offers renaming from a context menu on the window's title. Held by
     /// the view so it lives as long as the window it watches.
     @State private var titleMenu = TitleClickMonitor()
@@ -190,6 +190,14 @@ struct ContentView: View {
         return "\u{26A0}\u{FE0E} name also used on \(clash.displayHost)"
     }
 
+    /// Open the rename popover on the window showing this machine.
+    private func beginRenamingMachine() {
+        guard let window = currentWindow else { return }
+        renamePopover.show(in: window, currentName: systemClient.machineName) { newName in
+            systemClient.setMachineName(newName)
+        }
+    }
+
     private var emulatorView: some View {
         EmulatorView(
             videoClient: videoClient,
@@ -292,12 +300,7 @@ struct ContentView: View {
         // there is nothing to say, so an ordinary window carries the name
         // alone.
         .navigationSubtitle(duplicateNameWarning)
-        .focusedValue(\.renameMachine, { isRenamingMachine = true })
-        .sheet(isPresented: $isRenamingMachine) {
-            MachineRenameSheet(currentName: systemClient.machineName) { newName in
-                systemClient.setMachineName(newName)
-            }
-        }
+        .focusedValue(\.renameMachine, { beginRenamingMachine() })
         .alert(
             "Server / app version mismatch",
             isPresented: Binding(
@@ -455,7 +458,7 @@ struct ContentView: View {
             // change it. A right-click, because every left-click on a title
             // bar already means something; see TitleClickMonitor.
             titleMenu.install(on: window, menuTitle: "Rename Machine...") {
-                isRenamingMachine = true
+                beginRenamingMachine()
             }
         }))
         .onChange(of: currentWindow) { window in
