@@ -45,7 +45,12 @@ private struct MachineRenameField: View {
             .padding(10)
             .onAppear {
                 draft = currentName
-                focused = true
+                // Asked for after the popover's window has had a chance to
+                // become key. Focus taken before that is lost when it does,
+                // leaving a field that looks ready but is not.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    focused = true
+                }
             }
     }
 }
@@ -83,6 +88,15 @@ final class MachineRenamePopover: NSObject, NSPopoverDelegate {
         popover.show(relativeTo: anchorRect(in: titleBar, window: window),
                      of: titleBar,
                      preferredEdge: .minY)
+
+        // A popover shown from the title bar does not take key status by
+        // itself, and a text field in a window that is not key shows no
+        // insertion point: the field would have the focus but look inert,
+        // with nothing to say the user may start typing. Asked for after the
+        // popover has been placed, so its window exists to be asked.
+        DispatchQueue.main.async {
+            popover.contentViewController?.view.window?.makeKey()
+        }
     }
 
     func popoverDidClose(_ notification: Notification) {
