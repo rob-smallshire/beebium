@@ -175,6 +175,7 @@
 		F619A0248AEA6D3F17D0EBA9 /* GRPC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C97A19D18727CB09CD95712 /* GRPC */; };
 		F8DB66D575799986E3C664C3 /* ExtensionViewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D59B36AC9E2A59CA68F4FD3 /* ExtensionViewRenderer.swift */; };
 		F8E43B3F7BBA3554BE190043 /* MacKeyCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8502E9114AB10B2200A2F6F9 /* MacKeyCode.swift */; };
+		F911B573D5974E32CD568A35 /* TitleClickMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */; };
 		FB8C371C9D4C748FE2604B15 /* extension_ui.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C19550BD759DAA9DFA9A015 /* extension_ui.pb.swift */; };
 		FBA4B50F2A55D17E9C34AEF9 /* ReconnectCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE3C453D296DD3F81E0B829 /* ReconnectCoordinator.swift */; };
 		FFED4839C8FA82EBD68D55E8 /* SidebarModeToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E3A09BFCE24979EE6EF47F /* SidebarModeToolbar.swift */; };
@@ -343,6 +344,7 @@
 		D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParserTests.swift; sourceTree = "<group>"; };
 		DA0CF5589888F672F43B52FD /* aun.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.pb.swift; sourceTree = "<group>"; };
 		DBE3C453D296DD3F81E0B829 /* ReconnectCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinator.swift; sourceTree = "<group>"; };
+		DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleClickMonitor.swift; sourceTree = "<group>"; };
 		DFB1414298AE8F8261138293 /* keyboard.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = keyboard.proto; sourceTree = "<group>"; };
 		E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSchemaSection.swift; sourceTree = "<group>"; };
 		E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSectionView.swift; sourceTree = "<group>"; };
@@ -594,6 +596,7 @@
 				FEB0459103AA8B2261579315 /* SystemClient.swift */,
 				1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */,
 				0A03414ECE92D9AA04944FBB /* TextInputField.swift */,
+				DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */,
 				08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */,
 				2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */,
 				8BE2CECB7FD5D0AF509AAE1C /* Configuration */,
@@ -907,6 +910,7 @@
 				E275D2F57760944D93A67635 /* SystemClient.swift in Sources */,
 				14F3A975FA057C10313A9E3E /* SystemPowerMonitor.swift in Sources */,
 				F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */,
+				F911B573D5974E32CD568A35 /* TitleClickMonitor.swift in Sources */,
 				F4E79C3B365AB2D13A5B5984 /* VideoClient.swift in Sources */,
 				116FC39CBA4CBBA8B1F63FD1 /* VideoSettings.swift in Sources */,
 				150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */,

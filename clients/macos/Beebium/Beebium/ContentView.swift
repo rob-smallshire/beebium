@@ -72,6 +72,9 @@ struct ContentView: View {
     @ObservedObject private var discoveryClient = DiscoveryClient.shared
     /// Whether the rename sheet is up.
     @State private var isRenamingMachine = false
+    /// Offers renaming from a context menu on the window's title. Held by
+    /// the view so it lives as long as the window it watches.
+    @State private var titleMenu = TitleClickMonitor()
     @StateObject private var videoClient = VideoClient()
     @StateObject private var keyboardClient = KeyboardClient()
     @StateObject private var systemClient = SystemClient()
@@ -448,6 +451,12 @@ struct ContentView: View {
             // several windows apart, permanently invisible.
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
+            // The name is in the title, so that is where a user reaches to
+            // change it. A right-click, because every left-click on a title
+            // bar already means something; see TitleClickMonitor.
+            titleMenu.install(on: window, menuTitle: "Rename Machine...") {
+                isRenamingMachine = true
+            }
         }))
         .onChange(of: currentWindow) { window in
             guard let window = window else { return }
