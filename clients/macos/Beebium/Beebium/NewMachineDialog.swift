@@ -200,6 +200,12 @@ struct NewMachineDialog: View {
             }
             .buttonStyle(.plain)
             .disabled(selectedPreset == nil)
+            // SwiftUI names this from the Text in its label, so it reads as
+            // "Configuration"; what a chevron toggle cannot convey is which
+            // way it is about to go.
+            .accessibilityHint(showConfiguration
+                               ? "Hides the configuration options"
+                               : "Shows the configuration options")
 
             // Configuration editor (shown when expanded)
             if showConfiguration {
