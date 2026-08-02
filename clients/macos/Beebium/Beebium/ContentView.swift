@@ -310,7 +310,15 @@ struct ContentView: View {
                 }
             ),
             presenting: systemClient.protocolMismatchMessage
-        ) { _ in
+        ) { message in
+            // An alert's message is not selectable, and this one carries the
+            // two fingerprints and the server's path -- exactly what has to be
+            // quoted in a bug report or pasted into a rebuild command.
+            Button("Copy Details") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(message, forType: .string)
+                systemClient.protocolMismatchMessage = nil
+            }
             Button("OK", role: .cancel) { systemClient.protocolMismatchMessage = nil }
         } message: { message in
             Text(message)
