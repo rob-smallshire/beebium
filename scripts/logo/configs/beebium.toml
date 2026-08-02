@@ -1,0 +1,75 @@
+# The Beebium application icon.
+#
+# Paths are relative to this file.  Every value has a default in
+# beebium_icon.config; only the interesting ones are spelled out here.
+
+name = "beebium"
+
+[palette]
+# BBC Microcomputer case beige, with Acorn green typography.
+face_top = "#F6ECD2"
+face_bottom = "#E7D8B2"
+frame = "#FBF4E1"
+ink = "#2E6B35"
+shadow = "#4A3B14"
+
+[geometry]
+style = "squircle"
+
+[content]
+symbol = "Bb"
+name = "Beebium"
+atomic_number = "6502"
+ground_state = "8-bit"
+isotopes = ["16", "32", "64", "128"]
+# "nuclide" writes each RAM size as a raised mass number before the symbol,
+# the way chemistry writes an isotope: 16Bb, 32Bb.  "unit" writes 16K, 32K
+# instead, using isotope_suffix.
+isotope_style = "nuclide"
+isotope_suffix = "K"
+energies = ["2", "3", "4"]
+energy_suffix = "MHz"
+# The chips the machine is built from, as the constituent elements of a
+# compound.  A 65xx/68xx series with no stragglers: CPU, VIA, CRTC, ACIA,
+# ADLC.  Only shown at the very top of the ladder.
+constituents = ["6502", "6522", "6845", "6850", "6854"]
+separator = " · "
+
+[lod]
+# The smallest rendered size, in pixels, at which each element appears.
+small_size = 24
+symbol = 0
+keyline = 48
+atomic_number = 128
+name = 128
+isotopes = 256
+ground_state = 512
+energies = 512
+constituents = 1024
+
+# Two typefaces, so that the identity of the element reads apart from its
+# specifications, the way a real periodic table separates them.
+#
+# The vendored defaults are open-licensed stand-ins: Nunito Sans for the
+# humanist geometric display face, Barlow for the DIN-like technical face.
+# See configs/beebium-avenir-din.toml for the system-font pairing.
+
+[fonts.symbol]
+filepath = "../fonts/NunitoSans.ttf"
+# A periodic table sets its symbols in a normal weight, not a black one; a
+# heavy Bb reads as a logo rather than as an element.
+variations = { wght = 600 }
+# Even this fills in its own counters at 16px, so the small end goes lighter.
+small_variations = { wght = 500 }
+fit = "ink"
+
+[fonts.name]
+filepath = "../fonts/NunitoSans.ttf"
+variations = { wght = 600 }
+tracking = -0.005
+fit = "ink"
+
+[fonts.technical]
+filepath = "../fonts/Barlow-Medium.ttf"
+tracking = 0.02
+fit = "cap"
