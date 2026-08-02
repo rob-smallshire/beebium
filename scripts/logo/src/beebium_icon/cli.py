@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from beebium_icon.bundle import TARGETS, build_target, install_appiconset
@@ -37,6 +38,10 @@ def main(argv: list[str] | None = None) -> int:
         config = load_config(arguments.config)
         if arguments.style:
             config = config.with_style(arguments.style)
+        if arguments.no_shadow:
+            config = replace(
+                config, geometry=replace(config.geometry, shadow_opacity=0.0)
+            )
         return arguments.handler(arguments, config)
     except (ConfigError, TypographyError, FileNotFoundError, ValueError) as error:
         print(f"beebium-icon: {error}", file=sys.stderr)
@@ -60,6 +65,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--style",
         choices=FRAME_STYLES,
         help="override the frame style the configuration or target selects",
+    )
+    parser.add_argument(
+        "--no-shadow",
+        action="store_true",
+        help="drop the shadow, which a document or a web page does not want "
+        "and which is the least portable part of an SVG",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -171,8 +182,6 @@ def _command_build(arguments: argparse.Namespace, config: IconConfig) -> int:
 
 
 def _restyle(target, style: str):
-    from dataclasses import replace
-
     return replace(target, style=style)
 
 

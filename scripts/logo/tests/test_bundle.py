@@ -157,6 +157,16 @@ def test_cli_style_override_reaches_the_bundle(tmp_path):
     assert tiled != squircled
 
 
+def test_cli_can_drop_the_shadow(tmp_path):
+    """The README logo must not depend on an SVG filter surviving a sanitiser."""
+    plain_filepath = tmp_path / "plain.svg"
+    shadowed_filepath = tmp_path / "shadowed.svg"
+    assert main(["--no-shadow", "svg", "--size", "512", "-o", str(plain_filepath)]) == 0
+    assert main(["svg", "--size", "512", "-o", str(shadowed_filepath)]) == 0
+    assert "filter" not in plain_filepath.read_text()
+    assert "feDropShadow" in shadowed_filepath.read_text()
+
+
 def test_cli_reports_an_unreadable_configuration(tmp_path, capsys):
     assert main(["-c", str(tmp_path / "absent.toml"), "svg"]) == 1
     assert "beebium-icon:" in capsys.readouterr().err

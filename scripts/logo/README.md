@@ -63,6 +63,18 @@ uv run beebium-icon build macos --install-appiconset \
     ../../clients/macos/Beebium/Beebium/Assets.xcassets/AppIcon.appiconset
 ```
 
+To regenerate the logo the top-level README shows:
+
+```bash
+uv run beebium-icon --style tile --no-shadow svg --size 1024 \
+    -o ../../docs/images/beebium-logo.svg
+```
+
+That one is deliberately drawn at the largest size and shown small, so it
+carries every row; and `--no-shadow` keeps the document out of SVG filters,
+which are the least portable thing an SVG can contain and which GitHub's
+sanitiser is not obliged to keep.
+
 ## Configuration
 
 Everything drawn comes from a TOML file - `configs/beebium.toml` by default.
