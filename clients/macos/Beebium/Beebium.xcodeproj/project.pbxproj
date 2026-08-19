@@ -39,6 +39,7 @@
 		23F3E03B298F6AB8A9B9924E /* EconetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA006204A482FCD8B77F7549 /* EconetClient.swift */; };
 		26F83122590B987F48169D2D /* VideoSettingsLoadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AEA0430FDD370E37C07678 /* VideoSettingsLoadTests.swift */; };
 		281A106F8708C92D91CD9240 /* keyboard.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */; };
+		2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EE051165760A831AA7396F /* TransientMessage.swift */; };
 		2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */; };
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
@@ -216,6 +217,7 @@
 		208639B544792E5992A279DF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumSvgGlyphRenderer.swift; sourceTree = "<group>"; };
 		22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.grpc.swift; sourceTree = "<group>"; };
+		22EE051165760A831AA7396F /* TransientMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientMessage.swift; sourceTree = "<group>"; };
 		25D1F9F6D43714BB3F5B5CEB /* AudioMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerView.swift; sourceTree = "<group>"; };
 		27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinatorTests.swift; sourceTree = "<group>"; };
 		28ED949DB593C8353954F7B1 /* MachinePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePreset.swift; sourceTree = "<group>"; };
@@ -601,6 +603,7 @@
 				1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */,
 				0A03414ECE92D9AA04944FBB /* TextInputField.swift */,
 				DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */,
+				22EE051165760A831AA7396F /* TransientMessage.swift */,
 				08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */,
 				2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */,
 				8BE2CECB7FD5D0AF509AAE1C /* Configuration */,
@@ -919,6 +922,7 @@
 				14F3A975FA057C10313A9E3E /* SystemPowerMonitor.swift in Sources */,
 				F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */,
 				F911B573D5974E32CD568A35 /* TitleClickMonitor.swift in Sources */,
+				2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */,
 				F4E79C3B365AB2D13A5B5984 /* VideoClient.swift in Sources */,
 				116FC39CBA4CBBA8B1F63FD1 /* VideoSettings.swift in Sources */,
 				150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */,

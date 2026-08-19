@@ -30,8 +30,9 @@ struct FloppyDriveConfigView: View {
     /// Reason a hovering drag will not be accepted, shown while it hovers.
     @State private var dropRefusal: DiscDropRefusal?
 
-    /// Reason the last drop could not be read.
-    @State private var dropError: String?
+    /// Why the last picked or dropped image was not accepted -- brief, and
+    /// clears itself so an accidental drop is not stuck on the row.
+    @StateObject private var driveError = TransientMessage()
 
     private var isEmpty: Bool {
         imageFilepath == nil
@@ -53,17 +54,22 @@ struct FloppyDriveConfigView: View {
                 loadedContent
             }
 
-            if let message = dropRefusal?.message ?? dropError {
+            if let message = dropRefusal?.message ?? driveError.brief {
                 HStack(spacing: 4) {
                     Image(systemName: dropRefusal != nil
                           ? "nosign" : "exclamationmark.triangle.fill")
                         .font(.caption2)
+                    // Brief; the server's fuller reason is a hover away.
                     Text(message)
                         .font(.caption)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 .foregroundColor(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .help((dropRefusal?.message ?? driveError.detail) ?? message)
+                .contentShape(Rectangle())
+                .onTapGesture { if dropRefusal == nil { driveError.clear() } }
             }
 
             // Actions row - matches StorageModeView layout
@@ -82,8 +88,12 @@ struct FloppyDriveConfigView: View {
             isTargeted: $isDropTargeted,
             refusal: $dropRefusal,
             accept: { url in validate(url) },
-            report: { message in dropError = message }
+            report: { message in driveError.show(message) }
         ))
+        // A fresh, acceptable drag makes a lingering error beside the point.
+        .onChange(of: isDropTargeted) { targeted in
+            if targeted { driveError.clear() }
+        }
     }
 
     // MARK: - Content Views
@@ -178,7 +188,7 @@ struct FloppyDriveConfigView: View {
     /// validates it on launch, and refusing to configure a machine because
     /// presets have not finished loading would be worse.
     private func validate(_ url: URL) {
-        dropError = nil
+        driveError.clear()
         guard let executablePath = PresetManager.shared.anyCoreExecutablePath else {
             imageFilepath = url.path
             return
@@ -187,8 +197,9 @@ struct FloppyDriveConfigView: View {
             let info = await PresetManager.shared.describeDiscImage(
                 path: url.path, executablePath: executablePath)
             if let info, !info.recognised {
-                dropError = info.reason
-                    ?? "\(url.lastPathComponent) is not a recognised disc image"
+                // Brief on the row; the server's exact reason in the tooltip.
+                driveError.show("Unrecognised format \(url.lastPathComponent)",
+                                detail: info.reason)
             } else {
                 // Recognised, or the executable could not be run to say
                 // otherwise -- accept and let the launch be the backstop.
