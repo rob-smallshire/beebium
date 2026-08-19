@@ -507,14 +507,19 @@ private struct DriveRowView: View {
     // MARK: - Actions
 
     private func browseForDisc() {
-        let panel = NSOpenPanel()
-        panel.title = "Select Disc Image"
-        panel.allowedContentTypes = DiscImageTypes.contentTypes
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
+        // The picker filter comes from the server, so the first browse may
+        // wait briefly on it (cached thereafter). Running on the main actor
+        // keeps NSOpenPanel where AppKit needs it.
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "Select Disc Image"
+            panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes()
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
 
-        if panel.runModal() == .OK, let url = panel.url {
-            insertDisc(url: url)
+            if panel.runModal() == .OK, let url = panel.url {
+                insertDisc(url: url)
+            }
         }
     }
 

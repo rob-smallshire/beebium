@@ -154,14 +154,18 @@ struct FloppyDriveConfigView: View {
     // MARK: - Actions
 
     private func browseForDisc() {
-        let panel = NSOpenPanel()
-        panel.title = "Select Disc Image"
-        panel.allowedContentTypes = DiscImageTypes.contentTypes
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
+        // The picker filter comes from the server (cached after the first
+        // ask); running on the main actor keeps NSOpenPanel on its thread.
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "Select Disc Image"
+            panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes()
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
 
-        if panel.runModal() == .OK, let url = panel.url {
-            validate(url)
+            if panel.runModal() == .OK, let url = panel.url {
+                validate(url)
+            }
         }
     }
 

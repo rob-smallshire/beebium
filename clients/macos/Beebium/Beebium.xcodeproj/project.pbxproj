@@ -8,13 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		010DBCB8FE2D1DAA06D514CC /* BeebiumSvgGlyphRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */; };
+		01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */; };
 		02202BCE716C487C5A3D36FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3FE1A20DF4E1D3707C33DE /* SettingsView.swift */; };
 		02956037B5EAA66AA17BCBEB /* SidewaysSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */; };
 		02EAA3A16D440CCD12071A3D /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F2683BAFB4C72B6644F473 /* AudioEngine.swift */; };
 		03B945147D637860AEC9B652 /* aun.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32A705682AF714B2B54471F /* aun.grpc.swift */; };
 		03F8C1AF54A149B3750029EE /* audio.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */; };
 		03FCAEA23F2FF31EC7E07D29 /* KeyboardMappings in Resources */ = {isa = PBXBuildFile; fileRef = C9A1A70DB6662E96A6210970 /* KeyboardMappings */; };
-		0519CCA0392852CB2C422286 /* DiscImageTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40DDCC33A2B6BB3F4A015E4 /* DiscImageTypes.swift */; };
 		06B9C1E897D9DB39E8392078 /* SidebarModeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7386122C0E5009AE250FECD /* SidebarModeContent.swift */; };
 		07C91006D788A614860664BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4635C74CA6E1654868006CA6 /* Assets.xcassets */; };
 		089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66676E0A17481C9E2BE66969 /* HostFingerprint.swift */; };
@@ -316,7 +316,6 @@
 		A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorView.swift; sourceTree = "<group>"; };
 		A32A705682AF714B2B54471F /* aun.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.grpc.swift; sourceTree = "<group>"; };
 		A3BEAA83FA16284B08EE75DC /* ProtocolFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolFingerprint.swift; sourceTree = "<group>"; };
-		A40DDCC33A2B6BB3F4A015E4 /* DiscImageTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageTypes.swift; sourceTree = "<group>"; };
 		A44DA8D133CDD247497229CA /* disc.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = disc.grpc.swift; sourceTree = "<group>"; };
 		A7386122C0E5009AE250FECD /* SidebarModeContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarModeContent.swift; sourceTree = "<group>"; };
 		AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.grpc.swift; sourceTree = "<group>"; };
@@ -352,6 +351,7 @@
 		DFB1414298AE8F8261138293 /* keyboard.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = keyboard.proto; sourceTree = "<group>"; };
 		E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSchemaSection.swift; sourceTree = "<group>"; };
 		E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSectionView.swift; sourceTree = "<group>"; };
+		E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscFormatListTests.swift; sourceTree = "<group>"; };
 		E2FF930B029ECBBAE243C4D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E5FAFDF7474D253DDBE042E3 /* AudioRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRingBuffer.swift; sourceTree = "<group>"; };
 		E61C3011B028BF1FDAD579A4 /* keyboard.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = keyboard.pb.swift; sourceTree = "<group>"; };
@@ -548,7 +548,6 @@
 				12818B1698A8D15AE8A63653 /* DeepLink.swift */,
 				CF6562062957B62B8C099A42 /* DiscClient.swift */,
 				1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */,
-				A40DDCC33A2B6BB3F4A015E4 /* DiscImageTypes.swift */,
 				639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */,
 				D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */,
 				CA006204A482FCD8B77F7549 /* EconetClient.swift */,
@@ -637,6 +636,7 @@
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
+				E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */,
 				814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */,
 				2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */,
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
@@ -791,6 +791,7 @@
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
+				01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */,
 				F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */,
 				8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */,
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
@@ -847,7 +848,6 @@
 				4D9536D54F0C9291F5ECD326 /* DiscClient.swift in Sources */,
 				0DB84CA71C7998BEE8527F1B /* DiscImageDrop.swift in Sources */,
 				0EDBB215C12201D673213861 /* DiscImageInfo.swift in Sources */,
-				0519CCA0392852CB2C422286 /* DiscImageTypes.swift in Sources */,
 				DD38D6EB9C3CC2182169F801 /* Disconnectable.swift in Sources */,
 				AEFDACA93EC7747DF05C2447 /* DiscoveryClient.swift in Sources */,
 				674B7623816974BB8C3E2255 /* DisplayStyle.swift in Sources */,

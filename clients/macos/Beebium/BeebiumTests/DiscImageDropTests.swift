@@ -13,18 +13,6 @@
 import XCTest
 @testable import Beebium
 
-final class DiscImageTypesTests: XCTestCase {
-    func testNoContentTypeIsAWildcard() {
-        // Substituting a permissive stand-in for an extension that fails to
-        // resolve would silently widen every file picker to all files.
-        for type in DiscImageTypes.contentTypes {
-            XCTAssertNotEqual(type, .data)
-            XCTAssertNotEqual(type, .item)
-            XCTAssertNotEqual(type, .content)
-        }
-    }
-}
-
 final class DiscDropRefusalTests: XCTestCase {
     private let occupied = "Eject disc first"
 

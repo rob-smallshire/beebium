@@ -12,6 +12,7 @@
 
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
 
 /// Error type for core launch failures
 enum CoreLaunchError: LocalizedError {
@@ -53,6 +54,11 @@ class PresetManager: ObservableObject {
 
     /// Numbers machines per preset, for this run of the app only.
     private let nameSequence = MachineNameSequence()
+
+    /// Disc image picker content types, fetched from the server once and kept
+    /// for the session (disc format support does not change while the app
+    /// runs).
+    private var cachedDiscImageContentTypes: [UTType]?
 
     private init() {}
 
@@ -385,6 +391,55 @@ class PresetManager: ObservableObject {
     /// before presets have been discovered.
     var anyCoreExecutablePath: String? {
         systemPresets.first?.coreExecutablePath
+    }
+
+    /// The disc image formats the server can load, as content types for a
+    /// file picker's filter.
+    ///
+    /// Sourced from the server via list-floppy-formats and cached for the
+    /// session, so the client keeps no list of its own -- the picker offers
+    /// exactly the formats the machine will load, and the two cannot drift.
+    /// Empty (an unfiltered picker) if no executable can be asked or its
+    /// output cannot be parsed, which is a better failure than a stale
+    /// hardcoded list.
+    func discImageContentTypes() async -> [UTType] {
+        if let cached = cachedDiscImageContentTypes {
+            return cached
+        }
+        guard let executablePath = anyCoreExecutablePath else {
+            return []
+        }
+        let (output, error) = await runCli(
+            executable: executablePath,
+            arguments: ["--format", "jsonl", "list-floppy-formats"])
+        if error != nil {
+            return []
+        }
+        let types = Self.parseDiscImageExtensions(fromFormatList: output)
+            .compactMap { UTType(filenameExtension: $0) }
+        cachedDiscImageContentTypes = types
+        return types
+    }
+
+    /// The extensions from list-floppy-formats' JSONL output, without the
+    /// leading dot and lowercased. A pure, side-effect-free seam, so the
+    /// parse can be tested without running a server.
+    nonisolated static func parseDiscImageExtensions(fromFormatList jsonl: String) -> [String] {
+        struct Line: Decodable { let extensions: [String] }
+        var out: [String] = []
+        for raw in jsonl.split(whereSeparator: \.isNewline) {
+            guard let data = raw.data(using: .utf8),
+                  let line = try? JSONDecoder().decode(Line.self, from: data) else {
+                continue
+            }
+            for ext in line.extensions {
+                let bare = ext.hasPrefix(".") ? String(ext.dropFirst()) : ext
+                if !bare.isEmpty {
+                    out.append(bare.lowercased())
+                }
+            }
+        }
+        return out
     }
 
     /// Ask the server executable whether `path` is a disc image, and what.
