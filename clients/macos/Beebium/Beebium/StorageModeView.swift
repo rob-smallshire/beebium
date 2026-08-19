@@ -231,6 +231,14 @@ private struct StorageDeviceRowView: View {
     }
 }
 
+/// A failed-action message for a drive row: what to show, and the fuller
+/// text behind it. The brief line fits the row; the detail (the server's own
+/// words) is the tooltip.
+private struct DriveMessage: Equatable {
+    let brief: String
+    let detail: String
+}
+
 /// Row view for a single floppy drive
 private struct DriveRowView: View {
     let drive: Beebium_DriveStatus
@@ -241,10 +249,14 @@ private struct DriveRowView: View {
     @State private var isProcessing = false
     /// Reason a hovering drag will not be accepted, shown while it hovers.
     @State private var dropRefusal: DiscDropRefusal?
-    /// Reason the last insert or eject did not happen, shown until the next
-    /// attempt. A request the server turned down has to be visible: the row
-    /// would otherwise simply not change and look like nothing was tried.
-    @State private var actionError: String?
+    /// Reason the last insert or eject did not happen. A request the server
+    /// turned down has to be visible -- the row would otherwise simply not
+    /// change and look like nothing was tried -- but it is a passing status,
+    /// not a permanent one, so it dismisses on its own (see showActionError).
+    @State private var actionError: DriveMessage?
+    /// Clears `actionError` after a while, so an accidental drop does not
+    /// leave the row wearing an error with no way to shed it.
+    @State private var actionErrorDismiss: Task<Void, Never>?
     /// True once a pending eject has been waiting long enough that the drive
     /// is evidently busy. The server waits indefinitely rather than pulling
     /// the disc out of a spinning drive, so this is where the user is offered
@@ -314,8 +326,15 @@ private struct DriveRowView: View {
         .onDisappear {
             ejectWaitTask?.cancel()
             ejectWaitTask = nil
+            actionErrorDismiss?.cancel()
+            actionErrorDismiss = nil
         }
         .onChange(of: drive.state) { _ in trackEjectProgress() }
+        // A fresh, acceptable drag makes any lingering error beside the point:
+        // shed it as the drag arrives so retrying reads cleanly.
+        .onChange(of: isDropTargeted) { targeted in
+            if targeted { clearActionError() }
+        }
         .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
             isSlotEmpty: isEmpty,
             occupiedReason: "Eject disc first",
@@ -323,14 +342,20 @@ private struct DriveRowView: View {
             isTargeted: $isDropTargeted,
             refusal: $dropRefusal,
             accept: { url in insertDisc(url: url) },
-            report: { message in actionError = message }
+            report: { message in showActionError(brief: message) }
         ))
     }
 
     /// The refusal for a drag in flight wins over an older failure: it is
     /// about what the user is doing right now.
     private var statusMessage: String? {
-        dropRefusal?.message ?? actionError
+        dropRefusal?.message ?? actionError?.brief
+    }
+
+    /// The fuller text behind the brief one, shown on hover. A drop refusal
+    /// says all it needs to; a failed action keeps the server's exact words.
+    private var statusDetail: String? {
+        dropRefusal?.message ?? actionError?.detail
     }
 
     private func statusLine(_ message: String) -> some View {
@@ -339,8 +364,8 @@ private struct DriveRowView: View {
                   ? "nosign" : "exclamationmark.triangle.fill")
                 .font(.caption2)
             // One line, so it occupies exactly the space the empty prompt or
-            // disc name would; a longer server error truncates and stays
-            // readable through the tooltip rather than growing the row.
+            // disc name would; the brief text fits, and the server's full
+            // reason is a hover away rather than something that grows the row.
             Text(message)
                 .font(.caption)
                 .lineLimit(1)
@@ -348,8 +373,34 @@ private struct DriveRowView: View {
         }
         .foregroundColor(.red)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .help(message)
+        .help(statusDetail ?? message)
+        .contentShape(Rectangle())
+        // A lingering failure -- not a live refusal -- can be dismissed by
+        // clicking it, for anyone who would rather not wait it out.
+        .onTapGesture { if dropRefusal == nil { clearActionError() } }
     }
+
+    /// Show a failed-action message, briefly. `brief` is what the row shows;
+    /// `detail` (the server's own words, by default the same) is the tooltip.
+    /// The message clears itself after a few seconds so it cannot get stuck.
+    private func showActionError(brief: String, detail: String? = nil) {
+        actionError = DriveMessage(brief: brief, detail: detail ?? brief)
+        actionErrorDismiss?.cancel()
+        actionErrorDismiss = Task {
+            try? await Task.sleep(nanoseconds: UInt64(Self.errorDismissDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { actionError = nil }
+        }
+    }
+
+    private func clearActionError() {
+        actionErrorDismiss?.cancel()
+        actionErrorDismiss = nil
+        actionError = nil
+    }
+
+    /// How long a failed-action message lingers before it clears itself.
+    private static let errorDismissDelay: Double = 6.0
 
     // MARK: - Content Views
 
@@ -525,11 +576,11 @@ private struct DriveRowView: View {
 
     private func insertDisc(url: URL) {
         guard isEmpty else {
-            actionError = "Eject disc first"
+            showActionError(brief: "Eject disc first")
             return
         }
 
-        actionError = nil
+        clearActionError()
         isProcessing = true
         Task {
             let result = await discClient.insertDisc(drive: Int(drive.drive), url: url)
@@ -537,7 +588,11 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Insert failed: \(error.localizedDescription)")
-                    actionError = error.localizedDescription
+                    // The reachable failure from a drop onto an empty local
+                    // drive is an unrecognised image; the server's exact
+                    // words -- size, extension, path -- stay in the tooltip.
+                    showActionError(brief: "Unrecognised format \(url.lastPathComponent)",
+                                    detail: error.localizedDescription)
                 }
             }
         }
@@ -546,7 +601,7 @@ private struct DriveRowView: View {
     private func ejectDisc() {
         guard isLoaded else { return }
 
-        actionError = nil
+        clearActionError()
         isProcessing = true
         Task {
             let result = await discClient.ejectDisc(drive: Int(drive.drive), immediate: false)
@@ -554,14 +609,14 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Eject failed: \(error.localizedDescription)")
-                    actionError = error.localizedDescription
+                    showActionError(brief: error.localizedDescription)
                 }
             }
         }
     }
 
     private func forceEject() {
-        actionError = nil
+        clearActionError()
         isProcessing = true
         Task {
             let result = await discClient.ejectDisc(drive: Int(drive.drive), immediate: true)
@@ -569,14 +624,14 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Force eject failed: \(error.localizedDescription)")
-                    actionError = error.localizedDescription
+                    showActionError(brief: error.localizedDescription)
                 }
             }
         }
     }
 
     private func cancelEject() {
-        actionError = nil
+        clearActionError()
         isProcessing = true
         Task {
             let result = await discClient.cancelEject(drive: Int(drive.drive))
@@ -584,7 +639,7 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Cancel eject failed: \(error.localizedDescription)")
-                    actionError = error.localizedDescription
+                    showActionError(brief: error.localizedDescription)
                 }
             }
         }
