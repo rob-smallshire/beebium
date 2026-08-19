@@ -4270,6 +4270,96 @@ public:
     }
 };
 
+// Validate and categorise a disc image, the way the running server does when
+// a disc is inserted. This is the same rule -- the shared DiscFormatRegistry
+// via load_disc_from_url_or_filepath -- reached through the CLI, so a front
+// end configuring a machine before it is launched judges an image by exactly
+// the criteria the machine itself will apply. There is no second, weaker rule
+// anywhere.
+template<typename MachineType>
+class DescribeDiscImageSubcommand : public Subcommand<MachineType> {
+public:
+    std::string_view name() const override { return "describe-disc-image"; }
+    std::string_view description() const override {
+        return "Validate a floppy disc image and print its format as JSON";
+    }
+
+    void help(const char* program_name) const override {
+        std::cerr << "Usage: " << program_name << " describe-disc-image <path>\n"
+                  << "\n"
+                  << "Loads the disc image at <path> using the same format detection the\n"
+                  << "server applies when a disc is inserted, and prints the result as JSON:\n"
+                  << "whether it is a recognised disc image, its format, how many sides it\n"
+                  << "has, and whether it is write-protected. When it is not recognised, the\n"
+                  << "reason is given.\n"
+                  << "\n"
+                  << "Exit status is 0 whenever the file could be read, whether or not it is\n"
+                  << "a disc image (read the \"recognised\" field); non-zero only if the file\n"
+                  << "itself cannot be read.\n"
+                  << "\n"
+                  << "Output is always JSON regardless of the --format option.\n";
+    }
+
+    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
+        if (global.help_requested) {
+            help(argv[0]);
+            return ExitCode::OK;
+        }
+
+        std::string path;
+        for (int i = global.subcommand_argv_start; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--help" || arg == "-h") {
+                help(argv[0]);
+                return ExitCode::OK;
+            } else if (!arg.empty() && arg[0] == '-') {
+                std::cerr << "Unknown argument: " << arg << "\n";
+                help(argv[0]);
+                return ExitCode::USAGE;
+            } else if (path.empty()) {
+                path = arg;
+            } else {
+                std::cerr << "Unexpected argument: " << arg << "\n";
+                help(argv[0]);
+                return ExitCode::USAGE;
+            }
+        }
+
+        if (path.empty()) {
+            std::cerr << "Error: a disc image path is required\n";
+            help(argv[0]);
+            return ExitCode::USAGE;
+        }
+
+        // A missing or unreadable file is an operational failure, not a
+        // verdict on an image: report it on stderr with a non-zero status,
+        // rather than as recognised=false.
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec) || ec) {
+            std::cerr << "Error: cannot read disc image: " << path << "\n";
+            return ExitCode::NOINPUT;
+        }
+
+        // The one rule, shared with InsertDisc.
+        auto result = load_disc_from_url_or_filepath(path);
+
+        using ojson = nlohmann::ordered_json;
+        ojson out;
+        out["recognised"] = result.success();
+        if (result.success()) {
+            const Disc* disc = result.disc.get();
+            out["format"] = std::string(disc->format_name());
+            out["sides"] = disc->is_double_sided() ? 2 : 1;
+            out["write_protected"] = disc->is_write_protected();
+        } else {
+            out["format"] = "";
+            out["reason"] = result.error;
+        }
+        std::cout << out.dump(2) << "\n";
+        return ExitCode::OK;
+    }
+};
+
 template<typename MachineType>
 class HelpSubcommand : public Subcommand<MachineType> {
 public:
@@ -4303,6 +4393,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<DescribeMachineSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribePresetSchemaSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());
+        v.push_back(std::make_unique<DescribeDiscImageSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListPresetsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ShowPresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ReportPresetsDirpathSubcommand<MachineType>>());

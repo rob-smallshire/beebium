@@ -1652,6 +1652,7 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     target_compile_definitions(test_preset_subcommands PRIVATE
         BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+        BEEBIUM_DISCS_DIR="${BEEBIUM_DISCS_DIR}"
     )
     # Integration tests depend on executables being built
     add_dependencies(test_preset_subcommands beebium-servers)

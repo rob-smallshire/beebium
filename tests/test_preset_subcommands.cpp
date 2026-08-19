@@ -790,3 +790,82 @@ TEST_CASE("describe-rom reports a non-ROMFS service ROM with kinds=[service]",
     REQUIRE(result.stdout_output.find("\"language\"") == std::string::npos);
 }
 #endif
+
+// ============================================================================
+// describe-disc-image validates a floppy disc image by the same rule the
+// server applies on insert (the shared DiscFormatRegistry), so a front end
+// configuring a machine before launch judges an image exactly as the running
+// machine will.
+// ============================================================================
+
+#ifdef BEEBIUM_DISCS_DIR
+namespace {
+std::string disc_path(const std::string& name) {
+    return (std::filesystem::path(BEEBIUM_DISCS_DIR) / name).string();
+}
+}  // namespace
+
+TEST_CASE("describe-disc-image recognises an SSD image",
+          "[integration][disc][describe-disc-image]") {
+    const std::string path = disc_path("01-basic-validation.ssd");
+    if (!std::filesystem::exists(path)) {
+        SKIP("test disc image not available: " + path);
+    }
+    auto result = run_command(EXECUTABLE + " describe-disc-image \"" + path + "\"");
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stdout_output.find("\"recognised\": true") != std::string::npos);
+    REQUIRE(result.stdout_output.find("\"format\": \"SSD\"") != std::string::npos);
+    REQUIRE(result.stdout_output.find("\"sides\": 1") != std::string::npos);
+    REQUIRE(result.stdout_output.find("\"write_protected\":") != std::string::npos);
+}
+
+TEST_CASE("describe-disc-image recognises an HFE image",
+          "[integration][disc][describe-disc-image]") {
+    const std::string path =
+        disc_path("games/Superior_Software/Repton_FSD0080_1.hfe");
+    if (!std::filesystem::exists(path)) {
+        SKIP("test HFE image not available: " + path);
+    }
+    auto result = run_command(EXECUTABLE + " describe-disc-image \"" + path + "\"");
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stdout_output.find("\"recognised\": true") != std::string::npos);
+    REQUIRE(result.stdout_output.find("\"format\": \"HFE") != std::string::npos);
+}
+
+TEST_CASE("describe-disc-image reports a non-disc file as not recognised, with a reason",
+          "[integration][disc][describe-disc-image]") {
+    // A file that is plainly not a disc image. Exit is still 0 -- the file
+    // was readable; the verdict is in the JSON, not the exit code.
+    auto tmp = std::filesystem::temp_directory_path() / "beebium_not_a_disc.bin";
+    {
+        std::ofstream f(tmp, std::ios::binary);
+        f << "this is not a disc image";
+    }
+    auto result = run_command(EXECUTABLE + " describe-disc-image \"" + tmp.string() + "\"");
+    remove_quietly(tmp);
+
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stdout_output.find("\"recognised\": false") != std::string::npos);
+    REQUIRE(result.stdout_output.find("\"reason\":") != std::string::npos);
+}
+
+TEST_CASE("describe-disc-image on a missing file returns NOINPUT",
+          "[integration][disc][describe-disc-image]") {
+    auto result = run_command(EXECUTABLE + " describe-disc-image /no/such/disc-98765.ssd");
+    REQUIRE(result.exit_code == 66);  // EX_NOINPUT
+    REQUIRE(result.stderr_output.find("cannot read") != std::string::npos);
+}
+
+TEST_CASE("describe-disc-image with no path returns USAGE",
+          "[integration][disc][describe-disc-image]") {
+    auto result = run_command(EXECUTABLE + " describe-disc-image");
+    REQUIRE(result.exit_code == 64);  // EX_USAGE
+}
+
+TEST_CASE("describe-disc-image --help returns OK",
+          "[integration][disc][describe-disc-image]") {
+    auto result = run_command(EXECUTABLE + " describe-disc-image --help");
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stderr_output.find("Usage:") != std::string::npos);
+}
+#endif  // BEEBIUM_DISCS_DIR
