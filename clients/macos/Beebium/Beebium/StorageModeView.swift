@@ -280,17 +280,18 @@ private struct DriveRowView: View {
                 }
             }
 
-            // Content based on state
-            if isEjecting {
+            // A drop refusal or a failed action takes the same single line the
+            // drive's state would otherwise occupy -- the empty prompt or the
+            // disc name -- rather than adding a line below it and pushing the
+            // rest of the sidebar down. Only ever one of them is shown.
+            if let message = statusMessage {
+                statusLine(message)
+            } else if isEjecting {
                 ejectingContent
             } else if isLoaded {
                 loadedContent
             } else {
                 emptyContent
-            }
-
-            if let message = statusMessage {
-                statusLine(message)
             }
 
             // Actions row
@@ -337,12 +338,17 @@ private struct DriveRowView: View {
             Image(systemName: dropRefusal != nil
                   ? "nosign" : "exclamationmark.triangle.fill")
                 .font(.caption2)
+            // One line, so it occupies exactly the space the empty prompt or
+            // disc name would; a longer server error truncates and stays
+            // readable through the tooltip rather than growing the row.
             Text(message)
                 .font(.caption)
-                .lineLimit(2)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         .foregroundColor(.red)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .help(message)
     }
 
     // MARK: - Content Views
