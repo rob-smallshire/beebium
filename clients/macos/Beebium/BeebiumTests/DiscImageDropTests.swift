@@ -14,25 +14,6 @@ import XCTest
 @testable import Beebium
 
 final class DiscImageTypesTests: XCTestCase {
-    func testRecognisesSupportedExtensions() {
-        for ext in ["ssd", "dsd", "adf", "adl", "adm", "ads", "hfe", "img"] {
-            XCTAssertTrue(
-                DiscImageTypes.isDiscImage(URL(fileURLWithPath: "/discs/elite.\(ext)")),
-                "\(ext) should be recognised")
-        }
-    }
-
-    func testExtensionMatchIsCaseInsensitive() {
-        XCTAssertTrue(DiscImageTypes.isDiscImage(URL(fileURLWithPath: "/discs/ELITE.SSD")))
-        XCTAssertTrue(DiscImageTypes.isDiscImage(URL(fileURLWithPath: "/discs/Elite.Ssd")))
-    }
-
-    func testRejectsOtherFiles() {
-        XCTAssertFalse(DiscImageTypes.isDiscImage(URL(fileURLWithPath: "/notes.txt")))
-        XCTAssertFalse(DiscImageTypes.isDiscImage(URL(fileURLWithPath: "/disc.ssd.zip")))
-        XCTAssertFalse(DiscImageTypes.isDiscImage(URL(fileURLWithPath: "/discs")))
-    }
-
     func testNoContentTypeIsAWildcard() {
         // Substituting a permissive stand-in for an extension that fails to
         // resolve would silently widen every file picker to all files.
@@ -47,79 +28,40 @@ final class DiscImageTypesTests: XCTestCase {
 final class DiscDropRefusalTests: XCTestCase {
     private let occupied = "Eject disc first"
 
-    func testAcceptsOneDiscImageOnAnEmptySlot() {
-        XCTAssertNil(discDropRefusal(for: .one(isDiscImage: true),
-                                     isSlotEmpty: true,
+    func testAcceptsAnEmptyLocalSlot() {
+        // What the file is does not enter into the hover decision -- only the
+        // drive's state and the server's location, both known without it.
+        XCTAssertNil(discDropRefusal(isSlotEmpty: true,
+                                     isServerLocal: true,
                                      occupiedReason: occupied))
     }
 
     func testRefusesAnOccupiedSlot() {
-        XCTAssertEqual(discDropRefusal(for: .one(isDiscImage: true),
-                                       isSlotEmpty: false,
+        XCTAssertEqual(discDropRefusal(isSlotEmpty: false,
+                                       isServerLocal: true,
                                        occupiedReason: occupied),
                        .slotOccupied(occupied))
     }
 
-    func testRefusesSeveralFilesEvenOnAnEmptySlot() {
-        XCTAssertEqual(discDropRefusal(for: .several,
-                                       isSlotEmpty: true,
+    func testRefusesWhenTheServerIsElsewhere() {
+        // A path is only meaningful to a process sharing this filesystem.
+        XCTAssertEqual(discDropRefusal(isSlotEmpty: true,
+                                       isServerLocal: false,
                                        occupiedReason: occupied),
-                       .severalFiles)
-    }
-
-    func testRefusesAFileThatIsNotADiscImage() {
-        XCTAssertEqual(discDropRefusal(for: .one(isDiscImage: false),
-                                       isSlotEmpty: true,
-                                       occupiedReason: occupied),
-                       .notADiscImage)
-    }
-
-    func testUnsuitableFileIsReportedAheadOfAnOccupiedSlot() {
-        // "Eject disc first" would imply that ejecting makes the drop work,
-        // which is untrue of a file that was never a disc image.
-        XCTAssertEqual(discDropRefusal(for: .one(isDiscImage: false),
-                                       isSlotEmpty: false,
-                                       occupiedReason: occupied),
-                       .notADiscImage)
-    }
-
-    func testRefusesEverythingWhenTheServerIsElsewhere() {
-        // A path is only meaningful to a process sharing this filesystem, so
-        // a perfectly good disc image is still not droppable.
-        XCTAssertEqual(discDropRefusal(for: .one(isDiscImage: true),
-                                       isSlotEmpty: true,
-                                       occupiedReason: occupied,
-                                       isServerLocal: false),
                        .serverElsewhere)
     }
 
-    func testRemoteServerIsReportedAheadOfEveryOtherReason() {
-        // Nothing the user does to the file or the drive can make this work,
-        // so saying anything else would send them off fixing the wrong thing.
-        for candidate: DiscDropCandidate in [.none, .several,
-                                             .one(isDiscImage: false),
-                                             .one(isDiscImage: true)] {
-            for isSlotEmpty in [true, false] {
-                XCTAssertEqual(discDropRefusal(for: candidate,
-                                               isSlotEmpty: isSlotEmpty,
-                                               occupiedReason: occupied,
-                                               isServerLocal: false),
-                               .serverElsewhere)
-            }
-        }
-    }
-
-    func testRefusesADragCarryingNoFiles() {
-        XCTAssertEqual(discDropRefusal(for: .none,
-                                       isSlotEmpty: true,
+    func testRemoteServerIsReportedAheadOfAnOccupiedSlot() {
+        // Nothing local -- neither ejecting nor anything else -- can make a
+        // drop onto a remote server work, so that is what to say.
+        XCTAssertEqual(discDropRefusal(isSlotEmpty: false,
+                                       isServerLocal: false,
                                        occupiedReason: occupied),
-                       .notADiscImage)
+                       .serverElsewhere)
     }
 
     func testEveryRefusalCarriesAReason() {
-        for refusal: DiscDropRefusal in [.severalFiles, .notADiscImage,
-                                         .slotOccupied(occupied),
-                                         .serverElsewhere] {
+        for refusal: DiscDropRefusal in [.slotOccupied(occupied), .serverElsewhere] {
             XCTAssertFalse(refusal.message.isEmpty)
         }
     }

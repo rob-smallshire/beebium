@@ -15,14 +15,14 @@ import UniformTypeIdentifiers
 
 /// Why a drag hovering over a drive cannot be dropped on it.
 ///
-/// Every refusal carries a reason the user can read. A drop that is going to
-/// be ignored has to say so while the drag is still in the air, because once
-/// the pointer is released there is nothing left to explain.
+/// Only reasons that can be known while the drag is still in the air, without
+/// reading the file: its bytes are not available before the drop, and whether
+/// it is a usable disc image is not the client's to decide. A running server
+/// judges that on insert, and the preset editor by asking the server
+/// executable; either way the answer comes after the drop, not during the
+/// hover. So a hovering drag is refused only for the drive's state or the
+/// server's location, never for what the file is.
 enum DiscDropRefusal: Equatable {
-    /// More than one file is being dragged.
-    case severalFiles
-    /// The file is not one of the formats a drive can load.
-    case notADiscImage
     /// The drive already holds a disc.
     case slotOccupied(String)
     /// The server is on another host, so it cannot open a file from this one.
@@ -30,10 +30,6 @@ enum DiscDropRefusal: Equatable {
 
     var message: String {
         switch self {
-        case .severalFiles:
-            return "Drop one disc image"
-        case .notADiscImage:
-            return "Not a disc image"
         case .slotOccupied(let reason):
             return reason
         case .serverElsewhere:
@@ -42,51 +38,31 @@ enum DiscDropRefusal: Equatable {
     }
 }
 
-/// What a hovering drag appears to be carrying.
-///
-/// Named separately from `DropInfo` so the decision below can be exercised
-/// without a live drag session.
-enum DiscDropCandidate: Equatable {
-    case none
-    case one(isDiscImage: Bool)
-    case several
-}
-
 /// Whether a drag may be dropped, and if not, why not.
 ///
-/// Reasons are ordered by how fundamental they are. A server on another host
-/// cannot open a file from this one whatever the file is or whatever the
-/// drive is doing, so that is reported first; and the file's own suitability
-/// comes before the state of the drive, because told "eject disc first" a
-/// user would reasonably expect that ejecting makes the drop work, which is
-/// not true of a file that was never a disc image.
-func discDropRefusal(for candidate: DiscDropCandidate,
-                     isSlotEmpty: Bool,
-                     occupiedReason: String,
-                     isServerLocal: Bool = true) -> DiscDropRefusal? {
+/// Judged from the drive's state and the server's location alone. What the
+/// file is does not enter into it -- see DiscDropRefusal.
+func discDropRefusal(isSlotEmpty: Bool,
+                     isServerLocal: Bool,
+                     occupiedReason: String) -> DiscDropRefusal? {
     if !isServerLocal {
         return .serverElsewhere
     }
-    switch candidate {
-    case .none:
-        return .notADiscImage
-    case .several:
-        return .severalFiles
-    case .one(let isDiscImage):
-        if !isDiscImage {
-            return .notADiscImage
-        }
-        return isSlotEmpty ? nil : .slotOccupied(occupiedReason)
+    if !isSlotEmpty {
+        return .slotOccupied(occupiedReason)
     }
+    return nil
 }
 
-/// Drop handling for a drive slot: one disc image, onto an empty slot, or
-/// nothing happens and the user is told why.
+/// Drop handling for a drive slot.
 ///
-/// Validation is up front rather than after the fact. `dropUpdated` answers
-/// with a forbidden proposal for anything that will not be accepted, so the
-/// pointer shows the refusal and macOS animates the file back to where it
-/// came from, and `performDrop` is never reached.
+/// The drag is judged only by what can be known without the file -- the
+/// drive's state and the server's location -- so a droppable drag is accepted
+/// on sight and the file is handed to `accept` on release. Whether it is a
+/// usable disc image is decided downstream: a running server rejects a bad
+/// image on insert with its own precise error, and the preset editor validates
+/// through the server executable. Neither can be done here, because the file's
+/// bytes are not available while the drag hovers.
 struct DiscImageDropDelegate: DropDelegate {
     /// Whether the slot can take a disc right now.
     let isSlotEmpty: Bool
@@ -99,25 +75,26 @@ struct DiscImageDropDelegate: DropDelegate {
     @Binding var isTargeted: Bool
     /// Set while a refused drag hovers, to show the reason.
     @Binding var refusal: DiscDropRefusal?
-    /// Called on the main actor with an accepted disc image.
+    /// Called on the main actor with a dropped file. Its suitability as a disc
+    /// image is the caller's to judge.
     let accept: (URL) -> Void
-    /// Called on the main actor when a drop that passed validation still
-    /// could not be read. Never let a failure pass without saying so.
+    /// Called on the main actor when a drop cannot be carried out at all.
+    /// Never let a failure pass without saying so.
     let report: (String) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
-        // Claim any file drag so that dropUpdated is consulted at all; the
-        // proposal returned there is what permits or forbids the drop.
+        // Claim any file drag so dropUpdated is consulted; the proposal it
+        // returns is what permits or forbids the drop.
         info.hasItemsConforming(to: [.fileURL])
     }
 
     func dropEntered(info: DropInfo) {
-        update(with: info)
+        refresh()
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        update(with: info)
-        return DropProposal(operation: refusal == nil ? .copy : .forbidden)
+        refresh()
+        return DropProposal(operation: currentRefusal == nil ? .copy : .forbidden)
     }
 
     func dropExited(info: DropInfo) {
@@ -129,8 +106,16 @@ struct DiscImageDropDelegate: DropDelegate {
         setTargeted(false)
         setRefusal(nil)
 
-        guard currentRefusal(for: info) == nil,
-              let provider = info.itemProviders(for: [.fileURL]).first else {
+        // The drive's state or the server may have changed since the drag
+        // began; re-check what the hover checked.
+        guard currentRefusal == nil else { return false }
+
+        let providers = info.itemProviders(for: [.fileURL])
+        guard providers.count == 1, let provider = providers.first else {
+            // A drive holds one disc, so a drop of several files is ambiguous.
+            if providers.count > 1 {
+                report("Drop a single disc image")
+            }
             return false
         }
 
@@ -146,55 +131,22 @@ struct DiscImageDropDelegate: DropDelegate {
                     report("Could not read the dropped file")
                     return
                 }
-                // Hovering could only go on what the drag advertised about
-                // itself; this is the first sight of the actual file.
-                guard DiscImageTypes.isDiscImage(url) else {
-                    report("\(url.lastPathComponent) is not a disc image")
-                    return
-                }
                 accept(url)
             }
         }
         return true
     }
 
-    // MARK: - Validation
+    // MARK: - Refusal
 
-    private func currentRefusal(for info: DropInfo) -> DiscDropRefusal? {
-        discDropRefusal(for: candidate(in: info),
-                        isSlotEmpty: isSlotEmpty,
-                        occupiedReason: occupiedReason,
-                        isServerLocal: isServerLocal)
+    private var currentRefusal: DiscDropRefusal? {
+        discDropRefusal(isSlotEmpty: isSlotEmpty,
+                        isServerLocal: isServerLocal,
+                        occupiedReason: occupiedReason)
     }
 
-    private func candidate(in info: DropInfo) -> DiscDropCandidate {
-        let providers = info.itemProviders(for: [.fileURL])
-        switch providers.count {
-        case 0:
-            return .none
-        case 1:
-            return .one(isDiscImage: looksLikeDiscImage(providers[0]))
-        default:
-            return .several
-        }
-    }
-
-    private func looksLikeDiscImage(_ provider: NSItemProvider) -> Bool {
-        if DiscImageTypes.contentTypes.contains(where: {
-            provider.hasItemConformingToTypeIdentifier($0.identifier)
-        }) {
-            return true
-        }
-        // Finder does not always advertise a content type for extensions
-        // macOS has no declaration for, so fall back to the name it offers.
-        if let name = provider.suggestedName {
-            return DiscImageTypes.isDiscImage(URL(fileURLWithPath: name))
-        }
-        return false
-    }
-
-    private func update(with info: DropInfo) {
-        let reason = currentRefusal(for: info)
+    private func refresh() {
+        let reason = currentRefusal
         setRefusal(reason)
         setTargeted(reason == nil)
     }

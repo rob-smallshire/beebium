@@ -81,10 +81,7 @@ struct FloppyDriveConfigView: View {
             occupiedReason: "Clear disc first",
             isTargeted: $isDropTargeted,
             refusal: $dropRefusal,
-            accept: { url in
-                dropError = nil
-                imageFilepath = url.path
-            },
+            accept: { url in validate(url) },
             report: { message in dropError = message }
         ))
     }
@@ -164,7 +161,35 @@ struct FloppyDriveConfigView: View {
         panel.canChooseDirectories = false
 
         if panel.runModal() == .OK, let url = panel.url {
+            validate(url)
+        }
+    }
+
+    /// Accept a picked or dropped image only if the server executable
+    /// recognises it, the same rule the machine will apply once launched.
+    ///
+    /// There is no running server to ask before launch, so the server
+    /// executable is asked instead, via describe-disc-image. If none can be
+    /// found yet the image is accepted unchecked -- the machine still
+    /// validates it on launch, and refusing to configure a machine because
+    /// presets have not finished loading would be worse.
+    private func validate(_ url: URL) {
+        dropError = nil
+        guard let executablePath = PresetManager.shared.anyCoreExecutablePath else {
             imageFilepath = url.path
+            return
+        }
+        Task {
+            let info = await PresetManager.shared.describeDiscImage(
+                path: url.path, executablePath: executablePath)
+            if let info, !info.recognised {
+                dropError = info.reason
+                    ?? "\(url.lastPathComponent) is not a recognised disc image"
+            } else {
+                // Recognised, or the executable could not be run to say
+                // otherwise -- accept and let the launch be the backstop.
+                imageFilepath = url.path
+            }
         }
     }
 

@@ -376,6 +376,39 @@ class PresetManager: ObservableObject {
         return info
     }
 
+    /// A core executable to ask about disc formats when no particular machine
+    /// is in hand.
+    ///
+    /// Disc format support lives in the shared core, identical across every
+    /// server variant, so any of them answers the same -- validity and the
+    /// accepted extensions do not depend on which machine you picked. Nil only
+    /// before presets have been discovered.
+    var anyCoreExecutablePath: String? {
+        systemPresets.first?.coreExecutablePath
+    }
+
+    /// Ask the server executable whether `path` is a disc image, and what.
+    ///
+    /// The same rule the machine applies on insert, reached before it is
+    /// launched -- so the preset editor accepts exactly what the running
+    /// machine would. Nil if the executable could not be run at all (as
+    /// opposed to running and reporting the file is not a disc image, which
+    /// comes back as a DiscImageInfo with recognised == false).
+    func describeDiscImage(path: String, executablePath: String) async -> DiscImageInfo? {
+        let (output, error) = await runCli(
+            executable: executablePath,
+            arguments: ["describe-disc-image", path])
+        // A non-zero exit means the file could not be read at all; the
+        // "not a disc image" verdict comes back as exit 0 with recognised
+        // false, so it is not an error here.
+        if error != nil { return nil }
+        guard let data = output.data(using: .utf8),
+              let info = try? JSONDecoder().decode(DiscImageInfo.self, from: data) else {
+            return nil
+        }
+        return info
+    }
+
     /// Fetch the sideways_bank section with full detail from the schema JSON.
     private func fetchSidewaysSectionFromSchema(executablePath: String) async -> SidewaysSchemaSection? {
         let process = Process()

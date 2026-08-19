@@ -44,9 +44,4 @@ enum DiscImageTypes {
     static let contentTypes: [UTType] = extensions.sorted().compactMap {
         UTType(filenameExtension: $0)
     }
-
-    /// Whether a URL names a file a drive could load, judged by extension.
-    static func isDiscImage(_ url: URL) -> Bool {
-        extensions.contains(url.pathExtension.lowercased())
-    }
 }
