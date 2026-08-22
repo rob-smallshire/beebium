@@ -117,6 +117,24 @@ if(BEEBIUM_BUILD_TESTS)
     include(CTest)
     include(Catch)
 
+    # Every Catch2 test treats a legitimate skip -- a fixture or external tool
+    # the runner cannot provide -- as skipped, not failed. Catch2 exits 4 for a
+    # skip-only run, and CTest's SKIP_RETURN_CODE property maps that to
+    # "Skipped". Rather than repeat it at ~200 call sites (and forget it at most
+    # of them), the stock catch_discover_tests is wrapped once, here at the root
+    # so every test-registering subdirectory inherits it -- tests/, and the
+    # catch_discover_tests calls under src/ too.
+    #
+    # SKIP_RETURN_CODE is merged into any PROPERTIES a call site already passes:
+    # a second PROPERTIES keyword would let cmake_parse_arguments keep only the
+    # last, silently dropping e.g. a RESOURCE_LOCK. The original command remains
+    # callable as _catch_discover_tests (CMake's command-override convention).
+    function(catch_discover_tests TARGET)
+        cmake_parse_arguments(_cdt "" "" "PROPERTIES" ${ARGN})
+        _catch_discover_tests(${TARGET} ${_cdt_UNPARSED_ARGUMENTS}
+            PROPERTIES ${_cdt_PROPERTIES} SKIP_RETURN_CODE 4)
+    endfunction()
+
     # Defer Catch2's test discovery from build time to ctest time on Windows.
     # The default POST_BUILD mode runs each test executable once during the
     # build to enumerate test cases, but that happens BEFORE vcpkg's

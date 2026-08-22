@@ -407,9 +407,7 @@ target_include_directories(test_rfc2217_pyserial_client
 target_link_libraries(test_rfc2217_pyserial_client
     PRIVATE beebium_ext_rfc2217_server beebium_core Threads::Threads
             Catch2::Catch2WithMain)
-catch_discover_tests(test_rfc2217_pyserial_client
-    PROPERTIES SKIP_RETURN_CODE 4
-)
+catch_discover_tests(test_rfc2217_pyserial_client)
 
 # IP232 endpoint integration tests (against the in-process loopback server)
 add_executable(test_ip232_serial_endpoint test_ip232_serial_endpoint.cpp)
@@ -434,11 +432,10 @@ target_include_directories(test_ip232_tcpser_integration
 target_link_libraries(test_ip232_tcpser_integration
     PRIVATE beebium_ext_ip232_serial beebium_core Threads::Threads
             Catch2::Catch2WithMain)
-# tcpser is optional: Catch2 returns 4 for a skipped run, which ctest then
-# reports as skipped rather than failed.
-catch_discover_tests(test_ip232_tcpser_integration
-    PROPERTIES SKIP_RETURN_CODE 4
-)
+# tcpser is optional; the test skips when it is absent, reported as skipped
+# (not failed) by the catch_discover_tests SKIP_RETURN_CODE wrapper in the
+# root CMakeLists.
+catch_discover_tests(test_ip232_tcpser_integration)
 
 # Serial PTY transport integration tests (POSIX-only: PtyMaster +
 # HostSerialEndpoint bridged through the SerialSocket to a PosixSerialPort).
@@ -852,9 +849,7 @@ target_compile_definitions(test_econet_fileserver PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
 )
-catch_discover_tests(test_econet_fileserver
-    PROPERTIES SKIP_RETURN_CODE 4
-)
+catch_discover_tests(test_econet_fileserver)
 
 # clearRAM test
 add_executable(test_clearram test_clearram.cpp)
@@ -1203,7 +1198,7 @@ target_compile_definitions(test_serial_break_e2e PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
 )
-catch_discover_tests(test_serial_break_e2e PROPERTIES SKIP_RETURN_CODE 4)
+catch_discover_tests(test_serial_break_e2e)
 
 
 
