@@ -251,8 +251,11 @@ def browse(timeout: float = 5.0) -> Iterator[DiscoveredMachine]:
 def is_available() -> bool:
     """Check if mDNS discovery is available.
 
-    Returns True if the zeroconf library is installed and
-    mDNS appears to be working on this system.
+    Returns True if the zeroconf library is installed and a Zeroconf instance
+    can be constructed. This is a weak check: constructing succeeds on hosts
+    where multicast is nonetheless unroutable, so it says nothing about whether
+    a service can actually be observed. Use multicast_loopback_available() when
+    that guarantee is needed.
     """
     try:
         from zeroconf import Zeroconf
@@ -262,3 +265,80 @@ def is_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True) -> bool:
+    """Whether mDNS discovery can actually observe a service on this host.
+
+    Registers a throwaway DNS-SD service through one zeroconf instance and
+    browses for it through a second, independent one. Seeing it proves the
+    whole multicast path -- send, loopback and receive on UDP 5353 -- works
+    here. Some sandboxed CI runners have no multicast route: zeroconf logs
+    "No route to host" on 5353 and a browser observes nothing, whatever is
+    advertising. Discovery cannot work there, and this returns False.
+
+    Two independent instances are used deliberately: registering and browsing
+    on a single instance can be answered from its own in-process registry
+    without a packet ever crossing the socket, which would report success even
+    where multicast is broken.
+
+    Returns False if the zeroconf extra is not installed.
+    """
+    try:
+        from zeroconf import ServiceBrowser, ServiceInfo, Zeroconf
+    except ImportError:
+        return False
+
+    import socket
+    import threading
+    import uuid
+
+    token = uuid.uuid4().hex
+    probe_type = "_beebium-probe._tcp.local."
+    full_name = f"{token}.{probe_type}"
+    info = ServiceInfo(
+        probe_type,
+        full_name,
+        addresses=[socket.inet_aton("127.0.0.1")],
+        port=1,
+        properties={b"token": token.encode("ascii")},
+        server=f"{token}.local.",
+    )
+
+    seen = threading.Event()
+
+    class _ProbeListener:
+        def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+            if name == full_name:
+                seen.set()
+
+        def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+            if name == full_name:
+                seen.set()
+
+        def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+            pass
+
+    registrar: Zeroconf | None = None
+    browser_zeroconf: Zeroconf | None = None
+    try:
+        # Browse first, so the browser is listening before the announcement.
+        browser_zeroconf = Zeroconf()
+        ServiceBrowser(browser_zeroconf, probe_type, cast("ServiceListener", _ProbeListener()))
+        if _register:
+            registrar = Zeroconf()
+            registrar.register_service(info)
+        return seen.wait(timeout)
+    except OSError:
+        # A host with no multicast route raises here rather than merely timing
+        # out; either way discovery is not usable.
+        return False
+    finally:
+        if registrar is not None:
+            try:
+                registrar.unregister_service(info)
+            except Exception:
+                pass
+            registrar.close()
+        if browser_zeroconf is not None:
+            browser_zeroconf.close()

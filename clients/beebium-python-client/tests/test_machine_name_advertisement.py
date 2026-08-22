@@ -32,19 +32,63 @@ from beebium.client.exceptions import ServerNotFoundError
 
 pytest.importorskip("zeroconf", reason="discovery needs the zeroconf extra")
 
-from beebium.client.discovery import MachineDiscovery  # noqa: E402
+from beebium.client.discovery import MachineDiscovery, multicast_loopback_available  # noqa: E402
 
 # Generous: mDNS on the local link is prompt, but a loaded CI runner is not.
 PROPAGATION_TIMEOUT = 15.0
+# How long to allow each capability to establish before declaring it absent.
+CAPABILITY_TIMEOUT = 8.0
+
+
+@pytest.fixture(scope="module")
+def mdns_browsable() -> None:
+    """Skip the module unless this host can actually browse mDNS.
+
+    A machine's advertisement is only observable if the browser's multicast
+    path works. Some sandboxed CI runners (notably GitHub's macOS images) have
+    no multicast route: zeroconf logs "No route to host" on 5353 and a browser
+    sees nothing regardless of what is advertising. This is a capability, not a
+    platform: the same runner would fail on any OS, and a real desktop passes.
+    """
+    if not multicast_loopback_available(timeout=CAPABILITY_TIMEOUT):
+        pytest.skip(
+            "no usable mDNS multicast route from this host: a zeroconf browser "
+            "could not observe a zeroconf-registered service on the same "
+            "machine, so it cannot observe a server's advertisement either"
+        )
+
+
+def _wait_until_advertising(bbc: Beebium, timeout: float) -> bool:
+    """Whether the server reports its advertisement as actually active, in time.
+
+    The advertiser becomes active asynchronously -- on Linux it must reach the
+    avahi-daemon and commit its entry group -- so this polls rather than reads
+    once.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if bbc.system.get_advertisement_state().enabled:
+            return True
+        time.sleep(0.2)
+    return False
 
 
 @pytest.fixture
 def advertising_bbc(
+    mdns_browsable: None,
     mos_filepath: Path,
     basic_filepath: Path | None,
     beebium_server_filepath: Path | None,
 ) -> Iterator[Beebium]:
-    """A machine advertising itself under a known name."""
+    """A machine advertising itself under a known name.
+
+    Depends on mdns_browsable so a host that cannot browse skips before a server
+    is even launched. Once launched, it also requires the server to report its
+    advertisement as active: an environment with no working mDNS advertiser
+    (e.g. Linux with no avahi-daemon running, or a Windows runner with no mDNS
+    backend) puts nothing on the network to observe, so the test skips with that
+    reason rather than failing.
+    """
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,
@@ -53,6 +97,18 @@ def advertising_bbc(
             extra_args=["--machine-name", "Peterhouse", "--advertise"],
             startup_timeout=20.0,
         ) as bbc:
+            state = bbc.system.get_advertisement_state()
+            if not state.available:
+                pytest.skip(
+                    "the server has no mDNS advertiser on this host "
+                    "(advertisement unavailable), so there is nothing to observe"
+                )
+            if not _wait_until_advertising(bbc, CAPABILITY_TIMEOUT):
+                pytest.skip(
+                    "the server's mDNS advertiser never became active on this "
+                    "host (e.g. no avahi-daemon running), so it never published "
+                    "an advertisement to observe"
+                )
             yield bbc
     except ServerNotFoundError as e:
         pytest.skip(str(e))
