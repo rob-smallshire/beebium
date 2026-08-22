@@ -8,6 +8,7 @@ dynamic = ["version"]
 description = "Python client for the Beebium BBC Micro emulator"
 readme = "README.md"
 license = "GPL-3.0-or-later"
+license-files = ["COPYING.txt"]
 requires-python = ">=3.12"
 authors = [
     { name = "Robert Smallshire", email = "robert@smallshire.org.uk" }

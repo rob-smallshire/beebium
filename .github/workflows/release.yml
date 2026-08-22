@@ -7,7 +7,10 @@
 #   1. builds the self-contained Linux .deb + .tar.gz (both arches),
 #   2. builds, tests and audits the macOS Homebrew formula (both arches),
 #   3. builds the self-contained Windows .zip (x64),
-#   4. creates a DRAFT GitHub Release with the Linux and Windows artifacts.
+#   4. creates a DRAFT GitHub Release with the Linux and Windows artifacts,
+#   5. publishes the Python client to PyPI (publish-python.yml), once the
+#      server packages have all built, so client and servers are cut from the
+#      same tag.
 #
 # The release is left as a DRAFT on purpose: nothing is published until you
 # review it and click publish. The macOS server is delivered via the Homebrew
@@ -37,6 +40,18 @@ jobs:
 
   windows:
     uses: ./.github/workflows/windows-package.yml
+
+  pypi:
+    # PyPI uploads are permanent, so only a pushed version tag publishes; a
+    # manual dispatch of this workflow builds the server packages only.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos-formula, windows]
+    uses: ./.github/workflows/publish-python.yml
+    with:
+      repository: pypi
+    permissions:
+      id-token: write
+      contents: read
 
   release:
     name: draft GitHub Release

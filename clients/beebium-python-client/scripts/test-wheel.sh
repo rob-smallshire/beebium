@@ -11,18 +11,21 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-# Build the wheel and run the packaging tests against it in a fresh virtualenv.
+# Build the wheel and run tests against it in a fresh virtualenv.
+#
+#   scripts/test-wheel.sh                       # the packaging suite (default)
+#   scripts/test-wheel.sh tests/ -v --timeout=600   # any pytest arguments
 #
 # This is the load-bearing packaging gate (see
-# docs/discussion/python-client-architecture.md section 4.3): the suite must run
+# docs/discussion/python-client-architecture.md section 4.3): tests must run
 # against code installed from the built wheel, never against src/, so that
 # missing package data, an unshipped py.typed marker, namespace misconfiguration
 # and unregistered entry points are caught rather than silently passed over by a
-# source-tree run.
+# source-tree run. CI runs the whole suite this way, including the server-backed
+# integration tests (which take the server from BEEBIUM_SERVER as usual).
 #
-# The emulator server is NOT required: only the server-free packaging assertions
-# in tests_packaging/ run here. The full integration suite runs separately
-# against a built server.
+# With no arguments only the server-free packaging assertions in
+# tests_packaging/ run, so no emulator server is needed.
 
 set -euo pipefail
 
@@ -30,6 +33,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLIENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$CLIENT_DIR"
+
+# pytest arguments; paths are made absolute because pytest runs from WORK_DIR.
+PYTEST_ARGS=()
+for arg in "$@"; do
+    if [[ -e "$arg" ]]; then
+        PYTEST_ARGS+=("$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")")
+    else
+        PYTEST_ARGS+=("$arg")
+    fi
+done
+if [[ ${#PYTEST_ARGS[@]} -eq 0 ]]; then
+    PYTEST_ARGS=("$CLIENT_DIR/tests_packaging")
+fi
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -50,7 +66,9 @@ VENV_PYTHON="$WORK_DIR/venv/bin/python"
 [[ -x "$VENV_PYTHON" ]] || VENV_PYTHON="$WORK_DIR/venv/Scripts/python.exe"  # Windows
 
 echo "==> Installing the built wheel (product) into the fresh venv"
-uv pip install --python "$VENV_PYTHON" "$WHEEL"
+# With the published extras, so tests of the optional features (image export,
+# mDNS discovery) run rather than skip.
+uv pip install --python "$VENV_PYTHON" "${WHEEL}[imaging,discovery]"
 
 echo "==> Installing the test runner from the 'test' dependency-group"
 # Export just the test group (pytest + pytest-timeout; no project, no codegen
@@ -59,12 +77,12 @@ echo "==> Installing the test runner from the 'test' dependency-group"
 uv export --only-group test --no-hashes --no-emit-project -o "$WORK_DIR/test-requirements.txt"
 uv pip install --python "$VENV_PYTHON" -r "$WORK_DIR/test-requirements.txt"
 
-echo "==> Running packaging tests against the INSTALLED wheel (cwd outside src/)"
+echo "==> Running tests against the INSTALLED wheel (cwd outside src/)"
 # Invoke the venv's pytest DIRECTLY (not `uv run`, which would sync the project
 # environment and reinstall beebium from source, shadowing the wheel). Run from
 # WORK_DIR with an absolute test path so `import beebium` resolves from
 # site-packages, never from ./src.
 cd "$WORK_DIR"
-"$VENV_PYTHON" -m pytest "$CLIENT_DIR/tests_packaging" -v
+"$VENV_PYTHON" -m pytest "${PYTEST_ARGS[@]}"
 
-echo "==> Wheel packaging tests passed."
+echo "==> Tests passed against the installed wheel."

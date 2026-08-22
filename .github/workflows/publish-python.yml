@@ -1,0 +1,110 @@
+# Build and publish the Python client (the `beebium` distribution) to PyPI.
+#
+# Called from release.yml when a version tag is pushed, after the server
+# packages have built, so the client on PyPI and the servers on GitHub are
+# always cut from the same tag (the protocol-fingerprint handshake is strict:
+# a client only talks to a server built from the same protos). It can also be
+# run by hand (Actions > Publish Python client > Run workflow) to publish a
+# chosen ref to PyPI or TestPyPI.
+#
+# Authentication is PyPI Trusted Publishing (OIDC): PyPI is configured to
+# trust this repository's `publish-python.yml` running in the `pypi`
+# (or `testpypi`) environment, and `uv publish` exchanges the job's identity
+# token for a short-lived upload token. No API token is stored anywhere.
+#
+# Uploads are permanent: a version can never be re-uploaded once it is on an
+# index. The build job therefore refuses to publish a tag whose name does not
+# match the package version, and runs the wheel packaging gate first.
+
+name: Publish Python client
+
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: "Index to publish to: pypi or testpypi"
+        type: string
+        default: pypi
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Index to publish to"
+        type: choice
+        options: [pypi, testpypi]
+        default: testpypi
+
+jobs:
+  build:
+    name: build and verify sdist + wheel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/beebium-python-client
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Check generated proto stubs are in sync with their sources
+        run: bash scripts/check_proto_regen.sh
+
+      - name: Build wheel and run packaging tests against it
+        # The load-bearing packaging gate: installs the built wheel into a
+        # fresh venv and runs tests_packaging/ against it, not against src/.
+        run: bash scripts/test-wheel.sh
+
+      - name: Build sdist and wheel for publication
+        run: |
+          rm -rf dist
+          uv build
+          ls -l dist
+
+      - name: Check the distribution metadata renders
+        run: uvx twine check --strict dist/*
+
+      - name: Verify the package version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          # The version is dynamic (read from _version.py by hatch), so take
+          # it from the artifact actually being published.
+          version="$(ls dist/beebium-*.whl | sed -E 's|.*/beebium-([^-]+)-.*|\1|')"
+          tag="${GITHUB_REF_NAME}"
+          if [ "v${version}" != "${tag}" ]; then
+            echo "::error::package version ${version} does not match tag ${tag}"
+            exit 1
+          fi
+          echo "Publishing beebium ${version} from tag ${tag}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-dist
+          path: clients/beebium-python-client/dist/*
+          if-no-files-found: error
+
+  publish:
+    name: publish to ${{ inputs.repository }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.repository }}
+      url: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/p/beebium' || 'https://pypi.org/p/beebium' }}
+    permissions:
+      id-token: write   # for PyPI Trusted Publishing
+      contents: read
+    steps:
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Publish with trusted publishing
+        env:
+          UV_PUBLISH_URL: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+        run: uv publish --trusted-publishing always dist/*

@@ -437,13 +437,25 @@ subsequent phase is validated the right way.
 
 ## 6. Deployment (PyPI)
 
-No workflow publishes today; `release.yml` only *claims* the clients ship to
-PyPI. Add a `publish-python.yml` (or a job in `release.yml`) using **PyPI
-Trusted Publishing (OIDC)** via `pypa/gh-action-pypi-publish` -- no long-lived
-token. Build sdist + wheel for the `beebium` distribution (and any additional
-`packages/*` distributions as they appear -- a matrix over `packages/*` keeps it
-open-ended), publish on tag. Gate on the "generated == committed" proto check
-and the test suite.
+`.github/workflows/publish-python.yml` builds the sdist and wheel of the
+`beebium` distribution and publishes them with **PyPI Trusted Publishing
+(OIDC)** via `uv publish --trusted-publishing always` -- no long-lived token is
+stored. It is a reusable workflow: `release.yml` calls it on every pushed `v*`
+tag after the server packages have built (so the client on PyPI and the servers
+on GitHub/Homebrew/Scoop are cut from one tag, as the strict protocol
+fingerprint handshake requires), and it can be dispatched by hand against
+PyPI or TestPyPI for a chosen ref.
+
+Gates before upload: the "generated == committed" proto check, the wheel
+packaging suite run against the installed wheel (`scripts/test-wheel.sh`),
+`twine check --strict` on both artifacts, and on tags an assertion that the
+wheel's version equals the tag. The publish job runs in the GitHub environment
+named after the index (`pypi` / `testpypi`); PyPI's trusted publisher for the
+project is registered against this repository, this workflow filename and that
+environment name.
+
+The distribution ships the GPL licence text (`COPYING.txt`, a copy of the
+repository's) in both sdist and wheel.
 
 ---
 
@@ -471,8 +483,9 @@ phase is independently mergeable.
   `packages/`, create `beebium.client` core + `beebium-ext-*` + `beebium`
   metapackage; move stubs per §4.1; update imports. Highest risk; isolated to
   layout, since the framework already works from Phase 2.
-- **Phase 4 -- PyPI trusted publishing.** `publish-python.yml`, matrix over
-  distributions, OIDC, wired into release.
+- **Phase 4 -- PyPI trusted publishing.** `publish-python.yml` (OIDC via
+  `uv publish`), called from `release.yml` on tags. Done; a matrix over
+  distributions is added when a second distribution appears.
 
 ---
 

@@ -999,20 +999,15 @@ jobs:
         # tree changes -- catches stubs drifting from the .proto sources.
         run: bash scripts/check_proto_regen.sh
 
-      - name: Build wheel and run packaging tests against it
+      - name: Build wheel and run packaging + unit tests against it
         working-directory: clients/beebium-python-client
         # Load-bearing packaging gate: build the wheel, install it into a fresh
-        # venv, and run the server-free packaging assertions against the
-        # installed artifact (not src/) so missing package data, an unshipped
-        # py.typed marker or an unregistered entry point fail here.
-        run: bash scripts/test-wheel.sh
-
-      - name: Run unit tests
-        working-directory: clients/beebium-python-client
-        # --durations=0 lists every test's wall-clock time (slowest first) so we
-        # have data on which integration tests are genuinely long; --timeout=600
-        # fails a hung test after 10 min rather than stalling the job.
-        run: uv run python -m pytest tests/ -v --durations=0 --timeout=600
+        # venv, and run the suite against the installed artifact (not src/) so
+        # missing package data, an unshipped py.typed marker or an unregistered
+        # entry point fail here. --durations=0 lists every test's wall-clock
+        # time (slowest first); --timeout=600 fails a hung test after 10 min
+        # rather than stalling the job.
+        run: bash scripts/test-wheel.sh tests_packaging/ tests/ -v --durations=0 --timeout=600
 
       # One line per collected test ("path::test_name"), so counting the lines
       # carrying "::" is independent of pytest's summary wording. Parametrised
@@ -1070,10 +1065,12 @@ jobs:
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
-        # --durations=0 lists every test's wall-clock time (slowest first) so we
-        # have data on which integration tests are genuinely long; --timeout=600
-        # fails a hung test after 10 min rather than stalling the job.
-        run: uv run python -m pytest tests/ -v --durations=0 --timeout=600
+        # Runs against the BUILT WHEEL installed into a fresh venv, not the
+        # source tree, so packaging faults (missing data files, entry points)
+        # fail here too. --durations=0 lists every test's wall-clock time
+        # (slowest first); --timeout=600 fails a hung test after 10 min
+        # rather than stalling the job.
+        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
 
   python-integration-windows:
     name: Python Client Integration Tests (Windows)
@@ -1105,10 +1102,12 @@ jobs:
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/Release/beebium-model-b.exe
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
-        # --durations=0 lists every test's wall-clock time (slowest first) so we
-        # have data on which integration tests are genuinely long; --timeout=600
-        # fails a hung test after 10 min rather than stalling the job.
-        run: uv run python -m pytest tests/ -v --durations=0 --timeout=600
+        # Runs against the BUILT WHEEL installed into a fresh venv, not the
+        # source tree, so packaging faults (missing data files, entry points)
+        # fail here too. --durations=0 lists every test's wall-clock time
+        # (slowest first); --timeout=600 fails a hung test after 10 min
+        # rather than stalling the job.
+        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
 
   python-integration-macos-arm64:
     name: Python Client Integration Tests (macOS arm64)
@@ -1143,10 +1142,12 @@ jobs:
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
-        # --durations=0 lists every test's wall-clock time (slowest first) so we
-        # have data on which integration tests are genuinely long; --timeout=600
-        # fails a hung test after 10 min rather than stalling the job.
-        run: uv run python -m pytest tests/ -v --durations=0 --timeout=600
+        # Runs against the BUILT WHEEL installed into a fresh venv, not the
+        # source tree, so packaging faults (missing data files, entry points)
+        # fail here too. --durations=0 lists every test's wall-clock time
+        # (slowest first); --timeout=600 fails a hung test after 10 min
+        # rather than stalling the job.
+        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
 
   python-integration-macos-x86_64:
     name: Python Client Integration Tests (macOS x86_64)
@@ -1181,10 +1182,12 @@ jobs:
         env:
           BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
-        # --durations=0 lists every test's wall-clock time (slowest first) so we
-        # have data on which integration tests are genuinely long; --timeout=600
-        # fails a hung test after 10 min rather than stalling the job.
-        run: uv run python -m pytest tests/ -v --durations=0 --timeout=600
+        # Runs against the BUILT WHEEL installed into a fresh venv, not the
+        # source tree, so packaging faults (missing data files, entry points)
+        # fail here too. --durations=0 lists every test's wall-clock time
+        # (slowest first); --timeout=600 fails a hung test after 10 min
+        # rather than stalling the job.
+        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
 
   # Builds the npm tarball and exercises it the way a consumer would. Nothing
   # else here can: the other jobs run `npm ci`, which installs devDependencies,
