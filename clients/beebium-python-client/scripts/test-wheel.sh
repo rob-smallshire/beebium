@@ -68,7 +68,18 @@ VENV_PYTHON="$WORK_DIR/venv/bin/python"
 echo "==> Installing the built wheel (product) into the fresh venv"
 # With the published extras, so tests of the optional features (image export,
 # mDNS discovery) run rather than skip.
-uv pip install --python "$VENV_PYTHON" "${WHEEL}[imaging,discovery]"
+#
+# On MSYS/Git Bash (the Windows CI shell), arguments that look like POSIX paths
+# are rewritten to Windows paths before reaching a native program like uv. The
+# "[imaging,discovery]" extras suffix defeats that heuristic, so the combined
+# argument is mangled (e.g. /d/a/... becomes D:/d/a/...) and uv cannot find the
+# wheel. Convert the wheel path to a native Windows path ourselves; the result
+# no longer starts with "/", so no further conversion is attempted on it.
+WHEEL_REF="$WHEEL"
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*) WHEEL_REF="$(cygpath -m "$WHEEL")" ;;
+esac
+uv pip install --python "$VENV_PYTHON" "${WHEEL_REF}[imaging,discovery]"
 
 echo "==> Installing the test runner from the 'test' dependency-group"
 # Export just the test group (pytest + pytest-timeout; no project, no codegen
