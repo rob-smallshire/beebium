@@ -68,6 +68,83 @@ class TestInRepoBuildDiscovery:
         assert finder._find_server(None) == in_repo
 
 
+class TestSearchRootDiscovery:
+    """A caller can supply the roots to search, not only this module's __file__.
+
+    This is what lets a client installed from a wheel -- whose __file__ is in
+    site-packages, with no checkout above it -- still find the checkout's own
+    build, by searching from pytest's rootdir instead.
+    """
+
+    def test_build_found_under_an_explicit_root(
+        self, finder: ServerProcess, tmp_path: Path
+    ) -> None:
+        """A build directory below a supplied root is found, independent of
+        where this module happens to live."""
+        checkout = tmp_path / "checkout"
+        build_server = _make_executable(
+            checkout / "build" / "src" / "server",
+            finder._exe_name("beebium-model-b"),
+        )
+        found = finder._find_in_repo_build(
+            finder._exe_name("beebium-model-b"), [checkout]
+        )
+        assert found == build_server
+
+    def test_build_found_above_an_explicit_root(
+        self, finder: ServerProcess, tmp_path: Path
+    ) -> None:
+        """The supplied root's ancestors are searched too, so rootdir need not
+        be the repo root -- it is typically the client subdirectory."""
+        checkout = tmp_path / "checkout"
+        build_server = _make_executable(
+            checkout / "build" / "src" / "server",
+            finder._exe_name("beebium-model-b"),
+        )
+        rootdir = checkout / "clients" / "beebium-python-client"
+        rootdir.mkdir(parents=True)
+        found = finder._find_in_repo_build(
+            finder._exe_name("beebium-model-b"), [rootdir]
+        )
+        assert found == build_server
+
+    def test_explicit_root_build_beats_path(
+        self, finder: ServerProcess, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The checkout build resolved from a supplied root outranks a server on
+        PATH -- the wheel-install case the pytest plugin depends on."""
+        checkout = tmp_path / "checkout"
+        build_server = _make_executable(
+            checkout / "build" / "src" / "server",
+            finder._exe_name("beebium-model-b"),
+        )
+        installed_dirpath = tmp_path / "installed"
+        _make_executable(installed_dirpath, finder._exe_name("beebium-model-b"))
+        monkeypatch.setenv(
+            "PATH", f"{installed_dirpath}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+        monkeypatch.delenv("BEEBIUM_SERVER", raising=False)
+
+        # The plugin resolves the checkout build from rootdir, then passes it as
+        # the explicit server path -- which the precedence rules put above PATH.
+        resolved = finder._find_in_repo_build(
+            finder._exe_name("beebium-model-b"), [checkout]
+        )
+        assert finder._find_server(resolved) == build_server
+
+    def test_no_build_under_root_returns_none(
+        self, finder: ServerProcess, tmp_path: Path
+    ) -> None:
+        """An empty tree (the installed-wheel-with-no-checkout case) yields
+        None so discovery can fall through to PATH."""
+        assert (
+            finder._find_in_repo_build(
+                finder._exe_name("beebium-model-b"), [tmp_path]
+            )
+            is None
+        )
+
+
 class TestDiscoveryPrecedence:
     """Explicit choices outrank discovery; discovery outranks PATH."""
 

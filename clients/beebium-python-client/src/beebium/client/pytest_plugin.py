@@ -32,6 +32,31 @@ import pytest
 
 from beebium.client import Beebium
 from beebium.client.exceptions import BeebiumError, ServerNotFoundError
+from beebium.client.server import ServerProcess
+
+
+def _find_checkout_roms(rootpath: Path) -> Path | None:
+    """Find the repo's roms/ directory at or above pytest's rootdir.
+
+    When beebium is installed from a wheel its __file__ is in site-packages
+    with no checkout above it, but pytest's rootdir still points into the
+    checkout under test (tests/ live there), so it is the reliable anchor.
+    """
+    for ancestor in (rootpath, *rootpath.parents):
+        candidate = ancestor / "roms"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _find_checkout_server(rootpath: Path) -> Path | None:
+    """Find the freshly-built server in a build directory at or above rootdir.
+
+    Uses the same anchor as _find_checkout_roms so a wheel-installed client
+    still finds the checkout's own server rather than one on PATH.
+    """
+    exe_name = ServerProcess._exe_name("beebium-model-b")
+    return ServerProcess._find_in_repo_build(exe_name, [rootpath])
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -79,11 +104,14 @@ def beebium_roms_dirpath(request: pytest.FixtureRequest) -> Path:
             return path
         pytest.skip(f"BEEBIUM_ROM_DIR points to non-existent path: {env_path}")
 
-    # 3. Common locations
+    # 3. The checkout's own roms/, located from pytest's rootdir. This works
+    #    whether beebium is installed from a wheel or as an editable checkout.
+    checkout_roms = _find_checkout_roms(Path(request.config.rootpath))
+    if checkout_roms is not None:
+        return checkout_roms
+
+    # 4. Common install locations
     candidates = [
-        # Relative to this module (in-repo development):
-        # src/beebium/client/pytest_plugin.py -> repo root is five levels up.
-        Path(__file__).parents[5] / "roms",
         # User's home directory
         Path.home() / ".beebium" / "roms",
         # /usr/share location
@@ -134,8 +162,9 @@ def beebium_server_filepath(request: pytest.FixtureRequest) -> Path | None:
 
     Looks in this order:
     1. --beebium-server command line option
-    2. BEEBIUM_SERVER environment variable
-    3. None (let ServerProcess auto-detect)
+    2. BEEBIUM_SERVER environment variable (deferred to ServerProcess)
+    3. The checkout's own build, located from pytest's rootdir
+    4. None (let ServerProcess auto-detect: its __file__ walk, then PATH)
     """
     # 1. Command line option
     cli_path = request.config.getoption("--beebium-server")
@@ -145,8 +174,22 @@ def beebium_server_filepath(request: pytest.FixtureRequest) -> Path | None:
             return path
         pytest.skip(f"beebium-server not found or not executable: {cli_path}")
 
-    # 2. Environment variable (will be checked by ServerProcess)
-    # 3. Auto-detect (return None)
+    # 2. Environment variable -- defer to ServerProcess, which validates it and
+    #    fails loudly if it is wrong. CI sets this, so it must keep priority.
+    if os.environ.get("BEEBIUM_SERVER"):
+        return None
+
+    # 3. The checkout's own build, located from pytest's rootdir. Returned as an
+    #    explicit path so it outranks a stray server on PATH -- e.g. a system-
+    #    installed one built from a different protocol, which would otherwise be
+    #    chosen and then fail the fingerprint handshake with an opaque error.
+    #    A wheel-installed client cannot find this via its own __file__ (it lives
+    #    in site-packages), so the plugin locates it from rootdir instead.
+    checkout_server = _find_checkout_server(Path(request.config.rootpath))
+    if checkout_server is not None:
+        return checkout_server
+
+    # 4. Auto-detect (return None)
     return None
 
 

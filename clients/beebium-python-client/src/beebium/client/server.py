@@ -335,12 +335,30 @@ class ServerProcess:
             return name + ".exe"
         return name
 
-    def _find_in_repo_build(self, exe_name: str) -> Path | None:
-        """Find the server in a build directory of the surrounding checkout.
+    @staticmethod
+    def _find_in_repo_build(
+        exe_name: str, search_dirpaths: list[Path] | None = None
+    ) -> Path | None:
+        """Find the server in a build directory at or above one or more roots.
 
-        Returns None when this package is not sitting in a source checkout with
-        a build directory, which is the case for an installed wheel.
+        Each root is searched together with every one of its ancestors, so a
+        build directory anywhere between the root and the filesystem root is
+        found. Walking every ancestor rather than counting to a fixed depth
+        cannot go stale when a directory is renamed or moved.
+
+        With no roots given the search walks up from this module's own file,
+        which resolves an editable/source checkout. A caller can instead pass
+        other roots -- the pytest plugin passes pytest's rootdir, so a client
+        installed from a wheel (whose __file__ is in site-packages, with no
+        checkout above it) still finds the freshly-built server in the checkout
+        under test.
+
+        Returns None when no build directory is found, which is the normal case
+        for an installed wheel with nothing else to search.
         """
+        if search_dirpaths is None:
+            search_dirpaths = [Path(__file__).resolve()]
+
         # Build directory candidates (Unix and Windows)
         build_dirs = [
             "build",
@@ -357,25 +375,25 @@ class ServerProcess:
                 ]
             )
 
-        # Walk up from this file rather than counting parents to a fixed depth.
-        # A previous fixed count silently stopped one level short of the repo
-        # root, so this search never matched and PATH always won -- which is
-        # exactly the failure this function exists to prevent. Searching every
-        # ancestor cannot go stale when a directory is renamed or moved.
-        for ancestor in Path(__file__).resolve().parents:
-            for build_dir in build_dirs:
-                server_dirpath = ancestor / build_dir / "src" / "server"
-                if sys.platform == "win32":
-                    # With MSVC the executable lands in a per-config subdirectory.
-                    for config in ["Release", "Debug", ""]:
-                        candidate = server_dirpath / config / exe_name if config \
-                            else server_dirpath / exe_name
-                        if self._is_executable(candidate):
+        seen: set[Path] = set()
+        for start in search_dirpaths:
+            for ancestor in (start, *start.parents):
+                if ancestor in seen:
+                    continue
+                seen.add(ancestor)
+                for build_dir in build_dirs:
+                    server_dirpath = ancestor / build_dir / "src" / "server"
+                    if sys.platform == "win32":
+                        # With MSVC the executable lands in a per-config subdirectory.
+                        for config in ["Release", "Debug", ""]:
+                            candidate = server_dirpath / config / exe_name if config \
+                                else server_dirpath / exe_name
+                            if ServerProcess._is_executable(candidate):
+                                return candidate
+                    else:
+                        candidate = server_dirpath / exe_name
+                        if ServerProcess._is_executable(candidate):
                             return candidate
-                else:
-                    candidate = server_dirpath / exe_name
-                    if self._is_executable(candidate):
-                        return candidate
 
         return None
 
