@@ -41,11 +41,12 @@ Example usage:
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
 
     from zeroconf import ServiceListener, Zeroconf
 
@@ -267,22 +268,61 @@ def is_available() -> bool:
         return False
 
 
+def _advertisable_ipv4_addresses(candidate_ips: Iterable[object]) -> list[str]:
+    """The IPv4 addresses a real mDNS advertiser would announce on.
+
+    Routable interfaces only: loopback and link-local are excluded, and the
+    IPv6 addresses ifaddr yields (as tuples, not strings) are skipped. The order
+    of the input is preserved and duplicates are removed.
+    """
+    result: list[str] = []
+    for candidate in candidate_ips:
+        if not isinstance(candidate, str):
+            continue
+        try:
+            parsed = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if parsed.version == 4 and not parsed.is_loopback and not parsed.is_link_local:
+            if candidate not in result:
+                result.append(candidate)
+    return result
+
+
+def _non_loopback_ipv4_addresses() -> list[str]:
+    """The host's routable IPv4 interface addresses, via ifaddr (a zeroconf
+    dependency, so present whenever zeroconf is)."""
+    import ifaddr
+
+    candidate_ips = [ip.ip for adapter in ifaddr.get_adapters() for ip in adapter.ips]
+    return _advertisable_ipv4_addresses(candidate_ips)
+
+
 def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True) -> bool:
     """Whether mDNS discovery can actually observe a service on this host.
 
     Registers a throwaway DNS-SD service through one zeroconf instance and
-    browses for it through a second, independent one. Seeing it proves the
-    whole multicast path -- send, loopback and receive on UDP 5353 -- works
-    here. Some sandboxed CI runners have no multicast route: zeroconf logs
-    "No route to host" on 5353 and a browser observes nothing, whatever is
-    advertising. Discovery cannot work there, and this returns False.
+    browses for it through a second, independent one. Seeing it proves that a
+    multicast announcement sent from a real interface loops back and is received
+    on UDP 5353. Some sandboxed CI runners have no multicast route on their LAN
+    interface: zeroconf logs "No route to host" on 5353 and a browser observes
+    nothing, whatever is advertising. Discovery cannot work there, and this
+    returns False.
 
-    Two independent instances are used deliberately: registering and browsing
-    on a single instance can be answered from its own in-process registry
-    without a packet ever crossing the socket, which would report success even
-    where multicast is broken.
+    Two deliberate choices make this a faithful predictor of the real browse:
 
-    Returns False if the zeroconf extra is not installed.
+    - The registrar advertises only on the routable interfaces (never on the
+      loopback interface), because the server's advertiser -- mDNSResponder or
+      avahi-daemon -- announces on real interfaces, not lo0. Advertising over
+      loopback would prove a path the real service never uses: a runner whose
+      loopback multicast works but whose LAN interface has no route would then
+      look usable when it is not.
+    - The browser uses zeroconf's default interface set, exactly as
+      MachineDiscovery does, so what it can observe here is what the real
+      discovery can observe.
+
+    Returns False if the zeroconf extra is not installed, or if the host has no
+    routable IPv4 interface to advertise on.
     """
     try:
         from zeroconf import ServiceBrowser, ServiceInfo, Zeroconf
@@ -293,13 +333,19 @@ def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True
     import threading
     import uuid
 
+    addresses = _non_loopback_ipv4_addresses()
+    if not addresses:
+        # Nothing a real advertiser could announce on, so the real path cannot
+        # be exercised; treat discovery as unusable here.
+        return False
+
     token = uuid.uuid4().hex
     probe_type = "_beebium-probe._tcp.local."
     full_name = f"{token}.{probe_type}"
     info = ServiceInfo(
         probe_type,
         full_name,
-        addresses=[socket.inet_aton("127.0.0.1")],
+        addresses=[socket.inet_aton(addresses[0])],
         port=1,
         properties={b"token": token.encode("ascii")},
         server=f"{token}.local.",
@@ -326,7 +372,7 @@ def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True
         browser_zeroconf = Zeroconf()
         ServiceBrowser(browser_zeroconf, probe_type, cast("ServiceListener", _ProbeListener()))
         if _register:
-            registrar = Zeroconf()
+            registrar = Zeroconf(interfaces=addresses)
             registrar.register_service(info)
         return seen.wait(timeout)
     except OSError:

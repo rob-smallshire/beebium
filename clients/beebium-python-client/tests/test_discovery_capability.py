@@ -26,7 +26,34 @@ import pytest
 
 pytest.importorskip("zeroconf", reason="discovery needs the zeroconf extra")
 
-from beebium.client.discovery import multicast_loopback_available  # noqa: E402
+from beebium.client.discovery import (  # noqa: E402
+    _advertisable_ipv4_addresses,
+    multicast_loopback_available,
+)
+
+
+def test_advertisable_addresses_exclude_loopback_and_link_local() -> None:
+    """The probe advertises where a real mDNS advertiser would: routable IPv4
+    only. Advertising over loopback would let a host whose loopback multicast
+    works but whose LAN interface has no route report a false positive -- the
+    exact macOS-runner failure. IPv6 addresses (tuples from ifaddr) and
+    duplicates are dropped."""
+    candidates = [
+        "127.0.0.1",  # loopback -- excluded
+        "169.254.1.2",  # link-local -- excluded
+        "192.168.1.39",  # routable -- kept
+        "10.0.0.5",  # routable -- kept
+        "192.168.1.39",  # duplicate -- kept once
+        ("fe80::1", 0, 0),  # IPv6 tuple -- skipped
+        "not-an-ip",  # unparseable -- skipped
+    ]
+    assert _advertisable_ipv4_addresses(candidates) == ["192.168.1.39", "10.0.0.5"]
+
+
+def test_no_advertisable_address_means_unavailable() -> None:
+    """With only loopback there is no interface a real advertiser could use, so
+    discovery is reported unavailable."""
+    assert _advertisable_ipv4_addresses(["127.0.0.1"]) == []
 
 
 def test_reports_unavailable_when_nothing_is_registered() -> None:
