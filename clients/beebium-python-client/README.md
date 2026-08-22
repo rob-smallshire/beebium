@@ -22,8 +22,15 @@ uv run python examples/serial_demo.py --port 50071
 # `dev` dependency-group, which uv installs by default -- no extra flags:
 uv run python -m pytest
 
-# Build the wheel and run the packaging tests against it in a fresh venv:
+# Build the wheel and run tests against it in a fresh venv. With no arguments
+# only the packaging assertions in tests_packaging/ run; pass pytest arguments
+# to run any other tests against the installed wheel (CI runs the whole suite
+# this way, so packaging faults are caught rather than passed over by a
+# source-tree run). The plugin finds roms/ and the checkout's server build from
+# pytest's rootdir, so no env vars are needed in-repo:
 bash scripts/test-wheel.sh
+bash scripts/test-wheel.sh tests/test_keyboard.py -q
+# BEEBIUM_ROM_DIR / BEEBIUM_SERVER still override the in-checkout discovery.
 
 # Or materialise a .venv you can activate (the dev group is included by default):
 uv sync
