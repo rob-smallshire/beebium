@@ -32,11 +32,12 @@ import time
 from pathlib import Path
 
 import pytest
-from tube_test_helpers import dump_diagnostics, run_until_or_timeout
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import screen_contains
+
+from tube_test_helpers import dump_diagnostics, run_until_or_timeout
 
 _skip_windows_ci = pytest.mark.skipif(
     sys.platform == "win32" and os.environ.get("CI") == "true",

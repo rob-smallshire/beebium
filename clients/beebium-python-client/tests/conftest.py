@@ -20,12 +20,13 @@ import time
 from pathlib import Path
 
 import pytest
-from tube_test_helpers import DFS_1770_ROM_CANDIDATES, find_dfs_1770_rom
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.ext.peripheral.rpc_serial import RpcSerial
+
 from firetrack import FIRETRACK_DISC_FILENAME
+from tube_test_helpers import DFS_1770_ROM_CANDIDATES, find_dfs_1770_rom
 
 # The beebium fixtures (bbc, bbc_shared, stopped_bbc, etc.) are automatically
 # available from the beebium.client.pytest_plugin module via the entry point.

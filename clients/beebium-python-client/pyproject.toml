@@ -115,6 +115,13 @@ ignore = ["UP046", "UP047"]
 # Package __init__ modules re-export their public API.
 "**/__init__.py" = ["F401"]
 
+[tool.ruff.lint.isort]
+# Test-support modules imported bare (not under the beebium package) sit
+# beside the tests. Classify them as local so they sort into their own group
+# after first-party beebium imports, rather than being mistaken for
+# third-party packages, which leaves the import order stable.
+known-local-folder = ["conftest", "firetrack", "tube_test_helpers"]
+
 [tool.pyright]
 include = ["src", "examples"]
 # The generated protobuf stubs are exercised via their .pyi type stubs but are

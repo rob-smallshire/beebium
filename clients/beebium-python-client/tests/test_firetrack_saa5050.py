@@ -29,6 +29,7 @@ import os
 import pytest
 
 from beebium.client import Beebium
+
 import firetrack
 
 # Firetrack drives a real game through its multi-minute instruction story in real

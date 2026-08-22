@@ -39,6 +39,7 @@ from conftest import (
     transmitted,
 )
 
+
 def test_return_transmits_the_viewdata_hash(commstar_prestel_bbc):
     """RETURN in Prestel mode sends 0x5F -- viewdata's 'proceed to next frame'."""
     bbc = commstar_prestel_bbc
