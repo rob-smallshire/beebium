@@ -26,8 +26,11 @@ import pytest
 
 pytest.importorskip("zeroconf", reason="discovery needs the zeroconf extra")
 
+import beebium.client.discovery as discovery  # noqa: E402
 from beebium.client.discovery import (  # noqa: E402
     _advertisable_ipv4_addresses,
+    _dns_sd_registration_argv,
+    _start_dns_sd_registration,
     multicast_loopback_available,
 )
 
@@ -54,6 +57,26 @@ def test_no_advertisable_address_means_unavailable() -> None:
     """With only loopback there is no interface a real advertiser could use, so
     discovery is reported unavailable."""
     assert _advertisable_ipv4_addresses(["127.0.0.1"]) == []
+
+
+def test_dns_sd_registration_argv() -> None:
+    """The macOS probe registers through mDNSResponder with `dns-sd -R`, so the
+    real advertiser's daemon carries the announcement (not zeroconf)."""
+    assert _dns_sd_registration_argv("abc123", 1) == [
+        "/usr/bin/dns-sd",
+        "-R",
+        "abc123",
+        "_beebium-probe._tcp",
+        "local",
+        "1",
+    ]
+
+
+def test_missing_dns_sd_binary_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host without the dns-sd tool cannot register through the daemon, so the
+    probe reports the path unusable rather than raising."""
+    monkeypatch.setattr(discovery, "_DNS_SD", "/nonexistent/dns-sd")
+    assert _start_dns_sd_registration("abc123", 1) is None
 
 
 def test_reports_unavailable_when_nothing_is_registered() -> None:

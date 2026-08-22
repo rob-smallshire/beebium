@@ -42,6 +42,7 @@ Example usage:
 from __future__ import annotations
 
 import ipaddress
+import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -298,31 +299,69 @@ def _non_loopback_ipv4_addresses() -> list[str]:
     return _advertisable_ipv4_addresses(candidate_ips)
 
 
+# The bundled DNS-SD registration tool on macOS. Registering the probe through
+# it drives mDNSResponder -- the same daemon the server advertises through -- so
+# the probe exercises the actual mDNSResponder -> third-party browser path,
+# which a zeroconf-to-zeroconf probe cannot (that path can work on a runner
+# where the daemon's announcements never reach a foreign browser socket).
+_DNS_SD = "/usr/bin/dns-sd"
+_PROBE_SERVICE_LABEL = "_beebium-probe._tcp"
+
+
+def _dns_sd_registration_argv(instance_name: str, port: int) -> list[str]:
+    """The `dns-sd -R` argv that registers a throwaway probe service through the
+    system mDNS daemon. The process stays running, advertising, until killed."""
+    return [_DNS_SD, "-R", instance_name, _PROBE_SERVICE_LABEL, "local", str(port)]
+
+
+def _start_dns_sd_registration(instance_name: str, port: int) -> subprocess.Popen[bytes] | None:
+    """Start `dns-sd -R` in the background, or return None if it is unusable.
+
+    Returns the running subprocess, or None when the tool is missing or exits
+    immediately (it should stay running to keep advertising).
+    """
+    import time
+
+    argv = _dns_sd_registration_argv(instance_name, port)
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return None  # dns-sd absent or not executable
+    # A healthy registration keeps running; an immediate exit means it failed.
+    time.sleep(0.3)
+    if proc.poll() is not None:
+        return None
+    return proc
+
+
 def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True) -> bool:
     """Whether mDNS discovery can actually observe a service on this host.
 
-    Registers a throwaway DNS-SD service through one zeroconf instance and
-    browses for it through a second, independent one. Seeing it proves that a
-    multicast announcement sent from a real interface loops back and is received
-    on UDP 5353. Some sandboxed CI runners have no multicast route on their LAN
-    interface: zeroconf logs "No route to host" on 5353 and a browser observes
-    nothing, whatever is advertising. Discovery cannot work there, and this
+    Registers a throwaway DNS-SD service and browses for it with zeroconf, the
+    way MachineDiscovery does. Seeing it proves the whole path -- a real
+    advertiser's announcement reaching a third-party browser socket on UDP 5353
+    -- works here. Where it does not (some sandboxed CI runners), a browser
+    observes nothing whatever is advertising, discovery cannot work, and this
     returns False.
 
-    Two deliberate choices make this a faithful predictor of the real browse:
+    The browser always uses zeroconf's default interface set, exactly as
+    MachineDiscovery does, so what it can observe here is what the real
+    discovery can observe. The registrar is chosen to match the real advertiser
+    so the probe cannot pass by a path the real service never uses:
 
-    - The registrar advertises only on the routable interfaces (never on the
-      loopback interface), because the server's advertiser -- mDNSResponder or
-      avahi-daemon -- announces on real interfaces, not lo0. Advertising over
-      loopback would prove a path the real service never uses: a runner whose
-      loopback multicast works but whose LAN interface has no route would then
-      look usable when it is not.
-    - The browser uses zeroconf's default interface set, exactly as
-      MachineDiscovery does, so what it can observe here is what the real
-      discovery can observe.
+    - On macOS the server advertises through mDNSResponder, so the probe
+      registers through it too, via the bundled `dns-sd` tool. A zeroconf
+      registrar would not do: on the hosted arm64 runners zeroconf-to-zeroconf
+      traffic is delivered but mDNSResponder's announcements never reach a
+      foreign browser socket, so only registering through the daemon detects
+      that.
+    - Elsewhere the probe registers with zeroconf, on the routable interfaces
+      only (never the loopback interface, which no real advertiser uses). This
+      is the system path on Linux, where avahi-daemon fills the same role and
+      it works.
 
-    Returns False if the zeroconf extra is not installed, or if the host has no
-    routable IPv4 interface to advertise on.
+    Returns False if the zeroconf extra is not installed, if the host has no
+    routable IPv4 interface to advertise on, or (macOS) if `dns-sd` is missing.
     """
     try:
         from zeroconf import ServiceBrowser, ServiceInfo, Zeroconf
@@ -330,6 +369,7 @@ def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True
         return False
 
     import socket
+    import sys
     import threading
     import uuid
 
@@ -342,14 +382,6 @@ def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True
     token = uuid.uuid4().hex
     probe_type = "_beebium-probe._tcp.local."
     full_name = f"{token}.{probe_type}"
-    info = ServiceInfo(
-        probe_type,
-        full_name,
-        addresses=[socket.inet_aton(addresses[0])],
-        port=1,
-        properties={b"token": token.encode("ascii")},
-        server=f"{token}.local.",
-    )
 
     seen = threading.Event()
 
@@ -366,25 +398,47 @@ def multicast_loopback_available(timeout: float = 5.0, *, _register: bool = True
             pass
 
     registrar: Zeroconf | None = None
+    info: ServiceInfo | None = None
+    dns_sd_process: subprocess.Popen[bytes] | None = None
     browser_zeroconf: Zeroconf | None = None
     try:
         # Browse first, so the browser is listening before the announcement.
         browser_zeroconf = Zeroconf()
         ServiceBrowser(browser_zeroconf, probe_type, cast("ServiceListener", _ProbeListener()))
         if _register:
-            registrar = Zeroconf(interfaces=addresses)
-            registrar.register_service(info)
+            if sys.platform == "darwin":
+                dns_sd_process = _start_dns_sd_registration(token, 1)
+                if dns_sd_process is None:
+                    return False
+            else:
+                info = ServiceInfo(
+                    probe_type,
+                    full_name,
+                    addresses=[socket.inet_aton(addresses[0])],
+                    port=1,
+                    properties={b"token": token.encode("ascii")},
+                    server=f"{token}.local.",
+                )
+                registrar = Zeroconf(interfaces=addresses)
+                registrar.register_service(info)
         return seen.wait(timeout)
     except OSError:
         # A host with no multicast route raises here rather than merely timing
         # out; either way discovery is not usable.
         return False
     finally:
-        if registrar is not None:
+        if dns_sd_process is not None:
+            dns_sd_process.terminate()
             try:
-                registrar.unregister_service(info)
+                dns_sd_process.wait(timeout=2.0)
             except Exception:
-                pass
+                dns_sd_process.kill()
+        if registrar is not None:
+            if info is not None:
+                try:
+                    registrar.unregister_service(info)
+                except Exception:
+                    pass
             registrar.close()
         if browser_zeroconf is not None:
             browser_zeroconf.close()

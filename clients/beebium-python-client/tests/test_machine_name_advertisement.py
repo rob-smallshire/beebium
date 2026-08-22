@@ -52,9 +52,10 @@ def mdns_browsable() -> None:
     """
     if not multicast_loopback_available(timeout=CAPABILITY_TIMEOUT):
         pytest.skip(
-            "no usable mDNS multicast route from this host: a zeroconf browser "
-            "could not observe a zeroconf-registered service on the same "
-            "machine, so it cannot observe a server's advertisement either"
+            "this host's mDNS discovery path is unusable: the browser did not "
+            "observe a probe service published for it to see (on macOS, one "
+            "registered with the system mDNS daemon), so it cannot observe a "
+            "server's advertisement either"
         )
 
 
