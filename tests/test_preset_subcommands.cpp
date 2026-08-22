@@ -821,11 +821,13 @@ TEST_CASE("describe-disc-image recognises an SSD image",
 
 TEST_CASE("describe-disc-image recognises an HFE image",
           "[integration][disc][describe-disc-image]") {
+    // A committed HFE fixture under tests/assets, not a game image beneath
+    // the gitignored discs/games -- so it is present on every checkout,
+    // including a clean CI runner, rather than only where one happens to have
+    // been dropped by hand. No skip guard: a missing committed fixture should
+    // fail loudly, as the describe-rom ROMFS tests treat theirs.
     const std::string path =
-        disc_path("games/Superior_Software/Repton_FSD0080_1.hfe");
-    if (!std::filesystem::exists(path)) {
-        SKIP("test HFE image not available: " + path);
-    }
+        std::string(BEEBIUM_TEST_ASSETS_DIR) + "/discs/Citadel_FSD0174_1.hfe";
     auto result = run_command(EXECUTABLE + " describe-disc-image \"" + path + "\"");
     REQUIRE(result.exit_code == 0);
     REQUIRE(result.stdout_output.find("\"recognised\": true") != std::string::npos);
