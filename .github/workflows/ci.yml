@@ -1039,7 +1039,12 @@ jobs:
       - name: Install gRPC runtime libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgrpc++-dev
+          # libgrpc++-dev: the server's gRPC runtime. The rest let the server's
+          # Avahi advertiser actually publish, so the machine-advertisement test
+          # exercises the advertise path instead of skipping: libavahi-client3
+          # is the runtime the server dlopens ("libavahi-client.so.3"), and
+          # avahi-daemon/avahi-utils/dbus provide the running mDNS daemon.
+          sudo apt-get install -y libgrpc++-dev libavahi-client3 avahi-daemon avahi-utils dbus
 
       # Extract at 'build/' so the artifact's src/server/ and lib/
       # entries land in the same relative layout the server's build-time
@@ -1059,6 +1064,32 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Start Avahi daemon (mDNS advertiser for the machine-name test)
+        # The server's advertiser only reports itself active once it reaches a
+        # running avahi-daemon and commits its entry group, so without a daemon
+        # the machine-advertisement test skips ("advertiser never became
+        # active"). Start it the same way the server-test job does: prefer the
+        # init-managed services, else launch dbus and avahi-daemon directly.
+        # A failure here is not fatal -- the test then skips with that reason
+        # rather than sinking the job -- but the daemon should normally come up.
+        run: |
+          sudo systemctl start dbus 2>/dev/null || sudo service dbus start 2>/dev/null || true
+          sudo systemctl start avahi-daemon 2>/dev/null || sudo service avahi-daemon start 2>/dev/null || true
+          if ! avahi-browse -t _workstation._tcp >/dev/null 2>&1; then
+            sudo mkdir -p /run/dbus
+            sudo dbus-daemon --system --fork 2>/dev/null || true
+            sudo avahi-daemon --daemonize --no-drop-root 2>/dev/null \
+              || sudo avahi-daemon --daemonize --no-drop-root --no-rlimits 2>/dev/null || true
+          fi
+          for attempt in $(seq 1 10); do
+            if avahi-browse -t _beebium._tcp >/dev/null 2>&1; then
+              echo "avahi-daemon ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::warning::avahi-daemon did not become ready; the machine-advertisement test will skip"
 
       - name: Run integration tests
         working-directory: clients/beebium-python-client
