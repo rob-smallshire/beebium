@@ -1,0 +1,5 @@
+# Unpacked release bundle, laid down by build_wheel.py at build time only.
+_bundle/
+_bundle_extract_tmp/
+# Built wheels.
+dist/

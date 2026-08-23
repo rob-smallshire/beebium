@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "beebium-server"
+dynamic = ["version"]
+description = "Prebuilt Beebium BBC Micro emulator server binaries"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["COPYING.txt"]
+# The shim is trivial pure Python (pathlib + os.execv); it does not couple to a
+# CPython version, so keep the floor low. The wheel is platform-specific but
+# Python-version agnostic (py3-none-<platform>).
+requires-python = ">=3.8"
+authors = [
+    { name = "Robert Smallshire", email = "robert@smallshire.org.uk" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Emulators",
+]
+# No runtime dependencies: this ships binaries, not Python code that imports
+# anything. It does not depend on `beebium`, and `beebium` does not depend on it.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/rob-smallshire/beebium"
+Repository = "https://github.com/rob-smallshire/beebium"
+
+# PATH parity with the .deb symlinks / Homebrew links / Scoop shims: each name
+# execs the matching bundled binary (see beebium.server._launch).
+[project.scripts]
+beebium-model-b = "beebium.server._launch:model_b"
+beebium-model-b-plus = "beebium.server._launch:model_b_plus"
+beebium-model-b-plus-128k = "beebium.server._launch:model_b_plus_128k"
+beebium-model-b-romram = "beebium.server._launch:model_b_romram"
+
+[dependency-groups]
+# Just the test runner, for the server-free packaging tests. Kept out of the
+# published wheel metadata (a dependency-group, not an extra).
+test = [
+    "pytest>=7.0.0",
+]
+
+[tool.hatch.version]
+path = "src/beebium/server/_version.py"
+
+# beebium is a PEP 420 namespace shared with the `beebium` client distribution;
+# beebium.server is a regular package. Include the whole src/beebium tree, plus
+# the _bundle/ payload, which build_wheel.py unpacks at build time and which is
+# gitignored -- so it must be named as an artifact to survive hatchling's
+# VCS-aware file selection.
+[tool.hatch.build.targets.wheel]
+packages = ["src/beebium"]
+artifacts = ["src/beebium/server/_bundle/**"]
+
+# Mark the wheel non-pure and stamp the platform tag. build_wheel.py sets
+# BEEBIUM_WHEEL_TAG (e.g. manylinux_2_36_aarch64) before `uv build --wheel`, so
+# one build step emits beebium_server-<ver>-py3-none-<tag>.whl directly -- no
+# post-build retag. A plain `uv build` with no tag set stays py3-none-any.
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
