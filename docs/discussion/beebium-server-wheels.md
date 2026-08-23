@@ -269,21 +269,52 @@ Two further small changes:
   `server=`, and its ROM fixture tries `beebium.server.rom_dirpath()` after the
   checkout `roms/` and before the home/`/usr/share` locations.
 
-### 5.3 The `beebium[server]` extra
+### 5.3 The `beebium[server]` extra (deferred)
 
-`beebium` declares an extra that pins the server wheel to the **same
+The intended one-line form is an extra pinning the server wheel to the **same
 version**:
 
 ```toml
 [project.optional-dependencies]
-server = ["beebium-server==0.1.4"]
+server = ["beebium-server==0.1.5"]   # kept in lockstep by bump-my-version
 ```
 
-maintained by `bump-my-version` like every other version site. `pip install
-"beebium[server]"` is then the one-line form of the goal, and the exact pin
-makes version skew between the two impossible on that path. The two-package
-form in section 1 keeps working for users who want to choose versions
-independently.
+so `pip install "beebium[server]"` gives the complete headless system and the
+exact pin makes version skew impossible on that path.
+
+**This is deferred.** It was tried (and reverted) because an exact pin on a
+sibling published *later in the same release* cannot resolve during the release
+window. `bump-my-version` moves the pin in the bump commit, but `beebium-server`
+`<new>` only reaches PyPI ~45 minutes later (after the Linux bundles build), and
+the bump cannot update `uv.lock` (its `beebium-server` entry carries
+version-specific wheel URLs and hashes that a regex cannot rewrite; only
+`uv lock`, run *after* the version publishes, can). `uv` performs a **universal
+resolution that includes every extra** on any non-`--frozen` `uv run`,
+`uv sync`, `uv export` or `uv lock` — so throughout that window they all fail
+("no version of `beebium-server==<new>`"), *even though the extra is never
+installed*. That breaks the client's own publish (`publish-python.yml` runs
+`test-wheel.sh`, which runs `uv export`) and every developer's `uv sync` on the
+bump commit.
+
+Options considered:
+
+- **`--frozen` everywhere** — make CI and developers use the lock as-is so the
+  extra is never re-resolved. Works, but it must become the default for *every*
+  `uv` invocation (a plain `uv sync`/`uv run` would fail for every developer on
+  every bump commit), permanently weakens lock checking, and leaves `uv.lock` a
+  release behind the pin. More friction than the one-line form is worth.
+- **A separately published metapackage** (e.g. `beebium-headless`) whose pins
+  are only ever published *after* both `beebium` and `beebium-server` exist —
+  keeps exact pins without the in-repo lock circularity, at the cost of a third
+  distribution and its own release step.
+- **A loose pin** (`beebium-server~=0.1`) — resolves any time, but loses the
+  exact-version lockstep the extra exists to provide.
+
+None is worth blocking on. The **documented and supported path is the two-package
+form `pip install beebium beebium-server`** (section 1). The client already
+defaults to the installed wheel (section 5.2), so the user experience is nearly
+identical. Revisit if the metapackage or a post-publish `uv lock` step in the
+release runbook later proves worthwhile.
 
 ## 6. Size, now and later
 
