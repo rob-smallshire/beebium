@@ -248,9 +248,22 @@ class SubscriptionHandle:
         self._stop_event = stop_event
 
     def stop(self, timeout: float = 1.0) -> None:
-        """Signal the background subscription to stop and join the thread."""
+        """Signal the background subscription to stop and join the thread.
+
+        This is a prompt cancel: the loop checks the stop flag before each
+        callback, so an item already pulled from the stream when stop() is
+        called is not delivered. To let a finite stream finish and deliver every
+        item, use wait() instead.
+        """
         self._stop_event.set()
         self._thread.join(timeout)
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Block until the subscription finishes on its own -- a finite stream
+        ends, or the server closes it -- and report whether it did. Unlike
+        stop(), this does not signal cancellation; it only waits."""
+        self._thread.join(timeout)
+        return not self._thread.is_alive()
 
     @property
     def is_running(self) -> bool:

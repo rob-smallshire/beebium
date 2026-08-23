@@ -21,6 +21,7 @@ types.
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -208,7 +209,13 @@ class TestDispatchPayloadDispatch:
 
 
 class TestBackgroundSubscription:
-    def test_callback_fires_per_view_until_stop(self):
+    def test_finite_stream_delivers_every_view(self):
+        """A finite stream ends on its own and every item is delivered.
+
+        Wait for the thread to finish rather than stop() it: stop() is a prompt
+        cancel that drops any item already pulled from the stream, so calling it
+        before the thread has consumed the two views would race (delivering 0).
+        """
         stub = MagicMock()
         # Two pushes then the stream ends naturally.
         stub.SubscribeView.return_value = iter([_make_view_proto(), _make_view_proto()])
@@ -217,8 +224,27 @@ class TestBackgroundSubscription:
         client = ExtensionUi(stub)
         handle = client.start_background_subscription("test", lambda view: seen.append(view))
 
-        # Stream is finite; thread will exit on its own. Wait for it.
-        handle.stop(timeout=2.0)
+        assert handle.wait(timeout=2.0), "background thread did not finish the finite stream in time"
         assert handle.is_running is False
         assert len(seen) == 2
         assert all(isinstance(v, View) for v in seen)
+
+    def test_stop_interrupts_an_infinite_stream(self):
+        """stop() terminates the thread even when the stream never ends."""
+        stub = MagicMock()
+
+        def infinite_views():
+            while True:
+                yield _make_view_proto()
+
+        stub.SubscribeView.return_value = infinite_views()
+        delivering = threading.Event()
+
+        client = ExtensionUi(stub)
+        handle = client.start_background_subscription("test", lambda view: delivering.set())
+
+        # Synchronise on the first delivery (not a sleep): the thread is now
+        # actively iterating an unbounded stream.
+        assert delivering.wait(timeout=2.0), "background thread never started delivering"
+        handle.stop(timeout=2.0)
+        assert handle.is_running is False
