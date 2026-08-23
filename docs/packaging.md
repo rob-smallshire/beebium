@@ -471,6 +471,66 @@ Notes:
   the Dockerfile's `BUILD_JOBS` arg caps overall parallelism, so the build does
   not OOM on a memory-limited host (e.g. an 8 GB Docker VM).
 
+## Persistent dependency caching — the build-env image
+
+The expensive part of the Linux build is the vcpkg dependency install (the
+static gRPC/protobuf/abseil/openssl/… stack, ~30–40 min native and far longer
+emulated). Everything downstream — the server compile, packaging, smoke — is
+minutes. So the goal is to build those dependencies **once per input change** and
+reuse them, durably, across the multi-month gaps between releases.
+
+The two caches the build previously leaned on are both non-durable on ephemeral
+runners, which is why a release after any quiet period was a full from-scratch
+build (~2 h):
+
+- `--cache-from/--cache-to type=gha` (buildx layer cache) is evicted after 7
+  days unused and capped at ~10 GB per repo; the last release before a gap
+  finds it cold.
+- the Dockerfile's `--mount=type=cache,target=/root/.cache/vcpkg` is
+  **runner-local**, so it is always empty on a fresh hosted runner.
+
+### The design
+
+A per-architecture **builder base image**,
+`ghcr.io/rob-smallshire/beebium-build-env:<tag>`, holds the toolchain, the
+pinned vcpkg, and the fully-installed static dependency tree
+(`/src/vcpkg_installed`). The release build starts *from* it, so the dependency
+install never runs at release time.
+
+- **Content-addressed tag.** `<tag>` is a hash of exactly the inputs that
+  determine the dependency tree: `vcpkg.json`, the static triplet overlays under
+  `triplets/`, the pinned vcpkg commit, and the Dockerfile's builder stage up to
+  (and including) the `vcpkg install`. Any change to those inputs yields a new
+  tag; nothing else does. Each architecture gets its own image (the tag carries
+  the arch), keeping the arm64-native / amd64-emulated buildx layout unchanged.
+- **Built only when missing.** `.github/workflows/build-env.yml` computes the
+  tag, checks whether that image already exists in GHCR, and builds + pushes it
+  only when it does not (plus a manual `workflow_dispatch`). It pushes with the
+  workflow `GITHUB_TOKEN` (`packages: write`, already granted in `release.yml`).
+  So the ~40-min dependency build happens once per input change, not once per
+  release.
+- **Reused with a from-scratch fallback.** The release Dockerfile's builder
+  stage begins `FROM ${BUILDENV_IMAGE}`, where `BUILDENV_IMAGE` is a build-arg
+  that **defaults to a locally-built stage** carrying the same dependency
+  install. When the release workflow passes the GHCR tag, buildx pulls the
+  prebuilt image and the local dependency stage is pruned as dead code — the
+  install is skipped entirely. When no image is supplied (a fresh fork, or a
+  plain local `docker buildx build`), the default builds the dependencies from
+  scratch, so the checkout still builds with no registry access.
+
+### Why this is durable where the runner caches are not
+
+A GHCR image is content-addressed and permanent (it is not subject to the 7-day
+Actions-cache eviction), and the tag rotates automatically only when the
+dependency inputs change. Crucially, the Linux dependencies are built **inside
+the pinned `debian:bookworm` build floor**, so their ABI is fixed by that image,
+not by the mutable hosted-runner image. This is the difference from the Windows
+NuGet binary cache, whose keys ride the hosted `windows-2022` toolchain: there a
+runner-image bump silently moves the vcpkg ABI hash and invalidates the cache
+even when the compiler version string is unchanged. Building Linux in a pinned
+container sidesteps that entirely, which is what makes a long-lived, content-
+addressed build-env image safe here.
+
 ## Validation
 
 Packaging is validated as a ladder of increasing fidelity, ending at the
