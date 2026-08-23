@@ -27,6 +27,10 @@ tag_name = "v{new_version}"
 tag_message = "Release v{new_version}"
 message = "Release v{new_version}"
 
+# The hooks below use && and so need shell execution (bump-my-version >= 1.5
+# refuses shell syntax in hooks unless this is set).
+allow_shell_hooks = true
+
 # After the regex edits, re-write the JSON files canonically so the package's
 # own version is updated cleanly without disturbing the rest of the document
 # (the name-anchored regex below may leave non-canonical indentation; json.tool
