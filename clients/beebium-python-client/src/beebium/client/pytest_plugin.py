@@ -59,6 +59,16 @@ def _find_checkout_server(rootpath: Path) -> Path | None:
     return ServerProcess._find_in_repo_build(exe_name, [rootpath])
 
 
+def _wheel_rom_dirpath() -> Path | None:
+    """The installed beebium-server wheel's ROM directory, if importable."""
+    try:
+        import beebium.server  # lazy: never import at module load
+    except ImportError:
+        return None
+    romdir = Path(beebium.server.rom_dirpath())
+    return romdir if romdir.is_dir() else None
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add beebium-specific command line options."""
     group = parser.getgroup("beebium", "Beebium emulator options")
@@ -72,7 +82,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--beebium-server",
         action="store",
         default=None,
-        help="Path to beebium-server executable (default: $BEEBIUM_SERVER)",
+        help="Server to use: a beebium-model-b binary or an install root "
+        "(default: $BEEBIUM_SERVER, then the checkout build / wheel / PATH)",
     )
 
 
@@ -110,7 +121,13 @@ def beebium_roms_dirpath(request: pytest.FixtureRequest) -> Path:
     if checkout_roms is not None:
         return checkout_roms
 
-    # 4. Common install locations
+    # 4. The installed beebium-server wheel's ROMs (present when that package is
+    #    installed), after the checkout so a development run prefers its own.
+    wheel_roms = _wheel_rom_dirpath()
+    if wheel_roms is not None:
+        return wheel_roms
+
+    # 5. Common install locations
     candidates = [
         # User's home directory
         Path.home() / ".beebium" / "roms",
@@ -166,13 +183,14 @@ def beebium_server_filepath(request: pytest.FixtureRequest) -> Path | None:
     3. The checkout's own build, located from pytest's rootdir
     4. None (let ServerProcess auto-detect: its __file__ walk, then PATH)
     """
-    # 1. Command line option
+    # 1. Command line option -- a binary or an install root. Return it as-is;
+    #    ServerProcess (via server=) coerces and validates it precisely.
     cli_path = request.config.getoption("--beebium-server")
     if cli_path:
         path = Path(cli_path)
-        if path.exists() and os.access(path, os.X_OK):
+        if path.exists():
             return path
-        pytest.skip(f"beebium-server not found or not executable: {cli_path}")
+        pytest.skip(f"--beebium-server path does not exist: {cli_path}")
 
     # 2. Environment variable -- defer to ServerProcess, which validates it and
     #    fails loudly if it is wrong. CI sets this, so it must keep priority.
@@ -214,7 +232,7 @@ def bbc(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
         ) as instance:
             yield instance
     except ServerNotFoundError as e:
@@ -245,7 +263,7 @@ def bbc_shared(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
         ) as instance:
             yield instance
     except ServerNotFoundError as e:
@@ -289,7 +307,7 @@ def bbc_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=beebium_server_filepath,
+            server=beebium_server_filepath,
             extra_args=["--tube", "65C02-3MHz"],
             startup_timeout=20.0,
         ) as instance:

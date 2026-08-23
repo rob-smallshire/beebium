@@ -181,7 +181,7 @@ def main():
     with Beebium.launch(
         mos_filepath=mos,
         basic_filepath=args.basic,
-        server_filepath=args.server,
+        server=args.server,
         extra_args=["--rpc-serial"],
     ) as bbc:
         run_demo(bbc)

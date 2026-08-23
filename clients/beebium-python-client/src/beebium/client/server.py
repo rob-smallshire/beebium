@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import signal
 import socket
 import subprocess
@@ -23,12 +22,14 @@ import sys
 import threading
 import time
 import uuid
+import warnings
 from pathlib import Path
 
 import grpc
 
 import beebium.client as beebium
-from beebium.client.exceptions import ServerNotFoundError, ServerStartupError
+from beebium.client.exceptions import ServerStartupError
+from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation, find_in_build_tree
 
 
 class ServerProcess:
@@ -46,8 +47,10 @@ class ServerProcess:
 
     def __init__(
         self,
-        mos_filepath: str | Path,
+        mos_filepath: str | Path | None = None,
         basic_filepath: str | Path | None = None,
+        server: ServerInstallation | str | Path | None = None,
+        variant: str = DEFAULT_VARIANT,
         server_filepath: str | Path | None = None,
         port: int = 0,
         extra_args: list[str] | None = None,
@@ -55,18 +58,38 @@ class ServerProcess:
         """Create a server process manager.
 
         Args:
-            mos_filepath: Path to the MOS ROM file (required).
+            mos_filepath: Path to the MOS ROM file. When None, ``--mos`` is not
+                passed and the server resolves its default MOS from its own ROM
+                directory (so a wheel/bundle install launches with no arguments).
             basic_filepath: Path to the BASIC ROM file (optional).
-            server_filepath: Path to the beebium-server executable (optional).
-                If not provided, searches BEEBIUM_SERVER env var, PATH, and
-                common build locations.
+            server: which server to run -- a ServerInstallation, a path to a
+                binary, or a path to an install root. When None, the default
+                resolution applies (BEEBIUM_SERVER, checkout build, the
+                beebium-server wheel, then PATH).
+            variant: the machine variant within the installation ("model-b").
+            server_filepath: deprecated alias for ``server=`` (a binary path).
             port: Port to listen on. If 0 (default), a free port is allocated.
             extra_args: Additional command-line arguments to pass to the server
                 (e.g., ["--tube", "65C02-3MHz"]).
         """
-        self._mos_filepath = Path(mos_filepath)
+        if server_filepath is not None:
+            if server is not None:
+                raise ValueError("pass server=, not both server= and the deprecated server_filepath=")
+            warnings.warn(
+                "server_filepath= is deprecated; use server= (a ServerInstallation, "
+                "a binary path, or an install root)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            server = server_filepath
+
+        self._mos_filepath = Path(mos_filepath) if mos_filepath is not None else None
         self._basic_filepath = Path(basic_filepath) if basic_filepath else None
-        self._server_filepath = self._find_server(server_filepath)
+        self._variant = variant
+        self._installation = (
+            ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
+        )
+        self._server_filepath = self._installation.executable_filepath(variant)
         self._port = port if port != 0 else self._find_free_port()
         self._extra_args = extra_args or []
         self._process: subprocess.Popen[bytes] | None = None
@@ -91,8 +114,18 @@ class ServerProcess:
 
     @property
     def server_filepath(self) -> Path:
-        """Path to the resolved beebium-model-b executable."""
+        """Path to the resolved server executable."""
         return self._server_filepath
+
+    @property
+    def installation(self) -> ServerInstallation:
+        """The installation this server was resolved from."""
+        return self._installation
+
+    @property
+    def variant(self) -> str:
+        """The machine variant running (e.g. ``model-b``)."""
+        return self._variant
 
     @property
     def target(self) -> str:
@@ -115,6 +148,30 @@ class ServerProcess:
         """
         return self._provenance_instance_uuid
 
+    def _build_command(self) -> list[str]:
+        """The server command line. A None mos_filepath omits --mos, so the
+        server resolves its own default MOS from its ROM directory."""
+        cmd = [str(self._server_filepath)]
+        if self._mos_filepath is not None:
+            cmd.extend(["--mos", str(self._mos_filepath)])
+        cmd.extend(["--port", str(self._port)])
+        # BASIC ROM is auto-loaded by the server if present in the ROM directory.
+        # A custom BASIC filepath is configured via sideways ROM slot 15.
+        if self._basic_filepath:
+            cmd.extend(["--sideways", f"15:rom:{self._basic_filepath}"])
+        cmd.extend(
+            [
+                "--provenance-type",
+                "python-client",
+                "--provenance-uuid",
+                self._provenance_instance_uuid,
+                "--provenance-version",
+                beebium.__version__,
+            ]
+        )
+        cmd.extend(self._extra_args)
+        return cmd
+
     def start(self, timeout: float = 10.0) -> None:
         """Start the server and wait for it to be ready.
 
@@ -128,38 +185,12 @@ class ServerProcess:
             raise ServerStartupError("Server is already running")
 
         # Validate ROM files exist
-        if not self._mos_filepath.exists():
+        if self._mos_filepath is not None and not self._mos_filepath.exists():
             raise ServerStartupError(f"MOS ROM not found: {self._mos_filepath}")
         if self._basic_filepath and not self._basic_filepath.exists():
             raise ServerStartupError(f"BASIC ROM not found: {self._basic_filepath}")
 
-        # Build command line
-        cmd = [
-            str(self._server_filepath),
-            "--mos",
-            str(self._mos_filepath),
-            "--port",
-            str(self._port),
-        ]
-        # BASIC ROM is auto-loaded by the server if present in the ROM directory.
-        # If a custom BASIC filepath is provided, configure it via sideways ROM slot 15.
-        if self._basic_filepath:
-            cmd.extend(["--sideways", f"15:rom:{self._basic_filepath}"])
-
-        # Add provenance flags
-        cmd.extend(
-            [
-                "--provenance-type",
-                "python-client",
-                "--provenance-uuid",
-                self._provenance_instance_uuid,
-                "--provenance-version",
-                beebium.__version__,
-            ]
-        )
-
-        # Add any extra arguments (e.g., --tube 65C02-3MHz)
-        cmd.extend(self._extra_args)
+        cmd = self._build_command()
 
         # Start the server process
         self._process = subprocess.Popen(
@@ -339,112 +370,13 @@ class ServerProcess:
     def _find_in_repo_build(
         exe_name: str, search_dirpaths: list[Path] | None = None
     ) -> Path | None:
-        """Find the server in a build directory at or above one or more roots.
+        """Find a server binary in a checkout build directory.
 
-        Each root is searched together with every one of its ancestors, so a
-        build directory anywhere between the root and the filesystem root is
-        found. Walking every ancestor rather than counting to a fixed depth
-        cannot go stale when a directory is renamed or moved.
-
-        With no roots given the search walks up from this module's own file,
-        which resolves an editable/source checkout. A caller can instead pass
-        other roots -- the pytest plugin passes pytest's rootdir, so a client
-        installed from a wheel (whose __file__ is in site-packages, with no
-        checkout above it) still finds the freshly-built server in the checkout
-        under test.
-
-        Returns None when no build directory is found, which is the normal case
-        for an installed wheel with nothing else to search.
+        Thin wrapper over :func:`beebium.client.installation.find_in_build_tree`,
+        kept because the pytest plugin resolves the checkout build from pytest's
+        rootdir through it.
         """
-        if search_dirpaths is None:
-            search_dirpaths = [Path(__file__).resolve()]
-
-        # Build directory candidates (Unix and Windows)
-        build_dirs = [
-            "build",
-            "cmake-build-debug",
-            "cmake-build-release",
-        ]
-        if sys.platform == "win32":
-            build_dirs.extend(
-                [
-                    "build-win-x64-release",
-                    "build-win-x64-debug",
-                    "out/build/x64-Release",
-                    "out/build/x64-Debug",
-                ]
-            )
-
-        seen: set[Path] = set()
-        for start in search_dirpaths:
-            for ancestor in (start, *start.parents):
-                if ancestor in seen:
-                    continue
-                seen.add(ancestor)
-                for build_dir in build_dirs:
-                    server_dirpath = ancestor / build_dir / "src" / "server"
-                    if sys.platform == "win32":
-                        # With MSVC the executable lands in a per-config subdirectory.
-                        for config in ["Release", "Debug", ""]:
-                            candidate = server_dirpath / config / exe_name if config \
-                                else server_dirpath / exe_name
-                            if ServerProcess._is_executable(candidate):
-                                return candidate
-                    else:
-                        candidate = server_dirpath / exe_name
-                        if ServerProcess._is_executable(candidate):
-                            return candidate
-
-        return None
-
-    def _find_server(self, path: str | Path | None) -> Path:
-        """Find the beebium-model-b executable.
-
-        Search order:
-        1. Explicit path argument
-        2. BEEBIUM_SERVER environment variable
-        3. A build directory in the surrounding source checkout
-        4. PATH lookup for 'beebium-model-b'
-
-        The in-repo build deliberately outranks PATH. A developer with a
-        release of Beebium installed system-wide would otherwise test their
-        working tree's client against the installed server, which silently
-        pairs a client and server built from different protocols -- the
-        fingerprint handshake then fails at connect with no hint that the wrong
-        binary was chosen. A build directory only exists in a checkout, so
-        preferring it cannot affect an installed wheel, where step 3 finds
-        nothing and PATH is used as before.
-        """
-        # 1. Explicit path
-        if path is not None:
-            explicit = Path(path)
-            if self._is_executable(explicit):
-                return explicit
-            raise ServerNotFoundError(f"Server not found at specified path: {path}")
-
-        # 2. Environment variable
-        env_path = os.environ.get("BEEBIUM_SERVER")
-        if env_path:
-            env_server = Path(env_path)
-            if self._is_executable(env_server):
-                return env_server
-            raise ServerNotFoundError(f"BEEBIUM_SERVER points to invalid path: {env_path}")
-
-        exe_name = self._exe_name("beebium-model-b")
-
-        # 3. A build directory in the surrounding source checkout
-        in_repo = self._find_in_repo_build(exe_name)
-        if in_repo is not None:
-            return in_repo
-
-        # 4. PATH lookup
-        which_result = shutil.which(exe_name)
-        if which_result:
-            return Path(which_result)
-
-        raise ServerNotFoundError(
-            "beebium-model-b not found. Set BEEBIUM_SERVER environment variable or add beebium-model-b to PATH."
-        )
+        return find_in_build_tree(exe_name, search_dirpaths)
 
     @staticmethod
     def _find_free_port() -> int:

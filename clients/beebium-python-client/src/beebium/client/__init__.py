@@ -94,6 +94,7 @@ from beebium.client.host import (
     is_local_host,
     local_host_fingerprint,
 )
+from beebium.client.installation import ServerInstallation
 from beebium.client.system import (
     AdvertisementState,
     MachineIdentity,
@@ -128,6 +129,7 @@ __all__ = [
     "is_local_host",
     "local_host_fingerprint",
     "ProtocolMismatchError",
+    "ServerInstallation",
     "ControlKind",
     "DebuggerError",
     "DEFAULT_GRPC_PORT",

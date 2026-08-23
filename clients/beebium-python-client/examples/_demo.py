@@ -80,7 +80,7 @@ def run(
     with Beebium.launch(
         mos_filepath=mos,
         basic_filepath=args.basic or _default("bbc-basic_2.rom"),
-        server_filepath=args.server,
+        server=args.server,
         extra_args=extra_args or [],
     ) as bbc:
         demo(bbc)

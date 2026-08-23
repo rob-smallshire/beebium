@@ -104,10 +104,17 @@ with Beebium.connect() as bbc:
     bbc.debugger.stop()
     print(f"PC = ${bbc.cpu.pc:04X}")
 
-# Launch and manage a server
-with Beebium.launch(mos_filepath="acorn-mos_1_20.rom", basic_filepath="bbc-basic_2.rom") as bbc:
+# Launch and manage a server. With the `beebium-server` package installed
+# (pip install beebium beebium-server) this needs no arguments: the server is
+# found in that wheel and uses its own bundled ROMs.
+with Beebium.launch() as bbc:
     bbc.keyboard.type("PRINT 42")
     bbc.keyboard.press_return()
+
+# Or point at a specific server -- a binary, an install root, or a
+# ServerInstallation -- and supply your own ROMs:
+with Beebium.launch(server="/opt/beebium", mos_filepath="acorn-mos_1_20.rom") as bbc:
+    ...
 ```
 
 ## Features

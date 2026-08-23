@@ -10,34 +10,31 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Server discovery must prefer the checkout's own build over an installed one.
+"""Choosing a server: the explicit installation forms and the default order.
 
-A developer with a released Beebium installed system-wide would otherwise run
-their working tree's tests against the installed server. The pairing then fails
-at connect with a protocol fingerprint mismatch that says nothing about the
-wrong binary having been chosen, which is expensive to diagnose.
-
-The in-repo search previously counted a fixed number of parent directories and
-stopped one level short of the repo root, so it never matched and PATH always
-won. These tests pin the order and the fact that the search actually finds
-something.
+A wrong pairing must never be chosen silently, and when the user is specific
+that is what runs -- no fallback. When the user is not specific, resolution goes
+BEEBIUM_SERVER -> checkout build -> the beebium-server wheel -> PATH, with the
+wheel outranking PATH because it is version-locked to the client by construction.
 """
 
 from __future__ import annotations
 
 import os
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
 from beebium.client.exceptions import ServerNotFoundError
+from beebium.client.installation import (
+    VARIANTS,
+    ServerInstallation,
+    _exe_name,
+    find_in_build_tree,
+)
 from beebium.client.server import ServerProcess
-
-
-@pytest.fixture
-def finder() -> ServerProcess:
-    """A ServerProcess with no __init__ run, for exercising path resolution."""
-    return ServerProcess.__new__(ServerProcess)
 
 
 def _make_executable(dirpath: Path, name: str) -> Path:
@@ -48,148 +45,199 @@ def _make_executable(dirpath: Path, name: str) -> Path:
     return executable
 
 
-class TestInRepoBuildDiscovery:
-    """The build directory in the surrounding checkout is found and preferred."""
-
-    def test_finds_the_checkout_build(self, finder: ServerProcess) -> None:
-        """The search reaches the repo root, not merely the clients directory."""
-        found = finder._find_in_repo_build(finder._exe_name("beebium-model-b"))
-        if found is None:
-            pytest.skip("no build directory in this checkout")
-        assert found.is_file()
-        # The whole point: a path inside this checkout, not an installed one.
-        assert "beebium" in found.parts
-
-    def test_resolved_server_is_the_checkout_build(self, finder: ServerProcess) -> None:
-        """With no override, discovery lands on the checkout's own server."""
-        in_repo = finder._find_in_repo_build(finder._exe_name("beebium-model-b"))
-        if in_repo is None:
-            pytest.skip("no build directory in this checkout")
-        assert finder._find_server(None) == in_repo
+def _make_install_tree(root: Path, *, variants: tuple[str, ...] = VARIANTS, with_share: bool = True) -> Path:
+    """A prefix with bin/<all variants> and (optionally) share/beebium/{roms,presets}."""
+    for variant in variants:
+        _make_executable(root / "bin", _exe_name(variant))
+    if with_share:
+        (root / "share" / "beebium" / "roms").mkdir(parents=True, exist_ok=True)
+        (root / "share" / "beebium" / "presets").mkdir(parents=True, exist_ok=True)
+    return root
 
 
-class TestSearchRootDiscovery:
-    """A caller can supply the roots to search, not only this module's __file__.
+def _inject_fake_wheel(monkeypatch: pytest.MonkeyPatch, bundle_root: Path, *, version: str = "0.1.3") -> None:
+    """Put a fake importable `beebium.server` on sys.modules pointing at a tree,
+    so the resolution logic can be exercised without a real platform wheel."""
+    _make_install_tree(bundle_root)
+    module = types.ModuleType("beebium.server")
+    module.__version__ = version
+    module.bundle_dirpath = lambda: bundle_root
+    module.rom_dirpath = lambda: bundle_root / "share" / "beebium" / "roms"
+    module.preset_dirpath = lambda: bundle_root / "share" / "beebium" / "presets"
+    module.variants = lambda: VARIANTS
+    monkeypatch.setitem(sys.modules, "beebium.server", module)
 
-    This is what lets a client installed from a wheel -- whose __file__ is in
-    site-packages, with no checkout above it -- still find the checkout's own
-    build, by searching from pytest's rootdir instead.
-    """
 
-    def test_build_found_under_an_explicit_root(
-        self, finder: ServerProcess, tmp_path: Path
-    ) -> None:
-        """A build directory below a supplied root is found, independent of
-        where this module happens to live."""
+class TestFindInBuildTree:
+    """The checkout build search, reused by the pytest plugin from rootdir."""
+
+    def test_build_found_at_and_above_a_root(self, tmp_path: Path) -> None:
         checkout = tmp_path / "checkout"
-        build_server = _make_executable(
-            checkout / "build" / "src" / "server",
-            finder._exe_name("beebium-model-b"),
-        )
-        found = finder._find_in_repo_build(
-            finder._exe_name("beebium-model-b"), [checkout]
-        )
-        assert found == build_server
-
-    def test_build_found_above_an_explicit_root(
-        self, finder: ServerProcess, tmp_path: Path
-    ) -> None:
-        """The supplied root's ancestors are searched too, so rootdir need not
-        be the repo root -- it is typically the client subdirectory."""
-        checkout = tmp_path / "checkout"
-        build_server = _make_executable(
-            checkout / "build" / "src" / "server",
-            finder._exe_name("beebium-model-b"),
-        )
+        server = _make_executable(checkout / "build" / "src" / "server", _exe_name("model-b"))
+        assert find_in_build_tree(_exe_name("model-b"), [checkout]) == server
         rootdir = checkout / "clients" / "beebium-python-client"
         rootdir.mkdir(parents=True)
-        found = finder._find_in_repo_build(
-            finder._exe_name("beebium-model-b"), [rootdir]
-        )
-        assert found == build_server
+        assert find_in_build_tree(_exe_name("model-b"), [rootdir]) == server
 
-    def test_explicit_root_build_beats_path(
-        self, finder: ServerProcess, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The checkout build resolved from a supplied root outranks a server on
-        PATH -- the wheel-install case the pytest plugin depends on."""
-        checkout = tmp_path / "checkout"
-        build_server = _make_executable(
-            checkout / "build" / "src" / "server",
-            finder._exe_name("beebium-model-b"),
-        )
-        installed_dirpath = tmp_path / "installed"
-        _make_executable(installed_dirpath, finder._exe_name("beebium-model-b"))
-        monkeypatch.setenv(
-            "PATH", f"{installed_dirpath}{os.pathsep}{os.environ.get('PATH', '')}"
-        )
-        monkeypatch.delenv("BEEBIUM_SERVER", raising=False)
+    def test_no_build_returns_none(self, tmp_path: Path) -> None:
+        assert find_in_build_tree(_exe_name("model-b"), [tmp_path]) is None
 
-        # The plugin resolves the checkout build from rootdir, then passes it as
-        # the explicit server path -- which the precedence rules put above PATH.
-        resolved = finder._find_in_repo_build(
-            finder._exe_name("beebium-model-b"), [checkout]
-        )
-        assert finder._find_server(resolved) == build_server
-
-    def test_no_build_under_root_returns_none(
-        self, finder: ServerProcess, tmp_path: Path
-    ) -> None:
-        """An empty tree (the installed-wheel-with-no-checkout case) yields
-        None so discovery can fall through to PATH."""
-        assert (
-            finder._find_in_repo_build(
-                finder._exe_name("beebium-model-b"), [tmp_path]
-            )
-            is None
-        )
+    def test_serverprocess_delegates(self, tmp_path: Path) -> None:
+        server = _make_executable(tmp_path / "build" / "src" / "server", _exe_name("model-b"))
+        assert ServerProcess._find_in_repo_build(_exe_name("model-b"), [tmp_path]) == server
 
 
-class TestDiscoveryPrecedence:
-    """Explicit choices outrank discovery; discovery outranks PATH."""
+class TestExplicitForms:
+    """When the user is specific, that installation is what runs."""
 
-    def test_explicit_path_wins(self, finder: ServerProcess, tmp_path: Path) -> None:
-        explicit = _make_executable(tmp_path, finder._exe_name("beebium-model-b"))
-        assert finder._find_server(explicit) == explicit
+    def test_from_root_prefix(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "inst")
+        installation = ServerInstallation.from_root(root)
+        assert installation.executable_filepath().name == _exe_name("model-b")
+        assert installation.executable_filepath("model-b-plus").name == _exe_name("model-b-plus")
+        assert installation.variants() == VARIANTS
+        assert installation.rom_dirpath == root / "share" / "beebium" / "roms"
+        assert installation.preset_dirpath == root / "share" / "beebium" / "presets"
 
-    def test_explicit_missing_path_is_an_error(
-        self, finder: ServerProcess, tmp_path: Path
-    ) -> None:
+    def test_from_root_accepts_a_bin_directory(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "inst")
+        installation = ServerInstallation.from_root(root / "bin")
+        assert installation.root_dirpath == root
+        assert installation.rom_dirpath == root / "share" / "beebium" / "roms"
+
+    def test_from_root_without_binaries_is_an_error(self, tmp_path: Path) -> None:
+        (tmp_path / "empty").mkdir()
         with pytest.raises(ServerNotFoundError):
-            finder._find_server(tmp_path / "nonexistent")
+            ServerInstallation.from_root(tmp_path / "empty")
 
-    def test_environment_variable_wins_over_in_repo_build(
-        self, finder: ServerProcess, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """BEEBIUM_SERVER remains the way to test against a different build."""
-        override = _make_executable(tmp_path, finder._exe_name("beebium-model-b"))
-        monkeypatch.setenv("BEEBIUM_SERVER", str(override))
-        assert finder._find_server(None) == override
+    def test_from_executable_returns_the_exact_binary(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bare", _exe_name("model-b"))
+        installation = ServerInstallation.from_executable(binary)
+        assert installation.executable_filepath() == binary
+        # A bare binary has no share/ tree, so no ROM/preset dirs.
+        assert installation.rom_dirpath is None and installation.preset_dirpath is None
+        assert installation.variants() == ("model-b",)
 
-    def test_invalid_environment_variable_is_an_error(
-        self, finder: ServerProcess, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A wrong BEEBIUM_SERVER fails loudly rather than falling through.
-
-        Silently falling back would reintroduce the failure this guards against.
-        """
-        monkeypatch.setenv("BEEBIUM_SERVER", str(tmp_path / "nonexistent"))
+    def test_from_executable_missing_binary_is_an_error(self, tmp_path: Path) -> None:
         with pytest.raises(ServerNotFoundError):
-            finder._find_server(None)
+            ServerInstallation.from_executable(tmp_path / "nonexistent")
 
-    def test_in_repo_build_wins_over_path(
-        self, finder: ServerProcess, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """An installed server on PATH must not shadow the checkout's build."""
-        in_repo = finder._find_in_repo_build(finder._exe_name("beebium-model-b"))
-        if in_repo is None:
-            pytest.skip("no build directory in this checkout")
+    def test_missing_variant_error_names_the_installation(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bare", _exe_name("model-b"))
+        installation = ServerInstallation.from_executable(binary)
+        with pytest.raises(ServerNotFoundError) as excinfo:
+            installation.executable_filepath("model-b-plus")
+        assert "explicit executable" in str(excinfo.value)
 
-        installed_dirpath = tmp_path / "installed"
-        _make_executable(installed_dirpath, finder._exe_name("beebium-model-b"))
-        monkeypatch.setenv(
-            "PATH", f"{installed_dirpath}{os.pathsep}{os.environ.get('PATH', '')}"
-        )
+    def test_unknown_variant_is_a_value_error(self, tmp_path: Path) -> None:
+        installation = ServerInstallation.from_root(_make_install_tree(tmp_path / "inst"))
+        with pytest.raises(ValueError):
+            installation.executable_filepath("model-c")
+
+    def test_coerce_directory_and_file(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "inst")
+        assert ServerInstallation.coerce(str(root)).origin == "install root"
+        assert ServerInstallation.coerce(root / "bin" / _exe_name("model-b")).origin == "explicit executable"
+        # An installation passes through unchanged.
+        installation = ServerInstallation.from_root(root)
+        assert ServerInstallation.coerce(installation) is installation
+
+    def test_executable_permission_is_repaired(self, tmp_path: Path) -> None:
+        if sys.platform == "win32":
+            pytest.skip("no execute bit on Windows")
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        binary.chmod(0o644)  # drop the execute bit
+        installation = ServerInstallation.from_root(tmp_path)
+        resolved = installation.executable_filepath()
+        assert os.access(resolved, os.X_OK)
+
+
+class TestDefaultResolution:
+    """BEEBIUM_SERVER -> checkout build -> wheel -> PATH, when not specific."""
+
+    @pytest.fixture(autouse=True)
+    def _no_checkout_build(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Neutralise the checkout-build step so this machine's own repo build
+        # does not short-circuit the wheel/PATH ordering under test.
+        monkeypatch.setattr("beebium.client.installation.find_in_build_tree", lambda *a, **k: None)
+
+    def test_env_var_beats_the_wheel(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _inject_fake_wheel(monkeypatch, tmp_path / "wheel")
+        env_server = _make_executable(tmp_path / "env", _exe_name("model-b"))
+        monkeypatch.setenv("BEEBIUM_SERVER", str(env_server))
+        installation = ServerInstallation.default()
+        assert installation.origin == "BEEBIUM_SERVER"
+        assert installation.executable_filepath() == env_server
+
+    def test_wheel_beats_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("BEEBIUM_SERVER", raising=False)
+        _inject_fake_wheel(monkeypatch, tmp_path / "wheel")
+        on_path = tmp_path / "onpath"
+        _make_executable(on_path, _exe_name("model-b"))
+        monkeypatch.setenv("PATH", f"{on_path}{os.pathsep}{os.environ.get('PATH', '')}")
+        installation = ServerInstallation.default()
+        assert installation.origin == "beebium-server wheel"
 
-        assert finder._find_server(None) == in_repo
+    def test_path_used_when_no_wheel(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BEEBIUM_SERVER", raising=False)
+        monkeypatch.delitem(sys.modules, "beebium.server", raising=False)
+        monkeypatch.setattr(
+            ServerInstallation, "installed_wheel",
+            classmethod(lambda cls: (_ for _ in ()).throw(ImportError())),
+        )
+        on_path = tmp_path / "onpath"
+        _make_executable(on_path, _exe_name("model-b"))
+        monkeypatch.setenv("PATH", f"{on_path}{os.pathsep}{os.environ.get('PATH', '')}")
+        installation = ServerInstallation.default()
+        assert installation.origin == "PATH"
+
+    def test_nothing_found_is_an_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BEEBIUM_SERVER", raising=False)
+        monkeypatch.setattr(
+            ServerInstallation, "installed_wheel",
+            classmethod(lambda cls: (_ for _ in ()).throw(ImportError())),
+        )
+        monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+        with pytest.raises(ServerNotFoundError):
+            ServerInstallation.default()
+
+    def test_wheel_version_skew_warns(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BEEBIUM_SERVER", raising=False)
+        _inject_fake_wheel(monkeypatch, tmp_path / "wheel", version="9.9.9")
+        with pytest.warns(UserWarning, match="differs from the beebium client"):
+            ServerInstallation.default()
+
+
+class TestServerProcessIntegration:
+    """ServerProcess resolves an installation and honours server=/variant=/mos."""
+
+    def test_deprecated_server_filepath_alias_warns(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        with pytest.warns(DeprecationWarning, match="server_filepath="):
+            process = ServerProcess(server_filepath=binary)
+        assert process.server_filepath == binary
+
+    def test_server_and_alias_together_is_an_error(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        with pytest.raises(ValueError):
+            ServerProcess(server=binary, server_filepath=binary)
+
+    def test_variant_selects_the_binary(self, tmp_path: Path) -> None:
+        root = _make_install_tree(tmp_path / "inst")
+        process = ServerProcess(server=root, variant="model-b-plus")
+        assert process.server_filepath.name == _exe_name("model-b-plus")
+        assert process.variant == "model-b-plus"
+        assert process.installation.origin == "install root"
+
+    def test_mos_omitted_from_command_when_none(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        process = ServerProcess(server=binary)
+        assert "--mos" not in process._build_command()
+
+    def test_mos_included_when_given(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        mos = tmp_path / "mos.rom"
+        mos.write_bytes(b"\x00" * 16)
+        process = ServerProcess(server=binary, mos_filepath=mos)
+        command = process._build_command()
+        assert "--mos" in command and str(mos) in command

@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import time
 import uuid
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -45,6 +46,7 @@ from beebium.client.extension_rpc import ExtensionChannel
 from beebium.client.extension_ui import ExtensionUi
 from beebium.client.extensions import Extensions
 from beebium.client.indicators import Indicators
+from beebium.client.installation import ServerInstallation
 from beebium.client.keyboard import Keyboard
 from beebium.client.latch import AddressableLatch
 from beebium.client.memory import Memory
@@ -171,8 +173,10 @@ class Beebium:
     @contextlib.contextmanager
     def launch(
         cls,
-        mos_filepath: str | Path,
+        mos_filepath: str | Path | None = None,
         basic_filepath: str | Path | None = None,
+        server: ServerInstallation | str | Path | None = None,
+        variant: str = "model-b",
         server_filepath: str | Path | None = None,
         port: int = 0,
         startup_timeout: float = 10.0,
@@ -184,9 +188,16 @@ class Beebium:
         The server is automatically stopped when the context manager exits.
 
         Args:
-            mos_filepath: Path to the MOS ROM file (required).
+            mos_filepath: Path to the MOS ROM file. When None (the default), the
+                server resolves its own default MOS from its ROM directory, so a
+                wheel/bundle install launches with no arguments.
             basic_filepath: Path to the BASIC ROM file (optional).
-            server_filepath: Path to the beebium-server executable (optional).
+            server: which server to run -- a ServerInstallation, a path to a
+                binary, or a path to an install root. When None, the default
+                resolution applies (BEEBIUM_SERVER, checkout build, the
+                beebium-server wheel, then PATH).
+            variant: the machine variant to run ("model-b" default).
+            server_filepath: deprecated alias for ``server=`` (a binary path).
             port: Port to listen on. If 0 (default), a free port is allocated.
             startup_timeout: Maximum time to wait for server to start (seconds).
             connection_timeout: Maximum time to wait for connection (seconds).
@@ -200,36 +211,51 @@ class Beebium:
             ServerStartupError: If the server fails to start.
             ConnectionError: If the connection cannot be established.
         """
-        server = ServerProcess(
+        # Handle the deprecated alias here so the warning points at the caller's
+        # launch() line, and pass server= to ServerProcess (no double warning).
+        if server_filepath is not None:
+            if server is not None:
+                raise ValueError("pass server=, not both server= and the deprecated server_filepath=")
+            warnings.warn(
+                "server_filepath= is deprecated; use server= (a ServerInstallation, "
+                "a binary path, or an install root)",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            server = server_filepath
+
+        process = ServerProcess(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=server,
+            variant=variant,
             port=port,
             extra_args=extra_args,
         )
 
         try:
-            server.start(timeout=startup_timeout)
-            connection = Connection(server.target, timeout=connection_timeout)
+            process.start(timeout=startup_timeout)
+            connection = Connection(process.target, timeout=connection_timeout)
             # Use the server's provenance UUID so this client is authorized
             # to request shutdown (matches launch provenance).
             client = cls(
                 connection,
-                server=server,
-                instance_uuid=server.provenance_instance_uuid,
+                server=process,
+                instance_uuid=process.provenance_instance_uuid,
             )
-            client._verify_protocol()
+            client._verify_protocol(installation_description=process.installation.describe())
             yield client
         finally:
-            server.stop()
+            process.stop()
 
-    def _verify_protocol(self) -> None:
+    def _verify_protocol(self, installation_description: str | None = None) -> None:
         """Assert the server's wire protocol matches this client's.
 
         Compares the server's protocol fingerprint (from GetSystemInfo) to the
         client's compiled-in fingerprint and raises on any mismatch, so an
         incompatible pairing fails clearly at connect rather than cryptically
-        mid-call later.
+        mid-call later. When launching, ``installation_description`` names the
+        installation that was chosen, so a wrong pairing points at it.
         """
         server_fingerprint = self.system.protocol_fingerprint
         if server_fingerprint != PROTOCOL_FINGERPRINT:
@@ -241,8 +267,9 @@ class Beebium:
             # were not. Two hex strings cannot answer that; a path can.
             executable = self.system.executable_path
             where = f" at {executable}" if executable else f" on {self.target}"
+            chosen = f" (chosen: {installation_description})" if installation_description else ""
             raise ProtocolMismatchError(
-                f"Server{where} has protocol fingerprint {reported}, which "
+                f"Server{where}{chosen} has protocol fingerprint {reported}, which "
                 f"does not match this client's {PROTOCOL_FINGERPRINT}. "
                 f"Install a server and client built from the same protocol."
             )
