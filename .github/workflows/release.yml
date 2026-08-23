@@ -59,7 +59,7 @@ jobs:
   # genuinely consumes the server builds, so it needs `linux`.
   server-wheels:
     name: build server wheels
-    needs: [linux, windows]
+    needs: [linux, windows, macos-bundle]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -72,15 +72,17 @@ jobs:
           path: _bundles
           merge-multiple: true
 
-      - name: Build the Linux and Windows server wheels
+      - name: Build the server wheels for every platform
         working-directory: packaging/python-server
         run: |
           set -euo pipefail
           V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
-          python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-linux-amd64.tar.gz" manylinux_2_36_x86_64
-          python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-linux-arm64.tar.gz" manylinux_2_36_aarch64
-          python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-windows-x64.zip" win_amd64
-          echo "macOS server wheels: skipped (no macOS bundle yet)"
+          B="${GITHUB_WORKSPACE}/_bundles"
+          python build_wheel.py "${B}/beebium-server-${V}-linux-amd64.tar.gz"  manylinux_2_36_x86_64
+          python build_wheel.py "${B}/beebium-server-${V}-linux-arm64.tar.gz"  manylinux_2_36_aarch64
+          python build_wheel.py "${B}/beebium-server-${V}-macos-arm64.tar.gz"  macosx_11_0_arm64
+          python build_wheel.py "${B}/beebium-server-${V}-macos-x86_64.tar.gz" macosx_12_0_x86_64
+          python build_wheel.py "${B}/beebium-server-${V}-windows-x64.zip"     win_amd64
           ls -l dist
 
       # Publish-boundary gate: the exact wheel set, with the right platform tags,
@@ -94,6 +96,8 @@ jobs:
           expected="$(printf '%s\n' \
             "beebium_server-${V}-py3-none-manylinux_2_36_x86_64.whl" \
             "beebium_server-${V}-py3-none-manylinux_2_36_aarch64.whl" \
+            "beebium_server-${V}-py3-none-macosx_11_0_arm64.whl" \
+            "beebium_server-${V}-py3-none-macosx_12_0_x86_64.whl" \
             "beebium_server-${V}-py3-none-win_amd64.whl" | sort)"
           actual="$(ls -1 *.whl | sort)"
           if [ "${expected}" != "${actual}" ]; then
@@ -134,6 +138,12 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
             tag: manylinux_2_36_aarch64
+          - arch: macos-arm64
+            runner: macos-14
+            tag: macosx_11_0_arm64
+          - arch: macos-x86_64
+            runner: macos-15-intel
+            tag: macosx_12_0_x86_64
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v8.0.0

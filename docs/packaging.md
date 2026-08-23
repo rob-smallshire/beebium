@@ -596,48 +596,52 @@ A wheel is a **repackaging** of the release bundle, not a new compile:
 the `.tar.gz`/`.zip` verbatim into `beebium/server/_bundle/` and emits
 `beebium_server-<ver>-py3-none-<platform-tag>.whl`, so the server bytes are
 byte-identical to the GitHub Release and have passed the same install-smoke
-layers. One wheel per OS/arch: Linux uses the PEP 600 tags
-`manylinux_2_36_{x86_64,aarch64}` for the bookworm glibc floor the bundles are
-built against, and Windows uses `win_amd64` (repackaged from the self-contained
-`.zip`; the binaries append `.exe`, the plugin DLLs sit beside the exes, and
-there is no `lib/` — `build_wheel.py` preserves that exe-relative layout).
+layers. One wheel per OS/arch across all five platforms: Linux uses the PEP 600
+tags `manylinux_2_36_{x86_64,aarch64}` for the bookworm glibc floor the bundles
+are built against; macOS uses `macosx_11_0_arm64` / `macosx_12_0_x86_64` (the
+deployment floors the bundle build sets — see below); and Windows uses
+`win_amd64` (repackaged from the self-contained `.zip`; the binaries append
+`.exe`, the plugin DLLs sit beside the exes, and there is no `lib/` —
+`build_wheel.py` preserves that exe-relative layout).
 
 In `release.yml`:
 
-- **`server-wheels`** (needs `linux` and `windows`) downloads the `bundle-*`
-  artifacts, builds the two Linux wheels and the Windows wheel, and — a
-  publish-boundary gate before upload — asserts the exact wheel set with the
-  right platform tags and that each wheel contains all four server binaries (the
-  Windows wheel's carry the `.exe` suffix).
-- **`verify-server-wheels`** (a per-arch matrix on `ubuntu-latest` /
-  `ubuntu-24.04-arm`) and **`verify-server-wheels-windows`** (`windows-2022`)
-  install the matching server wheel plus the **client wheel built from the same
-  checkout** into a fresh venv, then prove the whole user path: `import
-  beebium.server`, that `ServerInstallation.default()` resolves to the wheel with
-  no environment set, and `packaging/smoke/test_smoke.py` launching the wheel's
-  server with no arguments. Linux also runs `smoke-installed-tree.sh` against the
-  installed `_bundle`; Windows has no bash equivalent, so the `beebium-model-b`
-  console-script shim (which runs the exe and loads every plugin DLL) plus the
-  full boot in `test_smoke.py` stand in for it.
+- **`server-wheels`** (needs `linux`, `windows` and `macos-bundle`) downloads the
+  `bundle-*` artifacts, builds all five wheels, and — a publish-boundary gate
+  before upload — asserts the exact wheel set with the right platform tags and
+  that each wheel contains all four server binaries (the Windows wheel's carry
+  the `.exe` suffix).
+- **`verify-server-wheels`** (a matrix on `ubuntu-latest` / `ubuntu-24.04-arm` /
+  `macos-14` / `macos-15-intel`) and **`verify-server-wheels-windows`**
+  (`windows-2022`) install the matching server wheel plus the **client wheel
+  built from the same checkout** into a fresh venv, then prove the whole user
+  path: `import beebium.server`, that `ServerInstallation.default()` resolves to
+  the wheel with no environment set, and `packaging/smoke/test_smoke.py`
+  launching the wheel's server with no arguments. Linux and macOS also run
+  `smoke-installed-tree.sh` against the installed `_bundle`; Windows has no bash
+  equivalent, so the `beebium-model-b` console-script shim (which runs the exe
+  and loads every plugin DLL) plus the full boot in `test_smoke.py` stand in for
+  it. The macOS legs are where ad-hoc signing is proven on real runners:
+  pip-installed binaries carry no quarantine attribute, so they execute without
+  a Gatekeeper prompt.
 - **`publish-server-wheels.yml`** (reusable + dispatch, PyPI Trusted Publishing
   in the `pypi`/`testpypi` environment) publishes the verified wheels. Unlike the
-  client publish it genuinely needs the server builds, so it runs only after both
-  verification legs pass, and asserts each wheel's version matches the tag.
+  client publish it genuinely needs the server builds, so it runs only after all
+  five verification legs pass, and asserts each wheel's version matches the tag.
 
-**Staging.** Linux and Windows wheels ship today. The two macOS wheels join once
-a relocatable macOS bundle exists (see the design doc, sections 4.2 and 7); until
-then `server-wheels` logs macOS as an explicit "skipped: no macOS bundle yet"
-line rather than silently omitting it. The `beebium[server]` extra (a pin to the
-exact same version) is deferred — an exact pin on a sibling published later in
-the same release cannot resolve during the release window (see the design doc,
-section 5.3); the two-package `pip install beebium beebium-server` is the
-supported one-line-ish form.
+**macOS deployment floor.** The `*-osx-static` triplets set no deployment target,
+so the cached vcpkg static deps' object files carry whatever `minos` the CI
+runner's macOS had. But `ld64` sets the final binary's `LC_BUILD_VERSION minos`
+from the link flag, not the input objects, so `macos-bundle.yml` sets an explicit
+`CMAKE_OSX_DEPLOYMENT_TARGET` (11.0 arm64 — the first Apple-Silicon macOS; 12.0
+x86_64 — a defensible modern Intel floor) *while still reusing CI's warm caches*,
+and asserts the built binary's `minos` equals it. The wheel tag matches that
+floor, so it is honest.
 
-The Windows wheel currently ships no presets: the Windows `.zip` bundle carries
-an empty `share/beebium/presets/` (a bundle regression, tracked separately), and
-an empty directory does not survive into a wheel, so `beebium.server`'s
-`preset_dirpath()` is absent there. The packaging test skips with that reason on
-Windows and requires real presets everywhere they are shipped.
+The `beebium[server]` extra (a pin to the exact same version) is deferred — an
+exact pin on a sibling published later in the same release cannot resolve during
+the release window (see the design doc, section 5.3); the two-package `pip
+install beebium beebium-server` is the supported one-line-ish form.
 
 ## CI
 

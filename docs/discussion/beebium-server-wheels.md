@@ -1,8 +1,12 @@
 # Shipping the emulator on PyPI: `beebium-server` platform wheels
 
-Status: design, August 2026. Follows section 9 of
-`python-client-architecture.md`, which recorded the idea; this document settles
-the shape. Nothing here is implemented yet.
+Status: implemented, August 2026 — all five platform wheels ship
+(`manylinux_2_36_{x86_64,aarch64}`, `macosx_11_0_arm64`, `macosx_12_0_x86_64`,
+`win_amd64`), built and verified in `release.yml` and published to PyPI as
+`beebium-server`. Follows section 9 of `python-client-architecture.md`, which
+recorded the idea; this document settled the shape. The `beebium[server]` extra
+(section 5.3) is deliberately deferred; the operational details live in
+`docs/packaging.md`.
 
 ## 1. Goal
 
