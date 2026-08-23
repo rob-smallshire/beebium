@@ -6,8 +6,12 @@
 #
 #   - vcpkg.json                      (the dependency manifest + builtin-baseline)
 #   - triplets/                       (the static triplet overlays)
-#   - docker/linux-bundle/Dockerfile  (pins the vcpkg commit and defines the
-#                                       dependency-install stage)
+#   - the Dockerfile's build-env stage (the text up to the
+#                                       `FROM ${BUILDENV_IMAGE}` line -- it pins
+#                                       the vcpkg commit and installs the deps).
+#                                       The later builder/artifact stages are
+#                                       deliberately excluded, so a source-build
+#                                       change does not rotate the tag.
 #
 # The hash is architecture-independent: the recipe is identical for amd64 and
 # arm64, so callers append the arch to the image tag (e.g. "<hash>-arm64") to
@@ -30,13 +34,19 @@ sha256() {
     fi
 }
 
-# Hash the manifest and Dockerfile by content+path, then every triplet overlay
-# (sorted, so the order find returns them in cannot change the result), and fold
-# all of that into a single digest.
+# The build-env stage is everything before the `FROM ${BUILDENV_IMAGE}` line;
+# hashing only it means edits to the later builder/artifact stages do not rotate
+# the tag. (If the marker is ever absent, awk prints the whole file, which
+# over-invalidates safely rather than under-invalidating.)
+buildenv_stage="$(awk '/^FROM \$\{BUILDENV_IMAGE\}/ {exit} {print}' docker/linux-bundle/Dockerfile)"
+
+# Hash the manifest and the build-env stage by content, then every triplet
+# overlay (sorted, so the order find returns them in cannot change the result),
+# and fold all of that into a single digest.
 tag="$(
     {
         sha256 <vcpkg.json
-        sha256 <docker/linux-bundle/Dockerfile
+        printf '%s' "$buildenv_stage" | sha256
         find triplets -type f | LC_ALL=C sort | while IFS= read -r f; do
             printf '%s\n' "$f"
             sha256 <"$f"
