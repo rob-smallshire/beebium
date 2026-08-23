@@ -1,8 +1,9 @@
 # Build and publish the Python client (the `beebium` distribution) to PyPI.
 #
-# Called from release.yml when a version tag is pushed, after the server
-# packages have built, so the client on PyPI and the servers on GitHub are
-# always cut from the same tag (the protocol-fingerprint handshake is strict:
+# Called from release.yml when a version tag is pushed, in parallel with the
+# server builds (it uses nothing they produce). The client on PyPI and the
+# servers on GitHub are always cut from the same tag because they share the ref,
+# not because this waits for them (the protocol-fingerprint handshake is strict:
 # a client only talks to a server built from the same protos). It can also be
 # run by hand (Actions > Publish Python client > Run workflow) to publish a
 # chosen ref to PyPI or TestPyPI.

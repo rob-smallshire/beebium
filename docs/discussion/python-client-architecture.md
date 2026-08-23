@@ -441,10 +441,11 @@ subsequent phase is validated the right way.
 `beebium` distribution and publishes them with **PyPI Trusted Publishing
 (OIDC)** via `uv publish --trusted-publishing always` -- no long-lived token is
 stored. It is a reusable workflow: `release.yml` calls it on every pushed `v*`
-tag after the server packages have built (so the client on PyPI and the servers
-on GitHub/Homebrew/Scoop are cut from one tag, as the strict protocol
-fingerprint handshake requires), and it can be dispatched by hand against
-PyPI or TestPyPI for a chosen ref.
+tag in parallel with the server builds -- it uses nothing they produce, so it
+publishes as soon as its own gates pass rather than waiting on them (the client
+on PyPI and the servers on GitHub/Homebrew/Scoop are cut from one tag because
+they share the ref, as the strict protocol fingerprint handshake requires), and
+it can be dispatched by hand against PyPI or TestPyPI for a chosen ref.
 
 Gates before upload: the "generated == committed" proto check, the wheel
 packaging suite run against the installed wheel (`scripts/test-wheel.sh`),

@@ -8,9 +8,10 @@
 #   2. builds, tests and audits the macOS Homebrew formula (both arches),
 #   3. builds the self-contained Windows .zip (x64),
 #   4. creates a DRAFT GitHub Release with the Linux and Windows artifacts,
-#   5. publishes the Python client to PyPI (publish-python.yml), once the
-#      server packages have all built, so client and servers are cut from the
-#      same tag.
+#   5. publishes the Python client to PyPI (publish-python.yml) as soon as its
+#      own gates pass, in parallel with the server builds -- it needs nothing
+#      they produce. Client and servers are cut from the same tag because they
+#      share the ref, not because one waits for the other.
 #
 # The release is left as a DRAFT on purpose: nothing is published until you
 # review it and click publish. The macOS server is delivered via the Homebrew
@@ -44,8 +45,12 @@ jobs:
   pypi:
     # PyPI uploads are permanent, so only a pushed version tag publishes; a
     # manual dispatch of this workflow builds the server packages only.
+    #
+    # No `needs`: the Python client uses nothing the server bundles produce, so
+    # it publishes as soon as its own gates pass rather than waiting ~1h for
+    # them. Client and servers are cut from the same tag because they share the
+    # ref, not because this job is ordered after the builds.
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, macos-formula, windows]
     uses: ./.github/workflows/publish-python.yml
     with:
       repository: pypi
