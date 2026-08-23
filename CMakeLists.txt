@@ -137,11 +137,14 @@ if(BEEBIUM_BUILD_TESTS)
 
     # Defer Catch2's test discovery from build time to ctest time on Windows.
     # The default POST_BUILD mode runs each test executable once during the
-    # build to enumerate test cases, but that happens BEFORE vcpkg's
-    # applocal.ps1 has copied the required DLLs (protobuf, grpc, absl, ...)
-    # next to the .exe, so discovery fails with exit code 0xc0000135
-    # (STATUS_DLL_NOT_FOUND). PRE_TEST runs discovery at `ctest` invocation
-    # instead, by which time the DLLs are in place.
+    # build to enumerate its cases, but the test .exes load beebium's own
+    # beebium_extension_api.dll (a SHARED library -- the plugin ABI boundary),
+    # which the CI job copies next to them only just before invoking ctest. At
+    # build time it is absent, so POST_BUILD discovery fails with exit code
+    # 0xc0000135 (STATUS_DLL_NOT_FOUND). PRE_TEST runs discovery at `ctest`
+    # invocation instead, by which time the DLL is in place. (The static-md
+    # build links gRPC/protobuf/abseil into the .exes, so vcpkg DLLs are no
+    # longer a factor; the remaining runtime DLL is our extension API.)
     if(WIN32)
         set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE "PRE_TEST")
     endif()

@@ -3,9 +3,12 @@
 # `-B build` configure). vcpkg is cloned inside the image, so the repo .git is
 # not needed either.
 # Exclude every host build directory (build/, build-linux/, build-debug/,
-# build-release/, ...). The container configures its own ./build internally;
-# copying host build trees in both bloats the context and can fill the VM disk.
+# build-release/, ...) plus CLion's cmake-build-* trees, which `build*/` does
+# not match. The container configures its own ./build internally; copying host
+# build trees in both bloats the context and can fill the VM disk (a 1.3 GB
+# cmake-build-debug/ was seen doing exactly that).
 build*/
+cmake-build-*/
 .git/
 _artifacts/
 **/node_modules/

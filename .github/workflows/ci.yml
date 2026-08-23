@@ -540,7 +540,18 @@ jobs:
       packages: write
 
     env:
-      VCPKG_DEFAULT_TRIPLET: x64-windows
+      # Build and test the SAME static triplet the release ships
+      # (windows-package.yml), so everyday CI keeps that triplet warm in the
+      # shared NuGet binary cache and exercises the configuration we distribute
+      # -- rather than a dynamic x64-windows the release never uses.
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
+      # Build the tooling (protoc, grpc_cpp_plugin) with the same static,
+      # release-only triplet as the target. Static libs + dynamic CRT still run,
+      # and sharing host=target avoids a second, native x64-windows (debug+release)
+      # build of the whole gRPC/protobuf/abseil stack just to obtain them.
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
+      # The committed overlay triplet (static libs + dynamic CRT, release-only).
+      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
       # Pin vcpkg's tool/source download root to a cacheable path. vcpkg
       # downloads its own pinned PowerShell-core here during compiler-hash
       # detection, and that GitHub release URL intermittently 504s; caching
@@ -583,6 +594,8 @@ jobs:
               -A x64 `
               -DCMAKE_TOOLCHAIN_FILE="${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" `
               -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALLED_DIR}" `
+              -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
+              -DVCPKG_HOST_TRIPLET=x64-windows-static-md `
               -DVCPKG_MANIFEST_INSTALL=OFF `
               -DBEEBIUM_BUILD_TESTS=ON `
               -DBEEBIUM_BUILD_SERVICE=ON `
@@ -649,14 +662,23 @@ jobs:
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Check executable dependencies
-        run: dumpbin /dependents build\src\server\Release\beebium-model-b.exe
-
-      - name: Copy runtime DLLs to Release folder
+      # With the static-md triplet, gRPC/protobuf/abseil/OpenSSL are linked into
+      # the executables, so there are no vcpkg runtime DLLs to copy next to them
+      # (only the MSVC CRT stays dynamic, and it is present on any target). Assert
+      # that -- the same self-containment check the release build makes -- so a
+      # regression to a dynamic dependency fails here rather than in the release.
+      - name: Verify self-containment
         run: |
-          Copy-Item "$env:VCPKG_INSTALLED_DIR\x64-windows\bin\*.dll" -Destination "build\src\server\Release\" -Force
+          $exe = "build\src\server\Release\beebium-model-b.exe"
+          dumpbin /dependents $exe
+          $deps = dumpbin /dependents $exe
+          if ($deps | Select-String -Pattern 'grpc|protobuf|absl|abseil|re2|cares|libcrypto|libssl' -CaseSensitive:$false) {
+            Write-Host "::error::server links a dynamic gRPC/protobuf/abseil/OpenSSL DLL; the static-md build is not self-contained"
+            exit 1
+          }
+          Write-Host "self-contained: no gRPC/protobuf/abseil DLL dependencies"
 
-      - name: Upload server binary with DLLs
+      - name: Upload server binary
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
         if: always()
