@@ -53,29 +53,29 @@ jobs:
   # compile: the server bytes are the tarball's). This is the one Python job that
   # genuinely consumes the server builds, so it needs `linux`.
   server-wheels:
-    name: build Linux server wheels
-    needs: linux
+    name: build server wheels
+    needs: [linux, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v8.0.0
 
-      - name: Download the Linux bundle artifacts
+      - name: Download the bundle artifacts
         uses: actions/download-artifact@v8
         with:
           pattern: bundle-*
           path: _bundles
           merge-multiple: true
 
-      - name: Build both Linux server wheels
+      - name: Build the Linux and Windows server wheels
         working-directory: packaging/python-server
         run: |
           set -euo pipefail
           V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
           python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-linux-amd64.tar.gz" manylinux_2_36_x86_64
           python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-linux-arm64.tar.gz" manylinux_2_36_aarch64
+          python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-windows-x64.zip" win_amd64
           echo "macOS server wheels: skipped (no macOS bundle yet)"
-          echo "Windows server wheel: skipped (win_amd64 wheel not built yet)"
           ls -l dist
 
       # Publish-boundary gate: the exact wheel set, with the right platform tags,
@@ -88,16 +88,19 @@ jobs:
           V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
           expected="$(printf '%s\n' \
             "beebium_server-${V}-py3-none-manylinux_2_36_x86_64.whl" \
-            "beebium_server-${V}-py3-none-manylinux_2_36_aarch64.whl" | sort)"
+            "beebium_server-${V}-py3-none-manylinux_2_36_aarch64.whl" \
+            "beebium_server-${V}-py3-none-win_amd64.whl" | sort)"
           actual="$(ls -1 *.whl | sort)"
           if [ "${expected}" != "${actual}" ]; then
             echo "::error::server wheel set mismatch"
             diff <(echo "${expected}") <(echo "${actual}") || true
             exit 1
           fi
+          # Each wheel carries all four binaries; the Windows wheel names them
+          # with a .exe suffix, so accept either form per variant.
           for whl in *.whl; do
             for variant in model-b model-b-plus model-b-plus-128k model-b-romram; do
-              unzip -l "${whl}" | grep -qE "beebium/server/_bundle/bin/beebium-${variant}\$" \
+              unzip -l "${whl}" | grep -qE "beebium/server/_bundle/bin/beebium-${variant}(\.exe)?\$" \
                 || { echo "::error::${whl} is missing beebium-${variant}"; exit 1; }
             done
           done
@@ -173,11 +176,73 @@ jobs:
           echo "== full smoke: client launches the wheel server with no arguments =="
           env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/packaging/smoke/test_smoke.py" -q
 
-  # Publish the verified Linux server wheels to PyPI. Unlike the client publish,
-  # this DOES need the server builds, so it runs only after verification passes.
+  # The Windows analogue of the verify matrix. Windows has no bash
+  # smoke-installed-tree.sh, so the console-script shim (which runs the exe and
+  # loads every plugin DLL) plus the full boot in test_smoke.py stand in for it.
+  verify-server-wheels-windows:
+    name: verify server wheel (win_amd64)
+    needs: server-wheels
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Download the server wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: server-wheels
+          path: server-wheels
+
+      - name: Build the client wheel from this checkout
+        shell: pwsh
+        working-directory: clients/beebium-python-client
+        run: |
+          Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+          uv build --wheel
+          Get-ChildItem dist
+
+      - name: Install the Windows server wheel + client wheel into a fresh venv
+        shell: pwsh
+        run: |
+          $server = (Get-ChildItem server-wheels\beebium_server-*-win_amd64.whl)[0].FullName
+          $client = (Get-ChildItem clients\beebium-python-client\dist\beebium-*.whl)[0].FullName
+          Write-Host "server wheel: $server"
+          Write-Host "client wheel: $client"
+          uv venv "$env:RUNNER_TEMP\vv"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $py = "$env:RUNNER_TEMP\vv\Scripts\python.exe"
+          uv pip install --python "$py" "$server" "$client" pytest pytest-timeout
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          "BEEBIUM_PY=$py" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Import, and list extensions via the console-script shim
+        shell: pwsh
+        run: |
+          & "$env:BEEBIUM_PY" -c "import beebium.server as s; print(s.__version__, s.executable_filepath())"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\vv\Scripts\beebium-model-b.exe" list-extensions
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Resolver must choose the wheel (no env, outside the repo)
+        shell: pwsh
+        run: |
+          Remove-Item Env:\BEEBIUM_SERVER -ErrorAction SilentlyContinue
+          Set-Location $env:RUNNER_TEMP
+          & "$env:BEEBIUM_PY" -c "from beebium.client import ServerInstallation; i = ServerInstallation.default(); print('resolved origin:', i.origin); assert i.origin == 'beebium-server wheel', i.origin"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Full smoke -- client launches the wheel server with no arguments
+        shell: pwsh
+        run: |
+          Remove-Item Env:\BEEBIUM_SERVER -ErrorAction SilentlyContinue
+          & "$env:BEEBIUM_PY" -m pytest "$env:GITHUB_WORKSPACE\packaging\smoke\test_smoke.py" -q
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  # Publish the verified server wheels to PyPI. Unlike the client publish, this
+  # DOES need the server builds, so it runs only after verification passes.
   publish-server-wheels:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: verify-server-wheels
+    needs: [verify-server-wheels, verify-server-wheels-windows]
     uses: ./.github/workflows/publish-server-wheels.yml
     with:
       repository: pypi
