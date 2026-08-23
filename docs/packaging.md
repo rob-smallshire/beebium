@@ -518,6 +518,14 @@ install never runs at release time.
   plain local `docker buildx build`), the default builds the dependencies from
   scratch, so the checkout still builds with no registry access.
 
+**First-run GHCR setup (one-time, manual).** The first push creates the
+`beebium-build-env` package *private* under the user's GHCR namespace. For the
+release build's `GITHUB_TOKEN` to pull it, the package must be linked to the
+`beebium` repository (the package's *Manage Actions access* → add the repository
+with read), or set internal/public. This is a one-time step per package. Until
+it is done — or on any fork without the package — the release build simply takes
+the from-scratch fallback above, so nothing breaks; it is only slower.
+
 ### Why this is durable where the runner caches are not
 
 A GHCR image is content-addressed and permanent (it is not subject to the 7-day
