@@ -18,5 +18,10 @@ _artifacts/
 clients/macos/**/build/
 clients/macos/**/DerivedData/
 clients/beebium-typescript-client/dist/
-vcpkg_installed/
+# Match vcpkg_installed and any variant (vcpkg_installed-static, ...); the
+# container installs its own tree under /src/vcpkg_installed.
+vcpkg_installed*/
+# Standalone integration scenarios (their own venvs/uv.lock); the container
+# build never uses them, so keep them out of the context.
+integration_tests/
 *.tgz
