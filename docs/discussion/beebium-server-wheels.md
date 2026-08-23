@@ -165,11 +165,14 @@ in CI before anything is published.
 workflows (it is the one Python job that genuinely consumes their outputs --
 unlike the client publish, which stays independent and fast), downloads the
 bundle artifacts, builds all wheels on one Linux runner, uploads them as an
-artifact, then fans out the per-platform verification matrix above. A final
-`publish-server-wheels` job uploads with `uv publish --trusted-publishing
-always` in the `pypi` environment, the same pattern as `publish-python.yml`;
-PyPI's trusted publisher for `beebium-server` is registered against the same
-repository/workflow/environment. Until macOS bundles exist, the job publishes
+artifact, then fans out the per-platform verification matrix above. Publishing
+lives in its own reusable workflow, `publish-server-wheels.yml` (called from
+`release.yml`, dispatchable by hand for TestPyPI), uploading with `uv publish
+--trusted-publishing always` in the `pypi` environment -- the same pattern as
+`publish-python.yml`. PyPI matches a trusted publisher on the *reusable*
+workflow's filename, so the `beebium-server` pending publisher is registered
+as: owner `rob-smallshire`, repository `beebium`, workflow
+`publish-server-wheels.yml`, environment `pypi`. Until macOS bundles exist, the job publishes
 the Linux and Windows wheels and skips macOS with an explicit log line -- never
 silently.
 
