@@ -57,14 +57,7 @@ pip install --group dev          # dev tooling (pip >= 25.1); or just use uv
 pip install beebium            # core client
 pip install beebium[imaging]   # + Pillow for image capture
 pip install beebium[discovery] # + zeroconf for mDNS server discovery
-pip install "beebium[server]"  # + the prebuilt server binaries (Linux only, for now)
 ```
-
-`pip install "beebium[server]"` pulls the matching `beebium-server` wheel, so
-`Beebium.launch()` works with no arguments -- a complete headless system in one
-line. It ships Linux wheels today (`x86_64` / `aarch64`); on macOS and Windows
-install a server another way (a checkout build, or Homebrew / Scoop) until those
-wheels exist.
 
 Development tooling is not a published extra -- contributors get it from the
 `dev` dependency-group via uv (above).

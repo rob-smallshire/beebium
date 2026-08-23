@@ -39,14 +39,6 @@ imaging = [
 discovery = [
     "zeroconf>=0.131.0",
 ]
-# The prebuilt server binaries, pinned to the exact same monorepo version (kept
-# in lockstep by bump-my-version). `pip install "beebium[server]"` is then a
-# one-line working headless system, and the exact pin makes version skew
-# impossible on that path. Linux only for now (beebium-server ships Linux
-# wheels); the two-package form keeps working everywhere.
-server = [
-    "beebium-server==0.1.4",
-]
 
 # PEP 735 dependency-groups: local development tooling, kept out of published
 # metadata. `uv run`/`uv sync` install the `dev` group by default. The `test`
