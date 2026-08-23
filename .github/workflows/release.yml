@@ -33,7 +33,14 @@ permissions:
   packages: write
 
 jobs:
+  # Ensure the Linux build-env dependency image exists before the bundle build
+  # reuses it. A no-op when the image for the current tag is already published,
+  # so this rarely costs more than a lookup.
+  build-env:
+    uses: ./.github/workflows/build-env.yml
+
   linux:
+    needs: build-env
     uses: ./.github/workflows/linux-packages.yml
 
   macos-formula:
