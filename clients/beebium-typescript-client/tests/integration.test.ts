@@ -23,6 +23,7 @@ import { Econet } from "../src/econet.js";
 import { Tube } from "../src/tube.js";
 import { TubeUlaInspection } from "../src/tube-ula.js";
 import { withServer } from "./server-harness.js";
+import { VERSION } from "../src/version.js";
 
 // =========================================================================
 // System Service
@@ -45,7 +46,9 @@ describe("Integration: System Service", () => {
             const provenance = await system.getProvenance();
             expect(provenance.type).toBe("typescript-client");
             expect(provenance.instanceUuid).toBe(server.provenanceUuid);
-            expect(provenance.version).toBe("0.1.0");
+            // Lockstep: the server reports back the version the client launched
+            // it with, which is the client's own VERSION.
+            expect(provenance.version).toBe(VERSION);
             expect(provenance.timestamp).toBeGreaterThan(0);
         });
     });
