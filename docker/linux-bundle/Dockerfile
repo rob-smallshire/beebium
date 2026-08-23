@@ -19,7 +19,19 @@
 #       --target artifact --output type=local,dest=./_artifacts .
 
 ARG BASE=debian:bookworm
-FROM ${BASE} AS builder
+# The builder stage starts FROM this. It defaults to the local `build-env` stage
+# below, so a fresh checkout or fork builds the vcpkg dependencies from scratch
+# with no registry access. The release workflow overrides it with a prebuilt
+# ghcr.io/rob-smallshire/beebium-build-env image, and buildx then prunes the
+# local build-env stage as dead code -- skipping the expensive vcpkg install.
+# Declared before the first FROM so it is usable in a later FROM. See
+# docs/packaging.md, "Persistent dependency caching -- the build-env image".
+ARG BUILDENV_IMAGE=build-env
+
+# ---- build-env: toolchain + pinned vcpkg + the static dependency tree --------
+# This stage is what gets published as beebium-build-env; it holds everything up
+# to and including the vcpkg install, and nothing source-specific.
+FROM ${BASE} AS build-env
 
 ENV DEBIAN_FRONTEND=noninteractive
 # Required for vcpkg on non-x64 Linux: vcpkg bundles prebuilt cmake/ninja only
@@ -70,6 +82,15 @@ RUN --mount=type=cache,target=/root/.cache/vcpkg \
         --host-triplet "${VCPKG_TRIPLET}" \
         --overlay-triplets=/src/triplets \
         --x-install-root=/src/vcpkg_installed
+
+# ---- builder: the source build, on top of the dependency environment ---------
+# FROM the build-env above by default, or a prebuilt beebium-build-env image when
+# the workflow supplies one (then the vcpkg install above never runs). The
+# toolchain, /opt/vcpkg and /src/vcpkg_installed come from that image; its ENV
+# (VCPKG_ROOT, VCPKG_FORCE_SYSTEM_BINARIES) and WORKDIR /src are inherited, but
+# ARGs are not, so VCPKG_TRIPLET is re-declared for the CMake configure below.
+FROM ${BUILDENV_IMAGE} AS builder
+ARG VCPKG_TRIPLET=arm64-linux-static
 
 # Now bring in the full source and build only the servers + plugins (the
 # beebium-servers aggregate skips the ~65 Catch2 test executables).
