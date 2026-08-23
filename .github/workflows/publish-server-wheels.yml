@@ -49,6 +49,11 @@ jobs:
       contents: read
     steps:
       - uses: astral-sh/setup-uv@v8.0.0
+        with:
+          # Pin an exact uv version: setup-uv then skips resolving "latest"
+          # against the astral-sh/versions manifest, the fetch of which failed
+          # transiently and broke a release run.
+          version: "0.12.3"
 
       - name: Download the built server wheels
         uses: actions/download-artifact@v8
