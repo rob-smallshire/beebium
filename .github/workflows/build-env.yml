@@ -1,0 +1,81 @@
+# Build and publish the Linux build-env image -- the toolchain, pinned vcpkg and
+# statically-built vcpkg dependency tree that the release bundle build starts
+# from (see docs/packaging.md, "Persistent dependency caching"). The image is
+# content-addressed: its tag is a hash of the dependency inputs (vcpkg.json, the
+# triplet overlays and the Dockerfile's build-env stage), so it is rebuilt only
+# when those change.
+#
+# Runs on demand and as a reusable prerequisite of the release. When the image
+# for the current tag already exists it is a no-op, so wiring it before the
+# bundle build costs nothing on most releases and rebuilds the ~half-hour
+# dependency stage only when the inputs actually move.
+
+name: Build env image (Linux)
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-env:
+    name: build-env (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native per architecture (no QEMU): matches linux-packages.yml.
+          - arch: amd64
+            runner: ubuntu-latest
+            triplet: x64-linux-static
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            triplet: arm64-linux-static
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve build-env image ref
+        id: ref
+        run: |
+          tag="$(bash scripts/build-env-tag.sh)"
+          img="ghcr.io/${{ github.repository_owner }}/beebium-build-env:${tag}-${{ matrix.arch }}"
+          echo "img=$img" >> "$GITHUB_OUTPUT"
+          echo "Resolved build-env image: $img"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check whether the image already exists
+        id: exists
+        run: |
+          if docker manifest inspect "${{ steps.ref.outputs.img }}" >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Image already present; nothing to build."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Image absent; will build and push."
+          fi
+
+      - name: Set up Buildx
+        if: steps.exists.outputs.present == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push the build-env image
+        if: steps.exists.outputs.present == 'false'
+        run: |
+          docker buildx build \
+            --platform linux/${{ matrix.arch }} \
+            -f docker/linux-bundle/Dockerfile \
+            --target build-env \
+            --build-arg VCPKG_TRIPLET=${{ matrix.triplet }} \
+            -t "${{ steps.ref.outputs.img }}" \
+            --push \
+            .
