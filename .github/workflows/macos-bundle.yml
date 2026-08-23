@@ -1,0 +1,174 @@
+# Build the self-contained macOS server bundles (arm64 + x86_64).
+#
+# Like the Linux/Windows bundles this is a from-source static build
+# (gRPC/protobuf/abseil via the *-osx-static triplets), so it is expensive and
+# runs only on demand or as a reusable job in the release flow. It reuses the
+# SAME vcpkg actions/cache as ci.yml's server-macos-* jobs (identical keys), so
+# a release hits the caches everyday CI keeps warm; there is no GHCR build-env on
+# macOS.
+#
+# The result is beebium-server-<version>-macos-<arch>.tar.gz: a relocatable
+# single-directory tree (bin/ lib/ share/beebium) with every Mach-O ad-hoc
+# codesigned so Apple Silicon will execute it. pip-installed binaries carry no
+# quarantine attribute, so Gatekeeper/notarisation does not apply.
+
+name: macOS bundle
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: bundle (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # arch, runner, triplet, and the vcpkg cache-key arch token MUST match
+          # ci.yml's server-macos-* jobs so this reuses their warm caches.
+          - arch: arm64
+            runner: macos-14
+            triplet: arm64-osx-static
+            cache_arch: arm64
+            # 11.0 (Big Sur) is the first macOS on Apple Silicon, so it is the
+            # lowest floor that means anything for arm64. ld64 sets the binary's
+            # LC_BUILD_VERSION minos from this link flag regardless of the (warm-
+            # cached) static deps' own object minos, so the floor is honest.
+            deployment_target: "11.0"
+          - arch: x86_64
+            runner: macos-15-intel
+            triplet: x64-osx-static
+            cache_arch: x64
+            # 12.0 (Monterey) is a defensible modern Intel floor: Catalina/Big Sur
+            # are past their support window, and it keeps the wheel's reach broad
+            # without claiming an OS we cannot reason about.
+            deployment_target: "12.0"
+
+    env:
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
+      VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.triplet }}
+      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
+      # The hosted macOS runners are RAM-starved for a static gRPC/protobuf
+      # build; serialise the heavy compiles as ci.yml does.
+      CMAKE_BUILD_PARALLEL_LEVEL: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode 16
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16'
+
+      - name: Set VCPKG_INSTALLED_DIR
+        run: |
+          echo "VCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed" >> $GITHUB_ENV
+          # Same runner-image-version key component as ci.yml, so an image bump
+          # rotates the key identically and the caches stay shared and warm.
+          echo "IMAGE_VERSION=$ImageVersion" >> $GITHUB_ENV
+
+      - name: Cache vcpkg installed packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ matrix.cache_arch }}-static-${{ env.IMAGE_VERSION }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ matrix.cache_arch }}-static-${{ env.IMAGE_VERSION }}-
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '77df67cfff9c12ccfdb52284e07c87c75092f723'
+          runVcpkgInstall: true
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - name: Configure CMake
+        run: |
+          for attempt in 1 2 3; do
+            if cmake -B build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.deployment_target }} \
+                -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+                -DVCPKG_INSTALLED_DIR="${VCPKG_INSTALLED_DIR}" \
+                -DVCPKG_OVERLAY_TRIPLETS="${GITHUB_WORKSPACE}/triplets" \
+                -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+                -DVCPKG_HOST_TRIPLET=${{ matrix.triplet }} \
+                -DVCPKG_MANIFEST_INSTALL=OFF \
+                -DBEEBIUM_BUILD_TESTS=ON \
+                -DBEEBIUM_BUILD_SERVICE=ON \
+                -DBEEBIUM_BUILD_SERVER=ON; then
+              exit 0
+            fi
+            echo "::warning::CMake configure failed (attempt ${attempt}/3); retrying in case the cause was transient (e.g. a FetchContent download)."
+            rm -rf build
+            sleep $((attempt * 20))
+          done
+          echo "::error::CMake configure failed after 3 attempts"
+          exit 1
+
+      - name: Build the servers
+        run: cmake --build build --target beebium-servers --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+      - name: Verify the binary's deployment floor
+        run: |
+          set -euo pipefail
+          got="$(vtool -show-build build/src/server/beebium-model-b | awk '/minos/{print $2}')"
+          echo "beebium-model-b minos=${got}, expected ${{ matrix.deployment_target }}"
+          [ "${got}" = "${{ matrix.deployment_target }}" ] \
+            || { echo "::error::minos ${got} != deployment target ${{ matrix.deployment_target }} -- the wheel tag would be wrong"; exit 1; }
+
+      - name: Prove the freshly built tree installs and boots
+        run: ctest --test-dir build -R install_smoke --output-on-failure
+
+      - name: Package the relocatable tarball (CPack TGZ)
+        run: |
+          set -euo pipefail
+          ( cd build && cpack -G TGZ )
+          ls build/beebium-server-*-macos-${{ matrix.arch }}.tar.gz
+
+      - name: Ad-hoc codesign every Mach-O and repackage
+        run: |
+          set -euo pipefail
+          V="$(grep -E '^current_version' .bumpversion.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          tarball="build/beebium-server-${V}-macos-${{ matrix.arch }}.tar.gz"
+          top="beebium-server-${V}-macos-${{ matrix.arch }}"
+          work="$(mktemp -d)"
+          tar -xzf "${tarball}" -C "${work}"
+          tree="${work}/${top}"
+          # Sign the servers, the plugin dylibs, and the ABI libraries. CMake
+          # already applies an ad-hoc signature during install; re-affirm it (and
+          # cover anything it missed) so every shipped Mach-O is signed and valid.
+          find "${tree}/bin" "${tree}/lib" -type f \( -name '*.dylib' -o -perm -u+x \) \
+            | while IFS= read -r f; do
+                if file "$f" | grep -q "Mach-O"; then
+                  codesign --force -s - "$f"
+                  codesign -v "$f"
+                fi
+              done
+          # Repackage the signed tree in place (same single-top-dir layout).
+          rm -f "${tarball}"
+          tar -czf "${tarball}" -C "${work}" "${top}"
+          echo "Signed and repackaged ${tarball}"
+
+      - name: Smoke-test the extracted, signed tree
+        run: |
+          set -euo pipefail
+          V="$(grep -E '^current_version' .bumpversion.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          top="beebium-server-${V}-macos-${{ matrix.arch }}"
+          work="$(mktemp -d)"
+          tar -xzf "build/beebium-server-${V}-macos-${{ matrix.arch }}.tar.gz" -C "${work}"
+          bash scripts/smoke-installed-tree.sh "${work}/${top}"
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-macos-${{ matrix.arch }}
+          path: build/beebium-server-*-macos-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error

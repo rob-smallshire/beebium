@@ -29,15 +29,26 @@ fail() { echo "SMOKE FAIL: $*" >&2; exit 1; }
 [ -x "${server}" ] || fail "server binary missing or not executable: ${server}"
 
 echo "== uname: $(uname -m) / $(uname -s) =="
+# A self-contained bundle must NOT pull these in dynamically -- they are
+# statically linked from vcpkg. If any appears, the bundle is not portable.
+# ldd on Linux, otool -L on macOS (there is no ldd there); both list the
+# dynamic dependencies of the server binary.
+vendored='libgrpc|libprotobuf|libabsl|libre2|libcares|libssl|libcrypto|libupb'
 if command -v ldd >/dev/null 2>&1; then
     echo "== ldd ${server##*/} (self-containment check) =="
-    ldd_out="$(ldd "${server}" || true)"
-    echo "${ldd_out}"
-    # A self-contained bundle must NOT pull these in dynamically -- they are
-    # statically linked from vcpkg. If any appears, the bundle is not portable.
-    if echo "${ldd_out}" | grep -Eiq 'libgrpc|libprotobuf|libabsl|libre2|libcares|libssl|libcrypto|libupb'; then
+    deps_out="$(ldd "${server}" || true)"
+elif command -v otool >/dev/null 2>&1; then
+    echo "== otool -L ${server##*/} (self-containment check) =="
+    deps_out="$(otool -L "${server}" || true)"
+else
+    deps_out=""
+    echo "== (no ldd/otool; skipping the self-containment check) =="
+fi
+if [ -n "${deps_out}" ]; then
+    echo "${deps_out}"
+    if echo "${deps_out}" | grep -Eiq "${vendored}"; then
         fail "bundle dynamically links a vendored dependency (not self-contained):
-$(echo "${ldd_out}" | grep -Ei 'libgrpc|libprotobuf|libabsl|libre2|libcares|libssl|libcrypto|libupb')"
+$(echo "${deps_out}" | grep -Ei "${vendored}")"
     fi
 fi
 

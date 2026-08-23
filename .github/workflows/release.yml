@@ -46,6 +46,11 @@ jobs:
   macos-formula:
     uses: ./.github/workflows/macos-package.yml
 
+  # The self-contained macOS bundles (arm64 + x86_64), for the Release tarballs
+  # and the macOS server wheels. Separate from the Homebrew formula job.
+  macos-bundle:
+    uses: ./.github/workflows/macos-bundle.yml
+
   windows:
     uses: ./.github/workflows/windows-package.yml
 
@@ -268,7 +273,7 @@ jobs:
 
   release:
     name: draft GitHub Release
-    needs: [linux, macos-formula, windows]
+    needs: [linux, macos-formula, macos-bundle, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -299,6 +304,8 @@ jobs:
           expected="$(printf '%s\n' \
             "beebium-server-${V}-linux-amd64.tar.gz" \
             "beebium-server-${V}-linux-arm64.tar.gz" \
+            "beebium-server-${V}-macos-arm64.tar.gz" \
+            "beebium-server-${V}-macos-x86_64.tar.gz" \
             "beebium-server-${V}-windows-x64.zip" \
             "beebium-server_${V}_amd64.deb" \
             "beebium-server_${V}_arm64.deb" \
@@ -311,13 +318,13 @@ jobs:
             exit 1
           fi
 
-          # 2. Each Linux .tar.gz is a single relocatable top-level directory
-          #    named for its arch -- NOT /opt, and not more than one entry.
-          for arch in amd64 arm64; do
-            t="beebium-server-${V}-linux-${arch}.tar.gz"
+          # 2. Each relocatable .tar.gz is a single top-level directory named for
+          #    its os+arch -- NOT /opt, and not more than one entry.
+          for osarch in linux-amd64 linux-arm64 macos-arm64 macos-x86_64; do
+            t="beebium-server-${V}-${osarch}.tar.gz"
             tops="$(tar -tzf "${t}" | cut -d/ -f1 | sort -u)"
-            if [ "${tops}" != "beebium-server-${V}-linux-${arch}" ]; then
-              echo "::error::${t} top-level is '$(echo ${tops})', expected the single dir beebium-server-${V}-linux-${arch}"
+            if [ "${tops}" != "beebium-server-${V}-${osarch}" ]; then
+              echo "::error::${t} top-level is '$(echo ${tops})', expected the single dir beebium-server-${V}-${osarch}"
               exit 1
             fi
           done
@@ -369,10 +376,15 @@ jobs:
               `PATH` (no root needed).
 
             ### macOS
+            Self-contained for Apple Silicon (`arm64`) and Intel (`x86_64`),
+            ad-hoc codesigned so they run without a build toolchain.
             ```
             brew tap rob-smallshire/beebium
             brew install beebium-server
             ```
+            Or download the `.tar.gz` for your architecture, extract it
+            **anywhere**, and add the extracted `beebium-server-*/bin` directory
+            to your `PATH` (no Homebrew needed).
 
             ### Windows
             ```

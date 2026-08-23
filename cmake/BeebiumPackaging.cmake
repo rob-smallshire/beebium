@@ -24,22 +24,33 @@ set(CPACK_PACKAGE_CONTACT "Robert Smallshire <robert@smallshire.org.uk>")
 # CPACK_GENERATOR set) to pick the prefix and top-level wrapper for each.
 set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/BeebiumCPackOptions.cmake")
 
-# Normalise the architecture to the Debian label (amd64/arm64) so the .deb and
-# the .tar.gz carry the same arch name and match the .deb's auto-detected
-# Architecture field.
-set(_beebium_pkg_arch "${CMAKE_SYSTEM_PROCESSOR}")
-if(_beebium_pkg_arch STREQUAL "x86_64")
-    set(_beebium_pkg_arch "amd64")
-elseif(_beebium_pkg_arch STREQUAL "aarch64")
-    set(_beebium_pkg_arch "arm64")
+# OS + architecture tokens for the package file name. On Linux the arch is
+# normalised to the Debian label (amd64/arm64) so the .deb and .tar.gz match the
+# .deb's auto-detected Architecture field. On macOS the tarball uses the Apple
+# arch names (arm64 / x86_64), which is also what the platform wheel tags expect.
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(_beebium_pkg_os "macos")
+    if(CMAKE_OSX_ARCHITECTURES)
+        set(_beebium_pkg_arch "${CMAKE_OSX_ARCHITECTURES}")
+    else()
+        set(_beebium_pkg_arch "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+else()
+    set(_beebium_pkg_os "linux")
+    set(_beebium_pkg_arch "${CMAKE_SYSTEM_PROCESSOR}")
+    if(_beebium_pkg_arch STREQUAL "x86_64")
+        set(_beebium_pkg_arch "amd64")
+    elseif(_beebium_pkg_arch STREQUAL "aarch64")
+        set(_beebium_pkg_arch "arm64")
+    endif()
 endif()
 
-# Base package file name used by all generators: beebium-server-<ver>-linux-<arch>.
+# Base package file name used by all generators: beebium-server-<ver>-<os>-<arch>.
 # The DEB generator overrides this with the canonical Debian name below. Setting
 # CPACK_PACKAGE_FILE_NAME (rather than CPACK_ARCHIVE_FILE_NAME) is what reliably
 # names the archive across CPack versions.
 set(CPACK_PACKAGE_FILE_NAME
-    "beebium-server-${PROJECT_VERSION}-linux-${_beebium_pkg_arch}")
+    "beebium-server-${PROJECT_VERSION}-${_beebium_pkg_os}-${_beebium_pkg_arch}")
 
 # Archive (TGZ): a relocatable single-directory bundle (see the per-generator
 # prefix/wrapper in BeebiumCPackOptions.cmake). The DEB generator is added below
