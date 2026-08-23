@@ -25,7 +25,7 @@ In CI the ROM directory is pointed at the bundle via BEEBIUM_ROM_DIR
 
 from __future__ import annotations
 
-from beebium import Beebium
+from beebium.client import Beebium
 
 
 def test_boots_to_basic_and_evaluates(bbc: Beebium) -> None:

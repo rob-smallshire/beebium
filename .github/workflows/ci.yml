@@ -1009,6 +1009,16 @@ jobs:
         # rather than stalling the job.
         run: bash scripts/test-wheel.sh tests_packaging/ tests/ -v --durations=0 --timeout=600
 
+      - name: Packaging smoke test still imports the client
+        working-directory: clients/beebium-python-client
+        # The release smoke test (packaging/smoke/test_smoke.py) drives an
+        # installed server and so runs only on tags/manual -- a stale import
+        # there rots silently, as a flat `from beebium import Beebium` (broken by
+        # the namespace split) did until it failed a release. Collect it against
+        # the built wheel every push: this proves the import path and the
+        # bbc-fixture plugin resolve, without needing a server.
+        run: bash scripts/test-wheel.sh ../../packaging/smoke/test_smoke.py --collect-only -q
+
       # One line per collected test ("path::test_name"), so counting the lines
       # carrying "::" is independent of pytest's summary wording. Parametrised
       # cases are collected individually and so count individually.
