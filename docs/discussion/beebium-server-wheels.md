@@ -209,39 +209,62 @@ everywhere, matching the client.
 
 ### 5.2 `beebium.client` (the existing client)
 
-Three changes, all small:
+Choosing a server is a first-class, explicit choice, not only a search order.
+A server is never just one binary: an *installation* is the four machine
+binaries plus the extensions, ABI libraries, ROMs and presets laid out beside
+them -- which is what a `.deb`, a Homebrew keg, a Scoop app, a checkout build
+and the wheel each provide. The client therefore gains one small value type:
 
-1. **`mos_filepath` becomes optional** in `ServerProcess` and
-   `Beebium.launch()`. When it is `None`, `--mos` is simply not passed and the
-   server resolves its default MOS from its own ROM directory. `Beebium.launch()`
-   with no arguments is then a complete call. `basic_filepath` is already
-   optional and follows the same rule.
-2. **Server resolution gains one step.** `_find_server` order becomes:
-   1. explicit `server_filepath`
-   2. `BEEBIUM_SERVER`
-   3. a build directory in the surrounding checkout (development only)
-   4. **the installed `beebium.server` wheel**, found by importing
-      `beebium.server` (an `ImportError` means it is not installed; the client
-      never hard-depends on it)
-   5. `beebium-model-b` on `PATH`
+```python
+from beebium.client import ServerInstallation
 
-   The wheel ranks above `PATH` because it is the one install that is
-   version-locked to the client by construction (same tag, same fingerprint),
-   whereas `PATH` holds whatever the machine happens to have. Explicit path and
-   `BEEBIUM_SERVER` still outrank it, and `Beebium.connect()` -- attaching to a
-   server started by any other means -- is untouched. If the wheel and client
-   versions differ, the client logs a warning naming both and still tries the
-   wheel; the fingerprint handshake remains the real guard. The docstring and
-   `tests/test_server_discovery.py` are extended to pin the new step.
-3. **`variant` is plumbed through** `launch(variant="model-b-plus")`, so the
-   other three machines are reachable from the wheel without knowing binary
-   names. (When the server is found on `PATH` or via `BEEBIUM_SERVER`, the
-   variant selects the sibling binary by name next to it, which is what every
-   install layout provides.)
+ServerInstallation.from_executable(path)   # one binary; siblings found beside it
+ServerInstallation.from_root(prefix)       # an install root containing bin/ (or the bin/ dir itself)
+ServerInstallation.installed_wheel()       # the beebium-server wheel, if importable
+ServerInstallation.on_path()               # whatever `beebium-model-b` resolves to on PATH
+ServerInstallation.default()               # the resolution below
 
-The pytest plugin's ROM fixture gains the matching step: after the checkout
-`roms/`, try `beebium.server.rom_dirpath()` before the home/`/usr/share`
-locations.
+installation.executable_filepath(variant="model-b")
+installation.variants()                    # which of the four are present
+installation.rom_dirpath / preset_dirpath  # may be None for a bare binary
+installation.describe()                    # origin + path, for logs and errors
+```
+
+`Beebium.launch()` and `ServerProcess` take `server=` accepting any of: a
+`ServerInstallation`; a path to a binary (today's `server_filepath`, kept as a
+deprecated alias); or a path to an install root. A `variant=` parameter
+selects the machine within the installation (`"model-b"` default). When the
+user is specific, that is what runs -- no fallback, and a missing binary or
+variant is an error naming the installation, not a silent slide down the list.
+
+Only when the user is not specific does resolution apply, in this order:
+
+1. `BEEBIUM_SERVER` -- a binary path or an install root (an invalid value
+   raises, as today)
+2. a build directory in the surrounding checkout (development only)
+3. **the installed `beebium.server` wheel**, found by importing
+   `beebium.server` (`ImportError` means not installed; the client never
+   hard-depends on it)
+4. `beebium-model-b` on `PATH`
+
+The wheel is the default because it is the one installation version-locked to
+the client by construction (same tag, same fingerprint); `PATH` holds whatever
+the machine happens to have. `Beebium.connect()` -- attaching to a server
+started by any other means -- is untouched. If the wheel and client versions
+differ, the client logs a warning naming both and still tries the wheel; the
+fingerprint handshake remains the real guard. `tests/test_server_discovery.py`
+pins every explicit form and the default order.
+
+Two further small changes:
+
+- **`mos_filepath` becomes optional** in `ServerProcess` and
+  `Beebium.launch()`. When `None`, `--mos` is not passed and the server
+  resolves its default MOS from its own ROM directory, so `Beebium.launch()`
+  with no arguments is a complete call. `basic_filepath` is already optional
+  and follows the same rule.
+- The pytest plugin's `--beebium-server` option accepts the same forms as
+  `server=`, and its ROM fixture tries `beebium.server.rom_dirpath()` after the
+  checkout `roms/` and before the home/`/usr/share` locations.
 
 ### 5.3 The `beebium[server]` extra
 
@@ -296,8 +319,8 @@ macOS wheel and says so in the job log.
 
 ## 8. Decisions deferred to the maintainer
 
-- Whether the wheel should ship the `test-scratch-ram` extension (present in
-  the bundles today; harmless but not user-facing).
+- (Decided: ship the `test-scratch-ram` extension for now, as the bundles do.)
+- (Decided: the `beebium[server]` pinned extra is wanted.)
 - Whether to take on notarisation for macOS if ad-hoc signing turns out not
   to be enough for pip-installed binaries on a given macOS version.
 - Whether, and when, to pursue the single-binary server (section 6).
