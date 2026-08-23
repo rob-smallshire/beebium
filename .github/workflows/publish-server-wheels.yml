@@ -1,0 +1,79 @@
+# Publish the beebium-server platform wheels to PyPI.
+#
+# Called from release.yml after the server wheels are built (server-wheels job)
+# and verified (verify-server-wheels matrix); it downloads the `server-wheels`
+# artifact from the same run and uploads it. Unlike the client publish this
+# genuinely needs the server builds, so it is gated behind their verification.
+#
+# Authentication is PyPI Trusted Publishing (OIDC): PyPI is configured to trust
+# this repository's `publish-server-wheels.yml` running in the `pypi` (or
+# `testpypi`) environment; `uv publish` exchanges the job's identity token for a
+# short-lived upload token. No API token is stored anywhere.
+#
+# Uploads are permanent. The tag==version assertion (from the wheel filename)
+# guards against publishing a mismatched build. Only Linux wheels exist today;
+# the Windows and macOS wheels join once their bundles are built (the caller logs
+# them as skipped in the meantime).
+#
+# workflow_dispatch publishes whatever `server-wheels` artifact exists in the
+# triggering run, so it is useful for re-driving the publish step of a release
+# run rather than for a standalone build (the wheels are repackaged release
+# bundles and cannot be rebuilt without them).
+
+name: Publish server wheels
+
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: "Index to publish to: pypi or testpypi"
+        type: string
+        default: pypi
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Index to publish to"
+        type: choice
+        options: [pypi, testpypi]
+        default: testpypi
+
+jobs:
+  publish:
+    name: publish to ${{ inputs.repository }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.repository }}
+      url: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/p/beebium-server' || 'https://pypi.org/p/beebium-server' }}
+    permissions:
+      id-token: write   # for PyPI Trusted Publishing
+      contents: read
+    steps:
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Download the built server wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: server-wheels
+          path: dist
+
+      - name: Verify the wheel versions match the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          shopt -s nullglob
+          wheels=(dist/beebium_server-*.whl)
+          [ ${#wheels[@]} -gt 0 ] || { echo "::error::no server wheels to publish"; exit 1; }
+          for whl in "${wheels[@]}"; do
+            version="$(basename "${whl}" | sed -E 's|beebium_server-([^-]+)-.*|\1|')"
+            if [ "v${version}" != "${tag}" ]; then
+              echo "::error::${whl} version ${version} does not match tag ${tag}"
+              exit 1
+            fi
+          done
+          echo "Publishing $(printf '%s ' "${wheels[@]}") from tag ${tag}"
+
+      - name: Publish with trusted publishing
+        env:
+          UV_PUBLISH_URL: ${{ inputs.repository == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+        run: uv publish --trusted-publishing always dist/*.whl

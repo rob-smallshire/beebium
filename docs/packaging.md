@@ -581,6 +581,51 @@ published assets.
    package-manager plumbing, so it must run post-publish (they do not exist
    before).
 
+## Python server wheels (`beebium-server`)
+
+The server binaries are also shipped on PyPI as `beebium-server`, so
+`pip install beebium beebium-server` gives a working headless system: the Python
+client launches a server from the wheel, with its bundled ROMs, presets and
+extensions, and no environment variables. Design and rationale are in
+`docs/discussion/beebium-server-wheels.md`; the client-side resolution (the
+wheel is the default, behind `BEEBIUM_SERVER` and a checkout build) is in
+`docs/deployment.md`'s server discovery.
+
+A wheel is a **repackaging** of the release bundle, not a new compile:
+`packaging/python-server/build_wheel.py <bundle-archive> <platform-tag>` unpacks
+the `.tar.gz`/`.zip` verbatim into `beebium/server/_bundle/` and emits
+`beebium_server-<ver>-py3-none-<platform-tag>.whl`, so the server bytes are
+byte-identical to the GitHub Release and have passed the same install-smoke
+layers. One wheel per OS/arch; Linux uses the PEP 600 tags
+`manylinux_2_36_{x86_64,aarch64}` for the bookworm glibc floor the bundles are
+built against.
+
+In `release.yml`:
+
+- **`server-wheels`** (needs `linux`) downloads the `bundle-*` artifacts, builds
+  both Linux wheels, and — a publish-boundary gate before upload — asserts the
+  exact wheel set with the right platform tags and that each wheel contains all
+  four server binaries.
+- **`verify-server-wheels`** (a per-arch matrix on `ubuntu-latest` /
+  `ubuntu-24.04-arm`) installs the matching server wheel plus the **client wheel
+  built from the same checkout** into a fresh venv, then proves the whole user
+  path: `import beebium.server`, `smoke-installed-tree.sh` against the installed
+  `_bundle`, that `ServerInstallation.default()` resolves to the wheel with no
+  environment set, and `packaging/smoke/test_smoke.py` launching the wheel's
+  server with no arguments.
+- **`publish-server-wheels.yml`** (reusable + dispatch, PyPI Trusted Publishing
+  in the `pypi`/`testpypi` environment) publishes the verified wheels. Unlike the
+  client publish it genuinely needs the server builds, so it runs only after the
+  verification matrix passes, and asserts each wheel's version matches the tag.
+
+**Staging.** Only Linux wheels ship today. The Windows (`win_amd64`) wheel joins
+once its `.zip` bundle is wired into `build_wheel.py`, and the two macOS wheels
+join once a relocatable macOS bundle exists (see the design doc, sections 4.2
+and 7); until then `server-wheels` logs each as an explicit "skipped: no
+`<platform>` bundle yet" line rather than silently omitting it. The
+`beebium[server]` extra (a pin to the exact same version) lands with the docs
+phase, once `beebium-server` is on PyPI so the pin resolves.
+
 ## CI
 
 `.github/workflows/linux-packages.yml` runs on `workflow_dispatch` (the

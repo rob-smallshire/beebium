@@ -49,6 +49,142 @@ jobs:
   windows:
     uses: ./.github/workflows/windows-package.yml
 
+  # Repackage the Linux release bundles into beebium-server platform wheels (no
+  # compile: the server bytes are the tarball's). This is the one Python job that
+  # genuinely consumes the server builds, so it needs `linux`.
+  server-wheels:
+    name: build Linux server wheels
+    needs: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Download the Linux bundle artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: bundle-*
+          path: _bundles
+          merge-multiple: true
+
+      - name: Build both Linux server wheels
+        working-directory: packaging/python-server
+        run: |
+          set -euo pipefail
+          V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-linux-amd64.tar.gz" manylinux_2_36_x86_64
+          python build_wheel.py "${GITHUB_WORKSPACE}/_bundles/beebium-server-${V}-linux-arm64.tar.gz" manylinux_2_36_aarch64
+          echo "macOS server wheels: skipped (no macOS bundle yet)"
+          echo "Windows server wheel: skipped (win_amd64 wheel not built yet)"
+          ls -l dist
+
+      # Publish-boundary gate: the exact wheel set, with the right platform tags,
+      # each containing all four server binaries -- before the wheels leave this
+      # job. A green build does not prove the wheel was assembled correctly.
+      - name: Verify the server wheels before upload
+        working-directory: packaging/python-server/dist
+        run: |
+          set -euo pipefail
+          V="$(grep -E '^current_version' "${GITHUB_WORKSPACE}/.bumpversion.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          expected="$(printf '%s\n' \
+            "beebium_server-${V}-py3-none-manylinux_2_36_x86_64.whl" \
+            "beebium_server-${V}-py3-none-manylinux_2_36_aarch64.whl" | sort)"
+          actual="$(ls -1 *.whl | sort)"
+          if [ "${expected}" != "${actual}" ]; then
+            echo "::error::server wheel set mismatch"
+            diff <(echo "${expected}") <(echo "${actual}") || true
+            exit 1
+          fi
+          for whl in *.whl; do
+            for variant in model-b model-b-plus model-b-plus-128k model-b-romram; do
+              unzip -l "${whl}" | grep -qE "beebium/server/_bundle/bin/beebium-${variant}\$" \
+                || { echo "::error::${whl} is missing beebium-${variant}"; exit 1; }
+            done
+          done
+          echo "Server wheels verified: correct tags and all four binaries."
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-wheels
+          path: packaging/python-server/dist/*.whl
+          if-no-files-found: error
+
+  # Install each server wheel on a matching-arch runner in a fresh venv, with the
+  # CLIENT wheel built from this same checkout, and prove the client resolves and
+  # drives the wheel's server with no environment set.
+  verify-server-wheels:
+    name: verify server wheel (${{ matrix.arch }})
+    needs: server-wheels
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            tag: manylinux_2_36_x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            tag: manylinux_2_36_aarch64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Download the server wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: server-wheels
+          path: server-wheels
+
+      - name: Build the client wheel from this checkout
+        working-directory: clients/beebium-python-client
+        run: |
+          rm -rf dist
+          uv build --wheel
+          ls -l dist
+
+      - name: Install both wheels into a fresh venv and verify
+        run: |
+          set -euo pipefail
+          server_whl="$(ls server-wheels/beebium_server-*-${{ matrix.tag }}.whl)"
+          client_whl="$(ls clients/beebium-python-client/dist/beebium-*.whl)"
+          echo "server wheel: ${server_whl}"
+          echo "client wheel: ${client_whl}"
+          uv venv /tmp/verify-venv
+          PY=/tmp/verify-venv/bin/python
+          uv pip install --python "${PY}" "${server_whl}" "${client_whl}" pytest pytest-timeout
+
+          echo "== import + paths =="
+          "${PY}" -c "import beebium.server as s; print(s.__version__, s.executable_filepath())"
+
+          echo "== smoke-installed-tree.sh against the wheel bundle =="
+          SP="$("${PY}" -c 'import beebium.server, os; print(os.path.dirname(beebium.server.__file__))')"
+          bash scripts/smoke-installed-tree.sh "${SP}/_bundle"
+
+          echo "== resolver must choose the wheel (no env, no checkout build, outside the repo) =="
+          mkdir -p /tmp/outside
+          ( cd /tmp/outside && env -u BEEBIUM_SERVER "${PY}" -c "
+          from beebium.client import ServerInstallation
+          i = ServerInstallation.default()
+          print('resolved origin:', i.origin)
+          assert i.origin == 'beebium-server wheel', i.origin
+          " )
+
+          echo "== full smoke: client launches the wheel server with no arguments =="
+          env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/packaging/smoke/test_smoke.py" -q
+
+  # Publish the verified Linux server wheels to PyPI. Unlike the client publish,
+  # this DOES need the server builds, so it runs only after verification passes.
+  publish-server-wheels:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify-server-wheels
+    uses: ./.github/workflows/publish-server-wheels.yml
+    with:
+      repository: pypi
+    permissions:
+      id-token: write
+      contents: read
+
   pypi:
     # PyPI uploads are permanent, so only a pushed version tag publishes; a
     # manual dispatch of this workflow builds the server packages only.
