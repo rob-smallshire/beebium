@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(beebium
-    VERSION 0.1.4
+    VERSION 0.1.5
     DESCRIPTION "BBC Micro emulator with headless core and IPC architecture"
     LANGUAGES C CXX
 )
