@@ -61,6 +61,15 @@ regex = true
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 
+# The beebium[server] extra pins the server wheel to the exact same version.
+# Anchored on "beebium-server==" so only this pin matches, never another string
+# that happens to equal the current version.
+[[tool.bumpversion.files]]
+filename = "clients/beebium-python-client/pyproject.toml"
+regex = true
+search = 'beebium-server=={current_version}'
+replace = 'beebium-server=={new_version}'
+
 # --- Python server wheel (beebium-server) ----------------------------------
 # The distribution version is dynamic, read from this single source file by
 # hatchling; the pyproject carries no version string to bump.
