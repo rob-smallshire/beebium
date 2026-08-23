@@ -89,4 +89,10 @@ if ! grep -q "Listening on port" "${boot_log}"; then
 fi
 grep "Listening on port" "${boot_log}"
 
+echo "== presets shipped (share/beebium/presets non-empty) =="
+preset_count="$(find "${prefix}/share/beebium/presets" -maxdepth 1 -name '*.preset.beebium' 2>/dev/null | wc -l | tr -d ' ')"
+[ "${preset_count}" -gt 0 ] \
+    || fail "no *.preset.beebium under ${prefix}/share/beebium/presets -- presets drive --preset machine configs"
+echo "found ${preset_count} preset(s)"
+
 echo "SMOKE PASS: ${prefix} is runnable on $(uname -m)/$(uname -s)"

@@ -146,4 +146,6 @@ jobs:
           foreach ($cli in @('host-serial','aun','scsi-hdd','rpc-serial','ip232-serial','rfc2217-client-serial','rfc2217-server-serial','loopback-serial','piconet','acorn-scsi','acorn-rtc')) {
             if ($clis -notcontains $cli) { Write-Host "::error::extension not discovered from the ZIP: $cli"; exit 1 }
           }
-          Write-Host "Windows smoke OK: extracted ZIP runs and discovers all extensions"
+          $presets = @(Get-ChildItem "extracted\share\beebium\presets\*.preset.beebium" -ErrorAction SilentlyContinue)
+          if ($presets.Count -eq 0) { Write-Host "::error::no presets in the ZIP (share\beebium\presets is empty) -- presets drive --preset machine configs"; exit 1 }
+          Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s)"
