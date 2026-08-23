@@ -45,6 +45,11 @@ jobs:
 
     env:
       VCPKG_DEFAULT_TRIPLET: arm64-osx-static
+      # Build the tooling (protoc, grpc_cpp_plugin) with the same static,
+      # release-only triplet as the target. Static libs still run, and sharing
+      # host=target avoids a second, native arm64-osx (debug+release) build of the
+      # whole gRPC/protobuf/abseil stack just to obtain them.
+      VCPKG_DEFAULT_HOST_TRIPLET: arm64-osx-static
       VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
       # Per-platform build parallelism. The GitHub-hosted macOS arm64 runner is
       # RAM-starved for a static gRPC/protobuf build: several concurrent C++
@@ -100,6 +105,7 @@ jobs:
                 -DVCPKG_INSTALLED_DIR="${VCPKG_INSTALLED_DIR}" \
                 -DVCPKG_OVERLAY_TRIPLETS="${GITHUB_WORKSPACE}/triplets" \
                 -DVCPKG_TARGET_TRIPLET=arm64-osx-static \
+                -DVCPKG_HOST_TRIPLET=arm64-osx-static \
                 -DVCPKG_MANIFEST_INSTALL=OFF \
                 -DBEEBIUM_BUILD_TESTS=ON \
                 -DBEEBIUM_BUILD_SERVICE=ON \
@@ -169,6 +175,10 @@ jobs:
 
     env:
       VCPKG_DEFAULT_TRIPLET: x64-osx-static
+      # host=target: build protoc/grpc_cpp_plugin with the same static, release-only
+      # triplet rather than a second native x64-osx (debug+release) copy of the
+      # gRPC/protobuf/abseil stack. The macos-15-intel runner is natively x64.
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-osx-static
       VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
 
     steps:
@@ -217,6 +227,7 @@ jobs:
                 -DVCPKG_INSTALLED_DIR="${VCPKG_INSTALLED_DIR}" \
                 -DVCPKG_OVERLAY_TRIPLETS="${GITHUB_WORKSPACE}/triplets" \
                 -DVCPKG_TARGET_TRIPLET=x64-osx-static \
+                -DVCPKG_HOST_TRIPLET=x64-osx-static \
                 -DVCPKG_MANIFEST_INSTALL=OFF \
                 -DBEEBIUM_BUILD_TESTS=ON \
                 -DBEEBIUM_BUILD_SERVICE=ON \

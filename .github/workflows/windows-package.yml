@@ -27,6 +27,11 @@ jobs:
     runs-on: windows-2022
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
+      # Build the tooling (protoc, grpc_cpp_plugin) with the same static,
+      # release-only triplet as the target. Static libs + dynamic CRT still run,
+      # and sharing host=target avoids a second, native x64-windows (debug+release)
+      # build of the whole gRPC/protobuf/abseil stack just to obtain them.
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
       # The committed overlay triplet (static libs + dynamic CRT, release-only).
       VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
       VCPKG_DOWNLOADS: ${{ github.workspace }}/vcpkg-downloads
@@ -70,6 +75,7 @@ jobs:
               -DCMAKE_TOOLCHAIN_FILE="${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" `
               -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALLED_DIR}" `
               -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
+              -DVCPKG_HOST_TRIPLET=x64-windows-static-md `
               -DVCPKG_MANIFEST_INSTALL=OFF `
               -DBEEBIUM_BUILD_TESTS=OFF
             if ($LASTEXITCODE -eq 0) { break }

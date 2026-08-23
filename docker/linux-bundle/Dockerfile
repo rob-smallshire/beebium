@@ -56,11 +56,18 @@ ARG VCPKG_TRIPLET=arm64-linux-static
 # across source-only changes. The cache mount persists vcpkg's built binary
 # archives across builds, so even a manifest change rebuilds quickly. Mirrors
 # the CI split: install here, then configure with VCPKG_MANIFEST_INSTALL=OFF.
+#
+# --host-triplet pins the build-time tooling (protoc, grpc_cpp_plugin) to the
+# same static, release-only triplet as the target. The overlay triplet links
+# libs statically but the CRT dynamically, so those tools still run; sharing the
+# triplet avoids a second, native (debug+release) build of the whole
+# gRPC/protobuf/abseil stack just to obtain them -- the dominant cold-build cost.
 COPY vcpkg.json /src/vcpkg.json
 COPY triplets /src/triplets
 RUN --mount=type=cache,target=/root/.cache/vcpkg \
     "${VCPKG_ROOT}/vcpkg" install \
         --triplet "${VCPKG_TRIPLET}" \
+        --host-triplet "${VCPKG_TRIPLET}" \
         --overlay-triplets=/src/triplets \
         --x-install-root=/src/vcpkg_installed
 
@@ -82,6 +89,7 @@ RUN cmake -S . -B build -G Ninja \
         -DVCPKG_INSTALLED_DIR=/src/vcpkg_installed \
         -DVCPKG_OVERLAY_TRIPLETS=/src/triplets \
         -DVCPKG_TARGET_TRIPLET="${VCPKG_TRIPLET}" \
+        -DVCPKG_HOST_TRIPLET="${VCPKG_TRIPLET}" \
         -DVCPKG_MANIFEST_INSTALL=OFF \
         -DBEEBIUM_BUILD_TESTS=ON \
     && cmake --build build --target beebium-servers -j"${BUILD_JOBS}"
