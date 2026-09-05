@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/beebium-logo.svg" alt="Beebium logo: a periodic-table tile for the element Beebium, symbol Bb" width="256">
+  <img src="docs/images/beebium-logo.png" alt="The Shape of Beebium: a sunset over a mirrored floor with a cylinder, a cuboid and a pyramid" width="256">
 </p>
 
 # Beebium
