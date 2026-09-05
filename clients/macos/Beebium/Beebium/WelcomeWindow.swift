@@ -33,8 +33,8 @@ struct WelcomeWindowContent: View {
             VStack(spacing: 4) {
                 if let appIcon = NSApp.applicationIconImage {
                     // Large enough that the icon's detailed representation is
-                    // chosen: the Beebium tile carries its atomic number, name
-                    // and isotopes at 256px and above, and none of them below.
+                    // chosen: below 64px the artwork is only its palette, and
+                    // the solids on the floor do not resolve at all.
                     Image(nsImage: appIcon)
                         .resizable()
                         .frame(width: 144, height: 144)
