@@ -24,7 +24,7 @@ from PIL import Image
 
 from beebium_icon.bundle import APPICONSET_SLOTS, TARGETS, build_target, install_appiconset
 from beebium_icon.cli import main
-from beebium_icon.config import SQUIRCLE, TILE
+from beebium_icon.config import ROUNDED, SQUIRCLE
 
 
 @pytest.fixture(scope="module")
@@ -70,29 +70,28 @@ def test_linux_writes_a_hicolor_tree(built):
     hicolor_dirpath = built / "linux" / "hicolor"
     for size in TARGETS["linux"].sizes:
         assert (hicolor_dirpath / f"{size}x{size}" / "apps" / "beebium.png").is_file()
-    assert (hicolor_dirpath / "scalable" / "apps" / "beebium.svg").is_file()
 
 
-def test_web_writes_a_favicon_a_touch_icon_and_an_svg(built):
+def test_web_writes_a_favicon_a_touch_icon_and_pngs(built):
     web_dirpath = built / "web"
     assert Image.open(web_dirpath / "favicon.ico").format == "ICO"
     assert Image.open(web_dirpath / "apple-touch-icon.png").size == (180, 180)
-    assert (web_dirpath / "beebium.svg").read_text().startswith("<svg")
+    assert Image.open(web_dirpath / "icon-512.png").size == (512, 512)
 
 
-def test_each_target_uses_the_frame_style_that_suits_it(config, tmp_path):
-    """macOS gets Apple's continuous body; the other platforms get the tile."""
-    assert TARGETS["macos"].style == SQUIRCLE
-    assert {TARGETS[name].style for name in ("windows", "linux", "web")} == {TILE}
+def test_each_target_uses_the_shape_that_suits_it(config, tmp_path):
+    """macOS gets Apple's continuous body; the other platforms get a rounded square."""
+    assert TARGETS["macos"].shape == SQUIRCLE
+    assert {TARGETS[name].shape for name in ("windows", "linux", "web")} == {ROUNDED}
 
     build_target(config, TARGETS["macos"], tmp_path)
-    build_target(config, replace(TARGETS["macos"], name="tiled", style=TILE), tmp_path)
+    build_target(config, replace(TARGETS["macos"], name="round", shape=ROUNDED), tmp_path)
     squircled = Image.open(tmp_path / "macos" / "AppIcon.appiconset" / "icon_512x512.png")
-    tiled = Image.open(tmp_path / "tiled" / "AppIcon.appiconset" / "icon_512x512.png")
-    assert squircled.tobytes() != tiled.tobytes()
+    rounded = Image.open(tmp_path / "round" / "AppIcon.appiconset" / "icon_512x512.png")
+    assert squircled.tobytes() != rounded.tobytes()
     # Both shapes are rounded, so neither paints the canvas corner.
     assert squircled.convert("RGBA").getpixel((0, 0))[3] == 0
-    assert tiled.convert("RGBA").getpixel((0, 0))[3] == 0
+    assert rounded.convert("RGBA").getpixel((0, 0))[3] == 0
 
 
 def test_installing_the_catalogue_replaces_what_was_there(built, tmp_path):
@@ -109,17 +108,6 @@ def test_installing_the_catalogue_replaces_what_was_there(built, tmp_path):
 def test_installing_from_an_unbuilt_tree_is_refused(tmp_path):
     with pytest.raises(FileNotFoundError, match="no generated asset catalogue"):
         install_appiconset(tmp_path, tmp_path / "AppIcon.appiconset")
-
-
-def test_cli_writes_an_svg(tmp_path, capsys):
-    filepath = tmp_path / "icon.svg"
-    assert main(["svg", "--size", "256", "-o", str(filepath)]) == 0
-    assert filepath.read_text().startswith("<svg")
-
-
-def test_cli_writes_an_svg_to_stdout(capsys):
-    assert main(["svg", "--size", "64"]) == 0
-    assert capsys.readouterr().out.startswith("<svg")
 
 
 def test_cli_writes_a_png(tmp_path):
@@ -146,29 +134,28 @@ def test_cli_builds_every_target_by_default(tmp_path):
         assert (tmp_path / name).is_dir()
 
 
-def test_cli_style_override_reaches_the_bundle(tmp_path):
-    assert main(["--style", "tile", "build", "macos", "-o", str(tmp_path)]) == 0
+def test_cli_shape_override_reaches_the_bundle(tmp_path):
+    assert main(["--shape", "rounded", "build", "macos", "-o", str(tmp_path)]) == 0
     squircle_dirpath = tmp_path / "squircle"
-    assert main(["--style", "squircle", "build", "macos", "-o", str(squircle_dirpath)]) == 0
-    tiled = (tmp_path / "macos" / "AppIcon.appiconset" / "icon_512x512.png").read_bytes()
+    assert main(["--shape", "squircle", "build", "macos", "-o", str(squircle_dirpath)]) == 0
+    rounded = (tmp_path / "macos" / "AppIcon.appiconset" / "icon_512x512.png").read_bytes()
     squircled = (
         squircle_dirpath / "macos" / "AppIcon.appiconset" / "icon_512x512.png"
     ).read_bytes()
-    assert tiled != squircled
+    assert rounded != squircled
 
 
 def test_cli_can_drop_the_shadow(tmp_path):
-    """The README logo must not depend on an SVG filter surviving a sanitiser."""
-    plain_filepath = tmp_path / "plain.svg"
-    shadowed_filepath = tmp_path / "shadowed.svg"
-    assert main(["--no-shadow", "svg", "--size", "512", "-o", str(plain_filepath)]) == 0
-    assert main(["svg", "--size", "512", "-o", str(shadowed_filepath)]) == 0
-    assert "filter" not in plain_filepath.read_text()
-    assert "feDropShadow" in shadowed_filepath.read_text()
+    """A document wants the icon without the shadow macOS asks for."""
+    plain_filepath = tmp_path / "plain.png"
+    shadowed_filepath = tmp_path / "shadowed.png"
+    assert main(["--no-shadow", "png", "--size", "512", "-o", str(plain_filepath)]) == 0
+    assert main(["png", "--size", "512", "-o", str(shadowed_filepath)]) == 0
+    assert plain_filepath.read_bytes() != shadowed_filepath.read_bytes()
 
 
 def test_cli_reports_an_unreadable_configuration(tmp_path, capsys):
-    assert main(["-c", str(tmp_path / "absent.toml"), "svg"]) == 1
+    assert main(["-c", str(tmp_path / "absent.toml"), "png", "-o", "/dev/null"]) == 1
     assert "beebium-icon:" in capsys.readouterr().err
 
 

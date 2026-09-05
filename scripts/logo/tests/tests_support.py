@@ -24,10 +24,10 @@ def outline_points(path_data: str) -> list[tuple[float, float]]:
     """Flatten path data to points lying on the outline.
 
     Curves are sampled rather than taken at their control points, which would
-    overstate the bounds: a control point can sit well outside the ink.  Arcs
-    contribute their endpoints only, which is enough for bounds, because an
-    arc drawn here always bulges towards a corner the straight edges already
-    reach.
+    overstate the bounds: a control point can sit well outside the outline.
+    Arcs contribute their endpoints only, which is enough for bounds, because
+    an arc drawn here always bulges towards a corner the straight edges
+    already reach.
     """
     points: list[tuple[float, float]] = []
     position = (0.0, 0.0)

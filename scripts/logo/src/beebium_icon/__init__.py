@@ -10,12 +10,12 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Generator for the Beebium application icon.
+"""Packager for the Beebium application icon.
 
-The icon is a periodic-table tile for the fictional element Beebium (symbol
-Bb).  A level-of-detail scheme adds annotations - atomic number, element name,
-isotopes, energy levels - as the rendered size grows, so the same design reads
-at 16px in a menu and at 1024px in the Finder.
+The icon is "The Shape of Beebium", a pastiche of Acorn's "The Shape of Things
+to Come" that keeps the sunset, the mirrored floor and the geometric solids
+but omits the computer.  This package cuts that one artwork to the sizes,
+shapes and container formats each platform asks for.
 """
 
 from beebium_icon.config import IconConfig, load_config

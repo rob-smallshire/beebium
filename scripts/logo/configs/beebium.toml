@@ -1,75 +1,42 @@
 # The Beebium application icon.
 #
+# The artwork is "The Shape of Beebium", a pastiche of Acorn's 1981 marketing
+# image "The Shape of Things to Come": the same sunset over a mirrored floor
+# with a cylinder, a cuboid and a pyramid, but without the computer.  It needs
+# no border and no lettering, and its palette - orange sky, white sun, blue
+# floor - is what makes it legible at 16px, where none of the solids are.
+#
 # Paths are relative to this file.  Every value has a default in
-# beebium_icon.config; only the interesting ones are spelled out here.
+# src/beebium_icon/config.py; only the interesting ones are spelled out here.
 
 name = "beebium"
 
-[palette]
-# BBC Microcomputer case beige, with Acorn green typography.
-face_top = "#F6ECD2"
-face_bottom = "#E7D8B2"
-frame = "#FBF4E1"
-ink = "#2E6B35"
-shadow = "#4A3B14"
+[artwork]
+filepath = "../the-shape-of-beebium.png"
+# Lanczos softens the horizon and the cylinder's edge as it shrinks them.
+# Below half size that loss is worth correcting; above it, sharpening only
+# roughens the clouds.
+sharpen_below_scale = 0.5
+sharpen_percent = 90
 
-[geometry]
-style = "squircle"
+# macOS. Apple's icon grid: the body is inset to leave room for the shadow,
+# and the corner is a superellipse rather than an arc.
+[squircle]
+body_ratio = 0.805
+unshadowed_body_ratio = 0.94
+corner_ratio = 0.225
+exponent = 5.0
 
-[content]
-symbol = "Bb"
-name = "Beebium"
-atomic_number = "6502"
-ground_state = "8-bit"
-isotopes = ["16", "32", "64", "128"]
-# "nuclide" writes each RAM size as a raised mass number before the symbol,
-# the way chemistry writes an isotope: 16Bb, 32Bb.  "unit" writes 16K, 32K
-# instead, using isotope_suffix.
-isotope_style = "nuclide"
-isotope_suffix = "K"
-energies = ["2", "3", "4"]
-energy_suffix = "MHz"
-# The chips the machine is built from, as the constituent elements of a
-# compound.  A 65xx/68xx series with no stragglers: CPU, VIA, CRTC, ACIA,
-# ADLC.  Only shown at the very top of the ladder.
-constituents = ["6502", "6522", "6845", "6850", "6854"]
-separator = " · "
+# Windows, Linux and the web: a conventional rounded square filling the
+# canvas. A corner_ratio of 0 would make it a plain square.
+[rounded]
+body_ratio = 1.0
+corner_ratio = 0.18
 
-[lod]
-# The smallest rendered size, in pixels, at which each element appears.
-small_size = 24
-symbol = 0
-keyline = 48
-atomic_number = 128
-name = 128
-isotopes = 256
-ground_state = 512
-energies = 512
-constituents = 1024
-
-# Two typefaces, so that the identity of the element reads apart from its
-# specifications, the way a real periodic table separates them.
-#
-# The vendored defaults are open-licensed stand-ins: Nunito Sans for the
-# humanist geometric display face, Barlow for the DIN-like technical face.
-# See configs/beebium-avenir-din.toml for the system-font pairing.
-
-[fonts.symbol]
-filepath = "../fonts/NunitoSans.ttf"
-# A periodic table sets its symbols in a normal weight, not a black one; a
-# heavy Bb reads as a logo rather than as an element.
-variations = { wght = 600 }
-# Even this fills in its own counters at 16px, so the small end goes lighter.
-small_variations = { wght = 500 }
-fit = "ink"
-
-[fonts.name]
-filepath = "../fonts/NunitoSans.ttf"
-variations = { wght = 600 }
-tracking = -0.005
-fit = "ink"
-
-[fonts.technical]
-filepath = "../fonts/Barlow-Medium.ttf"
-tracking = 0.02
-fit = "cap"
+[shadow]
+colour = "#241A06"
+opacity = 0.30
+dy = 0.020
+blur = 0.018
+# Below this size the shadow costs more pixels of artwork than it earns.
+min_size = 64

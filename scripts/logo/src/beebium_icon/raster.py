@@ -10,14 +10,12 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Rasterising, and the container formats that hold rasters.
+"""The container formats that hold the rendered icons.
 
-resvg does the rasterising: it is a self-contained Rust renderer shipped as a
-wheel, so there is no system Cairo or librsvg to install, and it renders the
-same on every platform.  ICNS and ICO are assembled here rather than shelled
-out to iconutil, both because iconutil is macOS-only and because every size in
-the bundle is rendered at its own level of detail instead of being downsampled
-from one large image.
+ICNS and ICO are assembled here rather than shelled out to iconutil, both
+because iconutil is macOS-only and because every size in the bundle is
+resampled from the full-resolution artwork rather than downsampled from one
+already-reduced image.
 """
 
 from __future__ import annotations
@@ -25,16 +23,18 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
-import resvg_py
-
+from beebium_icon.artwork import render_png
 from beebium_icon.config import IconConfig
-from beebium_icon.svg import render_svg
 
-
-def render_png(config: IconConfig, size: int) -> bytes:
-    """Render the icon at one size as PNG bytes."""
-    svg = render_svg(config, size)
-    return bytes(resvg_py.svg_to_bytes(svg_string=svg, width=size, height=size))
+__all__ = [
+    "ICNS_SIZES",
+    "ICNS_TYPES",
+    "Raster",
+    "build_icns",
+    "build_ico",
+    "render_png",
+    "render_rasters",
+]
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class Raster:
 
 
 def render_rasters(config: IconConfig, sizes: tuple[int, ...]) -> tuple[Raster, ...]:
-    """Render each size independently, so each gets its own level of detail."""
+    """Render each size independently, from the full-resolution artwork."""
     return tuple(Raster(size, render_png(config, size)) for size in sorted(set(sizes)))
 
 

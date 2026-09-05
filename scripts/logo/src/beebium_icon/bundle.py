@@ -13,9 +13,9 @@
 """Platform icon bundles.
 
 One target per platform, each naming the sizes that platform asks for, the
-frame style that looks native there, and the layout of files on disk.  Every
-size in a bundle is rendered from the configuration at that size, so the level
-of detail is chosen per size rather than smeared out of one large image.
+shape that looks native there, and the layout of files on disk.  Every size is
+resampled from the full-resolution artwork rather than from an already-reduced
+image, so nothing is softened twice.
 """
 
 from __future__ import annotations
@@ -25,9 +25,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from beebium_icon.config import SQUIRCLE, TILE, IconConfig
+from beebium_icon.config import ROUNDED, SQUIRCLE, IconConfig
 from beebium_icon.raster import Raster, build_icns, build_ico, render_rasters
-from beebium_icon.svg import render_svg
 
 
 @dataclass(frozen=True)
@@ -35,7 +34,7 @@ class Target:
     """A platform's icon requirements, and how to lay them out on disk."""
 
     name: str
-    style: str
+    shape: str
     sizes: tuple[int, ...]
     description: str
     builder: Callable[[IconConfig, tuple[Raster, ...], Path], list[Path]]
@@ -56,18 +55,13 @@ APPICONSET_SLOTS: tuple[tuple[int, int], ...] = (
     (512, 2),
 )
 
-# The nominal SVG size: large enough that rounding in the layout is invisible
-# when the document is scaled.
-SCALABLE_SIZE = 1024
-
-
 def build_target(config: IconConfig, target: Target, out_dirpath: Path) -> list[Path]:
     """Render one platform's icons beneath out_dirpath, returning what was written."""
-    styled = config.with_style(target.style)
-    rasters = render_rasters(styled, target.sizes)
+    shaped = config.with_shape(target.shape)
+    rasters = render_rasters(shaped, target.sizes)
     target_dirpath = out_dirpath / target.name
     target_dirpath.mkdir(parents=True, exist_ok=True)
-    return target.builder(styled, rasters, target_dirpath)
+    return target.builder(shaped, rasters, target_dirpath)
 
 
 def _write(filepath: Path, data: bytes) -> Path:
@@ -141,12 +135,6 @@ def _build_linux(
                 raster.png,
             )
         )
-    written.append(
-        _write(
-            target_dirpath / "hicolor" / "scalable" / "apps" / f"{config.name}.svg",
-            render_svg(config, SCALABLE_SIZE).encode("utf-8"),
-        )
-    )
     return written
 
 
@@ -160,10 +148,6 @@ def _build_web(
             build_ico(tuple(by_size[size] for size in (16, 32, 48))),
         ),
         _write(target_dirpath / "apple-touch-icon.png", by_size[180].png),
-        _write(
-            target_dirpath / f"{config.name}.svg",
-            render_svg(config, SCALABLE_SIZE).encode("utf-8"),
-        ),
     ]
     for size in (192, 512):
         written.append(_write(target_dirpath / f"icon-{size}.png", by_size[size].png))
@@ -196,23 +180,23 @@ TARGETS: dict[str, Target] = {
     ),
     "windows": Target(
         "windows",
-        TILE,
+        ROUNDED,
         (16, 24, 32, 48, 64, 128, 256),
         "multi-resolution ICO",
         _build_windows,
     ),
     "linux": Target(
         "linux",
-        TILE,
+        ROUNDED,
         (16, 22, 24, 32, 48, 64, 128, 256, 512),
         "hicolor icon theme tree",
         _build_linux,
     ),
     "web": Target(
         "web",
-        TILE,
+        ROUNDED,
         (16, 32, 48, 180, 192, 512),
-        "favicon, touch icon and scalable SVG",
+        "favicon, touch icon and PNGs",
         _build_web,
     ),
 }

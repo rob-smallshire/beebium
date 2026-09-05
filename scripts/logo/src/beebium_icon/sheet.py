@@ -10,7 +10,7 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""A contact sheet for judging the level-of-detail ladder.
+"""A contact sheet for judging the small sizes.
 
 Renders every size at its native resolution on one background, then repeats
 the row magnified with nearest-neighbour sampling, which is the only reliable
@@ -23,8 +23,8 @@ import io
 
 from PIL import Image, ImageDraw, ImageFont
 
+from beebium_icon.artwork import render_png
 from beebium_icon.config import IconConfig
-from beebium_icon.raster import render_png
 
 MARGIN = 32
 GUTTER = 28

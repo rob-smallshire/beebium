@@ -59,12 +59,12 @@ def test_a_rendered_png_has_the_size_asked_for(config):
 
 
 def test_a_rendered_png_has_transparent_corners(config):
-    """The tile is rounded; the canvas corners must not be painted."""
+    """The icon is rounded; the canvas corners must not be painted."""
     image = Image.open(io.BytesIO(render_png(config, 512))).convert("RGBA")
     assert image.getpixel((0, 0))[3] == 0
 
 
-def test_the_tile_is_painted_in_the_middle(config):
+def test_the_icon_is_painted_in_the_middle(config):
     image = Image.open(io.BytesIO(render_png(config, 512))).convert("RGBA")
     assert image.getpixel((256, 256))[3] == 255
 
@@ -133,7 +133,7 @@ def test_ico_refuses_to_be_empty():
 
 
 def test_each_size_is_rendered_rather_than_downsampled(config):
-    """A 16px icon is not a shrunken 512px one; it has fewer things on it."""
+    """A 16px icon is resampled from the artwork, not from the 512px icon."""
     small = Raster(16, render_png(config, 16))
     large = Raster(512, render_png(config, 512))
     small_image = Image.open(io.BytesIO(small.png)).convert("RGBA")

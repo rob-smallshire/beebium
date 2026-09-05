@@ -1,10 +1,9 @@
 [project]
 name = "beebium-icon"
 version = "0.1.0"
-description = "Generator for the Beebium application icon: a periodic-table tile for the element Beebium"
+description = "Packager for the Beebium application icon"
 requires-python = ">=3.11"
 dependencies = [
-    "uharfbuzz>=0.39",
     "resvg-py>=0.1.5",
     "pillow>=10.0",
 ]

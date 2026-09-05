@@ -1,36 +1,21 @@
-# Beebium icon generator
+# Beebium icon packager
 
-Generates the Beebium application icon: a periodic-table tile for the fictional
-element **Beebium**, symbol **Bb**, atomic number 6502, in BBC Microcomputer
-beige and Acorn green.
+The Beebium application icon is **The Shape of Beebium**: a pastiche of
+Acorn's 1981 marketing image *The Shape of Things to Come*, which posed a BBC
+Micro on a cylindrical plinth before a sunset over a mirrored, strongly
+converging floor. The pastiche keeps the sky, the floor and the three solids -
+cylinder, cuboid, pyramid - and omits the computer.
 
-The tile uses a level-of-detail scheme.  At 16px it is the symbol alone; each
-step up the ladder adds an annotation, until at 512px and above the tile
-carries every slot: the atomic number, the ground state, the element name,
-the isotopes and the energy levels.  Every size is composed at that
-size - nothing is downsampled from one large drawing - so the small end is a
-deliberate design rather than a blur.
+The artwork is finished, so this tool does not draw anything. It cuts one
+square image to the sizes, shapes and container formats that each platform
+asks for.
 
 ```
-16, 32          Bb
-64              Bb, keyline
-128             + 6502, Beebium
-256             + isotopes: 16Bb . 32Bb . 64Bb . 128Bb
-512             + 8-bit, energy levels: 2 . 3 . 4 MHz
-1024            + constituents: 6502 . 6522 . 6845 . 6850 . 6854
+the-shape-of-beebium.png  ->  .icns + AppIcon.appiconset   (macOS)
+                              .ico + PNGs                  (Windows)
+                              hicolor tree                 (Linux)
+                              favicon, touch icon, PNGs    (web)
 ```
-
-What each slot means, in the manner of the legend on a NIST periodic table:
-
-| Slot           | On the tile               | For a BBC Micro                        |
-|----------------|---------------------------|----------------------------------------|
-| Atomic number  | `6502`                    | the processor at the heart of every one |
-| Ground state   | `8-bit`                   | the word size, which stays true across the isotopes |
-| Symbol         | `Bb`                      | -                                      |
-| Name           | `Beebium`                 | -                                      |
-| Isotopes       | `16Bb . 32Bb . 64Bb`      | the RAM the machine came with, as mass numbers |
-| Energy levels  | `2 . 3 . 4 MHz`           | the clock speeds it runs at            |
-| Constituents   | `6502 . 6522 . 6845 ...`  | the chips it is built from             |
 
 ## Using it
 
@@ -41,20 +26,10 @@ cd scripts/logo
 
 uv run beebium-icon build                       # every platform, into out/
 uv run beebium-icon build macos windows         # named platforms only
-uv run beebium-icon sheet -o /tmp/ladder.png    # contact sheet of the ladder
-uv run beebium-icon svg --size 1024 -o /tmp/icon.svg
-uv run beebium-icon png --size 256 -o /tmp/icon.png
+uv run beebium-icon sheet -o /tmp/ladder.png    # contact sheet for the small sizes
+uv run beebium-icon png --size 1024 -o /tmp/icon.png
 uv run pytest                                   # the test suite
 ```
-
-`build` writes, beneath `out/`:
-
-| Target    | Contents                                                          |
-|-----------|-------------------------------------------------------------------|
-| `macos`   | `Beebium.icns` and an `AppIcon.appiconset` with its `Contents.json` |
-| `windows` | multi-resolution `beebium.ico` (PNG-compressed entries) plus PNGs  |
-| `linux`   | a `hicolor` theme tree, including `scalable/apps/beebium.svg`      |
-| `web`     | `favicon.ico`, `apple-touch-icon.png`, PNGs and a scalable SVG      |
 
 To put the generated icons into the macOS front end:
 
@@ -66,106 +41,62 @@ uv run beebium-icon build macos --install-appiconset \
 To regenerate the logo the top-level README shows:
 
 ```bash
-uv run beebium-icon --style tile --no-shadow svg --size 1024 \
-    -o ../../docs/images/beebium-logo.svg
+uv run beebium-icon --shape rounded png --size 512 \
+    -o ../../docs/images/beebium-logo.png
 ```
 
-That one is deliberately drawn at the largest size and shown small, so it
-carries every row; and `--no-shadow` keeps the document out of SVG filters,
-which are the least portable thing an SVG can contain and which GitHub's
-sanitiser is not obliged to keep.
+## Shapes
+
+Two, selected per target and overridable with `--shape`:
+
+- **`squircle`** - Apple's icon grid: a superellipse body inset to 0.805 of the
+  canvas, leaving the margin macOS expects a drop shadow to occupy. Used for
+  the `macos` target.
+- **`rounded`** - a conventional rounded square filling the canvas, with no
+  shadow, which is what Windows and Linux expect. A `corner_ratio` of 0 makes
+  it a plain square. Used everywhere else.
+
+## What the small sizes need
+
+The artwork reads at 16px because of its palette - orange sky, white sun, blue
+floor - long after the solids have dissolved. Two things protect that:
+
+- **No shadow below 64px.** The shadow is a property of Apple's grid, and the
+  margin it reserves is 20% of the canvas. Below 64px the icon gives that
+  margin back to the artwork instead, growing the body from 0.805 to 0.94.
+- **Sharpening below half size.** Lanczos averages away the horizon and the
+  cylinder's lit edge. Unsharp masking puts them back. Above half size the
+  reduction is small enough that sharpening only roughens the clouds, so it is
+  not applied.
+
+`beebium-icon sheet` renders every size at its native resolution and again
+magnified with nearest-neighbour sampling, which is the only reliable way to
+see what a 16px icon is doing to the pixel grid.
 
 ## Configuration
 
-Everything drawn comes from a TOML file - `configs/beebium.toml` by default.
-A machine variant, an isotope for a second processor, is a new configuration
-file rather than new code:
-
-```bash
-uv run beebium-icon -c configs/beebium-z80.toml build macos
-```
-
-The sections are `palette`, `geometry`, `layout`, `content`, `lod` and `fonts`;
-every key has a default in `src/beebium_icon/config.py`, which is the reference
-for what each one means.  Unknown keys are rejected rather than ignored.
-
-`lod` holds the smallest rendered size at which each element appears, so the
-ladder above is data, not code.
-
-## Notation
-
-Content strings carry a small markup for raised and lowered text, because
-chemistry is written that way:
-
-```
-2^4K            a raised 4
-^{16}Bb         a raised 16, as a mass number
-(6522)_2        a lowered 2, as in a molecular formula
-\^              a literal caret
-```
-
-Scripts are drawn by scaling and shifting the same face, not by asking for
-Unicode superscript characters, which most faces carry for only a few digits,
-nor for OpenType script features, which many faces lack.  Their size and
-offsets are the `[scripts]` section.
-
-The isotope row has two styles, since it is generated rather than written out:
-`nuclide` sets each RAM size as a raised mass number before the symbol, as
-chemistry writes an isotope; `unit` sets `16K . 32K` instead.  To put the
-constituents in place of the energy levels rather than below them, empty
-`content.energies` and lower `lod.constituents` to 512.
-
-## Frame styles
-
-Two outer shapes, selected per target and overridable with `--style`:
-
-- **`squircle`** - a superellipse-cornered body on Apple's icon grid, which is
-  what a macOS app icon should be.  Used for the `macos` target.
-- **`tile`** - the free-standing tile as drawn in the original concept: a
-  lighter beige band around a beige face.  Used for the other targets, and
-  portable anywhere.
-
-## Typography
-
-Two typefaces, because a periodic table separates the identity of an element
-from its measurements:
-
-| Role        | Carries                                     |
-|-------------|---------------------------------------------|
-| `symbol`    | `Bb`                                        |
-| `name`      | `Beebium`                                   |
-| `technical` | 6502, 8-bit, isotopes, energy levels        |
-
-Text is shaped with HarfBuzz and converted to outlines when the SVG is written,
-so a generated icon depends on no installed font and comes out identically on
-any machine.  A role may name a `.ttc` face index and variable-font axis
-settings; `small_variations` gives a role a lighter cut at and below
-`lod.small_size`, because a heavy weight fills in its own counters once a glyph
-is eight pixels tall.
-
-`configs/beebium.toml` uses the open-licensed faces vendored in `fonts/`, and is
-the configuration the shipped icons are built from.  `configs/beebium-avenir-din.toml`
-uses Avenir Next and DIN Alternate from `/System/Library/Fonts`, which are the
-faces the design was drawn for; it renders only on macOS and its output must
-not be checked in, since those fonts are not redistributable.
+Everything comes from a TOML file - `configs/beebium.toml` by default: the
+artwork's path, the resampling thresholds, the proportions of both shapes, and
+the shadow. Every key has a default in `src/beebium_icon/config.py`, which is
+the reference for what each one means. Unknown keys are rejected rather than
+ignored.
 
 ## How it fits together
 
-| Module          | Responsibility                                              |
-|-----------------|-------------------------------------------------------------|
-| `config.py`     | the TOML schema, its defaults and its validation             |
-| `geometry.py`   | boxes, rounded rectangles, superellipses                     |
-| `typography.py` | shaping and outlining text                                   |
-| `layout.py`     | level of detail, and where each block sits                   |
-| `svg.py`        | the SVG document                                             |
-| `raster.py`     | rasterising, and the ICNS and ICO containers                 |
-| `bundle.py`     | per-platform file layouts                                    |
-| `sheet.py`      | the contact sheet                                            |
-| `cli.py`        | the command line                                             |
+| Module        | Responsibility                                          |
+|---------------|---------------------------------------------------------|
+| `config.py`   | the TOML schema, its defaults and its validation         |
+| `geometry.py` | boxes, rounded rectangles, superellipses                 |
+| `artwork.py`  | resampling, sharpening, masking, the shadow              |
+| `raster.py`   | the ICNS and ICO containers                              |
+| `bundle.py`   | per-platform file layouts                                |
+| `sheet.py`    | the contact sheet                                        |
+| `cli.py`      | the command line                                         |
 
-Rasterising uses resvg, which ships as a wheel and needs no system Cairo, so
-`uv run` is the only prerequisite on any platform.
+The mask is rasterised from an SVG path by resvg, which ships as a wheel and
+needs no system Cairo, so `uv run` is the only prerequisite on any platform.
+Cutting the corner with a polygon fill instead would show its stairs at 16px.
 
 The ICNS archive is assembled here rather than by `iconutil`, which is
-macOS-only.  16 and 32 travel as `icp4` and `icp5`; there is deliberately no
+macOS-only. 16 and 32 travel as `icp4` and `icp5`; there is deliberately no
 `icp6`, because macOS reads that type back as 48x48.

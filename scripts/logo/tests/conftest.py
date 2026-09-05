@@ -20,8 +20,10 @@ import pytest
 
 from beebium_icon.config import IconConfig, load_config
 
-CONFIGS_DIRPATH = Path(__file__).resolve().parents[1] / "configs"
+LOGO_DIRPATH = Path(__file__).resolve().parents[1]
+CONFIGS_DIRPATH = LOGO_DIRPATH / "configs"
 DEFAULT_CONFIG_FILEPATH = CONFIGS_DIRPATH / "beebium.toml"
+ARTWORK_FILEPATH = LOGO_DIRPATH / "the-shape-of-beebium.png"
 
 
 @pytest.fixture(scope="session")
