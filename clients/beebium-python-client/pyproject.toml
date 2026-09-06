@@ -123,7 +123,7 @@ ignore = ["UP046", "UP047"]
 # beside the tests. Classify them as local so they sort into their own group
 # after first-party beebium imports, rather than being mistaken for
 # third-party packages, which leaves the import order stable.
-known-local-folder = ["conftest", "firetrack", "tube_test_helpers"]
+known-local-folder = ["conftest", "firetrack", "tube_test_helpers", "_snippet_guard"]
 
 [tool.pyright]
 include = ["src", "examples"]

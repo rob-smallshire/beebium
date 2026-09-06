@@ -20,7 +20,7 @@ readme/snippets/), and this script splices the tested code into the prose.
 Snippet extraction rule (deliberately simple, so what renders is exactly what
 runs): a snippet is the block of lines strictly between the first
 ``# readme:begin`` and the next ``# readme:end`` marker in
-readme/snippets/test_<name>.py, with common leading indentation removed. The
+readme/snippets/test_readme_<name>.py, with common leading indentation removed. The
 two marker lines are dropped; nothing else is added, removed or reformatted.
 Keep any assertions or fixtures a snippet should not show OUTSIDE the marked
 region.
@@ -56,8 +56,12 @@ HEADER = (
 
 
 def extract_snippet(name: str) -> str:
-    """Return the marked, dedented code region from snippets/test_<name>.py."""
-    snippet_filepath = SNIPPETS_DIRPATH / f"test_{name}.py"
+    """Return the marked, dedented code region from snippets/test_readme_<name>.py.
+
+    Snippet files carry a ``test_readme_`` prefix (not a bare ``test_``) so their
+    basenames never collide with tests/ when pytest collects both together.
+    """
+    snippet_filepath = SNIPPETS_DIRPATH / f"test_readme_{name}.py"
     if not snippet_filepath.exists():
         raise FileNotFoundError(f"no snippet file for {name!r}: {snippet_filepath}")
 

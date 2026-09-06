@@ -20,19 +20,29 @@ none of it is rendered into the README.
 
 import pytest
 
-from beebium.client.installation import ServerInstallation
+from _snippet_guard import snippet_skip_reason
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "no_server: a snippet-support unit test that runs without a server "
+        "(exempt from the server-origin guard).",
+    )
 
 
 @pytest.fixture(autouse=True)
-def _require_server():
-    """Skip a snippet when no emulator server can be resolved.
+def _require_server(request: pytest.FixtureRequest):
+    """Skip a snippet -- with a precise reason -- unless a server the examples are
+    about is available.
 
-    The snippets launch or connect to a real server. Where none is available
-    (e.g. a unit job with no built server and no beebium-server wheel), skip
-    with a clear reason rather than failing -- the server-backed integration
-    jobs are where the snippets actually execute.
+    Where none is (a unit job with no built server and no beebium-server wheel),
+    or only a stray PATH server is, skip rather than fail: the server-backed
+    integration jobs set BEEBIUM_SERVER and are where the snippets execute.
+    Tests marked ``no_server`` (the guard's own unit tests) are exempt.
     """
-    try:
-        ServerInstallation.default().executable_filepath("model-b")
-    except Exception as exc:  # noqa: BLE001 -- any resolution failure means "no server here"
-        pytest.skip(f"no beebium-server available for README snippets: {exc}")
+    if request.node.get_closest_marker("no_server"):
+        return
+    reason = snippet_skip_reason()
+    if reason:
+        pytest.skip(reason)

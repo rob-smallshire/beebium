@@ -69,11 +69,13 @@ Do **not** edit `README.md` by hand. Instead:
 
 - Prose lives in `readme/README.md.j2` (a Jinja2 template).
 - Every Usage code example is a **real, executable test** under
-  `readme/snippets/`. Each snippet file marks the region that appears in the
-  README with `# readme:begin` / `# readme:end`; the generator splices that
-  region in verbatim (dedented, marker lines removed) -- so what the README
-  shows is exactly what runs. Keep assertions or fixtures a snippet should not
-  display outside the marked region.
+  `readme/snippets/`, named `test_readme_<name>.py` (the `test_readme_` prefix
+  keeps their basenames from colliding with `tests/` when pytest collects both
+  together). Each snippet file marks the region that appears in the README with
+  `# readme:begin` / `# readme:end`; the generator splices that region in
+  verbatim (dedented, marker lines removed) -- so what the README shows is
+  exactly what runs. Keep assertions or fixtures a snippet should not display
+  outside the marked region.
 - `scripts/generate_readme.py` renders the template into `README.md`.
 
 After editing the template or a snippet, regenerate and run the snippet tests:
