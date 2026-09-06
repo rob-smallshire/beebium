@@ -1041,6 +1041,14 @@ jobs:
         # tree changes -- catches stubs drifting from the .proto sources.
         run: bash scripts/check_proto_regen.sh
 
+      - name: Check the generated README is in sync with its template and snippets
+        working-directory: clients/beebium-python-client
+        # README.md is generated from readme/README.md.j2 + readme/snippets/;
+        # re-render and fail if the committed file drifts. The snippets are also
+        # executed against the built wheel on the Linux integration leg, so the
+        # examples are both current (here) and proven to run (there).
+        run: bash scripts/check_readme_regen.sh
+
       - name: Build wheel and run packaging + unit tests against it
         working-directory: clients/beebium-python-client
         # Load-bearing packaging gate: build the wheel, install it into a fresh
@@ -1155,10 +1163,12 @@ jobs:
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
         # Runs against the BUILT WHEEL installed into a fresh venv, not the
         # source tree, so packaging faults (missing data files, entry points)
-        # fail here too. --durations=0 lists every test's wall-clock time
+        # fail here too. readme/snippets/ runs the README's Usage examples
+        # against a real server so the documented code is proven, not just
+        # regenerated. --durations=0 lists every test's wall-clock time
         # (slowest first); --timeout=600 fails a hung test after 10 min
         # rather than stalling the job.
-        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
+        run: bash scripts/test-wheel.sh tests/ readme/snippets/ -v --durations=0 --timeout=600
 
   python-integration-windows:
     name: Python Client Integration Tests (Windows)
@@ -1197,10 +1207,12 @@ jobs:
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
         # Runs against the BUILT WHEEL installed into a fresh venv, not the
         # source tree, so packaging faults (missing data files, entry points)
-        # fail here too. --durations=0 lists every test's wall-clock time
+        # fail here too. readme/snippets/ runs the README's Usage examples
+        # against a real server so the documented code is proven, not just
+        # regenerated. --durations=0 lists every test's wall-clock time
         # (slowest first); --timeout=600 fails a hung test after 10 min
         # rather than stalling the job.
-        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
+        run: bash scripts/test-wheel.sh tests/ readme/snippets/ -v --durations=0 --timeout=600
 
   python-integration-macos-arm64:
     name: Python Client Integration Tests (macOS arm64)
@@ -1242,10 +1254,12 @@ jobs:
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
         # Runs against the BUILT WHEEL installed into a fresh venv, not the
         # source tree, so packaging faults (missing data files, entry points)
-        # fail here too. --durations=0 lists every test's wall-clock time
+        # fail here too. readme/snippets/ runs the README's Usage examples
+        # against a real server so the documented code is proven, not just
+        # regenerated. --durations=0 lists every test's wall-clock time
         # (slowest first); --timeout=600 fails a hung test after 10 min
         # rather than stalling the job.
-        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
+        run: bash scripts/test-wheel.sh tests/ readme/snippets/ -v --durations=0 --timeout=600
 
   python-integration-macos-x86_64:
     name: Python Client Integration Tests (macOS x86_64)
@@ -1287,10 +1301,12 @@ jobs:
           BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
         # Runs against the BUILT WHEEL installed into a fresh venv, not the
         # source tree, so packaging faults (missing data files, entry points)
-        # fail here too. --durations=0 lists every test's wall-clock time
+        # fail here too. readme/snippets/ runs the README's Usage examples
+        # against a real server so the documented code is proven, not just
+        # regenerated. --durations=0 lists every test's wall-clock time
         # (slowest first); --timeout=600 fails a hung test after 10 min
         # rather than stalling the job.
-        run: bash scripts/test-wheel.sh tests/ -v --durations=0 --timeout=600
+        run: bash scripts/test-wheel.sh tests/ readme/snippets/ -v --durations=0 --timeout=600
 
   # Builds the npm tarball and exercises it the way a consumer would. Nothing
   # else here can: the other jobs run `npm ci`, which installs devDependencies,

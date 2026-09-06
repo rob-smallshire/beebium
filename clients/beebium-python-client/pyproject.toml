@@ -55,6 +55,9 @@ dev = [
     "grpcio-tools>=1.60.0",
     "mypy-protobuf>=3.6.0",
     "ruff>=0.6.0",
+    # README generation (scripts/generate_readme.py). Kept out of published
+    # metadata: end users install the generated README, never regenerate it.
+    "jinja2>=3.1.0",
     # The optional-feature dependencies, so the dev environment type-checks the
     # code that uses them (video PIL export, zeroconf discovery).
     "Pillow>=10.0.0",
