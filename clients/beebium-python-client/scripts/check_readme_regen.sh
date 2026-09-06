@@ -11,34 +11,54 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-# Regeneration-is-a-no-op check for the generated README.
+# Regeneration-is-a-no-op check for the GENERATED READMEs.
 #
-# Re-renders README.md from readme/README.md.j2 and the snippet files (with the
-# locked dev toolchain) and asserts the committed README.md is unchanged. This
-# closes the drift hole where the template or a snippet changes but the
+# Re-renders every generated README from its readme/README.md.j2 + readme/snippets/
+# (with the locked dev toolchain) and asserts the committed files are unchanged.
+# This closes the drift hole where a template or a snippet changes but the
 # committed README is not regenerated. Paired with the snippet tests (which run
-# the examples against the built wheel), it keeps the README both current and
+# the examples against the built wheels), it keeps the READMEs both current and
 # correct.
+#
+# One generator (scripts/generate_readme.py at the repo root) serves both
+# packages; jinja2 comes from this client project's dev group, so this runs
+# under `uv run` from the client directory and regenerates the server package's
+# README too.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLIENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd "$CLIENT_DIR/../.." && pwd)"
+GENERATOR="$REPO_DIR/scripts/generate_readme.py"
+
+# Every package whose README is generated: <project-dir>:<README path to diff>.
+PROJECTS=(
+    "$CLIENT_DIR"
+    "$REPO_DIR/packaging/python-server"
+)
 
 cd "$CLIENT_DIR"
 
-echo "Regenerating README.md with the locked toolchain (uv default dev group)..."
-uv run python scripts/generate_readme.py
+for project in "${PROJECTS[@]}"; do
+    echo "Regenerating README for ${project} with the locked toolchain..."
+    uv run python "$GENERATOR" "$project"
+done
 
 echo "Checking that regeneration was a no-op..."
-if ! git diff --quiet -- README.md; then
+readmes=()
+for project in "${PROJECTS[@]}"; do
+    readmes+=("$project/README.md")
+done
+
+if ! git -C "$REPO_DIR" diff --quiet -- "${readmes[@]}"; then
     echo
-    echo "ERROR: regenerating README.md changed the committed file." >&2
-    echo "Edit readme/README.md.j2 or a file under readme/snippets/, then run" >&2
-    echo "scripts/generate_readme.py and commit the result. Diff:" >&2
+    echo "ERROR: regenerating a README changed the committed file." >&2
+    echo "Edit the readme/README.md.j2 or a readme/snippets/ file, then run" >&2
+    echo "scripts/generate_readme.py <project-dir> and commit the result. Diff:" >&2
     echo
-    git --no-pager diff -- README.md >&2
+    git -C "$REPO_DIR" --no-pager diff -- "${readmes[@]}" >&2
     exit 1
 fi
 
-echo "OK: README.md is in sync with its template and snippets."
+echo "OK: all generated READMEs are in sync with their templates and snippets."

@@ -201,6 +201,9 @@ jobs:
           echo "== full smoke: client launches the wheel server with no arguments =="
           env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/packaging/smoke/test_smoke.py" -q
 
+          echo "== README snippets: the beebium-server README examples run against this wheel =="
+          env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/packaging/python-server/readme/snippets" -q
+
   # The Windows analogue of the verify matrix. Windows has no bash
   # smoke-installed-tree.sh, so the console-script shim (which runs the exe and
   # loads every plugin DLL) plus the full boot in test_smoke.py stand in for it.
@@ -266,6 +269,16 @@ jobs:
         run: |
           Remove-Item Env:\BEEBIUM_SERVER -ErrorAction SilentlyContinue
           & "$env:BEEBIUM_PY" -m pytest "$env:GITHUB_WORKSPACE\packaging\smoke\test_smoke.py" -q
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: README snippets run against the installed wheel
+        shell: pwsh
+        # The console-script CLI snippet skips on Windows (the shim runs the
+        # server as a child there); the paths-API snippet runs. list-extensions
+        # above already exercises the console script on Windows.
+        run: |
+          Remove-Item Env:\BEEBIUM_SERVER -ErrorAction SilentlyContinue
+          & "$env:BEEBIUM_PY" -m pytest "$env:GITHUB_WORKSPACE\packaging\python-server\readme\snippets" -q
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
   # Publish the verified server wheels to PyPI. Unlike the client publish, this

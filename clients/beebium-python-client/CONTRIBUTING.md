@@ -76,13 +76,15 @@ Do **not** edit `README.md` by hand. Instead:
   verbatim (dedented, marker lines removed) -- so what the README shows is
   exactly what runs. Keep assertions or fixtures a snippet should not display
   outside the marked region.
-- `scripts/generate_readme.py` renders the template into `README.md`.
+- The repo-root `scripts/generate_readme.py` renders the template into
+  `README.md`. One generator serves every generated README (this client and the
+  `beebium-server` wheel); it takes the package directory as an argument.
 
 After editing the template or a snippet, regenerate and run the snippet tests:
 
 ```bash
-uv run python scripts/generate_readme.py         # regenerate README.md
-bash scripts/test-wheel.sh readme/snippets/ -q   # prove the examples run
+uv run python ../../scripts/generate_readme.py .   # regenerate this README.md
+bash scripts/test-wheel.sh readme/snippets/ -q     # prove the examples run
 ```
 
 CI enforces both: `scripts/check_readme_regen.sh` fails if the committed
