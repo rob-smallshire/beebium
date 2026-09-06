@@ -109,10 +109,20 @@ line-length = 120
 extend-exclude = ["**/_proto"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP"]
+# TID251 (banned-api) enforces the rule below: never import a conftest.py as a
+# module. See [tool.ruff.lint.flake8-tidy-imports.banned-api].
+select = ["E", "F", "W", "I", "B", "UP", "TID251"]
 # Keep classic typing.TypeVar rather than PEP 695 type parameters for now; a
 # migration to `def f[T]()` syntax is a deliberate, separate choice.
 ignore = ["UP046", "UP047"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# `from conftest import ...` / `import conftest` is fragile: pytest can bind the
+# bare module name `conftest` to a DIFFERENT directory's conftest.py when several
+# are collected together (e.g. tests/ and readme/snippets/), so a shared symbol
+# silently resolves to the wrong file. Put shared test helpers in a uniquely
+# named module (firetrack.py, tube_test_helpers.py, prestel_helpers.py) instead.
+"conftest".msg = "Do not import a conftest.py as a module; put shared helpers in a uniquely named module (e.g. prestel_helpers.py)."
 
 [tool.ruff.lint.per-file-ignores]
 # Package __init__ modules re-export their public API.
@@ -123,7 +133,7 @@ ignore = ["UP046", "UP047"]
 # beside the tests. Classify them as local so they sort into their own group
 # after first-party beebium imports, rather than being mistaken for
 # third-party packages, which leaves the import order stable.
-known-local-folder = ["conftest", "firetrack", "tube_test_helpers", "_snippet_guard"]
+known-local-folder = ["firetrack", "tube_test_helpers", "prestel_helpers", "_snippet_guard"]
 
 [tool.pyright]
 include = ["src", "examples"]

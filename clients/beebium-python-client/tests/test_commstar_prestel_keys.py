@@ -32,7 +32,7 @@ stop resolving keys through CTRL (see rule R9 in docs/frontend-modifier-keys.md)
 
 import time
 
-from conftest import (
+from prestel_helpers import (
     CARRIAGE_RETURN,
     KEY_HOLD_SECONDS,
     VIEWDATA_HASH,

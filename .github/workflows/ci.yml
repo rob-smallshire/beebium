@@ -1049,6 +1049,22 @@ jobs:
         # examples are both current (here) and proven to run (there).
         run: bash scripts/check_readme_regen.sh
 
+      - name: Forbid importing a conftest.py as a module
+        working-directory: clients/beebium-python-client
+        # `from conftest import ...` / `import conftest` is fragile: when pytest
+        # collects tests/ and readme/snippets/ together, the bare name `conftest`
+        # can bind to the wrong directory's conftest.py, so a shared symbol
+        # resolves to the wrong file and collection fails. Shared helpers belong
+        # in a uniquely named module (prestel_helpers.py, tube_test_helpers.py).
+        # ruff's TID251 enforces this locally, but ruff does not run in CI, so
+        # this grep is the CI backstop. Scoped to this package's test/readme trees.
+        run: |
+          if git grep -nE '^[[:space:]]*(from[[:space:]]+conftest[[:space:]]+import|import[[:space:]]+conftest)([[:space:]]|$)' -- 'tests' 'readme' 'tests_packaging'; then
+            echo "::error::Do not import a conftest.py as a module. Put shared test helpers in a uniquely named module (e.g. prestel_helpers.py)."
+            exit 1
+          fi
+          echo "OK: no bare conftest imports in the client package."
+
       - name: Build wheel and run packaging + unit tests against it
         working-directory: clients/beebium-python-client
         # Load-bearing packaging gate: build the wheel, install it into a fresh

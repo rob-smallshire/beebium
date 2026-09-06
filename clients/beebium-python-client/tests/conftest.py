@@ -16,16 +16,15 @@ The beebium pytest fixtures are auto-registered via the entry point in pyproject
 This conftest.py adds additional test-specific fixtures shared across test files.
 """
 
-import time
 from pathlib import Path
 
 import pytest
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
-from beebium.ext.peripheral.rpc_serial import RpcSerial
 
 from firetrack import FIRETRACK_DISC_FILENAME
+from prestel_helpers import COMMSTAR_ROM_FILENAME, enter_prestel_chat
 from tube_test_helpers import DFS_1770_ROM_CANDIDATES, find_dfs_1770_rom
 
 # The beebium fixtures (bbc, bbc_shared, stopped_bbc, etc.) are automatically
@@ -96,19 +95,11 @@ def bbc_firetrack(
 # modules drive it the same way, so the navigation lives here.
 # ---------------------------------------------------------------------------
 
-COMMSTAR_ROM_FILENAME = "commstar_1_40_SN882A.rom"
-
-# Prestel transmits at 75 baud: a single 10-bit frame takes about 130ms of
-# emulated time, so allow generous settling before reading the wire.
-TRANSMIT_SETTLE_SECONDS = 2.0
-
-# Commstar samples the keyboard *after* taking the character, so a key must
-# stay down long enough to be seen by that scan. The MOS scans on the 100Hz
-# interrupt; 150ms is several scans' worth.
-KEY_HOLD_SECONDS = 0.15
-
-VIEWDATA_HASH = b"_"  # 0x5F -- '#' in the teletext repertoire
-CARRIAGE_RETURN = b"\r"
+# The Commstar/Prestel constants and navigation helpers (screen, wait_for_screen,
+# enter_prestel_chat, transmitted, and the timing/byte constants) live in
+# prestel_helpers.py so the two Commstar test modules can import them from a
+# uniquely named module rather than from this conftest -- see that module's
+# docstring for why importing a conftest as `from conftest import ...` is unsafe.
 
 
 @pytest.fixture(scope="module")
@@ -143,40 +134,3 @@ def commstar_prestel_bbc(
             yield bbc
     except ServerNotFoundError as e:
         pytest.skip(str(e))
-
-
-def screen(bbc: Beebium) -> str:
-    """The whole screen as one string, for substring assertions."""
-    text = bbc.video.screen_text().text
-    return "\n".join(text) if isinstance(text, list) else text
-
-
-def wait_for_screen(bbc: Beebium, needle: str, timeout: float = 10.0) -> None:
-    """Poll the screen until `needle` appears, rather than sleeping blind."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if needle in screen(bbc):
-            return
-        time.sleep(0.1)
-    pytest.fail(f"{needle!r} did not appear on screen. Screen was:\n{screen(bbc)}")
-
-
-def enter_prestel_chat(bbc: Beebium) -> None:
-    """Start Commstar, select Prestel emulation, and enter chat mode."""
-    wait_for_screen(bbc, "BASIC")
-    bbc.keyboard.type("*COMMSTAR\r")
-    wait_for_screen(bbc, "Select ?")
-
-    # The Comms/Prestel toggle. Commstar's own menu renders the key as '_',
-    # since 0x5F is '#' in the teletext repertoire it displays in.
-    bbc.keyboard.type("#")
-    wait_for_screen(bbc, "Prestel")
-
-    bbc.keyboard.type("C")
-    time.sleep(1.0)  # chat mode clears the screen; nothing specific to await
-
-
-def transmitted(bbc: Beebium) -> bytes:
-    """Bytes the BBC has put on the wire since the last read."""
-    time.sleep(TRANSMIT_SETTLE_SECONDS)
-    return bytes(bbc.extensions[RpcSerial].receive())

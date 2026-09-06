@@ -33,7 +33,7 @@ from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.ext.peripheral.rpc_serial import RpcSerial
 
-from conftest import enter_prestel_chat, screen, transmitted, wait_for_screen
+from prestel_helpers import enter_prestel_chat, screen, transmitted, wait_for_screen
 
 PROBE = b"ABCDE"
 
