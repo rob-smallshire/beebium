@@ -26,7 +26,7 @@ from beebium_icon.config import (
     load_config,
 )
 
-from conftest import ARTWORK_FILEPATH, CONFIGS_DIRPATH, DEFAULT_CONFIG_FILEPATH
+from tests_support import ARTWORK_FILEPATH, CONFIGS_DIRPATH, DEFAULT_CONFIG_FILEPATH
 
 
 def test_default_config_loads(config):

@@ -31,24 +31,16 @@ from beebium.client.screen import screen_contains, dump_screen
 from adfs_test_support.basictool import build_basictool, tokenise
 from adfs_test_support.disc_builder import build_test_disc
 
-
-# Tube OSRDCH is slower than native -- use a longer per-key delay.
-TUBE_CYCLES_PER_KEY = 200_000
+# Shared constants and the run_until_or_timeout helper live in
+# tube_save_helpers.py so the test module can import them from a uniquely named
+# module rather than from this conftest (a bare `from conftest import ...` is
+# fragile when several conftests are collected together).
+from tube_save_helpers import SSD_SIZE, run_until_or_timeout
 
 # DFS ROM for the Acorn 1770 disc controller.
 DFS_1770_ROM_FILENAME = "acorn-dfs_2_26.rom"
 
-# DFS SSD geometry
-SSD_SIZE = 102400  # 40 tracks * 10 sectors * 256 bytes
-
 PROGRAMS_DIRPATH = Path(__file__).parent.parent / "programs"
-
-
-def run_until_or_timeout(bbc: Beebium, predicate, emulated_seconds: float,
-                         chunk_seconds: float = 1.0) -> bool:
-    """Run until predicate is met or timeout."""
-    return bbc.run_until_or_timeout(
-        predicate, emulated_seconds, chunk_seconds=chunk_seconds)
 
 
 # ---- Session-scope fixtures ----

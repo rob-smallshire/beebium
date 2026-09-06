@@ -10,20 +10,20 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Shared fixtures."""
+"""Shared fixtures.
+
+Shared asset-path constants live in tests_support.py, not here: importing a
+conftest.py by its bare name (`from conftest import ...`) is fragile when
+several conftests are collected together.
+"""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 
 from beebium_icon.config import IconConfig, load_config
 
-LOGO_DIRPATH = Path(__file__).resolve().parents[1]
-CONFIGS_DIRPATH = LOGO_DIRPATH / "configs"
-DEFAULT_CONFIG_FILEPATH = CONFIGS_DIRPATH / "beebium.toml"
-ARTWORK_FILEPATH = LOGO_DIRPATH / "the-shape-of-beebium.png"
+from tests_support import DEFAULT_CONFIG_FILEPATH
 
 
 @pytest.fixture(scope="session")

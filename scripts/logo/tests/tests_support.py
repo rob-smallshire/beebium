@@ -10,11 +10,24 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Helpers for inspecting generated path data."""
+"""Shared test support: asset paths and helpers for inspecting path data.
+
+A uniquely named module (not conftest.py) for symbols shared across test
+modules. Importing a conftest.py by its bare name is fragile -- when several
+conftest.py files are collected together pytest can bind the name `conftest` to
+the wrong one -- so shared constants and helpers live here instead.
+"""
 
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
+# Repo asset paths, shared by the config tests and the config fixture.
+LOGO_DIRPATH = Path(__file__).resolve().parents[1]
+CONFIGS_DIRPATH = LOGO_DIRPATH / "configs"
+DEFAULT_CONFIG_FILEPATH = CONFIGS_DIRPATH / "beebium.toml"
+ARTWORK_FILEPATH = LOGO_DIRPATH / "the-shape-of-beebium.png"
 
 TOKEN = re.compile(r"([MLHVCQAZ])|(-?\d+(?:\.\d+)?)")
 CURVE_SAMPLES = 24
