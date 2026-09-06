@@ -51,3 +51,26 @@ def snippet_skip_reason() -> str | None:
     except ServerNotFoundError as exc:
         return f"no beebium-server available for README snippets: {exc}"
     return skip_reason_for_origin(installation.origin, installation.describe())
+
+
+def variant_skip_reason(variant: str) -> str | None:
+    """Why a snippet needing `variant` should skip, or None if it is available.
+
+    A snippet that launches a non-default variant (e.g. model-b-plus) can only
+    run against an installation that ships that binary. The CI integration
+    artifact ships only beebium-model-b, so the sibling-variant lookup rightly
+    fails there -- skip with a precise reason instead. The full beebium-server
+    wheel (all four variants), used on the verify-server-wheels legs, runs it
+    for real.
+    """
+    try:
+        installation = ServerInstallation.default()
+    except ServerNotFoundError as exc:
+        return f"no beebium-server available for README snippets: {exc}"
+    available = installation.variants()
+    if variant not in available:
+        return (
+            f"server ({installation.describe()}) does not ship the '{variant}' "
+            f"variant this snippet launches; it has {', '.join(available) or 'none'}."
+        )
+    return None

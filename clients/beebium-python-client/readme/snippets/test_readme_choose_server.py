@@ -12,8 +12,20 @@
 
 """README snippet: choose a machine variant or a specific server."""
 
+import pytest
+
+from _snippet_guard import variant_skip_reason
+
 
 def test_choose_server():
+    # Scaffolding (not rendered): the snippet launches model-b-plus, but a server
+    # install may ship only model-b (e.g. the CI integration artifact points
+    # BEEBIUM_SERVER at a single-variant build). Skip with a precise reason when
+    # the variant is absent rather than fail; the full beebium-server wheel on the
+    # verify legs ships all four, so it runs there for real.
+    reason = variant_skip_reason("model-b-plus")
+    if reason:
+        pytest.skip(reason)
     # readme:begin
     from beebium.client import Beebium
 
