@@ -2062,7 +2062,7 @@ class TubeParasiteStatus(_message.Message):
     r2_status: _builtins.int
     """Offset 2: R2 status bits"""
     r3_status: _builtins.int
-    """Offset 4: R3 status bits (includes N flag at bit 5)"""
+    """Offset 4: R3 status bits (N F3 1 1 1 1 1 1; N at bit 7)"""
     r4_status: _builtins.int
     """Offset 6: R4 status bits"""
     def __init__(
