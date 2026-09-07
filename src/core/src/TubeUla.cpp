@@ -22,6 +22,8 @@ TubeUla::TubeUla()
 void TubeUla::reset()
 {
     control_flags_ = 0;
+    host_bus_latch_ = 0;
+    parasite_bus_latch_ = 0;
     counters_.reset();
     soft_reset();
 }
@@ -102,7 +104,8 @@ uint8_t TubeUla::host_read(uint8_t offset)
     }
 
     case 1: {
-        // R1 data: read from P-to-H 24-byte FIFO.
+        // R1 data: read from P-to-H 24-byte FIFO. Empty reads return the
+        // parasite's data bus latch.
         uint8_t count = r1_p2h_.count;
         if (count > 0) {
             uint8_t head = r1_p2h_.head;
@@ -110,6 +113,8 @@ uint8_t TubeUla::host_read(uint8_t offset)
             r1_p2h_.head = (head + 1) % 24;
             --r1_p2h_.count;
             ++counters_.r1_p2h_reads;
+        } else {
+            result = parasite_bus_latch_;
         }
         break;
     }
@@ -149,15 +154,15 @@ uint8_t TubeUla::host_read(uint8_t offset)
 
     case 5: {
         // R3 data: read from P-to-H register.
-        // When the FIFO is empty, return stale data without stretching.
-        // This matches real hardware (and B2, BeebEm, jsbeeb, B-Em): the
-        // Tube ULA does not implement any wait mechanism for empty R3
-        // reads. Software coordinates timing via NMI-driven handshaking,
-        // not bus stretches. In particular, ANFS's tube_transfer_setup
-        // performs two "flush" reads of R3 P-to-H (BIT &FEE5) during
-        // transfer initialisation, with the V flag set; these must
-        // complete without blocking even when the parasite hasn't yet
-        // written any bytes.
+        // When the FIFO is empty, return the parasite's data bus latch
+        // without stretching. This matches real hardware (and B2, BeebEm,
+        // jsbeeb, B-Em): the Tube ULA does not implement any wait mechanism
+        // for empty R3 reads. Software coordinates timing via NMI-driven
+        // handshaking, not bus stretches. In particular, ANFS's
+        // tube_transfer_setup performs two "flush" reads of R3 P-to-H
+        // (BIT &FEE5) during transfer initialisation, with the V flag set;
+        // these must complete without blocking even when the parasite
+        // hasn't yet written any bytes.
         if (r3_p2h_.count > 0) {
             uint8_t head = r3_p2h_.head;
             result = r3_p2h_.data[head];
@@ -167,6 +172,8 @@ uint8_t TubeUla::host_read(uint8_t offset)
                 r3_p2h_.pending = false;
             ++counters_.r3_p2h_reads;
             trace_event(0x38, result);  // R3 P2H host-read
+        } else {
+            result = parasite_bus_latch_;
         }
         break;
     }
@@ -213,7 +220,7 @@ uint8_t TubeUla::host_peek(uint8_t offset) const
     }
     case 1: {
         uint8_t count = r1_p2h_.count;
-        result = (count > 0) ? r1_p2h_.data[r1_p2h_.head] : 0;
+        result = (count > 0) ? r1_p2h_.data[r1_p2h_.head] : parasite_bus_latch_;
         break;
     }
     case 2: {
@@ -239,10 +246,7 @@ uint8_t TubeUla::host_peek(uint8_t offset) const
     }
     case 5: {
         uint8_t count = r3_p2h_.count;
-        if (count > 0) {
-            uint8_t head = r3_p2h_.head;
-            result = r3_p2h_.data[head];
-        }
+        result = (count > 0) ? r3_p2h_.data[r3_p2h_.head] : parasite_bus_latch_;
         break;
     }
     case 6: {
@@ -263,6 +267,9 @@ uint8_t TubeUla::host_peek(uint8_t offset) const
 
 void TubeUla::host_write(uint8_t offset, uint8_t value)
 {
+    // Every write, whatever the address, leaves its value on the data bus latch.
+    host_bus_latch_ = value;
+
     switch (offset & 7) {
     case 0: {
         // Control flag register.
@@ -407,24 +414,22 @@ uint8_t TubeUla::parasite_read(uint8_t offset)
     }
 
     case 4: {
-        // R3 parasite status. Bit 7 reflects the PNMI condition (not just
-        // H2P data availability). This is how the Tube ULA hardware works:
-        // the parasite sees "data available" when PNMI would fire, which
-        // includes the "P2H drained" condition. This provides the
-        // synchronisation signal for type 6/7 paired transfers.
-        result = 0x1F;
-        bool p2h_space = !r3_p2h_.pending;
+        // R3 parasite status: N F3 1 1 1 1 1 1 (Application Note 004,
+        // register organisation table and note 11). Bit 7 is N, "register 3
+        // action required", the ungated PNMI condition: H-to-P data ready
+        // or P-to-H drained. It provides the synchronisation signal for
+        // type 6/7 paired transfers.
+        result = 0x3F;
         if (pnmi_condition_)
             result |= DATA_AVAILABLE;
-        if (p2h_space)
+        if (!r3_p2h_.pending)
             result |= SPACE_AVAILABLE;
-        if (pnmi_condition_ || p2h_space)
-            result |= 0x20;  // N flag
         break;
     }
 
     case 5: {
-        // R3 data: read from H-to-P register.
+        // R3 data: read from H-to-P register. Empty reads return the host's
+        // data bus latch.
         if (r3_h2p_.count > 0) {
             result = r3_h2p_.data[r3_h2p_.head];
             r3_h2p_.head ^= 1;
@@ -433,6 +438,8 @@ uint8_t TubeUla::parasite_read(uint8_t offset)
                 r3_h2p_.pending = false;
             ++counters_.r3_h2p_reads;
             trace_event(0x34, result);  // R3 H2P parasite-read
+        } else {
+            result = host_bus_latch_;
         }
         break;
     }
@@ -492,22 +499,16 @@ uint8_t TubeUla::parasite_peek(uint8_t offset) const
         result = r2_h2p_.data;
         break;
     case 4: {
-        result = 0x1F;
-        bool p2h_space = !r3_p2h_.pending;
+        result = 0x3F;
         if (pnmi_condition_)
             result |= DATA_AVAILABLE;
-        if (p2h_space)
+        if (!r3_p2h_.pending)
             result |= SPACE_AVAILABLE;
-        if (pnmi_condition_ || p2h_space)
-            result |= 0x20;
         break;
     }
     case 5: {
         uint8_t count = r3_h2p_.count;
-        if (count > 0) {
-            uint8_t head = r3_h2p_.head;
-            result = r3_h2p_.data[head];
-        }
+        result = (count > 0) ? r3_h2p_.data[r3_h2p_.head] : host_bus_latch_;
         break;
     }
     case 6: {
@@ -528,6 +529,9 @@ uint8_t TubeUla::parasite_peek(uint8_t offset) const
 
 void TubeUla::parasite_write(uint8_t offset, uint8_t value)
 {
+    // Every write, whatever the address, leaves its value on the data bus latch.
+    parasite_bus_latch_ = value;
+
     switch (offset & 7) {
     case 0:
         break;

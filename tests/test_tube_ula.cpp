@@ -128,8 +128,20 @@ TEST_CASE("R1 parasite-to-host 24-byte FIFO", "[tube][fifo][r1]") {
             REQUIRE(tube.host_read(1) == static_cast<uint8_t>(i));
     }
 
-    SECTION("Read when empty returns zero") {
+    SECTION("Read when empty returns the parasite's data bus latch") {
+        // Nothing driven since reset: the latch is clear.
         REQUIRE(tube.host_read(1) == 0);
+
+        // A parasite write to any address, even the write-ignored status
+        // address, leaves its value on the parasite side's data bus.
+        tube.parasite_write(0, 0x55);
+        REQUIRE(tube.host_read(1) == 0x55);
+
+        // Data that went through the FIFO is returned first; once drained,
+        // the empty read shows the last byte the parasite drove.
+        tube.parasite_write(1, 0xAA);
+        REQUIRE(tube.host_read(1) == 0xAA);
+        REQUIRE(tube.host_read(1) == 0xAA);
     }
 
     SECTION("Drain: each host read advances FIFO, empty flag sets on last") {
@@ -923,9 +935,9 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
         uint8_t r3h = tube.host_read(4);
         REQUIRE((r3h & 0x3F) == 0x3F);
 
-        // R3 parasite status: bits 4-0 should be 1 (bit 5 is the N flag).
+        // R3 parasite status: bits 5-0 should be 1 (N is bit 7, not bit 5).
         uint8_t r3p = tube.parasite_read(4);
-        REQUIRE((r3p & 0x1F) == 0x1F);
+        REQUIRE((r3p & 0x3F) == 0x3F);
 
         // R4 host status: bits 5-0 should be 1.
         uint8_t r4h = tube.host_read(6);
@@ -945,38 +957,44 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
         REQUIRE((r1p & 0x3F) == 0x00);
     }
 
-    SECTION("Parasite R3 status: N flag (bit 5) reflects NMI condition") {
+    SECTION("Parasite R3 status: N (bit 7) reflects the register 3 action-required condition") {
+        // Layout is N F3 1 1 1 1 1 1 (Application Note 004). Bit 5 is one
+        // of the insignificant bits and reads as 1 regardless of N.
+
         // After reset: H-to-P empty, P-to-H has dummy byte (pending).
         // N = (h2p data) || (p2h space) = false || false = 0.
         uint8_t stat = tube.parasite_read(4);
-        REQUIRE((stat & 0x20) == 0);
+        REQUIRE((stat & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((stat & 0x3F) == 0x3F);
 
         // Drain dummy byte so P-to-H is empty (space available -> N = 1).
         tube.host_read(5);
         stat = tube.parasite_read(4);
-        REQUIRE((stat & 0x20) != 0);
+        REQUIRE((stat & TubeUla::DATA_AVAILABLE) != 0);
+        REQUIRE((stat & 0x3F) == 0x3F);
 
         // Write H-to-P data so h2p also has data (N still 1).
         tube.host_write(5, 0x42);
         stat = tube.parasite_read(4);
-        REQUIRE((stat & 0x20) != 0);
+        REQUIRE((stat & TubeUla::DATA_AVAILABLE) != 0);
 
         // Parasite writes P-to-H (pending, space gone) and reads H-to-P (pending cleared).
         tube.parasite_write(5, 0x99);
         tube.parasite_read(5);  // consume H-to-P
         // Now: h2p empty (not pending), p2h pending -> N = false || false = 0.
         stat = tube.parasite_read(4);
-        REQUIRE((stat & 0x20) == 0);
+        REQUIRE((stat & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((stat & 0x3F) == 0x3F);
     }
 
-    SECTION("N flag is independent of M flag") {
+    SECTION("N is independent of M flag") {
         // Drain dummy byte.
         tube.host_read(5);
 
         // N should reflect the condition even with M=0 (no NMI enabled).
         // P-to-H is empty -> space available -> N = 1.
         uint8_t stat = tube.parasite_read(4);
-        REQUIRE((stat & 0x20) != 0);
+        REQUIRE((stat & TubeUla::DATA_AVAILABLE) != 0);
     }
 
     SECTION("All four register status bytes accessible") {

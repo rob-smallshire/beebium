@@ -1020,6 +1020,11 @@ add_executable(test_tube_ula test_tube_ula.cpp)
 target_link_libraries(test_tube_ula PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_tube_ula)
 
+# Period Tube ULA pin-level test vectors replayed against TubeUla
+add_executable(test_tube_ula_vectors test_tube_ula_vectors.cpp)
+target_link_libraries(test_tube_ula_vectors PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_tube_ula_vectors)
+
 # Tube socket tests
 add_executable(test_tube_socket test_tube_socket.cpp)
 target_link_libraries(test_tube_socket PRIVATE beebium_core Catch2::Catch2WithMain)

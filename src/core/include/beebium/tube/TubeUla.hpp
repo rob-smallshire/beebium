@@ -117,6 +117,12 @@ private:
     // Control flag register (bits 0-5: Q, I, J, M, V, P).
     uint8_t control_flags_ = 0;
 
+    // Data bus latches: the last byte each side drove into the ULA, whatever
+    // the address. Reading an empty FIFO (R1 P-to-H, R3 either direction)
+    // returns the opposite side's latch, as the hardware does.
+    uint8_t host_bus_latch_ = 0;
+    uint8_t parasite_bus_latch_ = 0;
+
     // Latch: 1-byte data with ready/full flags.
     // Used for R1 H-to-P, R2 both directions, R4 both directions.
     struct Latch {
