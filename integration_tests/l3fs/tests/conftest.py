@@ -218,7 +218,7 @@ def l3fs_scsi_filepath(tmp_path):
 
     # 5. Initialise the AFS partition with the standard layout.
     _run_disc(
-        "afs-init", str(dat),
+        "afs", "init", str(dat),
         "--disc-name", "L3DATA",
         "--user", "USER1:2MB",
         "--omit-user", "Welcome",

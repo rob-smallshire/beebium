@@ -143,6 +143,7 @@ def test_osw72_read_sense_adfs_read_asm(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
+                "--floppy", f"0:{ssd_filepath}",
                 "--sideways", f"9:rom:{anfs_filepath}",
                 "--sideways", f"10:rom:{adfs_filepath}",
                 "--sideways", f"11:rom:{dfs_filepath}",

@@ -33,6 +33,7 @@ from pathlib import Path
 import pytest
 
 from beebium.client import Beebium
+from beebium.ext.econet.aun import Aun
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import dump_screen, lined, linearise, read_mode7_screen
 
@@ -235,11 +236,11 @@ def test_l3fs_floppy_client_login(
 
             # Dump server Econet status.
             s_eco = server_bbc.econet.status
-            s_aun = server_bbc.aun.status
+            s_aun = server_bbc.transport[Aun].status
             print(f"\nServer Econet: station={s_eco.station_id} "
                   f"aun_mode={s_eco.aun_mode} connected={s_eco.connected} "
                   f"aun_port={s_aun.local_port} peers={s_aun.peer_count}")
-            for peer in server_bbc.aun.peers:
+            for peer in server_bbc.transport[Aun].peers:
                 print(f"  Peer: {peer.net}.{peer.stn} -> {peer.ip_address}:{peer.port}")
 
             # Launch the client.
@@ -359,32 +360,6 @@ def test_l3fs_floppy_client_login(
 
                 # Read stderr for AUN trace BEFORE any assertions that might
                 # terminate the test.
-                for label, bbc in [("Server", server_bbc), ("Client", client_bbc)]:
-                    proc = bbc._server._process if bbc._server else None
-                    if proc and proc.stderr:
-                        import os as _os
-                        fd = proc.stderr.fileno()
-                        _os.set_blocking(fd, False)
-                        try:
-                            data = proc.stderr.read(1048576)  # 1 MB
-                            if data:
-                                text = data.decode("utf-8", errors="replace")
-                                all_lines = text.splitlines()
-                                diag_lines = [l for l in all_lines if any(
-                                    t in l for t in ("[NMI-ENTRY", "[STUCK", "[DUMP", "[STRETCH+", "[STRETCH-INFO"))]
-                                aun_lines = [l for l in all_lines if "AUN" in l]
-                                print(f"\n{label} diagnostics ({len(diag_lines)} lines):")
-                                for l in diag_lines[:30]:
-                                    print(f"  {l}")
-                                print(f"{label} AUN trace ({len(aun_lines)} lines, {len(data)} bytes stderr):")
-                                for l in aun_lines[:20]:
-                                    print(f"  {l}")
-                            else:
-                                print(f"\n{label} stderr: empty")
-                        except Exception as e:
-                            print(f"\n{label} stderr read error: {e}")
-                        finally:
-                            _os.set_blocking(fd, True)
 
                 client_screen = linearise(read_mode7_screen(client_bbc), lined)
                 if "No reply" in client_screen:

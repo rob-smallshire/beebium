@@ -32,6 +32,7 @@ import time
 import pytest
 
 from beebium.client import Beebium
+from beebium.ext.econet.aun import Aun
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import dump_screen, lined, linearise, read_mode7_screen
 
@@ -160,7 +161,7 @@ def test_l3fs_client_login(
 
             # Dump Econet diagnostics for the server.
             server_econet = server_bbc.econet.status
-            server_aun = server_bbc.aun.status
+            server_aun = server_bbc.transport[Aun].status
             print(f"\nServer Econet: station={server_econet.station_id} "
                   f"aun_mode={server_econet.aun_mode} "
                   f"connected={server_econet.connected} "
@@ -169,7 +170,7 @@ def test_l3fs_client_login(
             if server_econet.handshake:
                 print(f"  Handshake: stage={server_econet.handshake.stage} "
                       f"flag_fill={server_econet.handshake.flag_fill_active}")
-            for peer in server_bbc.aun.peers:
+            for peer in server_bbc.transport[Aun].peers:
                 print(f"  Peer: {peer.net}.{peer.stn} -> {peer.ip_address}:{peer.port}")
 
             # Now launch the client station.
@@ -190,7 +191,7 @@ def test_l3fs_client_login(
 
                 # Dump Econet diagnostics for the client.
                 client_econet = client_bbc.econet.status
-                client_aun = client_bbc.aun.status
+                client_aun = client_bbc.transport[Aun].status
                 print(f"\nClient Econet: station={client_econet.station_id} "
                       f"aun_mode={client_econet.aun_mode} "
                       f"connected={client_econet.connected} "
@@ -199,7 +200,7 @@ def test_l3fs_client_login(
                 if client_econet.handshake:
                     print(f"  Handshake: stage={client_econet.handshake.stage} "
                           f"flag_fill={client_econet.handshake.flag_fill_active}")
-                for peer in client_bbc.aun.peers:
+                for peer in client_bbc.transport[Aun].peers:
                     print(f"  Peer: {peer.net}.{peer.stn} -> {peer.ip_address}:{peer.port}")
 
                 # Select NFS as the active filing system, then log in.
@@ -271,34 +272,6 @@ def test_l3fs_client_login(
 
                 print(f"\nClient after *I AM SYST:\n{_dump(client_bbc)}")
                 print(f"\nServer after client login:\n{_dump(server_bbc)}")
-
-                # Dump any AUN trace output from server/client stderr.
-                for label, bbc in [("Server", server_bbc), ("Client", client_bbc)]:
-                    proc = bbc._server._process if bbc._server else None
-                    if proc and proc.stderr:
-                        import select as _select
-                        import os as _os
-                        fd = proc.stderr.fileno()
-                        _os.set_blocking(fd, False)
-                        try:
-                            data = proc.stderr.read(8192)
-                            if data:
-                                text = data.decode("utf-8", errors="replace")
-                                aun_lines = [l for l in text.splitlines() if "AUN" in l]
-                                if aun_lines:
-                                    print(f"\n{label} AUN trace ({len(aun_lines)} lines):")
-                                    for l in aun_lines[:20]:
-                                        print(f"  {l}")
-                                else:
-                                    print(f"\n{label} stderr ({len(text)} bytes, no AUN lines)")
-                                    # Print last few lines for context
-                                    lines = text.splitlines()
-                                    for l in lines[-5:]:
-                                        print(f"  {l}")
-                        except Exception as e:
-                            print(f"\n{label} stderr read error: {e}")
-                        finally:
-                            _os.set_blocking(fd, True)
 
                 # Check for common error conditions.
                 client_screen = linearise(read_mode7_screen(client_bbc), lined)
