@@ -654,7 +654,7 @@ server header to find a file.
   v1.10 (`acorn-tube-6502_1_10.rom`, 2048 bytes, MD5
   `cd6ba85e22adec70b6d863de4c053db7`), the 65C102 plugin the 65C102 Tube
   client v1.20 (`acorn-tube-65c102_1_20.rom`, 2048 bytes, MD5
-  `f0555114f7a18f727e9ca14effebcc95`), which is a different build with its
+  `83d73e0e78693bb4b43e7cb18e58d556`), which is a different build with its
   own banner, "Acorn TUBE 65C102 Co-Processor". No plugin references
   another plugin's directory.
 
