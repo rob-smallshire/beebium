@@ -159,6 +159,24 @@ public:
     ClockRatio clock_ratio() const override { return ClockRatio{1, 1}; }
 };
 
+// A coprocessor that counts the cycles it is actually driven for, at a fixed
+// clock ratio, using the same CoprocessorClock the real runners use. It needs
+// no CPU or ROM, so it isolates the socket's time-base behaviour.
+class CycleCountingStub : public Coprocessor {
+public:
+    explicit CycleCountingStub(ClockRatio ratio) : clock_(ratio) {}
+    void run_until(uint64_t host_cycle) override { cycles_ += clock_.cycles_due(host_cycle); }
+    void pause() override {}
+    void resume() override {}
+    bool is_paused() const override { return false; }
+    void reset() override { clock_.rebase(); cycles_ = 0; }
+    ClockRatio clock_ratio() const override { return clock_.ratio(); }
+    uint64_t cycles() const { return cycles_; }
+private:
+    CoprocessorClock clock_;
+    uint64_t cycles_ = 0;
+};
+
 }  // namespace
 
 TEST_CASE("Skew: exact accesses and bounded interval across a 65C02 boot",
@@ -334,6 +352,36 @@ TEST_CASE("Skew: coprocessor_time() is re-established after reset()",
     socket.reset();
     socket.run_coprocessor_until(3);
     CHECK(socket.coprocessor_time() == 3);
+}
+
+TEST_CASE("Skew: a coprocessor installed at an arbitrary host time runs exactly ratio x cycles",
+          "[tube][skew]") {
+    // Installing a coprocessor into an already-running machine must pin its
+    // time origin at the install host time, not up to Delta cycles later when
+    // batching would otherwise first run it. Over N host cycles from install it
+    // then executes exactly ratio x N of its own cycles, with no startup phase
+    // error -- the batching interval never changes the total.
+    for (const ClockRatio ratio : {ClockRatio{3, 2}, ClockRatio{2, 1}}) {
+        TubeSocket socket;
+        CycleCountingStub stub(ratio);
+        stub.reset();
+
+        // The host runs to an arbitrary time T with no coprocessor installed.
+        const uint64_t T = 12345;
+        for (uint64_t h = 1; h <= T; ++h) socket.host_cycle(h);
+
+        // Install at T. The origin is pinned here with zero cycles due.
+        socket.install_coprocessor(&stub);
+        CHECK(stub.cycles() == 0);
+
+        // Run N host cycles the way Machine::step() drives the socket, then
+        // flush to the final host time as a stop/step boundary would.
+        const uint64_t N = 100000;
+        for (uint64_t h = T + 1; h <= T + N; ++h) socket.host_cycle(h);
+        socket.run_coprocessor_until(T + N);
+
+        CHECK(stub.cycles() == ratio.numerator * N / ratio.denominator);
+    }
 }
 
 TEST_CASE("Skew: a coprocessor HIRQ reaches the host's IRQ input within Delta",

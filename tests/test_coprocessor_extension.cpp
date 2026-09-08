@@ -107,10 +107,12 @@ TEST_CASE("CoprocessorExtension: coprocessor and backend land in the socket", "[
     socket.install_coprocessor(ext.coprocessor());
     CHECK(socket.enabled());
 
-    // The socket drives the installed coprocessor in host time.
+    // Installing pins the coprocessor's time origin at the current host time
+    // (0 here) with a run to that cycle, so its first recorded arg is 0. The
+    // socket then drives it in host time.
     socket.run_coprocessor_until(1);
     socket.run_coprocessor_until(2);
-    CHECK(ext.cop.run_until_args == std::vector<uint64_t>{1, 2});
+    CHECK(ext.cop.run_until_args == std::vector<uint64_t>{0, 1, 2});
 
     // Host register access is delegated to the installed backend.
     CHECK(socket.read(0) == 0xAB);

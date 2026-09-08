@@ -201,6 +201,14 @@ public:
     // while installed. The clock ratio lives with the coprocessor, not here.
     void install_coprocessor(Coprocessor* coprocessor) {
         coprocessor_ = coprocessor;
+        // Establish the coprocessor's time origin at the current host time, with
+        // zero cycles due. Without this, batching would defer its first
+        // run_until until host_cycle() finds it a full MAX_COPROCESSOR_SKEW
+        // behind, so a coprocessor installed into a running machine would start
+        // up to that many host cycles late -- not a skew (the bound holds
+        // thereafter) but a permanent startup phase error of ratio x skew
+        // cycles. Running it to host_time_ now pins the origin at install.
+        run_coprocessor_until(host_time_);
     }
 
     void remove_coprocessor() { coprocessor_ = nullptr; }
