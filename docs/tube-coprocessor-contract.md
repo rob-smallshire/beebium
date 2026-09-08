@@ -132,10 +132,13 @@ installed in the socket, as it does today for the `ParasiteTickable`.
 ### Origin and reset
 
 - A coprocessor has no time base until its first `run_until(t)`, which
-  establishes `t` as the origin `t0` with zero cycles due. A coprocessor
-  installed into a machine that has already been running for a long time
-  therefore starts from the host's current time; it never runs a catch-up
-  burst from host time zero.
+  establishes `t` as the origin `t0` with zero cycles due. The socket
+  makes that call at install, with the current host time, so a
+  coprocessor starts exactly when it is installed: it never runs a
+  catch-up burst from host time zero, and under batching (Step 3) it does
+  not start late by up to Δ waiting for the first deferred batch. Its
+  cycle count over any run from install is exactly the ratio times the
+  host cycles.
 - `reset()` restarts the coprocessor and discards its time base, so the
   next `run_until(t)` establishes a new origin exactly as at construction.
   This is required because a hard host reset zeroes `state_.cycle_count`,
