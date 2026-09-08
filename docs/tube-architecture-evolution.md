@@ -774,8 +774,12 @@ require further refinement.
 
 **Cross-emulator note:** jsbeeb avoids the problem by accident (single-threaded
 JS event loop means the R1 latch is always empty during the dummy read).
-PiTubeDirect avoids it because of the extreme speed ratio (137x). B2 had the
-same bug and was fixed via PR #569 (tom-seddon/b2) using the same peek approach.
+PiTubeDirect avoids it by construction: neither its ARM-assembly 65tube core
+nor its lib6502 core issues the fixup-cycle read at all; indexed addressing
+computes the final effective address and loads once, so no spurious access
+can reach the Tube registers (see `docs/discussion/cross-emulator-tube-analysis.md`).
+B2 had the same bug and was fixed via PR #569 (tom-seddon/b2) using the same
+peek approach.
 
 ### 3. R3 Paired Transfer Synchronisation (PNMI and DATA_AVAILABLE)
 
@@ -835,7 +839,7 @@ How other emulators handle the same problems, from
 | BeebEm | Single-process | Single thread | `R3PHPtr`/`R3HPPtr` counters | Works |
 | B2 | Single-process | Single thread | `WriteFIFO3`/`ReadFIFO3` | Fixed (PR #569) |
 | jsbeeb | Single-process, JS event loop | Single thread | Implicit determinism | Works (by accident) |
-| PiTubeDirect | Real BBC + Pi GPIO | Dual-core (VideoCore + ARM) | Hardware FIQ timing | Works (speed ratio) |
+| PiTubeDirect | Real BBC + Pi GPIO | VideoCore handshake, ARM FIQ, one emulation core | Host is the only clock; ordered via FIQ | Works (no fixup read issued) |
 | MAME | Single-process | Single thread | Unknown | Hangs |
 
 The pattern is clear: emulators where both CPUs share deterministic interleaving
