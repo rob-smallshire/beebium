@@ -905,6 +905,90 @@ interrupt latency by up to 4 us of emulated time and nothing else; if any
 test outcome changes, the cause is found before merge.
 
 
+## Step 3b: an instruction-level coprocessor core (design only, not scheduled)
+
+This section records a design that is deliberately not being implemented.
+A non-historical turbo mode is not a goal for Beebium: the coprocessors run
+at their historical clocks, and the project's view is that running the
+machine at anything other than real speed stops being emulation. At real
+speed the cycle-stepped 65C02 core is a few percent of one core after
+Step 3, so a faster core would buy little for the 65C02 family. The design
+is kept because it is the basis for the heavier CPUs that are planned
+(NS32016, 80186, 80286, and to a lesser degree the Z80 and 6809), whose
+cores will be instruction-level from the start and must meet the same
+contract, and because it is the option to reach for if a turbo mode ever
+does become a goal.
+
+### What the parasite core does today
+
+The 65C02 plugin runs the `M6502` library, a cycle-stepped model: each
+coprocessor cycle is one call through a function pointer, followed by a
+memory dispatch through `ParasiteMemoryMap` with its Tube-window check,
+watch and trace checks, a PIRQ sample, NMI-handler tracking and a PNMI
+sample. Roughly 11 ns per cycle at 3 million cycles a second. It is the
+reference core and stays so.
+
+### What an instruction-level core is
+
+An interpreter that executes one whole instruction per dispatch, inside
+the plugin, behind the unchanged `Coprocessor` and `Cpu6502DebugTarget`
+interfaces, selectable per plugin configuration alongside the reference
+core. It keeps four things exact and drops everything else.
+
+Kept exact:
+
+- **Cycle counts.** A per-opcode cycle table with the branch-taken and
+  page-cross penalties, so the coprocessor's clock advances exactly as the
+  cycle-stepped core's does. The `CoprocessorClock` budget is unchanged;
+  the core runs instructions until the batch's cycles are spent.
+- **Tube register accesses in host-time order** (contract clause 1). One
+  rule: an instruction that touches the window at &FEF8-&FEFF executes
+  only if it completes within the batch's budget; otherwise the batch
+  stops before it. Instructions that do not touch the window may
+  overshoot the budget by at most one instruction, the overshoot being
+  deducted from the next batch. Overshoot is invisible to the host,
+  whose only shared state with the coprocessor is the Tube registers and
+  the interrupt lines.
+- **Interrupt recognition at instruction boundaries.** PIRQ and PNMI are
+  sampled once per instruction, which is when the CPU recognises them;
+  the NMI-handler tracking that prevents nested NMIs carries over.
+- **The boot-ROM overlay and its unmapping on the first Tube access.**
+
+Dropped:
+
+- **Bus-cycle simulation.** Memory is a flat 64 KB array with a flag for
+  the ROM overlay and a shift-and-compare for the Tube window, in the
+  manner of PiTubeDirect's fast core (`cross-emulator-tube-analysis.md`).
+- **Dummy reads.** The page-cross and read-modify-write dummy accesses
+  matter only when they land on the Tube window, and the reference core
+  routes those through a side-effect-free peek whose result the CPU
+  discards. A core that never issues them is identical at the ULA; this
+  is why PiTubeDirect's cores are safe and why the CE2023 case stays
+  correct.
+
+### Consequences
+
+- `Cpu6502DebugTarget::cpu()` returns the `M6502` library struct, and the
+  state RPC reads interrupt flags from it. A core that does not use that
+  struct must keep a shadow copy, or the interface must expose the program
+  counter and interrupt state directly. The latter is the right fix and
+  belongs with Step 1d. Watchpoints remain supported by checking accesses
+  only when any are set.
+- Acceptance would be differential: both cores run the same programs (the
+  Klaus functional test, the Tube boot, CE2023) and must produce identical
+  cycle counts and identical Tube register traces at every access.
+
+### What it would buy
+
+At real speed, under one percent of a core for the 65C02 against about
+three now. Its value is for the heavy cores, where instruction level is
+the only practical choice, and, if ever wanted, for a turbo coprocessor
+where a 100:1 ratio (about 200 MHz-equivalent) would be a quarter of a
+core rather than several cores. The Tube protocol tolerates a faster
+parasite: every parasite-paced path is closed-loop, and the host-paced R3
+transfers require only that the parasite be fast enough.
+
+
 ## Later steps (for orientation, not for implementation now)
 
 - **Step 1c, the 65C102 4 MHz second processor.** Specified below.
@@ -918,12 +1002,8 @@ test outcome changes, the cause is found before merge.
   `CoprocessorDebugTarget` is the seam it plugs into.
 - **Step 2, skew contract.** Specified above.
 - **Step 3, batching.** Specified above.
-- **Step 3b, a fast 65C02 core for the coprocessor plugin.** With batching
-  in place, the 65C02 runner may execute instruction-at-a-time inside
-  `run_until`, counting cycles only to find the batch's end and dropping
-  to bus-cycle precision around Tube register accesses, in the manner of
-  PiTubeDirect's fast core (see `cross-emulator-tube-analysis.md`). A
-  plugin-internal change, measured against the Step 3 baseline.
+- **Step 3b, an instruction-level coprocessor core.** Designed above,
+  deliberately not scheduled; the design basis for the heavy CPU cores.
 - **Step 4, execution strategies.** A second implementation of the same
   contract that runs the coprocessor on a worker thread, spinning during
   the host's pacing burst and parked while the host sleeps, for
