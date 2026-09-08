@@ -23,12 +23,17 @@ namespace beebium {
 // and without drift. Every coprocessor implementation can share this rather
 // than reimplementing the rational arithmetic.
 //
-// The origin t0 is host time zero at construction. cycles_due(t) returns the
-// coprocessor cycles that became due since the previous call, so that the
-// cumulative count after any sequence of calls reaching host time t equals
-// exactly floor((t - t0) * numerator / denominator). The fractional remainder
-// carries across calls, so over any interval the coprocessor runs exactly the
-// cycles the ratio dictates -- never one more or one fewer.
+// The time base is undefined until the first cycles_due() call, which defines
+// the origin t0 and returns zero -- so a freshly constructed clock never runs
+// a catch-up burst from host time zero however long the host has been running.
+// Thereafter cycles_due(t) returns the coprocessor cycles that became due since
+// the previous call, so the cumulative count after any sequence of calls
+// reaching host time t equals exactly floor((t - t0) * numerator / denominator).
+// The fractional remainder carries across calls, so over any interval the
+// coprocessor runs exactly the cycles the ratio dictates -- never one more or
+// one fewer. rebase() returns to the undefined state, so the next call defines
+// a fresh origin; this is what a hardware reset does, where host time may jump
+// backwards.
 class CoprocessorClock {
 public:
     explicit CoprocessorClock(ClockRatio ratio)
@@ -78,8 +83,8 @@ public:
 private:
     ClockRatio ratio_;
     uint64_t last_host_cycle_ = 0;
-    uint64_t remainder_ = 0;   // fractional cycles carried, always < denominator
-    bool have_origin_ = true;  // origin is host time zero at construction
+    uint64_t remainder_ = 0;    // fractional cycles carried, always < denominator
+    bool have_origin_ = false;  // the first cycles_due() defines the origin
 };
 
 }  // namespace beebium

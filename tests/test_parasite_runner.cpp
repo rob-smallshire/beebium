@@ -170,13 +170,15 @@ TEST_CASE("ParasiteRunner run_until matches the old 3:2 accumulator per-call seq
     // time the phase reached the denominator. Encode that algorithm inline and
     // require run_until(t) for t = 1..N to run exactly the same cycles per call.
     //
-    // The clock's origin is host time zero at construction (no reset here, which
-    // would rebase it), so run_until(1) is the first host cycle, matching the
-    // accumulator's first call. Cycles run per call are counted from the CPU
-    // cycle counter -- each step() is exactly one tick.
+    // The clock's time base is undefined until the first run_until, which
+    // defines the origin and runs nothing. Establish the origin at host time 0
+    // so that run_until(1) is the first host cycle, matching the accumulator's
+    // first call. Cycles run per call are counted from the CPU cycle counter --
+    // each step() is exactly one tick.
     TubeUla tube;
     auto rom = make_nop_rom();
     ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+    runner.run_until(0);   // establish the origin at host time 0
 
     const uint64_t N = 32;
     const uint32_t num = 3, den = 2;

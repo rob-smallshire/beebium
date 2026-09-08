@@ -25,10 +25,7 @@ struct ClockRatio {
 
 // A Tube coprocessor: everything on the far side of the Tube cable, driven
 // by the host's clock. Supplied by an extension, installed in the TubeSocket
-// while attached. Replaces the earlier ParasiteTickable, moving from a
-// per-cycle tick() driven by a socket-owned phase accumulator to a
-// run_until() driven by host time, with the clock ratio owned by the
-// coprocessor itself.
+// while attached.
 //
 // The host and the coprocessor are independent clock domains that meet only
 // at the Tube ULA registers and its interrupt outputs. The socket drives the
