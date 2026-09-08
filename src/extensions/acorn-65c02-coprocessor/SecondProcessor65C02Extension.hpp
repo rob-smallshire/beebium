@@ -83,7 +83,9 @@ public:
     bool running() const { return runner_ != nullptr; }
 
 private:
-    bool load_rom(std::array<uint8_t, 2048>& rom) const;
+    // Load the Tube client ROM into `rom`: an explicit `rom` config override,
+    // else the "client" ROM declared in the manifest (Extension::load_rom).
+    bool load_client_rom(std::array<uint8_t, 2048>& rom) const;
 
     ClockRatio clock_ratio_;
     std::string cpu_label_;

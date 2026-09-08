@@ -14,7 +14,6 @@ add_library(beebium_ext_acorn_65c02 STATIC
 
 target_include_directories(beebium_ext_acorn_65c02
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${CMAKE_SOURCE_DIR}/src/server/include
 )
 
 target_link_libraries(beebium_ext_acorn_65c02
@@ -49,19 +48,9 @@ if(BEEBIUM_BUILD_SERVICE)
         VISIBILITY_INLINES_HIDDEN YES
     )
 
+    # beebium_finalize_plugin deploys and installs this plugin's roms/
+    # directory (the Tube client ROM) beside the library and manifest; the
+    # extension resolves it against its own manifest directory. The shared
+    # roms/ directory carries host ROMs only.
     beebium_finalize_plugin(TARGET beebium_ext_acorn_65c02_plugin NAME acorn-65c02-coprocessor)
 endif()
-
-# Copy the Tube client ROM to the build output so the extension finds it at
-# runtime relative to the server executable. RomPaths::find_rom searches a
-# roms/ directory near the executable (and $BEEBIUM_ROM_DIR, and the installed
-# ../share/beebium/roms), independent of where the plugin itself lives -- see
-# the lookup order documented in SecondProcessor65C02Extension.cpp::load_rom.
-# The server installs the whole rom set into share/beebium/roms, so an
-# installed plugin resolves the ROM there.
-file(GLOB EXTENSION_ROMS "${CMAKE_CURRENT_SOURCE_DIR}/roms/*.rom")
-foreach(ROM_FILE ${EXTENSION_ROMS})
-    get_filename_component(ROM_NAME ${ROM_FILE} NAME)
-    configure_file(${ROM_FILE}
-        ${CMAKE_BINARY_DIR}/roms/${ROM_NAME} COPYONLY)
-endforeach()

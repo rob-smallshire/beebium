@@ -56,11 +56,11 @@ bool anfs_rom_available() {
 
 bool tube_rom_available() {
     return std::filesystem::exists(
-        std::filesystem::path(BEEBIUM_TEST_ROM_DIR) / TUBE_ROM_FILENAME);
+        std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME);
 }
 
 std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
-    auto filepath = std::filesystem::path(BEEBIUM_TEST_ROM_DIR) / TUBE_ROM_FILENAME;
+    auto filepath = std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME;
     std::ifstream file(filepath, std::ios::binary);
     std::array<uint8_t, TUBE_ROM_SIZE> rom{};
     file.read(reinterpret_cast<char*>(rom.data()), TUBE_ROM_SIZE);

@@ -63,6 +63,17 @@ function(beebium_finalize_plugin)
                 "${_deploy_dir}/manifest.json"
             COMMENT "Deploying ${ARG_NAME} plugin to <server>/extensions/${ARG_NAME}/"
         )
+        # Firmware the plugin ships (declared in its manifest's `roms`) lives in
+        # the plugin's roms/ directory and deploys beside the library and
+        # manifest, so the extension resolves it against its own manifest dir.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/roms")
+            add_custom_command(TARGET ${ARG_TARGET} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${CMAKE_CURRENT_SOURCE_DIR}/roms"
+                    "${_deploy_dir}/roms"
+                COMMENT "Deploying ${ARG_NAME} ROMs to <server>/extensions/${ARG_NAME}/roms/"
+            )
+        endif()
     endif()
 
     # Install the plugin alongside the server binaries, matching the runtime
@@ -86,6 +97,13 @@ function(beebium_finalize_plugin)
         install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/manifest.json
             DESTINATION bin/extensions/${ARG_NAME}
         )
+        # Ship the plugin's firmware beside it, so every package and the macOS
+        # app bundle (which copies extensions/ whole) carries it.
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/roms")
+            install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/roms
+                DESTINATION bin/extensions/${ARG_NAME}
+            )
+        endif()
     endif()
 
     # Windows test runtime: any test binary that statically links the

@@ -162,9 +162,8 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
         "${BEEBIUM_ROM_DIR}/acorn-mos_2_0.rom"
         "${BEEBIUM_ROM_DIR}/bbc-basic_2.rom"
         "${BEEBIUM_ROM_DIR}/acorn-dfs_2_26.rom"
-        "${BEEBIUM_ROM_DIR}/acorn-tube-6502_1_10.rom"
         "${ROM_OUTPUT_DIR}/"
-    COMMENT "Copying ROMs to build directory"
+    COMMENT "Copying host ROMs to build directory"
 )
 
 # Generate the shipped system presets (and their thumbnails). Model B serves

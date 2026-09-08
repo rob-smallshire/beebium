@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <set>
 #include <string>
 
@@ -219,4 +220,99 @@ TEST_CASE("plugin manifest attaches_to matches the extension code",
         ++peripherals_checked;
     }
     CHECK(peripherals_checked > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Manifest `roms` parsing and the load-time firmware presence check (Step 1e)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Write a manifest.json with the given body into a fresh temp directory and
+// return that directory. Caller removes it.
+std::filesystem::path write_manifest(const std::string& json) {
+    static int counter = 0;
+    auto dir = std::filesystem::temp_directory_path()
+             / ("beebium-manifest-roms-" + std::to_string(counter++));
+    std::filesystem::create_directories(dir);
+    std::ofstream f(dir / "manifest.json");
+    f << json;
+    return dir;
+}
+
+}  // namespace
+
+TEST_CASE("Manifest roms: a well-formed array is parsed", "[extension][plugin][rom]") {
+    auto dir = write_manifest(R"({
+        "name": "cop", "library": "cop",
+        "roms": [
+            {"key": "client", "filename": "fw.rom", "size": 2048, "description": "d"}
+        ]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    REQUIRE(manifests.size() == 1);
+    REQUIRE(manifests[0].roms.size() == 1);
+    CHECK(manifests[0].roms[0].key == "client");
+    CHECK(manifests[0].roms[0].filename == "fw.rom");
+    CHECK(manifests[0].roms[0].size == 2048);
+    CHECK(manifests[0].roms[0].description == "d");
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("Manifest roms: absent means an empty list", "[extension][plugin][rom]") {
+    auto dir = write_manifest(R"({"name": "cop", "library": "cop"})");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    REQUIRE(manifests.size() == 1);
+    CHECK(manifests[0].roms.empty());
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("Manifest roms: malformed entries are skipped, not fatal", "[extension][plugin][rom]") {
+    // A non-array `roms`, and an array with an entry missing filename: the
+    // manifest still parses, dropping the bad entries.
+    auto non_array = write_manifest(R"({"name": "a", "library": "a", "roms": "nope"})");
+    auto bad_entry = write_manifest(R"({
+        "name": "b", "library": "b",
+        "roms": [{"key": "x"}, 42, {"filename": "y.rom"},
+                 {"key": "ok", "filename": "ok.rom", "size": 16}]
+    })");
+    beebium::PluginLoader loader;
+
+    auto m1 = loader.scan_manifests(non_array);
+    REQUIRE(m1.size() == 1);
+    CHECK(m1[0].roms.empty());
+
+    auto m2 = loader.scan_manifests(bad_entry);
+    REQUIRE(m2.size() == 1);
+    REQUIRE(m2[0].roms.size() == 1);          // only the complete entry survives
+    CHECK(m2[0].roms[0].key == "ok");
+    CHECK(m2[0].roms[0].size == 16);
+
+    std::filesystem::remove_all(non_array);
+    std::filesystem::remove_all(bad_entry);
+}
+
+TEST_CASE("PluginLoader load_extension fails naming the plugin and path when a "
+          "declared ROM is absent", "[extension][plugin][rom]") {
+    // The presence check runs before dlopen, so no real library is needed: a
+    // manifest declaring a ROM that does not exist beside it must fail the load.
+    beebium::ExtensionManifest m;
+    m.name = "broken-firmware";
+    m.library_stem = "broken-firmware";
+    m.manifest_dirpath = std::filesystem::temp_directory_path()
+                       / "beebium-broken-firmware-plugin";
+    m.roms.push_back(beebium::RomImage{"client", "absent.rom", 2048, ""});
+
+    beebium::PluginLoader loader;
+    try {
+        loader.load_extension(m, {}, {});
+        FAIL("expected load_extension to throw for a missing declared ROM");
+    } catch (const std::exception& e) {
+        std::string msg = e.what();
+        INFO("message: " << msg);
+        CHECK(msg.find("broken-firmware") != std::string::npos);
+        CHECK(msg.find("absent.rom") != std::string::npos);
+    }
 }

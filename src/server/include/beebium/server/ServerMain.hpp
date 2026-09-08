@@ -2770,6 +2770,17 @@ public:
                         }
                     }
                 }
+                if (!manifest->roms.empty()) {
+                    std::cout << "  ROMs:\n";
+                    for (const auto& r : manifest->roms) {
+                        std::cout << "    " << r.key << " : " << r.filename
+                                  << " (" << r.size << " bytes)";
+                        if (!r.description.empty()) {
+                            std::cout << " -- " << r.description;
+                        }
+                        std::cout << "\n";
+                    }
+                }
                 break;
             }
             case OutputFormat::Tsv:

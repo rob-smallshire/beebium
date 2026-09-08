@@ -64,12 +64,13 @@ bool files_available() {
     return std::filesystem::exists(rom_dirpath / "acorn-mos_1_20.rom")
         && std::filesystem::exists(rom_dirpath / "bbc-basic_2.rom")
         && std::filesystem::exists(rom_dirpath / DFS_ROM_FILENAME)
-        && std::filesystem::exists(rom_dirpath / TUBE_ROM_FILENAME)
+        && std::filesystem::exists(
+               std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME)
         && std::filesystem::exists(assets_dirpath / "discs" / DISC_FILENAME);
 }
 
 std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
-    auto filepath = std::filesystem::path(BEEBIUM_ROM_DIR) / TUBE_ROM_FILENAME;
+    auto filepath = std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME;
     std::ifstream file(filepath, std::ios::binary);
     REQUIRE(file.good());
     std::array<uint8_t, TUBE_ROM_SIZE> rom{};

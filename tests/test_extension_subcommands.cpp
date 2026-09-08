@@ -227,6 +227,9 @@ TEST_CASE("describe-extension shows parameter detail for a known extension",
     REQUIRE(r.stdout_output.find("rom") != std::string::npos);  // parameter name
     // The synthesised invocation form tells the user how to invoke it.
     REQUIRE(r.stdout_output.find("Usage: --tube-65c02") != std::string::npos);
+    // The client ROM the plugin ships is listed with its filename and size.
+    REQUIRE(r.stdout_output.find("acorn-tube-6502_1_10.rom") != std::string::npos);
+    REQUIRE(r.stdout_output.find("2048") != std::string::npos);
 }
 
 TEST_CASE("describe-extension shows the rom parameter for tube-65c102",
@@ -237,6 +240,9 @@ TEST_CASE("describe-extension shows the rom parameter for tube-65c102",
     REQUIRE(r.stdout_output.find("tube-65c102") != std::string::npos);
     REQUIRE(r.stdout_output.find("rom") != std::string::npos);
     REQUIRE(r.stdout_output.find("Usage: --tube-65c102") != std::string::npos);
+    // The 65C102 ships its own distinct client ROM.
+    REQUIRE(r.stdout_output.find("acorn-tube-65c102_1_20.rom") != std::string::npos);
+    REQUIRE(r.stdout_output.find("2048") != std::string::npos);
 }
 
 TEST_CASE("starting with both coprocessor flags fails with the single-socket message",

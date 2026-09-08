@@ -65,6 +65,11 @@ add_executable(test_extension_base test_extension_base.cpp)
 target_link_libraries(test_extension_base PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_extension_base)
 
+# Extension ROM resolution/loading (manifest `roms`, EPROM-dump acceptance)
+add_executable(test_extension_rom test_extension_rom.cpp)
+target_link_libraries(test_extension_rom PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_extension_rom)
+
 # ExtensionResolver: merging multi-source manifest collections
 add_executable(test_extension_resolver test_extension_resolver.cpp)
 target_link_libraries(test_extension_resolver PRIVATE beebium_core Catch2::Catch2WithMain)
@@ -791,6 +796,12 @@ set(BEEBIUM_ROM_DIR "${CMAKE_SOURCE_DIR}/roms" CACHE PATH "Directory containing 
 # (tracked in tests/assets/roms/).
 set(BEEBIUM_TEST_ROM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets/roms")
 
+# Coprocessor client ROMs now ship inside each plugin's own roms/ directory,
+# not the shared roms/ set. Tests that load a Tube client ROM take it from the
+# plugin source directory via these compile definitions.
+set(BEEBIUM_TUBE_ROM_DIR "${CMAKE_SOURCE_DIR}/src/extensions/acorn-65c02-coprocessor/roms")
+set(BEEBIUM_TUBE_65C102_ROM_DIR "${CMAKE_SOURCE_DIR}/src/extensions/acorn-65c102-coprocessor/roms")
+
 # Disc images directory for integration tests
 set(BEEBIUM_DISCS_DIR "${CMAKE_SOURCE_DIR}/discs" CACHE PATH "Directory containing test disc images")
 
@@ -839,6 +850,7 @@ target_link_libraries(test_econet_tx_with_tube PRIVATE beebium_core Catch2::Catc
 target_compile_definitions(test_econet_tx_with_tube PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
 )
 catch_discover_tests(test_econet_tx_with_tube)
 
@@ -1055,6 +1067,7 @@ add_executable(test_parasite_boot test_parasite_boot.cpp)
 target_link_libraries(test_parasite_boot PRIVATE beebium_core Catch2::Catch2WithMain)
 target_compile_definitions(test_parasite_boot PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
 )
 catch_discover_tests(test_parasite_boot)
 
@@ -1063,6 +1076,7 @@ add_executable(test_tube_inprocess test_tube_inprocess.cpp)
 target_link_libraries(test_tube_inprocess PRIVATE beebium_core Catch2::Catch2WithMain)
 target_compile_definitions(test_tube_inprocess PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
 )
 catch_discover_tests(test_tube_inprocess)
 
@@ -1077,6 +1091,7 @@ target_link_libraries(test_tube_extension PRIVATE
 )
 target_compile_definitions(test_tube_extension PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
 )
 catch_discover_tests(test_tube_extension)
 
@@ -1146,6 +1161,8 @@ target_link_libraries(test_boot_tube PRIVATE beebium_core Catch2::Catch2WithMain
 target_compile_definitions(test_boot_tube PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
+    BEEBIUM_TUBE_65C102_ROM_DIR="${BEEBIUM_TUBE_65C102_ROM_DIR}"
 )
 catch_discover_tests(test_boot_tube)
 
@@ -1190,6 +1207,7 @@ target_link_libraries(test_tube_ce2023_trace PRIVATE beebium_core 6502_lib Catch
 target_compile_definitions(test_tube_ce2023_trace PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
     BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
 )
 catch_discover_tests(test_tube_ce2023_trace)

@@ -58,7 +58,7 @@ TEST_CASE("65C02 extension: boots and produces R1 banner", "[tube][extension]") 
     SecondProcessor65C02Extension ext;
     ext.set_config({
         {"id", "test-tube"},
-        {"rom", std::string(BEEBIUM_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
+        {"rom", std::string(BEEBIUM_TUBE_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
     });
 
     // Initialise -- installs parasite for single-threaded ticking.
@@ -104,7 +104,7 @@ TEST_CASE("65C02 extension: coprocessor pauses through the Coprocessor interface
     SecondProcessor65C02Extension ext;
     ext.set_config({
         {"id", "test-tube-xstop"},
-        {"rom", std::string(BEEBIUM_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
+        {"rom", std::string(BEEBIUM_TUBE_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
     });
     ext.init(ctx);
     REQUIRE(ext.running());
@@ -145,7 +145,7 @@ TEST_CASE("65C02 extension: shutdown is idempotent", "[tube][extension]") {
     SecondProcessor65C02Extension ext;
     ext.set_config({
         {"id", "test-tube-2"},
-        {"rom", std::string(BEEBIUM_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
+        {"rom", std::string(BEEBIUM_TUBE_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
     });
 
     ext.init(ctx);

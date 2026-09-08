@@ -5,6 +5,14 @@
     "library": "acorn-65c02-coprocessor",
     "attaches_to": ["tube"],
     "cli": "tube-65c02",
+    "roms": [
+        {
+            "key": "client",
+            "filename": "acorn-tube-6502_1_10.rom",
+            "size": 2048,
+            "description": "Acorn Tube 6502 client ROM v1.10"
+        }
+    ],
     "parameters": [
         {
             "key": "rom",

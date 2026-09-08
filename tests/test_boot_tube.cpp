@@ -63,13 +63,21 @@ using namespace beebium::test;
 
 namespace {
 
+// Each coprocessor's client ROM now ships in its own plugin's roms/ directory;
+// the tests read them from there via the compile-time BEEBIUM_TUBE_*_ROM_DIR.
 static constexpr const char* TUBE_ROM_FILENAME = "acorn-tube-6502_1_10.rom";
+static constexpr const char* TUBE_65C102_ROM_FILENAME = "acorn-tube-65c102_1_20.rom";
 static constexpr const char* DNFS_ROM_FILENAME = "acorn-dnfs_3_02.rom";
 static constexpr size_t TUBE_ROM_SIZE = 2048;
 
 bool tube_rom_available() {
     return std::filesystem::exists(
-        std::filesystem::path(BEEBIUM_ROM_DIR) / TUBE_ROM_FILENAME);
+        std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME);
+}
+
+bool tube_65c102_rom_available() {
+    return std::filesystem::exists(
+        std::filesystem::path(BEEBIUM_TUBE_65C102_ROM_DIR) / TUBE_65C102_ROM_FILENAME);
 }
 
 bool dnfs_rom_available() {
@@ -79,8 +87,7 @@ bool dnfs_rom_available() {
                std::filesystem::path(BEEBIUM_TEST_ROM_DIR) / DNFS_ROM_FILENAME);
 }
 
-std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
-    auto filepath = std::filesystem::path(BEEBIUM_ROM_DIR) / TUBE_ROM_FILENAME;
+std::array<uint8_t, TUBE_ROM_SIZE> load_rom_file(const std::filesystem::path& filepath) {
     std::ifstream file(filepath, std::ios::binary);
     REQUIRE(file.good());
 
@@ -88,6 +95,15 @@ std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
     file.read(reinterpret_cast<char*>(rom.data()), TUBE_ROM_SIZE);
     REQUIRE(file.gcount() == static_cast<std::streamsize>(TUBE_ROM_SIZE));
     return rom;
+}
+
+std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
+    return load_rom_file(std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME);
+}
+
+std::array<uint8_t, TUBE_ROM_SIZE> load_tube_65c102_rom() {
+    return load_rom_file(
+        std::filesystem::path(BEEBIUM_TUBE_65C102_ROM_DIR) / TUBE_65C102_ROM_FILENAME);
 }
 
 // Set up a Model B with MOS + BASIC + DNFS (which includes Tube Host code).
@@ -162,17 +178,17 @@ TEST_CASE("Model B with 65C02 second processor boots with Tube banner",
 TEST_CASE("Model B with 65C102 4 MHz second processor boots and runs at 2x host",
           "[boot][tube]") {
     if (!base_roms_available()) SKIP("Base ROMs not available");
-    if (!tube_rom_available()) SKIP("Tube 6502 ROM not available");
+    if (!tube_65c102_rom_available()) SKIP("Tube 65C102 ROM not available");
     if (!dnfs_rom_available()) SKIP("DNFS ROM not available");
 
-    // The 65C102 is the 65C02 second processor with a 4 MHz clock: identical
-    // software and ROM, ratio 2/1 instead of 3/2.
+    // The 65C102 is a 65C02-family second processor at 4 MHz (ratio 2/1). It
+    // has its own client ROM with its own banner, distinct from the 65C02's.
     ModelB machine;
     setup_tube_machine(machine);
     machine.state().memory.tube_socket.enable();
     machine.reset();
 
-    auto tube_rom = load_tube_rom();
+    auto tube_rom = load_tube_65c102_rom();
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
     ParasiteRunner parasite(*tube, tube_rom, ClockRatio{2, 1});
@@ -188,8 +204,8 @@ TEST_CASE("Model B with 65C102 4 MHz second processor boots and runs at 2x host"
 
     INFO("Screen:\n" << dump_screen(machine));
 
-    // Same boot outcome as the 65C02: the Tube banner and the BASIC prompt.
-    CHECK(screen_contains(machine, "Acorn TUBE 6502 64K"));
+    // The 65C102's own banner (not the 6502's), proving its own ROM booted.
+    CHECK(screen_contains(machine, "Acorn TUBE 65C102 Co-Processor"));
     CHECK_FALSE(screen_contains(machine, "BBC Computer 32K"));
     CHECK(screen_contains(machine, ">"));
 
