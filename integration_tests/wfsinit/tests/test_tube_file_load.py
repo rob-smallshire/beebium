@@ -33,12 +33,29 @@ from beebium.ext.peripheral.acorn_scsi._proto import scsi_host_adapter_pb2, scsi
 
 
 ASM_DIRPATH = Path(__file__).parent.parent / "asm"
-TUBE_CYCLES_PER_KEY = 200_000
 
 
 def run_until_or_timeout(bbc, predicate, emulated_seconds, chunk_seconds=1.0):
     return bbc.run_until_or_timeout(
         predicate, emulated_seconds, chunk_seconds=chunk_seconds)
+
+
+def _has_prompt_after(bbc, command_text):
+    """True once a '>' prompt appears on a line after the command text.
+
+    Typing is paced by the server, so the prompt and a partly typed command
+    are both on screen before the command has been entered. Only a prompt on
+    a later line shows the command has completed.
+    """
+    from beebium.client.screen import read_mode7_screen
+    found_command = False
+    for row in read_mode7_screen(bbc):
+        stripped = row.strip()
+        if command_text in stripped:
+            found_command = True
+        elif found_command and stripped == ">":
+            return True
+    return False
 
 
 def _dump_hang_diagnostics(bbc):
@@ -128,6 +145,7 @@ def test_load_file_via_tube(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
+                "--floppy", f"0:{ssd_filepath}",
                 "--sideways", f"9:rom:{anfs_filepath}",
                 "--sideways", f"10:rom:{adfs_filepath}",
                 "--sideways", f"11:rom:{dfs_filepath}",
@@ -148,12 +166,11 @@ def test_load_file_via_tube(
 
             # Type *LOAD to load the TEST file into parasite memory.
             # This triggers the Tube address claim + R3/R4 data transfer.
-            bbc.keyboard.type('*LOAD TEST 1F00\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type('*LOAD TEST 1F00\r')
 
             ok = run_until_or_timeout(
                 bbc,
-                lambda: screen_contains(bbc, ">") and
-                        screen_contains(bbc, "LOAD"),
+                lambda: _has_prompt_after(bbc, "LOAD TEST"),
                 emulated_seconds=30.0,
             )
 
@@ -200,6 +217,7 @@ def test_call_loaded_file_via_tube(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
+                "--floppy", f"0:{ssd_filepath}",
                 "--sideways", f"9:rom:{anfs_filepath}",
                 "--sideways", f"10:rom:{adfs_filepath}",
                 "--sideways", f"11:rom:{dfs_filepath}",
@@ -218,11 +236,10 @@ def test_call_loaded_file_via_tube(
             assert ok, f"Boot failed:\n{dump_screen(bbc)}"
 
             # Load the file
-            bbc.keyboard.type('*LOAD TEST 1F00\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type('*LOAD TEST 1F00\r')
             ok = run_until_or_timeout(
                 bbc,
-                lambda: screen_contains(bbc, ">") and
-                        screen_contains(bbc, "LOAD"),
+                lambda: _has_prompt_after(bbc, "LOAD TEST"),
                 emulated_seconds=30.0,
             )
             if not ok:
@@ -230,7 +247,7 @@ def test_call_loaded_file_via_tube(
                 pytest.fail("*LOAD hung. See diagnostics.")
 
             # Execute the loaded program
-            bbc.keyboard.type('CALL &1F00\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type('CALL &1F00\r')
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "DONE"),

@@ -35,7 +35,7 @@ from oaknut.dfs import DFS, ACORN_DFS_40T_SINGLE_SIDED
 from beebium.client import Beebium
 from beebium.client.screen import screen_contains, read_mode7_screen, dump_screen
 
-from tube_save_helpers import TUBE_CYCLES_PER_KEY, run_until_or_timeout, SSD_SIZE
+from tube_save_helpers import run_until_or_timeout, SSD_SIZE
 
 
 _skip_windows_ci = pytest.mark.skipif(
@@ -104,10 +104,10 @@ def _has_prompt_after(bbc: Beebium, command: str) -> bool:
     return False
 
 
-def _load_and_save(bbc: Beebium, cycles_per_key: int, emulated_seconds: float) -> bool:
+def _load_and_save(bbc: Beebium, emulated_seconds: float) -> bool:
     """Type LOAD and SAVE commands, waiting for completion."""
     load_cmd = 'LOAD ":0.TEST"'
-    bbc.keyboard.type(load_cmd + '\r', cycles_per_key=cycles_per_key)
+    bbc.keyboard.type(load_cmd + '\r')
     ok = bbc.run_until_or_timeout(
         lambda: _has_prompt_after(bbc, load_cmd),
         emulated_seconds=emulated_seconds,
@@ -116,7 +116,7 @@ def _load_and_save(bbc: Beebium, cycles_per_key: int, emulated_seconds: float) -
         return False
 
     save_cmd = 'SAVE ":1.TEST"'
-    bbc.keyboard.type(save_cmd + '\r', cycles_per_key=cycles_per_key)
+    bbc.keyboard.type(save_cmd + '\r')
     ok = bbc.run_until_or_timeout(
         lambda: _has_prompt_after(bbc, save_cmd),
         emulated_seconds=emulated_seconds,
@@ -127,7 +127,7 @@ def _load_and_save(bbc: Beebium, cycles_per_key: int, emulated_seconds: float) -
 def _load_and_save_tube(bbc: Beebium) -> bool:
     """Type LOAD and SAVE commands with Tube, waiting for completion."""
     load_cmd = 'LOAD ":0.TEST"'
-    bbc.keyboard.type(load_cmd + '\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+    bbc.keyboard.type(load_cmd + '\r')
     ok = run_until_or_timeout(
         bbc,
         lambda: _has_prompt_after(bbc, load_cmd),
@@ -137,7 +137,7 @@ def _load_and_save_tube(bbc: Beebium) -> bool:
         return False
 
     save_cmd = 'SAVE ":1.TEST"'
-    bbc.keyboard.type(save_cmd + '\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+    bbc.keyboard.type(save_cmd + '\r')
     ok = run_until_or_timeout(
         bbc,
         lambda: _has_prompt_after(bbc, save_cmd),
@@ -167,7 +167,7 @@ class TestDfsSaveWithoutTube:
         blank_ssd_filepath: Path,
     ) -> None:
         """SAVE without Tube produces a byte-exact copy."""
-        ok = _load_and_save(bbc_no_tube, cycles_per_key=100_000, emulated_seconds=15.0)
+        ok = _load_and_save(bbc_no_tube, emulated_seconds=15.0)
         screen = dump_screen(bbc_no_tube)
         assert ok, f"LOAD/SAVE did not complete:\n{screen}"
         print(f"Screen after LOAD/SAVE:\n{screen}")
@@ -214,7 +214,7 @@ class TestDfsSaveWithTube:
         any bug to the SAVE (parasite-to-host) direction.
         """
         load_cmd = 'LOAD ":0.TEST"'
-        bbc_with_tube.keyboard.type(load_cmd + '\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+        bbc_with_tube.keyboard.type(load_cmd + '\r')
         ok = run_until_or_timeout(
             bbc_with_tube,
             lambda: _has_prompt_after(bbc_with_tube, load_cmd),

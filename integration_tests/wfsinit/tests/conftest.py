@@ -163,8 +163,7 @@ def scsi_hdd_filepath(tmp_path):
     result = subprocess.run(
         [
             disc_cli_filepath, "create", str(dat_filepath),
-            "--format", "adfs-hard",
-            "--capacity", "20MB",
+            "--geometry", "capacity=20MB",
             "--title", "Server",
         ],
         capture_output=True, text=True,

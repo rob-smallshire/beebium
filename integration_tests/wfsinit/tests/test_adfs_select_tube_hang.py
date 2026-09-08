@@ -40,7 +40,6 @@ from beebium.client.screen import screen_contains, dump_screen
 from beebium.ext.peripheral.acorn_scsi._proto import scsi_host_adapter_pb2, scsi_host_adapter_pb2_grpc
 
 
-TUBE_CYCLES_PER_KEY = 200_000
 
 
 def run_until_or_timeout(bbc, predicate, emulated_seconds, chunk_seconds=1.0):
@@ -283,7 +282,7 @@ def test_adfs_select_with_tube_and_scsi(
 
             # Type *ADFS and wait for the prompt to reappear.
             cmd = "*ADFS"
-            bbc.keyboard.type(cmd + "\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type(cmd + "\r")
 
             ok = run_until_or_timeout(
                 bbc,
@@ -365,7 +364,7 @@ def test_osword_72_then_adfs_select_with_tube(
             )
 
             for line in program.strip().split('\n'):
-                bbc.keyboard.type(line + "\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+                bbc.keyboard.type(line + "\r")
                 ok = run_until_or_timeout(
                     bbc,
                     lambda: screen_contains(bbc, ">"),
@@ -373,7 +372,7 @@ def test_osword_72_then_adfs_select_with_tube(
                 )
                 assert ok, f"Prompt lost:\n{dump_screen(bbc)}"
 
-            bbc.keyboard.type("RUN\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("RUN\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "DONE"),
@@ -442,7 +441,7 @@ def test_osword_72_correct_cb_with_tube(
             )
 
             for line in program.strip().split('\n'):
-                bbc.keyboard.type(line + "\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+                bbc.keyboard.type(line + "\r")
                 ok = run_until_or_timeout(
                     bbc,
                     lambda: screen_contains(bbc, ">"),
@@ -450,7 +449,7 @@ def test_osword_72_correct_cb_with_tube(
                 )
                 assert ok, f"Prompt lost:\n{dump_screen(bbc)}"
 
-            bbc.keyboard.type("RUN\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("RUN\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "DONE"),
@@ -508,7 +507,7 @@ def test_adfs_cat_with_tube_and_scsi(
             assert ok, f"Boot failed:\n{dump_screen(bbc)}"
 
             # Select ADFS
-            bbc.keyboard.type("*ADFS\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("*ADFS\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: _has_prompt_after(bbc, "*ADFS"),
@@ -517,7 +516,7 @@ def test_adfs_cat_with_tube_and_scsi(
             assert ok, f"*ADFS hung:\n{dump_screen(bbc)}"
 
             # Catalogue the SCSI disc
-            bbc.keyboard.type("*CAT\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("*CAT\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: _has_prompt_after(bbc, "*CAT"),
@@ -604,7 +603,7 @@ def test_osword_72_scsi_read_with_tube(
             )
 
             for line in program.strip().split('\n'):
-                bbc.keyboard.type(line + "\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+                bbc.keyboard.type(line + "\r")
                 ok = run_until_or_timeout(
                     bbc,
                     lambda: screen_contains(bbc, ">"),
@@ -613,7 +612,7 @@ def test_osword_72_scsi_read_with_tube(
                 assert ok, f"Prompt lost entering program:\n{dump_screen(bbc)}"
 
             # RUN the program
-            bbc.keyboard.type("RUN\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("RUN\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "DONE"),
@@ -695,7 +694,7 @@ def test_osword_72_after_adfs_select_with_tube(
             )
 
             for line in program.strip().split('\n'):
-                bbc.keyboard.type(line + "\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+                bbc.keyboard.type(line + "\r")
                 ok = run_until_or_timeout(
                     bbc,
                     lambda: screen_contains(bbc, ">"),
@@ -703,7 +702,7 @@ def test_osword_72_after_adfs_select_with_tube(
                 )
                 assert ok, f"Prompt lost entering program:\n{dump_screen(bbc)}"
 
-            bbc.keyboard.type("RUN\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("RUN\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "DONE"),
@@ -823,7 +822,7 @@ def test_watchpoint_025f_tube_flag(
             )
 
             for line in program.strip().split('\n'):
-                bbc.keyboard.type(line + "\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+                bbc.keyboard.type(line + "\r")
                 ok = run_until_or_timeout(
                     bbc,
                     lambda: screen_contains(bbc, ">"),
@@ -831,7 +830,7 @@ def test_watchpoint_025f_tube_flag(
                 )
                 assert ok, f"Prompt lost:\n{dump_screen(bbc)}"
 
-            bbc.keyboard.type("RUN\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("RUN\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "DONE"),

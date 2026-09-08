@@ -22,8 +22,6 @@ from __future__ import annotations
 
 from beebium.client import Beebium
 
-# Tube OSRDCH is slower than native -- use a longer per-key delay.
-TUBE_CYCLES_PER_KEY = 200_000
 
 # DFS SSD geometry: 40 tracks * 10 sectors * 256 bytes.
 SSD_SIZE = 102400

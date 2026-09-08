@@ -19,7 +19,6 @@ from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import screen_contains, dump_screen
 
-TUBE_CYCLES_PER_KEY = 200_000
 
 def run_until_or_timeout(bbc, predicate, emulated_seconds, chunk_seconds=1.0):
     return bbc.run_until_or_timeout(
@@ -118,7 +117,7 @@ def test_load_puts_data_in_host_ram(
                 bbc.memory.address.bus[0x1F00 + i] = 0xAA
 
             # Load the file (load address is &1F00 from the catalogue)
-            bbc.keyboard.type('*LOAD TEST\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type('*LOAD TEST\r')
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, "LOAD") and

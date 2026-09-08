@@ -20,7 +20,6 @@ from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import screen_contains, dump_screen, read_mode7_screen
 ASM_DIRPATH = Path(__file__).parent.parent / "asm"
-TUBE_CYCLES_PER_KEY = 200_000
 
 def run_until_or_timeout(bbc, predicate, emulated_seconds, chunk_seconds=1.0):
     return bbc.run_until_or_timeout(
@@ -59,7 +58,7 @@ def test_tube_load_detailed_debug(
             assert ok, f"Boot failed:\n{dump_screen(bbc)}"
 
             # First: *CAT to see what DFS thinks is on the disc
-            bbc.keyboard.type("*CAT\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("*CAT\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, ">"),
@@ -78,7 +77,7 @@ def test_tube_load_detailed_debug(
                 parasite.memory.address.bus[addr] = 0xBB
 
             # Check file info
-            bbc.keyboard.type("*INFO TEST\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("*INFO TEST\r")
             ok = run_until_or_timeout(
                 bbc,
                 lambda: screen_contains(bbc, ">"),
@@ -99,7 +98,7 @@ def test_tube_load_detailed_debug(
                         return True
                 return False
 
-            bbc.keyboard.type("*LOAD TEST 1F00\r", cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type("*LOAD TEST 1F00\r")
             ok = run_until_or_timeout(
                 bbc,
                 _load_complete,
@@ -190,7 +189,7 @@ def test_exec_boot_with_tube(
                 text = "\n".join(rows)
                 return "DONE" in text or "fault" in text.lower() or "error" in text.lower()
 
-            bbc.keyboard.type('*EXEC !BOOT\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type('*EXEC !BOOT\r')
             ok = run_until_or_timeout(
                 bbc,
                 _after_exec,
@@ -249,7 +248,7 @@ def test_run_from_keyboard_with_tube(
                 text = "\n".join(rows)
                 return "DONE" in text
 
-            bbc.keyboard.type('*RUN TEST\r', cycles_per_key=TUBE_CYCLES_PER_KEY)
+            bbc.keyboard.type('*RUN TEST\r')
             ok = run_until_or_timeout(
                 bbc,
                 _run_complete,

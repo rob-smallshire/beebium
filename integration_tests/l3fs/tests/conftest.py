@@ -196,8 +196,7 @@ def l3fs_scsi_filepath(tmp_path):
     # 1. Create a 10 MB ADFS-formatted hard disc.
     _run_disc(
         "create", str(dat),
-        "--format", "adfs-hard",
-        "--capacity", "10MB",
+        "--geometry", "capacity=10MB",
         "--title", "Server",
     )
 
