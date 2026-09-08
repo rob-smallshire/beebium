@@ -37,6 +37,16 @@ The single-threaded lockstep in `Machine::step()` is one exact execution of
 that model. The contract below describes the coprocessor's obligations in a
 way that any exact execution strategy can drive.
 
+The contract is independent of the coprocessor's CPU family. Acorn and
+third parties shipped 6502, 65C102, Z80, 6809, NS32016, 80186 and 80286
+second processors, and the core must be able to host any of them by adding
+an extension. Nothing the core, the server or the service layer calls on a
+coprocessor may assume a 6502: register names, a 16-bit address space, an
+`M6502` structure, or interrupt-handler tracking. Where a family-specific
+surface is unavoidable today, which is only the gRPC debugger, it lives
+behind a family-agnostic base and the server asks for the family it can
+serve.
+
 
 ## The contract (Step 1)
 
@@ -68,10 +78,16 @@ public:
 
     // Exact clock ratio, coprocessor cycles per host cycle.
     virtual ClockRatio clock_ratio() const = 0;
-
-    // Diagnostic: current parasite PC, or 0xFFFF if not applicable.
-    virtual uint16_t diag_pc() const { return 0xFFFF; }
 };
+```
+
+There is no program-counter accessor on this interface: a PC is a
+family-specific notion (16-bit on a 6502, 24-bit on a 32016, segmented on
+an 80186) and belongs on the family's debug target. Step 1 shipped a
+`diag_pc()` for a stretch diagnostic that Step 1b deletes; it is removed
+with it.
+
+```cpp
 
 struct ClockRatio {
     uint32_t numerator;    // coprocessor cycles
@@ -134,8 +150,10 @@ phase. It becomes:
 void install_coprocessor(Coprocessor* coprocessor);   // replaces install_parasite
 void remove_coprocessor();                            // replaces remove_parasite
 void run_coprocessor_until(uint64_t host_cycle);      // replaces tick_parasite and tick_parasite_stretch
-uint16_t diag_parasite_pc() const;                    // unchanged
 ```
+
+(`diag_parasite_pc()` existed in Step 1 and is removed in Step 1b together
+with the stretch diagnostic that used it.)
 
 `set_parasite_clock_ratio`, `tick_parasite`, `tick_parasite_stretch` and the
 `parasite_phase_` / `parasite_clock_num_` / `parasite_clock_den_` members
@@ -332,8 +350,10 @@ public:
     // backend. Valid after init().
     virtual TubeHostBackend* tube_backend() = 0;
 
-    // Debugger access, or nullptr if this coprocessor offers none.
-    virtual Cpu6502DebugTarget* debug_target() { return nullptr; }
+    // Debugger access, or nullptr if this coprocessor offers none. The
+    // returned object is family-agnostic; the server asks it for the
+    // families it can serve (see Cpu6502DebugTarget).
+    virtual CoprocessorDebugTarget* debug_target() { return nullptr; }
 };
 ```
 
@@ -351,9 +371,32 @@ public:
    accessors is the developer's choice; either way `init()` must leave the
    socket populated and `shutdown()` must leave it empty.
 
-2. `beebium/extension/Cpu6502DebugTarget.hpp`
+2. `beebium/extension/CoprocessorDebugTarget.hpp`
 
-   An abstract class exposing, as virtual functions, exactly the members
+   The family-agnostic base every coprocessor's debug target derives from:
+
+```cpp
+class BEEBIUM_EXT_API CoprocessorDebugTarget {
+public:
+    virtual ~CoprocessorDebugTarget();
+    // The CPU family, e.g. "6502", "z80", "6809", "ns32016", "80186".
+    virtual std::string_view cpu_family() const = 0;
+};
+```
+
+   It carries no registers, no address width and no memory access, because
+   those differ per family and the only consumer today is a 6502-specific
+   gRPC service. The server obtains a family it can serve by
+   `dynamic_cast` to that family's exported interface; for a family it
+   cannot serve it logs that no debugger is available for the coprocessor
+   and continues, so a Z80 or 32016 coprocessor runs without a debugger
+   until its family is supported (see Step 1d below).
+
+   `beebium/extension/Cpu6502DebugTarget.hpp`
+
+   `Cpu6502DebugTarget : CoprocessorDebugTarget`, the 6502 family, and
+   the only one served today. An abstract class exposing, as virtual
+   functions, exactly the members
    that `service::DebuggerControlServiceImpl<T>` requires of its `T`:
    execution control (`cycle_count`, `sequence`, `is_paused`, `pause`,
    `resume`, `reset`, `step`, `step_instruction`, `prepare_for_step`,
@@ -495,6 +538,14 @@ Existing tests to update, with intent preserved:
   2/1, CLI `tube-65c102`. Software-identical to the 65C02 second processor;
   only the clock differs. Gives the programme two coprocessor instances to
   exercise the contract with.
+- **Step 1d, family-agnostic coprocessor debugger.** `ParasiteDebuggerControl`
+  is the 6502 proto under another name: `Cpu6502State`, 16-bit addresses.
+  Serving the other families needs a debugger surface described in terms
+  of a family descriptor (register names, widths and values; address
+  width; memory regions) rather than a fixed 6502 shape, on the server, in
+  the protos and in the Python, TypeScript and macOS clients. That is a
+  design of its own, building on `docs/discussion/debugger-requirements.md`;
+  `CoprocessorDebugTarget` is the seam it plugs into.
 - **Step 2, skew contract.** Name the maximum permitted skew Δ, in host
   cycles, between the host's time and the coprocessor's. Register accesses
   remain exact; interrupt-line delivery is permitted up to Δ of latency.
