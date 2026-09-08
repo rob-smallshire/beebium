@@ -18,7 +18,7 @@ scope now. Later steps are noted so that Step 1 does not preclude them.
 |------|---------|
 | Host | The BBC Micro side: `Machine<Hardware>`, its 6502 and peripherals, clocked at 2 MHz. |
 | Coprocessor | Everything on the far side of the Tube cable: bridging hardware (the Tube ULA for Acorn designs), a CPU, memory, boot ROM. Supplied by an extension. |
-| Parasite | Acorn's name for the coprocessor's CPU. Kept for the CPU and its runner (`ParasiteRunner`, `ParasiteCpu`). |
+| Parasite | Acorn's name for the coprocessor's CPU. Not used in Beebium's APIs or new code: "coprocessor" is the project's word for everything on the far side of the cable, including its CPU. Existing `Parasite*` class names are renamed in Step 1d. |
 | Host cycle | One tick of the host's 2 MHz clock. `Machine` counts these in `state_.cycle_count`. |
 | Host time | The host's cumulative host-cycle count. This is the time unit of the contract. |
 | Coprocessor cycle | One tick of the coprocessor's own clock (3 MHz for the 65C02 second processor, other rates for other designs). |
@@ -989,17 +989,154 @@ parasite: every parasite-paced path is closed-loop, and the host-paced R3
 transfers require only that the parasite be fast enough.
 
 
+## Step 1d: a family-agnostic coprocessor debugger
+
+### Goal
+
+The debugger works for any coprocessor CPU family without the protos,
+the server or the clients naming a family. The coprocessor describes its
+CPU; the server serves the description; the clients render it. The same
+description serves the host's own 6502, so there is one register model
+end to end. The word "parasite" leaves the APIs and the code.
+
+### What is already family-agnostic and stays
+
+Memory addresses (32-bit), memory regions, breakpoints and watchpoints
+as address ranges, execution control, stepping, the execution-state event
+stream, and the coupled run and stop primitives of
+`docs/discussion/debugger-requirements.md`. None of these change.
+
+### The register model
+
+```protobuf
+message CpuDescriptor {
+    string family = 1;                 // "6502", "z80", "6809", "ns32016", "80186"
+    uint32 address_bits = 2;           // 16, 24, 32
+    bool little_endian = 3;
+    repeated RegisterDescriptor registers = 4;   // in display order
+    repeated string signals = 5;       // interrupt line names, e.g. "IRQ", "NMI"
+}
+
+message RegisterDescriptor {
+    string name = 1;                   // "A", "PC", "HL", "SP", "P"
+    uint32 width_bits = 2;
+    RegisterRole role = 3;             // NONE, PROGRAM_COUNTER, STACK_POINTER, FLAGS
+    repeated string flag_names = 4;    // for FLAGS: bit 0 first, "" for unused
+}
+
+message CpuState {
+    repeated RegisterValue registers = 1;   // same order as the descriptor
+    repeated SignalState signals = 2;       // same order as descriptor.signals
+    uint64 cycle_count = 3;
+}
+
+message RegisterValue { string name = 1; uint64 value = 2; }
+message SignalState  { string name = 1; bool asserted = 2; bool pending = 3; bool in_handler = 4; }
+```
+
+Roles are the minimum clients need: which register is the program
+counter, which the stack pointer, which the flags. More roles (segment
+registers, banked sets) are added when a family that needs them arrives,
+driven by a concrete example, not before.
+
+For the 6502 family the descriptor lists A, X, Y, SP, PC and P, with P's
+flag names N V - B D I Z C, and the signals IRQ and NMI. `in_handler` on
+NMI carries the existing NMI-handler tracking; `pending` on NMI is the
+latched edge, on IRQ the asserted-and-unmasked condition. The device
+flag masks in today's `Cpu6502State` are Beebium-internal aggregator
+state, not CPU state, and are dropped from the wire.
+
+### RPC changes
+
+In `debugger.proto`:
+
+- `Get6502State` and `Set6502State`, and `Cpu6502State`, are removed.
+- `GetCpuDescriptor(Empty) returns (CpuDescriptor)` is added.
+- `GetCpuState(Empty) returns (CpuState)` and `SetCpuState(CpuState)
+  returns (CpuState)` are added; `SetCpuState` accepts any subset of
+  registers by name and returns the full state.
+- The service `ParasiteDebuggerControl` is renamed
+  `CoprocessorDebuggerControl`. `DebuggerControl` is unchanged in name and
+  gains the same three RPCs in place of the 6502 pair.
+
+Everything else in the file is unchanged. The protocol fingerprint is
+resynchronised and all clients regenerated, released together, per the
+project's no-backward-compatibility rule.
+
+### Extension API
+
+`Cpu6502DebugTarget` and `Cpu6502MemoryModel` are removed.
+`CoprocessorDebugTarget` becomes the whole debug contract: the descriptor
+(`cpu_descriptor()`), register access by index (`register_value(i)`,
+`set_register_value(i, v)`), signal state by index, and the existing
+execution control, flat memory access, region model, breakpoint and
+watchpoint surface, `prepare_for_step` and `finish_step`. It carries no
+`M6502` reference and no 6502 register names.
+
+The server instantiates `DebuggerControlServiceImpl<CoprocessorDebugTarget>`
+for the coprocessor and no longer casts to a family; the "no debugger for
+family X" path from Step 1b becomes unreachable and is removed. The host
+`Machine` implements the same descriptor and register access for its own
+6502, so both services are instantiations of one template against one
+interface, and the template no longer needs the host memory policies'
+`machine_type()` as a special case if the interface provides it.
+
+### Naming
+
+"Parasite" is retired from all names: `ParasiteRunner`, `ParasiteCpu`,
+`ParasiteMemoryMap`, `ParasiteDebuggerAdapter`, `TubeParasiteBackend`,
+`parasite_read`/`parasite_write`/`parasite_peek` on the ULA, the Python
+`connect_parasite()`, the `TubeSystem` parasite naming, the TypeScript
+equivalents, and comments. The replacement word is "coprocessor"
+(`CoprocessorRunner`, `CoprocessorCpu`, `coprocessor_read`, ...). The
+Tube ULA's two sides are "host" and "coprocessor". Acorn's documents
+still say parasite and the references to them may quote it. The rename
+is one mechanical commit at the end of the step, after the functional
+changes, so the review can see each separately. The vector test's BASIC
+transliteration keeps the pin names the original program uses.
+
+### Clients
+
+- **Python.** `cpu.registers` returns an ordered mapping of register name
+  to value with attribute access, built from the descriptor, so existing
+  6502 code reading `.a`, `.x`, `.pc` keeps working and a Z80's `.hl`
+  appears with no client change. `cpu.descriptor` exposes the descriptor;
+  `cpu.signals` the interrupt lines. `Registers` as a fixed dataclass
+  goes. `connect_parasite()` becomes `connect_coprocessor()`. The
+  disassembler stays 6502-only and client-side; other families bring
+  their own later.
+- **TypeScript.** The same shape.
+- **macOS.** Stub regeneration only; the app does not use the CPU state
+  RPCs.
+- The generated READMEs are regenerated and their snippets re-run.
+
+### Tests
+
+- Proto and server: descriptor and state round trips for the host 6502
+  and the coprocessor 65C02 through both services; `SetCpuState` with a
+  subset; unknown register names rejected with a message naming them.
+- The stub-family test from Step 1b becomes its opposite: a stub
+  coprocessor with a made-up family and register set is fully served,
+  descriptor, state and set, with no server code knowing its names.
+- Existing debugger tests (host and coprocessor breakpoints, watchpoints,
+  stepping, cross-processor stop) pass with the 6502 pair removed.
+- Python and TypeScript client unit tests for the mapping and attribute
+  access, and the existing integration tests that read registers through
+  `connect_parasite()` migrated to `connect_coprocessor()`.
+
+### Acceptance
+
+Every suite in Step 3's list unchanged in outcome; the Python and
+TypeScript client suites; the README snippet regeneration check; the
+fingerprint check; `grep -rni parasite src clients/beebium-python-client/src
+clients/beebium-typescript-client/src` finding only quotations of Acorn
+documents and the vector test's pin names.
+
+
 ## Later steps (for orientation, not for implementation now)
 
 - **Step 1c, the 65C102 4 MHz second processor.** Specified below.
-- **Step 1d, family-agnostic coprocessor debugger.** `ParasiteDebuggerControl`
-  is the 6502 proto under another name: `Cpu6502State`, 16-bit addresses.
-  Serving the other families needs a debugger surface described in terms
-  of a family descriptor (register names, widths and values; address
-  width; memory regions) rather than a fixed 6502 shape, on the server, in
-  the protos and in the Python, TypeScript and macOS clients. That is a
-  design of its own, building on `docs/discussion/debugger-requirements.md`;
-  `CoprocessorDebugTarget` is the seam it plugs into.
+- **Step 1d, family-agnostic coprocessor debugger.** Specified above.
 - **Step 2, skew contract.** Specified above.
 - **Step 3, batching.** Specified above.
 - **Step 3b, an instruction-level coprocessor core.** Designed above,
