@@ -40,15 +40,15 @@ namespace beebium::service {
 // target's read_with_pc/peek_with_pc/write_with_pc default to the plain form;
 // only the host adapter, whose memory routing depends on the program counter,
 // overrides them.
-inline uint8_t read_with_optional_pc(CpuDebugTarget& target, uint16_t addr, bool has_pc, uint16_t pc) {
+inline uint8_t read_with_optional_pc(CpuDebugTarget& target, uint32_t addr, bool has_pc, uint32_t pc) {
     return has_pc ? target.read_with_pc(addr, pc) : target.read(addr);
 }
 
-inline uint8_t peek_with_optional_pc(CpuDebugTarget& target, uint16_t addr, bool has_pc, uint16_t pc) {
+inline uint8_t peek_with_optional_pc(CpuDebugTarget& target, uint32_t addr, bool has_pc, uint32_t pc) {
     return has_pc ? target.peek_with_pc(addr, pc) : target.peek(addr);
 }
 
-inline void write_with_optional_pc(CpuDebugTarget& target, uint16_t addr, uint8_t val, bool has_pc, uint16_t pc) {
+inline void write_with_optional_pc(CpuDebugTarget& target, uint32_t addr, uint8_t val, bool has_pc, uint32_t pc) {
     if (has_pc) {
         target.write_with_pc(addr, val, pc);
     } else {
@@ -245,6 +245,12 @@ private:
     cpu::CpuDescriptor descriptor_;
     std::unordered_map<std::string, size_t> register_index_;
     uint64_t reg_value_by_name(std::string_view name) const;
+    // The highest addressable byte for this CPU, from the descriptor's
+    // address_bits (0xFFFF for a 16-bit CPU, wider for a 24- or 32-bit one).
+    uint32_t max_address() const {
+        const uint32_t bits = descriptor_.address_bits;
+        return bits >= 32 ? 0xFFFFFFFFu : ((1u << bits) - 1u);
+    }
     CounterpartStopCallback counterpart_stop_cb_;
     std::mutex mutex_;
     std::vector<BreakpointRecord> breakpoints_;
@@ -353,7 +359,7 @@ DebuggerControlServiceImpl::DebuggerControlServiceImpl(CpuDebugTarget& machine)
     for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
         register_index_[descriptor_.registers[i].name] = i;
     }
-    machine_.set_breakpoint_hit_callback([this](const beebium::BreakpointEntry& bp, uint16_t pc) {
+    machine_.set_breakpoint_hit_callback([this](const beebium::BreakpointEntry& bp, uint32_t pc) {
         // Increment hit counter
         auto& mutable_bp = const_cast<beebium::BreakpointEntry&>(bp);
         ++mutable_bp.hit_count;
@@ -395,7 +401,7 @@ DebuggerControlServiceImpl::DebuggerControlServiceImpl(CpuDebugTarget& machine)
     });
 
     machine_.set_watchpoint_hit_callback(
-        [this](const beebium::WatchpointEntry& wp, uint16_t addr, uint8_t value, bool is_write) {
+        [this](const beebium::WatchpointEntry& wp, uint32_t addr, uint8_t value, bool is_write) {
             // Increment hit counter (available as `hits` in condition expression)
             auto& mutable_wp = const_cast<beebium::WatchpointEntry&>(wp);
             ++mutable_wp.hit_count;
@@ -480,7 +486,7 @@ void DebuggerControlServiceImpl::update_breakpoint_entries() {
     for (const auto& bp : breakpoints_) {
         if (!bp.enabled) continue;
         entries.push_back({bp.id,
-                          static_cast<uint16_t>(bp.start_address),
+                          bp.start_address,
                           bp.end_address,
                           bp.stop_counterpart,
                           bp.condition,
@@ -646,13 +652,13 @@ grpc::Status DebuggerControlServiceImpl::ReadMemory(
     uint32_t address = request->address();
     uint32_t length = request->length();
     bool has_pc = request->has_simulated_pc();
-    uint16_t pc = has_pc ? static_cast<uint16_t>(request->simulated_pc()) : 0;
+    uint32_t pc = has_pc ? request->simulated_pc() : 0;
 
     std::string data;
     data.reserve(length);
 
-    for (uint32_t i = 0; i < length && (address + i) <= 0xFFFF; ++i) {
-        uint16_t addr = static_cast<uint16_t>(address + i);
+    for (uint32_t i = 0; i < length && (address + i) <= max_address(); ++i) {
+        uint32_t addr = address + i;
         data.push_back(static_cast<char>(
             read_with_optional_pc(machine_, addr, has_pc, pc)));
     }
@@ -671,10 +677,10 @@ grpc::Status DebuggerControlServiceImpl::WriteMemory(
     uint32_t address = request->address();
     const std::string& data = request->data();
     bool has_pc = request->has_simulated_pc();
-    uint16_t pc = has_pc ? static_cast<uint16_t>(request->simulated_pc()) : 0;
+    uint32_t pc = has_pc ? request->simulated_pc() : 0;
 
-    for (size_t i = 0; i < data.size() && (address + i) <= 0xFFFF; ++i) {
-        uint16_t addr = static_cast<uint16_t>(address + i);
+    for (size_t i = 0; i < data.size() && (address + i) <= max_address(); ++i) {
+        uint32_t addr = address + i;
         write_with_optional_pc(machine_, addr, static_cast<uint8_t>(data[i]), has_pc, pc);
     }
 
@@ -692,13 +698,13 @@ grpc::Status DebuggerControlServiceImpl::PeekMemory(
     uint32_t address = request->address();
     uint32_t length = request->length();
     bool has_pc = request->has_simulated_pc();
-    uint16_t pc = has_pc ? static_cast<uint16_t>(request->simulated_pc()) : 0;
+    uint32_t pc = has_pc ? request->simulated_pc() : 0;
 
     std::string data;
     data.reserve(length);
 
-    for (uint32_t i = 0; i < length && (address + i) <= 0xFFFF; ++i) {
-        uint16_t addr = static_cast<uint16_t>(address + i);
+    for (uint32_t i = 0; i < length && (address + i) <= max_address(); ++i) {
+        uint32_t addr = address + i;
         data.push_back(static_cast<char>(
             peek_with_optional_pc(machine_, addr, has_pc, pc)));
     }
@@ -825,7 +831,9 @@ grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
     uint32_t end = request->end_address();
     // end_address == 0 means single-address breakpoint [start, start+1)
     if (end == 0) end = start + 1;
-    if (start > 0xFFFF || end > 0x10000 || start >= end) {
+    if (start > max_address()
+        || static_cast<uint64_t>(end) > static_cast<uint64_t>(max_address()) + 1
+        || start >= end) {
         response->set_success(false);
         return grpc::Status::OK;
     }
@@ -971,7 +979,7 @@ void DebuggerControlServiceImpl::update_watchpoint_entries() {
     for (const auto& wp : watchpoints_) {
         if (!wp.enabled) continue;
         entries.push_back({wp.id,
-                          static_cast<uint16_t>(wp.start_address),
+                          wp.start_address,
                           wp.end_address,
                           wp.type,
                           wp.stop_counterpart,
@@ -1009,7 +1017,9 @@ grpc::Status DebuggerControlServiceImpl::AddWatchpoint(
 
     uint32_t start = request->start_address();
     uint32_t end = request->end_address();
-    if (start > 0xFFFF || end > 0x10000 || start >= end) {
+    if (start > max_address()
+        || static_cast<uint64_t>(end) > static_cast<uint64_t>(max_address()) + 1
+        || start >= end) {
         response->set_success(false);
         return grpc::Status::OK;
     }

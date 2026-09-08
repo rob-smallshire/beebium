@@ -64,7 +64,7 @@ enum WatchType : uint8_t {
 // condition like "cycles >= 10000000" for cycle-budget runs.
 struct BreakpointEntry {
     uint32_t id;
-    uint16_t start;
+    uint32_t start;
     uint32_t end;       // exclusive [start, end); 0x10000 for full address space
     bool stop_counterpart = false;
 
@@ -76,7 +76,7 @@ struct BreakpointEntry {
     // Hit counter: increments on every address match, available as `hits` in the condition.
     uint64_t hit_count = 0;
 
-    bool matches(uint16_t pc) const {
+    bool matches(uint32_t pc) const {
         return pc >= start && pc < end;
     }
 };
@@ -85,7 +85,7 @@ struct BreakpointEntry {
 // Sorted by start address. Modified only while the machine is stopped.
 struct WatchpointEntry {
     uint32_t id;
-    uint16_t start;
+    uint32_t start;
     uint32_t end;       // exclusive [start, end); 0x10000 for full address space
     WatchType type;     // WATCH_READ, WATCH_WRITE, WATCH_BOTH
     bool stop_counterpart = false;

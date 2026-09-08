@@ -24,6 +24,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 using namespace beebium;
@@ -35,9 +36,9 @@ namespace {
 // appears anywhere in the server or the protos.
 class StubCpuDebugTarget : public CpuDebugTarget {
 public:
-    StubCpuDebugTarget() {
+    explicit StubCpuDebugTarget(uint32_t address_bits = 16) {
         descriptor_.family = "quux-9000";
-        descriptor_.address_bits = 16;
+        descriptor_.address_bits = address_bits;
         descriptor_.little_endian = false;
         descriptor_.registers = {
             {"D0", 16, cpu::RegisterRole::None, {}},
@@ -69,22 +70,25 @@ public:
     void prepare_for_step() override {}
     void wait_until_idle() override {}
 
-    uint8_t read(uint16_t addr) override { return memory_[addr]; }
-    uint8_t peek(uint16_t addr) const override { return memory_[addr]; }
-    void write(uint16_t addr, uint8_t value) override { memory_[addr] = value; ++sequence_; }
+    uint8_t read(uint32_t addr) override { return peek(addr); }
+    uint8_t peek(uint32_t addr) const override {
+        auto it = memory_.find(addr);
+        return it == memory_.end() ? 0 : it->second;
+    }
+    void write(uint32_t addr, uint8_t value) override { memory_[addr] = value; ++sequence_; }
 
     std::vector<MemoryRegionDescriptor> get_memory_regions() const override {
         MemoryRegionDescriptor ram;
         ram.name = "ram";
         ram.base_address = 0;
-        ram.size = 0x10000;
+        ram.size = descriptor_.address_bits >= 32 ? 0u : (1u << descriptor_.address_bits);
         ram.flags = RegionFlags::Readable | RegionFlags::Writable;
         return {ram};
     }
-    uint8_t peek_region(std::string_view, uint32_t address) const override { return memory_[address & 0xFFFF]; }
-    uint8_t read_region(std::string_view, uint32_t address) override { return memory_[address & 0xFFFF]; }
+    uint8_t peek_region(std::string_view, uint32_t address) const override { return peek(address); }
+    uint8_t read_region(std::string_view, uint32_t address) override { return read(address); }
     void write_region(std::string_view, uint32_t address, uint8_t value) override {
-        memory_[address & 0xFFFF] = value;
+        write(address, value);
     }
     std::string_view machine_type() const override { return "quux-machine"; }
 
@@ -107,7 +111,7 @@ private:
     cpu::CpuDescriptor descriptor_;
     std::vector<uint64_t> registers_;
     std::array<cpu::SignalStateValue, 2> signals_{};
-    std::array<uint8_t, 0x10000> memory_{};
+    std::unordered_map<uint32_t, uint8_t> memory_;
     std::vector<BreakpointEntry> breakpoints_;
     std::vector<WatchpointEntry> watchpoints_;
     uint64_t cycle_count_ = 0;
@@ -195,5 +199,49 @@ TEST_CASE("A made-up CPU family round-trips its state through the interface", "[
         auto status = impl.SetCpuState(nullptr, &req, &resp);
         CHECK_FALSE(status.ok());
         CHECK(status.error_message().find("A") != std::string::npos);
+    }
+}
+
+TEST_CASE("A 24-bit CPU family is served above the 16-bit boundary", "[debugger][coprocessor]") {
+    StubCpuDebugTarget stub(/*address_bits=*/24);
+    service::DebuggerControlServiceImpl impl(stub);
+
+    // The address bound follows the descriptor, not 0xFFFF.
+    ::beebium::CpuDescriptor desc;
+    REQUIRE(impl.GetCpuDescriptor(nullptr, nullptr, &desc).ok());
+    CHECK(desc.address_bits() == 24);
+
+    const uint32_t addr = 0x123456;  // well above 0xFFFF
+
+    // Write then read a byte high in the 24-bit space.
+    {
+        WriteMemoryRequest wreq;
+        wreq.set_address(addr);
+        wreq.set_data(std::string(1, static_cast<char>(0x5A)));
+        WriteMemoryResponse wresp;
+        REQUIRE(impl.WriteMemory(nullptr, &wreq, &wresp).ok());
+
+        ReadMemoryRequest rreq;
+        rreq.set_address(addr);
+        rreq.set_length(1);
+        ReadMemoryResponse rresp;
+        REQUIRE(impl.ReadMemory(nullptr, &rreq, &rresp).ok());
+        REQUIRE(rresp.data().size() == 1);
+        CHECK(static_cast<uint8_t>(rresp.data()[0]) == 0x5A);
+    }
+
+    // A breakpoint above 0xFFFF is accepted, not rejected by a 16-bit bound.
+    {
+        AddBreakpointRequest req;
+        req.set_start_address(0x120000);
+        req.set_end_address(0x120001);
+        AddBreakpointResponse resp;
+        REQUIRE(impl.AddBreakpoint(nullptr, &req, &resp).ok());
+
+        Empty lreq;
+        ListBreakpointsResponse lresp;
+        REQUIRE(impl.ListBreakpoints(nullptr, &lreq, &lresp).ok());
+        REQUIRE(lresp.breakpoints_size() == 1);
+        CHECK(lresp.breakpoints(0).start_address() == 0x120000);
     }
 }

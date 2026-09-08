@@ -70,32 +70,39 @@ public:
     void finish_step() override { machine_.finish_step(); }
 
     // --- Flat memory access ---
-    uint8_t read(uint16_t addr) override { return machine_.read(addr); }
-    uint8_t peek(uint16_t addr) const override { return machine_.peek(addr); }
-    void write(uint16_t addr, uint8_t value) override { machine_.write(addr, value); }
+    // The interface uses 32-bit addresses; the host 6502 map is 16-bit, so
+    // truncate here.
+    uint8_t read(uint32_t addr) override { return machine_.read(static_cast<uint16_t>(addr)); }
+    uint8_t peek(uint32_t addr) const override { return machine_.peek(static_cast<uint16_t>(addr)); }
+    void write(uint32_t addr, uint8_t value) override {
+        machine_.write(static_cast<uint16_t>(addr), value);
+    }
 
     // The host's memory routing depends on the program counter (shadow-RAM
     // modes), so it overrides the PC-aware access. peek_with_pc uses the
     // side-effect-free PC-aware read.
-    uint8_t read_with_pc(uint16_t addr, uint16_t pc) override {
+    uint8_t read_with_pc(uint32_t addr, uint32_t pc) override {
         if constexpr (HostHasPcAwareMemory<decltype(machine_.memory())>) {
-            return machine_.memory().read_with_pc(addr, pc);
+            return machine_.memory().read_with_pc(static_cast<uint16_t>(addr),
+                                                  static_cast<uint16_t>(pc));
         } else {
-            return machine_.read(addr);
+            return machine_.read(static_cast<uint16_t>(addr));
         }
     }
-    uint8_t peek_with_pc(uint16_t addr, uint16_t pc) const override {
+    uint8_t peek_with_pc(uint32_t addr, uint32_t pc) const override {
         if constexpr (HostHasPcAwareMemory<decltype(machine_.memory())>) {
-            return machine_.memory().read_with_pc(addr, pc);
+            return machine_.memory().read_with_pc(static_cast<uint16_t>(addr),
+                                                  static_cast<uint16_t>(pc));
         } else {
-            return machine_.peek(addr);
+            return machine_.peek(static_cast<uint16_t>(addr));
         }
     }
-    void write_with_pc(uint16_t addr, uint8_t value, uint16_t pc) override {
+    void write_with_pc(uint32_t addr, uint8_t value, uint32_t pc) override {
         if constexpr (HostHasPcAwareMemory<decltype(machine_.memory())>) {
-            machine_.memory().write_with_pc(addr, value, pc);
+            machine_.memory().write_with_pc(static_cast<uint16_t>(addr), value,
+                                            static_cast<uint16_t>(pc));
         } else {
-            machine_.write(addr, value);
+            machine_.write(static_cast<uint16_t>(addr), value);
         }
     }
 

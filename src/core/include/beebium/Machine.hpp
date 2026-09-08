@@ -54,7 +54,7 @@ constexpr uint8_t kEconetNmiDeviceMask = 0x02;
 
 // Breakpoint hit callback: called on the rare path when a breakpoint address matches.
 // Receives the entry (for condition evaluation) and the PC.
-using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint16_t pc)>;
+using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
 
 // Watchpoint hit callback: same type as CpuBinding's inline check callback
 using WatchpointHitCallback = CpuWatchpointHitCallback;

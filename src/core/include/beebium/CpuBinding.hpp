@@ -36,7 +36,7 @@ concept HasPcAwareMemory = requires(T& m, uint16_t addr, uint16_t pc, uint8_t va
 using CpuInstructionCallback = std::function<void(uint16_t pc)>;
 
 // Watchpoint hit callback type for CpuBinding inline checking
-using CpuWatchpointHitCallback = std::function<void(const WatchpointEntry& wp, uint16_t addr, uint8_t value, bool is_write)>;
+using CpuWatchpointHitCallback = std::function<void(const WatchpointEntry& wp, uint32_t addr, uint8_t value, bool is_write)>;
 
 // CpuBinding wraps M6502 + MemoryPolicy for clock subscription.
 //

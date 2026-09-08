@@ -40,9 +40,9 @@ public:
     virtual ~CpuDebugTarget();
 
     using BreakpointHitCallback =
-        std::function<void(const BreakpointEntry& bp, uint16_t pc)>;
+        std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
     using WatchpointHitCallback =
-        std::function<void(const WatchpointEntry& wp, uint16_t addr, uint8_t value, bool is_write)>;
+        std::function<void(const WatchpointEntry& wp, uint32_t addr, uint8_t value, bool is_write)>;
 
     // --- CPU description and register/signal access by index ---
 
@@ -74,17 +74,20 @@ public:
     virtual void finish_step() {}
 
     // --- Flat memory access (CPU address space) ---
-    virtual uint8_t read(uint16_t addr) = 0;
-    virtual uint8_t peek(uint16_t addr) const = 0;
-    virtual void write(uint16_t addr, uint8_t value) = 0;
+    // Addresses are 32-bit so any family (a 24-bit 32016, a 32-bit CPU) is
+    // served; the descriptor's address_bits bounds the meaningful range and a
+    // narrower CPU's implementation truncates internally.
+    virtual uint8_t read(uint32_t addr) = 0;
+    virtual uint8_t peek(uint32_t addr) const = 0;
+    virtual void write(uint32_t addr, uint8_t value) = 0;
 
     // PC-aware access, for memory maps whose routing depends on the program
     // counter (the host's shadow-RAM modes). The default ignores the PC; the
     // host adapter overrides it. peek_with_pc is the side-effect-free routing
     // used to inspect banked memory as the CPU would see it at that PC.
-    virtual uint8_t read_with_pc(uint16_t addr, uint16_t /*pc*/) { return read(addr); }
-    virtual uint8_t peek_with_pc(uint16_t addr, uint16_t /*pc*/) const { return peek(addr); }
-    virtual void write_with_pc(uint16_t addr, uint8_t value, uint16_t /*pc*/) { write(addr, value); }
+    virtual uint8_t read_with_pc(uint32_t addr, uint32_t /*pc*/) { return read(addr); }
+    virtual uint8_t peek_with_pc(uint32_t addr, uint32_t /*pc*/) const { return peek(addr); }
+    virtual void write_with_pc(uint32_t addr, uint8_t value, uint32_t /*pc*/) { write(addr, value); }
 
     // --- Memory-region model ---
     virtual std::vector<MemoryRegionDescriptor> get_memory_regions() const = 0;

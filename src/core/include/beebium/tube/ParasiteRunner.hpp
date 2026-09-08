@@ -50,7 +50,7 @@ namespace beebium {
 class ParasiteRunner : public Coprocessor, public CpuDebugTarget {
 public:
     using Memory = ParasiteMemoryMap;
-    using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint16_t pc)>;
+    using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
 
     // Construct with an external parasite backend, a 2 KB ROM image, and the
     // clock ratio (coprocessor cycles per host cycle; 3/2 for the 3 MHz 65C02
@@ -159,9 +159,14 @@ public:
 
     // --- Memory access ---
 
-    uint8_t read(uint16_t addr) { return memory_.read(addr); }
-    void write(uint16_t addr, uint8_t value) { memory_.write(addr, value); ++sequence_; }
-    uint8_t peek(uint16_t addr) const { return memory_.peek(addr); }
+    // The debugger interface uses 32-bit addresses; the 6502 map is 16-bit, so
+    // truncate here.
+    uint8_t read(uint32_t addr) { return memory_.read(static_cast<uint16_t>(addr)); }
+    void write(uint32_t addr, uint8_t value) {
+        memory_.write(static_cast<uint16_t>(addr), value);
+        ++sequence_;
+    }
+    uint8_t peek(uint32_t addr) const { return memory_.peek(static_cast<uint16_t>(addr)); }
 
     ParasiteMemoryMap& memory() { return memory_; }
     const ParasiteMemoryMap& memory() const { return memory_; }
@@ -192,7 +197,7 @@ public:
 
     // --- Watchpoint management (sorted by start, modified only while stopped) ---
 
-    using WatchpointHitCallback = std::function<void(const WatchpointEntry& wp, uint16_t addr, uint8_t value, bool is_write)>;
+    using WatchpointHitCallback = std::function<void(const WatchpointEntry& wp, uint32_t addr, uint8_t value, bool is_write)>;
 
     void set_watchpoint_entries(std::vector<WatchpointEntry> entries) {
         std::sort(entries.begin(), entries.end(),
