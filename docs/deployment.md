@@ -29,6 +29,17 @@ Slot 15 is the highest priority sideways ROM slot, conventionally used for the d
 
 ## Directory Layouts
 
+### Extensions Directory
+
+Peripheral extensions, including the Acorn 65C02 second processor
+(`acorn-65c02-coprocessor`), are plugins loaded from `<exe-dir>/extensions/`.
+A server run from a build tree in which the plugins have not been built
+(the `beebium-servers` target builds them all), or from an installed tree
+missing `extensions/acorn-65c02-coprocessor/`, has no Tube coprocessor:
+`--tube-65c02` is not recognised and the machine boots without a second
+processor. The release artifacts, packages and the macOS app bundle all
+ship the `extensions/` tree.
+
 ### Build Directory (Development)
 
 After building, ROMs are copied to `build/roms/`:

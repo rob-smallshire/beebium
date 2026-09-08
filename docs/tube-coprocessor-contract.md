@@ -519,8 +519,30 @@ Existing tests to update, with intent preserved:
   working through the new interface.
 - `grep -rn SecondProcessor65C02Extension src/server src/service` finds
   nothing.
-- A build with `-DBEEBIUM_BUILD_SERVICE=OFF` still configures and builds
-  the static extension library and its tests.
+- The static extension library and its tests link only `beebium_core`, so
+  they are buildable with `-DBEEBIUM_BUILD_SERVICE=OFF`. (That configure
+  currently fails earlier, in other extensions that call
+  `beebium_compile_proto` unguarded; a pre-existing defect outside the
+  Tube work, recorded under follow-ups.)
+
+### Follow-ups recorded during Step 1b
+
+Found while implementing; none is a Tube defect and none blocks the step.
+
+- `DebuggerControlServiceImpl`'s breakpoint-hit callback re-locks the
+  service mutex, so a service method such as `StepCycle` that holds the
+  lock while stepping deadlocks when the step hits a breakpoint. The
+  server never does this because emulation runs on its own thread; a
+  single-threaded in-process driver does. `test_coprocessor_extension`
+  steps the runner directly for that reason.
+- The plugin includes `beebium/server/RomPaths.hpp` from the server's
+  include directory to find its ROM, as the built-in did. ROM lookup is a
+  facility every coprocessor plugin needs and belongs in the extension
+  API.
+- `-DBEEBIUM_BUILD_SERVICE=OFF` fails to configure because
+  `src/extensions/CMakeLists.txt` adds extensions whose CMake calls
+  `beebium_compile_proto` unconditionally while the helper is only
+  included under `BEEBIUM_BUILD_SERVICE`.
 
 ### Consequences to state
 
@@ -531,13 +553,68 @@ Existing tests to update, with intent preserved:
   `docs/deployment.md`.
 
 
+## Step 1c: the 65C102 4 MHz second processor
+
+### Goal
+
+A second coprocessor plugin, `acorn-65c102-coprocessor`, CLI `tube-65c102`,
+built from the same source as the 65C02 plugin, so that the programme has
+two coprocessor instances exercising the contract and the server proves
+it hosts a coprocessor it has never heard of.
+
+### What it is
+
+Acorn's 65C102 second processor (the Master Turbo module used the same
+part) is a 65C02-family CPU at 4 MHz with 64 KB of RAM and the same 2 KB
+Tube client ROM. From the software's point of view it is the 65C02 second
+processor with a faster clock; the differences are in the oscillator and
+board, which the emulation does not model. Everything except the clock
+ratio and the identity is shared.
+
+### Design
+
+- Parameterise `SecondProcessor65C02Extension` on what differs: the
+  `ClockRatio` (3/2 or 2/1) and the display identity. One class, two
+  constructions; no subclass and no duplicated logic.
+- Two plugin directories under `src/extensions/`, each with its own
+  `manifest.json` and `plugin_entry.cpp`, both linking the existing static
+  library so the code exists once: the 65C102's entry constructs the
+  extension with `ClockRatio{2, 1}`. The loader's one-manifest-per-directory
+  rule is why there are two directories rather than one library exporting
+  two manifests.
+- The 65C102 manifest: name `acorn-65c102-coprocessor`, display name
+  "Acorn 65C102 Co-processor", description "Acorn 65C102 4 MHz second
+  processor", cli `tube-65c102`, `attaches_to: ["tube"]`, the same `rom`
+  parameter. The server's single-socket rule already rejects loading both
+  at once with a clear message; add a test for that message.
+- `CoprocessorClock` already handles 2/1 exactly; the existing clock tests
+  cover integer ratios.
+
+### Tests
+
+- The 65C102 plugin boots the Tube banner and reaches the BASIC prompt
+  (a `test_boot_tube` case constructed with the 4 MHz ratio), and the
+  parasite runs exactly twice the host's cycles over the boot: the cycle
+  counters, not wall time.
+- `list-extensions` shows both `tube-65c02` and `tube-65c102` from the
+  extensions directory; `describe-extension tube-65c102` shows the `rom`
+  parameter.
+- Starting with both `--tube-65c02` and `--tube-65c102` fails with the
+  single-socket message.
+- One scenario-level check: the wfsinit ADFS-select test parametrised over
+  both coprocessors, or a copy of it for the 65C102, since it is the
+  heaviest R2/R3/R4 protocol exercise we have.
+
+### Acceptance
+
+Step 1b's acceptance list, plus the tests above, plus the packaging
+consequence: the `beebium-servers` aggregate builds the new plugin so it
+ships in every artifact without further change.
+
+
 ## Later steps (for orientation, not for implementation now)
 
-- **Step 1c, the 65C102 4 MHz second processor.** Once the plugin exists,
-  a second manifest and entry point in the same source directory, ratio
-  2/1, CLI `tube-65c102`. Software-identical to the 65C02 second processor;
-  only the clock differs. Gives the programme two coprocessor instances to
-  exercise the contract with.
+- **Step 1c, the 65C102 4 MHz second processor.** Specified below.
 - **Step 1d, family-agnostic coprocessor debugger.** `ParasiteDebuggerControl`
   is the 6502 proto under another name: `Cpu6502State`, 16-bit addresses.
   Serving the other families needs a debugger surface described in terms
