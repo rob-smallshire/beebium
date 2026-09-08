@@ -639,18 +639,24 @@ server header to find a file.
 ]
 ```
 
-  `ExtensionManifest` parses it; `describe-extension` lists the entries;
-  `list-extensions` is unchanged.
+  and for the 65C102 plugin the same entry with filename
+  `acorn-tube-65c102_1_20.rom` and description "Acorn Tube 65C102 client
+  ROM v1.20". `ExtensionManifest` parses it; `describe-extension` lists
+  the entries; `list-extensions` is unchanged.
 
 - **Files live beside the manifest.** In the source tree a plugin's ROMs
   are under `src/extensions/<name>/roms/`. `beebium_finalize_plugin`
   deploys that directory to `<exe-dir>/extensions/<name>/roms/` and
   installs it to `bin/extensions/<name>/roms/`, next to the library and
   manifest, so every artifact, package and the macOS app bundle (which
-  copies `extensions/` whole) carries them without further change. The
-  65C102 plugin deploys the same file from the 65C02 plugin's source
-  `roms/` directory, so the image exists once in the repository and each
-  deployed plugin directory is self-contained.
+  copies `extensions/` whole) carries them without further change. Each
+  plugin ships its own firmware: the 65C02 plugin the 6502 Tube client
+  v1.10 (`acorn-tube-6502_1_10.rom`, 2048 bytes, MD5
+  `cd6ba85e22adec70b6d863de4c053db7`), the 65C102 plugin the 65C102 Tube
+  client v1.20 (`acorn-tube-65c102_1_20.rom`, 2048 bytes, MD5
+  `f0555114f7a18f727e9ca14effebcc95`), which is a different build with its
+  own banner, "Acorn TUBE 65C102 Co-Processor". No plugin references
+  another plugin's directory.
 
 - **Resolution is the extension API's job.** Add to `Extension` (or
   `ExtensionContext`, developer's choice, say which) a
@@ -704,7 +710,10 @@ server header to find a file.
   `test-scratch-ram` or a temporary manifest copy).
 - Proof that the packaged ROM is what gets used: a server started with
   `BEEBIUM_ROM_DIR` pointing at a directory holding only the host ROMs
-  boots the Tube banner with `--tube-65c02`.
+  boots the Tube banner with `--tube-65c02`, and with `--tube-65c102`
+  boots the 65C102's own banner, "Acorn TUBE 65C102 Co-Processor". The
+  Step 1c boot test and the wfsinit parametrised test are updated to
+  expect that banner for the 65C102 rather than the 6502 one.
 
 ### Acceptance
 
