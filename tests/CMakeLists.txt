@@ -1212,6 +1212,17 @@ target_compile_definitions(test_tube_ce2023_trace PRIVATE
 )
 catch_discover_tests(test_tube_ce2023_trace)
 
+# Host/coprocessor skew contract (Step 2)
+add_executable(test_coprocessor_skew test_coprocessor_skew.cpp)
+target_link_libraries(test_coprocessor_skew PRIVATE beebium_core 6502_lib Catch2::Catch2WithMain)
+target_compile_definitions(test_coprocessor_skew PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
+    BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+)
+catch_discover_tests(test_coprocessor_skew)
+
 # End-to-end serial BREAK: a beebasm-assembled 6502 program on an auto-booting
 # DFS disc drives/detects a break against a host peer (recording device / real
 # pySerial client). SKIPs when beebasm / ROMs / pySerial are absent.

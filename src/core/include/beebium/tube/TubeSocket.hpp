@@ -18,7 +18,9 @@
 
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <utility>
 
 namespace beebium {
 
@@ -64,6 +66,16 @@ private:
 //
 // The register offsets use 3 address bits (A0-A2), mirrored across &FEE0-&FEFF.
 // The hardware policy registers this with Mirror<0x07>.
+//
+// Host/coprocessor skew contract (docs/tube-coprocessor-contract.md, Step 2).
+// Coprocessor time C is the host time run_coprocessor_until() was last called
+// with (coprocessor_time()); a single-threaded strategy keeps C <= host time H
+// always. Immediately before any host register access C == H, so the ULA
+// presents exactly the state of that bus cycle. At every other host cycle
+// H - C <= MAX_COPROCESSOR_SKEW; the only observable consequence is interrupt
+// latency, bounded by that skew. reset() re-establishes C on the next
+// run_coprocessor_until(), and while paused C still advances, so the bound
+// holds throughout.
 class TubeSocket {
 public:
     TubeSocket()
@@ -111,6 +123,10 @@ public:
     // --- MemoryMappedDevice interface ---
 
     uint8_t read(uint16_t offset) {
+        if (register_access_observer_) {
+            register_access_observer_(observer_host_time_,
+                                      static_cast<uint8_t>(offset), /*is_write=*/false);
+        }
         // Reads complete immediately. The Tube ULA does not generate
         // read-side bus stretches: an empty R3 P-to-H returns stale
         // latch data, matching real hardware (and B2, BeebEm, jsbeeb,
@@ -124,6 +140,10 @@ public:
     }
 
     void write(uint16_t offset, uint8_t value) {
+        if (register_access_observer_) {
+            register_access_observer_(observer_host_time_,
+                                      static_cast<uint8_t>(offset), /*is_write=*/true);
+        }
         active_backend()->host_write(static_cast<uint8_t>(offset), value);
     }
 
@@ -186,8 +206,45 @@ public:
     // this passes host time through unchanged and is a no-op when nothing is
     // installed or when called again at the same host time.
     void run_coprocessor_until(uint64_t host_cycle) {
+        coprocessor_time_ = host_cycle;
         if (coprocessor_) {
             coprocessor_->run_until(host_cycle);
+        }
+    }
+
+    // Coprocessor time C: the host time the coprocessor has been run to, i.e.
+    // the argument of the last run_coprocessor_until(). See the skew contract
+    // in this class's comment. C <= host time in a single-threaded strategy.
+    uint64_t coprocessor_time() const { return coprocessor_time_; }
+
+    // Maximum permitted skew (host time - coprocessor_time()) in host cycles at
+    // any host cycle that is not a Tube register access; register accesses are
+    // exact (skew 0). 8 host cycles = 4 us at 2 MHz. Rationale: the tightest
+    // open-loop Tube timing is the type-0/3 NMI transfer (host touches R3 about
+    // every 24 us per byte), and 4 us leaves the parasite's NMI handler well
+    // over half that window. See docs/tube-coprocessor-contract.md (Step 2).
+    // The value is intended to be raised in Step 3 against measurements; this
+    // is the single place to change it.
+    static constexpr uint64_t MAX_COPROCESSOR_SKEW = 8;
+
+    // --- Test-only skew observation (not for production use) ---
+
+    // Observer invoked with (host_time, offset, is_write) immediately before
+    // each host Tube register read or write, so a test can assert the skew
+    // contract (coprocessor_time() == host_time at every access). host_time is
+    // whatever Machine last supplied via set_observer_host_time(); the socket
+    // does not otherwise know the host clock. Unset in production.
+    using RegisterAccessObserver =
+        std::function<void(uint64_t host_time, uint8_t offset, bool is_write)>;
+    void set_register_access_observer(RegisterAccessObserver observer) {
+        register_access_observer_ = std::move(observer);
+    }
+
+    // Machine supplies the current host time each step for the observer. A
+    // no-op unless an observer is installed, so it costs nothing in production.
+    void set_observer_host_time(uint64_t host_time) {
+        if (register_access_observer_) {
+            observer_host_time_ = host_time;
         }
     }
 
@@ -241,6 +298,14 @@ private:
     // Non-owning: the extension owns its lifetime. The clock ratio and
     // fractional phase live with the coprocessor, not here.
     Coprocessor* coprocessor_ = nullptr;
+
+    // Coprocessor time C: host time of the last run_coprocessor_until() call.
+    uint64_t coprocessor_time_ = 0;
+
+    // Test-only skew observation. When unset, the register-access path pays
+    // only a single null check and Machine's set_observer_host_time() is inert.
+    RegisterAccessObserver register_access_observer_;
+    uint64_t observer_host_time_ = 0;
 
     // Diagnostic: parasite ticks consumed by the inline read stretch loop.
     // These ticks happen INSIDE a single host CPU cycle (no cycle_count

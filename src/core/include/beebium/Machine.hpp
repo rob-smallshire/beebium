@@ -206,6 +206,10 @@ public:
         // Tube-stretch completion fall-through below).
         state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
 
+        // Supply the current host time to the Tube socket for the test-only
+        // skew observer. Inert in production (no observer installed).
+        state_.memory.tube_socket.set_observer_host_time(state_.cycle_count);
+
         // Handle Tube bus stretch (host CPU halted, coprocessor + peripherals continue).
         // When the host writes to a full Tube register, the Tube ULA holds the host
         // CPU's clock until the parasite drains the register. During stretch, the
