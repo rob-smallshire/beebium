@@ -14,9 +14,9 @@
 
 #include "Coprocessor.hpp"
 #include "CoprocessorClock.hpp"
-#include "ParasiteCpu.hpp"
-#include "ParasiteMemoryMap.hpp"
-#include "TubeParasiteBackend.hpp"
+#include "CoprocessorCpu.hpp"
+#include "CoprocessorMemoryMap.hpp"
+#include "TubeCoprocessorBackend.hpp"
 #include "../Types.hpp"
 #include "../Cpu6502Descriptor.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
@@ -32,13 +32,13 @@
 
 namespace beebium {
 
-// Parasite execution runner -- the emulation engine for a second processor.
+// Coprocessor execution runner -- the emulation engine for a second processor.
 //
 // Owns the CPU, memory map, and Tube port, and provides an execution loop.
-// This is the parasite's analogue of Machine<Hardware> on the host side.
+// This is the coprocessor's analogue of Machine<Hardware> on the host side.
 //
 // The runner implements the Coprocessor contract: it is driven in host time
-// by TubeSocket::run_coprocessor_until(), converting host cycles to parasite
+// by TubeSocket::run_coprocessor_until(), converting host cycles to coprocessor
 // cycles through a CoprocessorClock for its clock ratio. It supports
 // pause/resume for debugger integration; while paused, run_until() advances
 // the clock's record of host time but runs no cycles.
@@ -47,36 +47,36 @@ namespace beebium {
 // 3/2). Future coprocessors (6809, Z80, 80186, 32016) would have their own
 // runner classes with different CPU and memory map types and clock ratios.
 
-class ParasiteRunner : public Coprocessor, public CpuDebugTarget {
+class CoprocessorRunner : public Coprocessor, public CpuDebugTarget {
 public:
-    using Memory = ParasiteMemoryMap;
+    using Memory = CoprocessorMemoryMap;
     using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
 
-    // Construct with an external parasite backend, a 2 KB ROM image, and the
+    // Construct with an external coprocessor backend, a 2 KB ROM image, and the
     // clock ratio (coprocessor cycles per host cycle; 3/2 for the 3 MHz 65C02
     // second processor against a 2 MHz host). The caller owns the backend and
     // must keep it alive for the runner's lifetime.
-    ParasiteRunner(TubeParasiteBackend& backend, std::span<const uint8_t, 2048> rom,
+    CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 2048> rom,
                    ClockRatio ratio = ClockRatio{3, 2});
-    ~ParasiteRunner() = default;
+    ~CoprocessorRunner() = default;
 
     // Non-copyable (owns M6502 with internal pointers)
-    ParasiteRunner(const ParasiteRunner&) = delete;
-    ParasiteRunner& operator=(const ParasiteRunner&) = delete;
+    CoprocessorRunner(const CoprocessorRunner&) = delete;
+    CoprocessorRunner& operator=(const CoprocessorRunner&) = delete;
 
     // Reset CPU, memory map, and Tube port, and rebase the clock so the next
     // run_until() establishes a fresh time origin. Overrides Coprocessor::reset()
     // so TubeSocket can propagate the host's reset signal across the Tube cable
-    // to the parasite. Required because a hard host reset zeroes the host cycle
+    // to the coprocessor. Required because a hard host reset zeroes the host cycle
     // count, so host time legitimately goes backwards across a reset.
     void reset() override;
 
-    // Coprocessor::run_until() -- run every parasite cycle due at or before
+    // Coprocessor::run_until() -- run every coprocessor cycle due at or before
     // host_cycle. While paused, advances the clock's host-time record but runs
     // nothing; those cycles are lost, not deferred.
     void run_until(uint64_t host_cycle) override;
 
-    // Coprocessor::clock_ratio() -- the parasite/host cycle ratio.
+    // Coprocessor::clock_ratio() -- the coprocessor/host cycle ratio.
     ClockRatio clock_ratio() const override { return clock_.ratio(); }
 
     // Execute for the given number of cycles, or until shutdown.
@@ -94,7 +94,7 @@ public:
     void pause() override;
     void resume() override;
     bool is_paused() const override { return paused_; }
-    void prepare_for_step() {} // No bus stretching on parasite side
+    void prepare_for_step() {} // No bus stretching on coprocessor side
 
     // Wait until run() has exited after a pause (no-op in single-threaded mode).
     void wait_until_idle() {}
@@ -116,7 +116,7 @@ public:
         return cpu6502_signal_state(index, cpu(), p(), in_nmi_handler(), in_irq_handler());
     }
 
-    // --- Memory-region model (delegates to the parasite's memory map) ---
+    // --- Memory-region model (delegates to the coprocessor's memory map) ---
 
     std::vector<MemoryRegionDescriptor> get_memory_regions() const override {
         return memory_.get_memory_regions();
@@ -168,12 +168,12 @@ public:
     }
     uint8_t peek(uint32_t addr) const { return memory_.peek(static_cast<uint16_t>(addr)); }
 
-    ParasiteMemoryMap& memory() { return memory_; }
-    const ParasiteMemoryMap& memory() const { return memory_; }
+    CoprocessorMemoryMap& memory() { return memory_; }
+    const CoprocessorMemoryMap& memory() const { return memory_; }
 
     // --- Single-cycle step ---
 
-    // One parasite cycle. run_until() drives this per due cycle; the live
+    // One coprocessor cycle. run_until() drives this per due cycle; the live
     // breakpoint/watchpoint checks happen inside step().
     void tick() { step(); }
 
@@ -229,14 +229,14 @@ public:
     M6502& cpu() { return cpu_.cpu(); }
     const M6502& cpu() const { return cpu_.cpu(); }
 
-    ParasiteCpu& parasite_cpu() { return cpu_; }
-    const ParasiteCpu& parasite_cpu() const { return cpu_; }
+    CoprocessorCpu& coprocessor_cpu() { return cpu_; }
+    const CoprocessorCpu& coprocessor_cpu() const { return cpu_; }
 
-    ParasiteMemoryMap& memory_map() { return memory_; }
-    const ParasiteMemoryMap& memory_map() const { return memory_; }
+    CoprocessorMemoryMap& memory_map() { return memory_; }
+    const CoprocessorMemoryMap& memory_map() const { return memory_; }
 
-    TubeParasiteBackend& tube_port() { return tube_port_; }
-    const TubeParasiteBackend& tube_port() const { return tube_port_; }
+    TubeCoprocessorBackend& tube_port() { return tube_port_; }
+    const TubeCoprocessorBackend& tube_port() const { return tube_port_; }
 
 private:
     // Breakpoint check, performed before a tick at an instruction boundary.
@@ -249,11 +249,11 @@ private:
     // if a watchpoint fired.
     bool check_watchpoints();
 
-    TubeParasiteBackend& tube_port_;                     // reference to active port
-    ParasiteMemoryMap memory_;
-    ParasiteCpu cpu_;
+    TubeCoprocessorBackend& tube_port_;                     // reference to active port
+    CoprocessorMemoryMap memory_;
+    CoprocessorCpu cpu_;
 
-    // Host-time to parasite-cycle conversion for the fixed clock ratio.
+    // Host-time to coprocessor-cycle conversion for the fixed clock ratio.
     CoprocessorClock clock_;
 
     // ROM image (kept for reset)

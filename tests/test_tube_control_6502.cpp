@@ -13,18 +13,18 @@
 // Tube ULA control flag tests using the real 65C02 CPU.
 //
 // Tests the control register (host offset 0) and its effects as observed
-// by the parasite via R1 status ($FEF8) bits 5-0, and the behavioural
+// by the coprocessor via R1 status ($FEF8) bits 5-0, and the behavioural
 // effects of flags M (PNMI gating), I/J (PIRQ gating), V (R3 two-byte
 // mode), and T (soft reset).
 //
-// Each test runs a 6502 program on the parasite that observes or reacts
+// Each test runs a 6502 program on the coprocessor that observes or reacts
 // to flag changes made by the host thread, verifying the cross-thread
 // interaction through the TubeUla model.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteCpu.hpp>
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -53,21 +53,21 @@ static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr,
     return rom;
 }
 
-static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
+static void plant(CoprocessorMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
     for (auto byte : code) {
         mem.ram(addr++) = byte;
     }
 }
 
 // ============================================================================
-// Control flag read-back: parasite observes host flag changes
+// Control flag read-back: coprocessor observes host flag changes
 // ============================================================================
 //
-// The parasite reads R1 status in a loop, storing the low 6 bits into
+// The coprocessor reads R1 status in a loop, storing the low 6 bits into
 // successive RAM locations.  The host sets different flag combinations
-// between each sample.  After NUM_SAMPLES readings, the parasite halts.
+// between each sample.  After NUM_SAMPLES readings, the coprocessor halts.
 //
-// Parasite program at $0400:
+// Coprocessor program at $0400:
 //   $0400: LDX #$00
 //   $0402: LDA $FEF8        ; read R1 status
 //   $0405: AND #$3F         ; mask to control flags
@@ -80,7 +80,7 @@ static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<u
 static constexpr uint16_t CODE_ADDR = 0x0400;
 static constexpr uint16_t RESULT_ADDR = 0x0500;
 
-static void plant_flag_sampler(ParasiteMemoryMap& mem, uint8_t num_samples) {
+static void plant_flag_sampler(CoprocessorMemoryMap& mem, uint8_t num_samples) {
     plant(mem, CODE_ADDR, {
         0xA2, 0x00,                         // LDX #$00
         0xAD, 0xF8, 0xFE,                   // LDA $FEF8     (read R1 status)
@@ -93,7 +93,7 @@ static void plant_flag_sampler(ParasiteMemoryMap& mem, uint8_t num_samples) {
     });
 }
 
-static void setup_cpu_basic(ParasiteMemoryMap& mem, ParasiteCpu& cpu) {
+static void setup_cpu_basic(CoprocessorMemoryMap& mem, CoprocessorCpu& cpu) {
     mem.read(0xFEF8);  // disable boot ROM
     mem.ram(0xFFFC) = CODE_ADDR & 0xFF;
     mem.ram(0xFFFD) = (CODE_ADDR >> 8) & 0xFF;
@@ -104,12 +104,12 @@ static void setup_cpu_basic(ParasiteMemoryMap& mem, ParasiteCpu& cpu) {
 // Tests: flag read-back
 // ============================================================================
 
-TEST_CASE("6502 control flags: parasite reads back host-set flags", "[tube][6502][control]") {
+TEST_CASE("6502 control flags: coprocessor reads back host-set flags", "[tube][6502][control]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_flag_sampler(memory, 1);
     setup_cpu_basic(memory, cpu);
@@ -133,7 +133,7 @@ TEST_CASE("6502 control flags: parasite reads back host-set flags", "[tube][6502
 
 TEST_CASE("6502 control flags: set and clear individual flags", "[tube][6502][control]") {
     // Verify each flag can be set and cleared independently.
-    // The parasite reads R1 status after each host flag change.
+    // The coprocessor reads R1 status after each host flag change.
 
     TubeUla tube;
 
@@ -162,8 +162,8 @@ TEST_CASE("6502 control flags: set multiple flags then clear one", "[tube][6502]
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_flag_sampler(memory, 1);
     setup_cpu_basic(memory, cpu);
@@ -182,7 +182,7 @@ TEST_CASE("6502 control flags: set multiple flags then clear one", "[tube][6502]
     CHECK((flags & TubeUla::FLAG_J) == 0);  // cleared
     CHECK((flags & TubeUla::FLAG_M) != 0);  // still set
 
-    // Now verify the parasite sees I and M but not J
+    // Now verify the coprocessor sees I and M but not J
     for (int i = 0; i < 10000 && cpu.cpu().opcode_pc.w != 0x040F; ++i) {
         cpu.tick();
     }
@@ -255,7 +255,7 @@ TEST_CASE("6502 control flags: M=1 enables PNMI from R3", "[tube][6502][control]
 
 TEST_CASE("6502 control flags: clearing M mid-transfer suppresses further NMIs", "[tube][6502][control]") {
     // Start an NMI-driven R3 transfer with M=1, send a few bytes,
-    // then clear M.  The parasite should stop receiving NMIs.
+    // then clear M.  The coprocessor should stop receiving NMIs.
 
     TubeUla tube;
 
@@ -264,8 +264,8 @@ TEST_CASE("6502 control flags: clearing M mid-transfer suppresses further NMIs",
     static constexpr uint8_t COUNTER_ZP = 0x10;
 
     auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR, 0x0000);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     // Main loop: spin forever (NMI handler does the work)
     // $0400: CLI
@@ -312,7 +312,7 @@ TEST_CASE("6502 control flags: clearing M mid-transfer suppresses further NMIs",
     // PNMI should NOT be asserted
     CHECK(tube.pnmi_level() == false);
 
-    // Run the parasite for a while -- counter should NOT increase
+    // Run the coprocessor for a while -- counter should NOT increase
     for (int i = 0; i < 10000; ++i) {
         cpu.tick();
     }
@@ -392,14 +392,14 @@ TEST_CASE("6502 control flags: V=1 R3 is 2-byte mode", "[tube][6502][control]") 
 }
 
 TEST_CASE("6502 control flags: V=1 R3 two-byte transfer with 6502", "[tube][6502][control]") {
-    // Full two-byte mode transfer: host writes 2 bytes, parasite reads both.
+    // Full two-byte mode transfer: host writes 2 bytes, coprocessor reads both.
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
-    // Parasite: read two bytes from R3 into RAM
+    // Coprocessor: read two bytes from R3 into RAM
     // $0400: LDA $FEFD       ; read R3 data (byte 0)
     // $0403: STA $0500       ; store
     // $0405: LDA $FEFD       ; read R3 data (byte 1)
@@ -435,8 +435,8 @@ TEST_CASE("6502 control flags: V=1 R3 two-byte transfer with 6502", "[tube][6502
 // ============================================================================
 
 TEST_CASE("6502 control flags: enable I mid-transfer starts PIRQ delivery", "[tube][6502][control]") {
-    // Set up the parasite first, then write R1 data with I=0, then set I=1
-    // while the data is still pending.  The parasite should see PIRQ assert
+    // Set up the coprocessor first, then write R1 data with I=0, then set I=1
+    // while the data is still pending.  The coprocessor should see PIRQ assert
     // and handle the byte via its IRQ handler.
     TubeUla tube;
 
@@ -445,8 +445,8 @@ TEST_CASE("6502 control flags: enable I mid-transfer starts PIRQ delivery", "[tu
     static constexpr uint8_t CTR_ZP = 0x10;
 
     auto rom = make_stub_rom(MAIN, 0x0000, IRQ);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     // Main: CLI then poll counter until 1
     plant(memory, MAIN, {

@@ -10,11 +10,11 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#include <beebium/tube/ParasiteCpu.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
 
 namespace beebium {
 
-ParasiteCpu::ParasiteCpu(ParasiteMemoryMap& memory, TubeParasiteBackend& tube_port)
+CoprocessorCpu::CoprocessorCpu(CoprocessorMemoryMap& memory, TubeCoprocessorBackend& tube_port)
     : memory_(memory)
     , tube_port_(tube_port)
     , cycle_count_(0)
@@ -22,11 +22,11 @@ ParasiteCpu::ParasiteCpu(ParasiteMemoryMap& memory, TubeParasiteBackend& tube_po
     M6502_Init(&cpu_, &M6502_rockwell65c02_config);
 }
 
-ParasiteCpu::~ParasiteCpu() {
+CoprocessorCpu::~CoprocessorCpu() {
     M6502_Destroy(&cpu_);
 }
 
-void ParasiteCpu::reset() {
+void CoprocessorCpu::reset() {
     M6502_Init(&cpu_, &M6502_rockwell65c02_config);
     M6502_Reset(&cpu_);
     memory_.reset();
@@ -35,7 +35,7 @@ void ParasiteCpu::reset() {
     in_nmi_handler_ = false;
 }
 
-void ParasiteCpu::tick() {
+void CoprocessorCpu::tick() {
     // Detect NMI entry BEFORE tfn runs.  The 65C02's Cycle0_InterruptCMOS
     // clears nmi_flags and changes read to M6502ReadType_Instruction at T0,
     // destroying the evidence before we could check it post-tfn.  At this
@@ -104,7 +104,7 @@ void ParasiteCpu::tick() {
 
     // PNMI: only forward the level to M6502 when not inside an NMI handler.
     // This prevents NMI nesting in the cross-process Tube model where the
-    // host thread can write the next R3 byte before the parasite's NMI
+    // host thread can write the next R3 byte before the coprocessor's NMI
     // handler completes.  When the handler returns (RTI), suppression ends
     // and the current PNMI level produces a clean edge if still asserted.
     if (!in_nmi_handler_) {
@@ -114,7 +114,7 @@ void ParasiteCpu::tick() {
     ++cycle_count_;
 }
 
-uint64_t ParasiteCpu::step_instruction() {
+uint64_t CoprocessorCpu::step_instruction() {
     const uint64_t start = cycle_count_;
     do {
         tick();
@@ -122,7 +122,7 @@ uint64_t ParasiteCpu::step_instruction() {
     return cycle_count_ - start;
 }
 
-void ParasiteCpu::run(uint64_t cycles) {
+void CoprocessorCpu::run(uint64_t cycles) {
     const uint64_t target = cycle_count_ + cycles;
     while (cycle_count_ < target) {
         tick();

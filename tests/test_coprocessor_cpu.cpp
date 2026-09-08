@@ -10,9 +10,9 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Tests for the parasite CPU wrapper.
+// Tests for the coprocessor CPU wrapper.
 //
-// ParasiteCpu wires a Rockwell 65C02 to the ParasiteMemoryMap and TubeUla,
+// CoprocessorCpu wires a Rockwell 65C02 to the CoprocessorMemoryMap and TubeUla,
 // routing bus access and interrupt lines. These tests verify:
 //   - CPU initialisation and reset
 //   - Instruction execution via tick() and step_instruction()
@@ -23,8 +23,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteCpu.hpp>
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -57,12 +57,12 @@ static std::array<uint8_t, 2048> make_nop_rom(uint16_t rom_entry = 0xF800) {
 // Construction and initial state
 // ===========================================================================
 
-TEST_CASE("ParasiteCpu initialises with Rockwell 65C02 config", "[parasite][cpu]") {
+TEST_CASE("CoprocessorCpu initialises with Rockwell 65C02 config", "[coprocessor][cpu]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
 
     CHECK(cpu.cycle_count() == 0);
     CHECK(cpu.cpu().config == &M6502_rockwell65c02_config);
@@ -72,12 +72,12 @@ TEST_CASE("ParasiteCpu initialises with Rockwell 65C02 config", "[parasite][cpu]
 // Reset and reset vector
 // ===========================================================================
 
-TEST_CASE("ParasiteCpu reset fetches reset vector from boot ROM", "[parasite][cpu][reset]") {
+TEST_CASE("CoprocessorCpu reset fetches reset vector from boot ROM", "[coprocessor][cpu][reset]") {
     TubeUla tube;
     auto rom = make_nop_rom(0xF800);
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     // After reset, step through the 7-cycle reset sequence
@@ -89,12 +89,12 @@ TEST_CASE("ParasiteCpu reset fetches reset vector from boot ROM", "[parasite][cp
     CHECK(cpu.cpu().abus.w == 0xF800);
 }
 
-TEST_CASE("ParasiteCpu reset with custom reset vector", "[parasite][cpu][reset]") {
+TEST_CASE("CoprocessorCpu reset with custom reset vector", "[coprocessor][cpu][reset]") {
     TubeUla tube;
     auto rom = make_nop_rom(0xF900);
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     uint64_t cycles = cpu.step_instruction();
@@ -102,24 +102,24 @@ TEST_CASE("ParasiteCpu reset with custom reset vector", "[parasite][cpu][reset]"
     CHECK(cpu.cpu().abus.w == 0xF900);
 }
 
-TEST_CASE("ParasiteCpu reset re-enters boot mode", "[parasite][cpu][reset]") {
+TEST_CASE("CoprocessorCpu reset re-enters boot mode", "[coprocessor][cpu][reset]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     // Memory map should be in boot mode after reset
     CHECK(mem.boot_mode());
 }
 
-TEST_CASE("ParasiteCpu reset clears cycle count", "[parasite][cpu][reset]") {
+TEST_CASE("CoprocessorCpu reset clears cycle count", "[coprocessor][cpu][reset]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     // Execute some cycles
@@ -136,12 +136,12 @@ TEST_CASE("ParasiteCpu reset clears cycle count", "[parasite][cpu][reset]") {
 // Instruction execution
 // ===========================================================================
 
-TEST_CASE("ParasiteCpu step_instruction executes NOP", "[parasite][cpu][execution]") {
+TEST_CASE("CoprocessorCpu step_instruction executes NOP", "[coprocessor][cpu][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     // Reset sequence: 7 cycles
@@ -159,12 +159,12 @@ TEST_CASE("ParasiteCpu step_instruction executes NOP", "[parasite][cpu][executio
     CHECK(cpu.cycle_count() == 11);
 }
 
-TEST_CASE("ParasiteCpu tick advances one cycle", "[parasite][cpu][execution]") {
+TEST_CASE("CoprocessorCpu tick advances one cycle", "[coprocessor][cpu][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.tick();
@@ -174,27 +174,27 @@ TEST_CASE("ParasiteCpu tick advances one cycle", "[parasite][cpu][execution]") {
     CHECK(cpu.cycle_count() == 2);
 }
 
-TEST_CASE("ParasiteCpu run executes multiple cycles", "[parasite][cpu][execution]") {
+TEST_CASE("CoprocessorCpu run executes multiple cycles", "[coprocessor][cpu][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.run(20);
     CHECK(cpu.cycle_count() == 20);
 }
 
-TEST_CASE("ParasiteCpu executes LDA immediate from ROM", "[parasite][cpu][execution]") {
+TEST_CASE("CoprocessorCpu executes LDA immediate from ROM", "[coprocessor][cpu][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
     // Place LDA #$42 at &F800 (ROM offset 0)
     rom[0x000] = 0xA9;  // LDA #imm
     rom[0x001] = 0x42;
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset sequence (7 cycles)
@@ -203,7 +203,7 @@ TEST_CASE("ParasiteCpu executes LDA immediate from ROM", "[parasite][cpu][execut
     CHECK(cpu.cpu().a == 0x42);
 }
 
-TEST_CASE("ParasiteCpu executes STA/LDA in RAM", "[parasite][cpu][execution]") {
+TEST_CASE("CoprocessorCpu executes STA/LDA in RAM", "[coprocessor][cpu][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
     // Place STA $1000 then LDA $1000 at &F800
@@ -217,9 +217,9 @@ TEST_CASE("ParasiteCpu executes STA/LDA in RAM", "[parasite][cpu][execution]") {
     rom[0x007] = 0xAD;  // LDA $1000
     rom[0x008] = 0x00;
     rom[0x009] = 0x10;
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -239,15 +239,15 @@ TEST_CASE("ParasiteCpu executes STA/LDA in RAM", "[parasite][cpu][execution]") {
 // IRQ routing from Tube
 // ===========================================================================
 
-TEST_CASE("ParasiteCpu routes PIRQ to CPU IRQ line", "[parasite][cpu][irq]") {
+TEST_CASE("CoprocessorCpu routes PIRQ to CPU IRQ line", "[coprocessor][cpu][irq]") {
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program: CLI then loop with NOPs
     rom[0x000] = 0x58;  // CLI (enable interrupts)
     // Fill rest with NOP (already 0xEA)
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -268,14 +268,14 @@ TEST_CASE("ParasiteCpu routes PIRQ to CPU IRQ line", "[parasite][cpu][irq]") {
     CHECK(tube.pirq());
 }
 
-TEST_CASE("ParasiteCpu no IRQ when interrupts disabled", "[parasite][cpu][irq]") {
+TEST_CASE("CoprocessorCpu no IRQ when interrupts disabled", "[coprocessor][cpu][irq]") {
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program: SEI then NOPs (interrupts disabled)
     rom[0x000] = 0x78;  // SEI
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -305,24 +305,24 @@ TEST_CASE("ParasiteCpu no IRQ when interrupts disabled", "[parasite][cpu][irq]")
 // Service Manual:
 //
 //   PNMI is the active-high output from the Tube ULA that drives the
-//   parasite 6502's /NMI line (active-low, inverted by hardware).
+//   coprocessor 6502's /NMI line (active-low, inverted by hardware).
 //
 //   PNMI goes high when M=1 AND (R3 H-to-P has data OR R3 P-to-H has space).
 //   The 6502 NMI is edge-triggered (fires on falling edge of /NMI, i.e.
 //   rising edge of the active-high PNMI level).
 //
-//   ParasiteCpu passes pnmi_level() (the raw combinational output) to
+//   CoprocessorCpu passes pnmi_level() (the raw combinational output) to
 //   M6502_SetDeviceNMI every cycle. The M6502 library handles edge
 //   detection internally. This ensures the CPU sees NMI immediately
-//   when the host writes R3 data, without waiting for the parasite to
+//   when the host writes R3 data, without waiting for the coprocessor to
 //   perform a register access.
 
-TEST_CASE("ParasiteCpu PNMI: host R3 write triggers NMI during NOP execution", "[parasite][cpu][nmi]") {
+TEST_CASE("CoprocessorCpu PNMI: host R3 write triggers NMI during NOP execution", "[coprocessor][cpu][nmi]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -362,7 +362,7 @@ TEST_CASE("ParasiteCpu PNMI: host R3 write triggers NMI during NOP execution", "
     // Simulate the NMI handler consuming the R3 data, which deasserts PNMI.
     // Without this, RTI would immediately re-trigger NMI (correct behaviour
     // -- the condition is still asserted).
-    tube.parasite_read(5);  // consume the H-to-P data byte
+    tube.coprocessor_read(5);  // consume the H-to-P data byte
     CHECK_FALSE(tube.pnmi_level());
 
     // Run more cycles: the RTI at &F980 returns to the NOP stream.
@@ -377,12 +377,12 @@ TEST_CASE("ParasiteCpu PNMI: host R3 write triggers NMI during NOP execution", "
     CHECK(cpu.cpu().abus.w >= 0xF800);
 }
 
-TEST_CASE("ParasiteCpu PNMI: not triggered when M flag is clear", "[parasite][cpu][nmi]") {
+TEST_CASE("CoprocessorCpu PNMI: not triggered when M flag is clear", "[coprocessor][cpu][nmi]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -403,12 +403,12 @@ TEST_CASE("ParasiteCpu PNMI: not triggered when M flag is clear", "[parasite][cp
     CHECK(cpu.cpu().pc.w == pc_before + 3);
 }
 
-TEST_CASE("ParasiteCpu PNMI: P-to-H space triggers NMI", "[parasite][cpu][nmi]") {
+TEST_CASE("CoprocessorCpu PNMI: P-to-H space triggers NMI", "[coprocessor][cpu][nmi]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -436,12 +436,12 @@ TEST_CASE("ParasiteCpu PNMI: P-to-H space triggers NMI", "[parasite][cpu][nmi]")
     CHECK(cpu.cpu().nmi_flags == 0);
 }
 
-TEST_CASE("ParasiteCpu PNMI: second edge after level drops and rises", "[parasite][cpu][nmi]") {
+TEST_CASE("CoprocessorCpu PNMI: second edge after level drops and rises", "[coprocessor][cpu][nmi]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -461,12 +461,12 @@ TEST_CASE("ParasiteCpu PNMI: second edge after level drops and rises", "[parasit
     // PNMI level is still high (R3 H-to-P data not consumed).
     CHECK(tube.pnmi_level());
 
-    // Simulate parasite consuming the R3 H-to-P data.
-    tube.parasite_read(5);
+    // Simulate coprocessor consuming the R3 H-to-P data.
+    tube.coprocessor_read(5);
 
     // Also make P-to-H occupied so PNMI drops fully. Write a byte to P-to-H
-    // via the parasite interface to fill it.
-    tube.parasite_write(5, 0x00);
+    // via the coprocessor interface to fill it.
+    tube.coprocessor_write(5, 0x00);
 
     // PNMI level should now be false.
     CHECK_FALSE(tube.pnmi_level());
@@ -483,14 +483,14 @@ TEST_CASE("ParasiteCpu PNMI: second edge after level drops and rises", "[parasit
     CHECK(cpu.cpu().nmi_flags == 0);
 }
 
-TEST_CASE("ParasiteCpu PNMI: NMI cannot be masked by SEI", "[parasite][cpu][nmi]") {
+TEST_CASE("CoprocessorCpu PNMI: NMI cannot be masked by SEI", "[coprocessor][cpu][nmi]") {
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program: SEI then NOPs
     rom[0x000] = 0x78;  // SEI
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     cpu.step_instruction();  // reset (7)
@@ -512,12 +512,12 @@ TEST_CASE("ParasiteCpu PNMI: NMI cannot be masked by SEI", "[parasite][cpu][nmi]
 // Memory map interaction
 // ===========================================================================
 
-TEST_CASE("ParasiteCpu reads from boot ROM during reset sequence", "[parasite][cpu][boot]") {
+TEST_CASE("CoprocessorCpu reads from boot ROM during reset sequence", "[coprocessor][cpu][boot]") {
     TubeUla tube;
     auto rom = make_nop_rom(0xF850);
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
 
     // Boot mode should be active
@@ -533,16 +533,16 @@ TEST_CASE("ParasiteCpu reads from boot ROM during reset sequence", "[parasite][c
     CHECK(mem.boot_mode());
 }
 
-TEST_CASE("ParasiteCpu accessing Tube register terminates boot mode", "[parasite][cpu][boot]") {
+TEST_CASE("CoprocessorCpu accessing Tube register terminates boot mode", "[coprocessor][cpu][boot]") {
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program at &F800: LDA $FEF8 (read Tube R1 status)
     rom[0x000] = 0xAD;  // LDA abs
     rom[0x001] = 0xF8;  // low byte
     rom[0x002] = 0xFE;  // high byte
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
     cpu.reset();
     REQUIRE(mem.boot_mode());
 
@@ -557,19 +557,19 @@ TEST_CASE("ParasiteCpu accessing Tube register terminates boot mode", "[parasite
 // CPU state access
 // ===========================================================================
 
-TEST_CASE("ParasiteCpu provides mutable and const CPU access", "[parasite][cpu]") {
+TEST_CASE("CoprocessorCpu provides mutable and const CPU access", "[coprocessor][cpu]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
-    ParasiteCpu cpu(mem, tube);
+    CoprocessorCpu cpu(mem, tube);
 
     // Mutable access
     cpu.cpu().a = 0x42;
     CHECK(cpu.cpu().a == 0x42);
 
     // Const access
-    const ParasiteCpu& ccpu = cpu;
+    const CoprocessorCpu& ccpu = cpu;
     CHECK(ccpu.cpu().a == 0x42);
     CHECK(ccpu.cycle_count() == 0);
 }

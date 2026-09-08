@@ -30,7 +30,7 @@
 #include "beebium/service/PeripheralExtensionService.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/CpuDebugTarget.hpp"
-#include "ParasiteDebuggerAdapter.hpp"
+#include "CoprocessorDebuggerAdapter.hpp"
 #include "beebium/Machines.hpp"
 #include "beebium/SidewaysRomHeader.hpp"
 #include "beebium/PacingClock.hpp"
@@ -2131,15 +2131,15 @@ public:
             // served through the one service. Both must outlive the server, hence
             // these enclosing-scope owners.
             std::unique_ptr<beebium::service::DebuggerControlServiceImpl>
-                parasite_debugger_impl;
-            std::unique_ptr<beebium::ParasiteDebuggerAdapter> parasite_debugger_adapter;
+                coprocessor_debugger_impl;
+            std::unique_ptr<beebium::CoprocessorDebuggerAdapter> coprocessor_debugger_adapter;
             if (coprocessor_ext) {
                 if (auto* target = coprocessor_ext->debug_target()) {
-                    parasite_debugger_impl =
+                    coprocessor_debugger_impl =
                         std::make_unique<beebium::service::DebuggerControlServiceImpl>(*target);
-                    parasite_debugger_adapter =
-                        std::make_unique<beebium::ParasiteDebuggerAdapter>(*parasite_debugger_impl);
-                    extension_services.push_back(parasite_debugger_adapter.get());
+                    coprocessor_debugger_adapter =
+                        std::make_unique<beebium::CoprocessorDebuggerAdapter>(*coprocessor_debugger_impl);
+                    extension_services.push_back(coprocessor_debugger_adapter.get());
                 }
             }
 
@@ -2231,8 +2231,8 @@ public:
                 // Coprocessor breakpoint with stop_counterpart -> pause host.
                 // Only when a debugger was created for its family; without one
                 // there is no impl to detect the breakpoint.
-                if (parasite_debugger_impl) {
-                    parasite_debugger_impl->set_counterpart_stop_callback(
+                if (coprocessor_debugger_impl) {
+                    coprocessor_debugger_impl->set_counterpart_stop_callback(
                         [&machine] { machine.pause(); });
                 }
             }

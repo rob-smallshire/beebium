@@ -19,19 +19,19 @@
 namespace beebium {
 
 // Adapter that exposes a DebuggerControlServiceImpl under the
-// ParasiteDebuggerControl proto service name.
+// CoprocessorDebuggerControl proto service name.
 //
-// Both DebuggerControl and ParasiteDebuggerControl have identical RPCs and
+// Both DebuggerControl and CoprocessorDebuggerControl have identical RPCs and
 // share message types. This adapter inherits from the generated
-// ParasiteDebuggerControl::Service and delegates each RPC to the underlying
+// CoprocessorDebuggerControl::Service and delegates each RPC to the underlying
 // DebuggerControlServiceImpl, allowing host and coprocessor debuggers to coexist
 // on the same gRPC server. It lives in the server because the server, not the
 // coprocessor extension, instantiates the debugger against the abstract
 // CpuDebugTarget interface.
 
-class ParasiteDebuggerAdapter final : public ParasiteDebuggerControl::Service {
+class CoprocessorDebuggerAdapter final : public CoprocessorDebuggerControl::Service {
 public:
-    explicit ParasiteDebuggerAdapter(service::DebuggerControlServiceImpl& impl)
+    explicit CoprocessorDebuggerAdapter(service::DebuggerControlServiceImpl& impl)
         : impl_(impl) {}
 
     // Forward each RPC to the underlying implementation.

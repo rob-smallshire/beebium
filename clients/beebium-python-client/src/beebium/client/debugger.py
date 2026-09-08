@@ -414,7 +414,7 @@ class Debugger:
                 ``"cycles >= 100000"``, ``"X > 0 && mem[0x0070] == 0xFF"``,
                 ``"N && !Z"``.
             stop_counterpart: Also signal the counterpart processor (host or
-                parasite) to stop -- used to coordinate breakpoints across the
+                coprocessor) to stop -- used to coordinate breakpoints across the
                 Tube.
             enabled: Whether the breakpoint is active immediately. Pass ``False``
                 to add it disabled; toggle later with :meth:`enable_breakpoint`

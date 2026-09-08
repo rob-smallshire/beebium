@@ -10,9 +10,9 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Tests for the 6502 second processor (cheese wedge) parasite memory map.
+// Tests for the 6502 second processor (cheese wedge) coprocessor memory map.
 //
-// The parasite memory map has two modes:
+// The coprocessor memory map has two modes:
 //   Boot mode: ROM overlays RAM at &F800-&FFFF for reads; writes pass through to RAM.
 //              Tube registers at &FEF8-&FEFF override both ROM and RAM.
 //   Normal mode: all RAM except Tube registers at &FEF8-&FEFF.
@@ -23,7 +23,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -45,11 +45,11 @@ static std::array<uint8_t, 2048> make_test_rom() {
 // Construction and initial state
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap starts in boot mode", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap starts in boot mode", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     CHECK(mem.boot_mode());
 }
 
@@ -57,11 +57,11 @@ TEST_CASE("ParasiteMemoryMap starts in boot mode", "[parasite][memory]") {
 // RAM access (low memory, always RAM)
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap RAM read/write in low memory", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap RAM read/write in low memory", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
     mem.write(0x0000, 0x42);
     CHECK(mem.read(0x0000) == 0x42);
@@ -73,11 +73,11 @@ TEST_CASE("ParasiteMemoryMap RAM read/write in low memory", "[parasite][memory]"
     CHECK(mem.read(0xF7FF) == 0xCD);
 }
 
-TEST_CASE("ParasiteMemoryMap RAM initialised to zero", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap RAM initialised to zero", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
     CHECK(mem.read(0x0000) == 0x00);
     CHECK(mem.read(0x8000) == 0x00);
@@ -88,11 +88,11 @@ TEST_CASE("ParasiteMemoryMap RAM initialised to zero", "[parasite][memory]") {
 // Boot mode: ROM overlay at &F800-&FFFF
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap boot mode: reads from ROM region return ROM data", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: reads from ROM region return ROM data", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // &F800 maps to ROM offset 0
@@ -111,11 +111,11 @@ TEST_CASE("ParasiteMemoryMap boot mode: reads from ROM region return ROM data", 
     CHECK(mem.read(0xFFFF) == rom[0x7FF]);
 }
 
-TEST_CASE("ParasiteMemoryMap boot mode: writes to ROM region go to RAM", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: writes to ROM region go to RAM", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // Write to an address in the ROM region
@@ -128,11 +128,11 @@ TEST_CASE("ParasiteMemoryMap boot mode: writes to ROM region go to RAM", "[paras
     // (We'll test this in the transition tests below)
 }
 
-TEST_CASE("ParasiteMemoryMap boot mode: ROM copy pattern works", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: ROM copy pattern works", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // Simulate the boot ROM's self-copy: read from ROM, write back to same address.
@@ -163,14 +163,14 @@ TEST_CASE("ParasiteMemoryMap boot mode: ROM copy pattern works", "[parasite][mem
 // Boot mode: Tube registers override ROM
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap boot mode: Tube register read overrides ROM", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: Tube register read overrides ROM", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
     // Pre-load a known value into R4 H-to-P via the host side
     tube.host_write(7, 0x99);
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // &FEFF = R4 data (offset 7). Reading should return Tube data, not ROM.
@@ -181,11 +181,11 @@ TEST_CASE("ParasiteMemoryMap boot mode: Tube register read overrides ROM", "[par
     CHECK_FALSE(mem.boot_mode());
 }
 
-TEST_CASE("ParasiteMemoryMap boot mode: Tube register write overrides RAM", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: Tube register write overrides RAM", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // Write to R4 data (&FEFF, offset 7). Should go to Tube, not RAM.
@@ -204,11 +204,11 @@ TEST_CASE("ParasiteMemoryMap boot mode: Tube register write overrides RAM", "[pa
 // Boot mode termination
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap boot mode terminated by Tube read", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode terminated by Tube read", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // Read R1 status (&FEF8, offset 0) -- the typical first Tube access
@@ -217,11 +217,11 @@ TEST_CASE("ParasiteMemoryMap boot mode terminated by Tube read", "[parasite][mem
     CHECK_FALSE(mem.boot_mode());
 }
 
-TEST_CASE("ParasiteMemoryMap boot mode terminated by Tube write", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode terminated by Tube write", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     // Write to R1 data (&FEF9, offset 1)
@@ -230,12 +230,12 @@ TEST_CASE("ParasiteMemoryMap boot mode terminated by Tube write", "[parasite][me
     CHECK_FALSE(mem.boot_mode());
 }
 
-TEST_CASE("ParasiteMemoryMap boot mode: all 8 Tube addresses terminate boot", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: all 8 Tube addresses terminate boot", "[coprocessor][memory][boot]") {
     for (uint16_t offset = 0; offset < 8; ++offset) {
         TubeUla tube;
         auto rom = make_test_rom();
 
-        ParasiteMemoryMap mem(tube, rom);
+        CoprocessorMemoryMap mem(tube, rom);
         REQUIRE(mem.boot_mode());
 
         mem.read(0xFEF8 + offset);
@@ -243,11 +243,11 @@ TEST_CASE("ParasiteMemoryMap boot mode: all 8 Tube addresses terminate boot", "[
     }
 }
 
-TEST_CASE("ParasiteMemoryMap boot mode cannot be re-entered", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode cannot be re-entered", "[coprocessor][memory][boot]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     mem.read(0xFEF8);  // terminate boot mode
     REQUIRE_FALSE(mem.boot_mode());
 
@@ -261,11 +261,11 @@ TEST_CASE("ParasiteMemoryMap boot mode cannot be re-entered", "[parasite][memory
 // Normal mode: all RAM except Tube registers
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap normal mode: ROM region reads from RAM", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap normal mode: ROM region reads from RAM", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
     // Write to RAM while in boot mode
     mem.write(0xF800, 0xAA);
@@ -280,11 +280,11 @@ TEST_CASE("ParasiteMemoryMap normal mode: ROM region reads from RAM", "[parasite
     CHECK(mem.read(0xFF00) == 0xBB);
 }
 
-TEST_CASE("ParasiteMemoryMap normal mode: Tube registers still active", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap normal mode: Tube registers still active", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     mem.read(0xFEF8);  // end boot mode
     REQUIRE_FALSE(mem.boot_mode());
 
@@ -294,11 +294,11 @@ TEST_CASE("ParasiteMemoryMap normal mode: Tube registers still active", "[parasi
     CHECK(tube.host_read(7) == 0x77);
 }
 
-TEST_CASE("ParasiteMemoryMap normal mode: RAM behind Tube registers is not accessible", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap normal mode: RAM behind Tube registers is not accessible", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
     // Write to Tube register addresses while in boot mode (goes to Tube, not RAM)
     // First write some values to RAM at those addresses by going through
@@ -322,11 +322,11 @@ TEST_CASE("ParasiteMemoryMap normal mode: RAM behind Tube registers is not acces
 // Reset
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap reset re-enters boot mode", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap reset re-enters boot mode", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     mem.read(0xFEF8);  // end boot mode
     REQUIRE_FALSE(mem.boot_mode());
 
@@ -337,11 +337,11 @@ TEST_CASE("ParasiteMemoryMap reset re-enters boot mode", "[parasite][memory]") {
     CHECK(mem.read(0xF800) == rom[0]);
 }
 
-TEST_CASE("ParasiteMemoryMap reset preserves RAM contents", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap reset preserves RAM contents", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
     // Write to low RAM
     mem.write(0x1000, 0x42);
@@ -357,11 +357,11 @@ TEST_CASE("ParasiteMemoryMap reset preserves RAM contents", "[parasite][memory]"
 // Address mirroring: Tube registers are only 8 bytes
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap Tube register range is exactly &FEF8-&FEFF", "[parasite][memory]") {
+TEST_CASE("CoprocessorMemoryMap Tube register range is exactly &FEF8-&FEFF", "[coprocessor][memory]") {
     TubeUla tube;
     auto rom = make_test_rom();
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
 
     // &FEF7 should be ROM in boot mode, not a Tube register
     uint8_t val = mem.read(0xFEF7);
@@ -375,7 +375,7 @@ TEST_CASE("ParasiteMemoryMap Tube register range is exactly &FEF8-&FEFF", "[para
 // Reset vector accessible from ROM
 // ===========================================================================
 
-TEST_CASE("ParasiteMemoryMap boot mode: reset vector readable from ROM", "[parasite][memory][boot]") {
+TEST_CASE("CoprocessorMemoryMap boot mode: reset vector readable from ROM", "[coprocessor][memory][boot]") {
     TubeUla tube;
 
     // Create a ROM with a known reset vector
@@ -383,7 +383,7 @@ TEST_CASE("ParasiteMemoryMap boot mode: reset vector readable from ROM", "[paras
     rom[0x7FC] = 0x00;  // reset vector low: &F800
     rom[0x7FD] = 0xF8;  // reset vector high
 
-    ParasiteMemoryMap mem(tube, rom);
+    CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
     uint16_t reset_vector = mem.read(0xFFFC) | (mem.read(0xFFFD) << 8);

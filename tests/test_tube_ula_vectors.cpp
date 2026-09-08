@@ -382,7 +382,7 @@ private:
         case HD0: case HD1: case HD2: case HD3: case HD4: case HD5: case HD6: case HD7:
             return (host_bus() >> (pin - HD0)) & 1;
         case PD0: case PD1: case PD2: case PD3: case PD4: case PD5: case PD6: case PD7:
-            return (parasite_bus() >> (PD0 - pin)) & 1;
+            return (coprocessor_bus() >> (PD0 - pin)) & 1;
         case PIRQ:
             return ula_.pirq() ? 0 : 1;
         case HIRQ:
@@ -390,10 +390,10 @@ private:
         case PNMI:
             return ula_.pnmi_level() ? 0 : 1;
         case PRST:
-            return (level(HRST) == 0 || ula_.parasite_reset_active()) ? 0 : 1;
+            return (level(HRST) == 0 || ula_.coprocessor_reset_active()) ? 0 : 1;
         case DRQ:
             // App Note 004: DRQ is the R3 action-required condition N, ungated by M.
-            return (ula_.parasite_peek(4) & TubeUla::DATA_AVAILABLE) ? 1 : 0;
+            return (ula_.coprocessor_peek(4) & TubeUla::DATA_AVAILABLE) ? 1 : 0;
         default:
             FAIL(pin_name(pin) << " is not a ULA output");
             return 0;
@@ -432,12 +432,12 @@ private:
     }
 
     // Value the ULA drives on PD, sampled by the tester.
-    uint8_t parasite_bus()
+    uint8_t coprocessor_bus()
     {
         if (level(DACK) == 0)
             return pd_latched_;
         if (level(PCS) == 0 && level(PNRD) == 0 && (pa() & 1) == 0)
-            return ula_.parasite_peek(pa());
+            return ula_.coprocessor_peek(pa());
         return pd_latched_;
     }
 
@@ -464,11 +464,11 @@ private:
     {
         if (level(DACK) == 0) {
             // App Note 004: with DACK active, PNRD forces a write cycle to R3.
-            ula_.parasite_write(5, pd_driven());
+            ula_.coprocessor_write(5, pd_driven());
             return;
         }
         if (level(PCS) == 0 && (pa() & 1))
-            pd_latched_ = ula_.parasite_read(pa());
+            pd_latched_ = ula_.coprocessor_read(pa());
     }
 
     void pnwd_rising()
@@ -476,14 +476,14 @@ private:
         if (level(DACK) == 0)
             return;
         if (level(PCS) == 0)
-            ula_.parasite_write(pa(), pd_driven());
+            ula_.coprocessor_write(pa(), pd_driven());
     }
 
     void pnwd_falling()
     {
         if (level(DACK) == 0) {
             // App Note 004: with DACK active, PNWD forces a read cycle from R3.
-            pd_latched_ = ula_.parasite_read(5);
+            pd_latched_ = ula_.coprocessor_read(5);
         }
     }
 

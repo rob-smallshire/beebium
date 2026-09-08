@@ -13,15 +13,15 @@
 // R3 NMI transfer tests using the real 65C02 CPU.
 //
 // The host writes bytes through R3 (with M flag set to enable PNMI).
-// The parasite 6502 has a minimal NMI handler that reads R3 data and
+// The coprocessor 6502 has a minimal NMI handler that reads R3 data and
 // stores it into a results buffer. This tests the full NMI-driven
-// transfer path: host_write -> PNMI -> NMI handler -> parasite_read
+// transfer path: host_write -> PNMI -> NMI handler -> coprocessor_read
 // -> RAM, with concurrent execution.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteCpu.hpp>
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -38,7 +38,7 @@ static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr, uint16_t nmi
     return rom;
 }
 
-static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
+static void plant(CoprocessorMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
     for (auto byte : code) {
         mem.ram(addr++) = byte;
     }
@@ -73,7 +73,7 @@ static constexpr uint16_t NMI_ADDR = 0x0300;
 static constexpr uint16_t RESULT_ADDR = 0x0500;
 static constexpr uint8_t COUNTER_ZP = 0x10;
 
-static void plant_r3_receiver(ParasiteMemoryMap& mem, uint8_t num_bytes) {
+static void plant_r3_receiver(CoprocessorMemoryMap& mem, uint8_t num_bytes) {
     // Main loop: wait until counter reaches num_bytes
     plant(mem, MAIN_ADDR, {
         0x58,                                // CLI
@@ -105,8 +105,8 @@ TEST_CASE("6502 R3 NMI transfer: single byte", "[tube][6502][r3]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r3_receiver(memory, 1);
     memory.read(0xFEF8);  // disable boot ROM
@@ -143,8 +143,8 @@ TEST_CASE("6502 R3 NMI transfer: 2 bytes synchronous", "[tube][6502][r3]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r3_receiver(memory, 2);
     memory.read(0xFEF8);
@@ -183,8 +183,8 @@ TEST_CASE("6502 R3 NMI transfer: 200 bytes synchronous", "[tube][6502][r3]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r3_receiver(memory, NUM_BYTES);
@@ -226,8 +226,8 @@ TEST_CASE("6502 R3 NMI transfer: 200 bytes interleaved", "[tube][6502][r3]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r3_receiver(memory, NUM_BYTES);
@@ -266,8 +266,8 @@ TEST_CASE("6502 R3 NMI transfer: in_nmi_handler is set during handler", "[tube][
     TubeUla tube;
 
     auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r3_receiver(memory, 1);
     memory.read(0xFEF8);
@@ -309,8 +309,8 @@ TEST_CASE("6502 R3 NMI transfer: 200 bytes, repeated 50 times", "[tube][6502][r3
         TubeUla tube;
 
         auto rom = make_stub_rom(MAIN_ADDR, NMI_ADDR);
-        ParasiteMemoryMap memory(tube, rom);
-        ParasiteCpu cpu(memory, tube);
+        CoprocessorMemoryMap memory(tube, rom);
+        CoprocessorCpu cpu(memory, tube);
 
         plant_r3_receiver(memory, NUM_BYTES);
         memory.read(0xFEF8);

@@ -35,7 +35,7 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
     // Create components. The clock ratio (3/2 for the 65C02, 2/1 for the
     // 65C102) lives with the runner as its CoprocessorClock, not with the socket.
     tube_ula_ = std::make_unique<TubeUla>();
-    runner_ = std::make_unique<ParasiteRunner>(*tube_ula_, rom, clock_ratio_);
+    runner_ = std::make_unique<CoprocessorRunner>(*tube_ula_, rom, clock_ratio_);
     runner_->reset();
 
     // Install the TubeUla as the host-side backend.
@@ -47,7 +47,7 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
 
     // The debugger is the server's concern: it reads debug_target() (the
     // runner, a CpuDebugTarget), instantiates DebuggerControlServiceImpl
-    // against the abstract interface and registers the ParasiteDebuggerControl
+    // against the abstract interface and registers the CoprocessorDebuggerControl
     // service. The extension hosts no gRPC service itself.
 
     std::cout << "  " << cpu_label_ << " coprocessor (single-threaded)\n";

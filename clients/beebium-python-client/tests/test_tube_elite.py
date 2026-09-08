@@ -87,7 +87,7 @@ def bbc_tube(
     The fixture waits for the Tube banner before yielding.
 
     Configures:
-    - Tube with 65C02 3MHz parasite
+    - Tube with 65C02 3MHz coprocessor
     - Acorn 1770 disc controller
     - 1770 DFS ROM in sideways slot 14
     """
@@ -127,11 +127,11 @@ class TestTubeEliteBoot:
         """Verify Tube hardware is enabled.
 
         Only checks host-side status. In the single-process Tube
-        architecture the parasite runs inside the same server, so
-        parasite_connected / parasite_type / parasite_grpc_address
+        architecture the coprocessor runs inside the same server, so
+        coprocessor_connected / coprocessor_type / coprocessor_grpc_address
         fields (retained on GetTubeStatusResponse for compatibility)
         are no longer populated by the server. The test_tube_banner
-        test below is the functional check that the parasite is
+        test below is the functional check that the coprocessor is
         actually running.
         """
         status = bbc_tube.tube.status

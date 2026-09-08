@@ -22,32 +22,32 @@ using namespace beebium;
 // Register 1: H-to-P latch, P-to-H 24-byte FIFO
 //////////////////////////////////////////////////////////////////////////////
 
-TEST_CASE("R1 host-to-parasite latch", "[tube][fifo][r1]") {
+TEST_CASE("R1 host-to-coprocessor latch", "[tube][fifo][r1]") {
     TubeUla tube;
 
-    SECTION("Initial state: not full on host side, empty on parasite side") {
+    SECTION("Initial state: not full on host side, empty on coprocessor side") {
         uint8_t host_stat = tube.host_read(0);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);  // host can write
 
-        uint8_t para_stat = tube.parasite_read(0);
-        REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);  // no data for parasite
+        uint8_t para_stat = tube.coprocessor_read(0);
+        REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);  // no data for coprocessor
     }
 
-    SECTION("Host write followed by parasite read returns same byte") {
+    SECTION("Host write followed by coprocessor read returns same byte") {
         tube.host_write(1, 0xAB);
-        REQUIRE(tube.parasite_read(1) == 0xAB);
+        REQUIRE(tube.coprocessor_read(1) == 0xAB);
     }
 
-    SECTION("Host write sets parasite data-available flag") {
+    SECTION("Host write sets coprocessor data-available flag") {
         tube.host_write(1, 0x42);
-        uint8_t para_stat = tube.parasite_read(0);
+        uint8_t para_stat = tube.coprocessor_read(0);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);
     }
 
-    SECTION("Parasite read clears data-available flag") {
+    SECTION("Coprocessor read clears data-available flag") {
         tube.host_write(1, 0x42);
-        tube.parasite_read(1);  // consume
-        uint8_t para_stat = tube.parasite_read(0);
+        tube.coprocessor_read(1);  // consume
+        uint8_t para_stat = tube.coprocessor_read(0);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
     }
 
@@ -57,38 +57,38 @@ TEST_CASE("R1 host-to-parasite latch", "[tube][fifo][r1]") {
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) == 0);  // host cannot write
     }
 
-    SECTION("Parasite read restores host not-full flag") {
+    SECTION("Coprocessor read restores host not-full flag") {
         tube.host_write(1, 0x42);
-        tube.parasite_read(1);
+        tube.coprocessor_read(1);
         uint8_t host_stat = tube.host_read(0);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);  // host can write again
     }
 
     // Bus stretching (host_write to full latch) is tested via threaded
-    // tests -- TubeUla::host_write now spin-waits until the parasite
+    // tests -- TubeUla::host_write now spin-waits until the coprocessor
     // drains the register. See "TubeUla concurrent R1 FIFO transfer".
 }
 
-TEST_CASE("R1 parasite-to-host 24-byte FIFO", "[tube][fifo][r1]") {
+TEST_CASE("R1 coprocessor-to-host 24-byte FIFO", "[tube][fifo][r1]") {
     TubeUla tube;
 
-    SECTION("Initial state: empty on host side, not full on parasite side") {
+    SECTION("Initial state: empty on host side, not full on coprocessor side") {
         uint8_t host_stat = tube.host_read(0);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
 
-        uint8_t para_stat = tube.parasite_read(0);
+        uint8_t para_stat = tube.coprocessor_read(0);
         REQUIRE((para_stat & TubeUla::SPACE_AVAILABLE) != 0);
     }
 
-    SECTION("Single byte round-trip: parasite write, host read") {
-        tube.parasite_write(1, 0xCD);
+    SECTION("Single byte round-trip: coprocessor write, host read") {
+        tube.coprocessor_write(1, 0xCD);
         REQUIRE(tube.host_read(1) == 0xCD);
     }
 
     SECTION("FIFO ordering: 3 bytes written are read in same order") {
-        tube.parasite_write(1, 0x11);
-        tube.parasite_write(1, 0x22);
-        tube.parasite_write(1, 0x33);
+        tube.coprocessor_write(1, 0x11);
+        tube.coprocessor_write(1, 0x22);
+        tube.coprocessor_write(1, 0x33);
         REQUIRE(tube.host_read(1) == 0x11);
         REQUIRE(tube.host_read(1) == 0x22);
         REQUIRE(tube.host_read(1) == 0x33);
@@ -96,23 +96,23 @@ TEST_CASE("R1 parasite-to-host 24-byte FIFO", "[tube][fifo][r1]") {
 
     SECTION("Fill to 24 bytes: not-full flag clears on 24th write") {
         for (int i = 0; i < 23; i++) {
-            tube.parasite_write(1, static_cast<uint8_t>(i));
-            uint8_t stat = tube.parasite_read(0);
+            tube.coprocessor_write(1, static_cast<uint8_t>(i));
+            uint8_t stat = tube.coprocessor_read(0);
             REQUIRE((stat & TubeUla::SPACE_AVAILABLE) != 0);
         }
-        tube.parasite_write(1, 23);
-        uint8_t stat = tube.parasite_read(0);
+        tube.coprocessor_write(1, 23);
+        uint8_t stat = tube.coprocessor_read(0);
         REQUIRE((stat & TubeUla::SPACE_AVAILABLE) == 0);  // now full
     }
 
-    SECTION("Host data-available set after first parasite write") {
-        tube.parasite_write(1, 0x42);
+    SECTION("Host data-available set after first coprocessor write") {
+        tube.coprocessor_write(1, 0x42);
         uint8_t host_stat = tube.host_read(0);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) != 0);
     }
 
     SECTION("Host data-available clears when FIFO drained") {
-        tube.parasite_write(1, 0x42);
+        tube.coprocessor_write(1, 0x42);
         tube.host_read(1);  // drain
         uint8_t host_stat = tube.host_read(0);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
@@ -120,33 +120,33 @@ TEST_CASE("R1 parasite-to-host 24-byte FIFO", "[tube][fifo][r1]") {
 
     SECTION("Write when full: byte is dropped, FIFO contents unchanged") {
         for (int i = 0; i < 24; i++)
-            tube.parasite_write(1, static_cast<uint8_t>(i));
+            tube.coprocessor_write(1, static_cast<uint8_t>(i));
 
-        tube.parasite_write(1, 0xFF);  // should be dropped
+        tube.coprocessor_write(1, 0xFF);  // should be dropped
 
         for (int i = 0; i < 24; i++)
             REQUIRE(tube.host_read(1) == static_cast<uint8_t>(i));
     }
 
-    SECTION("Read when empty returns the parasite's data bus latch") {
+    SECTION("Read when empty returns the coprocessor's data bus latch") {
         // Nothing driven since reset: the latch is clear.
         REQUIRE(tube.host_read(1) == 0);
 
-        // A parasite write to any address, even the write-ignored status
-        // address, leaves its value on the parasite side's data bus.
-        tube.parasite_write(0, 0x55);
+        // A coprocessor write to any address, even the write-ignored status
+        // address, leaves its value on the coprocessor side's data bus.
+        tube.coprocessor_write(0, 0x55);
         REQUIRE(tube.host_read(1) == 0x55);
 
         // Data that went through the FIFO is returned first; once drained,
-        // the empty read shows the last byte the parasite drove.
-        tube.parasite_write(1, 0xAA);
+        // the empty read shows the last byte the coprocessor drove.
+        tube.coprocessor_write(1, 0xAA);
         REQUIRE(tube.host_read(1) == 0xAA);
         REQUIRE(tube.host_read(1) == 0xAA);
     }
 
     SECTION("Drain: each host read advances FIFO, empty flag sets on last") {
         for (int i = 0; i < 5; i++)
-            tube.parasite_write(1, static_cast<uint8_t>(i + 1));
+            tube.coprocessor_write(1, static_cast<uint8_t>(i + 1));
 
         for (int i = 0; i < 4; i++) {
             REQUIRE(tube.host_read(1) == static_cast<uint8_t>(i + 1));
@@ -161,18 +161,18 @@ TEST_CASE("R1 parasite-to-host 24-byte FIFO", "[tube][fifo][r1]") {
     SECTION("Fill and drain cycle: repeatable without state leakage") {
         for (int cycle = 0; cycle < 3; cycle++) {
             for (int i = 0; i < 24; i++)
-                tube.parasite_write(1, static_cast<uint8_t>(i + cycle));
+                tube.coprocessor_write(1, static_cast<uint8_t>(i + cycle));
             for (int i = 0; i < 24; i++)
                 REQUIRE(tube.host_read(1) == static_cast<uint8_t>(i + cycle));
         }
     }
 
     SECTION("Partial fill/drain interleaving") {
-        tube.parasite_write(1, 0xA0);
-        tube.parasite_write(1, 0xA1);
+        tube.coprocessor_write(1, 0xA0);
+        tube.coprocessor_write(1, 0xA1);
         REQUIRE(tube.host_read(1) == 0xA0);
 
-        tube.parasite_write(1, 0xA2);
+        tube.coprocessor_write(1, 0xA2);
         REQUIRE(tube.host_read(1) == 0xA1);
         REQUIRE(tube.host_read(1) == 0xA2);
     }
@@ -185,63 +185,63 @@ TEST_CASE("R1 parasite-to-host 24-byte FIFO", "[tube][fifo][r1]") {
 TEST_CASE("R2 single-byte latches", "[tube][fifo][r2]") {
     TubeUla tube;
 
-    SECTION("Host-to-parasite: write then read") {
+    SECTION("Host-to-coprocessor: write then read") {
         tube.host_write(3, 0xDE);
-        REQUIRE(tube.parasite_read(3) == 0xDE);
+        REQUIRE(tube.coprocessor_read(3) == 0xDE);
     }
 
-    SECTION("Parasite-to-host: write then read") {
-        tube.parasite_write(3, 0xEF);
+    SECTION("Coprocessor-to-host: write then read") {
+        tube.coprocessor_write(3, 0xEF);
         REQUIRE(tube.host_read(3) == 0xEF);
     }
 
     SECTION("Overwrite before read replaces value") {
         tube.host_write(3, 0xAA);
         tube.host_write(3, 0xBB);
-        REQUIRE(tube.parasite_read(3) == 0xBB);
+        REQUIRE(tube.coprocessor_read(3) == 0xBB);
     }
 
     SECTION("Status flags: H-to-P") {
-        // Initially: no data for parasite, space for host.
-        uint8_t para_stat = tube.parasite_read(2);
+        // Initially: no data for coprocessor, space for host.
+        uint8_t para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
         uint8_t host_stat = tube.host_read(2);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);
 
-        // After host write: data available for parasite, host full.
+        // After host write: data available for coprocessor, host full.
         tube.host_write(3, 0x42);
-        para_stat = tube.parasite_read(2);
+        para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);
         host_stat = tube.host_read(2);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) == 0);
 
-        // After parasite read: back to initial.
-        tube.parasite_read(3);
-        para_stat = tube.parasite_read(2);
+        // After coprocessor read: back to initial.
+        tube.coprocessor_read(3);
+        para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
         host_stat = tube.host_read(2);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);
     }
 
     SECTION("Status flags: P-to-H") {
-        // Initially: no data for host, space for parasite.
+        // Initially: no data for host, space for coprocessor.
         uint8_t host_stat = tube.host_read(2);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
-        uint8_t para_stat = tube.parasite_read(2);
+        uint8_t para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::SPACE_AVAILABLE) != 0);
 
-        // After parasite write: data available for host, parasite full.
-        tube.parasite_write(3, 0x42);
+        // After coprocessor write: data available for host, coprocessor full.
+        tube.coprocessor_write(3, 0x42);
         host_stat = tube.host_read(2);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) != 0);
-        para_stat = tube.parasite_read(2);
+        para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::SPACE_AVAILABLE) == 0);
 
         // After host read: back to initial.
         tube.host_read(3);
         host_stat = tube.host_read(2);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
-        para_stat = tube.parasite_read(2);
+        para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::SPACE_AVAILABLE) != 0);
     }
 }
@@ -255,25 +255,25 @@ TEST_CASE("R3 one-byte mode", "[tube][fifo][r3]") {
 
     // V flag defaults to 0 after reset (one-byte mode).
 
-    SECTION("Host-to-parasite: single byte") {
+    SECTION("Host-to-coprocessor: single byte") {
         tube.host_write(5, 0x77);
 
-        // Status: data available to parasite.
-        uint8_t para_stat = tube.parasite_read(4);
+        // Status: data available to coprocessor.
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);
 
-        REQUIRE(tube.parasite_read(5) == 0x77);
+        REQUIRE(tube.coprocessor_read(5) == 0x77);
 
         // After read: data not available.
-        para_stat = tube.parasite_read(4);
+        para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
     }
 
-    SECTION("Parasite-to-host: single byte") {
+    SECTION("Coprocessor-to-host: single byte") {
         // After reset, R3 P-to-H has 1 dummy byte. Read it off first.
         tube.host_read(5);
 
-        tube.parasite_write(5, 0x88);
+        tube.coprocessor_write(5, 0x88);
 
         uint8_t host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) != 0);
@@ -289,7 +289,7 @@ TEST_CASE("R3 one-byte mode", "[tube][fifo][r3]") {
 
     SECTION("Reading one byte empties the register in one-byte mode") {
         tube.host_write(5, 0x42);
-        tube.parasite_read(5);  // consume
+        tube.coprocessor_read(5);  // consume
         uint8_t host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);  // space again
     }
@@ -301,21 +301,21 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
     // Enable two-byte mode: set V flag.
     tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_V);
 
-    SECTION("Host-to-parasite: two bytes required before data-available set") {
+    SECTION("Host-to-coprocessor: two bytes required before data-available set") {
         tube.host_write(5, 0xAA);
-        uint8_t para_stat = tube.parasite_read(4);
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);  // not yet
 
         tube.host_write(5, 0xBB);
-        para_stat = tube.parasite_read(4);
+        para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);  // now available
     }
 
-    SECTION("Parasite reads both bytes in order") {
+    SECTION("Coprocessor reads both bytes in order") {
         tube.host_write(5, 0xAA);
         tube.host_write(5, 0xBB);
-        REQUIRE(tube.parasite_read(5) == 0xAA);
-        REQUIRE(tube.parasite_read(5) == 0xBB);
+        REQUIRE(tube.coprocessor_read(5) == 0xAA);
+        REQUIRE(tube.coprocessor_read(5) == 0xBB);
     }
 
     SECTION("Not-full only after both bytes read") {
@@ -324,24 +324,24 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
         uint8_t host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) == 0);  // full
 
-        tube.parasite_read(5);  // read first byte
+        tube.coprocessor_read(5);  // read first byte
         host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) == 0);  // still full
 
-        tube.parasite_read(5);  // read second byte
+        tube.coprocessor_read(5);  // read second byte
         host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);  // now space
     }
 
-    SECTION("Parasite-to-host: two bytes required") {
+    SECTION("Coprocessor-to-host: two bytes required") {
         // Drain the reset dummy byte first.
         tube.host_read(5);
 
-        tube.parasite_write(5, 0xCC);
+        tube.coprocessor_write(5, 0xCC);
         uint8_t host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
 
-        tube.parasite_write(5, 0xDD);
+        tube.coprocessor_write(5, 0xDD);
         host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) != 0);
 
@@ -363,12 +363,12 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
         // Drain the reset dummy byte.
         tube.host_read(5);
 
-        tube.parasite_write(5, 0xCC);  // first byte
-        uint8_t para_stat = tube.parasite_read(4);
+        tube.coprocessor_write(5, 0xCC);  // first byte
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::SPACE_AVAILABLE) != 0);  // can still write second byte
 
-        tube.parasite_write(5, 0xDD);  // second byte
-        para_stat = tube.parasite_read(4);
+        tube.coprocessor_write(5, 0xDD);  // second byte
+        para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::SPACE_AVAILABLE) == 0);  // now full
     }
 
@@ -376,14 +376,14 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
         tube.host_write(5, 0xAA);
         tube.host_write(5, 0xBB);
 
-        // Data available after first parasite read (one byte still to go).
-        tube.parasite_read(5);
-        uint8_t para_stat = tube.parasite_read(4);
+        // Data available after first coprocessor read (one byte still to go).
+        tube.coprocessor_read(5);
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);
 
         // Data not available after second read.
-        tube.parasite_read(5);
-        para_stat = tube.parasite_read(4);
+        tube.coprocessor_read(5);
+        para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
     }
 
@@ -391,8 +391,8 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
         // Drain dummy byte.
         tube.host_read(5);
 
-        tube.parasite_write(5, 0xCC);
-        tube.parasite_write(5, 0xDD);
+        tube.coprocessor_write(5, 0xCC);
+        tube.coprocessor_write(5, 0xDD);
 
         // Data available after first host read.
         tube.host_read(5);
@@ -412,9 +412,9 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
         tube.host_write(0, TubeUla::FLAG_V);  // S=0, clear V
 
         // In one-byte mode, one byte is enough for data-available.
-        uint8_t para_stat = tube.parasite_read(4);
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);
-        REQUIRE(tube.parasite_read(5) == 0xAA);
+        REQUIRE(tube.coprocessor_read(5) == 0xAA);
     }
 }
 
@@ -425,27 +425,27 @@ TEST_CASE("R3 two-byte mode", "[tube][fifo][r3]") {
 TEST_CASE("R4 single-byte latches", "[tube][fifo][r4]") {
     TubeUla tube;
 
-    SECTION("Host-to-parasite: write then read") {
+    SECTION("Host-to-coprocessor: write then read") {
         tube.host_write(7, 0x99);
-        REQUIRE(tube.parasite_read(7) == 0x99);
+        REQUIRE(tube.coprocessor_read(7) == 0x99);
     }
 
-    SECTION("Parasite-to-host: write then read") {
-        tube.parasite_write(7, 0x66);
+    SECTION("Coprocessor-to-host: write then read") {
+        tube.coprocessor_write(7, 0x66);
         REQUIRE(tube.host_read(7) == 0x66);
     }
 
     SECTION("Status flags: H-to-P") {
         // No data initially.
-        uint8_t para_stat = tube.parasite_read(6);
+        uint8_t para_stat = tube.coprocessor_read(6);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
 
         tube.host_write(7, 0x42);
-        para_stat = tube.parasite_read(6);
+        para_stat = tube.coprocessor_read(6);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);
 
-        tube.parasite_read(7);
-        para_stat = tube.parasite_read(6);
+        tube.coprocessor_read(7);
+        para_stat = tube.coprocessor_read(6);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
     }
 
@@ -453,7 +453,7 @@ TEST_CASE("R4 single-byte latches", "[tube][fifo][r4]") {
         uint8_t host_stat = tube.host_read(6);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
 
-        tube.parasite_write(7, 0x42);
+        tube.coprocessor_write(7, 0x42);
         host_stat = tube.host_read(6);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) != 0);
 
@@ -523,7 +523,7 @@ TEST_CASE("Control register flag manipulation", "[tube][flags]") {
         REQUIRE((host_stat & TubeUla::FLAG_Q) != 0);
         REQUIRE((host_stat & TubeUla::FLAG_M) != 0);
 
-        uint8_t para_stat = tube.parasite_read(0);
+        uint8_t para_stat = tube.coprocessor_read(0);
         REQUIRE((para_stat & TubeUla::FLAG_Q) != 0);
         REQUIRE((para_stat & TubeUla::FLAG_M) != 0);
     }
@@ -534,14 +534,14 @@ TEST_CASE("V flag controls R3 FIFO mode", "[tube][flags][r3]") {
 
     SECTION("V=0: R3 operates as 1-byte latch") {
         tube.host_write(5, 0x42);
-        uint8_t para_stat = tube.parasite_read(4);
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) != 0);  // one byte is enough
     }
 
     SECTION("V=1: R3 operates as 2-byte FIFO") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_V);
         tube.host_write(5, 0x42);
-        uint8_t para_stat = tube.parasite_read(4);
+        uint8_t para_stat = tube.coprocessor_read(4);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);  // one byte not enough
     }
 }
@@ -558,11 +558,11 @@ TEST_CASE("T flag triggers soft reset", "[tube][flags]") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_T);
 
         // R1 H-to-P should be empty.
-        uint8_t para_stat = tube.parasite_read(0);
+        uint8_t para_stat = tube.coprocessor_read(0);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
 
         // R2 H-to-P should be empty.
-        para_stat = tube.parasite_read(2);
+        para_stat = tube.coprocessor_read(2);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
     }
 
@@ -579,12 +579,12 @@ TEST_CASE("T flag triggers soft reset", "[tube][flags]") {
         // is not stored in the control register (only bits 0-5 are stored).
         tube.host_write(1, 0xAA);
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_T);
-        REQUIRE((tube.parasite_read(0) & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((tube.coprocessor_read(0) & TubeUla::DATA_AVAILABLE) == 0);
 
         tube.host_write(1, 0xBB);
         // Writing T again clears data again.
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_T);
-        REQUIRE((tube.parasite_read(0) & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((tube.coprocessor_read(0) & TubeUla::DATA_AVAILABLE) == 0);
     }
 
     SECTION("R3 P-to-H gets dummy byte after T reset") {
@@ -595,18 +595,18 @@ TEST_CASE("T flag triggers soft reset", "[tube][flags]") {
     }
 }
 
-TEST_CASE("P flag asserts parasite reset", "[tube][flags]") {
+TEST_CASE("P flag asserts coprocessor reset", "[tube][flags]") {
     TubeUla tube;
 
-    SECTION("Setting P makes parasite_reset_active() true") {
+    SECTION("Setting P makes coprocessor_reset_active() true") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_P);
-        REQUIRE(tube.parasite_reset_active());
+        REQUIRE(tube.coprocessor_reset_active());
     }
 
     SECTION("Clearing P deasserts reset") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_P);
         tube.host_write(0, TubeUla::FLAG_P);  // S=0, clear P
-        REQUIRE_FALSE(tube.parasite_reset_active());
+        REQUIRE_FALSE(tube.coprocessor_reset_active());
     }
 }
 
@@ -622,7 +622,7 @@ TEST_CASE("HIRQ generation", "[tube][interrupt][hirq]") {
     }
 
     SECTION("No HIRQ when Q=0 even with R4 P-to-H data") {
-        tube.parasite_write(7, 0x42);
+        tube.coprocessor_write(7, 0x42);
         REQUIRE_FALSE(tube.hirq());
     }
 
@@ -633,20 +633,20 @@ TEST_CASE("HIRQ generation", "[tube][interrupt][hirq]") {
 
     SECTION("HIRQ asserted when Q=1 and R4 P-to-H has data") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);
-        tube.parasite_write(7, 0x42);
+        tube.coprocessor_write(7, 0x42);
         REQUIRE(tube.hirq());
     }
 
     SECTION("HIRQ deasserted when R4 P-to-H data read by host") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);
-        tube.parasite_write(7, 0x42);
+        tube.coprocessor_write(7, 0x42);
         tube.host_read(7);
         REQUIRE_FALSE(tube.hirq());
     }
 
     SECTION("HIRQ deasserted when Q cleared") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);
-        tube.parasite_write(7, 0x42);
+        tube.coprocessor_write(7, 0x42);
         REQUIRE(tube.hirq());
 
         tube.host_write(0, TubeUla::FLAG_Q);  // S=0, clear Q
@@ -655,10 +655,10 @@ TEST_CASE("HIRQ generation", "[tube][interrupt][hirq]") {
 
     SECTION("HIRQ not affected by R1, R2, or R3 state") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);
-        tube.parasite_write(1, 0x42);  // R1 P-to-H
+        tube.coprocessor_write(1, 0x42);  // R1 P-to-H
         REQUIRE_FALSE(tube.hirq());
 
-        tube.parasite_write(3, 0x42);  // R2 P-to-H
+        tube.coprocessor_write(3, 0x42);  // R2 P-to-H
         REQUIRE_FALSE(tube.hirq());
     }
 }
@@ -681,10 +681,10 @@ TEST_CASE("PIRQ generation", "[tube][interrupt][pirq]") {
         REQUIRE(tube.pirq());
     }
 
-    SECTION("PIRQ deasserted when R1 data read by parasite") {
+    SECTION("PIRQ deasserted when R1 data read by coprocessor") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_I);
         tube.host_write(1, 0x42);
-        tube.parasite_read(1);
+        tube.coprocessor_read(1);
         REQUIRE_FALSE(tube.pirq());
     }
 
@@ -694,10 +694,10 @@ TEST_CASE("PIRQ generation", "[tube][interrupt][pirq]") {
         REQUIRE(tube.pirq());
     }
 
-    SECTION("PIRQ deasserted when R4 data read by parasite") {
+    SECTION("PIRQ deasserted when R4 data read by coprocessor") {
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_J);
         tube.host_write(7, 0x42);
-        tube.parasite_read(7);
+        tube.coprocessor_read(7);
         REQUIRE_FALSE(tube.pirq());
     }
 
@@ -708,11 +708,11 @@ TEST_CASE("PIRQ generation", "[tube][interrupt][pirq]") {
         REQUIRE(tube.pirq());
 
         // Clear R1, still active via R4.
-        tube.parasite_read(1);
+        tube.coprocessor_read(1);
         REQUIRE(tube.pirq());
 
         // Clear R4, now fully deasserted.
-        tube.parasite_read(7);
+        tube.coprocessor_read(7);
         REQUIRE_FALSE(tube.pirq());
     }
 
@@ -749,8 +749,8 @@ TEST_CASE("PNMI generation", "[tube][interrupt][pnmi]") {
         tube.host_write(5, 0x42);
         REQUIRE(tube.pnmi());
 
-        // Parasite reads the data, clearing the condition.
-        tube.parasite_read(5);
+        // Coprocessor reads the data, clearing the condition.
+        tube.coprocessor_read(5);
 
         // R3 P-to-H has dummy byte from reset, so p2h_count=1 (not 0).
         // PNMI condition depends on whether p2h is empty.
@@ -759,7 +759,7 @@ TEST_CASE("PNMI generation", "[tube][interrupt][pnmi]") {
         // (PNMI = h2p has data OR p2h empty, with M=1)
     }
 
-    SECTION("PNMI when R3 P-to-H is empty (parasite needs to write)") {
+    SECTION("PNMI when R3 P-to-H is empty (coprocessor needs to write)") {
         // Drain the reset dummy byte from R3 P-to-H.
         tube.host_read(5);
 
@@ -770,14 +770,14 @@ TEST_CASE("PNMI generation", "[tube][interrupt][pnmi]") {
         REQUIRE(tube.pnmi());
     }
 
-    SECTION("PNMI clears when R3 P-to-H gets data (parasite writes)") {
+    SECTION("PNMI clears when R3 P-to-H gets data (coprocessor writes)") {
         // Drain dummy byte.
         tube.host_read(5);
 
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_M);
         REQUIRE(tube.pnmi());  // P-to-H empty triggers NMI
 
-        tube.parasite_write(5, 0x42);  // P-to-H now has data
+        tube.coprocessor_write(5, 0x42);  // P-to-H now has data
         // PNMI level should drop (p2h not empty, h2p also empty).
         REQUIRE_FALSE(tube.pnmi());
     }
@@ -789,8 +789,8 @@ TEST_CASE("PNMI generation", "[tube][interrupt][pnmi]") {
         tube.host_write(5, 0xAA);
         REQUIRE(tube.pnmi());
 
-        // Parasite reads -> clears H-to-P condition.
-        tube.parasite_read(5);
+        // Coprocessor reads -> clears H-to-P condition.
+        tube.coprocessor_read(5);
         // After read, p2h still has dummy byte, h2p empty -> PNMI level false.
         REQUIRE_FALSE(tube.pnmi());
 
@@ -822,7 +822,7 @@ TEST_CASE("Tube reset state", "[tube][reset]") {
 
     SECTION("All FIFOs empty after reset") {
         // R1 H-to-P: no data.
-        uint8_t para_stat = tube.parasite_read(0);
+        uint8_t para_stat = tube.coprocessor_read(0);
         REQUIRE((para_stat & TubeUla::DATA_AVAILABLE) == 0);
 
         // R1 P-to-H: no data.
@@ -830,11 +830,11 @@ TEST_CASE("Tube reset state", "[tube][reset]") {
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) == 0);
 
         // R2: no data in either direction.
-        REQUIRE((tube.parasite_read(2) & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((tube.coprocessor_read(2) & TubeUla::DATA_AVAILABLE) == 0);
         REQUIRE((tube.host_read(2) & TubeUla::DATA_AVAILABLE) == 0);
 
         // R4: no data in either direction.
-        REQUIRE((tube.parasite_read(6) & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((tube.coprocessor_read(6) & TubeUla::DATA_AVAILABLE) == 0);
         REQUIRE((tube.host_read(6) & TubeUla::DATA_AVAILABLE) == 0);
     }
 
@@ -842,7 +842,7 @@ TEST_CASE("Tube reset state", "[tube][reset]") {
         REQUIRE(tube.control_flags() == 0);
     }
 
-    SECTION("R3 parasite-to-host contains one dummy byte after reset") {
+    SECTION("R3 coprocessor-to-host contains one dummy byte after reset") {
         // In one-byte mode (V=0), R3 P-to-H should show data available.
         uint8_t host_stat = tube.host_read(4);
         REQUIRE((host_stat & TubeUla::DATA_AVAILABLE) != 0);
@@ -866,7 +866,7 @@ TEST_CASE("Tube reset state", "[tube][reset]") {
     SECTION("Reset during active transfer clears mid-transfer state") {
         // Fill up some registers.
         tube.host_write(1, 0xAA);  // R1 H-to-P
-        tube.parasite_write(1, 0xBB);  // R1 P-to-H
+        tube.coprocessor_write(1, 0xBB);  // R1 P-to-H
         tube.host_write(3, 0xCC);  // R2 H-to-P
         tube.host_write(5, 0xDD);  // R3 H-to-P
         tube.host_write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q | TubeUla::FLAG_I);
@@ -878,7 +878,7 @@ TEST_CASE("Tube reset state", "[tube][reset]") {
         REQUIRE_FALSE(tube.hirq());
         REQUIRE_FALSE(tube.pirq());
         REQUIRE_FALSE(tube.pnmi());
-        REQUIRE((tube.parasite_read(0) & TubeUla::DATA_AVAILABLE) == 0);
+        REQUIRE((tube.coprocessor_read(0) & TubeUla::DATA_AVAILABLE) == 0);
         REQUIRE((tube.host_read(0) & TubeUla::DATA_AVAILABLE) == 0);
     }
 }
@@ -897,8 +897,8 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
         REQUIRE((stat & 0x40) != 0);
     }
 
-    SECTION("R1STAT parasite perspective: bit 7 = H-to-P data available, bit 6 = P-to-H not full") {
-        uint8_t stat = tube.parasite_read(0);
+    SECTION("R1STAT coprocessor perspective: bit 7 = H-to-P data available, bit 6 = P-to-H not full") {
+        uint8_t stat = tube.coprocessor_read(0);
         // Initially: H-to-P empty (bit 7 = 0), P-to-H not full (bit 6 = 1).
         REQUIRE((stat & 0x80) == 0);
         REQUIRE((stat & 0x40) != 0);
@@ -906,17 +906,17 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
 
     SECTION("Status bits update immediately after data write") {
         tube.host_write(1, 0x42);
-        // Immediately: parasite sees data available.
-        REQUIRE((tube.parasite_read(0) & 0x80) != 0);
+        // Immediately: coprocessor sees data available.
+        REQUIRE((tube.coprocessor_read(0) & 0x80) != 0);
         // Host sees not-full cleared.
         REQUIRE((tube.host_read(0) & 0x40) == 0);
     }
 
     SECTION("Status bits update immediately after data read") {
         tube.host_write(1, 0x42);
-        tube.parasite_read(1);
-        // Immediately: parasite sees no data.
-        REQUIRE((tube.parasite_read(0) & 0x80) == 0);
+        tube.coprocessor_read(1);
+        // Immediately: coprocessor sees no data.
+        REQUIRE((tube.coprocessor_read(0) & 0x80) == 0);
         // Host sees space available again.
         REQUIRE((tube.host_read(0) & 0x40) != 0);
     }
@@ -927,24 +927,24 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
         uint8_t r2h = tube.host_read(2);
         REQUIRE((r2h & 0x3F) == 0x3F);
 
-        // R2 parasite status: bits 5-0 should be 1.
-        uint8_t r2p = tube.parasite_read(2);
+        // R2 coprocessor status: bits 5-0 should be 1.
+        uint8_t r2p = tube.coprocessor_read(2);
         REQUIRE((r2p & 0x3F) == 0x3F);
 
         // R3 host status: bits 5-0 should be 1.
         uint8_t r3h = tube.host_read(4);
         REQUIRE((r3h & 0x3F) == 0x3F);
 
-        // R3 parasite status: bits 5-0 should be 1 (N is bit 7, not bit 5).
-        uint8_t r3p = tube.parasite_read(4);
+        // R3 coprocessor status: bits 5-0 should be 1 (N is bit 7, not bit 5).
+        uint8_t r3p = tube.coprocessor_read(4);
         REQUIRE((r3p & 0x3F) == 0x3F);
 
         // R4 host status: bits 5-0 should be 1.
         uint8_t r4h = tube.host_read(6);
         REQUIRE((r4h & 0x3F) == 0x3F);
 
-        // R4 parasite status: bits 5-0 should be 1.
-        uint8_t r4p = tube.parasite_read(6);
+        // R4 coprocessor status: bits 5-0 should be 1.
+        uint8_t r4p = tube.coprocessor_read(6);
         REQUIRE((r4p & 0x3F) == 0x3F);
     }
 
@@ -953,36 +953,36 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
         uint8_t r1h = tube.host_read(0);
         REQUIRE((r1h & 0x3F) == 0x00);
 
-        uint8_t r1p = tube.parasite_read(0);
+        uint8_t r1p = tube.coprocessor_read(0);
         REQUIRE((r1p & 0x3F) == 0x00);
     }
 
-    SECTION("Parasite R3 status: N (bit 7) reflects the register 3 action-required condition") {
+    SECTION("Coprocessor R3 status: N (bit 7) reflects the register 3 action-required condition") {
         // Layout is N F3 1 1 1 1 1 1 (Application Note 004). Bit 5 is one
         // of the insignificant bits and reads as 1 regardless of N.
 
         // After reset: H-to-P empty, P-to-H has dummy byte (pending).
         // N = (h2p data) || (p2h space) = false || false = 0.
-        uint8_t stat = tube.parasite_read(4);
+        uint8_t stat = tube.coprocessor_read(4);
         REQUIRE((stat & TubeUla::DATA_AVAILABLE) == 0);
         REQUIRE((stat & 0x3F) == 0x3F);
 
         // Drain dummy byte so P-to-H is empty (space available -> N = 1).
         tube.host_read(5);
-        stat = tube.parasite_read(4);
+        stat = tube.coprocessor_read(4);
         REQUIRE((stat & TubeUla::DATA_AVAILABLE) != 0);
         REQUIRE((stat & 0x3F) == 0x3F);
 
         // Write H-to-P data so h2p also has data (N still 1).
         tube.host_write(5, 0x42);
-        stat = tube.parasite_read(4);
+        stat = tube.coprocessor_read(4);
         REQUIRE((stat & TubeUla::DATA_AVAILABLE) != 0);
 
-        // Parasite writes P-to-H (pending, space gone) and reads H-to-P (pending cleared).
-        tube.parasite_write(5, 0x99);
-        tube.parasite_read(5);  // consume H-to-P
+        // Coprocessor writes P-to-H (pending, space gone) and reads H-to-P (pending cleared).
+        tube.coprocessor_write(5, 0x99);
+        tube.coprocessor_read(5);  // consume H-to-P
         // Now: h2p empty (not pending), p2h pending -> N = false || false = 0.
-        stat = tube.parasite_read(4);
+        stat = tube.coprocessor_read(4);
         REQUIRE((stat & TubeUla::DATA_AVAILABLE) == 0);
         REQUIRE((stat & 0x3F) == 0x3F);
     }
@@ -993,26 +993,26 @@ TEST_CASE("Status register bit layout", "[tube][status]") {
 
         // N should reflect the condition even with M=0 (no NMI enabled).
         // P-to-H is empty -> space available -> N = 1.
-        uint8_t stat = tube.parasite_read(4);
+        uint8_t stat = tube.coprocessor_read(4);
         REQUIRE((stat & TubeUla::DATA_AVAILABLE) != 0);
     }
 
     SECTION("All four register status bytes accessible") {
         // R1 status at offset 0.
         tube.host_read(0);  // should not crash
-        tube.parasite_read(0);
+        tube.coprocessor_read(0);
 
         // R2 status at offset 2.
         tube.host_read(2);
-        tube.parasite_read(2);
+        tube.coprocessor_read(2);
 
         // R3 status at offset 4.
         tube.host_read(4);
-        tube.parasite_read(4);
+        tube.coprocessor_read(4);
 
         // R4 status at offset 6.
         tube.host_read(6);
-        tube.parasite_read(6);
+        tube.coprocessor_read(6);
     }
 }
 
@@ -1025,41 +1025,41 @@ TEST_CASE("R1 FIFO boundary conditions", "[tube][fifo][boundary]") {
 
     SECTION("Fill to exactly 23, verify not-full, add 24th, verify full") {
         for (int i = 0; i < 23; i++)
-            tube.parasite_write(1, static_cast<uint8_t>(i));
+            tube.coprocessor_write(1, static_cast<uint8_t>(i));
 
-        uint8_t stat = tube.parasite_read(0);
+        uint8_t stat = tube.coprocessor_read(0);
         REQUIRE((stat & TubeUla::SPACE_AVAILABLE) != 0);
 
-        tube.parasite_write(1, 23);
-        stat = tube.parasite_read(0);
+        tube.coprocessor_write(1, 23);
+        stat = tube.coprocessor_read(0);
         REQUIRE((stat & TubeUla::SPACE_AVAILABLE) == 0);
     }
 
     SECTION("Read one from full FIFO, verify not-full, write one, verify full again") {
         for (int i = 0; i < 24; i++)
-            tube.parasite_write(1, static_cast<uint8_t>(i));
+            tube.coprocessor_write(1, static_cast<uint8_t>(i));
 
         tube.host_read(1);  // read one off
 
-        uint8_t stat = tube.parasite_read(0);
+        uint8_t stat = tube.coprocessor_read(0);
         REQUIRE((stat & TubeUla::SPACE_AVAILABLE) != 0);
 
-        tube.parasite_write(1, 0xFF);  // write one more
+        tube.coprocessor_write(1, 0xFF);  // write one more
 
-        stat = tube.parasite_read(0);
+        stat = tube.coprocessor_read(0);
         REQUIRE((stat & TubeUla::SPACE_AVAILABLE) == 0);
     }
 
     SECTION("FIFO wraps around correctly") {
         // Fill and drain 20 bytes to advance head/tail pointers.
         for (int i = 0; i < 20; i++)
-            tube.parasite_write(1, static_cast<uint8_t>(i));
+            tube.coprocessor_write(1, static_cast<uint8_t>(i));
         for (int i = 0; i < 20; i++)
             tube.host_read(1);
 
         // Now fill 24 bytes (will wrap around the 24-element buffer).
         for (int i = 0; i < 24; i++)
-            tube.parasite_write(1, static_cast<uint8_t>(100 + i));
+            tube.coprocessor_write(1, static_cast<uint8_t>(100 + i));
         for (int i = 0; i < 24; i++)
             REQUIRE(tube.host_read(1) == static_cast<uint8_t>(100 + i));
     }
@@ -1069,7 +1069,7 @@ TEST_CASE("R1 FIFO boundary conditions", "[tube][fifo][boundary]") {
 // Bus stretching
 //
 // TubeUla::host_write spin-waits on full registers (releasing/reacquiring
-// the mutex) until the parasite thread drains them. Single-threaded tests
+// the mutex) until the coprocessor thread drains them. Single-threaded tests
 // for the old deferred-write pattern have been removed. Threaded bus
 // stretching is exercised by the concurrent R1/R3 transfer tests below.
 //////////////////////////////////////////////////////////////////////////////
@@ -1088,7 +1088,7 @@ TEST_CASE("R2 has no bus stretching", "[tube][stretch][r2]") {
     SECTION("Second host write overwrites without blocking") {
         tube.host_write(3, 0xAA);
         tube.host_write(3, 0xBB);  // overwrites, does not block
-        REQUIRE(tube.parasite_read(3) == 0xBB);
+        REQUIRE(tube.coprocessor_read(3) == 0xBB);
     }
 }
 
@@ -1107,31 +1107,31 @@ TEST_CASE("Register access mirroring", "[tube][addressing]") {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Interleaved host/parasite access
+// Interleaved host/coprocessor access
 //////////////////////////////////////////////////////////////////////////////
 
 TEST_CASE("TubeUla R2 handshake interleaved", "[tube]") {
     TubeUla tube;
     constexpr int num_transfers = 1000;
     int host_received = 0;
-    int parasite_received = 0;
-    int parasite_write_idx = 0;
-    bool parasite_waiting_reply = false;
+    int coprocessor_received = 0;
+    int coprocessor_write_idx = 0;
+    bool coprocessor_waiting_reply = false;
     int host_read_idx = 0;
 
-    for (int tick = 0; tick < 100000 && (host_received < num_transfers || parasite_received < num_transfers); ++tick) {
-        // Parasite side: write a byte to P2H, then wait for H2P reply
-        if (!parasite_waiting_reply && parasite_write_idx < num_transfers) {
-            tube.parasite_write(3, static_cast<uint8_t>(parasite_write_idx & 0xFF));
-            parasite_waiting_reply = true;
+    for (int tick = 0; tick < 100000 && (host_received < num_transfers || coprocessor_received < num_transfers); ++tick) {
+        // Coprocessor side: write a byte to P2H, then wait for H2P reply
+        if (!coprocessor_waiting_reply && coprocessor_write_idx < num_transfers) {
+            tube.coprocessor_write(3, static_cast<uint8_t>(coprocessor_write_idx & 0xFF));
+            coprocessor_waiting_reply = true;
         }
-        if (parasite_waiting_reply) {
-            uint8_t status = tube.parasite_read(2);
+        if (coprocessor_waiting_reply) {
+            uint8_t status = tube.coprocessor_read(2);
             if (status & TubeUla::DATA_AVAILABLE) {
-                tube.parasite_read(3);
-                ++parasite_received;
-                ++parasite_write_idx;
-                parasite_waiting_reply = false;
+                tube.coprocessor_read(3);
+                ++coprocessor_received;
+                ++coprocessor_write_idx;
+                coprocessor_waiting_reply = false;
             }
         }
 
@@ -1147,7 +1147,7 @@ TEST_CASE("TubeUla R2 handshake interleaved", "[tube]") {
         }
     }
     CHECK(host_received == num_transfers);
-    CHECK(parasite_received == num_transfers);
+    CHECK(coprocessor_received == num_transfers);
 }
 
 TEST_CASE("TubeUla R1 FIFO transfer interleaved", "[tube]") {
@@ -1156,14 +1156,14 @@ TEST_CASE("TubeUla R1 FIFO transfer interleaved", "[tube]") {
     std::vector<uint8_t> received;
     received.reserve(num_bytes);
 
-    int parasite_written = 0;
+    int coprocessor_written = 0;
     for (int tick = 0; tick < 1000000 && static_cast<int>(received.size()) < num_bytes; ++tick) {
-        // Parasite writes to R1 P2H FIFO
-        if (parasite_written < num_bytes) {
-            uint8_t status = tube.parasite_read(0);
+        // Coprocessor writes to R1 P2H FIFO
+        if (coprocessor_written < num_bytes) {
+            uint8_t status = tube.coprocessor_read(0);
             if (status & TubeUla::SPACE_AVAILABLE) {
-                tube.parasite_write(1, static_cast<uint8_t>(parasite_written & 0xFF));
-                ++parasite_written;
+                tube.coprocessor_write(1, static_cast<uint8_t>(coprocessor_written & 0xFF));
+                ++coprocessor_written;
             }
         }
         // Host reads from R1 P2H FIFO
@@ -1197,11 +1197,11 @@ TEST_CASE("TubeUla R3 NMI-style transfer interleaved", "[tube]") {
             tube.host_write(5, static_cast<uint8_t>(host_written & 0xFF));
             ++host_written;
         }
-        // Parasite reads from R3 H2P
+        // Coprocessor reads from R3 H2P
         {
-            uint8_t status = tube.parasite_read(4);
+            uint8_t status = tube.coprocessor_read(4);
             if (status & TubeUla::DATA_AVAILABLE) {
-                received.push_back(tube.parasite_read(5));
+                received.push_back(tube.coprocessor_read(5));
             }
         }
     }

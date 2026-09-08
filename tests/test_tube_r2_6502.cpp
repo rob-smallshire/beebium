@@ -14,25 +14,25 @@
 //
 // R2 is a single-byte latch in each direction with no bus stretching and no
 // interrupt support.  Unlike R1/R3/R4, host_write to R2 does NOT spin until
-// the parasite consumes the previous byte -- it unconditionally overwrites
+// the coprocessor consumes the previous byte -- it unconditionally overwrites
 // the latch.  The host must therefore poll R2 status (or spin on the shared
 // ready flag) to avoid data loss.
 //
-// Host-to-Parasite: host waits for r2_h2p.ready == 0 (parasite consumed
-// previous byte), then writes R2 data (offset 3).  Parasite polls R2 status
+// Host-to-Coprocessor: host waits for r2_h2p.ready == 0 (coprocessor consumed
+// previous byte), then writes R2 data (offset 3).  Coprocessor polls R2 status
 // ($FEFA) bit 7 then reads R2 data ($FEFB).
 //
-// Parasite-to-Host: parasite polls R2 status ($FEFA) bit 6 then writes R2
-// data ($FEFB).  Host waits for r2_p2h.ready != 0 (parasite has written),
+// Coprocessor-to-Host: coprocessor polls R2 status ($FEFA) bit 6 then writes R2
+// data ($FEFB).  Host waits for r2_p2h.ready != 0 (coprocessor has written),
 // then reads R2 data (offset 3).
 //
-// Host-side operations are interleaved with parasite CPU ticks in a single
+// Host-side operations are interleaved with coprocessor CPU ticks in a single
 // thread, checking Tube status flags each iteration to decide when to act.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteCpu.hpp>
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -47,7 +47,7 @@ static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr) {
     return rom;
 }
 
-static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
+static void plant(CoprocessorMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
     for (auto byte : code) {
         mem.ram(addr++) = byte;
     }
@@ -57,7 +57,7 @@ static constexpr uint16_t CODE_ADDR = 0x0400;
 static constexpr uint16_t RESULT_ADDR = 0x0500;
 
 // ============================================================================
-// 6502 R2 polled read program (Host-to-Parasite)
+// 6502 R2 polled read program (Host-to-Coprocessor)
 // ============================================================================
 //
 // $0400: LDX #$00
@@ -70,7 +70,7 @@ static constexpr uint16_t RESULT_ADDR = 0x0500;
 // $0410: BNE $0402        ; loop
 // $0412: BRA *            ; halt
 
-static void plant_r2_reader(ParasiteMemoryMap& mem, uint8_t num_bytes) {
+static void plant_r2_reader(CoprocessorMemoryMap& mem, uint8_t num_bytes) {
     plant(mem, CODE_ADDR, {
         0xA2, 0x00,                         // LDX #$00
         0x2C, 0xFA, 0xFE,                   // BIT $FEFA     (poll R2 status)
@@ -85,7 +85,7 @@ static void plant_r2_reader(ParasiteMemoryMap& mem, uint8_t num_bytes) {
 }
 
 // ============================================================================
-// 6502 R2 polled write program (Parasite-to-Host)
+// 6502 R2 polled write program (Coprocessor-to-Host)
 // ============================================================================
 //
 // $0400: LDX #$00
@@ -98,7 +98,7 @@ static void plant_r2_reader(ParasiteMemoryMap& mem, uint8_t num_bytes) {
 // $0410: BNE $0402        ; loop
 // $0412: BRA *            ; halt
 
-static void plant_r2_writer(ParasiteMemoryMap& mem, uint8_t num_bytes) {
+static void plant_r2_writer(CoprocessorMemoryMap& mem, uint8_t num_bytes) {
     plant(mem, CODE_ADDR, {
         0xA2, 0x00,                         // LDX #$00
         0x2C, 0xFA, 0xFE,                   // BIT $FEFA     (poll R2 status)
@@ -134,7 +134,7 @@ static void plant_r2_writer(ParasiteMemoryMap& mem, uint8_t num_bytes) {
 
 static constexpr uint16_t CMD_RSP_HALT = 0x0419;
 
-static void plant_r2_cmd_rsp(ParasiteMemoryMap& mem, uint8_t num_commands) {
+static void plant_r2_cmd_rsp(CoprocessorMemoryMap& mem, uint8_t num_commands) {
     plant(mem, CODE_ADDR, {
         0xA2, 0x00,                         // LDX #$00
         0x2C, 0xFA, 0xFE,                   // BIT $FEFA     (poll R2 status)
@@ -151,7 +151,7 @@ static void plant_r2_cmd_rsp(ParasiteMemoryMap& mem, uint8_t num_commands) {
     });
 }
 
-static void setup_cpu(ParasiteMemoryMap& mem, ParasiteCpu& cpu) {
+static void setup_cpu(CoprocessorMemoryMap& mem, CoprocessorCpu& cpu) {
     mem.read(0xFEF8);  // disable boot ROM
     mem.ram(0xFFFC) = CODE_ADDR & 0xFF;
     mem.ram(0xFFFD) = (CODE_ADDR >> 8) & 0xFF;
@@ -159,15 +159,15 @@ static void setup_cpu(ParasiteMemoryMap& mem, ParasiteCpu& cpu) {
 }
 
 // ============================================================================
-// Host-to-Parasite tests
+// Host-to-Coprocessor tests
 // ============================================================================
 
 TEST_CASE("6502 R2 H2P: single byte", "[tube][6502][r2]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r2_reader(memory, 1);
     setup_cpu(memory, cpu);
@@ -186,14 +186,14 @@ TEST_CASE("6502 R2 H2P: 200 bytes interleaved", "[tube][6502][r2]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r2_reader(memory, NUM_BYTES);
     setup_cpu(memory, cpu);
 
-    // R2 has no bus stretching -- the host must wait for the parasite to
+    // R2 has no bus stretching -- the host must wait for the coprocessor to
     // consume each byte before writing the next, otherwise it overwrites
     // the latch and data is lost.
     int host_written = 0;
@@ -221,8 +221,8 @@ TEST_CASE("6502 R2 H2P: 200 bytes, repeated 50 times", "[tube][6502][r2]") {
         TubeUla tube;
 
         auto rom = make_stub_rom(CODE_ADDR);
-        ParasiteMemoryMap memory(tube, rom);
-        ParasiteCpu cpu(memory, tube);
+        CoprocessorMemoryMap memory(tube, rom);
+        CoprocessorCpu cpu(memory, tube);
 
         plant_r2_reader(memory, NUM_BYTES);
         setup_cpu(memory, cpu);
@@ -252,21 +252,21 @@ TEST_CASE("6502 R2 H2P: 200 bytes, repeated 50 times", "[tube][6502][r2]") {
 }
 
 // ============================================================================
-// Parasite-to-Host tests
+// Coprocessor-to-Host tests
 // ============================================================================
 
 TEST_CASE("6502 R2 P2H: single byte", "[tube][6502][r2]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r2_writer(memory, 1);
     memory.ram(RESULT_ADDR) = 0x42;  // source data
     setup_cpu(memory, cpu);
 
-    // Run parasite until it halts (has written the byte)
+    // Run coprocessor until it halts (has written the byte)
     for (int i = 0; i < 100000 && cpu.cpu().opcode_pc.w != 0x0412; ++i) {
         cpu.tick();
     }
@@ -279,8 +279,8 @@ TEST_CASE("6502 R2 P2H: 200 bytes interleaved", "[tube][6502][r2]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r2_writer(memory, NUM_BYTES);
@@ -320,8 +320,8 @@ TEST_CASE("6502 R2 P2H: 200 bytes, repeated 50 times", "[tube][6502][r2]") {
         TubeUla tube;
 
         auto rom = make_stub_rom(CODE_ADDR);
-        ParasiteMemoryMap memory(tube, rom);
-        ParasiteCpu cpu(memory, tube);
+        CoprocessorMemoryMap memory(tube, rom);
+        CoprocessorCpu cpu(memory, tube);
 
         plant_r2_writer(memory, NUM_BYTES);
         uint8_t base = static_cast<uint8_t>(iter * 11);
@@ -362,8 +362,8 @@ TEST_CASE("6502 R2 command/response: single round-trip", "[tube][6502][r2]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r2_cmd_rsp(memory, 1);
     setup_cpu(memory, cpu);
@@ -371,7 +371,7 @@ TEST_CASE("6502 R2 command/response: single round-trip", "[tube][6502][r2]") {
     // Host sends command
     tube.host_write(3, 0x42);
 
-    // Run parasite until it halts
+    // Run coprocessor until it halts
     for (int i = 0; i < 100000 && cpu.cpu().opcode_pc.w != CMD_RSP_HALT; ++i) {
         cpu.tick();
     }
@@ -384,8 +384,8 @@ TEST_CASE("6502 R2 command/response: 200 round-trips interleaved", "[tube][6502]
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_CMDS = 200;
     plant_r2_cmd_rsp(memory, NUM_CMDS);
@@ -430,8 +430,8 @@ TEST_CASE("6502 R2 command/response: 200 round-trips, repeated 50 times", "[tube
         TubeUla tube;
 
         auto rom = make_stub_rom(CODE_ADDR);
-        ParasiteMemoryMap memory(tube, rom);
-        ParasiteCpu cpu(memory, tube);
+        CoprocessorMemoryMap memory(tube, rom);
+        CoprocessorCpu cpu(memory, tube);
 
         plant_r2_cmd_rsp(memory, NUM_CMDS);
         setup_cpu(memory, cpu);

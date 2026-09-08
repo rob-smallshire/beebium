@@ -10,10 +10,10 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Tests for the parasite execution runner.
+// Tests for the coprocessor execution runner.
 //
-// ParasiteRunner owns the parasite emulation engine: CPU, memory map,
-// Tube port, and execution loop. It is the parasite's analogue of
+// CoprocessorRunner owns the coprocessor emulation engine: CPU, memory map,
+// Tube port, and execution loop. It is the coprocessor's analogue of
 // Machine<Hardware> on the host side.
 //
 // These tests verify:
@@ -24,7 +24,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -56,21 +56,21 @@ static std::array<uint8_t, 2048> make_nop_rom(uint16_t entry = 0xF800) {
 // Construction and initial state
 // ===========================================================================
 
-TEST_CASE("ParasiteRunner construction with ROM", "[parasite][runner]") {
+TEST_CASE("CoprocessorRunner construction with ROM", "[coprocessor][runner]") {
     TubeUla tube;
     auto rom = make_nop_rom();
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
 
     CHECK(runner.cycle_count() == 0);
     CHECK(runner.memory_map().boot_mode());
 }
 
-TEST_CASE("ParasiteRunner reset initialises CPU at reset vector", "[parasite][runner]") {
+TEST_CASE("CoprocessorRunner reset initialises CPU at reset vector", "[coprocessor][runner]") {
     TubeUla tube;
     auto rom = make_nop_rom(0xF850);
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     // Execute reset sequence (7 cycles)
@@ -83,22 +83,22 @@ TEST_CASE("ParasiteRunner reset initialises CPU at reset vector", "[parasite][ru
 // Execution
 // ===========================================================================
 
-TEST_CASE("ParasiteRunner run executes cycles", "[parasite][runner][execution]") {
+TEST_CASE("CoprocessorRunner run executes cycles", "[coprocessor][runner][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     runner.run(100);
     CHECK(runner.cycle_count() == 100);
 }
 
-TEST_CASE("ParasiteRunner step_instruction returns cycle count", "[parasite][runner][execution]") {
+TEST_CASE("CoprocessorRunner step_instruction returns cycle count", "[coprocessor][runner][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     uint64_t reset_cycles = runner.step_instruction();
@@ -112,11 +112,11 @@ TEST_CASE("ParasiteRunner step_instruction returns cycle count", "[parasite][run
 // Pause/resume (debugger support)
 // ===========================================================================
 
-TEST_CASE("ParasiteRunner pause stops execution", "[parasite][runner][debug]") {
+TEST_CASE("CoprocessorRunner pause stops execution", "[coprocessor][runner][debug]") {
     TubeUla tube;
     auto rom = make_nop_rom();
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     runner.pause();
@@ -138,11 +138,11 @@ TEST_CASE("ParasiteRunner pause stops execution", "[parasite][runner][debug]") {
 // Component access
 // ===========================================================================
 
-TEST_CASE("ParasiteRunner provides access to components", "[parasite][runner]") {
+TEST_CASE("CoprocessorRunner provides access to components", "[coprocessor][runner]") {
     TubeUla tube;
     auto rom = make_nop_rom();
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
 
     // CPU access
     CHECK(runner.cpu().config == &M6502_rockwell65c02_config);
@@ -154,7 +154,7 @@ TEST_CASE("ParasiteRunner provides access to components", "[parasite][runner]") 
     CHECK_FALSE(runner.tube_port().pirq());
 
     // Const access
-    const ParasiteRunner& crunner = runner;
+    const CoprocessorRunner& crunner = runner;
     CHECK(crunner.cycle_count() == 0);
     CHECK(crunner.cpu().config == &M6502_rockwell65c02_config);
 }
@@ -163,10 +163,10 @@ TEST_CASE("ParasiteRunner provides access to components", "[parasite][runner]") 
 // Coprocessor contract: host-time driving via run_until()
 // ===========================================================================
 
-TEST_CASE("ParasiteRunner run_until matches the old 3:2 accumulator per-call sequence",
-          "[parasite][runner][coprocessor]") {
+TEST_CASE("CoprocessorRunner run_until matches the old 3:2 accumulator per-call sequence",
+          "[coprocessor][runner][coprocessor]") {
     // Equivalence oracle. The removed TubeSocket accumulator advanced a phase
-    // by the numerator on each per-host-cycle call and ran a parasite tick each
+    // by the numerator on each per-host-cycle call and ran a coprocessor tick each
     // time the phase reached the denominator. Encode that algorithm inline and
     // require run_until(t) for t = 1..N to run exactly the same cycles per call.
     //
@@ -177,7 +177,7 @@ TEST_CASE("ParasiteRunner run_until matches the old 3:2 accumulator per-call seq
     // each step() is exactly one tick.
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+    CoprocessorRunner runner(tube, rom, ClockRatio{3, 2});
     runner.run_until(0);   // establish the origin at host time 0
 
     const uint64_t N = 32;
@@ -212,11 +212,11 @@ TEST_CASE("ParasiteRunner run_until matches the old 3:2 accumulator per-call seq
     CHECK(total == N * num / den);
 }
 
-TEST_CASE("ParasiteRunner run_until while paused advances time but runs no cycles, no catch-up",
-          "[parasite][runner][coprocessor][debug]") {
+TEST_CASE("CoprocessorRunner run_until while paused advances time but runs no cycles, no catch-up",
+          "[coprocessor][runner][coprocessor][debug]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+    CoprocessorRunner runner(tube, rom, ClockRatio{3, 2});
     runner.reset();
 
     runner.run_until(0);   // establish origin at host time 0
@@ -238,11 +238,11 @@ TEST_CASE("ParasiteRunner run_until while paused advances time but runs no cycle
     CHECK(runner.cycle_count() - base == 1);
 }
 
-TEST_CASE("ParasiteRunner reset rebases the clock: a smaller host time is accepted",
-          "[parasite][runner][coprocessor]") {
+TEST_CASE("CoprocessorRunner reset rebases the clock: a smaller host time is accepted",
+          "[coprocessor][runner][coprocessor]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+    CoprocessorRunner runner(tube, rom, ClockRatio{3, 2});
     runner.reset();
 
     // Run well into a session.
@@ -260,7 +260,7 @@ TEST_CASE("ParasiteRunner reset rebases the clock: a smaller host time is accept
     CHECK(runner.cycle_count() == base);
 
     // Subsequent calls run from the new origin: [5, 7] is two host cycles,
-    // floor(2 * 3 / 2) = 3 parasite cycles.
+    // floor(2 * 3 / 2) = 3 coprocessor cycles.
     runner.run_until(7);
     CHECK(runner.cycle_count() - base == 3);
 }

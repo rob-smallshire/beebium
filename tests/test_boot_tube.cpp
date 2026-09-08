@@ -14,32 +14,32 @@
 //
 // Integration test for BBC Model B boot with a 65C02 second processor.
 //
-// This is the full-stack integration test: a host Model B and a parasite
+// This is the full-stack integration test: a host Model B and a coprocessor
 // 65C02 share a TubeUla, both run their real boot ROMs, and the test
-// verifies that the parasite's banner ("Acorn TUBE 6502 64K") appears
+// verifies that the coprocessor's banner ("Acorn TUBE 6502 64K") appears
 // on the host's MODE 7 screen.
 //
 // The boot sequence:
 //   1. Host resets, MOS starts initialisation
-//   2. Parasite boots from its 2 KB client ROM, fills R1 P-to-H FIFO
+//   2. Coprocessor boots from its 2 KB client ROM, fills R1 P-to-H FIFO
 //      with the banner string (24 bytes)
 //   3. Host MOS writes &81 to &FEE0 (set Q), reads back, detects Tube ULA
 //   4. Host MOS issues service call &FF -- DNFS ROM handles this and
 //      sets the Tube presence flag at &027A
 //   5. Host MOS reads the banner from R1 and prints it on screen
-//   6. Host MOS attempts language transfer via R2/R4 (parasite responds)
+//   6. Host MOS attempts language transfer via R2/R4 (coprocessor responds)
 //
 // The DNFS ROM is required because MOS issues service call &FF after
 // detecting Tube hardware. Without a ROM that claims this call, the
 // Tube presence flag is never set, and MOS ignores the Tube.
 //
-// The parasite is installed on the TubeSocket and ticked automatically
-// by Machine::step() at a 3:2 clock ratio (3 MHz parasite / 2 MHz host).
+// The coprocessor is installed on the TubeSocket and ticked automatically
+// by Machine::step() at a 3:2 clock ratio (3 MHz coprocessor / 2 MHz host).
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <beebium/Machines.hpp>
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -127,7 +127,7 @@ void setup_tube_machine(ModelB& machine) {
 }  // namespace
 
 // =============================================================================
-// The coup de theatre: full host + parasite boot
+// The coup de theatre: full host + coprocessor boot
 // =============================================================================
 
 TEST_CASE("Model B with 65C02 second processor boots with Tube banner",
@@ -146,17 +146,17 @@ TEST_CASE("Model B with 65C02 second processor boots with Tube banner",
     // Reset the host
     machine.reset();
 
-    // --- Parasite setup ---
+    // --- Coprocessor setup ---
     auto tube_rom = load_tube_rom();
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
-    ParasiteRunner parasite(*tube, tube_rom);
-    parasite.reset();
+    CoprocessorRunner coprocessor(*tube, tube_rom);
+    coprocessor.reset();
 
     // Install the coprocessor to be driven in host time from Machine::step().
-    // The 3:2 clock ratio (1.5 parasite cycles per host cycle) lives with the
+    // The 3:2 clock ratio (1.5 coprocessor cycles per host cycle) lives with the
     // runner, not the socket.
-    machine.state().memory.tube_socket.install_coprocessor(&parasite);
+    machine.state().memory.tube_socket.install_coprocessor(&coprocessor);
 
     // --- Boot ---
     // Machine::step() now runs the coprocessor automatically via TubeSocket.
@@ -191,14 +191,14 @@ TEST_CASE("Model B with 65C102 4 MHz second processor boots and runs at 2x host"
     auto tube_rom = load_tube_65c102_rom();
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
-    ParasiteRunner parasite(*tube, tube_rom, ClockRatio{2, 1});
-    parasite.reset();
-    machine.state().memory.tube_socket.install_coprocessor(&parasite);
+    CoprocessorRunner coprocessor(*tube, tube_rom, ClockRatio{2, 1});
+    coprocessor.reset();
+    machine.state().memory.tube_socket.install_coprocessor(&coprocessor);
 
     // Capture the cycle origins right before running: the coprocessor's clock
     // origin is the host cycle at the first step after install.
     const uint64_t host_before = machine.state().cycle_count;
-    const uint64_t parasite_before = parasite.cycle_count();
+    const uint64_t coprocessor_before = coprocessor.cycle_count();
 
     machine.run(30'000'000);
 
@@ -215,11 +215,11 @@ TEST_CASE("Model B with 65C102 4 MHz second processor boots and runs at 2x host"
     // the counters line up at the same host time.
     machine.state().memory.tube_socket.run_coprocessor_until(machine.state().cycle_count);
 
-    // The parasite ran exactly twice the host's cycles over the boot -- the 2/1
+    // The coprocessor ran exactly twice the host's cycles over the boot -- the 2/1
     // ratio, measured by the cycle counters, not wall time.
     const uint64_t host_cycles = machine.state().cycle_count - host_before;
-    const uint64_t parasite_cycles = parasite.cycle_count() - parasite_before;
-    CHECK(parasite_cycles == 2 * host_cycles);
+    const uint64_t coprocessor_cycles = coprocessor.cycle_count() - coprocessor_before;
+    CHECK(coprocessor_cycles == 2 * host_cycles);
 }
 
 TEST_CASE("Model B with Tube shows 64K memory (not 32K)",
@@ -237,16 +237,16 @@ TEST_CASE("Model B with Tube shows 64K memory (not 32K)",
     auto tube_rom = load_tube_rom();
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
-    ParasiteRunner parasite(*tube, tube_rom);
-    parasite.reset();
+    CoprocessorRunner coprocessor(*tube, tube_rom);
+    coprocessor.reset();
 
-    machine.state().memory.tube_socket.install_coprocessor(&parasite);
+    machine.state().memory.tube_socket.install_coprocessor(&coprocessor);
 
     machine.run(30'000'000);
 
     INFO("Screen:\n" << dump_screen(machine));
 
-    // The banner includes "64K" (the parasite's memory size)
+    // The banner includes "64K" (the coprocessor's memory size)
     CHECK(screen_contains(machine, "64K"));
 }
 

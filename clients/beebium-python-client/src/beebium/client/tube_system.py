@@ -10,9 +10,9 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Tube system abstraction for host-parasite debugging.
+"""Tube system abstraction for host-coprocessor debugging.
 
-Manages both host and parasite as a single unit for coordinated
+Manages both host and coprocessor as a single unit for coordinated
 execution control, breakpointing, and predicate-based stopping.
 """
 
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 class TubeSystem:
-    """Manages a host and parasite as a single unit.
+    """Manages a host and coprocessor as a single unit.
 
     Both processors are run and stopped together. Predicates for
     ``run_until_or_timeout`` are evaluated periodically via peek
@@ -35,7 +35,7 @@ class TubeSystem:
 
     Usage::
 
-        system = TubeSystem(host, parasite)
+        system = TubeSystem(host, coprocessor)
         system.run()
         # ...
         system.stop()
@@ -45,46 +45,46 @@ class TubeSystem:
         system = TubeSystem.from_host(bbc)
     """
 
-    def __init__(self, host: Beebium, parasite: Beebium):
-        """Create a Tube system from existing host and parasite clients.
+    def __init__(self, host: Beebium, coprocessor: Beebium):
+        """Create a Tube system from existing host and coprocessor clients.
 
         Args:
             host: The host BBC Micro client.
-            parasite: The parasite (second processor) client.
+            coprocessor: The coprocessor (second processor) client.
         """
         self._host = host
-        self._parasite = parasite
+        self._coprocessor = coprocessor
 
     @classmethod
     def from_host(cls, host: Beebium) -> TubeSystem:
         """Create a Tube system from the host.
 
-        The parasite client shares the same gRPC connection as the host,
-        routing debugger calls to the ParasiteDebuggerControl service.
+        The coprocessor client shares the same gRPC connection as the host,
+        routing debugger calls to the CoprocessorDebuggerControl service.
 
         Args:
             host: The host BBC Micro client.
         """
-        parasite = host.connect_parasite()
-        return cls(host, parasite)
+        coprocessor = host.connect_coprocessor()
+        return cls(host, coprocessor)
 
     @property
     def host(self) -> Beebium:
         return self._host
 
     @property
-    def parasite(self) -> Beebium:
-        return self._parasite
+    def coprocessor(self) -> Beebium:
+        return self._coprocessor
 
     def run(self) -> None:
         """Run both processors."""
         self._host.debugger.ensure_running()
-        self._parasite.debugger.ensure_running()
+        self._coprocessor.debugger.ensure_running()
 
     def stop(self) -> None:
         """Stop both processors."""
         self._host.debugger.ensure_stopped()
-        self._parasite.debugger.ensure_stopped()
+        self._coprocessor.debugger.ensure_stopped()
 
     def run_until_or_timeout(
         self,
@@ -133,7 +133,7 @@ class TubeSystem:
                 ):
                     self.run()
                     self._host.debugger.wait_for_stop()
-                    self._parasite.debugger.ensure_stopped()
+                    self._coprocessor.debugger.ensure_stopped()
 
                 if predicate():
                     return True
@@ -146,7 +146,7 @@ class TubeSystem:
         """Run both processors for the given emulated time.
 
         Uses a full-range breakpoint with a cycle condition on the host,
-        with stop_counterpart to stop the parasite too. No polling.
+        with stop_counterpart to stop the coprocessor too. No polling.
 
         Args:
             emulated_seconds: BBC-time seconds to run.
@@ -175,7 +175,7 @@ class TubeSystem:
     def close(self) -> None:
         """Close the Tube system, stopping both processors.
 
-        The host is not closed (the caller owns it). The parasite
+        The host is not closed (the caller owns it). The coprocessor
         shares the host's connection and does not need separate cleanup.
         """
         self.stop()

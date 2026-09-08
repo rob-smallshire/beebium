@@ -5,7 +5,7 @@
 import { ChannelCredentials } from "@grpc/grpc-js";
 import { ConnectionError, TimeoutError } from "./exceptions.js";
 
-import { DebuggerControlClient, ParasiteDebuggerControlClient } from "./generated/debugger.js";
+import { DebuggerControlClient, CoprocessorDebuggerControlClient } from "./generated/debugger.js";
 import { DeviceInspectionClient } from "./generated/debugger.js";
 import { SystemServiceClient } from "./generated/system.js";
 import { KeyboardServiceClient } from "./generated/keyboard.js";
@@ -20,7 +20,7 @@ import { ExtensionUiServiceClient } from "./generated/extension_ui.js";
 import { IndicatorServiceClient } from "./generated/indicator.js";
 
 import type { DebuggerControlClient as DebuggerControlClientType } from "./generated/debugger.js";
-import type { ParasiteDebuggerControlClient as ParasiteDebuggerControlClientType } from "./generated/debugger.js";
+import type { CoprocessorDebuggerControlClient as CoprocessorDebuggerControlClientType } from "./generated/debugger.js";
 import type { DeviceInspectionClient as DeviceInspectionClientType } from "./generated/debugger.js";
 import type { SystemServiceClient as SystemServiceClientType } from "./generated/system.js";
 import type { KeyboardServiceClient as KeyboardServiceClientType } from "./generated/keyboard.js";
@@ -46,7 +46,7 @@ export class Connection {
     private _closed = false;
 
     private _debuggerStub: DebuggerControlClientType | null = null;
-    private _parasiteDebuggerStub: ParasiteDebuggerControlClientType | null = null;
+    private _coprocessorDebuggerStub: CoprocessorDebuggerControlClientType | null = null;
     private _deviceInspectionStub: DeviceInspectionClientType | null = null;
     private _systemStub: SystemServiceClientType | null = null;
     private _keyboardStub: KeyboardServiceClientType | null = null;
@@ -94,15 +94,15 @@ export class Connection {
         return this._debuggerStub;
     }
 
-    get parasiteDebuggerStub(): ParasiteDebuggerControlClientType {
+    get coprocessorDebuggerStub(): CoprocessorDebuggerControlClientType {
         this.ensureOpen();
-        if (!this._parasiteDebuggerStub) {
-            this._parasiteDebuggerStub = new ParasiteDebuggerControlClient(
+        if (!this._coprocessorDebuggerStub) {
+            this._coprocessorDebuggerStub = new CoprocessorDebuggerControlClient(
                 this._target,
                 this.credentials,
             );
         }
-        return this._parasiteDebuggerStub;
+        return this._coprocessorDebuggerStub;
     }
 
     get deviceInspectionStub(): DeviceInspectionClientType {
@@ -285,7 +285,7 @@ export class Connection {
 
         const stubs = [
             this._debuggerStub,
-            this._parasiteDebuggerStub,
+            this._coprocessorDebuggerStub,
             this._deviceInspectionStub,
             this._systemStub,
             this._keyboardStub,
@@ -306,7 +306,7 @@ export class Connection {
         }
 
         this._debuggerStub = null;
-        this._parasiteDebuggerStub = null;
+        this._coprocessorDebuggerStub = null;
         this._deviceInspectionStub = null;
         this._systemStub = null;
         this._keyboardStub = null;

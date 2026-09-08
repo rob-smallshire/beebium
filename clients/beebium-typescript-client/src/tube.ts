@@ -13,22 +13,22 @@ import { promisify } from "./call-utils.js";
 export interface TubeStatus {
     hasTubeSocket: boolean;
     enabled: boolean;
-    parasiteConnected: boolean;
-    parasiteType: string;
-    parasiteClockHz: number;
+    coprocessorConnected: boolean;
+    coprocessorType: string;
+    coprocessorClockHz: number;
     sharedMemoryName: string;
-    parasiteGrpcAddress: string;
+    coprocessorGrpcAddress: string;
 }
 
 function toTubeStatus(proto: ProtoGetTubeStatusResponse): TubeStatus {
     return {
         hasTubeSocket: proto.hasTubeSocket,
         enabled: proto.enabled,
-        parasiteConnected: proto.parasiteConnected,
-        parasiteType: proto.parasiteType,
-        parasiteClockHz: proto.parasiteClockHz,
+        coprocessorConnected: proto.coprocessorConnected,
+        coprocessorType: proto.coprocessorType,
+        coprocessorClockHz: proto.coprocessorClockHz,
         sharedMemoryName: proto.sharedMemoryName,
-        parasiteGrpcAddress: proto.parasiteGrpcAddress,
+        coprocessorGrpcAddress: proto.coprocessorGrpcAddress,
     };
 }
 
@@ -59,13 +59,13 @@ export class Tube {
         return (await this.getStatus()).enabled;
     }
 
-    /** Whether a parasite process is connected. */
-    async isParasiteConnected(): Promise<boolean> {
-        return (await this.getStatus()).parasiteConnected;
+    /** Whether a coprocessor process is connected. */
+    async isCoprocessorConnected(): Promise<boolean> {
+        return (await this.getStatus()).coprocessorConnected;
     }
 
-    /** Get the parasite's gRPC address (empty if not registered). */
-    async getParasiteGrpcAddress(): Promise<string> {
-        return (await this.getStatus()).parasiteGrpcAddress;
+    /** Get the coprocessor's gRPC address (empty if not registered). */
+    async getCoprocessorGrpcAddress(): Promise<string> {
+        return (await this.getStatus()).coprocessorGrpcAddress;
     }
 }

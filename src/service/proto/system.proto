@@ -310,7 +310,7 @@ message SetSpeedMultiplierResponse {
 }
 
 // Pacing statistics snapshot.
-// Available from both host and parasite SystemService instances.
+// Available from both host and coprocessor SystemService instances.
 message PacingStats {
     // Emulation timing
     uint64 ticks_executed = 1;         // Total ticks executed since start

@@ -1047,31 +1047,31 @@ add_executable(test_tube_socket test_tube_socket.cpp)
 target_link_libraries(test_tube_socket PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_tube_socket)
 
-# Parasite memory map tests (6502 second processor)
-add_executable(test_parasite_memory_map test_parasite_memory_map.cpp)
-target_link_libraries(test_parasite_memory_map PRIVATE beebium_core Catch2::Catch2WithMain)
-catch_discover_tests(test_parasite_memory_map)
+# Coprocessor memory map tests (6502 second processor)
+add_executable(test_coprocessor_memory_map test_coprocessor_memory_map.cpp)
+target_link_libraries(test_coprocessor_memory_map PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_coprocessor_memory_map)
 
-# Parasite CPU tests
-add_executable(test_parasite_cpu test_parasite_cpu.cpp)
-target_link_libraries(test_parasite_cpu PRIVATE beebium_core Catch2::Catch2WithMain)
-catch_discover_tests(test_parasite_cpu)
+# Coprocessor CPU tests
+add_executable(test_coprocessor_cpu test_coprocessor_cpu.cpp)
+target_link_libraries(test_coprocessor_cpu PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_coprocessor_cpu)
 
-# Parasite runner tests
-add_executable(test_parasite_runner test_parasite_runner.cpp)
-target_link_libraries(test_parasite_runner PRIVATE beebium_core Catch2::Catch2WithMain)
-catch_discover_tests(test_parasite_runner)
+# Coprocessor runner tests
+add_executable(test_coprocessor_runner test_coprocessor_runner.cpp)
+target_link_libraries(test_coprocessor_runner PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_coprocessor_runner)
 
-# Parasite boot integration tests (real ROM)
-add_executable(test_parasite_boot test_parasite_boot.cpp)
-target_link_libraries(test_parasite_boot PRIVATE beebium_core Catch2::Catch2WithMain)
-target_compile_definitions(test_parasite_boot PRIVATE
+# Coprocessor boot integration tests (real ROM)
+add_executable(test_coprocessor_boot test_coprocessor_boot.cpp)
+target_link_libraries(test_coprocessor_boot PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_coprocessor_boot PRIVATE
     BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
     BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
 )
-catch_discover_tests(test_parasite_boot)
+catch_discover_tests(test_coprocessor_boot)
 
-# Tube in-process tests (ParasiteRunner backed by TubeUla, no shared memory)
+# Tube in-process tests (CoprocessorRunner backed by TubeUla, no shared memory)
 add_executable(test_tube_inprocess test_tube_inprocess.cpp)
 target_link_libraries(test_tube_inprocess PRIVATE beebium_core Catch2::Catch2WithMain)
 target_compile_definitions(test_tube_inprocess PRIVATE
@@ -1155,7 +1155,7 @@ target_link_libraries(test_host_serial_ui PRIVATE
 )
 catch_discover_tests(test_host_serial_ui)
 
-# Tube boot screen integration tests (host + parasite, real ROMs)
+# Tube boot screen integration tests (host + coprocessor, real ROMs)
 add_executable(test_boot_tube test_boot_tube.cpp)
 target_link_libraries(test_boot_tube PRIVATE beebium_core Catch2::Catch2WithMain)
 target_compile_definitions(test_boot_tube PRIVATE
@@ -1291,12 +1291,12 @@ if(BEEBIUM_BUILD_SERVICE)
     catch_discover_tests(test_tube_inspection)
 
     # Debugger driven through the abstract CpuDebugTarget interface
-    add_executable(test_parasite_debug_target test_parasite_debug_target.cpp)
-    target_link_libraries(test_parasite_debug_target PRIVATE
+    add_executable(test_coprocessor_debug_target test_coprocessor_debug_target.cpp)
+    target_link_libraries(test_coprocessor_debug_target PRIVATE
         beebium_service
         Catch2::Catch2WithMain
     )
-    catch_discover_tests(test_parasite_debug_target)
+    catch_discover_tests(test_coprocessor_debug_target)
 
     # A made-up CPU family is fully served through the family-agnostic interface
     add_executable(test_stub_cpu_family test_stub_cpu_family.cpp)

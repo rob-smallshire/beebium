@@ -13,19 +13,19 @@
 // R1 transfer tests using the real 65C02 CPU.
 //
 // A small 6502 program polls R1 status and reads R1 data bytes,
-// storing them into a results buffer in parasite RAM. The host
-// writes bytes through TubeUla, interleaved with parasite CPU ticks
+// storing them into a results buffer in coprocessor RAM. The host
+// writes bytes through TubeUla, interleaved with coprocessor CPU ticks
 // on a single thread. After the transfer, the results buffer is
 // compared byte-by-byte.
 //
-// This exercises the full path: ParasiteCpu::tick() -> memory_.read()
-// -> TubeUla::parasite_read(), including the per-tick pirq()/pnmi_level()
+// This exercises the full path: CoprocessorCpu::tick() -> memory_.read()
+// -> TubeUla::coprocessor_read(), including the per-tick pirq()/pnmi_level()
 // calls.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteCpu.hpp>
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -44,8 +44,8 @@ static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr) {
     return rom;
 }
 
-// Plant machine code into parasite RAM.
-static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
+// Plant machine code into coprocessor RAM.
+static void plant(CoprocessorMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
     for (auto byte : code) {
         mem.ram(addr++) = byte;
     }
@@ -73,7 +73,7 @@ static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<u
 static constexpr uint16_t CODE_ADDR = 0x0400;
 static constexpr uint16_t RESULT_ADDR = 0x0500;
 
-static void plant_r1_reader(ParasiteMemoryMap& mem, uint8_t num_bytes) {
+static void plant_r1_reader(CoprocessorMemoryMap& mem, uint8_t num_bytes) {
     plant(mem, CODE_ADDR, {
         0xA2, 0x00,                         // LDX #$00
         0x2C, 0xF8, 0xFE,                   // BIT $FEF8     (poll R1 status)
@@ -95,8 +95,8 @@ TEST_CASE("6502 R1 polled read: single byte", "[tube][6502][r1]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r1_reader(memory, 1);
 
@@ -125,8 +125,8 @@ TEST_CASE("6502 R1 polled read: 200 bytes interleaved", "[tube][6502][r1]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r1_reader(memory, NUM_BYTES);
@@ -161,8 +161,8 @@ TEST_CASE("6502 R1 polled read: 200 bytes, repeated 50 times", "[tube][6502][r1]
         TubeUla tube;
 
         auto rom = make_stub_rom(CODE_ADDR);
-        ParasiteMemoryMap memory(tube, rom);
-        ParasiteCpu cpu(memory, tube);
+        CoprocessorMemoryMap memory(tube, rom);
+        CoprocessorCpu cpu(memory, tube);
 
         plant_r1_reader(memory, NUM_BYTES);
         memory.read(0xFEF8);
@@ -202,8 +202,8 @@ TEST_CASE("6502 R1 polled read: diagnostic -- check data bus at LDA $FEF9", "[tu
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r1_reader(memory, NUM_BYTES);
@@ -252,15 +252,15 @@ TEST_CASE("6502 R1 polled read: diagnostic -- check data bus at LDA $FEF9", "[tu
 }
 
 TEST_CASE("6502 R1 polled read: diagnostic -- read count vs write count", "[tube][6502][r1][diagnostic]") {
-    // Checks whether the parasite's R1 read counter ever exceeds the
+    // Checks whether the coprocessor's R1 read counter ever exceeds the
     // host's write counter. In single-threaded mode this is guaranteed
     // by construction, but we keep the test to verify the invariant.
 
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r1_reader(memory, NUM_BYTES);

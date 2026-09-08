@@ -47,7 +47,7 @@ def run_until_or_timeout(bbc: Beebium, predicate, emulated_seconds: float, chunk
     """Run the emulator until predicate() returns True or a cycle budget expires.
 
     In the single-threaded Tube model, running the host automatically
-    ticks the parasite via Machine::step(). The predicate is evaluated
+    ticks the coprocessor via Machine::step(). The predicate is evaluated
     periodically via peek (side-effect-free) while the machine is stopped
     between chunks.
 
@@ -72,7 +72,7 @@ def disassemble_region(memory, start: int, length: int) -> list[str]:
 def dump_diagnostics(bbc: Beebium) -> None:
     """Print comprehensive diagnostics for debugging boot failures.
 
-    Attempts to connect to the parasite for additional diagnostics.
+    Attempts to connect to the coprocessor for additional diagnostics.
     """
     print("\n=== DIAGNOSTICS ===")
 
@@ -132,10 +132,10 @@ def dump_diagnostics(bbc: Beebium) -> None:
         tube_status = bbc.tube.status
         print(
             f"Tube: enabled={tube_status.enabled}, "
-            f"connected={tube_status.parasite_connected}, "
-            f"type={tube_status.parasite_type}, "
-            f"clock={tube_status.parasite_clock_hz}Hz, "
-            f"parasite_addr={tube_status.parasite_grpc_address}"
+            f"connected={tube_status.coprocessor_connected}, "
+            f"type={tube_status.coprocessor_type}, "
+            f"clock={tube_status.coprocessor_clock_hz}Hz, "
+            f"coprocessor_addr={tube_status.coprocessor_grpc_address}"
         )
     except (BeebiumError, grpc.RpcError) as e:
         print(f"Tube: error reading - {e}")
@@ -216,111 +216,111 @@ def dump_diagnostics(bbc: Beebium) -> None:
     except (BeebiumError, grpc.RpcError) as e:
         print(f"Host screen: error reading - {e}")
 
-    # Parasite diagnostics
-    if bbc.tube.parasite_connected:
-        with bbc.parasite() as parasite:
-            dump_parasite_diagnostics(parasite)
+    # Coprocessor diagnostics
+    if bbc.tube.coprocessor_connected:
+        with bbc.coprocessor() as coprocessor:
+            dump_coprocessor_diagnostics(coprocessor)
 
     print("=== END DIAGNOSTICS ===\n")
 
 
-def dump_parasite_diagnostics(parasite: Beebium) -> None:
-    """Print parasite-side diagnostics."""
-    parasite_pc = None
+def dump_coprocessor_diagnostics(coprocessor: Beebium) -> None:
+    """Print coprocessor-side diagnostics."""
+    coprocessor_pc = None
     try:
-        p_regs = parasite.cpu.registers
-        parasite_pc = p_regs.pc
-        print(f"Parasite CPU: {p_regs}")
+        p_regs = coprocessor.cpu.registers
+        coprocessor_pc = p_regs.pc
+        print(f"Coprocessor CPU: {p_regs}")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite CPU: error reading - {e}")
+        print(f"Coprocessor CPU: error reading - {e}")
 
     try:
-        p_state = parasite.debugger.get_state()
-        print(f"Parasite execution: running={p_state.is_running}, cycles={p_state.cycle_count}")
+        p_state = coprocessor.debugger.get_state()
+        print(f"Coprocessor execution: running={p_state.is_running}, cycles={p_state.cycle_count}")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite execution: error reading - {e}")
+        print(f"Coprocessor execution: error reading - {e}")
 
-    # Disassemble around parasite PC
-    if parasite_pc is not None:
+    # Disassemble around coprocessor PC
+    if coprocessor_pc is not None:
         try:
-            dis_start = max(0, parasite_pc - 16)
-            lines = disassemble_region(parasite.memory, dis_start, 48)
-            print(f"Parasite code around PC=${parasite_pc:04X}:")
+            dis_start = max(0, coprocessor_pc - 16)
+            lines = disassemble_region(coprocessor.memory, dis_start, 48)
+            print(f"Coprocessor code around PC=${coprocessor_pc:04X}:")
             for line in lines:
                 addr_str = line.strip().split(":")[0]
                 addr_val = int(addr_str.lstrip("$"), 16)
-                marker = " >>>" if addr_val == parasite_pc else ""
+                marker = " >>>" if addr_val == coprocessor_pc else ""
                 print(f"{line}{marker}")
         except (BeebiumError, grpc.RpcError) as e:
-            print(f"Parasite disassembly: error - {e}")
+            print(f"Coprocessor disassembly: error - {e}")
 
-    # Parasite Tube register status (parasite view)
+    # Coprocessor Tube register status (coprocessor view)
     try:
-        pr1s = parasite.memory.address.peek[0xFEF8]
-        pr1d = parasite.memory.address.peek[0xFEF9]
-        pr2s = parasite.memory.address.peek[0xFEFA]
-        pr2d = parasite.memory.address.peek[0xFEFB]
-        pr3s = parasite.memory.address.peek[0xFEFC]
-        pr3d = parasite.memory.address.peek[0xFEFD]
-        pr4s = parasite.memory.address.peek[0xFEFE]
-        pr4d = parasite.memory.address.peek[0xFEFF]
-        print("Parasite Tube regs (parasite view):")
+        pr1s = coprocessor.memory.address.peek[0xFEF8]
+        pr1d = coprocessor.memory.address.peek[0xFEF9]
+        pr2s = coprocessor.memory.address.peek[0xFEFA]
+        pr2d = coprocessor.memory.address.peek[0xFEFB]
+        pr3s = coprocessor.memory.address.peek[0xFEFC]
+        pr3d = coprocessor.memory.address.peek[0xFEFD]
+        pr4s = coprocessor.memory.address.peek[0xFEFE]
+        pr4d = coprocessor.memory.address.peek[0xFEFF]
+        print("Coprocessor Tube regs (coprocessor view):")
         print(f"  R1: status=${pr1s:02X} data=${pr1d:02X}  [b7={'DATA' if pr1s & 0x80 else 'empty'}]")
         print(f"  R2: status=${pr2s:02X} data=${pr2d:02X}")
         print(f"  R3: status=${pr3s:02X} data=${pr3d:02X}  [b7={'DATA' if pr3s & 0x80 else 'empty'}]")
         print(f"  R4: status=${pr4s:02X} data=${pr4d:02X}  [b7={'DATA' if pr4s & 0x80 else 'empty'}]")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite Tube regs: error reading - {e}")
+        print(f"Coprocessor Tube regs: error reading - {e}")
 
-    # Parasite MOS workspace
+    # Coprocessor MOS workspace
     try:
-        p_exec = parasite.memory.address.peek[0x0257]
-        p_spool = parasite.memory.address.peek[0x0256]
-        p_tube = parasite.memory.address.peek[0x027A]
-        p_fs = parasite.memory.address.peek[0x028C]
-        p_eb = parasite.memory.address.peek[0x00EB]
-        print(f"Parasite exec handle (&0257): ${p_exec:02X}")
-        print(f"Parasite spool handle (&0256): ${p_spool:02X}")
-        print(f"Parasite Tube flag (&027A): ${p_tube:02X}")
-        print(f"Parasite FS (&028C): ${p_fs:02X}")
-        print(f"Parasite ZP $EB (exec check): ${p_eb:02X}")
+        p_exec = coprocessor.memory.address.peek[0x0257]
+        p_spool = coprocessor.memory.address.peek[0x0256]
+        p_tube = coprocessor.memory.address.peek[0x027A]
+        p_fs = coprocessor.memory.address.peek[0x028C]
+        p_eb = coprocessor.memory.address.peek[0x00EB]
+        print(f"Coprocessor exec handle (&0257): ${p_exec:02X}")
+        print(f"Coprocessor spool handle (&0256): ${p_spool:02X}")
+        print(f"Coprocessor Tube flag (&027A): ${p_tube:02X}")
+        print(f"Coprocessor FS (&028C): ${p_fs:02X}")
+        print(f"Coprocessor ZP $EB (exec check): ${p_eb:02X}")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite MOS workspace: error reading - {e}")
+        print(f"Coprocessor MOS workspace: error reading - {e}")
 
-    # Full parasite zero page
+    # Full coprocessor zero page
     try:
-        zp = parasite.memory.address.peek.read(0x0000, 256)
-        print("Parasite zero page:")
+        zp = coprocessor.memory.address.peek.read(0x0000, 256)
+        print("Coprocessor zero page:")
         for row in range(16):
             offset = row * 16
             hex_str = " ".join(f"{zp[offset + i]:02X}" for i in range(16))
             print(f"  ${offset:02X}: {hex_str}")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite ZP: error reading - {e}")
+        print(f"Coprocessor ZP: error reading - {e}")
 
-    # Parasite vectors and NMIV
+    # Coprocessor vectors and NMIV
     try:
-        nmiv = parasite.memory.address.peek.read(0x0200, 2)
+        nmiv = coprocessor.memory.address.peek.read(0x0200, 2)
         nmiv_addr = nmiv[0] | (nmiv[1] << 8)
-        irqv = parasite.memory.address.peek.read(0x0202, 2)
+        irqv = coprocessor.memory.address.peek.read(0x0202, 2)
         irqv_addr = irqv[0] | (irqv[1] << 8)
-        nmi_vec = parasite.memory.address.peek.read(0xFFFA, 2)
+        nmi_vec = coprocessor.memory.address.peek.read(0xFFFA, 2)
         nmi_addr = nmi_vec[0] | (nmi_vec[1] << 8)
-        irq_vec = parasite.memory.address.peek.read(0xFFFE, 2)
+        irq_vec = coprocessor.memory.address.peek.read(0xFFFE, 2)
         irq_addr = irq_vec[0] | (irq_vec[1] << 8)
-        print(f"Parasite vectors: NMIV=$0200={nmiv_addr:04X}, IRQ1V=$0202={irqv_addr:04X}")
-        print(f"Parasite HW vectors: NMI=$FFFA={nmi_addr:04X}, IRQ=$FFFE={irq_addr:04X}")
+        print(f"Coprocessor vectors: NMIV=$0200={nmiv_addr:04X}, IRQ1V=$0202={irqv_addr:04X}")
+        print(f"Coprocessor HW vectors: NMI=$FFFA={nmi_addr:04X}, IRQ=$FFFE={irq_addr:04X}")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite vectors: error reading - {e}")
+        print(f"Coprocessor vectors: error reading - {e}")
 
-    # Parasite stack
+    # Coprocessor stack
     try:
-        stack = parasite.memory.address.peek.read(0x0100, 256)
-        sp = p_regs.sp if parasite_pc is not None else 0xFF
+        stack = coprocessor.memory.address.peek.read(0x0100, 256)
+        sp = p_regs.sp if coprocessor_pc is not None else 0xFF
         stack_top = sp + 1
         if stack_top < 256:
             stack_bytes = stack[stack_top : min(stack_top + 16, 256)]
             hex_str = " ".join(f"{b:02X}" for b in stack_bytes)
-            print(f"Parasite stack (${0x100 + stack_top:04X}+): {hex_str}")
+            print(f"Coprocessor stack (${0x100 + stack_top:04X}+): {hex_str}")
     except (BeebiumError, grpc.RpcError) as e:
-        print(f"Parasite stack: error reading - {e}")
+        print(f"Coprocessor stack: error reading - {e}")

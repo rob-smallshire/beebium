@@ -25,11 +25,11 @@ class TubeStatus:
 
     has_tube_socket: bool
     enabled: bool
-    parasite_connected: bool
-    parasite_type: str
-    parasite_clock_hz: int
+    coprocessor_connected: bool
+    coprocessor_type: str
+    coprocessor_clock_hz: int
     shared_memory_name: str
-    parasite_grpc_address: str
+    coprocessor_grpc_address: str
 
 
 class Tube:
@@ -40,11 +40,11 @@ class Tube:
     Usage:
         # Check Tube status
         status = bbc.tube.status
-        print(f"Enabled: {status.enabled}, Parasite: {status.parasite_type}")
+        print(f"Enabled: {status.enabled}, Coprocessor: {status.coprocessor_type}")
 
         # Quick checks
         if bbc.tube.is_enabled:
-            print(f"Parasite at: {bbc.tube.parasite_grpc_address}")
+            print(f"Coprocessor at: {bbc.tube.coprocessor_grpc_address}")
     """
 
     def __init__(self, stub: tube_pb2_grpc.TubeServiceStub):
@@ -63,11 +63,11 @@ class Tube:
         return TubeStatus(
             has_tube_socket=response.has_tube_socket,
             enabled=response.enabled,
-            parasite_connected=response.parasite_connected,
-            parasite_type=response.parasite_type,
-            parasite_clock_hz=response.parasite_clock_hz,
+            coprocessor_connected=response.coprocessor_connected,
+            coprocessor_type=response.coprocessor_type,
+            coprocessor_clock_hz=response.coprocessor_clock_hz,
             shared_memory_name=response.shared_memory_name,
-            parasite_grpc_address=response.parasite_grpc_address,
+            coprocessor_grpc_address=response.coprocessor_grpc_address,
         )
 
     @property
@@ -76,11 +76,11 @@ class Tube:
         return self.status.enabled
 
     @property
-    def parasite_connected(self) -> bool:
-        """True if a parasite process is connected."""
-        return self.status.parasite_connected
+    def coprocessor_connected(self) -> bool:
+        """True if a coprocessor process is connected."""
+        return self.status.coprocessor_connected
 
     @property
-    def parasite_grpc_address(self) -> str:
-        """Parasite's gRPC address (empty if not registered)."""
-        return self.status.parasite_grpc_address
+    def coprocessor_grpc_address(self) -> str:
+        """Coprocessor's gRPC address (empty if not registered)."""
+        return self.status.coprocessor_grpc_address

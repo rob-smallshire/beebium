@@ -501,7 +501,7 @@ describe("Integration: Tube", () => {
             const status = await tube.getStatus();
             expect(typeof status.hasTubeSocket).toBe("boolean");
             expect(typeof status.enabled).toBe("boolean");
-            expect(typeof status.parasiteConnected).toBe("boolean");
+            expect(typeof status.coprocessorConnected).toBe("boolean");
         });
     });
 });

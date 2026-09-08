@@ -10,7 +10,7 @@ import type {
     TubeFifo24State as ProtoTubeFifo24State,
     TubeReg3State as ProtoTubeReg3State,
     TubeHostStatus as ProtoTubeHostStatus,
-    TubeParasiteStatus as ProtoTubeParasiteStatus,
+    TubeCoprocessorStatus as ProtoTubeCoprocessorStatus,
     TubeInterrupts as ProtoTubeInterrupts,
     TubeTransferCounters as ProtoTubeTransferCounters,
     GetTubeStateRequest,
@@ -30,7 +30,7 @@ export interface TubeControlFlags {
     m: boolean;
     /** Bit 4: Two-byte mode for R3 */
     v: boolean;
-    /** Bit 5: Parasite reset */
+    /** Bit 5: Coprocessor reset */
     p: boolean;
 }
 
@@ -72,7 +72,7 @@ export interface TubeHostStatus {
     r4Status: number;
 }
 
-export interface TubeParasiteStatus {
+export interface TubeCoprocessorStatus {
     /** Offset 0: control flags + R1 status bits */
     r1Status: number;
     /** Offset 2: R2 status bits */
@@ -86,7 +86,7 @@ export interface TubeParasiteStatus {
 export interface TubeInterrupts {
     /** Host IRQ: Q=1 AND R4 P-to-H has data */
     hirq: boolean;
-    /** Parasite IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data) */
+    /** Coprocessor IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data) */
     pirq: boolean;
     /** PNMI level (combinational, before edge detection) */
     pnmiLevel: boolean;
@@ -95,7 +95,7 @@ export interface TubeInterrupts {
 }
 
 export interface TubeTransferCounters {
-    /** Host-to-parasite direction */
+    /** Host-to-coprocessor direction */
     r1H2pWrites: number;
     r1H2pReads: number;
     r2H2pWrites: number;
@@ -104,7 +104,7 @@ export interface TubeTransferCounters {
     r3H2pReads: number;
     r4H2pWrites: number;
     r4H2pReads: number;
-    /** Parasite-to-host direction */
+    /** Coprocessor-to-host direction */
     r1P2hWrites: number;
     r1P2hReads: number;
     r2P2hWrites: number;
@@ -135,8 +135,8 @@ export interface TubeUlaState {
     r4P2h: TubeLatchState;
     /** Status registers (as read by host) */
     hostStatus: TubeHostStatus;
-    /** Status registers (as read by parasite) */
-    parasiteStatus: TubeParasiteStatus;
+    /** Status registers (as read by coprocessor) */
+    coprocessorStatus: TubeCoprocessorStatus;
     /** Interrupt outputs */
     interrupts: TubeInterrupts;
     /** Bus stretching state */
@@ -187,7 +187,7 @@ function formatReg3(r: TubeReg3State): string {
     return `count=${r.count}/${r.threshold} (${pend}, ${mode}) [${hexData}]`;
 }
 
-function formatStatus(label: string, s: TubeHostStatus | TubeParasiteStatus): string {
+function formatStatus(label: string, s: TubeHostStatus | TubeCoprocessorStatus): string {
     const hex2 = (n: number) => n.toString(16).toUpperCase().padStart(2, "0");
     return `${label}: R1=$${hex2(s.r1Status)} R2=$${hex2(s.r2Status)} R3=$${hex2(s.r3Status)} R4=$${hex2(s.r4Status)}`;
 }
@@ -236,7 +236,7 @@ export function formatTubeUlaState(s: TubeUlaState): string {
         `  R4 H->P: ${formatLatch(s.r4H2p)}`,
         `  R4 P->H: ${formatLatch(s.r4P2h)}`,
         `  ${formatStatus("Host status    ", s.hostStatus)}`,
-        `  ${formatStatus("Parasite status", s.parasiteStatus)}`,
+        `  ${formatStatus("Coprocessor status", s.coprocessorStatus)}`,
         `  Interrupts: ${formatInterrupts(s.interrupts)}`,
     ];
     if (s.hostStretched) {
@@ -260,7 +260,7 @@ const DEFAULT_REG3: TubeReg3State = { count: 0, data: new Uint8Array(0), pending
 
 const DEFAULT_HOST_STATUS: TubeHostStatus = { r1Status: 0, r2Status: 0, r3Status: 0, r4Status: 0 };
 
-const DEFAULT_PARASITE_STATUS: TubeParasiteStatus = { r1Status: 0, r2Status: 0, r3Status: 0, r4Status: 0 };
+const DEFAULT_COPROCESSOR_STATUS: TubeCoprocessorStatus = { r1Status: 0, r2Status: 0, r3Status: 0, r4Status: 0 };
 
 const DEFAULT_INTERRUPTS: TubeInterrupts = { hirq: false, pirq: false, pnmiLevel: false, pnmiEdge: false };
 
@@ -314,8 +314,8 @@ function toHostStatus(proto: ProtoTubeHostStatus | undefined): TubeHostStatus {
     };
 }
 
-function toParasiteStatus(proto: ProtoTubeParasiteStatus | undefined): TubeParasiteStatus {
-    if (!proto) return { ...DEFAULT_PARASITE_STATUS };
+function toCoprocessorStatus(proto: ProtoTubeCoprocessorStatus | undefined): TubeCoprocessorStatus {
+    if (!proto) return { ...DEFAULT_COPROCESSOR_STATUS };
     return {
         r1Status: proto.r1Status,
         r2Status: proto.r2Status,
@@ -369,7 +369,7 @@ function toTubeUlaState(proto: ProtoTubeState): TubeUlaState {
         r4H2p: toLatchState(proto.r4H2p),
         r4P2h: toLatchState(proto.r4P2h),
         hostStatus: toHostStatus(proto.hostStatus),
-        parasiteStatus: toParasiteStatus(proto.parasiteStatus),
+        coprocessorStatus: toCoprocessorStatus(proto.coprocessorStatus),
         interrupts: toInterrupts(proto.interrupts),
         hostStretched: proto.hostStretched,
         counters: toTransferCounters(proto.counters),

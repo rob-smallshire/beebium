@@ -23,7 +23,7 @@
 #include <beebium/extension/CpuDebugTarget.hpp>
 #include <beebium/service/DebuggerService.hpp>
 #include <beebium/tube/Coprocessor.hpp>
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeHostBackend.hpp>
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeUla.hpp>
@@ -121,7 +121,7 @@ TEST_CASE("CoprocessorExtension: a coprocessor describes its own CPU through the
     // registers in display order.
     TubeUla ula;
     auto rom = make_nop_rom();
-    ParasiteRunner runner(ula, rom);
+    CoprocessorRunner runner(ula, rom);
     CpuDebugTarget* target = &runner;
     CHECK(target->cpu_descriptor().family == "6502");
     REQUIRE(target->cpu_descriptor().registers.size() == 6);
@@ -136,8 +136,8 @@ TEST_CASE("CoprocessorExtension: cross-processor stop is wired both ways server-
     // to pause the other processor.
     TubeUla host_ula, cop_ula;
     auto rom = make_nop_rom();
-    ParasiteRunner host(host_ula, rom);
-    ParasiteRunner cop(cop_ula, rom);
+    CoprocessorRunner host(host_ula, rom);
+    CoprocessorRunner cop(cop_ula, rom);
     host.reset();
     cop.reset();
 
@@ -160,7 +160,7 @@ TEST_CASE("CoprocessorExtension: cross-processor stop is wired both ways server-
     // a service method must not hold that lock while stepping or the hit
     // deadlocks. The impl still owns the counterpart wiring, the breakpoint
     // entries and the hit callback; we just supply the cycles.
-    auto step_until = [](ParasiteRunner& runner, auto&& predicate) {
+    auto step_until = [](CoprocessorRunner& runner, auto&& predicate) {
         for (int i = 0; i < 40 && !predicate(); ++i) {
             runner.step();
         }

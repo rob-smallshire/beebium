@@ -41,9 +41,9 @@ GRPC_VERSION: str
 class TubeServiceStub:
     """Tube coprocessor management service.
 
-    Runs on the host's gRPC server. The parasite process connects to
+    Runs on the host's gRPC server. The coprocessor process connects to
     negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of parasite state.
+    for save/restore of coprocessor state.
     """
 
     @_typing.overload
@@ -51,43 +51,43 @@ class TubeServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> TubeServiceAsyncStub: ...
     Connect: _grpc.UnaryUnaryMultiCallable[_tube_pb2.TubeConnectRequest, _tube_pb2.TubeConnectResponse]
-    """Parasite connects, receives shared memory name and size."""
+    """Coprocessor connects, receives shared memory name and size."""
     RegisterEndpoint: _grpc.UnaryUnaryMultiCallable[_tube_pb2.RegisterEndpointRequest, _tube_pb2.RegisterEndpointResponse]
-    """Parasite registers its gRPC endpoint after starting its own server."""
+    """Coprocessor registers its gRPC endpoint after starting its own server."""
     GetStatus: _grpc.UnaryUnaryMultiCallable[_tube_pb2.GetTubeStatusRequest, _tube_pb2.GetTubeStatusResponse]
-    """Query current Tube status (enabled, parasite type, shared memory info)."""
+    """Query current Tube status (enabled, coprocessor type, shared memory info)."""
     GetState: _grpc.UnaryUnaryMultiCallable[_tube_pb2.TubeGetStateRequest, _tube_pb2.TubeGetStateResponse]
-    """Host requests full parasite state for save/restore."""
+    """Host requests full coprocessor state for save/restore."""
     RestoreState: _grpc.UnaryUnaryMultiCallable[_tube_pb2.TubeRestoreStateRequest, _tube_pb2.TubeRestoreStateResponse]
-    """Host sends saved parasite state for restore after reconnection."""
+    """Host sends saved coprocessor state for restore after reconnection."""
 
 @_typing.type_check_only
 class TubeServiceAsyncStub(TubeServiceStub):
     """Tube coprocessor management service.
 
-    Runs on the host's gRPC server. The parasite process connects to
+    Runs on the host's gRPC server. The coprocessor process connects to
     negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of parasite state.
+    for save/restore of coprocessor state.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     Connect: _aio.UnaryUnaryMultiCallable[_tube_pb2.TubeConnectRequest, _tube_pb2.TubeConnectResponse]  # type: ignore[assignment]
-    """Parasite connects, receives shared memory name and size."""
+    """Coprocessor connects, receives shared memory name and size."""
     RegisterEndpoint: _aio.UnaryUnaryMultiCallable[_tube_pb2.RegisterEndpointRequest, _tube_pb2.RegisterEndpointResponse]  # type: ignore[assignment]
-    """Parasite registers its gRPC endpoint after starting its own server."""
+    """Coprocessor registers its gRPC endpoint after starting its own server."""
     GetStatus: _aio.UnaryUnaryMultiCallable[_tube_pb2.GetTubeStatusRequest, _tube_pb2.GetTubeStatusResponse]  # type: ignore[assignment]
-    """Query current Tube status (enabled, parasite type, shared memory info)."""
+    """Query current Tube status (enabled, coprocessor type, shared memory info)."""
     GetState: _aio.UnaryUnaryMultiCallable[_tube_pb2.TubeGetStateRequest, _tube_pb2.TubeGetStateResponse]  # type: ignore[assignment]
-    """Host requests full parasite state for save/restore."""
+    """Host requests full coprocessor state for save/restore."""
     RestoreState: _aio.UnaryUnaryMultiCallable[_tube_pb2.TubeRestoreStateRequest, _tube_pb2.TubeRestoreStateResponse]  # type: ignore[assignment]
-    """Host sends saved parasite state for restore after reconnection."""
+    """Host sends saved coprocessor state for restore after reconnection."""
 
 class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
     """Tube coprocessor management service.
 
-    Runs on the host's gRPC server. The parasite process connects to
+    Runs on the host's gRPC server. The coprocessor process connects to
     negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of parasite state.
+    for save/restore of coprocessor state.
     """
 
     @_abc_1.abstractmethod
@@ -96,7 +96,7 @@ class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _tube_pb2.TubeConnectRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_tube_pb2.TubeConnectResponse, _abc.Awaitable[_tube_pb2.TubeConnectResponse]]:
-        """Parasite connects, receives shared memory name and size."""
+        """Coprocessor connects, receives shared memory name and size."""
 
     @_abc_1.abstractmethod
     def RegisterEndpoint(
@@ -104,7 +104,7 @@ class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _tube_pb2.RegisterEndpointRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_tube_pb2.RegisterEndpointResponse, _abc.Awaitable[_tube_pb2.RegisterEndpointResponse]]:
-        """Parasite registers its gRPC endpoint after starting its own server."""
+        """Coprocessor registers its gRPC endpoint after starting its own server."""
 
     @_abc_1.abstractmethod
     def GetStatus(
@@ -112,7 +112,7 @@ class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _tube_pb2.GetTubeStatusRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_tube_pb2.GetTubeStatusResponse, _abc.Awaitable[_tube_pb2.GetTubeStatusResponse]]:
-        """Query current Tube status (enabled, parasite type, shared memory info)."""
+        """Query current Tube status (enabled, coprocessor type, shared memory info)."""
 
     @_abc_1.abstractmethod
     def GetState(
@@ -120,7 +120,7 @@ class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _tube_pb2.TubeGetStateRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_tube_pb2.TubeGetStateResponse, _abc.Awaitable[_tube_pb2.TubeGetStateResponse]]:
-        """Host requests full parasite state for save/restore."""
+        """Host requests full coprocessor state for save/restore."""
 
     @_abc_1.abstractmethod
     def RestoreState(
@@ -128,6 +128,6 @@ class TubeServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _tube_pb2.TubeRestoreStateRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_tube_pb2.TubeRestoreStateResponse, _abc.Awaitable[_tube_pb2.TubeRestoreStateResponse]]:
-        """Host sends saved parasite state for restore after reconnection."""
+        """Host sends saved coprocessor state for restore after reconnection."""
 
 def add_TubeServiceServicer_to_server(servicer: TubeServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

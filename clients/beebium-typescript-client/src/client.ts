@@ -99,7 +99,7 @@ export class Beebium {
     private _sound?: Sound;
     private _tubeUla?: TubeUlaInspection;
     private _basic?: Basic;
-    private _debuggerStubOverride?: unknown;  // ParasiteDebuggerControlClient
+    private _debuggerStubOverride?: unknown;  // CoprocessorDebuggerControlClient
 
     private constructor(
         connection: Connection,
@@ -112,12 +112,12 @@ export class Beebium {
     }
 
     /**
-     * Create a parasite view sharing the same connection.
-     * Routes debugger calls to the ParasiteDebuggerControl service.
+     * Create a coprocessor view sharing the same connection.
+     * Routes debugger calls to the CoprocessorDebuggerControl service.
      */
-    private static fromParasiteStub(connection: Connection): Beebium {
+    private static fromCoprocessorStub(connection: Connection): Beebium {
         const client = new Beebium(connection);
-        client._debuggerStubOverride = connection.parasiteDebuggerStub;
+        client._debuggerStubOverride = connection.coprocessorDebuggerStub;
         return client;
     }
 
@@ -421,30 +421,30 @@ export class Beebium {
     }
 
     /**
-     * Connect to the parasite's gRPC server.
+     * Connect to the coprocessor's gRPC server.
      *
-     * Queries the host's Tube status for the parasite's gRPC address,
-     * then returns a new Beebium instance connected to the parasite.
+     * Queries the host's Tube status for the coprocessor's gRPC address,
+     * then returns a new Beebium instance connected to the coprocessor.
      *
      * @param timeoutMs - Connection timeout in milliseconds (default 5000).
-     * @returns A Beebium client connected to the parasite's gRPC server.
-     * @throws ConnectionError if the parasite is not connected or the
+     * @returns A Beebium client connected to the coprocessor's gRPC server.
+     * @throws ConnectionError if the coprocessor is not connected or the
      *     connection cannot be established.
      */
     /**
-     * Get a Beebium client for the parasite processor.
+     * Get a Beebium client for the coprocessor processor.
      *
      * Returns a Beebium instance that shares the same gRPC connection
-     * but routes debugger calls to the ParasiteDebuggerControl service.
+     * but routes debugger calls to the CoprocessorDebuggerControl service.
      *
      * @throws ConnectionError if no Tube coprocessor extension is active.
      */
-    async connectParasite(): Promise<Beebium> {
+    async connectCoprocessor(): Promise<Beebium> {
         const status = await this.tube.getStatus();
         if (!status.enabled) {
             throw new ConnectionError("No Tube coprocessor is active");
         }
-        return Beebium.fromParasiteStub(this.connection);
+        return Beebium.fromCoprocessorStub(this.connection);
     }
 
     // =========================================================================

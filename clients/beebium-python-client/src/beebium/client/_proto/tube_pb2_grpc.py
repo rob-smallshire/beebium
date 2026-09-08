@@ -40,9 +40,9 @@ if _version_not_supported:
 class TubeServiceStub(object):
     """Tube coprocessor management service.
 
-    Runs on the host's gRPC server. The parasite process connects to
+    Runs on the host's gRPC server. The coprocessor process connects to
     negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of parasite state.
+    for save/restore of coprocessor state.
     """
 
     def __init__(self, channel):
@@ -81,41 +81,41 @@ class TubeServiceStub(object):
 class TubeServiceServicer(object):
     """Tube coprocessor management service.
 
-    Runs on the host's gRPC server. The parasite process connects to
+    Runs on the host's gRPC server. The coprocessor process connects to
     negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of parasite state.
+    for save/restore of coprocessor state.
     """
 
     def Connect(self, request, context):
-        """Parasite connects, receives shared memory name and size.
+        """Coprocessor connects, receives shared memory name and size.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RegisterEndpoint(self, request, context):
-        """Parasite registers its gRPC endpoint after starting its own server.
+        """Coprocessor registers its gRPC endpoint after starting its own server.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetStatus(self, request, context):
-        """Query current Tube status (enabled, parasite type, shared memory info).
+        """Query current Tube status (enabled, coprocessor type, shared memory info).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetState(self, request, context):
-        """Host requests full parasite state for save/restore.
+        """Host requests full coprocessor state for save/restore.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RestoreState(self, request, context):
-        """Host sends saved parasite state for restore after reconnection.
+        """Host sends saved coprocessor state for restore after reconnection.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -160,9 +160,9 @@ def add_TubeServiceServicer_to_server(servicer, server):
 class TubeService(object):
     """Tube coprocessor management service.
 
-    Runs on the host's gRPC server. The parasite process connects to
+    Runs on the host's gRPC server. The coprocessor process connects to
     negotiate the shared memory link, and the host uses GetState/RestoreState
-    for save/restore of parasite state.
+    for save/restore of coprocessor state.
     """
 
     @staticmethod

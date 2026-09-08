@@ -40,7 +40,7 @@ GRPC_VERSION: str
 
 class DebuggerControlStub:
     """Generic debugger service for 6502-based machines.
-    Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+    Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
     """
 
     @_typing.overload
@@ -89,7 +89,7 @@ class DebuggerControlStub:
 @_typing.type_check_only
 class DebuggerControlAsyncStub(DebuggerControlStub):
     """Generic debugger service for 6502-based machines.
-    Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+    Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
@@ -134,7 +134,7 @@ class DebuggerControlAsyncStub(DebuggerControlStub):
 
 class DebuggerControlServicer(metaclass=_abc_1.ABCMeta):
     """Generic debugger service for 6502-based machines.
-    Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+    Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
     """
 
     @_abc_1.abstractmethod
@@ -339,8 +339,8 @@ class DebuggerControlServicer(metaclass=_abc_1.ABCMeta):
 
 def add_DebuggerControlServicer_to_server(servicer: DebuggerControlServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
 
-class ParasiteDebuggerControlStub:
-    """Parasite (second processor) debugger service.
+class CoprocessorDebuggerControlStub:
+    """Coprocessor (second processor) debugger service.
     Same RPCs as DebuggerControl but registered under a distinct service name
     so both can coexist on the same gRPC server.
     """
@@ -348,7 +348,7 @@ class ParasiteDebuggerControlStub:
     @_typing.overload
     def __new__(cls, channel: _grpc.Channel) -> _Self: ...
     @_typing.overload
-    def __new__(cls, channel: _aio.Channel) -> ParasiteDebuggerControlAsyncStub: ...
+    def __new__(cls, channel: _aio.Channel) -> CoprocessorDebuggerControlAsyncStub: ...
     GetState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ExecutionState]
     Run: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.RunResponse]
     Stop: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.StopResponse]
@@ -378,8 +378,8 @@ class ParasiteDebuggerControlStub:
     SetCpuState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.CpuState, _debugger_pb2.CpuState]
 
 @_typing.type_check_only
-class ParasiteDebuggerControlAsyncStub(ParasiteDebuggerControlStub):
-    """Parasite (second processor) debugger service.
+class CoprocessorDebuggerControlAsyncStub(CoprocessorDebuggerControlStub):
+    """Coprocessor (second processor) debugger service.
     Same RPCs as DebuggerControl but registered under a distinct service name
     so both can coexist on the same gRPC server.
     """
@@ -413,8 +413,8 @@ class ParasiteDebuggerControlAsyncStub(ParasiteDebuggerControlStub):
     GetCpuState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuState]  # type: ignore[assignment]
     SetCpuState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.CpuState, _debugger_pb2.CpuState]  # type: ignore[assignment]
 
-class ParasiteDebuggerControlServicer(metaclass=_abc_1.ABCMeta):
-    """Parasite (second processor) debugger service.
+class CoprocessorDebuggerControlServicer(metaclass=_abc_1.ABCMeta):
+    """Coprocessor (second processor) debugger service.
     Same RPCs as DebuggerControl but registered under a distinct service name
     so both can coexist on the same gRPC server.
     """
@@ -608,11 +608,11 @@ class ParasiteDebuggerControlServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.CpuState, _abc.Awaitable[_debugger_pb2.CpuState]]: ...
 
-def add_ParasiteDebuggerControlServicer_to_server(servicer: ParasiteDebuggerControlServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
+def add_CoprocessorDebuggerControlServicer_to_server(servicer: CoprocessorDebuggerControlServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
 
 class DeviceInspectionStub:
     """BBC Micro device state inspection.
-    Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+    Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
     """
 
     @_typing.overload
@@ -630,7 +630,7 @@ class DeviceInspectionStub:
 @_typing.type_check_only
 class DeviceInspectionAsyncStub(DeviceInspectionStub):
     """BBC Micro device state inspection.
-    Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+    Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
@@ -644,7 +644,7 @@ class DeviceInspectionAsyncStub(DeviceInspectionStub):
 
 class DeviceInspectionServicer(metaclass=_abc_1.ABCMeta):
     """BBC Micro device state inspection.
-    Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+    Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
     """
 
     @_abc_1.abstractmethod

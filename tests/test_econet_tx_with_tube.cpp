@@ -28,7 +28,7 @@
 #include <beebium/econet/TestBackend.hpp>
 #include <beebium/econet/FourWayHandshake.hpp>
 #include <beebium/econet/Mc6854.hpp>
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -202,14 +202,14 @@ TEST_CASE("Econet TX completes with Tube (server scenario)",
     // Enable Tube BEFORE reset
     machine.state().memory.tube_socket.enable();
 
-    // Set up parasite
+    // Set up coprocessor
     auto tube_rom = load_tube_rom();
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
-    ParasiteRunner parasite(*tube, tube_rom);
-    parasite.reset();
+    CoprocessorRunner coprocessor(*tube, tube_rom);
+    coprocessor.reset();
     // The 3:2 clock ratio lives with the runner; the socket drives it in host time.
-    machine.state().memory.tube_socket.install_coprocessor(&parasite);
+    machine.state().memory.tube_socket.install_coprocessor(&coprocessor);
 
     // Enable Econet
     auto backend_ptr = std::make_unique<TestBackend>();

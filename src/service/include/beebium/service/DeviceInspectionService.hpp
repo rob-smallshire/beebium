@@ -83,11 +83,11 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
 
     uint8_t threshold = (flags & TubeInspection::FLAG_V) ? 2 : 1;
 
-    // R1 H-to-P latch: peek data register (offset 1 from parasite perspective).
+    // R1 H-to-P latch: peek data register (offset 1 from coprocessor perspective).
     auto* r1_h2p = response->mutable_r1_h2p();
-    r1_h2p->set_value(ula.parasite_peek(1));
-    // Data available = parasite can read from H-to-P
-    r1_h2p->set_data_available((ula.parasite_peek(0) & TubeInspection::DATA_AVAILABLE) != 0);
+    r1_h2p->set_value(ula.coprocessor_peek(1));
+    // Data available = coprocessor can read from H-to-P
+    r1_h2p->set_data_available((ula.coprocessor_peek(0) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R1 P-to-H FIFO.
     auto* r1_p2h = response->mutable_r1_p2h();
@@ -109,8 +109,8 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
 
     // R2 H-to-P latch.
     auto* r2_h2p = response->mutable_r2_h2p();
-    r2_h2p->set_value(ula.parasite_peek(3));
-    r2_h2p->set_data_available((ula.parasite_peek(2) & TubeInspection::DATA_AVAILABLE) != 0);
+    r2_h2p->set_value(ula.coprocessor_peek(3));
+    r2_h2p->set_data_available((ula.coprocessor_peek(2) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R2 P-to-H latch.
     auto* r2_p2h = response->mutable_r2_p2h();
@@ -120,10 +120,10 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
     // R3 H-to-P register.
     auto* r3_h2p = response->mutable_r3_h2p();
     r3_h2p->set_threshold(threshold);
-    uint8_t parasite_r3_status = ula.parasite_peek(4);
-    bool h2p_has_data = (parasite_r3_status & TubeInspection::DATA_AVAILABLE) != 0;
+    uint8_t coprocessor_r3_status = ula.coprocessor_peek(4);
+    bool h2p_has_data = (coprocessor_r3_status & TubeInspection::DATA_AVAILABLE) != 0;
     r3_h2p->set_pending(h2p_has_data);
-    uint8_t h2p_head = ula.parasite_peek(5);
+    uint8_t h2p_head = ula.coprocessor_peek(5);
     r3_h2p->set_count(h2p_has_data ? 1 : 0);  // Minimum visible count
     if (h2p_has_data) {
         r3_h2p->set_data(std::string(1, static_cast<char>(h2p_head)));
@@ -143,8 +143,8 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
 
     // R4 H-to-P latch.
     auto* r4_h2p = response->mutable_r4_h2p();
-    r4_h2p->set_value(ula.parasite_peek(7));
-    r4_h2p->set_data_available((ula.parasite_peek(6) & TubeInspection::DATA_AVAILABLE) != 0);
+    r4_h2p->set_value(ula.coprocessor_peek(7));
+    r4_h2p->set_data_available((ula.coprocessor_peek(6) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R4 P-to-H latch.
     auto* r4_p2h = response->mutable_r4_p2h();
@@ -158,12 +158,12 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
     hs->set_r3_status(ula.host_peek(4));
     hs->set_r4_status(ula.host_peek(6));
 
-    // Parasite status registers.
-    auto* ps = response->mutable_parasite_status();
-    ps->set_r1_status(ula.parasite_peek(0));
-    ps->set_r2_status(ula.parasite_peek(2));
-    ps->set_r3_status(ula.parasite_peek(4));
-    ps->set_r4_status(ula.parasite_peek(6));
+    // Coprocessor status registers.
+    auto* ps = response->mutable_coprocessor_status();
+    ps->set_r1_status(ula.coprocessor_peek(0));
+    ps->set_r2_status(ula.coprocessor_peek(2));
+    ps->set_r3_status(ula.coprocessor_peek(4));
+    ps->set_r4_status(ula.coprocessor_peek(6));
 
     // Interrupts.
     auto* irq = response->mutable_interrupts();
@@ -211,7 +211,7 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
 
 // gRPC service implementation for DeviceInspection.
 // Provides access to BBC Micro device state (VIAs, CRTC, Video ULA, etc.).
-// Only meaningful on the host; parasite has no BBC Micro devices.
+// Only meaningful on the host; coprocessor has no BBC Micro devices.
 template<typename MachineType>
 class DeviceInspectionServiceImpl final : public DeviceInspection::Service {
 public:

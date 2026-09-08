@@ -144,7 +144,7 @@ class EconetStatus:
     watchdog_timeout_count: int = 0
     send_stage_log: str = ""
     ticks_with_timer_active: int = 0
-    read_stretch_parasite_ticks: int = 0
+    read_stretch_coprocessor_ticks: int = 0
 
 
 _EVENT_TYPE_NAMES = {
@@ -234,7 +234,7 @@ def _response_to_status(response: econet_pb2.GetEconetStatusResponse) -> EconetS
         watchdog_timeout_count=response.watchdog_timeout_count,
         send_stage_log=response.send_stage_log,
         ticks_with_timer_active=response.ticks_with_timer_active,
-        read_stretch_parasite_ticks=response.read_stretch_parasite_ticks,
+        read_stretch_coprocessor_ticks=response.read_stretch_coprocessor_ticks,
     )
 
 

@@ -209,7 +209,7 @@ describe("Econet", () => {
                 watchdogTimeoutCount: 0,
                 sendStageLog: "",
                 ticksWithTimerActive: 0n,
-                readStretchParasiteTicks: 0n,
+                readStretchCoprocessorTicks: 0n,
                 ...overrides,
             } as ProtoGetEconetStatusResponse;
         }

@@ -62,7 +62,7 @@ private:
 // TubeHostBackend. Three implementations exist:
 //
 //   EmptyTubeBackend  -- no second processor (reads return bus value)
-//   TubeUla           -- in-process model (both host and parasite sides)
+//   TubeUla           -- in-process model (both host and coprocessor sides)
 //
 // The register offsets use 3 address bits (A0-A2), mirrored across &FEE0-&FEFF.
 // The hardware policy registers this with Mirror<0x07>.
@@ -84,9 +84,9 @@ public:
 
     // --- Configuration ---
 
-    // Enable in in-process mode: both host and parasite sides are modelled
-    // by a TubeUla. Useful for single-process testing where parasite_write/
-    // parasite_read are called directly on the TubeUla.
+    // Enable in in-process mode: both host and coprocessor sides are modelled
+    // by a TubeUla. Useful for single-process testing where coprocessor_write/
+    // coprocessor_read are called directly on the TubeUla.
     void enable() {
         backend_ = std::make_unique<TubeUla>();
     }
@@ -251,7 +251,7 @@ public:
     // any host cycle that is not a Tube register access; register accesses are
     // exact (skew 0). 8 host cycles = 4 us at 2 MHz. Rationale: the tightest
     // open-loop Tube timing is the type-0/3 NMI transfer (host touches R3 about
-    // every 24 us per byte), and 4 us leaves the parasite's NMI handler well
+    // every 24 us per byte), and 4 us leaves the coprocessor's NMI handler well
     // over half that window. See docs/tube-coprocessor-contract.md (Step 2).
     // The value is intended to be raised in Step 3 against measurements; this
     // is the single place to change it.
@@ -331,15 +331,6 @@ private:
     // Test-only register-access observer. When unset the access path pays only
     // a single null check.
     RegisterAccessObserver register_access_observer_;
-
-    // Diagnostic: parasite ticks consumed by the inline read stretch loop.
-    // These ticks happen INSIDE a single host CPU cycle (no cycle_count
-    // increment, no peripheral ticking). High values indicate the loop
-    // is consuming wall-clock time without advancing the host clock.
-    uint64_t read_stretch_parasite_ticks_ = 0;
-
-public:
-    uint64_t read_stretch_parasite_ticks() const { return read_stretch_parasite_ticks_; }
 };
 
 }  // namespace beebium

@@ -21,7 +21,7 @@ class TubeInspection;
 // Abstract host-side interface for the Tube ULA.
 //
 // Implemented by:
-//   TubeUla          -- full in-process model (both host and parasite sides)
+//   TubeUla          -- full in-process model (both host and coprocessor sides)
 //   EmptyTubeBackend -- null object for an empty socket (no second processor)
 //
 // TubeSocket holds a unique_ptr<TubeHostBackend> and delegates all register
@@ -49,12 +49,12 @@ public:
     // because the target register was full (write) or empty (read).
     //
     // On real hardware the Tube ULA holds the host CPU's clock until the
-    // condition clears (the parasite drains or fills the register). In the
+    // condition clears (the coprocessor drains or fills the register). In the
     // in-process TubeUla model this is reported as a flag; the caller is
-    // responsible for stepping the parasite until stretched() returns false.
+    // responsible for stepping the coprocessor until stretched() returns false.
     //
     // The in-process TubeUla model reports bus stretch as a flag; the caller
-    // is responsible for stepping the parasite until stretched() returns false.
+    // is responsible for stepping the coprocessor until stretched() returns false.
     virtual bool stretched() const { return false; }
 
     // Complete any write that was deferred during a bus-stretched pause.

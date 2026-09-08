@@ -143,7 +143,7 @@ TEST_CASE("PacingController handles repeated short bursts", "[pacing]") {
 }
 
 
-TEST_CASE("PacingController 3 MHz parasite", "[pacing]") {
+TEST_CASE("PacingController 3 MHz coprocessor", "[pacing]") {
     PacingController ctrl(3'000'000, 500'000);
 
     auto results = simulate(ctrl, 1000, 100, 150);

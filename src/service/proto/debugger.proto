@@ -3,7 +3,7 @@ syntax = "proto3";
 package beebium;
 
 // Generic debugger service for 6502-based machines.
-// Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+// Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
 service DebuggerControl {
     // Execution control
     rpc GetState(Empty) returns (ExecutionState);
@@ -51,10 +51,10 @@ service DebuggerControl {
     rpc SetCpuState(CpuState) returns (CpuState);
 }
 
-// Parasite (second processor) debugger service.
+// Coprocessor (second processor) debugger service.
 // Same RPCs as DebuggerControl but registered under a distinct service name
 // so both can coexist on the same gRPC server.
-service ParasiteDebuggerControl {
+service CoprocessorDebuggerControl {
     rpc GetState(Empty) returns (ExecutionState);
     rpc Run(Empty) returns (RunResponse);
     rpc Stop(Empty) returns (StopResponse);
@@ -86,7 +86,7 @@ service ParasiteDebuggerControl {
 }
 
 // BBC Micro device state inspection.
-// Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+// Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
 service DeviceInspection {
     rpc GetSystemViaState(GetSystemViaStateRequest) returns (ViaState);
     rpc GetUserViaState(GetUserViaStateRequest) returns (ViaState);
@@ -528,19 +528,19 @@ message GetTubeStateRequest {}
 // Complete Tube ULA state, modelling the real hardware's registers, FIFOs,
 // latches, control flags, and interrupt outputs.
 //
-// The Tube ULA has four register pairs (R1-R4), each with a host-to-parasite
-// (H-to-P) and parasite-to-host (P-to-H) direction. Each direction uses
+// The Tube ULA has four register pairs (R1-R4), each with a host-to-coprocessor
+// (H-to-P) and coprocessor-to-host (P-to-H) direction. Each direction uses
 // specific hardware: latches, FIFOs, or 2-byte shift registers.
 //
-// Status bits are provided from both host and parasite perspectives, since
+// Status bits are provided from both host and coprocessor perspectives, since
 // each side sees different views of the same registers.
 message TubeState {
     // Control flags (6 bits, written by host via R1 status register).
     TubeControlFlags control_flags = 1;
 
     // Register 1: H-to-P is a 1-byte latch; P-to-H is a 24-byte FIFO.
-    TubeLatchState r1_h2p = 2;      // Host-to-parasite latch
-    TubeFifo24State r1_p2h = 3;     // Parasite-to-host 24-byte FIFO
+    TubeLatchState r1_h2p = 2;      // Host-to-coprocessor latch
+    TubeFifo24State r1_p2h = 3;     // Coprocessor-to-host 24-byte FIFO
 
     // Register 2: 1-byte latch in each direction (no bus stretching).
     TubeLatchState r2_h2p = 4;
@@ -558,8 +558,8 @@ message TubeState {
     // Status registers (as read by host at offsets 0/2/4/6).
     TubeHostStatus host_status = 10;
 
-    // Status registers (as read by parasite at offsets 0/2/4/6).
-    TubeParasiteStatus parasite_status = 11;
+    // Status registers (as read by coprocessor at offsets 0/2/4/6).
+    TubeCoprocessorStatus coprocessor_status = 11;
 
     // Interrupt outputs.
     TubeInterrupts interrupts = 12;
@@ -581,15 +581,15 @@ message TubeState {
 
 // A single entry in the Tube protocol trace ring buffer.
 message TubeTraceEntry {
-    uint32 tag = 1;    // bits 7-4: register (1-4), bit 3: dir (0=H2P,1=P2H), bit 2: side (0=host,1=parasite)
+    uint32 tag = 1;    // bits 7-4: register (1-4), bit 3: dir (0=H2P,1=P2H), bit 2: side (0=host,1=coprocessor)
     uint32 value = 2;  // data byte
 }
 
 // Per-register byte transfer counters for Tube diagnostics.
 // Each counter records total bytes written or read for a register direction.
-// Stored in shared memory so both host and parasite can read all counters.
+// Stored in shared memory so both host and coprocessor can read all counters.
 message TubeTransferCounters {
-    // Host-to-parasite direction
+    // Host-to-coprocessor direction
     uint64 r1_h2p_writes = 1;
     uint64 r1_h2p_reads = 2;
     uint64 r2_h2p_writes = 3;
@@ -599,7 +599,7 @@ message TubeTransferCounters {
     uint64 r4_h2p_writes = 7;
     uint64 r4_h2p_reads = 8;
 
-    // Parasite-to-host direction
+    // Coprocessor-to-host direction
     uint64 r1_p2h_writes = 9;
     uint64 r1_p2h_reads = 10;
     uint64 r2_p2h_writes = 11;
@@ -617,7 +617,7 @@ message TubeControlFlags {
     bool j = 3;   // Bit 2: Enable PIRQ from R4
     bool m = 4;   // Bit 3: Enable PNMI from R3
     bool v = 5;   // Bit 4: Two-byte mode for R3
-    bool p = 6;   // Bit 5: Parasite reset
+    bool p = 6;   // Bit 5: Coprocessor reset
 }
 
 // Single-byte latch state (R1 H-to-P, R2 both directions, R4 both directions).
@@ -649,8 +649,8 @@ message TubeHostStatus {
     uint32 r4_status = 4;   // Offset 6: R4 status bits
 }
 
-// Parasite-perspective status registers (what the parasite reads at offsets 0/2/4/6).
-message TubeParasiteStatus {
+// Coprocessor-perspective status registers (what the coprocessor reads at offsets 0/2/4/6).
+message TubeCoprocessorStatus {
     uint32 r1_status = 1;   // Offset 0: control flags + R1 status bits
     uint32 r2_status = 2;   // Offset 2: R2 status bits
     uint32 r3_status = 3;   // Offset 4: R3 status bits (N F3 1 1 1 1 1 1; N at bit 7)
@@ -660,7 +660,7 @@ message TubeParasiteStatus {
 // Tube interrupt output state.
 message TubeInterrupts {
     bool hirq = 1;           // Host IRQ: Q=1 AND R4 P-to-H has data
-    bool pirq = 2;           // Parasite IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data)
+    bool pirq = 2;           // Coprocessor IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data)
     bool pnmi_level = 3;     // PNMI level (combinational, before edge detection)
     bool pnmi_edge = 4;      // PNMI latched rising edge
 }

@@ -10,19 +10,19 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// In-process Tube tests: ParasiteRunner backed by TubeUla.
+// In-process Tube tests: CoprocessorRunner backed by TubeUla.
 //
 // These tests validate the in-process architecture where the host and
-// parasite share a TubeUla in the same process. The host accesses TubeUla
-// via host_read/host_write (as TubeSocket would), and the parasite accesses
-// it via parasite_read/parasite_write (through ParasiteRunner).
+// coprocessor share a TubeUla in the same process. The host accesses TubeUla
+// via host_read/host_write (as TubeSocket would), and the coprocessor accesses
+// it via coprocessor_read/coprocessor_write (through CoprocessorRunner).
 //
-// The parasite runs the real Acorn Tube 6502 Client ROM, proving the in-process
+// The coprocessor runs the real Acorn Tube 6502 Client ROM, proving the in-process
 // data path works with real CPU execution.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -59,10 +59,10 @@ static constexpr uint64_t BOOT_CYCLES = 100000;
 TEST_CASE("In-process: host reads banner from R1 FIFO", "[tube][inprocess]") {
     auto rom = load_rom();
     TubeUla tube;
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
-    // Run parasite -- it writes the boot banner to R1 P-to-H FIFO.
+    // Run coprocessor -- it writes the boot banner to R1 P-to-H FIFO.
     runner.run(BOOT_CYCLES);
 
     // Host reads R1 status via TubeUla host interface.
@@ -91,16 +91,16 @@ TEST_CASE("In-process: host reads banner from R1 FIFO", "[tube][inprocess]") {
 }
 
 // ===========================================================================
-// Sequential: host reads banner after parasite boot
+// Sequential: host reads banner after coprocessor boot
 // ===========================================================================
 
-TEST_CASE("In-process: host reads banner after parasite boot", "[tube][inprocess]") {
+TEST_CASE("In-process: host reads banner after coprocessor boot", "[tube][inprocess]") {
     auto rom = load_rom();
     TubeUla tube;
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
-    // Run parasite -- it writes the boot banner to R1 P-to-H FIFO.
+    // Run coprocessor -- it writes the boot banner to R1 P-to-H FIFO.
     runner.run(BOOT_CYCLES);
 
     // Host reads banner via TubeUla.
@@ -123,13 +123,13 @@ TEST_CASE("In-process: host reads banner after parasite boot", "[tube][inprocess
 }
 
 // ===========================================================================
-// Sequential: R2 handshake with parasite
+// Sequential: R2 handshake with coprocessor
 // ===========================================================================
 
-TEST_CASE("In-process: R2 handshake with parasite", "[tube][inprocess]") {
+TEST_CASE("In-process: R2 handshake with coprocessor", "[tube][inprocess]") {
     auto rom = load_rom();
     TubeUla tube;
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     // Boot phase
@@ -147,7 +147,7 @@ TEST_CASE("In-process: R2 handshake with parasite", "[tube][inprocess]") {
     // Write a dummy byte to R2 (OSRDCH command)
     tube.host_write(3, 0x00);
 
-    // Run parasite more to process the R2 data
+    // Run coprocessor more to process the R2 data
     runner.run(500000);
 
     // If we got here without hang, the R2 handshake worked.
@@ -159,11 +159,11 @@ TEST_CASE("In-process: R2 handshake with parasite", "[tube][inprocess]") {
 // Machine::step()), not only in run().
 // ===========================================================================
 
-TEST_CASE("In-process: parasite breakpoint fires on the tick() path",
+TEST_CASE("In-process: coprocessor breakpoint fires on the tick() path",
           "[tube][inprocess]") {
     auto rom = load_rom();
     TubeUla tube;
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     // Boot into real execution, then align to a clean instruction boundary so

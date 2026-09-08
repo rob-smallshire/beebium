@@ -23,22 +23,22 @@ describe("Tube", () => {
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: true,
-                    parasiteConnected: true,
-                    parasiteType: "65C02",
-                    parasiteClockHz: 3000000,
+                    coprocessorConnected: true,
+                    coprocessorType: "65C02",
+                    coprocessorClockHz: 3000000,
                     sharedMemoryName: "/beebium-tube-123",
-                    parasiteGrpcAddress: "localhost:50052",
+                    coprocessorGrpcAddress: "localhost:50052",
                 }),
             });
             const tube = new Tube(stub as any);
             const status = await tube.getStatus();
             expect(status.hasTubeSocket).toBe(true);
             expect(status.enabled).toBe(true);
-            expect(status.parasiteConnected).toBe(true);
-            expect(status.parasiteType).toBe("65C02");
-            expect(status.parasiteClockHz).toBe(3000000);
+            expect(status.coprocessorConnected).toBe(true);
+            expect(status.coprocessorType).toBe("65C02");
+            expect(status.coprocessorClockHz).toBe(3000000);
             expect(status.sharedMemoryName).toBe("/beebium-tube-123");
-            expect(status.parasiteGrpcAddress).toBe("localhost:50052");
+            expect(status.coprocessorGrpcAddress).toBe("localhost:50052");
         });
 
         it("maps disabled tube", async () => {
@@ -46,17 +46,17 @@ describe("Tube", () => {
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: false,
-                    parasiteConnected: false,
-                    parasiteType: "",
-                    parasiteClockHz: 0,
+                    coprocessorConnected: false,
+                    coprocessorType: "",
+                    coprocessorClockHz: 0,
                     sharedMemoryName: "",
-                    parasiteGrpcAddress: "",
+                    coprocessorGrpcAddress: "",
                 }),
             });
             const tube = new Tube(stub as any);
             const status = await tube.getStatus();
             expect(status.enabled).toBe(false);
-            expect(status.parasiteType).toBe("");
+            expect(status.coprocessorType).toBe("");
         });
     });
 
@@ -66,11 +66,11 @@ describe("Tube", () => {
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: true,
-                    parasiteConnected: false,
-                    parasiteType: "",
-                    parasiteClockHz: 0,
+                    coprocessorConnected: false,
+                    coprocessorType: "",
+                    coprocessorClockHz: 0,
                     sharedMemoryName: "",
-                    parasiteGrpcAddress: "",
+                    coprocessorGrpcAddress: "",
                 }),
             });
             const tube = new Tube(stub as any);
@@ -82,11 +82,11 @@ describe("Tube", () => {
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: false,
-                    parasiteConnected: false,
-                    parasiteType: "",
-                    parasiteClockHz: 0,
+                    coprocessorConnected: false,
+                    coprocessorType: "",
+                    coprocessorClockHz: 0,
                     sharedMemoryName: "",
-                    parasiteGrpcAddress: "",
+                    coprocessorGrpcAddress: "",
                 }),
             });
             const tube = new Tube(stub as any);
@@ -94,39 +94,39 @@ describe("Tube", () => {
         });
     });
 
-    describe("isParasiteConnected", () => {
+    describe("isCoprocessorConnected", () => {
         it("returns true when connected", async () => {
             const stub = createMockStub({
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: true,
-                    parasiteConnected: true,
-                    parasiteType: "65C02",
-                    parasiteClockHz: 3000000,
+                    coprocessorConnected: true,
+                    coprocessorType: "65C02",
+                    coprocessorClockHz: 3000000,
                     sharedMemoryName: "",
-                    parasiteGrpcAddress: "localhost:50052",
+                    coprocessorGrpcAddress: "localhost:50052",
                 }),
             });
             const tube = new Tube(stub as any);
-            expect(await tube.isParasiteConnected()).toBe(true);
+            expect(await tube.isCoprocessorConnected()).toBe(true);
         });
     });
 
-    describe("getParasiteGrpcAddress", () => {
+    describe("getCoprocessorGrpcAddress", () => {
         it("returns the address string", async () => {
             const stub = createMockStub({
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: true,
-                    parasiteConnected: true,
-                    parasiteType: "65C02",
-                    parasiteClockHz: 3000000,
+                    coprocessorConnected: true,
+                    coprocessorType: "65C02",
+                    coprocessorClockHz: 3000000,
                     sharedMemoryName: "",
-                    parasiteGrpcAddress: "localhost:50052",
+                    coprocessorGrpcAddress: "localhost:50052",
                 }),
             });
             const tube = new Tube(stub as any);
-            expect(await tube.getParasiteGrpcAddress()).toBe("localhost:50052");
+            expect(await tube.getCoprocessorGrpcAddress()).toBe("localhost:50052");
         });
 
         it("returns empty string when not registered", async () => {
@@ -134,15 +134,15 @@ describe("Tube", () => {
                 getStatus: () => ({
                     hasTubeSocket: true,
                     enabled: false,
-                    parasiteConnected: false,
-                    parasiteType: "",
-                    parasiteClockHz: 0,
+                    coprocessorConnected: false,
+                    coprocessorType: "",
+                    coprocessorClockHz: 0,
                     sharedMemoryName: "",
-                    parasiteGrpcAddress: "",
+                    coprocessorGrpcAddress: "",
                 }),
             });
             const tube = new Tube(stub as any);
-            expect(await tube.getParasiteGrpcAddress()).toBe("");
+            expect(await tube.getCoprocessorGrpcAddress()).toBe("");
         });
     });
 });

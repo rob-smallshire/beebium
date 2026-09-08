@@ -20,7 +20,7 @@ namespace beebium {
 
 // Trace entry for a Tube register access (read or write).
 struct RegisterTraceEntry {
-    uint64_t cycle;      // CPU cycle count (host or parasite, depending on side)
+    uint64_t cycle;      // CPU cycle count (host or coprocessor, depending on side)
     uint8_t  offset;     // Register offset (0-7)
     uint8_t  value;      // Data value read or written
     uint8_t  direction;  // 0 = read, 1 = write

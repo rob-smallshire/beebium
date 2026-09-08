@@ -10,13 +10,13 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 
 #include <algorithm>
 
 namespace beebium {
 
-ParasiteRunner::ParasiteRunner(TubeParasiteBackend& backend, std::span<const uint8_t, 2048> rom,
+CoprocessorRunner::CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 2048> rom,
                                ClockRatio ratio)
     : tube_port_(backend)
     , memory_(tube_port_, rom)
@@ -26,7 +26,7 @@ ParasiteRunner::ParasiteRunner(TubeParasiteBackend& backend, std::span<const uin
     std::copy(rom.begin(), rom.end(), rom_.begin());
 }
 
-void ParasiteRunner::reset() {
+void CoprocessorRunner::reset() {
     cpu_.reset();
     // Discard the clock's time base: a hard host reset zeroes the host cycle
     // count, so the next run_until() must establish a fresh origin rather than
@@ -34,10 +34,10 @@ void ParasiteRunner::reset() {
     clock_.rebase();
 }
 
-void ParasiteRunner::run_until(uint64_t host_cycle) {
-    // Advance the clock's record of host time and learn how many parasite
+void CoprocessorRunner::run_until(uint64_t host_cycle) {
+    // Advance the clock's record of host time and learn how many coprocessor
     // cycles have become due. Do this even while paused: the paused interval's
-    // cycles are lost, not deferred, so a resumed parasite does not catch up.
+    // cycles are lost, not deferred, so a resumed coprocessor does not catch up.
     const uint64_t due = clock_.cycles_due(host_cycle);
     if (paused_) return;
     for (uint64_t i = 0; i < due; ++i) {
@@ -45,7 +45,7 @@ void ParasiteRunner::run_until(uint64_t host_cycle) {
     }
 }
 
-bool ParasiteRunner::check_breakpoints() {
+bool CoprocessorRunner::check_breakpoints() {
     // Check breakpoints before tick(), when register updates are complete and
     // the CPU is about to decode the next opcode.
     if (breakpoint_entries_.empty() || !M6502_IsAboutToExecute(&cpu_.cpu())) {
@@ -62,7 +62,7 @@ bool ParasiteRunner::check_breakpoints() {
     return false;
 }
 
-bool ParasiteRunner::check_watchpoints() {
+bool CoprocessorRunner::check_watchpoints() {
     // Watchpoint check (every bus access, after tick).
     if (watchpoint_entries_.empty()) return false;
     const uint16_t addr = cpu_.cpu().abus.w;
@@ -79,7 +79,7 @@ bool ParasiteRunner::check_watchpoints() {
     return false;
 }
 
-void ParasiteRunner::run(uint64_t cycles) {
+void CoprocessorRunner::run(uint64_t cycles) {
     uint64_t batch_end = cpu_.cycle_count() + cycles;
 
     while (cpu_.cycle_count() < batch_end) {
@@ -90,15 +90,15 @@ void ParasiteRunner::run(uint64_t cycles) {
     }
 }
 
-uint64_t ParasiteRunner::step_instruction() {
+uint64_t CoprocessorRunner::step_instruction() {
     return cpu_.step_instruction();
 }
 
-void ParasiteRunner::step() {
-    // step() is the LIVE execution path: the parasite is ticked single-threaded
-    // from Machine::step() via TubeSocket::tick_parasite() -> tick() -> step().
+void CoprocessorRunner::step() {
+    // step() is the LIVE execution path: the coprocessor is ticked single-threaded
+    // from Machine::step() via TubeSocket::tick_coprocessor() -> tick() -> step().
     // run() is never called outside tests, so the breakpoint and watchpoint
-    // checks must happen here -- otherwise parasite breakpoints never fire during
+    // checks must happen here -- otherwise coprocessor breakpoints never fire during
     // normal execution.
     if (check_breakpoints()) return;  // paused at the breakpoint PC; don't execute it
     cpu_.tick();
@@ -106,12 +106,12 @@ void ParasiteRunner::step() {
     ++sequence_;
 }
 
-void ParasiteRunner::pause() {
+void CoprocessorRunner::pause() {
     paused_ = true;
     ++sequence_;
 }
 
-void ParasiteRunner::resume() {
+void CoprocessorRunner::resume() {
     paused_ = false;
     ++sequence_;
 }

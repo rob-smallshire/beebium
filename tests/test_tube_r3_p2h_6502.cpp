@@ -12,8 +12,8 @@
 
 // R3 P-to-H transfer tests using the real 65C02 CPU.
 //
-// The parasite writes bytes to R3 P-to-H via $FEFD.  The host reads them
-// from R3 data (offset 5).  The parasite polls R3 status ($FEFC) bit 6
+// The coprocessor writes bytes to R3 P-to-H via $FEFD.  The host reads them
+// from R3 data (offset 5).  The coprocessor polls R3 status ($FEFC) bit 6
 // (space available) before each write.
 //
 // R3 is a 2-slot circular buffer (or 1-slot when V=0).  These tests use
@@ -21,8 +21,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteCpu.hpp>
-#include <beebium/tube/ParasiteMemoryMap.hpp>
+#include <beebium/tube/CoprocessorCpu.hpp>
+#include <beebium/tube/CoprocessorMemoryMap.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -37,7 +37,7 @@ static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr) {
     return rom;
 }
 
-static void plant(ParasiteMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
+static void plant(CoprocessorMemoryMap& mem, uint16_t addr, std::initializer_list<uint8_t> code) {
     for (auto byte : code) {
         mem.ram(addr++) = byte;
     }
@@ -47,7 +47,7 @@ static constexpr uint16_t CODE_ADDR = 0x0400;
 static constexpr uint16_t SOURCE_ADDR = 0x0500;
 
 // ============================================================================
-// 6502 R3 polled write program (Parasite-to-Host)
+// 6502 R3 polled write program (Coprocessor-to-Host)
 // ============================================================================
 //
 // $0400: LDX #$00
@@ -60,7 +60,7 @@ static constexpr uint16_t SOURCE_ADDR = 0x0500;
 // $0410: BNE $0402        ; loop
 // $0412: BRA *            ; halt
 
-static void plant_r3_writer(ParasiteMemoryMap& mem, uint8_t num_bytes) {
+static void plant_r3_writer(CoprocessorMemoryMap& mem, uint8_t num_bytes) {
     plant(mem, CODE_ADDR, {
         0xA2, 0x00,                         // LDX #$00
         0x2C, 0xFC, 0xFE,                   // BIT $FEFC     (poll R3 status)
@@ -74,13 +74,13 @@ static void plant_r3_writer(ParasiteMemoryMap& mem, uint8_t num_bytes) {
     });
 }
 
-static void setup_cpu(ParasiteMemoryMap& mem, ParasiteCpu& cpu, TubeUla& tube) {
+static void setup_cpu(CoprocessorMemoryMap& mem, CoprocessorCpu& cpu, TubeUla& tube) {
     mem.read(0xFEF8);  // disable boot ROM
     mem.ram(0xFFFC) = CODE_ADDR & 0xFF;
     mem.ram(0xFFFD) = (CODE_ADDR >> 8) & 0xFF;
     cpu.reset();
     // TubeUla::reset() seeds R3 P-to-H with a dummy byte (count=1)
-    // to prevent spurious PNMI.  Drain it so the parasite has space to write.
+    // to prevent spurious PNMI.  Drain it so the coprocessor has space to write.
     tube.host_read(5);
 }
 
@@ -92,8 +92,8 @@ TEST_CASE("6502 R3 P2H: single byte", "[tube][6502][r3]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     plant_r3_writer(memory, 1);
     memory.ram(SOURCE_ADDR) = 0x42;
@@ -111,8 +111,8 @@ TEST_CASE("6502 R3 P2H: 200 bytes interleaved", "[tube][6502][r3]") {
     TubeUla tube;
 
     auto rom = make_stub_rom(CODE_ADDR);
-    ParasiteMemoryMap memory(tube, rom);
-    ParasiteCpu cpu(memory, tube);
+    CoprocessorMemoryMap memory(tube, rom);
+    CoprocessorCpu cpu(memory, tube);
 
     constexpr uint8_t NUM_BYTES = 200;
     plant_r3_writer(memory, NUM_BYTES);
@@ -148,8 +148,8 @@ TEST_CASE("6502 R3 P2H: 200 bytes, repeated 50 times", "[tube][6502][r3]") {
         TubeUla tube;
 
         auto rom = make_stub_rom(CODE_ADDR);
-        ParasiteMemoryMap memory(tube, rom);
-        ParasiteCpu cpu(memory, tube);
+        CoprocessorMemoryMap memory(tube, rom);
+        CoprocessorCpu cpu(memory, tube);
 
         plant_r3_writer(memory, NUM_BYTES);
         uint8_t base = static_cast<uint8_t>(iter * 11);

@@ -1710,11 +1710,11 @@ class TubeState(_message.Message):
     """Complete Tube ULA state, modelling the real hardware's registers, FIFOs,
     latches, control flags, and interrupt outputs.
 
-    The Tube ULA has four register pairs (R1-R4), each with a host-to-parasite
-    (H-to-P) and parasite-to-host (P-to-H) direction. Each direction uses
+    The Tube ULA has four register pairs (R1-R4), each with a host-to-coprocessor
+    (H-to-P) and coprocessor-to-host (P-to-H) direction. Each direction uses
     specific hardware: latches, FIFOs, or 2-byte shift registers.
 
-    Status bits are provided from both host and parasite perspectives, since
+    Status bits are provided from both host and coprocessor perspectives, since
     each side sees different views of the same registers.
     """
 
@@ -1730,7 +1730,7 @@ class TubeState(_message.Message):
     R4_H2P_FIELD_NUMBER: _builtins.int
     R4_P2H_FIELD_NUMBER: _builtins.int
     HOST_STATUS_FIELD_NUMBER: _builtins.int
-    PARASITE_STATUS_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_STATUS_FIELD_NUMBER: _builtins.int
     INTERRUPTS_FIELD_NUMBER: _builtins.int
     HOST_STRETCHED_FIELD_NUMBER: _builtins.int
     ENABLED_FIELD_NUMBER: _builtins.int
@@ -1749,12 +1749,12 @@ class TubeState(_message.Message):
     @_builtins.property
     def r1_h2p(self) -> Global___TubeLatchState:
         """Register 1: H-to-P is a 1-byte latch; P-to-H is a 24-byte FIFO.
-        Host-to-parasite latch
+        Host-to-coprocessor latch
         """
 
     @_builtins.property
     def r1_p2h(self) -> Global___TubeFifo24State:
-        """Parasite-to-host 24-byte FIFO"""
+        """Coprocessor-to-host 24-byte FIFO"""
 
     @_builtins.property
     def r2_h2p(self) -> Global___TubeLatchState:
@@ -1781,8 +1781,8 @@ class TubeState(_message.Message):
         """Status registers (as read by host at offsets 0/2/4/6)."""
 
     @_builtins.property
-    def parasite_status(self) -> Global___TubeParasiteStatus:
-        """Status registers (as read by parasite at offsets 0/2/4/6)."""
+    def coprocessor_status(self) -> Global___TubeCoprocessorStatus:
+        """Status registers (as read by coprocessor at offsets 0/2/4/6)."""
 
     @_builtins.property
     def interrupts(self) -> Global___TubeInterrupts:
@@ -1811,7 +1811,7 @@ class TubeState(_message.Message):
         r4_h2p: Global___TubeLatchState | None = ...,
         r4_p2h: Global___TubeLatchState | None = ...,
         host_status: Global___TubeHostStatus | None = ...,
-        parasite_status: Global___TubeParasiteStatus | None = ...,
+        coprocessor_status: Global___TubeCoprocessorStatus | None = ...,
         interrupts: Global___TubeInterrupts | None = ...,
         host_stretched: _builtins.bool = ...,
         enabled: _builtins.bool = ...,
@@ -1819,9 +1819,9 @@ class TubeState(_message.Message):
         trace: _abc.Iterable[Global___TubeTraceEntry] | None = ...,
         trace_total_count: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "counters", b"counters", "host_status", b"host_status", "interrupts", b"interrupts", "parasite_status", b"parasite_status", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "counters", b"counters", "enabled", b"enabled", "host_status", b"host_status", "host_stretched", b"host_stretched", "interrupts", b"interrupts", "parasite_status", b"parasite_status", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace", b"trace", "trace_total_count", b"trace_total_count"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "enabled", b"enabled", "host_status", b"host_status", "host_stretched", b"host_stretched", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace", b"trace", "trace_total_count", b"trace_total_count"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -1836,7 +1836,7 @@ class TubeTraceEntry(_message.Message):
     TAG_FIELD_NUMBER: _builtins.int
     VALUE_FIELD_NUMBER: _builtins.int
     tag: _builtins.int
-    """bits 7-4: register (1-4), bit 3: dir (0=H2P,1=P2H), bit 2: side (0=host,1=parasite)"""
+    """bits 7-4: register (1-4), bit 3: dir (0=H2P,1=P2H), bit 2: side (0=host,1=coprocessor)"""
     value: _builtins.int
     """data byte"""
     def __init__(
@@ -1857,7 +1857,7 @@ Global___TubeTraceEntry: _TypeAlias = TubeTraceEntry  # noqa: Y015
 class TubeTransferCounters(_message.Message):
     """Per-register byte transfer counters for Tube diagnostics.
     Each counter records total bytes written or read for a register direction.
-    Stored in shared memory so both host and parasite can read all counters.
+    Stored in shared memory so both host and coprocessor can read all counters.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -1879,7 +1879,7 @@ class TubeTransferCounters(_message.Message):
     R4_P2H_WRITES_FIELD_NUMBER: _builtins.int
     R4_P2H_READS_FIELD_NUMBER: _builtins.int
     r1_h2p_writes: _builtins.int
-    """Host-to-parasite direction"""
+    """Host-to-coprocessor direction"""
     r1_h2p_reads: _builtins.int
     r2_h2p_writes: _builtins.int
     r2_h2p_reads: _builtins.int
@@ -1888,7 +1888,7 @@ class TubeTransferCounters(_message.Message):
     r4_h2p_writes: _builtins.int
     r4_h2p_reads: _builtins.int
     r1_p2h_writes: _builtins.int
-    """Parasite-to-host direction"""
+    """Coprocessor-to-host direction"""
     r1_p2h_reads: _builtins.int
     r2_p2h_writes: _builtins.int
     r2_p2h_reads: _builtins.int
@@ -1947,7 +1947,7 @@ class TubeControlFlags(_message.Message):
     v: _builtins.bool
     """Bit 4: Two-byte mode for R3"""
     p: _builtins.bool
-    """Bit 5: Parasite reset"""
+    """Bit 5: Coprocessor reset"""
     def __init__(
         self,
         *,
@@ -2091,8 +2091,8 @@ class TubeHostStatus(_message.Message):
 Global___TubeHostStatus: _TypeAlias = TubeHostStatus  # noqa: Y015
 
 @_typing.final
-class TubeParasiteStatus(_message.Message):
-    """Parasite-perspective status registers (what the parasite reads at offsets 0/2/4/6)."""
+class TubeCoprocessorStatus(_message.Message):
+    """Coprocessor-perspective status registers (what the coprocessor reads at offsets 0/2/4/6)."""
 
     DESCRIPTOR: _descriptor.Descriptor
 
@@ -2122,7 +2122,7 @@ class TubeParasiteStatus(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___TubeParasiteStatus: _TypeAlias = TubeParasiteStatus  # noqa: Y015
+Global___TubeCoprocessorStatus: _TypeAlias = TubeCoprocessorStatus  # noqa: Y015
 
 @_typing.final
 class TubeInterrupts(_message.Message):
@@ -2137,7 +2137,7 @@ class TubeInterrupts(_message.Message):
     hirq: _builtins.bool
     """Host IRQ: Q=1 AND R4 P-to-H has data"""
     pirq: _builtins.bool
-    """Parasite IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data)"""
+    """Coprocessor IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data)"""
     pnmi_level: _builtins.bool
     """PNMI level (combinational, before edge detection)"""
     pnmi_edge: _builtins.bool

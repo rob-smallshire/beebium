@@ -24,7 +24,7 @@ target_link_libraries(beebium_ext_acorn_65c02
 # (so SecondProcessor65C02Extension is compiled exactly once and shared with the
 # 65C102 plugin) plus beebium_extension_api, the single shared copy of the
 # abstract interfaces the server dynamic_casts to. The static library brings the
-# Tube bridge, parasite runner, parasite CPU and 6502 core transitively via
+# Tube bridge, coprocessor runner, coprocessor CPU and 6502 core transitively via
 # beebium_core. The plugin does NOT link beebium_service: the debugger lives
 # entirely in the server now, so it carries no gRPC or proto descriptors.
 # plugin_entry.cpp constructs the extension with the default 3/2 ratio.

@@ -99,8 +99,8 @@ class Beebium:
         self._connection = connection
         self._server = server
         self._instance_uuid = instance_uuid
-        self._owns_connection = server is not None  # parasite views don't own the connection
-        self._debugger_stub_override = None  # set for parasite views
+        self._owns_connection = server is not None  # coprocessor views don't own the connection
+        self._debugger_stub_override = None  # set for coprocessor views
         self._debugger: Debugger | None = None
         self._cpu: CPU | None = None
         self._keyboard: Keyboard | None = None
@@ -127,15 +127,15 @@ class Beebium:
         self._extensions: Extensions | None = None
 
     @classmethod
-    def _from_parasite_stub(cls, connection: Connection) -> Beebium:
-        """Create a parasite view sharing the same connection.
+    def _from_coprocessor_stub(cls, connection: Connection) -> Beebium:
+        """Create a coprocessor view sharing the same connection.
 
         The returned client routes debugger calls to the
-        ParasiteDebuggerControl service. It does not own the connection.
+        CoprocessorDebuggerControl service. It does not own the connection.
         """
         client = cls(connection)
         client._owns_connection = False
-        client._debugger_stub_override = connection.parasite_debugger_stub
+        client._debugger_stub_override = connection.coprocessor_debugger_stub
         return client
 
     @classmethod
@@ -480,16 +480,16 @@ class Beebium:
             self._tube = Tube(self._connection.tube_stub)
         return self._tube
 
-    def connect_parasite(self) -> Beebium:
-        """Get a Beebium client for the parasite processor.
+    def connect_coprocessor(self) -> Beebium:
+        """Get a Beebium client for the coprocessor processor.
 
         Returns a Beebium instance that shares the same gRPC connection
-        but routes debugger calls to the ParasiteDebuggerControl service.
-        The parasite client does not own the connection and should not
+        but routes debugger calls to the CoprocessorDebuggerControl service.
+        The coprocessor client does not own the connection and should not
         be closed independently.
 
         Returns:
-            A Beebium client for the parasite processor.
+            A Beebium client for the coprocessor processor.
 
         Raises:
             BeebiumConnectionError: If no Tube coprocessor extension is active.
@@ -497,21 +497,21 @@ class Beebium:
         status = self.tube.status
         if not status.enabled:
             raise BeebiumConnectionError("No Tube coprocessor is active")
-        return Beebium._from_parasite_stub(self._connection)
+        return Beebium._from_coprocessor_stub(self._connection)
 
     @contextlib.contextmanager
-    def parasite(self) -> Iterator[Beebium]:
-        """Context manager for the parasite processor.
+    def coprocessor(self) -> Iterator[Beebium]:
+        """Context manager for the coprocessor processor.
 
         Usage::
 
-            with bbc.parasite() as parasite:
-                print(parasite.cpu.registers)
+            with bbc.coprocessor() as coprocessor:
+                print(coprocessor.cpu.registers)
 
         Raises:
             BeebiumConnectionError: If no Tube coprocessor is active.
         """
-        yield self.connect_parasite()
+        yield self.connect_coprocessor()
 
     # =========================================================================
     # Emulated time helpers

@@ -37,7 +37,7 @@ public:
     // Control flag bits (written via host offset 0).
     static constexpr uint8_t FLAG_S = 0x80;  // set/clear mode select
     static constexpr uint8_t FLAG_T = 0x40;  // soft reset (clear all registers)
-    static constexpr uint8_t FLAG_P = 0x20;  // parasite reset
+    static constexpr uint8_t FLAG_P = 0x20;  // coprocessor reset
     static constexpr uint8_t FLAG_V = 0x10;  // two-byte mode for R3
     static constexpr uint8_t FLAG_M = 0x08;  // enable PNMI from R3
     static constexpr uint8_t FLAG_J = 0x04;  // enable PIRQ from R4
@@ -69,7 +69,7 @@ public:
 
     // Protocol trace ring buffer entry.
     // Tag encoding: bits 7-4 = register (1-4), bit 3 = direction (0=H2P, 1=P2H),
-    //               bit 2 = side (0=host access, 1=parasite access).
+    //               bit 2 = side (0=host access, 1=coprocessor access).
     static constexpr size_t TRACE_SIZE = 1024;
     struct TraceEntry {
         uint8_t tag;    // register + direction + side
@@ -81,7 +81,7 @@ public:
 
     // Side-effect-free register reads from each side (offsets 0-7).
     virtual uint8_t host_peek(uint8_t offset) const = 0;
-    virtual uint8_t parasite_peek(uint8_t offset) const = 0;
+    virtual uint8_t coprocessor_peek(uint8_t offset) const = 0;
 
     // Interrupt outputs.
     virtual bool hirq() const = 0;

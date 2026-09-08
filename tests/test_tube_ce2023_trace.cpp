@@ -13,7 +13,7 @@
 // CE2023 full-boot regression test.
 //
 // Boots Chuckie Egg 2023 with a Model B + 65C02 Tube using interleaved
-// execution and verifies that the game loads successfully (the parasite
+// execution and verifies that the game loads successfully (the coprocessor
 // does not hang at the R1 poll loop).
 //
 // This test was the primary reproduction case during the CE2023
@@ -25,7 +25,7 @@
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/FrameRenderer.hpp>
 #include <beebium/disc/DiscLoader.hpp>
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -54,7 +54,7 @@ static constexpr const char* DFS_ROM_FILENAME = "acorn-dfs_2_26.rom";
 static constexpr const char* DISC_FILENAME = "chuckieEgg2023.ssd";
 static constexpr size_t TUBE_ROM_SIZE = 2048;
 
-// The R1 poll loop address where the parasite hangs if the
+// The R1 poll loop address where the coprocessor hangs if the
 // decompressor runs out of data.
 static constexpr uint16_t DECOMP_R1_BPL = 0x09D4;
 
@@ -82,7 +82,7 @@ std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
 struct TestFixture {
     TubeUla tube;
     ModelB machine;
-    std::unique_ptr<ParasiteRunner> parasite;
+    std::unique_ptr<CoprocessorRunner> coprocessor;
     HeapFrameAllocator allocator;
     FrameBuffer fb;
     FrameRenderer renderer;
@@ -113,13 +113,13 @@ struct TestFixture {
         machine.reset();
 
         auto tube_rom = load_tube_rom();
-        parasite = std::make_unique<ParasiteRunner>(tube, tube_rom);
-        parasite->reset();
+        coprocessor = std::make_unique<CoprocessorRunner>(tube, tube_rom);
+        coprocessor->reset();
     }
 
     // Run interleaved with given batch sizes.
     // Returns true if hang detected, false if budget exhausted.
-    bool run_until_hang(int host_batch, int parasite_batch, int max_rounds) {
+    bool run_until_hang(int host_batch, int coprocessor_batch, int max_rounds) {
         int poll_count = 0;
 
         for (int round = 0; round < max_rounds; ++round) {
@@ -128,12 +128,12 @@ struct TestFixture {
                 if (machine.memory().video_output.has_value())
                     renderer.process(machine.memory().video_output.value());
             }
-            for (int i = 0; i < parasite_batch; ++i)
-                parasite->step_instruction();
+            for (int i = 0; i < coprocessor_batch; ++i)
+                coprocessor->step_instruction();
 
             // Check for hang periodically
             if ((round & 0x3FF) == 0) {
-                if (parasite->pc() == DECOMP_R1_BPL) {
+                if (coprocessor->pc() == DECOMP_R1_BPL) {
                     if (++poll_count > 1000) return true;
                 } else {
                     poll_count = 0;

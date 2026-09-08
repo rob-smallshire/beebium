@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "TubeParasiteBackend.hpp"
+#include "TubeCoprocessorBackend.hpp"
 
 #include "beebium/MemoryRegion.hpp"
 
@@ -44,9 +44,9 @@ namespace beebium {
 // Reference: 6502 Second Processor Service Manual, Sections 5.1-5.3.
 
 // Provides the region-model surface (get_memory_regions/peek_region/
-// read_region/write_region/machine_type) that ParasiteRunner forwards to the
+// read_region/write_region/machine_type) that CoprocessorRunner forwards to the
 // debugger as part of the CpuDebugTarget contract.
-class ParasiteMemoryMap {
+class CoprocessorMemoryMap {
 public:
     static constexpr std::string_view MACHINE_TYPE = "Tube65C02";
     std::string_view machine_type() const { return MACHINE_TYPE; }
@@ -56,7 +56,7 @@ public:
     static constexpr std::string_view REGION_TUBE = "tube_registers";
     // Construct with a reference to the Tube port and a 2 KB ROM image.
     // The ROM span must be exactly 2048 bytes.
-    ParasiteMemoryMap(TubeParasiteBackend& tube_port, std::span<const uint8_t, 2048> rom)
+    CoprocessorMemoryMap(TubeCoprocessorBackend& tube_port, std::span<const uint8_t, 2048> rom)
         : tube_port_(tube_port)
         , rom_enabled_(true)
     {
@@ -67,7 +67,7 @@ public:
     uint8_t read(uint16_t address) {
         if (is_tube_address(address)) {
             rom_enabled_ = false;
-            return tube_port_.parasite_read(static_cast<uint8_t>(address & 7));
+            return tube_port_.coprocessor_read(static_cast<uint8_t>(address & 7));
         }
 
         if (rom_enabled_ && address >= 0xF800) {
@@ -80,7 +80,7 @@ public:
     void write(uint16_t address, uint8_t value) {
         if (is_tube_address(address)) {
             rom_enabled_ = false;
-            tube_port_.parasite_write(static_cast<uint8_t>(address & 7), value);
+            tube_port_.coprocessor_write(static_cast<uint8_t>(address & 7), value);
             return;
         }
 
@@ -102,11 +102,11 @@ public:
     const uint8_t& ram(uint16_t address) const { return ram_[address]; }
 
     // Side-effect-free read for debugger inspection.
-    // Uses parasite_peek() for Tube registers to avoid clearing ready flags
+    // Uses coprocessor_peek() for Tube registers to avoid clearing ready flags
     // or dequeuing FIFOs. Does not disable boot ROM.
     uint8_t peek(uint16_t address) const {
         if (is_tube_address(address)) {
-            return tube_port_.parasite_peek(static_cast<uint8_t>(address & 7));
+            return tube_port_.coprocessor_peek(static_cast<uint8_t>(address & 7));
         }
         if (rom_enabled_ && address >= 0xF800) {
             return rom_[address & 0x7FF];
@@ -150,7 +150,7 @@ public:
             if (address < 0xFEF8 || address > 0xFEFF) {
                 throw std::invalid_argument("address out of bounds for tube_registers region");
             }
-            return tube_port_.parasite_peek(static_cast<uint8_t>(address & 7));
+            return tube_port_.coprocessor_peek(static_cast<uint8_t>(address & 7));
         }
         throw std::invalid_argument("unknown region: '" + std::string(name) + "'");
     }
@@ -170,7 +170,7 @@ public:
             if (address < 0xFEF8 || address > 0xFEFF) {
                 throw std::invalid_argument("address out of bounds for tube_registers region");
             }
-            return tube_port_.parasite_read(static_cast<uint8_t>(address & 7));
+            return tube_port_.coprocessor_read(static_cast<uint8_t>(address & 7));
         }
         throw std::invalid_argument("unknown region: '" + std::string(name) + "'");
     }
@@ -188,7 +188,7 @@ public:
             if (address < 0xFEF8 || address > 0xFEFF) {
                 throw std::invalid_argument("address out of bounds for tube_registers region");
             }
-            tube_port_.parasite_write(static_cast<uint8_t>(address & 7), value);
+            tube_port_.coprocessor_write(static_cast<uint8_t>(address & 7), value);
             return;
         }
         throw std::invalid_argument("unknown region: '" + std::string(name) + "'");
@@ -199,7 +199,7 @@ private:
         return address >= 0xFEF8 && address <= 0xFEFF;
     }
 
-    TubeParasiteBackend& tube_port_;
+    TubeCoprocessorBackend& tube_port_;
     std::array<uint8_t, 65536> ram_;
     std::array<uint8_t, 2048> rom_;
     bool rom_enabled_;

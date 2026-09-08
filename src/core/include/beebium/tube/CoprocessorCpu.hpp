@@ -13,36 +13,36 @@
 #pragma once
 
 #include "InstructionTrace.hpp"
-#include "ParasiteMemoryMap.hpp"
-#include "TubeParasiteBackend.hpp"
+#include "CoprocessorMemoryMap.hpp"
+#include "TubeCoprocessorBackend.hpp"
 
 #include <6502/6502.h>
 #include <cstdint>
 
 namespace beebium {
 
-// CPU wrapper for the 6502 second processor parasite.
+// CPU wrapper for the 6502 second processor coprocessor.
 //
-// Wires a Rockwell 65C02 to the ParasiteMemoryMap for bus access and
-// routes interrupt lines from the TubeParasiteBackend (PIRQ -> IRQ, PNMI -> NMI).
+// Wires a Rockwell 65C02 to the CoprocessorMemoryMap for bus access and
+// routes interrupt lines from the TubeCoprocessorBackend (PIRQ -> IRQ, PNMI -> NMI).
 //
-// The parasite CPU runs at 3 MHz with no bus stretching -- every tick
+// The coprocessor CPU runs at 3 MHz with no bus stretching -- every tick
 // is a single CPU cycle with a memory access.
 //
 // IRQ device mask bits:
-//   bit 0: Tube PIRQ (the only IRQ source on the parasite)
+//   bit 0: Tube PIRQ (the only IRQ source on the coprocessor)
 //
 // NMI device mask bits:
-//   bit 0: Tube PNMI (the only NMI source on the parasite)
+//   bit 0: Tube PNMI (the only NMI source on the coprocessor)
 
-class ParasiteCpu {
+class CoprocessorCpu {
 public:
-    ParasiteCpu(ParasiteMemoryMap& memory, TubeParasiteBackend& tube_port);
-    ~ParasiteCpu();
+    CoprocessorCpu(CoprocessorMemoryMap& memory, TubeCoprocessorBackend& tube_port);
+    ~CoprocessorCpu();
 
     // Non-copyable (M6502 contains internal pointers)
-    ParasiteCpu(const ParasiteCpu&) = delete;
-    ParasiteCpu& operator=(const ParasiteCpu&) = delete;
+    CoprocessorCpu(const CoprocessorCpu&) = delete;
+    CoprocessorCpu& operator=(const CoprocessorCpu&) = delete;
 
     // Reset CPU, memory map, and Tube port. Clears cycle count.
     void reset();
@@ -88,17 +88,17 @@ private:
     static constexpr M6502_DeviceIRQFlags kPirqMask = 1;
     static constexpr M6502_DeviceNMIFlags kPnmiMask = 1;
 
-    ParasiteMemoryMap& memory_;
-    TubeParasiteBackend& tube_port_;
+    CoprocessorMemoryMap& memory_;
+    TubeCoprocessorBackend& tube_port_;
     M6502 cpu_;
     uint64_t cycle_count_ = 0;
 
     // NMI handler tracking: while inside an NMI handler, PNMI updates are
     // suppressed to prevent NMI nesting.  In the cross-process Tube model,
-    // the host thread can write the next R3 byte before the parasite's NMI
+    // the host thread can write the next R3 byte before the coprocessor's NMI
     // handler completes, which would cause a new NMI edge during the
     // handler.  In real hardware, the host is limited to 2 MHz and disc
-    // byte rate (~16-32 us), giving the parasite time to finish before new
+    // byte rate (~16-32 us), giving the coprocessor time to finish before new
     // data arrives.
     //
     // Entry: detected when M6502ReadType_Interrupt and it's an NMI (not IRQ).

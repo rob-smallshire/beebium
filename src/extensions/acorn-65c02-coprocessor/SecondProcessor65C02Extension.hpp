@@ -13,7 +13,7 @@
 #pragma once
 
 #include "beebium/extension/CoprocessorExtension.hpp"
-#include "beebium/tube/ParasiteRunner.hpp"
+#include "beebium/tube/CoprocessorRunner.hpp"
 #include "beebium/tube/TubeSocket.hpp"
 #include "beebium/tube/TubeUla.hpp"
 
@@ -28,13 +28,13 @@ namespace beebium {
 
 // Acorn 65C02-family second processor, implemented as a Peripheral Extension.
 //
-// Owns everything on the parasite side of the Tube cable:
+// Owns everything on the coprocessor side of the Tube cable:
 //   - TubeUla (register bridge)
-//   - ParasiteRunner (CPU, memory map, boot ROM, breakpoints)
+//   - CoprocessorRunner (CPU, memory map, boot ROM, breakpoints)
 //
 // The TubeUla is installed into the host's TubeSocket as the backend.
-// The ParasiteRunner is installed as the Coprocessor so that Machine::step()
-// drives the parasite in host time (single-threaded model).
+// The CoprocessorRunner is installed as the Coprocessor so that Machine::step()
+// drives the coprocessor in host time (single-threaded model).
 //
 // One class serves both members of the family: the 3 MHz 65C02 second
 // processor (ratio 3/2) and the 4 MHz 65C102 second processor (ratio 2/1).
@@ -49,7 +49,7 @@ namespace beebium {
 
 class SecondProcessor65C02Extension : public CoprocessorExtension {
 public:
-    // clock_ratio: parasite/host cycle ratio (3/2 for the 65C02, 2/1 for the
+    // clock_ratio: coprocessor/host cycle ratio (3/2 for the 65C02, 2/1 for the
     // 65C102). cpu_label: short identity for the startup log line.
     explicit SecondProcessor65C02Extension(ClockRatio clock_ratio = ClockRatio{3, 2},
                                            std::string cpu_label = "65C02 (3 MHz)")
@@ -79,7 +79,7 @@ public:
     // --- Accessors (for tests linking the extension directly) ---
 
     TubeUla* tube_ula() { return tube_ula_.get(); }
-    ParasiteRunner* runner() { return runner_.get(); }
+    CoprocessorRunner* runner() { return runner_.get(); }
     bool running() const { return runner_ != nullptr; }
 
 private:
@@ -90,7 +90,7 @@ private:
     ClockRatio clock_ratio_;
     std::string cpu_label_;
     std::unique_ptr<TubeUla> tube_ula_;
-    std::unique_ptr<ParasiteRunner> runner_;
+    std::unique_ptr<CoprocessorRunner> runner_;
     TubeSocket* tube_socket_ = nullptr;  // non-owning, from ExtensionContext
 };
 

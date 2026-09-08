@@ -13,8 +13,8 @@
 // Integration tests for the Acorn 65C02 coprocessor extension.
 //
 // These tests create the extension, provide it with a TubeSocket via
-// ExtensionContext, and verify that the parasite boots and communicates
-// with the host through the TubeUla bridge. The parasite is driven in host
+// ExtensionContext, and verify that the coprocessor boots and communicates
+// with the host through the TubeUla bridge. The coprocessor is driven in host
 // time via TubeSocket::run_coprocessor_until() in the single-threaded model.
 
 #include <catch2/catch_test_macros.hpp>
@@ -32,12 +32,12 @@
 
 using namespace beebium;
 
-// Drive the coprocessor in host time via the TubeSocket until the parasite has
+// Drive the coprocessor in host time via the TubeSocket until the coprocessor has
 // reached the target cycle count, or the host-cycle budget is exhausted. Each
-// host cycle produces 1 or 2 parasite cycles (the 3:2 ratio). host_cycle is a
+// host cycle produces 1 or 2 coprocessor cycles (the 3:2 ratio). host_cycle is a
 // running monotonic host time -- as it is in Machine::step() -- carried across
 // calls so the coprocessor's clock never sees time go backwards.
-static void run_coprocessor_to(TubeSocket& socket, ParasiteRunner& runner,
+static void run_coprocessor_to(TubeSocket& socket, CoprocessorRunner& runner,
                                uint64_t& host_cycle, uint64_t target_cycles,
                                uint64_t max_host_advance = 200000)
 {
@@ -61,14 +61,14 @@ TEST_CASE("65C02 extension: boots and produces R1 banner", "[tube][extension]") 
         {"rom", std::string(BEEBIUM_TUBE_ROM_DIR) + "/acorn-tube-6502_1_10.rom"}
     });
 
-    // Initialise -- installs parasite for single-threaded ticking.
+    // Initialise -- installs coprocessor for single-threaded ticking.
     ext.init(ctx);
     REQUIRE(ext.running());
     REQUIRE(tube_socket.enabled());
 
     // Run the coprocessor until it has completed enough cycles for the boot
-    // banner (the parasite writes 24 bytes to the R1 P-to-H FIFO via OSWRCH,
-    // which takes ~100K parasite cycles).
+    // banner (the coprocessor writes 24 bytes to the R1 P-to-H FIFO via OSWRCH,
+    // which takes ~100K coprocessor cycles).
     uint64_t host_cycle = 0;
     run_coprocessor_to(tube_socket, *ext.runner(), host_cycle, 100000);
 
@@ -109,7 +109,7 @@ TEST_CASE("65C02 extension: coprocessor pauses through the Coprocessor interface
     ext.init(ctx);
     REQUIRE(ext.running());
 
-    // Boot the parasite.
+    // Boot the coprocessor.
     uint64_t host_cycle = 0;
     run_coprocessor_to(tube_socket, *ext.runner(), host_cycle, 100000);
 
@@ -120,14 +120,14 @@ TEST_CASE("65C02 extension: coprocessor pauses through the Coprocessor interface
     CHECK(ext.runner()->is_paused());
 
     // Running the coprocessor while paused advances host time but runs no
-    // parasite cycles.
+    // coprocessor cycles.
     auto cycles_before = ext.runner()->cycle_count();
     for (int i = 0; i < 1000; ++i) {
         tube_socket.run_coprocessor_until(++host_cycle);
     }
     CHECK(ext.runner()->cycle_count() == cycles_before);
 
-    // Resume and verify the parasite runs again.
+    // Resume and verify the coprocessor runs again.
     ext.runner()->resume();
     CHECK(!ext.runner()->is_paused());
     for (int i = 0; i < 1000; ++i) {

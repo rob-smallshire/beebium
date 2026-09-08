@@ -17,8 +17,8 @@ add_library(beebium_core STATIC
     src/disc/formats/HfeFormatHandler.cpp
     src/econet/AunBackend.cpp
     src/TubeUla.cpp
-    src/ParasiteCpu.cpp
-    src/ParasiteRunner.cpp
+    src/CoprocessorCpu.cpp
+    src/CoprocessorRunner.cpp
     src/Expression.cpp
     # Serial-port enumeration -- platform-conditional; only one .cpp
     # compiles per build. Both are listed so IDEs see them.

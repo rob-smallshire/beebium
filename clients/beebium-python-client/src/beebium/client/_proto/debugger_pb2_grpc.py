@@ -39,7 +39,7 @@ if _version_not_supported:
 
 class DebuggerControlStub(object):
     """Generic debugger service for 6502-based machines.
-    Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+    Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
     """
 
     def __init__(self, channel):
@@ -187,7 +187,7 @@ class DebuggerControlStub(object):
 
 class DebuggerControlServicer(object):
     """Generic debugger service for 6502-based machines.
-    Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+    Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
     """
 
     def GetState(self, request, context):
@@ -510,7 +510,7 @@ def add_DebuggerControlServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class DebuggerControl(object):
     """Generic debugger service for 6502-based machines.
-    Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+    Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
     """
 
     @staticmethod
@@ -1243,8 +1243,8 @@ class DebuggerControl(object):
             _registered_method=True)
 
 
-class ParasiteDebuggerControlStub(object):
-    """Parasite (second processor) debugger service.
+class CoprocessorDebuggerControlStub(object):
+    """Coprocessor (second processor) debugger service.
     Same RPCs as DebuggerControl but registered under a distinct service name
     so both can coexist on the same gRPC server.
     """
@@ -1256,144 +1256,144 @@ class ParasiteDebuggerControlStub(object):
             channel: A grpc.Channel.
         """
         self.GetState = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/GetState',
+                '/beebium.CoprocessorDebuggerControl/GetState',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ExecutionState.FromString,
                 _registered_method=True)
         self.Run = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/Run',
+                '/beebium.CoprocessorDebuggerControl/Run',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.RunResponse.FromString,
                 _registered_method=True)
         self.Stop = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/Stop',
+                '/beebium.CoprocessorDebuggerControl/Stop',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.StopResponse.FromString,
                 _registered_method=True)
         self.Reset = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/Reset',
+                '/beebium.CoprocessorDebuggerControl/Reset',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ResetResponse.FromString,
                 _registered_method=True)
         self.StepInstruction = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/StepInstruction',
+                '/beebium.CoprocessorDebuggerControl/StepInstruction',
                 request_serializer=debugger__pb2.StepRequest.SerializeToString,
                 response_deserializer=debugger__pb2.StepResponse.FromString,
                 _registered_method=True)
         self.StepCycle = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/StepCycle',
+                '/beebium.CoprocessorDebuggerControl/StepCycle',
                 request_serializer=debugger__pb2.StepRequest.SerializeToString,
                 response_deserializer=debugger__pb2.StepResponse.FromString,
                 _registered_method=True)
         self.WatchExecutionState = channel.unary_stream(
-                '/beebium.ParasiteDebuggerControl/WatchExecutionState',
+                '/beebium.CoprocessorDebuggerControl/WatchExecutionState',
                 request_serializer=debugger__pb2.WatchExecutionStateRequest.SerializeToString,
                 response_deserializer=debugger__pb2.ExecutionStateEvent.FromString,
                 _registered_method=True)
         self.ReadMemory = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/ReadMemory',
+                '/beebium.CoprocessorDebuggerControl/ReadMemory',
                 request_serializer=debugger__pb2.ReadMemoryRequest.SerializeToString,
                 response_deserializer=debugger__pb2.ReadMemoryResponse.FromString,
                 _registered_method=True)
         self.WriteMemory = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/WriteMemory',
+                '/beebium.CoprocessorDebuggerControl/WriteMemory',
                 request_serializer=debugger__pb2.WriteMemoryRequest.SerializeToString,
                 response_deserializer=debugger__pb2.WriteMemoryResponse.FromString,
                 _registered_method=True)
         self.PeekMemory = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/PeekMemory',
+                '/beebium.CoprocessorDebuggerControl/PeekMemory',
                 request_serializer=debugger__pb2.PeekMemoryRequest.SerializeToString,
                 response_deserializer=debugger__pb2.PeekMemoryResponse.FromString,
                 _registered_method=True)
         self.GetMemoryRegions = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/GetMemoryRegions',
+                '/beebium.CoprocessorDebuggerControl/GetMemoryRegions',
                 request_serializer=debugger__pb2.GetMemoryRegionsRequest.SerializeToString,
                 response_deserializer=debugger__pb2.GetMemoryRegionsResponse.FromString,
                 _registered_method=True)
         self.PeekRegion = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/PeekRegion',
+                '/beebium.CoprocessorDebuggerControl/PeekRegion',
                 request_serializer=debugger__pb2.RegionAccessRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RegionAccessResponse.FromString,
                 _registered_method=True)
         self.ReadRegion = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/ReadRegion',
+                '/beebium.CoprocessorDebuggerControl/ReadRegion',
                 request_serializer=debugger__pb2.RegionAccessRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RegionAccessResponse.FromString,
                 _registered_method=True)
         self.WriteRegion = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/WriteRegion',
+                '/beebium.CoprocessorDebuggerControl/WriteRegion',
                 request_serializer=debugger__pb2.WriteRegionRequest.SerializeToString,
                 response_deserializer=debugger__pb2.WriteRegionResponse.FromString,
                 _registered_method=True)
         self.AddBreakpoint = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/AddBreakpoint',
+                '/beebium.CoprocessorDebuggerControl/AddBreakpoint',
                 request_serializer=debugger__pb2.AddBreakpointRequest.SerializeToString,
                 response_deserializer=debugger__pb2.AddBreakpointResponse.FromString,
                 _registered_method=True)
         self.RemoveBreakpoint = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/RemoveBreakpoint',
+                '/beebium.CoprocessorDebuggerControl/RemoveBreakpoint',
                 request_serializer=debugger__pb2.RemoveBreakpointRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RemoveBreakpointResponse.FromString,
                 _registered_method=True)
         self.EnableBreakpoint = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/EnableBreakpoint',
+                '/beebium.CoprocessorDebuggerControl/EnableBreakpoint',
                 request_serializer=debugger__pb2.EnableBreakpointRequest.SerializeToString,
                 response_deserializer=debugger__pb2.EnableBreakpointResponse.FromString,
                 _registered_method=True)
         self.ListBreakpoints = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/ListBreakpoints',
+                '/beebium.CoprocessorDebuggerControl/ListBreakpoints',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ListBreakpointsResponse.FromString,
                 _registered_method=True)
         self.ClearBreakpoints = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/ClearBreakpoints',
+                '/beebium.CoprocessorDebuggerControl/ClearBreakpoints',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ClearBreakpointsResponse.FromString,
                 _registered_method=True)
         self.AddWatchpoint = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/AddWatchpoint',
+                '/beebium.CoprocessorDebuggerControl/AddWatchpoint',
                 request_serializer=debugger__pb2.AddWatchpointRequest.SerializeToString,
                 response_deserializer=debugger__pb2.AddWatchpointResponse.FromString,
                 _registered_method=True)
         self.RemoveWatchpoint = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/RemoveWatchpoint',
+                '/beebium.CoprocessorDebuggerControl/RemoveWatchpoint',
                 request_serializer=debugger__pb2.RemoveWatchpointRequest.SerializeToString,
                 response_deserializer=debugger__pb2.RemoveWatchpointResponse.FromString,
                 _registered_method=True)
         self.EnableWatchpoint = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/EnableWatchpoint',
+                '/beebium.CoprocessorDebuggerControl/EnableWatchpoint',
                 request_serializer=debugger__pb2.EnableWatchpointRequest.SerializeToString,
                 response_deserializer=debugger__pb2.EnableWatchpointResponse.FromString,
                 _registered_method=True)
         self.ListWatchpoints = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/ListWatchpoints',
+                '/beebium.CoprocessorDebuggerControl/ListWatchpoints',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ListWatchpointsResponse.FromString,
                 _registered_method=True)
         self.ClearWatchpoints = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/ClearWatchpoints',
+                '/beebium.CoprocessorDebuggerControl/ClearWatchpoints',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ClearWatchpointsResponse.FromString,
                 _registered_method=True)
         self.GetCpuDescriptor = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/GetCpuDescriptor',
+                '/beebium.CoprocessorDebuggerControl/GetCpuDescriptor',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.CpuDescriptor.FromString,
                 _registered_method=True)
         self.GetCpuState = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/GetCpuState',
+                '/beebium.CoprocessorDebuggerControl/GetCpuState',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.CpuState.FromString,
                 _registered_method=True)
         self.SetCpuState = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/SetCpuState',
+                '/beebium.CoprocessorDebuggerControl/SetCpuState',
                 request_serializer=debugger__pb2.CpuState.SerializeToString,
                 response_deserializer=debugger__pb2.CpuState.FromString,
                 _registered_method=True)
 
 
-class ParasiteDebuggerControlServicer(object):
-    """Parasite (second processor) debugger service.
+class CoprocessorDebuggerControlServicer(object):
+    """Coprocessor (second processor) debugger service.
     Same RPCs as DebuggerControl but registered under a distinct service name
     so both can coexist on the same gRPC server.
     """
@@ -1561,7 +1561,7 @@ class ParasiteDebuggerControlServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_ParasiteDebuggerControlServicer_to_server(servicer, server):
+def add_CoprocessorDebuggerControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetState': grpc.unary_unary_rpc_method_handler(
                     servicer.GetState,
@@ -1700,14 +1700,14 @@ def add_ParasiteDebuggerControlServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'beebium.ParasiteDebuggerControl', rpc_method_handlers)
+            'beebium.CoprocessorDebuggerControl', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('beebium.ParasiteDebuggerControl', rpc_method_handlers)
+    server.add_registered_method_handlers('beebium.CoprocessorDebuggerControl', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class ParasiteDebuggerControl(object):
-    """Parasite (second processor) debugger service.
+class CoprocessorDebuggerControl(object):
+    """Coprocessor (second processor) debugger service.
     Same RPCs as DebuggerControl but registered under a distinct service name
     so both can coexist on the same gRPC server.
     """
@@ -1726,7 +1726,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/GetState',
+            '/beebium.CoprocessorDebuggerControl/GetState',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ExecutionState.FromString,
             options,
@@ -1753,7 +1753,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/Run',
+            '/beebium.CoprocessorDebuggerControl/Run',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.RunResponse.FromString,
             options,
@@ -1780,7 +1780,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/Stop',
+            '/beebium.CoprocessorDebuggerControl/Stop',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.StopResponse.FromString,
             options,
@@ -1807,7 +1807,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/Reset',
+            '/beebium.CoprocessorDebuggerControl/Reset',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ResetResponse.FromString,
             options,
@@ -1834,7 +1834,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/StepInstruction',
+            '/beebium.CoprocessorDebuggerControl/StepInstruction',
             debugger__pb2.StepRequest.SerializeToString,
             debugger__pb2.StepResponse.FromString,
             options,
@@ -1861,7 +1861,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/StepCycle',
+            '/beebium.CoprocessorDebuggerControl/StepCycle',
             debugger__pb2.StepRequest.SerializeToString,
             debugger__pb2.StepResponse.FromString,
             options,
@@ -1888,7 +1888,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/WatchExecutionState',
+            '/beebium.CoprocessorDebuggerControl/WatchExecutionState',
             debugger__pb2.WatchExecutionStateRequest.SerializeToString,
             debugger__pb2.ExecutionStateEvent.FromString,
             options,
@@ -1915,7 +1915,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/ReadMemory',
+            '/beebium.CoprocessorDebuggerControl/ReadMemory',
             debugger__pb2.ReadMemoryRequest.SerializeToString,
             debugger__pb2.ReadMemoryResponse.FromString,
             options,
@@ -1942,7 +1942,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/WriteMemory',
+            '/beebium.CoprocessorDebuggerControl/WriteMemory',
             debugger__pb2.WriteMemoryRequest.SerializeToString,
             debugger__pb2.WriteMemoryResponse.FromString,
             options,
@@ -1969,7 +1969,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/PeekMemory',
+            '/beebium.CoprocessorDebuggerControl/PeekMemory',
             debugger__pb2.PeekMemoryRequest.SerializeToString,
             debugger__pb2.PeekMemoryResponse.FromString,
             options,
@@ -1996,7 +1996,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/GetMemoryRegions',
+            '/beebium.CoprocessorDebuggerControl/GetMemoryRegions',
             debugger__pb2.GetMemoryRegionsRequest.SerializeToString,
             debugger__pb2.GetMemoryRegionsResponse.FromString,
             options,
@@ -2023,7 +2023,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/PeekRegion',
+            '/beebium.CoprocessorDebuggerControl/PeekRegion',
             debugger__pb2.RegionAccessRequest.SerializeToString,
             debugger__pb2.RegionAccessResponse.FromString,
             options,
@@ -2050,7 +2050,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/ReadRegion',
+            '/beebium.CoprocessorDebuggerControl/ReadRegion',
             debugger__pb2.RegionAccessRequest.SerializeToString,
             debugger__pb2.RegionAccessResponse.FromString,
             options,
@@ -2077,7 +2077,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/WriteRegion',
+            '/beebium.CoprocessorDebuggerControl/WriteRegion',
             debugger__pb2.WriteRegionRequest.SerializeToString,
             debugger__pb2.WriteRegionResponse.FromString,
             options,
@@ -2104,7 +2104,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/AddBreakpoint',
+            '/beebium.CoprocessorDebuggerControl/AddBreakpoint',
             debugger__pb2.AddBreakpointRequest.SerializeToString,
             debugger__pb2.AddBreakpointResponse.FromString,
             options,
@@ -2131,7 +2131,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/RemoveBreakpoint',
+            '/beebium.CoprocessorDebuggerControl/RemoveBreakpoint',
             debugger__pb2.RemoveBreakpointRequest.SerializeToString,
             debugger__pb2.RemoveBreakpointResponse.FromString,
             options,
@@ -2158,7 +2158,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/EnableBreakpoint',
+            '/beebium.CoprocessorDebuggerControl/EnableBreakpoint',
             debugger__pb2.EnableBreakpointRequest.SerializeToString,
             debugger__pb2.EnableBreakpointResponse.FromString,
             options,
@@ -2185,7 +2185,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/ListBreakpoints',
+            '/beebium.CoprocessorDebuggerControl/ListBreakpoints',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ListBreakpointsResponse.FromString,
             options,
@@ -2212,7 +2212,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/ClearBreakpoints',
+            '/beebium.CoprocessorDebuggerControl/ClearBreakpoints',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ClearBreakpointsResponse.FromString,
             options,
@@ -2239,7 +2239,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/AddWatchpoint',
+            '/beebium.CoprocessorDebuggerControl/AddWatchpoint',
             debugger__pb2.AddWatchpointRequest.SerializeToString,
             debugger__pb2.AddWatchpointResponse.FromString,
             options,
@@ -2266,7 +2266,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/RemoveWatchpoint',
+            '/beebium.CoprocessorDebuggerControl/RemoveWatchpoint',
             debugger__pb2.RemoveWatchpointRequest.SerializeToString,
             debugger__pb2.RemoveWatchpointResponse.FromString,
             options,
@@ -2293,7 +2293,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/EnableWatchpoint',
+            '/beebium.CoprocessorDebuggerControl/EnableWatchpoint',
             debugger__pb2.EnableWatchpointRequest.SerializeToString,
             debugger__pb2.EnableWatchpointResponse.FromString,
             options,
@@ -2320,7 +2320,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/ListWatchpoints',
+            '/beebium.CoprocessorDebuggerControl/ListWatchpoints',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ListWatchpointsResponse.FromString,
             options,
@@ -2347,7 +2347,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/ClearWatchpoints',
+            '/beebium.CoprocessorDebuggerControl/ClearWatchpoints',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ClearWatchpointsResponse.FromString,
             options,
@@ -2374,7 +2374,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/GetCpuDescriptor',
+            '/beebium.CoprocessorDebuggerControl/GetCpuDescriptor',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.CpuDescriptor.FromString,
             options,
@@ -2401,7 +2401,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/GetCpuState',
+            '/beebium.CoprocessorDebuggerControl/GetCpuState',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.CpuState.FromString,
             options,
@@ -2428,7 +2428,7 @@ class ParasiteDebuggerControl(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.ParasiteDebuggerControl/SetCpuState',
+            '/beebium.CoprocessorDebuggerControl/SetCpuState',
             debugger__pb2.CpuState.SerializeToString,
             debugger__pb2.CpuState.FromString,
             options,
@@ -2444,7 +2444,7 @@ class ParasiteDebuggerControl(object):
 
 class DeviceInspectionStub(object):
     """BBC Micro device state inspection.
-    Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+    Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
     """
 
     def __init__(self, channel):
@@ -2492,7 +2492,7 @@ class DeviceInspectionStub(object):
 
 class DeviceInspectionServicer(object):
     """BBC Micro device state inspection.
-    Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+    Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
     """
 
     def GetSystemViaState(self, request, context):
@@ -2585,7 +2585,7 @@ def add_DeviceInspectionServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class DeviceInspection(object):
     """BBC Micro device state inspection.
-    Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+    Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
     """
 
     @staticmethod

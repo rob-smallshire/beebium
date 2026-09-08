@@ -206,7 +206,7 @@ public:
 
         // Handle Tube bus stretch (host CPU halted, coprocessor + peripherals continue).
         // When the host writes to a full Tube register, the Tube ULA holds the host
-        // CPU's clock until the parasite drains the register. During stretch, the
+        // CPU's clock until the coprocessor drains the register. During stretch, the
         // host is halted waiting for the coprocessor, so run it to this cycle every
         // cycle (no batching here) -- otherwise the register would not drain and the
         // stretch would last longer than the hardware's.

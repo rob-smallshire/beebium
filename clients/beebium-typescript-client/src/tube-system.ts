@@ -1,7 +1,7 @@
 /**
- * Tube system abstraction for host-parasite debugging.
+ * Tube system abstraction for host-coprocessor debugging.
  *
- * Manages both host and parasite as a single unit for coordinated
+ * Manages both host and coprocessor as a single unit for coordinated
  * execution control, breakpointing, and predicate-based stopping.
  */
 
@@ -9,28 +9,28 @@ import type { Beebium } from "./client.js";
 
 export class TubeSystem {
     private readonly host: Beebium;
-    private readonly parasite: Beebium;
+    private readonly coprocessor: Beebium;
 
     /**
-     * Create a Tube system from existing host and parasite clients.
+     * Create a Tube system from existing host and coprocessor clients.
      *
      * @param host - The host BBC Micro client.
-     * @param parasite - The parasite (second processor) client.
+     * @param coprocessor - The coprocessor (second processor) client.
      */
-    constructor(host: Beebium, parasite: Beebium) {
+    constructor(host: Beebium, coprocessor: Beebium) {
         this.host = host;
-        this.parasite = parasite;
+        this.coprocessor = coprocessor;
     }
 
     /**
      * Create a Tube system from the host.
      *
-     * The parasite client shares the same gRPC connection as the host,
-     * routing debugger calls to the ParasiteDebuggerControl service.
+     * The coprocessor client shares the same gRPC connection as the host,
+     * routing debugger calls to the CoprocessorDebuggerControl service.
      */
     static async fromHost(host: Beebium): Promise<TubeSystem> {
-        const parasite = await host.connectParasite();
-        return new TubeSystem(host, parasite);
+        const coprocessor = await host.connectCoprocessor();
+        return new TubeSystem(host, coprocessor);
     }
 
     /** Get the host client. */
@@ -38,21 +38,21 @@ export class TubeSystem {
         return this.host;
     }
 
-    /** Get the parasite client. */
-    getParasite(): Beebium {
-        return this.parasite;
+    /** Get the coprocessor client. */
+    getCoprocessor(): Beebium {
+        return this.coprocessor;
     }
 
     /** Run both processors. Ensures both are running afterwards. */
     async run(): Promise<void> {
         if (!await this.host.debugger.isRunning()) await this.host.debugger.run();
-        if (!await this.parasite.debugger.isRunning()) await this.parasite.debugger.run();
+        if (!await this.coprocessor.debugger.isRunning()) await this.coprocessor.debugger.run();
     }
 
     /** Stop both processors. */
     async stop(): Promise<void> {
         if (await this.host.debugger.isRunning()) await this.host.debugger.stop();
-        if (await this.parasite.debugger.isRunning()) await this.parasite.debugger.stop();
+        if (await this.coprocessor.debugger.isRunning()) await this.coprocessor.debugger.stop();
     }
 
     /**
@@ -94,8 +94,8 @@ export class TubeSystem {
                     if (!event.state.isRunning && event.state.sequence > runSequence) break;
                 }
 
-                if (await this.parasite.debugger.isRunning()) {
-                    await this.parasite.debugger.stop();
+                if (await this.coprocessor.debugger.isRunning()) {
+                    await this.coprocessor.debugger.stop();
                 }
                 await this.host.debugger.removeBreakpoint(bpId);
 
@@ -119,7 +119,7 @@ export class TubeSystem {
     /**
      * Close the Tube system, stopping both processors.
      *
-     * The host is not closed (the caller owns it). The parasite
+     * The host is not closed (the caller owns it). The coprocessor
      * shares the host's connection and does not need separate cleanup.
      */
     async close(): Promise<void> {

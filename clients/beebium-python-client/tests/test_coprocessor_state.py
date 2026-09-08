@@ -10,10 +10,10 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Test that parasite client returns parasite state, not host state.
+"""Test that coprocessor client returns coprocessor state, not host state.
 
 Boots with a 65C02 Tube, stops both processors, and verifies that
-host and parasite report independent CPU registers and memory.
+host and coprocessor report independent CPU registers and memory.
 """
 
 from __future__ import annotations
@@ -72,21 +72,21 @@ def bbc_with_tube(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath
         pytest.skip(str(e))
 
 
-def test_parasite_cpu_differs_from_host(bbc_with_tube):
-    """Host and parasite CPUs should report different register state."""
+def test_coprocessor_cpu_differs_from_host(bbc_with_tube):
+    """Host and coprocessor CPUs should report different register state."""
     bbc = bbc_with_tube
-    parasite = bbc.connect_parasite()
+    coprocessor = bbc.connect_coprocessor()
 
     # Stop both processors.
     bbc.debugger.stop()
-    parasite.debugger.stop()
+    coprocessor.debugger.stop()
 
     host_regs = bbc.cpu.registers
-    para_regs = parasite.cpu.registers
+    para_regs = coprocessor.cpu.registers
 
     # After boot to BASIC prompt, the host PC should be in MOS/ROM territory
-    # (typically $E000-$FFFF) while the parasite PC should be in the Tube
-    # client area (typically $F800-$FFFF on the parasite, or in BASIC ROM).
+    # (typically $E000-$FFFF) while the coprocessor PC should be in the Tube
+    # client area (typically $F800-$FFFF on the coprocessor, or in BASIC ROM).
     # The key assertion: they must not be identical. Two independent CPUs
     # will not have identical PC, A, X, Y, SP, and P simultaneously.
     assert not (
@@ -96,11 +96,11 @@ def test_parasite_cpu_differs_from_host(bbc_with_tube):
         and host_regs.y == para_regs.y
         and host_regs.sp == para_regs.sp
     ), (
-        f"Host and parasite registers are identical -- "
-        f"parasite client is likely returning host state.\n"
+        f"Host and coprocessor registers are identical -- "
+        f"coprocessor client is likely returning host state.\n"
         f"Host:     PC=${host_regs.pc:04X} A=${host_regs.a:02X} "
         f"X=${host_regs.x:02X} Y=${host_regs.y:02X} SP=${host_regs.sp:02X}\n"
-        f"Parasite: PC=${para_regs.pc:04X} A=${para_regs.a:02X} "
+        f"Coprocessor: PC=${para_regs.pc:04X} A=${para_regs.a:02X} "
         f"X=${para_regs.x:02X} Y=${para_regs.y:02X} SP=${para_regs.sp:02X}"
     )
 
@@ -109,41 +109,41 @@ def test_parasite_cpu_differs_from_host(bbc_with_tube):
         f"X=${host_regs.x:02X} Y=${host_regs.y:02X} SP=${host_regs.sp:02X}"
     )
     print(
-        f"Parasite: PC=${para_regs.pc:04X} A=${para_regs.a:02X} "
+        f"Coprocessor: PC=${para_regs.pc:04X} A=${para_regs.a:02X} "
         f"X=${para_regs.x:02X} Y=${para_regs.y:02X} SP=${para_regs.sp:02X}"
     )
 
 
-def test_parasite_memory_differs_from_host(bbc_with_tube):
-    """Host and parasite memory should be independent address spaces."""
+def test_coprocessor_memory_differs_from_host(bbc_with_tube):
+    """Host and coprocessor memory should be independent address spaces."""
     bbc = bbc_with_tube
-    parasite = bbc.connect_parasite()
+    coprocessor = bbc.connect_coprocessor()
 
     bbc.debugger.stop()
-    parasite.debugger.stop()
+    coprocessor.debugger.stop()
 
     # On the host, $FEE0 is Tube ULA register R1 status (host side).
-    # On the parasite, $FEE0 is not a Tube register (Tube is at $FEF8-$FEFF).
+    # On the coprocessor, $FEE0 is not a Tube register (Tube is at $FEF8-$FEFF).
     # Read a byte from each -- they should differ.
     host_fee0 = bbc.memory.address.peek[0xFEE0]
-    para_fee0 = parasite.memory.address.peek[0xFEE0]
+    para_fee0 = coprocessor.memory.address.peek[0xFEE0]
 
-    # Also check the parasite Tube registers at $FEF8.
+    # Also check the coprocessor Tube registers at $FEF8.
     # The host has no Tube at $FEF8 (it's in the high ROM area).
     host_fef8 = bbc.memory.address.peek[0xFEF8]
-    para_fef8 = parasite.memory.address.peek[0xFEF8]
+    para_fef8 = coprocessor.memory.address.peek[0xFEF8]
 
     print(f"Host     $FEE0=${host_fee0:02X}  $FEF8=${host_fef8:02X}")
-    print(f"Parasite $FEE0=${para_fee0:02X}  $FEF8=${para_fef8:02X}")
+    print(f"Coprocessor $FEE0=${para_fee0:02X}  $FEF8=${para_fef8:02X}")
 
-    # The parasite's $0000-$00FF (zero page) should differ from the host's
+    # The coprocessor's $0000-$00FF (zero page) should differ from the host's
     # zero page, since they run different code with different variables.
     host_zp = bytes(bbc.memory.address.peek[0x00:0x10])
-    para_zp = bytes(parasite.memory.address.peek[0x00:0x10])
+    para_zp = bytes(coprocessor.memory.address.peek[0x00:0x10])
 
     print(f"Host     ZP $00-$0F: {host_zp.hex()}")
-    print(f"Parasite ZP $00-$0F: {para_zp.hex()}")
+    print(f"Coprocessor ZP $00-$0F: {para_zp.hex()}")
 
     assert host_zp != para_zp, (
-        "Host and parasite zero page are identical -- parasite client is likely returning host memory."
+        "Host and coprocessor zero page are identical -- coprocessor client is likely returning host memory."
     )

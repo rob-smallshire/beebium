@@ -36,7 +36,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ntube.proto\x12\x07\x62\x65\x65\x62ium\"`\n\x12TubeConnectRequest\x12\x18\n\x10protocol_version\x18\x01 \x01(\r\x12\x15\n\rparasite_type\x18\x02 \x01(\t\x12\x19\n\x11parasite_clock_hz\x18\x03 \x01(\r\"z\n\x13TubeConnectResponse\x12\x1a\n\x12shared_memory_name\x18\x01 \x01(\t\x12\x1a\n\x12shared_memory_size\x18\x02 \x01(\r\x12\x18\n\x10protocol_version\x18\x03 \x01(\r\x12\x11\n\thost_uuid\x18\x04 \x01(\t\"/\n\x17RegisterEndpointRequest\x12\x14\n\x0cgrpc_address\x18\x01 \x01(\t\"\x1a\n\x18RegisterEndpointResponse\"\x16\n\x14GetTubeStatusRequest\"\xca\x01\n\x15GetTubeStatusResponse\x12\x17\n\x0fhas_tube_socket\x18\x01 \x01(\x08\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\x12\x1a\n\x12parasite_connected\x18\x03 \x01(\x08\x12\x15\n\rparasite_type\x18\x04 \x01(\t\x12\x19\n\x11parasite_clock_hz\x18\x05 \x01(\r\x12\x1a\n\x12shared_memory_name\x18\x06 \x01(\t\x12\x1d\n\x15parasite_grpc_address\x18\x07 \x01(\t\"\x15\n\x13TubeGetStateRequest\"J\n\x14TubeGetStateResponse\x12\x11\n\tcpu_state\x18\x01 \x01(\x0c\x12\x0b\n\x03ram\x18\x02 \x01(\x0c\x12\x12\n\ntube_state\x18\x03 \x01(\x0c\"M\n\x17TubeRestoreStateRequest\x12\x11\n\tcpu_state\x18\x01 \x01(\x0c\x12\x0b\n\x03ram\x18\x02 \x01(\x0c\x12\x12\n\ntube_state\x18\x03 \x01(\x0c\"\x1a\n\x18TubeRestoreStateResponse2\x96\x03\n\x0bTubeService\x12\x44\n\x07\x43onnect\x12\x1b.beebium.TubeConnectRequest\x1a\x1c.beebium.TubeConnectResponse\x12W\n\x10RegisterEndpoint\x12 .beebium.RegisterEndpointRequest\x1a!.beebium.RegisterEndpointResponse\x12J\n\tGetStatus\x12\x1d.beebium.GetTubeStatusRequest\x1a\x1e.beebium.GetTubeStatusResponse\x12G\n\x08GetState\x12\x1c.beebium.TubeGetStateRequest\x1a\x1d.beebium.TubeGetStateResponse\x12S\n\x0cRestoreState\x12 .beebium.TubeRestoreStateRequest\x1a!.beebium.TubeRestoreStateResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ntube.proto\x12\x07\x62\x65\x65\x62ium\"f\n\x12TubeConnectRequest\x12\x18\n\x10protocol_version\x18\x01 \x01(\r\x12\x18\n\x10\x63oprocessor_type\x18\x02 \x01(\t\x12\x1c\n\x14\x63oprocessor_clock_hz\x18\x03 \x01(\r\"z\n\x13TubeConnectResponse\x12\x1a\n\x12shared_memory_name\x18\x01 \x01(\t\x12\x1a\n\x12shared_memory_size\x18\x02 \x01(\r\x12\x18\n\x10protocol_version\x18\x03 \x01(\r\x12\x11\n\thost_uuid\x18\x04 \x01(\t\"/\n\x17RegisterEndpointRequest\x12\x14\n\x0cgrpc_address\x18\x01 \x01(\t\"\x1a\n\x18RegisterEndpointResponse\"\x16\n\x14GetTubeStatusRequest\"\xd6\x01\n\x15GetTubeStatusResponse\x12\x17\n\x0fhas_tube_socket\x18\x01 \x01(\x08\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\x12\x1d\n\x15\x63oprocessor_connected\x18\x03 \x01(\x08\x12\x18\n\x10\x63oprocessor_type\x18\x04 \x01(\t\x12\x1c\n\x14\x63oprocessor_clock_hz\x18\x05 \x01(\r\x12\x1a\n\x12shared_memory_name\x18\x06 \x01(\t\x12 \n\x18\x63oprocessor_grpc_address\x18\x07 \x01(\t\"\x15\n\x13TubeGetStateRequest\"J\n\x14TubeGetStateResponse\x12\x11\n\tcpu_state\x18\x01 \x01(\x0c\x12\x0b\n\x03ram\x18\x02 \x01(\x0c\x12\x12\n\ntube_state\x18\x03 \x01(\x0c\"M\n\x17TubeRestoreStateRequest\x12\x11\n\tcpu_state\x18\x01 \x01(\x0c\x12\x0b\n\x03ram\x18\x02 \x01(\x0c\x12\x12\n\ntube_state\x18\x03 \x01(\x0c\"\x1a\n\x18TubeRestoreStateResponse2\x96\x03\n\x0bTubeService\x12\x44\n\x07\x43onnect\x12\x1b.beebium.TubeConnectRequest\x1a\x1c.beebium.TubeConnectResponse\x12W\n\x10RegisterEndpoint\x12 .beebium.RegisterEndpointRequest\x1a!.beebium.RegisterEndpointResponse\x12J\n\tGetStatus\x12\x1d.beebium.GetTubeStatusRequest\x1a\x1e.beebium.GetTubeStatusResponse\x12G\n\x08GetState\x12\x1c.beebium.TubeGetStateRequest\x1a\x1d.beebium.TubeGetStateResponse\x12S\n\x0cRestoreState\x12 .beebium.TubeRestoreStateRequest\x1a!.beebium.TubeRestoreStateResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -44,25 +44,25 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'tube_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_TUBECONNECTREQUEST']._serialized_start=23
-  _globals['_TUBECONNECTREQUEST']._serialized_end=119
-  _globals['_TUBECONNECTRESPONSE']._serialized_start=121
-  _globals['_TUBECONNECTRESPONSE']._serialized_end=243
-  _globals['_REGISTERENDPOINTREQUEST']._serialized_start=245
-  _globals['_REGISTERENDPOINTREQUEST']._serialized_end=292
-  _globals['_REGISTERENDPOINTRESPONSE']._serialized_start=294
-  _globals['_REGISTERENDPOINTRESPONSE']._serialized_end=320
-  _globals['_GETTUBESTATUSREQUEST']._serialized_start=322
-  _globals['_GETTUBESTATUSREQUEST']._serialized_end=344
-  _globals['_GETTUBESTATUSRESPONSE']._serialized_start=347
-  _globals['_GETTUBESTATUSRESPONSE']._serialized_end=549
-  _globals['_TUBEGETSTATEREQUEST']._serialized_start=551
-  _globals['_TUBEGETSTATEREQUEST']._serialized_end=572
-  _globals['_TUBEGETSTATERESPONSE']._serialized_start=574
-  _globals['_TUBEGETSTATERESPONSE']._serialized_end=648
-  _globals['_TUBERESTORESTATEREQUEST']._serialized_start=650
-  _globals['_TUBERESTORESTATEREQUEST']._serialized_end=727
-  _globals['_TUBERESTORESTATERESPONSE']._serialized_start=729
-  _globals['_TUBERESTORESTATERESPONSE']._serialized_end=755
-  _globals['_TUBESERVICE']._serialized_start=758
-  _globals['_TUBESERVICE']._serialized_end=1164
+  _globals['_TUBECONNECTREQUEST']._serialized_end=125
+  _globals['_TUBECONNECTRESPONSE']._serialized_start=127
+  _globals['_TUBECONNECTRESPONSE']._serialized_end=249
+  _globals['_REGISTERENDPOINTREQUEST']._serialized_start=251
+  _globals['_REGISTERENDPOINTREQUEST']._serialized_end=298
+  _globals['_REGISTERENDPOINTRESPONSE']._serialized_start=300
+  _globals['_REGISTERENDPOINTRESPONSE']._serialized_end=326
+  _globals['_GETTUBESTATUSREQUEST']._serialized_start=328
+  _globals['_GETTUBESTATUSREQUEST']._serialized_end=350
+  _globals['_GETTUBESTATUSRESPONSE']._serialized_start=353
+  _globals['_GETTUBESTATUSRESPONSE']._serialized_end=567
+  _globals['_TUBEGETSTATEREQUEST']._serialized_start=569
+  _globals['_TUBEGETSTATEREQUEST']._serialized_end=590
+  _globals['_TUBEGETSTATERESPONSE']._serialized_start=592
+  _globals['_TUBEGETSTATERESPONSE']._serialized_end=666
+  _globals['_TUBERESTORESTATEREQUEST']._serialized_start=668
+  _globals['_TUBERESTORESTATEREQUEST']._serialized_end=745
+  _globals['_TUBERESTORESTATERESPONSE']._serialized_start=747
+  _globals['_TUBERESTORESTATERESPONSE']._serialized_end=773
+  _globals['_TUBESERVICE']._serialized_start=776
+  _globals['_TUBESERVICE']._serialized_end=1182
 # @@protoc_insertion_point(module_scope)

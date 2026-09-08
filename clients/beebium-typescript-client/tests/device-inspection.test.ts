@@ -269,7 +269,7 @@ describe("TubeUlaInspection", () => {
                         r3Status: 0x20,
                         r4Status: 0x10,
                     },
-                    parasiteStatus: {
+                    coprocessorStatus: {
                         r1Status: 0x01,
                         r2Status: 0x02,
                         r3Status: 0x24,
@@ -336,7 +336,7 @@ describe("TubeUlaInspection", () => {
 
             // Status
             expect(state.hostStatus.r1Status).toBe(0x80);
-            expect(state.parasiteStatus.r3Status).toBe(0x24);
+            expect(state.coprocessorStatus.r3Status).toBe(0x24);
 
             // Interrupts
             expect(state.interrupts.hirq).toBe(true);
@@ -365,7 +365,7 @@ describe("TubeUlaInspection", () => {
                     r4H2p: undefined,
                     r4P2h: undefined,
                     hostStatus: undefined,
-                    parasiteStatus: undefined,
+                    coprocessorStatus: undefined,
                     interrupts: undefined,
                     hostStretched: false,
                     counters: undefined,

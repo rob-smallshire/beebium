@@ -1,7 +1,7 @@
 /**
  * Integration tests for TubeSystem.
  *
- * Launches a Tube-enabled server (host + parasite) and tests
+ * Launches a Tube-enabled server (host + coprocessor) and tests
  * coupled execution, predicate-based stopping, and timeout behaviour.
  *
  * Each test gets a fresh server instance.
@@ -52,10 +52,10 @@ function readFn(bbc: Beebium): ReadFn {
 // =========================================================================
 
 describe("TubeSystem", () => {
-    it("should create from host and connect to parasite", async () => {
+    it("should create from host and connect to coprocessor", async () => {
         const host = await launchTubeServer();
         try {
-            // Boot to Tube banner so parasite is connected
+            // Boot to Tube banner so coprocessor is connected
             const found = await host.runUntilOrTimeout(
                 () => screenContains(readFn(host), "Acorn TUBE"),
                 10,
@@ -63,10 +63,10 @@ describe("TubeSystem", () => {
             expect(found).toBe(true);
 
             const coupled = await TubeSystem.fromHost(host);
-            const parasite = coupled.getParasite();
-            expect(parasite).toBeDefined();
+            const coprocessor = coupled.getCoprocessor();
+            expect(coprocessor).toBeDefined();
 
-            const pState = await parasite.debugger.getState();
+            const pState = await coprocessor.debugger.getState();
             expect(pState.cycleCount).toBeGreaterThan(0);
 
             await coupled.close();
@@ -132,12 +132,12 @@ describe("TubeSystem", () => {
             );
 
             const coupled = await TubeSystem.fromHost(host);
-            const parasite = coupled.getParasite();
+            const coprocessor = coupled.getCoprocessor();
 
             await coupled.runUntil(async () => false, 0.5);
 
             expect(await host.debugger.isRunning()).toBe(false);
-            expect(await parasite.debugger.isRunning()).toBe(false);
+            expect(await coprocessor.debugger.isRunning()).toBe(false);
 
             await coupled.close();
         } finally {
@@ -154,20 +154,20 @@ describe("TubeSystem", () => {
             );
 
             const coupled = await TubeSystem.fromHost(host);
-            const parasite = coupled.getParasite();
+            const coprocessor = coupled.getCoprocessor();
 
             const hostCyclesBefore = (await host.debugger.getState()).cycleCount;
-            const parasiteCyclesBefore = (await parasite.debugger.getState()).cycleCount;
+            const coprocessorCyclesBefore = (await coprocessor.debugger.getState()).cycleCount;
 
             await coupled.runFor(0.5);
 
             const hostCyclesAfter = (await host.debugger.getState()).cycleCount;
-            const parasiteCyclesAfter = (await parasite.debugger.getState()).cycleCount;
+            const coprocessorCyclesAfter = (await coprocessor.debugger.getState()).cycleCount;
 
             // 0.5s at 2MHz host = ~1M cycles
             expect(hostCyclesAfter - hostCyclesBefore).toBeGreaterThan(500_000);
-            // Parasite at 3MHz should advance even more
-            expect(parasiteCyclesAfter - parasiteCyclesBefore).toBeGreaterThan(500_000);
+            // Coprocessor at 3MHz should advance even more
+            expect(coprocessorCyclesAfter - coprocessorCyclesBefore).toBeGreaterThan(500_000);
 
             await coupled.close();
         } finally {
@@ -184,19 +184,19 @@ describe("TubeSystem", () => {
             );
 
             const coupled = await TubeSystem.fromHost(host);
-            const parasite = coupled.getParasite();
+            const coprocessor = coupled.getCoprocessor();
 
             await coupled.run();
 
             // Both should be running
             expect(await host.debugger.isRunning()).toBe(true);
-            expect(await parasite.debugger.isRunning()).toBe(true);
+            expect(await coprocessor.debugger.isRunning()).toBe(true);
 
             await coupled.stop();
 
             // Both should be stopped
             expect(await host.debugger.isRunning()).toBe(false);
-            expect(await parasite.debugger.isRunning()).toBe(false);
+            expect(await coprocessor.debugger.isRunning()).toBe(false);
 
             await coupled.close();
         } finally {
@@ -204,40 +204,40 @@ describe("TubeSystem", () => {
         }
     }, 30000);
 
-    // NOTE: there used to be a "parasite runUntil should stop at an address" test
-    // here. It captured the parasite's current PC and asserted execution would
+    // NOTE: there used to be a "coprocessor runUntil should stop at an address" test
+    // here. It captured the coprocessor's current PC and asserted execution would
     // return to it -- but that PC is typically a one-shot boot/handshake address
-    // the parasite never revisits, so the assertion was unreliable (it only ever
+    // the coprocessor never revisits, so the assertion was unreliable (it only ever
     // "passed by timing coincidence"). The behaviour it meant to check -- that a
-    // parasite breakpoint fires while the host drives execution -- is the same bug
-    // this branch fixes, and is covered robustly by `parasite cycle-budget
+    // coprocessor breakpoint fires while the host drives execution -- is the same bug
+    // this branch fixes, and is covered robustly by `coprocessor cycle-budget
     // breakpoint should fire` below and by the C++ test_tube_inprocess unit test.
 
-    it("parasite debugger.stop() should work when parasite is running", async () => {
+    it("coprocessor debugger.stop() should work when coprocessor is running", async () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
                 () => screenContains(readFn(host), "Acorn TUBE"),
                 10,
             );
-            const parasite = await host.connectParasite();
+            const coprocessor = await host.connectCoprocessor();
 
-            // Parasite should be running freely after boot
-            expect(await parasite.debugger.isRunning()).toBe(true);
+            // Coprocessor should be running freely after boot
+            expect(await coprocessor.debugger.isRunning()).toBe(true);
 
             // Stop should work
-            await parasite.debugger.stop();
-            expect(await parasite.debugger.isRunning()).toBe(false);
+            await coprocessor.debugger.stop();
+            expect(await coprocessor.debugger.isRunning()).toBe(false);
 
             // Run should work
-            await parasite.debugger.run();
-            expect(await parasite.debugger.isRunning()).toBe(true);
+            await coprocessor.debugger.run();
+            expect(await coprocessor.debugger.isRunning()).toBe(true);
 
             // Stop again should work
-            await parasite.debugger.stop();
-            expect(await parasite.debugger.isRunning()).toBe(false);
+            await coprocessor.debugger.stop();
+            expect(await coprocessor.debugger.isRunning()).toBe(false);
 
-            await parasite.close();
+            await coprocessor.close();
         } finally {
             await host.close();
         }
@@ -251,30 +251,30 @@ describe("TubeSystem", () => {
                 10,
             );
 
-            const parasite = await host.connectParasite();
+            const coprocessor = await host.connectCoprocessor();
 
-            // Set a breakpoint at an address the parasite will never reach
+            // Set a breakpoint at an address the coprocessor will never reach
             // (address $0001 is zero page, never executed in the idle loop).
             // runUntil should timeout and throw.
             await expect(
-                parasite.debugger.runUntil(0x0001, 2000), // 2s timeout
+                coprocessor.debugger.runUntil(0x0001, 2000), // 2s timeout
             ).rejects.toThrow(/Timed out/);
 
-            // Parasite should be stopped after timeout
-            expect(await parasite.debugger.isRunning()).toBe(false);
+            // Coprocessor should be stopped after timeout
+            expect(await coprocessor.debugger.isRunning()).toBe(false);
 
-            await parasite.close();
+            await coprocessor.close();
         } finally {
             await host.close();
         }
     }, 15000);
 
-    // Regression test for parasite breakpoints firing while the host drives
-    // execution. This used to be skipped on CI: the parasite's breakpoint check
-    // lived only in ParasiteRunner::run(), which is never called -- the parasite
-    // is ticked single-threaded from Machine::step() via tick_parasite() ->
+    // Regression test for coprocessor breakpoints firing while the host drives
+    // execution. This used to be skipped on CI: the coprocessor's breakpoint check
+    // lived only in CoprocessorRunner::run(), which is never called -- the coprocessor
+    // is ticked single-threaded from Machine::step() via tick_coprocessor() ->
     // tick() -> step(). Fixed by also checking breakpoints/watchpoints in step().
-    it("parasite cycle-budget breakpoint should fire", async () => {
+    it("coprocessor cycle-budget breakpoint should fire", async () => {
         const host = await launchTubeServer();
         try {
             await host.runUntilOrTimeout(
@@ -283,45 +283,45 @@ describe("TubeSystem", () => {
             );
 
             const coupled = await TubeSystem.fromHost(host);
-            const parasite = coupled.getParasite();
+            const coprocessor = coupled.getCoprocessor();
 
-            // Test that a cycle-budget breakpoint on the parasite fires.
+            // Test that a cycle-budget breakpoint on the coprocessor fires.
             await coupled.stop();
-            const parasiteCycles = (await parasite.debugger.getState()).cycleCount;
-            const targetCycles = parasiteCycles + 200_000;
+            const coprocessorCycles = (await coprocessor.debugger.getState()).cycleCount;
+            const targetCycles = coprocessorCycles + 200_000;
 
-            const bpId = await parasite.debugger.addBreakpoint(0x0000, {
+            const bpId = await coprocessor.debugger.addBreakpoint(0x0000, {
                 endAddress: 0x10000,
                 condition: `cycles >= ${targetCycles}`,
             });
 
-            // Start host too (parasite may need it for Tube I/O)
+            // Start host too (coprocessor may need it for Tube I/O)
             try { await host.debugger.run(); } catch { /* already running */ }
 
             // Use the stream pattern to wait for the breakpoint to fire, then
             // read the authoritative state via getState(). Filter on sequence so
             // we only break on a stop that happened AFTER we resumed -- the
-            // parasite was stopped by coupled.stop() above, so a stale
+            // coprocessor was stopped by coupled.stop() above, so a stale
             // isRunning:false event is in flight; breaking on it would catch the
-            // parasite still running toward the breakpoint (a race that surfaced
+            // coprocessor still running toward the breakpoint (a race that surfaced
             // only on the slower macOS x86_64 runner). Same guard runUntil uses.
-            const iter = parasite.debugger.watchExecutionState();
+            const iter = coprocessor.debugger.watchExecutionState();
             const initial = await iter.next(); // consume initial state
             const runSequence = initial.value!.state.sequence;
-            await parasite.debugger.run();
+            await coprocessor.debugger.run();
             for await (const event of iter) {
                 if (!event.state.isRunning && event.state.sequence > runSequence) break;
             }
 
             // Read authoritative state after the stream confirms the stop.
-            const finalState = await parasite.debugger.getState();
+            const finalState = await coprocessor.debugger.getState();
             expect(finalState.isRunning).toBe(false);
             expect(finalState.cycleCount).toBeGreaterThanOrEqual(BigInt(targetCycles));
 
             // Stop host too
             if (await host.debugger.isRunning()) await host.debugger.stop();
 
-            await parasite.debugger.removeBreakpoint(bpId);
+            await coprocessor.debugger.removeBreakpoint(bpId);
             await coupled.close();
         } finally {
             await host.close();

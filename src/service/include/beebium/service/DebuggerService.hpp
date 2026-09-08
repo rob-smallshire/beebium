@@ -230,7 +230,7 @@ private:
 public:
     // Set a callback invoked when a breakpoint/watchpoint with
     // stop_counterpart fires. The callback should pause the counterpart
-    // processor. Used by the Tube extension to coordinate host and parasite.
+    // processor. Used by the Tube extension to coordinate host and coprocessor.
     using CounterpartStopCallback = std::function<void()>;
     void set_counterpart_stop_callback(CounterpartStopCallback cb) {
         counterpart_stop_cb_ = std::move(cb);

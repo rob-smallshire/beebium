@@ -10,20 +10,20 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Regression tests for issue #38: Break / Ctrl-Break must reset the parasite.
+"""Regression tests for issue #38: Break / Ctrl-Break must reset the coprocessor.
 
 Configuration mirrors the bug report:
 
     beebium-model-b-romram --sideways 9:rom:roms/acorn-anfs_4_18.rom --tube-65C02
 
-Originally, pressing Break only reset the host CPU; the parasite kept its
+Originally, pressing Break only reset the host CPU; the coprocessor kept its
 pre-Break state (typically blocked in a Tube R2 OSRDCH wait inside BASIC's
 input loop). The host's post-reset Tube banner sequence then had no
 respondent and the user saw a blank Mode 7 screen with only the cursor.
 
 These tests boot the machine, blank the banner from screen RAM, press
 Break (or Ctrl-Break), and assert that the "Acorn TUBE 6502 64K" banner
-reappears -- evidence that the parasite was reset alongside the host.
+reappears -- evidence that the coprocessor was reset alongside the host.
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def _press_ctrl_break_via_grpc(bbc: Beebium, hold_seconds: float = 0.05) -> None
 
 
 def _diagnostics(bbc: Beebium) -> str:
-    """Build a diagnostic dump for failure messages (host + parasite)."""
+    """Build a diagnostic dump for failure messages (host + coprocessor)."""
     lines = []
     try:
         host_regs = bbc.cpu.registers
@@ -159,17 +159,17 @@ def _diagnostics(bbc: Beebium) -> str:
         lines.append(f"Host CPU: error {e!r}")
     try:
         if bbc.tube.is_enabled:
-            parasite = bbc.connect_parasite()
-            p_regs = parasite.cpu.registers
+            coprocessor = bbc.connect_coprocessor()
+            p_regs = coprocessor.cpu.registers
             lines.append(
-                f"Parasite CPU: PC=${p_regs.pc:04X} A=${p_regs.a:02X} "
+                f"Coprocessor CPU: PC=${p_regs.pc:04X} A=${p_regs.a:02X} "
                 f"X=${p_regs.x:02X} Y=${p_regs.y:02X} "
                 f"SP=${p_regs.sp:02X}"
             )
         else:
-            lines.append("Parasite: Tube not enabled")
+            lines.append("Coprocessor: Tube not enabled")
     except Exception as e:  # pragma: no cover - diagnostics only
-        lines.append(f"Parasite CPU: error {e!r}")
+        lines.append(f"Coprocessor CPU: error {e!r}")
     try:
         lines.append("Host Mode 7 screen:")
         lines.append(dump_screen(bbc))

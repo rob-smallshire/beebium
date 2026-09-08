@@ -605,7 +605,7 @@ TEST_CASE("Boolean literal not prefix of identifier", "[expression][parser][edge
 
 TEST_CASE("Expression evaluation performance", "[expression][performance]") {
     // Compile once, evaluate many times -- this is the hot path.
-    // At 3 MHz the parasite executes ~1.5M instructions/sec. Each watchpoint
+    // At 3 MHz the coprocessor executes ~1.5M instructions/sec. Each watchpoint
     // address match evaluates the condition, so evaluation must be well under
     // 1 microsecond.
 

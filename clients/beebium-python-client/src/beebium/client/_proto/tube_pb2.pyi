@@ -35,24 +35,24 @@ class TubeConnectRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     PROTOCOL_VERSION_FIELD_NUMBER: _builtins.int
-    PARASITE_TYPE_FIELD_NUMBER: _builtins.int
-    PARASITE_CLOCK_HZ_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_TYPE_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_CLOCK_HZ_FIELD_NUMBER: _builtins.int
     protocol_version: _builtins.int
     """Protocol version for forward compatibility."""
-    parasite_type: _builtins.str
-    """Parasite CPU type (e.g. "6502", "65C02", "z80", "arm", "32016")."""
-    parasite_clock_hz: _builtins.int
-    """Parasite clock frequency in Hz (e.g. 3000000 for 3 MHz)."""
+    coprocessor_type: _builtins.str
+    """Coprocessor CPU type (e.g. "6502", "65C02", "z80", "arm", "32016")."""
+    coprocessor_clock_hz: _builtins.int
+    """Coprocessor clock frequency in Hz (e.g. 3000000 for 3 MHz)."""
     def __init__(
         self,
         *,
         protocol_version: _builtins.int = ...,
-        parasite_type: _builtins.str = ...,
-        parasite_clock_hz: _builtins.int = ...,
+        coprocessor_type: _builtins.str = ...,
+        coprocessor_clock_hz: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["parasite_clock_hz", b"parasite_clock_hz", "parasite_type", b"parasite_type", "protocol_version", b"protocol_version"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["coprocessor_clock_hz", b"coprocessor_clock_hz", "coprocessor_type", b"coprocessor_type", "protocol_version", b"protocol_version"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -100,7 +100,7 @@ class RegisterEndpointRequest(_message.Message):
 
     GRPC_ADDRESS_FIELD_NUMBER: _builtins.int
     grpc_address: _builtins.str
-    """The parasite's gRPC address (e.g. "localhost:50052")."""
+    """The coprocessor's gRPC address (e.g. "localhost:50052")."""
     def __init__(
         self,
         *,
@@ -157,25 +157,25 @@ class GetTubeStatusResponse(_message.Message):
 
     HAS_TUBE_SOCKET_FIELD_NUMBER: _builtins.int
     ENABLED_FIELD_NUMBER: _builtins.int
-    PARASITE_CONNECTED_FIELD_NUMBER: _builtins.int
-    PARASITE_TYPE_FIELD_NUMBER: _builtins.int
-    PARASITE_CLOCK_HZ_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_CONNECTED_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_TYPE_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_CLOCK_HZ_FIELD_NUMBER: _builtins.int
     SHARED_MEMORY_NAME_FIELD_NUMBER: _builtins.int
-    PARASITE_GRPC_ADDRESS_FIELD_NUMBER: _builtins.int
+    COPROCESSOR_GRPC_ADDRESS_FIELD_NUMBER: _builtins.int
     has_tube_socket: _builtins.bool
     """True if this machine variant has a Tube socket (compile-time)."""
     enabled: _builtins.bool
     """True if Tube hardware is currently enabled (runtime)."""
-    parasite_connected: _builtins.bool
-    """True if a parasite process is connected."""
-    parasite_type: _builtins.str
-    """Parasite CPU type (populated when connected)."""
-    parasite_clock_hz: _builtins.int
-    """Parasite clock frequency in Hz (populated when connected)."""
+    coprocessor_connected: _builtins.bool
+    """True if a coprocessor process is connected."""
+    coprocessor_type: _builtins.str
+    """Coprocessor CPU type (populated when connected)."""
+    coprocessor_clock_hz: _builtins.int
+    """Coprocessor clock frequency in Hz (populated when connected)."""
     shared_memory_name: _builtins.str
     """Shared memory name (populated when enabled)."""
-    parasite_grpc_address: _builtins.str
-    """Parasite's gRPC address (e.g. "localhost:50052").
+    coprocessor_grpc_address: _builtins.str
+    """Coprocessor's gRPC address (e.g. "localhost:50052").
     Populated after RegisterEndpoint is called.
     """
     def __init__(
@@ -183,15 +183,15 @@ class GetTubeStatusResponse(_message.Message):
         *,
         has_tube_socket: _builtins.bool = ...,
         enabled: _builtins.bool = ...,
-        parasite_connected: _builtins.bool = ...,
-        parasite_type: _builtins.str = ...,
-        parasite_clock_hz: _builtins.int = ...,
+        coprocessor_connected: _builtins.bool = ...,
+        coprocessor_type: _builtins.str = ...,
+        coprocessor_clock_hz: _builtins.int = ...,
         shared_memory_name: _builtins.str = ...,
-        parasite_grpc_address: _builtins.str = ...,
+        coprocessor_grpc_address: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["enabled", b"enabled", "has_tube_socket", b"has_tube_socket", "parasite_clock_hz", b"parasite_clock_hz", "parasite_connected", b"parasite_connected", "parasite_grpc_address", b"parasite_grpc_address", "parasite_type", b"parasite_type", "shared_memory_name", b"shared_memory_name"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["coprocessor_clock_hz", b"coprocessor_clock_hz", "coprocessor_connected", b"coprocessor_connected", "coprocessor_grpc_address", b"coprocessor_grpc_address", "coprocessor_type", b"coprocessor_type", "enabled", b"enabled", "has_tube_socket", b"has_tube_socket", "shared_memory_name", b"shared_memory_name"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -201,7 +201,7 @@ Global___GetTubeStatusResponse: _TypeAlias = GetTubeStatusResponse  # noqa: Y015
 class TubeGetStateRequest(_message.Message):
     """--- State Save/Restore ---
 
-    Empty - returns full parasite state.
+    Empty - returns full coprocessor state.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -225,9 +225,9 @@ class TubeGetStateResponse(_message.Message):
     RAM_FIELD_NUMBER: _builtins.int
     TUBE_STATE_FIELD_NUMBER: _builtins.int
     cpu_state: _builtins.bytes
-    """Serialised parasite CPU registers."""
+    """Serialised coprocessor CPU registers."""
     ram: _builtins.bytes
-    """Full parasite RAM contents (typically 64 KB)."""
+    """Full coprocessor RAM contents (typically 64 KB)."""
     tube_state: _builtins.bytes
     """Tube ULA register state."""
     def __init__(
@@ -253,9 +253,9 @@ class TubeRestoreStateRequest(_message.Message):
     RAM_FIELD_NUMBER: _builtins.int
     TUBE_STATE_FIELD_NUMBER: _builtins.int
     cpu_state: _builtins.bytes
-    """Serialised parasite CPU registers."""
+    """Serialised coprocessor CPU registers."""
     ram: _builtins.bytes
-    """Full parasite RAM contents."""
+    """Full coprocessor RAM contents."""
     tube_state: _builtins.bytes
     """Tube ULA register state."""
     def __init__(

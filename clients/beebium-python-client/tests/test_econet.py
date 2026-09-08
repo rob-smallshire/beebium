@@ -101,7 +101,7 @@ class MockGetEconetStatusResponse:
         watchdog_timeout_count=0,
         send_stage_log="",
         ticks_with_timer_active=0,
-        read_stretch_parasite_ticks=0,
+        read_stretch_coprocessor_ticks=0,
     ):
         self.has_econet_socket = has_econet_socket
         self.enabled = enabled
@@ -122,7 +122,7 @@ class MockGetEconetStatusResponse:
         self.watchdog_timeout_count = watchdog_timeout_count
         self.send_stage_log = send_stage_log
         self.ticks_with_timer_active = ticks_with_timer_active
-        self.read_stretch_parasite_ticks = read_stretch_parasite_ticks
+        self.read_stretch_coprocessor_ticks = read_stretch_coprocessor_ticks
         self._has_adlc = adlc is not None
         self._has_handshake = handshake is not None
 

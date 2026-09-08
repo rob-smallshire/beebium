@@ -296,12 +296,12 @@ def bbc_tube(
     """A BBC Micro instance with Tube coprocessor enabled.
 
     Launches the server with --tube 65C02-3MHz and uses a longer
-    startup timeout to allow the parasite process to connect.
+    startup timeout to allow the coprocessor process to connect.
 
     Usage:
         def test_tube_feature(bbc_tube):
             status = bbc_tube.tube.status
-            assert status.parasite_connected
+            assert status.coprocessor_connected
     """
     try:
         with Beebium.launch(

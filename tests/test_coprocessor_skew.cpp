@@ -23,7 +23,7 @@
 #include <beebium/Machines.hpp>
 #include <beebium/disc/DiscLoader.hpp>
 #include <beebium/tube/Coprocessor.hpp>
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
@@ -194,7 +194,7 @@ TEST_CASE("Skew: exact accesses and bounded interval across a 65C02 boot",
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
     auto tube_rom = load_tube_rom();
-    ParasiteRunner runner(*tube, tube_rom);
+    CoprocessorRunner runner(*tube, tube_rom);
     runner.reset();
 
     SkewObserver obs(runner, machine.state().memory.tube_socket);
@@ -247,7 +247,7 @@ TEST_CASE("Skew: exact accesses and bounded interval across the CE2023 load",
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
     auto tube_rom = load_tube_rom();
-    ParasiteRunner runner(*tube, tube_rom);
+    CoprocessorRunner runner(*tube, tube_rom);
     runner.reset();
 
     SkewObserver obs(runner, machine.state().memory.tube_socket);
@@ -276,7 +276,7 @@ TEST_CASE("Skew: pausing the host syncs the coprocessor to it", "[tube][skew]") 
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
     auto tube_rom = load_tube_rom();
-    ParasiteRunner runner(*tube, tube_rom);
+    CoprocessorRunner runner(*tube, tube_rom);
     runner.reset();
     machine.state().memory.tube_socket.install_coprocessor(&runner);
 
@@ -303,7 +303,7 @@ TEST_CASE("Skew: single-stepping the host keeps the coprocessor within a cycle",
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
     auto tube_rom = load_tube_rom();
-    ParasiteRunner runner(*tube, tube_rom);
+    CoprocessorRunner runner(*tube, tube_rom);
     runner.reset();
     machine.state().memory.tube_socket.install_coprocessor(&runner);
 
@@ -402,7 +402,7 @@ TEST_CASE("Skew: a coprocessor HIRQ reaches the host's IRQ input within Delta",
     ActionStub stub;
     bool raised = false;
     stub.on_run = [&](uint64_t h) {
-        if (!raised && h >= RAISE_AT) { ula->parasite_write(7, 0x42); raised = true; }
+        if (!raised && h >= RAISE_AT) { ula->coprocessor_write(7, 0x42); raised = true; }
     };
     socket.install_coprocessor(&stub);
 

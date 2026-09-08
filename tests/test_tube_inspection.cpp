@@ -28,7 +28,7 @@ using namespace beebium;
 
 namespace {
 
-// Drive an identical sequence of host- and parasite-side register traffic so
+// Drive an identical sequence of host- and coprocessor-side register traffic so
 // the two backends end in the same state: control flags, data in every
 // register direction, some drained, exercising flags, counters and the trace.
 void drive_traffic(TubeSocket& socket, TubeUla& ula) {
@@ -39,15 +39,15 @@ void drive_traffic(TubeSocket& socket, TubeUla& ula) {
     socket.write(5, 0xCC);   // R3 H-to-P
     socket.write(7, 0xDD);   // R4 H-to-P latch
 
-    ula.parasite_write(1, 0x11);  // R1 P-to-H FIFO
-    ula.parasite_write(1, 0x22);
-    ula.parasite_write(3, 0x33);  // R2 P-to-H
-    ula.parasite_write(5, 0x44);  // R3 P-to-H
-    ula.parasite_write(7, 0x55);  // R4 P-to-H
+    ula.coprocessor_write(1, 0x11);  // R1 P-to-H FIFO
+    ula.coprocessor_write(1, 0x22);
+    ula.coprocessor_write(3, 0x33);  // R2 P-to-H
+    ula.coprocessor_write(5, 0x44);  // R3 P-to-H
+    ula.coprocessor_write(7, 0x55);  // R4 P-to-H
 
-    // Parasite drains a couple of host-written registers, host drains one.
-    (void)ula.parasite_read(1);   // R1 H-to-P
-    (void)ula.parasite_read(3);   // R2 H-to-P
+    // Coprocessor drains a couple of host-written registers, host drains one.
+    (void)ula.coprocessor_read(1);   // R1 H-to-P
+    (void)ula.coprocessor_read(3);   // R2 H-to-P
     (void)socket.read(1);         // R1 P-to-H (host side)
 }
 

@@ -32,7 +32,7 @@ class TubeControlFlags:
     j: bool = False  # Bit 2: Enable PIRQ from R4
     m: bool = False  # Bit 3: Enable PNMI from R3
     v: bool = False  # Bit 4: Two-byte mode for R3
-    p: bool = False  # Bit 5: Parasite reset
+    p: bool = False  # Bit 5: Coprocessor reset
 
     @property
     def raw(self) -> int:
@@ -114,8 +114,8 @@ class TubeHostStatus:
 
 
 @dataclass
-class TubeParasiteStatus:
-    """Parasite-perspective status registers."""
+class TubeCoprocessorStatus:
+    """Coprocessor-perspective status registers."""
 
     r1_status: int = 0
     r2_status: int = 0
@@ -202,7 +202,7 @@ class TubeUlaState:
     r4_p2h: TubeLatchState = field(default_factory=TubeLatchState)
 
     host_status: TubeHostStatus = field(default_factory=TubeHostStatus)
-    parasite_status: TubeParasiteStatus = field(default_factory=TubeParasiteStatus)
+    coprocessor_status: TubeCoprocessorStatus = field(default_factory=TubeCoprocessorStatus)
     interrupts: TubeInterrupts = field(default_factory=TubeInterrupts)
 
     host_stretched: bool = False
@@ -222,7 +222,7 @@ class TubeUlaState:
             f"  R4 H->P: {self.r4_h2p}",
             f"  R4 P->H: {self.r4_p2h}",
             f"  Host status:     {self.host_status}",
-            f"  Parasite status: {self.parasite_status}",
+            f"  Coprocessor status: {self.coprocessor_status}",
             f"  Interrupts: {self.interrupts}",
         ]
         if self.host_stretched:
@@ -311,11 +311,11 @@ def _from_proto(pb: debugger_pb2.TubeState) -> TubeUlaState:
             r3_status=pb.host_status.r3_status,
             r4_status=pb.host_status.r4_status,
         ),
-        parasite_status=TubeParasiteStatus(
-            r1_status=pb.parasite_status.r1_status,
-            r2_status=pb.parasite_status.r2_status,
-            r3_status=pb.parasite_status.r3_status,
-            r4_status=pb.parasite_status.r4_status,
+        coprocessor_status=TubeCoprocessorStatus(
+            r1_status=pb.coprocessor_status.r1_status,
+            r2_status=pb.coprocessor_status.r2_status,
+            r3_status=pb.coprocessor_status.r3_status,
+            r4_status=pb.coprocessor_status.r4_status,
         ),
         interrupts=TubeInterrupts(
             hirq=pb.interrupts.hirq,

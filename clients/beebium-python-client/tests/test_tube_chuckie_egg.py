@@ -108,7 +108,7 @@ def bbc_tube(
     The fixture waits for the Tube banner before yielding.
 
     Configures:
-    - Tube with 65C02 3MHz parasite
+    - Tube with 65C02 3MHz coprocessor
     - Acorn 1770 disc controller
     - 1770 DFS ROM in sideways slot 14
     """
@@ -144,7 +144,7 @@ def bbc_tube(
 class TestTubeChuckieEggBoot:
     """Test booting Chuckie Egg 2023 (40th Anniversary Edition) via the Tube.
 
-    These tests run the full multi-process emulator (host + parasite as separate
+    These tests run the full multi-process emulator (host + coprocessor as separate
     OS processes communicating via shared memory and gRPC), matching production
     architecture. See docs/discussion/chuckie-egg-2023-tube-hang.md.
     """

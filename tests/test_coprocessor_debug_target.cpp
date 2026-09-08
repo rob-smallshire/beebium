@@ -11,8 +11,8 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 // Drives the concrete DebuggerControlServiceImpl against the abstract
-// CpuDebugTarget interface (not the concrete ParasiteRunner), the way the
-// server does. A ParasiteRunner is supplied only as a CpuDebugTarget&, proving
+// CpuDebugTarget interface (not the concrete CoprocessorRunner), the way the
+// server does. A CoprocessorRunner is supplied only as a CpuDebugTarget&, proving
 // the service works through the interface: the register model, memory,
 // stepping and the machine_type() accessor.
 
@@ -20,7 +20,7 @@
 
 #include <beebium/extension/CpuDebugTarget.hpp>
 #include <beebium/service/DebuggerService.hpp>
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -42,11 +42,11 @@ std::array<uint8_t, 2048> make_nop_rom(uint16_t entry = 0xF800) {
 
 }  // namespace
 
-TEST_CASE("DebuggerControlServiceImpl drives a ParasiteRunner through CpuDebugTarget",
-          "[parasite][debugger][coprocessor]") {
+TEST_CASE("DebuggerControlServiceImpl drives a CoprocessorRunner through CpuDebugTarget",
+          "[coprocessor][debugger][coprocessor]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     // The server sees only the abstract interface.

@@ -452,8 +452,6 @@ private:
             response.set_watchdog_timeout_count(econet.watchdog_timeout_count());
             response.set_send_stage_log(econet.send_stage_log_string());
             response.set_ticks_with_timer_active(econet.ticks_with_timer_active());
-            response.set_read_stretch_parasite_ticks(
-                machine_.memory().tube_socket.read_stretch_parasite_ticks());
         }
     }
 

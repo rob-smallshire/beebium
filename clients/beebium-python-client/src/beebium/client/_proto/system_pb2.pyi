@@ -709,7 +709,7 @@ Global___SetSpeedMultiplierResponse: _TypeAlias = SetSpeedMultiplierResponse  # 
 @_typing.final
 class PacingStats(_message.Message):
     """Pacing statistics snapshot.
-    Available from both host and parasite SystemService instances.
+    Available from both host and coprocessor SystemService instances.
     """
 
     DESCRIPTOR: _descriptor.Descriptor

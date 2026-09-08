@@ -14,7 +14,7 @@
 
 #include "TubeHostBackend.hpp"
 #include "TubeInspection.hpp"
-#include "TubeParasiteBackend.hpp"
+#include "TubeCoprocessorBackend.hpp"
 
 #include <algorithm>
 #include <array>
@@ -30,17 +30,17 @@ namespace beebium {
 // in-process testing and as the register bridge in the extension-based
 // coprocessor architecture.
 //
-// All access is single-threaded. The host and parasite sides are driven
+// All access is single-threaded. The host and coprocessor sides are driven
 // from the same thread via interleaved clock ticking. Bus stretching is
 // used to stall the host CPU when a register is full, deferring the
-// write until the parasite has drained the register.
+// write until the coprocessor has drained the register.
 //
-// The host and parasite sides see different views of the same registers:
+// The host and coprocessor sides see different views of the same registers:
 // different status bits, different read/write targets. The caller selects
-// the perspective by calling host_read/host_write or parasite_read/
-// parasite_write.
+// the perspective by calling host_read/host_write or coprocessor_read/
+// coprocessor_write.
 
-class TubeUla : public TubeHostBackend, public TubeParasiteBackend, public TubeInspection {
+class TubeUla : public TubeHostBackend, public TubeCoprocessorBackend, public TubeInspection {
 public:
     // The status flag bits, control flag bits, TransferCounters and TraceEntry
     // types are inherited from TubeInspection, the single source of truth.
@@ -55,16 +55,16 @@ public:
     uint8_t host_peek(uint8_t offset) const override;
     void host_write(uint8_t offset, uint8_t value) override;
 
-    // Parasite-side register access (offsets 0-7, mirrored from &FEF8-&FEFF).
-    uint8_t parasite_read(uint8_t offset) override;
-    uint8_t parasite_peek(uint8_t offset) const override;
-    void parasite_write(uint8_t offset, uint8_t value) override;
+    // Coprocessor-side register access (offsets 0-7, mirrored from &FEF8-&FEFF).
+    uint8_t coprocessor_read(uint8_t offset) override;
+    uint8_t coprocessor_peek(uint8_t offset) const override;
+    void coprocessor_write(uint8_t offset, uint8_t value) override;
 
     // Interrupt outputs (active high in this model; caller inverts if needed).
     // These use the Tube-specific names from Application Note 004:
     //   hirq -- Host IRQ (active when Q=1 and R4 has P-to-H data)
-    //   pirq -- Parasite IRQ (active when I=1 and R1 has data, or J=1 and R4 has data)
-    //   pnmi -- Parasite NMI (edge-triggered from R3 activity when M=1)
+    //   pirq -- Coprocessor IRQ (active when I=1 and R1 has data, or J=1 and R4 has data)
+    //   pnmi -- Coprocessor NMI (edge-triggered from R3 activity when M=1)
     //   pnmi_level -- raw combinational PNMI output (for M6502 edge detection)
     // TubeSocket adapts hirq() to the generic IrqSource::irq_pending() interface.
     bool hirq() const override;
@@ -80,8 +80,8 @@ public:
     // The read-only diagnostic surface is this ULA itself.
     const TubeInspection* inspection() const override { return this; }
 
-    // Test whether the parasite reset line is currently asserted.
-    bool parasite_reset_active() const {
+    // Test whether the coprocessor reset line is currently asserted.
+    bool coprocessor_reset_active() const {
         return (control_flags_ & FLAG_P) != 0;
     }
 
@@ -93,7 +93,7 @@ public:
     // Returns true if the stretch cleared (or was not active).
     bool try_complete_stretch() override;
 
-    // Access the NMI edge detector state (parasite-local).
+    // Access the NMI edge detector state (coprocessor-local).
     bool prev_pnmi() const { return prev_pnmi_; }
 
     // Diagnostic accessors for current stretch state (write stretches only --
@@ -114,7 +114,7 @@ private:
     // the address. Reading an empty FIFO (R1 P-to-H, R3 either direction)
     // returns the opposite side's latch, as the hardware does.
     uint8_t host_bus_latch_ = 0;
-    uint8_t parasite_bus_latch_ = 0;
+    uint8_t coprocessor_bus_latch_ = 0;
 
     // Latch: 1-byte data with ready/full flags.
     // Used for R1 H-to-P, R2 both directions, R4 both directions.

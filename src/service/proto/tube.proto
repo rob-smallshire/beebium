@@ -4,23 +4,23 @@ package beebium;
 
 // Tube coprocessor management service.
 //
-// Runs on the host's gRPC server. The parasite process connects to
+// Runs on the host's gRPC server. The coprocessor process connects to
 // negotiate the shared memory link, and the host uses GetState/RestoreState
-// for save/restore of parasite state.
+// for save/restore of coprocessor state.
 service TubeService {
-    // Parasite connects, receives shared memory name and size.
+    // Coprocessor connects, receives shared memory name and size.
     rpc Connect(TubeConnectRequest) returns (TubeConnectResponse);
 
-    // Parasite registers its gRPC endpoint after starting its own server.
+    // Coprocessor registers its gRPC endpoint after starting its own server.
     rpc RegisterEndpoint(RegisterEndpointRequest) returns (RegisterEndpointResponse);
 
-    // Query current Tube status (enabled, parasite type, shared memory info).
+    // Query current Tube status (enabled, coprocessor type, shared memory info).
     rpc GetStatus(GetTubeStatusRequest) returns (GetTubeStatusResponse);
 
-    // Host requests full parasite state for save/restore.
+    // Host requests full coprocessor state for save/restore.
     rpc GetState(TubeGetStateRequest) returns (TubeGetStateResponse);
 
-    // Host sends saved parasite state for restore after reconnection.
+    // Host sends saved coprocessor state for restore after reconnection.
     rpc RestoreState(TubeRestoreStateRequest) returns (TubeRestoreStateResponse);
 }
 
@@ -30,11 +30,11 @@ message TubeConnectRequest {
     // Protocol version for forward compatibility.
     uint32 protocol_version = 1;
 
-    // Parasite CPU type (e.g. "6502", "65C02", "z80", "arm", "32016").
-    string parasite_type = 2;
+    // Coprocessor CPU type (e.g. "6502", "65C02", "z80", "arm", "32016").
+    string coprocessor_type = 2;
 
-    // Parasite clock frequency in Hz (e.g. 3000000 for 3 MHz).
-    uint32 parasite_clock_hz = 3;
+    // Coprocessor clock frequency in Hz (e.g. 3000000 for 3 MHz).
+    uint32 coprocessor_clock_hz = 3;
 }
 
 message TubeConnectResponse {
@@ -55,7 +55,7 @@ message TubeConnectResponse {
 // --- RegisterEndpoint ---
 
 message RegisterEndpointRequest {
-    // The parasite's gRPC address (e.g. "localhost:50052").
+    // The coprocessor's gRPC address (e.g. "localhost:50052").
     string grpc_address = 1;
 }
 
@@ -76,34 +76,34 @@ message GetTubeStatusResponse {
     // True if Tube hardware is currently enabled (runtime).
     bool enabled = 2;
 
-    // True if a parasite process is connected.
-    bool parasite_connected = 3;
+    // True if a coprocessor process is connected.
+    bool coprocessor_connected = 3;
 
-    // Parasite CPU type (populated when connected).
-    string parasite_type = 4;
+    // Coprocessor CPU type (populated when connected).
+    string coprocessor_type = 4;
 
-    // Parasite clock frequency in Hz (populated when connected).
-    uint32 parasite_clock_hz = 5;
+    // Coprocessor clock frequency in Hz (populated when connected).
+    uint32 coprocessor_clock_hz = 5;
 
     // Shared memory name (populated when enabled).
     string shared_memory_name = 6;
 
-    // Parasite's gRPC address (e.g. "localhost:50052").
+    // Coprocessor's gRPC address (e.g. "localhost:50052").
     // Populated after RegisterEndpoint is called.
-    string parasite_grpc_address = 7;
+    string coprocessor_grpc_address = 7;
 }
 
 // --- State Save/Restore ---
 
 message TubeGetStateRequest {
-    // Empty - returns full parasite state.
+    // Empty - returns full coprocessor state.
 }
 
 message TubeGetStateResponse {
-    // Serialised parasite CPU registers.
+    // Serialised coprocessor CPU registers.
     bytes cpu_state = 1;
 
-    // Full parasite RAM contents (typically 64 KB).
+    // Full coprocessor RAM contents (typically 64 KB).
     bytes ram = 2;
 
     // Tube ULA register state.
@@ -111,10 +111,10 @@ message TubeGetStateResponse {
 }
 
 message TubeRestoreStateRequest {
-    // Serialised parasite CPU registers.
+    // Serialised coprocessor CPU registers.
     bytes cpu_state = 1;
 
-    // Full parasite RAM contents.
+    // Full coprocessor RAM contents.
     bytes ram = 2;
 
     // Tube ULA register state.

@@ -97,7 +97,10 @@ message GetEconetStatusResponse {
     uint32 watchdog_timeout_count = 21;
     string send_stage_log = 22;
     uint64 ticks_with_timer_active = 23;
-    uint64 read_stretch_parasite_ticks = 24;
+    // 24 was read_stretch_coprocessor_ticks, a dead Tube read-stretch diagnostic,
+    // removed with the coprocessor->coprocessor rename.
+    reserved 24;
+    reserved "read_stretch_coprocessor_ticks";
 
     // Emulation-speed gating. requires_real_time is true when the active
     // transport must run at real time (1x) -- it bridges to a real Econet line

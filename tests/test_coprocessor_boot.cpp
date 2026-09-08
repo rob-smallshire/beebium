@@ -29,14 +29,14 @@
 //      CmdPrompt (&F88D) instead of the banner routine
 //   8. JSR WaitByte polls R2 status (&FEFA) waiting for host acknowledge
 //
-// Without a host to respond, the parasite spins in the WaitByte loop.
+// Without a host to respond, the coprocessor spins in the WaitByte loop.
 //
 // Reference: docs/disassemblies/6502-Tube-Client-v1.10.bas (J.G.Harston)
 // Reference: 6502 Second Processor Service Manual, Sections 5.1-5.3
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/tube/ParasiteRunner.hpp>
+#include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
 
 #include <array>
@@ -76,7 +76,7 @@ static constexpr uint64_t BOOT_CYCLES = 100000;
 // Phase 1: Reset vector and boot mode
 // ===========================================================================
 
-TEST_CASE("Parasite boot: reset vector points to F800", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: reset vector points to F800", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
 
     // Verify ROM reset vector
@@ -84,21 +84,21 @@ TEST_CASE("Parasite boot: reset vector points to F800", "[parasite][boot][rom]")
     CHECK(reset_vector == 0xF800);
 }
 
-TEST_CASE("Parasite boot: starts in boot mode", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: starts in boot mode", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     CHECK(runner.memory_map().boot_mode());
 }
 
-TEST_CASE("Parasite boot: CPU begins at reset vector", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: CPU begins at reset vector", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
 
     // Execute reset sequence (7 cycles)
@@ -112,11 +112,11 @@ TEST_CASE("Parasite boot: CPU begins at reset vector", "[parasite][boot][rom]") 
 // Phase 2: ROM self-copy to RAM
 // ===========================================================================
 
-TEST_CASE("Parasite boot: ROM copied to RAM", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: ROM copied to RAM", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -152,11 +152,11 @@ TEST_CASE("Parasite boot: ROM copied to RAM", "[parasite][boot][rom]") {
     }
 }
 
-TEST_CASE("Parasite boot: stub copied to page 1", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: stub copied to page 1", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -174,11 +174,11 @@ TEST_CASE("Parasite boot: stub copied to page 1", "[parasite][boot][rom]") {
 // Phase 3: Boot mode termination
 // ===========================================================================
 
-TEST_CASE("Parasite boot: boot mode terminated by Tube register access", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: boot mode terminated by Tube register access", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -191,11 +191,11 @@ TEST_CASE("Parasite boot: boot mode terminated by Tube register access", "[paras
 // Phase 4: Banner printed to R1 P-to-H FIFO
 // ===========================================================================
 
-TEST_CASE("Parasite boot: banner written to R1 P-to-H FIFO", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: banner written to R1 P-to-H FIFO", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -230,11 +230,11 @@ TEST_CASE("Parasite boot: banner written to R1 P-to-H FIFO", "[parasite][boot][r
 // Phase 5: JMP patched for subsequent resets
 // ===========================================================================
 
-TEST_CASE("Parasite boot: JMP at F85D patched to CmdPrompt", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: JMP at F85D patched to CmdPrompt", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -253,11 +253,11 @@ TEST_CASE("Parasite boot: JMP at F85D patched to CmdPrompt", "[parasite][boot][r
 // Phase 6: CPU polling WaitByte for host acknowledge
 // ===========================================================================
 
-TEST_CASE("Parasite boot: CPU spins in WaitByte polling R2 status", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: CPU spins in WaitByte polling R2 status", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -280,11 +280,11 @@ TEST_CASE("Parasite boot: CPU spins in WaitByte polling R2 status", "[parasite][
 // Phase 7: Vector table installed correctly
 // ===========================================================================
 
-TEST_CASE("Parasite boot: MOS vectors installed at 0200", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: MOS vectors installed at 0200", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
@@ -313,11 +313,11 @@ TEST_CASE("Parasite boot: MOS vectors installed at 0200", "[parasite][boot][rom]
 // Phase 8: Zero-page state after boot
 // ===========================================================================
 
-TEST_CASE("Parasite boot: zero-page state after boot", "[parasite][boot][rom]") {
+TEST_CASE("Coprocessor boot: zero-page state after boot", "[coprocessor][boot][rom]") {
     auto rom = load_rom();
     TubeUla tube;
 
-    ParasiteRunner runner(tube, rom);
+    CoprocessorRunner runner(tube, rom);
     runner.reset();
     runner.run(BOOT_CYCLES);
 
