@@ -656,7 +656,14 @@ server header to find a file.
   client v1.20 (`acorn-tube-65c102_1_20.rom`, 2048 bytes, MD5
   `83d73e0e78693bb4b43e7cb18e58d556`), which is a different build with its
   own banner, "Acorn TUBE 65C102 Co-Processor". No plugin references
-  another plugin's directory.
+  another plugin's directory. The 65C102 image is the one B2 and B-Em ship
+  and matches the upper half of the full 4 KB EPROM dump in Toby Lobster's
+  ROM library. Another 2 KB image circulates as "65C102 TUBE 1.20" (MD5
+  `f0555114f7a18f727e9ca14effebcc95`) that the library annotates as saved
+  from a RAM copy after self-modification: its startup RTS at &F85E has
+  become TYA and its NMI vector has been rewritten, so booted as a ROM it
+  goes straight to the "*" supervisor and never prints the banner. Only
+  the image from the chip boots.
 
 - **Resolution is the extension API's job.** Add to `Extension` (or
   `ExtensionContext`, developer's choice, say which) a
