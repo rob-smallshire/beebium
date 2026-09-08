@@ -685,13 +685,24 @@ resume order -- unpause parasite first, then resume host.
 - Boot sequence reliable
 - Dramatically simpler code -- no atomics, no threading primitives, no races
 
-### Remaining Issues (as of 9 April 2026)
+### The $025F Failures (9 April 2026, resolved)
 
-- `test_osword_72_then_adfs_select_with_tube` hangs: the MOS Tube present flag
-  at $025F gets cleared mid-session during complex OSWORD &72 + ADFS select
-  sequences. 4 genuine Tube failures share this pattern. Simple operations pass.
-  Root cause suspected to be in bus stretch timing or tick ordering during
-  complex R2/R4 command/response sequences.
+Immediately after the migration, `test_osword_72_then_adfs_select_with_tube`
+and three related tests (file load, WFSINIT) failed with a shared symptom:
+the MOS Tube present flag at $025F was cleared mid-session during complex
+OSWORD &72 and ADFS select sequences. Bus stretch timing and tick ordering
+were suspected.
+
+The cause was in the test harness, not the emulator. The Python
+`TubeSystem.run()` resumed the host before unpausing the parasite, so the
+host ran alone for one gRPC round-trip after every chunk boundary. The Tube
+Host Code's finite polling loops timed out and MOS cleared $025F. See
+`docs/discussion/tube-single-threaded-resume-race.md`. The resume order was
+reversed and `TubeSystem` was then removed from the integration paths
+(`ee6d002b`); the WFSINIT hang had the separate R3 paired-transfer cause
+fixed in `d806300`. As of September 2026 every test in the wfsinit,
+tube-save and l3fs integration suites passes, including a watchpoint test
+on $025F itself.
 
 ### Key Files (Current)
 
