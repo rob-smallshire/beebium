@@ -196,12 +196,21 @@ public:
 
     // Execute one CPU cycle
     void step() {
-        // Handle Tube bus stretch (host CPU halted, parasite + peripherals continue).
+        // Run the Tube coprocessor forward to the current host cycle, as the
+        // first action on every path. cycle_count advances by exactly one per
+        // step() whatever path is taken, so the coprocessor's clock runs
+        // continuously -- during Tube stretches, during 1MHz bus stretches, and
+        // on normal cycles alike -- matching hardware, where the coprocessor's
+        // clock is independent of the host bus. A no-op when no coprocessor is
+        // installed; idempotent if reached twice at the same host time (the
+        // Tube-stretch completion fall-through below).
+        state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+
+        // Handle Tube bus stretch (host CPU halted, coprocessor + peripherals continue).
         // When the host writes to a full Tube register, the Tube ULA holds the host
         // CPU's clock until the parasite drains the register. During stretch, the
-        // parasite and all peripherals (VIAs, video, sound) continue running.
+        // coprocessor and all peripherals (VIAs, video, sound) continue running.
         if (tube_stretch_active_) {
-            state_.memory.tube_socket.tick_parasite_stretch();
             if (state_.memory.tube_socket.try_complete_tube_stretch()) {
                 tube_stretch_active_ = false;
                 // Fall through to normal step -- the deferred write has been
@@ -245,9 +254,9 @@ public:
             return;
         }
 
-        // Tick parasite BEFORE host (B2 ordering).
-        // Parasite register writes are immediately visible to the host.
-        state_.memory.tube_socket.tick_parasite();
+        // The coprocessor has already been run forward to this host cycle at
+        // the top of step(), so its register writes are visible before the
+        // host CPU ticks (B2 ordering).
 
         // Pass current cycle to CpuBinding for 1MHz synchronization calculations
         cpu_binding_.set_current_cycle(state_.cycle_count);

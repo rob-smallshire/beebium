@@ -16,16 +16,33 @@
 
 namespace beebium {
 
-ParasiteRunner::ParasiteRunner(TubeParasiteBackend& backend, std::span<const uint8_t, 2048> rom)
+ParasiteRunner::ParasiteRunner(TubeParasiteBackend& backend, std::span<const uint8_t, 2048> rom,
+                               ClockRatio ratio)
     : tube_port_(backend)
     , memory_(tube_port_, rom)
     , cpu_(memory_, tube_port_)
+    , clock_(ratio)
 {
     std::copy(rom.begin(), rom.end(), rom_.begin());
 }
 
 void ParasiteRunner::reset() {
     cpu_.reset();
+    // Discard the clock's time base: a hard host reset zeroes the host cycle
+    // count, so the next run_until() must establish a fresh origin rather than
+    // treat the reset as host time running backwards.
+    clock_.rebase();
+}
+
+void ParasiteRunner::run_until(uint64_t host_cycle) {
+    // Advance the clock's record of host time and learn how many parasite
+    // cycles have become due. Do this even while paused: the paused interval's
+    // cycles are lost, not deferred, so a resumed parasite does not catch up.
+    const uint64_t due = clock_.cycles_due(host_cycle);
+    if (paused_) return;
+    for (uint64_t i = 0; i < due; ++i) {
+        step();
+    }
 }
 
 bool ParasiteRunner::check_breakpoints() {

@@ -14,11 +14,34 @@
 
 #include <beebium/tube/TubeSocket.hpp>
 #include <beebium/tube/TubeConcepts.hpp>
+#include <beebium/tube/Coprocessor.hpp>
 #include <beebium/IrqAggregator.hpp>
 #include <beebium/MemoryMap.hpp>
 #include <beebium/devices/Ram.hpp>
 
+#include <cstdint>
+#include <vector>
+
 using namespace beebium;
+
+namespace {
+
+// Recording Coprocessor stub: logs the host_cycle argument of every run_until
+// call and counts resets. Runs no cycles of its own -- the socket's only job
+// here is to pass host time through and delegate reset.
+class RecordingCoprocessor : public Coprocessor {
+public:
+    std::vector<uint64_t> run_until_args;
+    int reset_count = 0;
+
+    void run_until(uint64_t host_cycle) override { run_until_args.push_back(host_cycle); }
+    bool is_paused() const override { return false; }
+    void reset() override { ++reset_count; }
+    ClockRatio clock_ratio() const override { return ClockRatio{3, 2}; }
+    uint16_t diag_pc() const override { return 0x1234; }
+};
+
+}  // namespace
 
 // ===========================================================================
 // Empty socket behaviour (no second processor attached)
@@ -339,6 +362,71 @@ TEST_CASE("TubeSocket: reset does not change enabled state", "[tube][socket]") {
     socket.enable();
     socket.reset();
     CHECK(socket.enabled());
+}
+
+// ===========================================================================
+// Coprocessor management (host-time-driven)
+// ===========================================================================
+
+TEST_CASE("TubeSocket: run_coprocessor_until passes host time through unchanged", "[tube][socket][coprocessor]") {
+    TubeSocket socket;
+    RecordingCoprocessor cop;
+    socket.install_coprocessor(&cop);
+
+    socket.run_coprocessor_until(0);
+    socket.run_coprocessor_until(1);
+    socket.run_coprocessor_until(1);   // idempotent second call still forwarded
+    socket.run_coprocessor_until(42);
+
+    CHECK(cop.run_until_args == std::vector<uint64_t>{0, 1, 1, 42});
+}
+
+TEST_CASE("TubeSocket: run_coprocessor_until is a no-op when nothing is installed", "[tube][socket][coprocessor]") {
+    TubeSocket socket;
+    // No coprocessor installed: must not crash and must do nothing.
+    socket.run_coprocessor_until(0);
+    socket.run_coprocessor_until(1000);
+    CHECK_FALSE(socket.enabled());
+}
+
+TEST_CASE("TubeSocket: run_coprocessor_until stops after remove_coprocessor", "[tube][socket][coprocessor]") {
+    TubeSocket socket;
+    RecordingCoprocessor cop;
+    socket.install_coprocessor(&cop);
+    socket.run_coprocessor_until(5);
+    socket.remove_coprocessor();
+    socket.run_coprocessor_until(6);   // no longer forwarded
+
+    CHECK(cop.run_until_args == std::vector<uint64_t>{5});
+}
+
+TEST_CASE("TubeSocket: diag_parasite_pc delegates to the coprocessor, else 0xFFFF", "[tube][socket][coprocessor]") {
+    TubeSocket socket;
+    CHECK(socket.diag_parasite_pc() == 0xFFFF);   // none installed
+
+    RecordingCoprocessor cop;
+    socket.install_coprocessor(&cop);
+    CHECK(socket.diag_parasite_pc() == 0x1234);
+
+    socket.remove_coprocessor();
+    CHECK(socket.diag_parasite_pc() == 0xFFFF);
+}
+
+TEST_CASE("TubeSocket: reset() resets the installed coprocessor", "[tube][socket][coprocessor]") {
+    TubeSocket socket;
+    RecordingCoprocessor cop;
+    socket.install_coprocessor(&cop);
+
+    socket.reset();
+    CHECK(cop.reset_count == 1);
+
+    socket.reset();
+    CHECK(cop.reset_count == 2);
+
+    // After removal, reset() no longer touches the coprocessor.
+    socket.remove_coprocessor();
+    socket.reset();
+    CHECK(cop.reset_count == 2);
 }
 
 // ===========================================================================

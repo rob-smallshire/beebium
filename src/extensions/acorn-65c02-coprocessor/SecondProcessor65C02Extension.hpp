@@ -33,13 +33,13 @@ namespace beebium {
 //   - ParasiteRunner (CPU, memory map, boot ROM, breakpoints)
 //
 // The TubeUla is installed into the host's TubeSocket as the backend.
-// The ParasiteRunner is installed as a ParasiteTickable so that
-// Machine::step() ticks the parasite in the single-threaded interleaved
-// model. The clock ratio is 3:2 (3 MHz parasite, 2 MHz host).
+// The ParasiteRunner is installed as the Coprocessor so that Machine::step()
+// drives the parasite in host time (single-threaded model). The clock ratio
+// is 3:2 (3 MHz parasite, 2 MHz host) and lives with the runner.
 //
 // Lifecycle:
-//   init()     -- load ROM, create components, install backend + parasite
-//   shutdown() -- remove parasite, uninstall backend
+//   init()     -- load ROM, create components, install backend + coprocessor
+//   shutdown() -- remove coprocessor, uninstall backend
 
 class SecondProcessor65C02Extension : public PeripheralExtension {
 public:

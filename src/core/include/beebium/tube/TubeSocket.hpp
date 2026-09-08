@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "ParasiteTickable.hpp"
+#include "Coprocessor.hpp"
 #include "TubeHostBackend.hpp"
 #include "TubeUla.hpp"
 
@@ -155,58 +155,45 @@ public:
     // --- Reset ---
 
     // Reset the Tube subsystem: ULA backend (FIFOs, control flags) and the
-    // parasite CPU if one is installed. This models the BBC's RST line
+    // coprocessor if one is installed. This models the BBC's RST line
     // propagating through the Tube cable: when the host is reset (power-on
     // or Break), the second processor resets too. Without resetting the
-    // parasite here it would resume whatever it was doing before Break --
+    // coprocessor here it would resume whatever it was doing before Break --
     // typically blocked in a Tube R2 OSRDCH wait -- so the host's post-reset
     // banner sequence has no respondent and the user sees a blank screen.
     void reset() {
         active_backend()->reset();
-        if (parasite_) {
-            parasite_->reset();
+        if (coprocessor_) {
+            coprocessor_->reset();
         }
     }
 
-    // --- Parasite management (single-threaded interleaved ticking) ---
+    // --- Coprocessor management (host-time-driven, single-threaded) ---
 
-    // Install a parasite runner for single-threaded ticking from Machine::step().
-    // The caller (extension) owns the runner's lifetime.
-    void install_parasite(ParasiteTickable* runner) {
-        parasite_ = runner;
+    // Install a coprocessor to be driven in host time from Machine::step().
+    // The caller (extension) owns the coprocessor's lifetime and keeps it alive
+    // while installed. The clock ratio lives with the coprocessor, not here.
+    void install_coprocessor(Coprocessor* coprocessor) {
+        coprocessor_ = coprocessor;
     }
 
-    void remove_parasite() { parasite_ = nullptr; }
+    void remove_coprocessor() { coprocessor_ = nullptr; }
 
     // Diagnostic: parasite PC for stretch deadlock investigation
     uint16_t diag_parasite_pc() const {
-        return parasite_ ? parasite_->diag_pc() : 0xFFFF;
+        return coprocessor_ ? coprocessor_->diag_pc() : 0xFFFF;
     }
 
-    // Configure clock ratio: numerator/denominator = parasite/host.
-    // For 3 MHz parasite with 2 MHz host: set_parasite_clock_ratio(3, 2).
-    void set_parasite_clock_ratio(uint8_t numerator, uint8_t denominator) {
-        parasite_clock_num_ = numerator;
-        parasite_clock_den_ = denominator;
-        parasite_phase_ = 0;
-    }
-
-    // Tick the parasite CPU. Called from Machine::step() before the host CPU tick.
-    // Uses a fractional accumulator for the clock ratio.
-    void tick_parasite() {
-        if (!parasite_ || parasite_->is_paused()) return;
-
-        parasite_phase_ += parasite_clock_num_;
-        while (parasite_phase_ >= parasite_clock_den_) {
-            parasite_phase_ -= parasite_clock_den_;
-            parasite_->tick();
+    // Run the coprocessor forward to the given host cycle. Called from
+    // Machine::step() as its first action, on every path, so the coprocessor's
+    // clock runs continuously whatever the host bus is doing. The coprocessor
+    // converts host time to its own cycles and handles its own pause state, so
+    // this passes host time through unchanged and is a no-op when nothing is
+    // installed or when called again at the same host time.
+    void run_coprocessor_until(uint64_t host_cycle) {
+        if (coprocessor_) {
+            coprocessor_->run_until(host_cycle);
         }
-    }
-
-    // Tick the parasite during Tube bus stretch (host CPU halted).
-    // Identical to tick_parasite() but called from the stretch path.
-    void tick_parasite_stretch() {
-        tick_parasite();
     }
 
     // Check if the host is Tube bus-stretched.
@@ -251,11 +238,10 @@ private:
     TubeHostBackend* installed_backend_ = nullptr;  // non-owning, extension-owned
     const uint8_t* last_bus_value_ptr_ = nullptr;
 
-    // Parasite ticking state (single-threaded interleaved model)
-    ParasiteTickable* parasite_ = nullptr;
-    uint8_t parasite_phase_ = 0;
-    uint8_t parasite_clock_num_ = 3;  // 3 MHz default
-    uint8_t parasite_clock_den_ = 2;  // 2 MHz host
+    // Installed coprocessor, driven in host time (single-threaded model).
+    // Non-owning: the extension owns its lifetime. The clock ratio and
+    // fractional phase live with the coprocessor, not here.
+    Coprocessor* coprocessor_ = nullptr;
 
     // Diagnostic: parasite ticks consumed by the inline read stretch loop.
     // These ticks happen INSIDE a single host CPU cycle (no cycle_count

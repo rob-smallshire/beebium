@@ -30,6 +30,7 @@
 #include <array>
 #include <cstdint>
 #include <thread>
+#include <vector>
 
 using namespace beebium;
 
@@ -156,4 +157,108 @@ TEST_CASE("ParasiteRunner provides access to components", "[parasite][runner]") 
     const ParasiteRunner& crunner = runner;
     CHECK(crunner.cycle_count() == 0);
     CHECK(crunner.cpu().config == &M6502_rockwell65c02_config);
+}
+
+// ===========================================================================
+// Coprocessor contract: host-time driving via run_until()
+// ===========================================================================
+
+TEST_CASE("ParasiteRunner run_until matches the old 3:2 accumulator per-call sequence",
+          "[parasite][runner][coprocessor]") {
+    // Equivalence oracle. The removed TubeSocket accumulator advanced a phase
+    // by the numerator on each per-host-cycle call and ran a parasite tick each
+    // time the phase reached the denominator. Encode that algorithm inline and
+    // require run_until(t) for t = 1..N to run exactly the same cycles per call.
+    //
+    // The clock's origin is host time zero at construction (no reset here, which
+    // would rebase it), so run_until(1) is the first host cycle, matching the
+    // accumulator's first call. Cycles run per call are counted from the CPU
+    // cycle counter -- each step() is exactly one tick.
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+
+    const uint64_t N = 32;
+    const uint32_t num = 3, den = 2;
+    uint32_t phase = 0;
+    std::vector<uint64_t> expected, actual;
+
+    uint64_t prev = runner.cycle_count();
+    for (uint64_t t = 1; t <= N; ++t) {
+        // Oracle: the old accumulator's cycles for this host cycle.
+        phase += num;
+        uint64_t exp = 0;
+        while (phase >= den) { phase -= den; ++exp; }
+        expected.push_back(exp);
+
+        // Actual: cycles the runner ran for this host cycle.
+        runner.run_until(t);
+        const uint64_t now = runner.cycle_count();
+        actual.push_back(now - prev);
+        prev = now;
+    }
+
+    CHECK(actual == expected);
+    // Sanity: the sequence opens 1, 2, 1, 2, ...
+    CHECK(actual[0] == 1);
+    CHECK(actual[1] == 2);
+    CHECK(actual[2] == 1);
+    CHECK(actual[3] == 2);
+    // Total equals floor(N * 3 / 2) with no drift.
+    uint64_t total = 0;
+    for (auto c : actual) total += c;
+    CHECK(total == N * num / den);
+}
+
+TEST_CASE("ParasiteRunner run_until while paused advances time but runs no cycles, no catch-up",
+          "[parasite][runner][coprocessor][debug]") {
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+    runner.reset();
+
+    runner.run_until(0);   // establish origin at host time 0
+    const uint64_t base = runner.cycle_count();
+
+    runner.pause();
+    REQUIRE(runner.is_paused());
+
+    // A long paused interval: time advances to 100, but nothing runs.
+    runner.run_until(100);
+    CHECK(runner.cycle_count() == base);
+
+    // After resuming, the next call runs ONLY the cycles due for the new
+    // interval [100, 101] -- one host cycle -- and does NOT catch up the ~150
+    // cycles that fell in the paused interval.
+    runner.resume();
+    REQUIRE_FALSE(runner.is_paused());
+    runner.run_until(101);
+    CHECK(runner.cycle_count() - base == 1);
+}
+
+TEST_CASE("ParasiteRunner reset rebases the clock: a smaller host time is accepted",
+          "[parasite][runner][coprocessor]") {
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    ParasiteRunner runner(tube, rom, ClockRatio{3, 2});
+    runner.reset();
+
+    // Run well into a session.
+    runner.run_until(1000);
+    runner.run_until(1010);
+
+    // A hard host reset zeroes the host cycle count and propagates across the
+    // Tube cable, so host time goes backwards. reset() must accept that.
+    runner.reset();
+    const uint64_t base = runner.cycle_count();
+
+    // A run_until with a much smaller host time is accepted, defines the new
+    // origin, and runs nothing.
+    runner.run_until(5);
+    CHECK(runner.cycle_count() == base);
+
+    // Subsequent calls run from the new origin: [5, 7] is two host cycles,
+    // floor(2 * 3 / 2) = 3 parasite cycles.
+    runner.run_until(7);
+    CHECK(runner.cycle_count() - base == 3);
 }

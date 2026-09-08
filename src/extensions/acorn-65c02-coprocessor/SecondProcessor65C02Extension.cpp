@@ -33,17 +33,18 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
             "SecondProcessor65C02Extension: failed to load Tube client ROM");
     }
 
-    // Create components.
+    // Create components. The clock ratio (3 MHz parasite / 2 MHz host) lives
+    // with the runner as its CoprocessorClock, not with the socket.
     tube_ula_ = std::make_unique<TubeUla>();
-    runner_ = std::make_unique<ParasiteRunner>(*tube_ula_, rom);
+    runner_ = std::make_unique<ParasiteRunner>(*tube_ula_, rom, ClockRatio{3, 2});
     runner_->reset();
 
     // Install the TubeUla as the host-side backend.
     tube_socket_->install_backend(tube_ula_.get());
 
-    // Install the runner for single-threaded ticking from Machine::step().
-    tube_socket_->install_parasite(runner_.get());
-    tube_socket_->set_parasite_clock_ratio(3, 2);  // 3 MHz / 2 MHz
+    // Install the runner as the coprocessor, driven in host time from
+    // Machine::step().
+    tube_socket_->install_coprocessor(runner_.get());
 
     // Create the parasite debugger impl (wraps ParasiteRunner with the same
     // DebuggerControlServiceImpl template used by the host debugger). The
@@ -61,9 +62,9 @@ void SecondProcessor65C02Extension::shutdown()
     if (!runner_)
         return;
 
-    // Remove parasite from host ticking.
+    // Remove the coprocessor from host ticking.
     if (tube_socket_) {
-        tube_socket_->remove_parasite();
+        tube_socket_->remove_coprocessor();
         tube_socket_->install_backend(nullptr);
     }
 

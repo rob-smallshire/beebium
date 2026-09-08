@@ -12,9 +12,10 @@
 
 #pragma once
 
+#include "Coprocessor.hpp"
+#include "CoprocessorClock.hpp"
 #include "ParasiteCpu.hpp"
 #include "ParasiteMemoryMap.hpp"
-#include "ParasiteTickable.hpp"
 #include "TubeParasiteBackend.hpp"
 #include "../Types.hpp"
 
@@ -32,31 +33,47 @@ namespace beebium {
 // Owns the CPU, memory map, and Tube port, and provides an execution loop.
 // This is the parasite's analogue of Machine<Hardware> on the host side.
 //
-// The runner supports pause/resume for debugger integration. When paused,
-// TubeSocket::tick_parasite() skips ticking via the is_paused() check.
+// The runner implements the Coprocessor contract: it is driven in host time
+// by TubeSocket::run_coprocessor_until(), converting host cycles to parasite
+// cycles through a CoprocessorClock for its clock ratio. It supports
+// pause/resume for debugger integration; while paused, run_until() advances
+// the clock's record of host time but runs no cycles.
 //
-// This class is specific to the 6502 second processor family. Future
-// coprocessors (6809, Z80, 80186, 32016) would have their own runner
-// classes with different CPU and memory map types.
+// This class is specific to the 6502 second processor family (3 MHz, ratio
+// 3/2). Future coprocessors (6809, Z80, 80186, 32016) would have their own
+// runner classes with different CPU and memory map types and clock ratios.
 
-class ParasiteRunner : public ParasiteTickable {
+class ParasiteRunner : public Coprocessor {
 public:
     using Memory = ParasiteMemoryMap;
     using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint16_t pc)>;
 
-    // Construct with an external parasite backend and a 2 KB ROM image.
-    // The caller owns the backend and must keep it alive for the runner's lifetime.
-    ParasiteRunner(TubeParasiteBackend& backend, std::span<const uint8_t, 2048> rom);
+    // Construct with an external parasite backend, a 2 KB ROM image, and the
+    // clock ratio (coprocessor cycles per host cycle; 3/2 for the 3 MHz 65C02
+    // second processor against a 2 MHz host). The caller owns the backend and
+    // must keep it alive for the runner's lifetime.
+    ParasiteRunner(TubeParasiteBackend& backend, std::span<const uint8_t, 2048> rom,
+                   ClockRatio ratio = ClockRatio{3, 2});
     ~ParasiteRunner() = default;
 
     // Non-copyable (owns M6502 with internal pointers)
     ParasiteRunner(const ParasiteRunner&) = delete;
     ParasiteRunner& operator=(const ParasiteRunner&) = delete;
 
-    // Reset CPU, memory map, and Tube port. Clears cycle count.
-    // Overrides ParasiteTickable::reset() so TubeSocket can propagate the
-    // host's reset signal across the Tube cable to the parasite.
+    // Reset CPU, memory map, and Tube port, and rebase the clock so the next
+    // run_until() establishes a fresh time origin. Overrides Coprocessor::reset()
+    // so TubeSocket can propagate the host's reset signal across the Tube cable
+    // to the parasite. Required because a hard host reset zeroes the host cycle
+    // count, so host time legitimately goes backwards across a reset.
     void reset() override;
+
+    // Coprocessor::run_until() -- run every parasite cycle due at or before
+    // host_cycle. While paused, advances the clock's host-time record but runs
+    // nothing; those cycles are lost, not deferred.
+    void run_until(uint64_t host_cycle) override;
+
+    // Coprocessor::clock_ratio() -- the parasite/host cycle ratio.
+    ClockRatio clock_ratio() const override { return clock_.ratio(); }
 
     // Execute for the given number of cycles, or until shutdown.
     // Checks pause state periodically.
@@ -119,8 +136,9 @@ public:
 
     // --- Single-cycle step ---
 
-    // ParasiteTickable::tick() -- one parasite cycle, called by TubeSocket.
-    void tick() override { step(); }
+    // One parasite cycle. run_until() drives this per due cycle; the live
+    // breakpoint/watchpoint checks happen inside step().
+    void tick() { step(); }
 
     void step();
 
@@ -197,6 +215,9 @@ private:
     TubeParasiteBackend& tube_port_;                     // reference to active port
     ParasiteMemoryMap memory_;
     ParasiteCpu cpu_;
+
+    // Host-time to parasite-cycle conversion for the fixed clock ratio.
+    CoprocessorClock clock_;
 
     // ROM image (kept for reset)
     std::array<uint8_t, 2048> rom_;
