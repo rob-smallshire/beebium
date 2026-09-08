@@ -660,7 +660,12 @@ server header to find a file.
   size. Both report a clear error naming the expected path when the file
   is missing or the wrong size. An explicit `rom` configuration parameter
   still overrides the packaged file, for users supplying a different
-  client ROM. `SecondProcessor65C02Extension::load_rom` uses these and
+  client ROM. For the 6502 second processor the declared size is 2048,
+  the mapped upper half of the board's 4 KB EPROM; a 4096-byte full dump
+  whose first 2048 bytes are all &FF is accepted and its upper half used,
+  with a log line saying which form was found, since such dumps circulate.
+  Any other size, or a 4096-byte file whose lower half is not blank, is
+  rejected. `SecondProcessor65C02Extension::load_rom` uses these and
   drops its include of `beebium/server/RomPaths.hpp`; the plugin no
   longer needs the server include directory at all.
 
@@ -691,7 +696,9 @@ server header to find a file.
   entry with its filename and size.
 - `rom_filepath`/`load_rom`: resolves beside the manifest; the explicit
   `rom` parameter overrides; a missing file and a wrong-size file each
-  produce the specified error.
+  produce the specified error; a 4096-byte image with a blank lower half
+  loads to the same 2048 bytes as the canonical file, and one with a
+  non-blank lower half is rejected.
 - Load-time check: a plugin directory whose declared ROM is absent fails
   to load with a message naming the plugin and the path (use
   `test-scratch-ram` or a temporary manifest copy).
