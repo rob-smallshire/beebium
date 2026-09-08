@@ -1065,21 +1065,28 @@ project's no-backward-compatibility rule.
 
 ### Extension API
 
-`Cpu6502DebugTarget` and `Cpu6502MemoryModel` are removed.
-`CoprocessorDebugTarget` becomes the whole debug contract: the descriptor
-(`cpu_descriptor()`), register access by index (`register_value(i)`,
+`Cpu6502DebugTarget` and `Cpu6502MemoryModel` are removed. The debug
+contract becomes one interface, `CpuDebugTarget` (renamed from
+`CoprocessorDebugTarget` because the host implements it too): the
+descriptor (`cpu_descriptor()`, a plain C++ struct crossing the extension
+API like `MemoryRegionDescriptor`, translated to proto in the service
+layer), register access by index (`register_value(i)`,
 `set_register_value(i, v)`), signal state by index, and the existing
-execution control, flat memory access, region model, breakpoint and
-watchpoint surface, `prepare_for_step` and `finish_step`. It carries no
-`M6502` reference and no 6502 register names.
+execution control, flat memory access, region model with `machine_type()`
+(the machine's identity such as "model-b-romram" or "Tube65C02", a
+different concept from the descriptor's CPU family and kept separate),
+breakpoint and watchpoint surface, `prepare_for_step` and `finish_step`.
+It carries no `M6502` reference and no 6502 register names.
 
-The server instantiates `DebuggerControlServiceImpl<CoprocessorDebugTarget>`
-for the coprocessor and no longer casts to a family; the "no debugger for
-family X" path from Step 1b becomes unreachable and is removed. The host
-`Machine` implements the same descriptor and register access for its own
-6502, so both services are instantiations of one template against one
-interface, and the template no longer needs the host memory policies'
-`machine_type()` as a special case if the interface provides it.
+`DebuggerControlServiceImpl` stops being a template: it is one concrete
+service over a `CpuDebugTarget&`, and the two generated gRPC service
+bases (`DebuggerControl`, `CoprocessorDebuggerControl`) each delegate to
+an instance of it. The host side is a thin `HostDebugTarget` adapter that
+delegates to `Machine`, so the hot `Machine` template carries no debug
+vtable; the coprocessor side is the runner. A shared 6502 descriptor
+helper serves both. The server no longer casts to a family; the "no
+debugger for family X" path from Step 1b becomes unreachable and is
+removed, as is the dead `ParasiteServer.hpp` from the multi-process era.
 
 ### Naming
 
@@ -1091,8 +1098,12 @@ equivalents, and comments. The replacement word is "coprocessor"
 (`CoprocessorRunner`, `CoprocessorCpu`, `coprocessor_read`, ...). The
 Tube ULA's two sides are "host" and "coprocessor". Acorn's documents
 still say parasite and the references to them may quote it. The rename
-is one mechanical commit at the end of the step, after the functional
-changes, so the review can see each separately. The vector test's BASIC
+covers the protos too (`tube.proto`'s parasite fields,
+`TubeParasiteStatus`). `econet.proto`'s `read_stretch_parasite_ticks`
+and the socket counter behind it are a dead diagnostic and are removed
+rather than renamed. The rename is one mechanical commit at the end of
+the step, after the functional changes, so the review can see each
+separately. Documentation prose is the architect's pass, after merge. The vector test's BASIC
 transliteration keeps the pin names the original program uses.
 
 ### Clients
