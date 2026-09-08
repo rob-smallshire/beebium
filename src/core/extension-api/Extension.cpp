@@ -20,10 +20,129 @@
 #include "beebium/extension/Extension.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace beebium {
 
 Extension::~Extension() = default;
+
+namespace {
+
+// Determine where an expected_size-byte image begins within the file at
+// `path`: offset 0 for an exact-size file, or `expected_size` for a
+// double-size file whose lower half is all 0xFF (a 2732-style EPROM dump
+// padded to the next size). Throws std::runtime_error naming `path` for a
+// missing file, any other size, or a double-size file with a non-blank lower
+// half. Shared by validate_rom_image and read_rom_image.
+std::uint64_t rom_image_offset(const std::filesystem::path& path,
+                               std::uint64_t expected_size) {
+    std::error_code ec;
+    const std::uint64_t actual = std::filesystem::file_size(path, ec);
+    if (ec) {
+        throw std::runtime_error("ROM image not found at " + path.string());
+    }
+    if (actual == expected_size) {
+        return 0;
+    }
+    if (actual == 2 * expected_size) {
+        // A double-size dump is accepted only when its lower half is blank
+        // (all 0xFF); the upper half is the mapped image.
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
+            throw std::runtime_error("Cannot open ROM image " + path.string());
+        }
+        std::vector<std::uint8_t> lower(expected_size);
+        file.read(reinterpret_cast<char*>(lower.data()),
+                  static_cast<std::streamsize>(expected_size));
+        if (static_cast<std::uint64_t>(file.gcount()) != expected_size) {
+            throw std::runtime_error("Short read on ROM image " + path.string());
+        }
+        const bool lower_blank = std::all_of(
+            lower.begin(), lower.end(), [](std::uint8_t b) { return b == 0xFF; });
+        if (!lower_blank) {
+            throw std::runtime_error(
+                "ROM image " + path.string() + " is " + std::to_string(actual)
+                + " bytes but its lower half is not blank (0xFF); expected "
+                + std::to_string(expected_size) + " bytes or a double-size dump "
+                "with a blank lower half");
+        }
+        return expected_size;
+    }
+    throw std::runtime_error(
+        "ROM image " + path.string() + " is " + std::to_string(actual)
+        + " bytes; expected " + std::to_string(expected_size)
+        + " (or " + std::to_string(2 * expected_size)
+        + " with a blank lower half)");
+}
+
+}  // namespace
+
+void validate_rom_image(const std::filesystem::path& path,
+                        std::uint64_t expected_size) {
+    (void)rom_image_offset(path, expected_size);
+}
+
+void read_rom_image(const std::filesystem::path& path,
+                    std::span<std::uint8_t> dest) {
+    const std::uint64_t expected = dest.size();
+    const std::uint64_t offset = rom_image_offset(path, expected);
+
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Cannot open ROM image " + path.string());
+    }
+    file.seekg(static_cast<std::streamoff>(offset));
+    file.read(reinterpret_cast<char*>(dest.data()),
+              static_cast<std::streamsize>(dest.size()));
+    if (static_cast<std::uint64_t>(file.gcount()) != dest.size()) {
+        throw std::runtime_error("Short read on ROM image " + path.string());
+    }
+
+    std::cout << "  ROM " << path.filename().string() << ": "
+              << (offset == 0
+                      ? std::to_string(expected) + "-byte image"
+                      : std::to_string(2 * expected) + "-byte image, using upper "
+                            + std::to_string(expected) + " bytes")
+              << "\n";
+}
+
+std::filesystem::path Extension::rom_filepath(std::string_view key) const {
+    for (const auto& rom : manifest_.roms) {
+        if (rom.key == key) {
+            return manifest_.manifest_dirpath / "roms" / rom.filename;
+        }
+    }
+    throw std::runtime_error(
+        "Extension '" + manifest_.name + "' declares no ROM with key '"
+        + std::string(key) + "'");
+}
+
+void Extension::load_rom(std::string_view key, std::span<std::uint8_t> dest) const {
+    const RomImage* entry = nullptr;
+    for (const auto& rom : manifest_.roms) {
+        if (rom.key == key) {
+            entry = &rom;
+            break;
+        }
+    }
+    if (!entry) {
+        throw std::runtime_error(
+            "Extension '" + manifest_.name + "' declares no ROM with key '"
+            + std::string(key) + "'");
+    }
+    if (dest.size() != entry->size) {
+        throw std::runtime_error(
+            "Extension '" + manifest_.name + "' ROM '" + std::string(key)
+            + "': buffer is " + std::to_string(dest.size())
+            + " bytes but the manifest declares " + std::to_string(entry->size));
+    }
+    read_rom_image(rom_filepath(key), dest);
+}
 
 std::string make_extension_id(
     std::string_view manifest_name,

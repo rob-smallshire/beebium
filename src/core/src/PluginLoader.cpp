@@ -167,6 +167,23 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
         }
     }
 
+    // Parse declared ROM images (optional; plugins that ship firmware).
+    // Malformed entries -- non-object, or missing key/filename -- are skipped;
+    // a non-array `roms` is ignored, matching the leniency of provides/attaches_to.
+    if (j.contains("roms") && j["roms"].is_array()) {
+        for (const auto& r : j["roms"]) {
+            if (!r.is_object()) continue;
+            RomImage rom;
+            rom.key = r.value("key", "");
+            rom.filename = r.value("filename", "");
+            rom.size = r.value("size", static_cast<std::uint64_t>(0));
+            rom.description = r.value("description", "");
+            if (!rom.key.empty() && !rom.filename.empty()) {
+                manifest.roms.push_back(std::move(rom));
+            }
+        }
+    }
+
     // Parse parameter schema
     if (j.contains("parameters") && j["parameters"].is_array()) {
         for (const auto& p : j["parameters"]) {
@@ -239,6 +256,21 @@ std::unique_ptr<Extension> PluginLoader::load_extension(
         const ExtensionManifest& manifest,
         std::map<std::string, std::string> config,
         std::map<std::string, std::vector<std::string>> list_config) {
+    // Load-time firmware check. Every ROM the manifest declares must be
+    // present and valid beside the manifest before we load the library: a
+    // missing or malformed firmware image is a broken installation, and the
+    // machine must not boot silently without the coprocessor. Fail here,
+    // naming the plugin and the path, before any dlopen.
+    for (const auto& rom : manifest.roms) {
+        auto rom_path = manifest.manifest_dirpath / "roms" / rom.filename;
+        try {
+            validate_rom_image(rom_path, rom.size);
+        } catch (const std::exception& e) {
+            throw std::runtime_error(
+                "Extension '" + manifest.name + "' cannot load: " + e.what());
+        }
+    }
+
     // Build library path
     std::string library_filename = manifest.library_stem + kSharedLibSuffix;
     auto library_filepath = manifest.manifest_dirpath / library_filename;

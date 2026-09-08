@@ -16,11 +16,23 @@
 #include "Export.hpp"
 #include "ExtensionArgParser.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace beebium {
+
+// A firmware ROM image a plugin ships in its own directory and declares in its
+// manifest's `roms` array. The file lives at <manifest_dirpath>/roms/<filename>
+// and is resolved through Extension::rom_filepath()/load_rom(). Coprocessor
+// firmware belongs to the coprocessor, not the shared host ROM set.
+struct RomImage {
+    std::string key;          // stable identifier used by the extension (e.g. "client")
+    std::string filename;     // basename within the plugin's roms/ directory
+    std::uint64_t size = 0;   // expected image size in bytes
+    std::string description;  // human-readable, shown by describe-extension
+};
 
 // Metadata describing a peripheral extension.
 // For dynamically loaded extensions, this is read from manifest.json.
@@ -37,6 +49,7 @@ struct BEEBIUM_EXT_API ExtensionManifest {
     std::vector<ParameterSchema> parameters{}; // parameter schema for CLI/preset/gRPC
     std::vector<std::string> provides{};       // extension points this extension creates (e.g. ["scsi"])
     std::vector<std::string> attaches_to{};    // extension points this extension attaches to (e.g. ["serial-port"]); may be several
+    std::vector<RomImage> roms{};              // firmware images shipped in the plugin's roms/ directory (plugins only)
 
     // Effective CLI name: cli_name if set, otherwise name
     std::string_view effective_cli_name() const {

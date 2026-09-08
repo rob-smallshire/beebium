@@ -16,6 +16,8 @@
 #include "Export.hpp"
 #include "ExtensionManifest.hpp"
 
+#include <cstdint>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <span>
@@ -116,6 +118,27 @@ public:
         return std::nullopt;
     }
 
+    // --- Packaged ROM images (manifest `roms`) ---
+    //
+    // A plugin ships its firmware in its own directory and declares each image
+    // in the manifest; these resolve and load it. Coprocessor firmware belongs
+    // to the coprocessor, not the shared host ROM set, and no extension needs a
+    // server header to find its own files.
+
+    // Resolve a declared ROM (by key) to its path beside the manifest:
+    // <manifest_dirpath>/roms/<filename>. Throws std::runtime_error naming the
+    // key if it is not declared. Does not consult config; an explicit override
+    // is the extension's own concern.
+    BEEBIUM_EXT_API std::filesystem::path rom_filepath(std::string_view key) const;
+
+    // Load the ROM declared under `key` into `dest`, whose size must equal the
+    // declared size. Accepts either an exact-size image or a double-size image
+    // whose lower half is all 0xFF (an EPROM dump padded to the next size),
+    // using the upper half; logs which form it found. Throws std::runtime_error
+    // naming the resolved path for a missing file, any other size, or a
+    // double-size file whose lower half is not blank.
+    BEEBIUM_EXT_API void load_rom(std::string_view key, std::span<std::uint8_t> dest) const;
+
     // Access all config values.
     const std::map<std::string, std::string>& config() const { return config_; }
 
@@ -211,6 +234,22 @@ protected:
 BEEBIUM_EXT_API std::string make_extension_id(
     std::string_view manifest_name,
     std::span<const std::string> existing_ids);
+
+// Validate that `path` holds an image that read_rom_image could load into an
+// expected_size buffer: the file exists and is either expected_size bytes, or
+// 2*expected_size bytes with an all-0xFF lower half (a padded EPROM dump).
+// Throws std::runtime_error naming `path` for a missing file, any other size,
+// or a double-size file whose lower half is not blank. Used by the plugin
+// loader's load-time presence check.
+BEEBIUM_EXT_API void validate_rom_image(const std::filesystem::path& path,
+                                        std::uint64_t expected_size);
+
+// Read a ROM image from `path` into `dest` (exactly dest.size() bytes),
+// accepting an exact-size file or a double-size file with an all-0xFF lower
+// half (using the upper half) and logging which form it found. Throws as
+// validate_rom_image does.
+BEEBIUM_EXT_API void read_rom_image(const std::filesystem::path& path,
+                                    std::span<std::uint8_t> dest);
 
 }  // namespace beebium
 
