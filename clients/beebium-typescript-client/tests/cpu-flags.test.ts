@@ -124,9 +124,6 @@ describe("formatRegisters", () => {
     it("formats all-zero registers correctly", () => {
         const regs: Registers = {
             a: 0, x: 0, y: 0, sp: 0, pc: 0, p: 0,
-            inNmiHandler: false, inIrqHandler: false,
-            nmiPending: false, irqPending: false,
-            deviceIrqFlags: 0, deviceNmiFlags: 0,
         };
         const result = formatRegisters(regs);
         expect(result).toBe("A=00 X=00 Y=00 SP=00 PC=0000 P=00 [nv-bdizc]");
@@ -135,9 +132,6 @@ describe("formatRegisters", () => {
     it("formats non-zero registers with hex values", () => {
         const regs: Registers = {
             a: 0x42, x: 0xFF, y: 0x10, sp: 0xFD, pc: 0xC000, p: 0x30,
-            inNmiHandler: false, inIrqHandler: false,
-            nmiPending: false, irqPending: false,
-            deviceIrqFlags: 0, deviceNmiFlags: 0,
         };
         const result = formatRegisters(regs);
         // p=0x30 = break + unused => Bb set, rest clear
@@ -147,9 +141,6 @@ describe("formatRegisters", () => {
     it("shows all flags set correctly for 0xFF", () => {
         const regs: Registers = {
             a: 0, x: 0, y: 0, sp: 0, pc: 0, p: 0xFF,
-            inNmiHandler: false, inIrqHandler: false,
-            nmiPending: false, irqPending: false,
-            deviceIrqFlags: 0, deviceNmiFlags: 0,
         };
         const result = formatRegisters(regs);
         // p=0xFF means ALL bits set, so all flags uppercase
@@ -159,9 +150,6 @@ describe("formatRegisters", () => {
     it("shows NZC flags for p=0x83", () => {
         const regs: Registers = {
             a: 0, x: 0, y: 0, sp: 0, pc: 0, p: 0x83,
-            inNmiHandler: false, inIrqHandler: false,
-            nmiPending: false, irqPending: false,
-            deviceIrqFlags: 0, deviceNmiFlags: 0,
         };
         const result = formatRegisters(regs);
         // 0x83 = 1000_0011 = N, Z, C
