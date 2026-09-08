@@ -10,10 +10,18 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""6502 CPU register access for the beebium client."""
+"""CPU register access for the beebium client.
+
+The CPU describes its own registers and interrupt signals, so this layer names
+no CPU family. ``cpu.registers`` is an ordered mapping of register name to
+value, also reachable as lowercase attributes (``regs.a``, ``regs.pc``, and a
+Z80's ``regs.hl``), built from ``cpu.descriptor``. The disassembler stays
+6502-only; only the register model is family-agnostic.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
@@ -82,74 +90,96 @@ class StatusRegister:
 
 
 @dataclass(frozen=True)
-class Registers:
-    """An immutable snapshot of the 6502 CPU registers.
+class Signal:
+    """The state of one CPU interrupt line, e.g. IRQ or NMI."""
 
-    ``bbc.cpu.registers`` returns one coherent snapshot. Registers are never
-    written by mutating a snapshot (that would mean nothing) -- writes go
-    through ``bbc.cpu.update(...)`` or the individual setters -- hence frozen.
+    name: str
+    asserted: bool = False
+    pending: bool = False
+    in_handler: bool = False
+
+    def __str__(self) -> str:
+        flags = [
+            label
+            for label, on in (
+                ("asserted", self.asserted),
+                ("pending", self.pending),
+                ("in-handler", self.in_handler),
+            )
+            if on
+        ]
+        return f"{self.name}({', '.join(flags)})" if flags else self.name
+
+
+class Registers(Mapping):
+    """An immutable snapshot of the CPU registers, built from the descriptor.
+
+    An ordered mapping of register name (as the descriptor names it, e.g. "A",
+    "PC", "HL") to value, so ``regs["PC"]`` works for any CPU. Each register is
+    also a lowercase attribute -- ``regs.a``, ``regs.pc`` -- so existing 6502
+    code keeps working and a new family's registers appear with no client
+    change. Writes never mutate a snapshot; they go through ``cpu.update(...)``.
     """
 
-    a: int  # Accumulator (0-255)
-    x: int  # X index register (0-255)
-    y: int  # Y index register (0-255)
-    sp: int  # Stack pointer (0-255, stack at $0100-$01FF)
-    pc: int  # Program counter (0-65535)
-    p: int  # Raw processor status byte
+    def __init__(self, descriptor: debugger_pb2.CpuDescriptor, values: dict[str, int]):
+        # Preserve descriptor order.
+        self._descriptor = descriptor
+        self._values = dict(values)
+        self._by_lower = {name.lower(): name for name in values}
 
-    # Interrupt handler tracking
-    in_nmi_handler: bool = False
-    in_irq_handler: bool = False
-    nmi_pending: bool = False
-    irq_pending: bool = False
-    device_irq_flags: int = 0
-    device_nmi_flags: int = 0
+    def __getitem__(self, name: str) -> int:
+        return self._values[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __getattr__(self, name: str) -> int:
+        # Lowercase attribute access, e.g. regs.pc -> the "PC" register.
+        try:
+            canonical = self.__dict__["_by_lower"][name]
+        except KeyError:
+            raise AttributeError(
+                f"{type(self).__name__!r} has no register {name!r}"
+            ) from None
+        return self.__dict__["_values"][canonical]
 
     @property
     def status(self) -> StatusRegister:
-        """The processor status register (P) decoded into named flags."""
-        return StatusRegister(self.p)
+        """The flags register decoded into named 6502 flags.
+
+        Built from the register the descriptor marks as the FLAGS register.
+        """
+        for reg in self._descriptor.registers:
+            if reg.role == debugger_pb2.FLAGS:
+                return StatusRegister(self._values[reg.name])
+        raise AttributeError("this CPU has no flags register")
 
     def __str__(self) -> str:
-        """Format registers for display."""
-        result = (
-            f"A={self.a:02X} X={self.x:02X} Y={self.y:02X} "
-            f"SP={self.sp:02X} PC={self.pc:04X} P={self.p:02X} [{self.status}]"
-        )
-        interrupts = []
-        if self.in_nmi_handler:
-            interrupts.append("in-NMI")
-        if self.in_irq_handler:
-            interrupts.append("in-IRQ")
-        if self.nmi_pending:
-            interrupts.append("NMI-pending")
-        if self.irq_pending:
-            interrupts.append("IRQ-pending")
-        if interrupts:
-            result += f" {{{', '.join(interrupts)}}}"
-        return result
+        parts = []
+        for reg in self._descriptor.registers:
+            width = max(1, (reg.width_bits + 3) // 4)
+            parts.append(f"{reg.name}={self._values[reg.name]:0{width}X}")
+        text = " ".join(parts)
+        for reg in self._descriptor.registers:
+            if reg.role == debugger_pb2.FLAGS:
+                text += f" [{StatusRegister(self._values[reg.name])}]"
+                break
+        return text
 
 
-def _registers_from_proto(state: debugger_pb2.Cpu6502State) -> Registers:
-    """Build a Registers snapshot from a Cpu6502State proto message."""
-    return Registers(
-        a=state.a,
-        x=state.x,
-        y=state.y,
-        sp=state.sp,
-        pc=state.pc,
-        p=state.p,
-        in_nmi_handler=state.in_nmi_handler,
-        in_irq_handler=state.in_irq_handler,
-        nmi_pending=state.nmi_pending,
-        irq_pending=state.irq_pending,
-        device_irq_flags=state.device_irq_flags,
-        device_nmi_flags=state.device_nmi_flags,
-    )
+def _registers_from_state(
+    descriptor: debugger_pb2.CpuDescriptor, state: debugger_pb2.CpuState
+) -> Registers:
+    """Build a Registers snapshot from a descriptor and a CpuState proto."""
+    values = {rv.name: rv.value for rv in state.registers}
+    return Registers(descriptor, values)
 
 
 class CPU:
-    """6502 CPU register access.
+    """CPU register access.
 
     Reads return a coherent snapshot; writes are atomic and return the
     resulting snapshot.
@@ -160,6 +190,7 @@ class CPU:
         print(regs)                     # A=.. X=.. ... PC=.. P=.. [flags]
         if regs.status.carry:
             ...
+        pc = regs["PC"]                 # by name, for any CPU
 
         # Convenience single-register access (each read is its own snapshot)
         if bbc.cpu.a == 0:
@@ -170,6 +201,10 @@ class CPU:
 
         # The individual setters route through update()
         bbc.cpu.pc = 0xC000
+
+        # Describe the CPU, or read its interrupt lines
+        bbc.cpu.descriptor.family          # "6502"
+        bbc.cpu.signals["NMI"].pending
     """
 
     def __init__(self, stub: debugger_pb2_grpc.DebuggerControlStub):
@@ -179,12 +214,38 @@ class CPU:
             stub: The gRPC stub for the DebuggerControl service.
         """
         self._stub = stub
+        self._descriptor: debugger_pb2.CpuDescriptor | None = None
+
+    @property
+    def descriptor(self) -> debugger_pb2.CpuDescriptor:
+        """The CPU's self-description, fetched once and cached.
+
+        Lists the registers in display order (each with a name, width, role and,
+        for the flags register, per-bit flag names) and the interrupt signals.
+        """
+        if self._descriptor is None:
+            self._descriptor = self._stub.GetCpuDescriptor(debugger_pb2.Empty())
+        return self._descriptor
 
     @property
     def registers(self) -> Registers:
         """Read all registers as one coherent snapshot."""
-        response = self._stub.Get6502State(debugger_pb2.Get6502StateRequest())
-        return _registers_from_proto(response)
+        state = self._stub.GetCpuState(debugger_pb2.Empty())
+        return _registers_from_state(self.descriptor, state)
+
+    @property
+    def signals(self) -> dict[str, Signal]:
+        """The CPU's interrupt lines and their current state, keyed by name."""
+        state = self._stub.GetCpuState(debugger_pb2.Empty())
+        return {
+            ss.name: Signal(
+                name=ss.name,
+                asserted=ss.asserted,
+                pending=ss.pending,
+                in_handler=ss.in_handler,
+            )
+            for ss in state.signals
+        }
 
     # Individual register properties (read)
 
@@ -244,35 +305,23 @@ class CPU:
     def p(self, value: int) -> None:
         self.update(p=value)
 
-    def update(
-        self,
-        *,
-        a: int | None = None,
-        x: int | None = None,
-        y: int | None = None,
-        sp: int | None = None,
-        pc: int | None = None,
-        p: int | None = None,
-    ) -> Registers:
+    def update(self, **values: int) -> Registers:
         """Atomically write one or more registers and return the new snapshot.
 
-        Only the registers explicitly provided are modified; the rest are left
-        unchanged. The server applies the writes and reads back the resulting
-        state as a single operation, so the returned ``Registers`` is a
+        Registers are named as lowercase keyword arguments (``a=``, ``pc=``, and
+        a Z80's ``hl=``). Only the registers provided are modified; the rest are
+        left unchanged. The server applies the writes and reads back the
+        resulting state as a single operation, so the returned ``Registers`` is a
         coherent post-write snapshot -- there is no separate read and no race.
+        An unknown register name is rejected by the server, naming it.
         """
-        request = debugger_pb2.Set6502StateRequest()
-        if a is not None:
-            request.a = a
-        if x is not None:
-            request.x = x
-        if y is not None:
-            request.y = y
-        if sp is not None:
-            request.sp = sp
-        if pc is not None:
-            request.pc = pc
-        if p is not None:
-            request.p = p
-
-        return _registers_from_proto(self._stub.Set6502State(request))
+        by_lower = {reg.name.lower(): reg.name for reg in self.descriptor.registers}
+        request = debugger_pb2.CpuState()
+        for key, value in values.items():
+            rv = request.registers.add()
+            # Pass the descriptor's canonical name when we know it, else the key
+            # as given, so the server's unknown-name rejection reports it.
+            rv.name = by_lower.get(key.lower(), key)
+            rv.value = value
+        state = self._stub.SetCpuState(request)
+        return _registers_from_state(self.descriptor, state)

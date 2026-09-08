@@ -22,6 +22,7 @@ from __future__ import annotations
 import pytest
 
 from beebium.client import Beebium
+from beebium.client._proto import debugger_pb2
 from beebium.client.cpu import Registers, StatusRegister
 from beebium.client.debugger import Breakpoint, ExecutionStateEvent, Watchpoint
 from beebium.client.exceptions import DebuggerError, InvalidConditionError
@@ -736,6 +737,13 @@ class TestStatusRegister:
         assert int(StatusRegister(0x42)) == 0x42
 
     def test_registers_status_property(self):
-        regs = Registers(a=0, x=0, y=0, sp=0, pc=0, p=0x40)  # V set
+        # Registers is built from a descriptor; .status finds the FLAGS register.
+        descriptor = debugger_pb2.CpuDescriptor(family="6502")
+        for name in ("A", "X", "Y", "SP", "PC"):
+            descriptor.registers.add(name=name)
+        descriptor.registers.add(name="P", role=debugger_pb2.FLAGS)
+        regs = Registers(
+            descriptor, {"A": 0, "X": 0, "Y": 0, "SP": 0, "PC": 0, "P": 0x40}
+        )  # V set
         assert isinstance(regs.status, StatusRegister)
         assert regs.status.overflow and not regs.status.carry
