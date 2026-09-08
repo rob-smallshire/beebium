@@ -538,7 +538,7 @@ Found while implementing; none is a Tube defect and none blocks the step.
 - The plugin includes `beebium/server/RomPaths.hpp` from the server's
   include directory to find its ROM, as the built-in did. ROM lookup is a
   facility every coprocessor plugin needs and belongs in the extension
-  API.
+  API. Addressed by Step 1e.
 - `-DBEEBIUM_BUILD_SERVICE=OFF` fails to configure because
   `src/extensions/CMakeLists.txt` adds extensions whose CMake calls
   `beebium_compile_proto` unconditionally while the helper is only
@@ -610,6 +610,100 @@ ratio and the identity is shared.
 Step 1b's acceptance list, plus the tests above, plus the packaging
 consequence: the `beebium-servers` aggregate builds the new plugin so it
 ships in every artifact without further change.
+
+
+## Step 1e: coprocessor ROMs packaged with the extension
+
+### Goal
+
+A coprocessor's firmware belongs to the coprocessor. Each coprocessor
+plugin ships the ROM images it needs inside its own plugin directory,
+declares them in its manifest, and loads them from there. The server's
+shared `roms/` directory carries host ROMs only, and no plugin includes a
+server header to find a file.
+
+### Design
+
+- **Manifest declares ROMs.** `manifest.json` gains an optional `roms`
+  array; each entry has `key`, `filename`, `size` in bytes, and
+  `description`. For the 65C02 and 65C102 plugins:
+
+```json
+"roms": [
+    {
+        "key": "client",
+        "filename": "acorn-tube-6502_1_10.rom",
+        "size": 2048,
+        "description": "Acorn Tube 6502 client ROM v1.10"
+    }
+]
+```
+
+  `ExtensionManifest` parses it; `describe-extension` lists the entries;
+  `list-extensions` is unchanged.
+
+- **Files live beside the manifest.** In the source tree a plugin's ROMs
+  are under `src/extensions/<name>/roms/`. `beebium_finalize_plugin`
+  deploys that directory to `<exe-dir>/extensions/<name>/roms/` and
+  installs it to `bin/extensions/<name>/roms/`, next to the library and
+  manifest, so every artifact, package and the macOS app bundle (which
+  copies `extensions/` whole) carries them without further change. The
+  65C102 plugin deploys the same file from the 65C02 plugin's source
+  `roms/` directory, so the image exists once in the repository and each
+  deployed plugin directory is self-contained.
+
+- **Resolution is the extension API's job.** Add to `Extension` (or
+  `ExtensionContext`, developer's choice, say which) a
+  `rom_filepath(std::string_view key)` that returns the path of the
+  declared ROM resolved against the manifest's `manifest_dirpath`, and a
+  `load_rom(key, span)` convenience that reads it and checks the declared
+  size. Both report a clear error naming the expected path when the file
+  is missing or the wrong size. An explicit `rom` configuration parameter
+  still overrides the packaged file, for users supplying a different
+  client ROM. `SecondProcessor65C02Extension::load_rom` uses these and
+  drops its include of `beebium/server/RomPaths.hpp`; the plugin no
+  longer needs the server include directory at all.
+
+- **Load-time check.** When a plugin with declared ROMs is loaded, the
+  loader (or the extension's `init()`, developer's choice, say which)
+  verifies every declared ROM is present at its resolved path and fails
+  the load with a message naming the plugin and the path. A missing
+  firmware image is a broken installation, and the error should say so
+  before the machine boots without a coprocessor.
+
+- **The shared ROM directory sheds the Tube ROM.** Remove
+  `acorn-tube-6502_1_10.rom` from the server's build-time copy list, from
+  the repository's top-level `roms/`, and from `tests/assets/roms/` if it
+  is a duplicate; the C++ tests that load the Tube client ROM take it from
+  the 65C02 plugin's source `roms/` directory through a compile-time
+  definition, as they take host ROMs from `BEEBIUM_ROM_DIR` today. Check
+  the macOS app and the packaging install lists for any explicit mention
+  of the file.
+
+- **Built-ins.** A built-in extension has no manifest directory; the
+  `roms` feature is defined for plugins only, and the two remaining
+  built-ins declare none.
+
+### Tests
+
+- Manifest parsing: `roms` present, absent, and malformed.
+- `describe-extension tube-65c02` and `tube-65c102` list the client ROM
+  entry with its filename and size.
+- `rom_filepath`/`load_rom`: resolves beside the manifest; the explicit
+  `rom` parameter overrides; a missing file and a wrong-size file each
+  produce the specified error.
+- Load-time check: a plugin directory whose declared ROM is absent fails
+  to load with a message naming the plugin and the path (use
+  `test-scratch-ram` or a temporary manifest copy).
+- Proof that the packaged ROM is what gets used: a server started with
+  `BEEBIUM_ROM_DIR` pointing at a directory holding only the host ROMs
+  boots the Tube banner with `--tube-65c02`.
+
+### Acceptance
+
+Step 1c's acceptance list, unchanged in outcome, plus the tests above,
+plus `grep -rn 'beebium/server' src/extensions/acorn-65c02-coprocessor
+src/extensions/acorn-65c102-coprocessor` finding nothing.
 
 
 ## Later steps (for orientation, not for implementation now)
