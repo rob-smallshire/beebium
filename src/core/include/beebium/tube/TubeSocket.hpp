@@ -221,6 +221,15 @@ public:
     // installed or when called again at the same host time.
     void run_coprocessor_until(uint64_t host_cycle) {
         coprocessor_time_ = host_cycle;
+        // Host time is by definition at least the time the coprocessor has been
+        // run to, so keep host_time_ >= the furthest run. Without this, a caller
+        // that drives run_coprocessor_until() directly (rather than host_cycle())
+        // leaves host_time_ behind, and the next read()/write() would sync the
+        // coprocessor to that stale, smaller host_time_ -- asking it to run
+        // backwards.
+        if (host_cycle > host_time_) {
+            host_time_ = host_cycle;
+        }
         if (coprocessor_) {
             coprocessor_->run_until(host_cycle);
         }

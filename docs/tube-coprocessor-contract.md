@@ -105,7 +105,12 @@ installed in the socket, as it does today for the `ParasiteTickable`.
 - `host_cycle` is the host's cumulative cycle count, `state_.cycle_count`.
 - Between resets, successive `run_until` arguments are non-decreasing. A
   call with a smaller value than the previous call is a contract violation;
-  implementations assert it in debug builds.
+  implementations assert it in debug builds. In a release build the clock
+  must not underflow: it treats the smaller value as an implicit rebase (a
+  new origin, zero cycles due), the same effect as an explicit reset. The
+  socket upholds the contract from its side too: `run_coprocessor_until`
+  keeps the stored host time at least the furthest cycle the coprocessor has
+  been run to, so a later register-access sync never targets an earlier time.
 - The number of coprocessor cycles due at host time `t`, measured from the
   time origin `t0`, is exactly `floor((t - t0) * numerator / denominator)`.
   Implementations must compute this without floating point and without

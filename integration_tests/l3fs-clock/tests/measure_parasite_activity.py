@@ -84,7 +84,7 @@ def main():
 
         print("L3FS running. Sampling parasite PC for 10 seconds...\n")
 
-        parasite = bbc.connect_parasite(timeout=5.0)
+        parasite = bbc.connect_coprocessor(timeout=5.0)
 
         # Sample the parasite PC rapidly
         pc_counts = Counter()

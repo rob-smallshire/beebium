@@ -113,7 +113,7 @@ def main():
 
         print("L3FS is running. Connecting to parasite...\n")
 
-        parasite = bbc.connect_parasite(timeout=5.0)
+        parasite = bbc.connect_coprocessor(timeout=5.0)
         host_channel = grpc.insecure_channel(bbc.target)
 
         # ---- Measurement loop ----

@@ -95,7 +95,7 @@ def main():
         print("L3FS running.\n")
 
         host_channel = grpc.insecure_channel(bbc.target)
-        parasite = bbc.connect_parasite(timeout=5.0)
+        parasite = bbc.connect_coprocessor(timeout=5.0)
 
         # Measure over short intervals to see the pattern
         print(f"{'Interval':>8}  {'R2 h2p':>8}  {'R2 p2h':>8}  {'h2p/s':>8}  {'p2h/s':>8}  "

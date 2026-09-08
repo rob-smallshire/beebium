@@ -131,7 +131,7 @@ def test_load_puts_data_in_host_ram(
             print(f"Host RAM at $1F00 after *LOAD: {host_data.hex()}")
 
             # Check parasite memory at &1F00
-            parasite = bbc.connect_parasite()
+            parasite = bbc.connect_coprocessor()
             para_data = bytes(parasite.memory.address.peek[0x1F00:0x1F10])
             print(f"Parasite RAM at $1F00 after *LOAD: {para_data.hex()}")
 

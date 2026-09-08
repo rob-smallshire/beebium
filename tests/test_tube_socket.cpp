@@ -386,6 +386,30 @@ TEST_CASE("TubeSocket: run_coprocessor_until passes host time through unchanged"
     CHECK(cop.run_until_args == std::vector<uint64_t>{0, 0, 1, 1, 42});
 }
 
+TEST_CASE("TubeSocket: a register access after a direct run_coprocessor_until does not run the coprocessor backwards",
+          "[tube][socket][coprocessor]") {
+    TubeSocket socket;
+    RecordingCoprocessor cop;
+    socket.install_coprocessor(&cop);
+
+    // A driver that advances the coprocessor directly via run_coprocessor_until
+    // (rather than host_cycle()) still leaves the socket's host time consistent:
+    // run_coprocessor_until keeps host_time_ >= the furthest run.
+    socket.run_coprocessor_until(100000);
+
+    // A host register read syncs the coprocessor to host time first. It must
+    // sync to at least 100000, never backwards to a stale host_time_ of 0.
+    socket.read(0);
+
+    REQUIRE(!cop.run_until_args.empty());
+    uint64_t highest = 0;
+    for (uint64_t arg : cop.run_until_args) {
+        CHECK(arg >= highest);   // monotonic non-decreasing: never backwards
+        highest = arg;
+    }
+    CHECK(cop.run_until_args.back() >= 100000);
+}
+
 TEST_CASE("TubeSocket: run_coprocessor_until is a no-op when nothing is installed", "[tube][socket][coprocessor]") {
     TubeSocket socket;
     // No coprocessor installed: must not crash and must do nothing.

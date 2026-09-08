@@ -70,7 +70,7 @@ def _dump_hang_diagnostics(bbc):
         lines.append(f"  [Host CPU unavailable: {e}]")
 
     try:
-        parasite = bbc.connect_parasite()
+        parasite = bbc.connect_coprocessor()
         parasite.debugger.stop()
         para_regs = parasite.cpu.registers
         lines.append("")

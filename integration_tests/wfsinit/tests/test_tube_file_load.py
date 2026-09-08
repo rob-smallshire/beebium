@@ -87,7 +87,7 @@ def _dump_hang_diagnostics(bbc):
         lines.append(f"  [Host CPU unavailable: {e}]")
 
     try:
-        parasite = bbc.connect_parasite()
+        parasite = bbc.connect_coprocessor()
         parasite.debugger.stop()
         para_regs = parasite.cpu.registers
         lines.append("")
@@ -182,7 +182,7 @@ def test_load_file_via_tube(
             print(f"*LOAD completed. Screen:\n{screen}")
 
             # Verify the file was loaded by checking parasite memory.
-            parasite = bbc.connect_parasite()
+            parasite = bbc.connect_coprocessor()
             # The hello program starts with LDX #0 (A2 00)
             first_bytes = bytes(parasite.memory.address.peek[0x1F00:0x1F04])
             print(f"Parasite memory at $1F00: {first_bytes.hex()}")

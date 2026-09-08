@@ -84,7 +84,7 @@ def main():
         bbc.keyboard.type("2\r")
         assert _wait_for_screen_text(bbc, "01:21", timeout_seconds=60)
 
-        parasite = bbc.connect_parasite(timeout=5.0)
+        parasite = bbc.connect_coprocessor(timeout=5.0)
 
         print("=== PARASITE memory at hotspots ($FA70-$FAA0) ===")
         print("(Parasite spends 91% of time at $FA93 and $FA96)\n")

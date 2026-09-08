@@ -164,6 +164,25 @@ TEST_CASE("CoprocessorClock: rebase then a smaller host time is accepted and ret
     CHECK(clock.cycles_due(3) == 1);
 }
 
+#ifdef NDEBUG
+// Release-only: a smaller host time WITHOUT an explicit rebase() trips the
+// debug assert (which aborts, so this cannot run in a debug build), but in a
+// release build it must not underflow the unsigned delta and run ~2^64 cycles.
+// It rebases implicitly: zero cycles due, new origin. This is the safety net
+// behind TubeSocket::run_coprocessor_until keeping host_time_ monotonic.
+TEST_CASE("CoprocessorClock: backward host time without rebase is a safe rebase in release",
+          "[coprocessor][clock]") {
+    CoprocessorClock clock(ClockRatio{3, 2});
+    for (uint64_t t = 1; t <= 1000; ++t) {
+        clock.cycles_due(t);
+    }
+    // No rebase() call: time simply goes backwards.
+    CHECK(clock.cycles_due(500) == 0);   // implicit rebase, nothing due
+    CHECK(clock.cycles_due(501) == 1);   // counts from the new origin (500)
+    CHECK(clock.cycles_due(502) == 2);
+}
+#endif
+
 TEST_CASE("CoprocessorClock: rebase to a nonzero origin has zero cycles due at the origin",
           "[coprocessor][clock]") {
     CoprocessorClock clock(ClockRatio{3, 2});

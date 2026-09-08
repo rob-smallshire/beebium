@@ -72,7 +72,7 @@ def test_tube_load_detailed_debug(
                 bbc.memory.address.bus[addr] = 0xAA
 
             # Also fill some parasite memory
-            parasite = bbc.connect_parasite()
+            parasite = bbc.connect_coprocessor()
             for addr in range(0x0800, 0x2100):
                 parasite.memory.address.bus[addr] = 0xBB
 

@@ -61,6 +61,16 @@ public:
             return 0;
         }
         assert(host_cycle >= last_host_cycle_);
+        if (host_cycle < last_host_cycle_) {
+            // Time ran backwards. The debug assert above flags the misuse; in a
+            // release build, rebase to the new origin (zero cycles due) rather
+            // than underflow the unsigned delta and run ~2^64 cycles. This is
+            // the same effect as an explicit rebase() and matches the Time
+            // section of docs/tube-coprocessor-contract.md.
+            last_host_cycle_ = host_cycle;
+            remainder_ = 0;
+            return 0;
+        }
         const uint64_t delta = host_cycle - last_host_cycle_;
         last_host_cycle_ = host_cycle;
 

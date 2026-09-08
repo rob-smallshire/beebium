@@ -99,7 +99,7 @@ def _dump_hang_diagnostics(bbc):
 
     # Parasite CPU
     try:
-        parasite = bbc.connect_parasite()
+        parasite = bbc.connect_coprocessor()
         parasite.debugger.stop()
         para_regs = parasite.cpu.registers
         lines.append("")
@@ -148,7 +148,7 @@ def _dump_hang_diagnostics(bbc):
 
     # Parasite stack and zero-page Tube state
     try:
-        parasite = bbc.connect_parasite()
+        parasite = bbc.connect_coprocessor()
         para_sp = para_regs.sp
         para_stack_start = 0x0100 + para_sp + 1
         para_stack = bytes(parasite.memory.address.peek[para_stack_start:para_stack_start + 16])

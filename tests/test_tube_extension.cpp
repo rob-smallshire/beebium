@@ -34,16 +34,19 @@ using namespace beebium;
 
 // Drive the coprocessor in host time via the TubeSocket until the coprocessor has
 // reached the target cycle count, or the host-cycle budget is exhausted. Each
-// host cycle produces 1 or 2 coprocessor cycles (the 3:2 ratio). host_cycle is a
-// running monotonic host time -- as it is in Machine::step() -- carried across
-// calls so the coprocessor's clock never sees time go backwards.
+// host cycle produces 1 or 2 coprocessor cycles (the 3:2 ratio). This calls
+// TubeSocket::host_cycle(H) once per host cycle, exactly as Machine::step()
+// does, so host_time_ tracks host time and the socket batches the coprocessor
+// within the skew bound -- rather than calling run_coprocessor_until() directly,
+// which leaves host_time_ behind and makes the next read()/write() sync the
+// coprocessor to a stale, smaller host time.
 static void run_coprocessor_to(TubeSocket& socket, CoprocessorRunner& runner,
                                uint64_t& host_cycle, uint64_t target_cycles,
                                uint64_t max_host_advance = 200000)
 {
     const uint64_t limit = host_cycle + max_host_advance;
     while (host_cycle < limit && runner.cycle_count() < target_cycles) {
-        socket.run_coprocessor_until(++host_cycle);
+        socket.host_cycle(++host_cycle);
     }
 }
 
