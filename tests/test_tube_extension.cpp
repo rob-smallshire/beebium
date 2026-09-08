@@ -14,8 +14,8 @@
 //
 // These tests create the extension, provide it with a TubeSocket via
 // ExtensionContext, and verify that the parasite boots and communicates
-// with the host through the TubeUla bridge. The parasite is ticked
-// via TubeSocket::tick_parasite() in the single-threaded model.
+// with the host through the TubeUla bridge. The parasite is driven in host
+// time via TubeSocket::run_coprocessor_until() in the single-threaded model.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -32,14 +32,18 @@
 
 using namespace beebium;
 
-// Tick the parasite via the TubeSocket until the target cycle count is reached
-// or the tick limit is exceeded. Each tick_parasite() call produces 1 or 2
-// parasite cycles (3:2 fractional accumulator).
-static void tick_parasite_until(TubeSocket& socket, ParasiteRunner& runner,
-                                uint64_t target_cycles, int max_ticks = 200000)
+// Drive the coprocessor in host time via the TubeSocket until the parasite has
+// reached the target cycle count, or the host-cycle budget is exhausted. Each
+// host cycle produces 1 or 2 parasite cycles (the 3:2 ratio). host_cycle is a
+// running monotonic host time -- as it is in Machine::step() -- carried across
+// calls so the coprocessor's clock never sees time go backwards.
+static void run_coprocessor_to(TubeSocket& socket, ParasiteRunner& runner,
+                               uint64_t& host_cycle, uint64_t target_cycles,
+                               uint64_t max_host_advance = 200000)
 {
-    for (int i = 0; i < max_ticks && runner.cycle_count() < target_cycles; ++i) {
-        socket.tick_parasite();
+    const uint64_t limit = host_cycle + max_host_advance;
+    while (host_cycle < limit && runner.cycle_count() < target_cycles) {
+        socket.run_coprocessor_until(++host_cycle);
     }
 }
 
@@ -62,10 +66,11 @@ TEST_CASE("65C02 extension: boots and produces R1 banner", "[tube][extension]") 
     REQUIRE(ext.running());
     REQUIRE(tube_socket.enabled());
 
-    // Tick the parasite until it has completed enough cycles for the boot
+    // Run the coprocessor until it has completed enough cycles for the boot
     // banner (the parasite writes 24 bytes to the R1 P-to-H FIFO via OSWRCH,
     // which takes ~100K parasite cycles).
-    tick_parasite_until(tube_socket, *ext.runner(), 100000);
+    uint64_t host_cycle = 0;
+    run_coprocessor_to(tube_socket, *ext.runner(), host_cycle, 100000);
 
     uint8_t status = tube_socket.peek(0);
     REQUIRE((status & TubeUla::DATA_AVAILABLE) != 0);
@@ -105,7 +110,8 @@ TEST_CASE("65C02 extension: cross-processor stop via counterpart callback", "[tu
     REQUIRE(ext.running());
 
     // Boot the parasite.
-    tick_parasite_until(tube_socket, *ext.runner(), 100000);
+    uint64_t host_cycle = 0;
+    run_coprocessor_to(tube_socket, *ext.runner(), host_cycle, 100000);
 
     // Simulate cross-processor stop: calling the parasite_pause_callback
     // should pause the parasite runner.
@@ -114,18 +120,19 @@ TEST_CASE("65C02 extension: cross-processor stop via counterpart callback", "[tu
     pause_cb();
     CHECK(ext.runner()->is_paused());
 
-    // Ticking while paused should be a no-op.
+    // Running the coprocessor while paused advances host time but runs no
+    // parasite cycles.
     auto cycles_before = ext.runner()->cycle_count();
     for (int i = 0; i < 1000; ++i) {
-        tube_socket.tick_parasite();
+        tube_socket.run_coprocessor_until(++host_cycle);
     }
     CHECK(ext.runner()->cycle_count() == cycles_before);
 
-    // Resume and verify ticking resumes.
+    // Resume and verify the parasite runs again.
     ext.runner()->resume();
     CHECK(!ext.runner()->is_paused());
     for (int i = 0; i < 1000; ++i) {
-        tube_socket.tick_parasite();
+        tube_socket.run_coprocessor_until(++host_cycle);
     }
     CHECK(ext.runner()->cycle_count() > cycles_before);
 

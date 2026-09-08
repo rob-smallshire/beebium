@@ -137,13 +137,13 @@ TEST_CASE("Model B with 65C02 second processor boots with Tube banner",
     ParasiteRunner parasite(*tube, tube_rom);
     parasite.reset();
 
-    // Install parasite for single-threaded ticking from Machine::step().
-    // The 3:2 clock ratio gives the parasite 1.5 cycles per host cycle.
-    machine.state().memory.tube_socket.install_parasite(&parasite);
-    machine.state().memory.tube_socket.set_parasite_clock_ratio(3, 2);
+    // Install the coprocessor to be driven in host time from Machine::step().
+    // The 3:2 clock ratio (1.5 parasite cycles per host cycle) lives with the
+    // runner, not the socket.
+    machine.state().memory.tube_socket.install_coprocessor(&parasite);
 
     // --- Boot ---
-    // Machine::step() now ticks the parasite automatically via TubeSocket.
+    // Machine::step() now runs the coprocessor automatically via TubeSocket.
     machine.run(30'000'000);
 
     // --- Verify screen ---
@@ -177,8 +177,7 @@ TEST_CASE("Model B with Tube shows 64K memory (not 32K)",
     ParasiteRunner parasite(*tube, tube_rom);
     parasite.reset();
 
-    machine.state().memory.tube_socket.install_parasite(&parasite);
-    machine.state().memory.tube_socket.set_parasite_clock_ratio(3, 2);
+    machine.state().memory.tube_socket.install_coprocessor(&parasite);
 
     machine.run(30'000'000);
 

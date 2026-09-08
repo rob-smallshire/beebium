@@ -186,8 +186,9 @@ TEST_CASE("In-process: parasite breakpoint fires on the tick() path",
             runner.pause();
         });
 
-    // tick() is the live path: TubeSocket::tick_parasite() -> tick() -> step().
-    // It must check the breakpoint BEFORE executing the instruction at target_pc.
+    // tick() is one cycle of the live path: TubeSocket::run_coprocessor_until()
+    // -> Coprocessor::run_until() -> step() per due cycle. It must check the
+    // breakpoint BEFORE executing the instruction at target_pc.
     // (Before the fix the check lived only in run(), so this never fired.)
     runner.tick();
 

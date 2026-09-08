@@ -208,8 +208,8 @@ TEST_CASE("Econet TX completes with Tube (server scenario)",
     REQUIRE(tube != nullptr);
     ParasiteRunner parasite(*tube, tube_rom);
     parasite.reset();
-    machine.state().memory.tube_socket.install_parasite(&parasite);
-    machine.state().memory.tube_socket.set_parasite_clock_ratio(3, 2);
+    // The 3:2 clock ratio lives with the runner; the socket drives it in host time.
+    machine.state().memory.tube_socket.install_coprocessor(&parasite);
 
     // Enable Econet
     auto backend_ptr = std::make_unique<TestBackend>();
