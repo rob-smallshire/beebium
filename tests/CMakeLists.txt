@@ -1269,6 +1269,14 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_parasite_debug_target)
 
+    # Server-facing coprocessor wiring through the abstract interfaces
+    add_executable(test_coprocessor_extension test_coprocessor_extension.cpp)
+    target_link_libraries(test_coprocessor_extension PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_coprocessor_extension)
+
     # Disc service tests
     add_executable(test_grpc_disc test_grpc_disc.cpp)
     target_link_libraries(test_grpc_disc PRIVATE

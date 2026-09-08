@@ -28,7 +28,8 @@
 #include "beebium/extension/OneMHzBusPort.hpp"
 #include "beebium/extension/PluginLoader.hpp"
 #include "beebium/service/PeripheralExtensionService.hpp"
-#include "SecondProcessor65C02Extension.hpp"
+#include "beebium/extension/CoprocessorExtension.hpp"
+#include "beebium/extension/Cpu6502DebugTarget.hpp"
 #include "ParasiteDebuggerAdapter.hpp"
 #include "beebium/Machines.hpp"
 #include "beebium/SidewaysRomHeader.hpp"
@@ -2105,23 +2106,48 @@ public:
             extension_services.push_back(&extension_ui_service);
             extension_services.push_back(&extension_rpc_service);
 
-            // The parasite (second processor) debugger is the one genuine core
-            // gRPC service contributed by an extension: it is the same
-            // DebuggerControl proto as the host debugger, consumed by the
-            // typed debugger clients. The server (not the extension) wraps the
-            // coprocessor's debugger impl in the adapter and registers it, so
-            // no extension hosts a gRPC service. The adapter must outlive the
-            // server, hence this enclosing-scope owner.
-            std::unique_ptr<beebium::ParasiteDebuggerAdapter> parasite_debugger_adapter;
+            // Find the coprocessor extension, if any, through the abstract
+            // CoprocessorExtension interface -- the server keeps no concrete
+            // coprocessor type. There is one Tube socket, so at most one
+            // coprocessor may attach; more than one is a configuration error.
+            beebium::CoprocessorExtension* coprocessor_ext = nullptr;
             for (auto* ext : extension_registry.extensions()) {
-                auto* tube_ext =
-                    dynamic_cast<beebium::SecondProcessor65C02Extension*>(ext);
-                if (tube_ext && tube_ext->debugger_service()) {
-                    parasite_debugger_adapter =
-                        std::make_unique<beebium::ParasiteDebuggerAdapter>(
-                            *tube_ext->debugger_service());
-                    extension_services.push_back(parasite_debugger_adapter.get());
-                    break;
+                if (auto* cop = dynamic_cast<beebium::CoprocessorExtension*>(ext)) {
+                    if (coprocessor_ext) {
+                        std::cerr << "Error: more than one coprocessor attached to the "
+                                     "Tube; the Tube has a single socket.\n";
+                        return 1;
+                    }
+                    coprocessor_ext = cop;
+                }
+            }
+
+            // The parasite (second processor) debugger is the one genuine core
+            // gRPC service contributed by an extension: the same DebuggerControl
+            // proto as the host debugger, consumed by the typed debugger clients.
+            // The server, not the extension, instantiates the debugger against
+            // the abstract Cpu6502DebugTarget and wraps it in the adapter, so no
+            // extension hosts a gRPC service. Both must outlive the server, hence
+            // these enclosing-scope owners.
+            std::unique_ptr<beebium::service::DebuggerControlServiceImpl<beebium::Cpu6502DebugTarget>>
+                parasite_debugger_impl;
+            std::unique_ptr<beebium::ParasiteDebuggerAdapter> parasite_debugger_adapter;
+            if (coprocessor_ext) {
+                if (auto* target = coprocessor_ext->debug_target()) {
+                    // The server can serve the 6502 family today. Other families
+                    // simply get no debugger rather than blocking the machine.
+                    if (auto* cpu6502 = dynamic_cast<beebium::Cpu6502DebugTarget*>(target)) {
+                        parasite_debugger_impl = std::make_unique<
+                            beebium::service::DebuggerControlServiceImpl<beebium::Cpu6502DebugTarget>>(
+                                *cpu6502);
+                        parasite_debugger_adapter =
+                            std::make_unique<beebium::ParasiteDebuggerAdapter>(*parasite_debugger_impl);
+                        extension_services.push_back(parasite_debugger_adapter.get());
+                    } else {
+                        std::cout << "No debugger available for coprocessor CPU family '"
+                                  << target->cpu_family()
+                                  << "'; continuing without a coprocessor debugger.\n";
+                    }
                 }
             }
 
@@ -2199,19 +2225,23 @@ public:
             std::cout << "Listening on port " << server.port() << std::endl;
             std::cout << Memory::MACHINE_DISPLAY_NAME << " ready. Press Ctrl+C to stop." << std::endl;
 
-            // Wire cross-processor debugger stop for Tube extensions.
-            // When a breakpoint with stop_counterpart fires on one side,
-            // the callback pauses the other side.
-            for (auto* ext : extension_registry.extensions()) {
-                auto* tube_ext = dynamic_cast<beebium::SecondProcessor65C02Extension*>(ext);
-                if (tube_ext && tube_ext->running()) {
-                    // Host breakpoint → pause parasite
+            // Wire cross-processor debugger stop entirely server-side. Stop
+            // detection lives in the two DebuggerControlServiceImpl instances
+            // the server owns (the host's and the coprocessor's), so each one's
+            // counterpart callback pauses the other processor through the
+            // abstract interface.
+            if (coprocessor_ext) {
+                if (auto* cop = coprocessor_ext->coprocessor()) {
+                    // Host breakpoint with stop_counterpart -> pause coprocessor.
                     server.debugger_service().set_counterpart_stop_callback(
-                        tube_ext->parasite_pause_callback());
-                    // Parasite breakpoint → pause host
-                    tube_ext->wire_counterpart_stop([&machine] {
-                        machine.pause();
-                    });
+                        [cop] { cop->pause(); });
+                }
+                // Coprocessor breakpoint with stop_counterpart -> pause host.
+                // Only when a debugger was created for its family; without one
+                // there is no impl to detect the breakpoint.
+                if (parasite_debugger_impl) {
+                    parasite_debugger_impl->set_counterpart_stop_callback(
+                        [&machine] { machine.pause(); });
                 }
             }
 

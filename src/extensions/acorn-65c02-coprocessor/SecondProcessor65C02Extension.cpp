@@ -46,13 +46,10 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
     // Machine::step().
     tube_socket_->install_coprocessor(runner_.get());
 
-    // Create the parasite debugger impl (wraps ParasiteRunner with the same
-    // DebuggerControlServiceImpl template used by the host debugger). The
-    // server reads this via debugger_service() and wraps it in a
-    // ParasiteDebuggerAdapter registered as the ParasiteDebuggerControl gRPC
-    // service, so it coexists with the host's DebuggerControl without the
-    // extension hosting any gRPC service itself.
-    debugger_service_ = std::make_unique<service::DebuggerControlServiceImpl<ParasiteRunner>>(*runner_);
+    // The debugger is the server's concern: it reads debug_target() (the
+    // runner, a Cpu6502DebugTarget), instantiates DebuggerControlServiceImpl
+    // against the abstract interface and registers the ParasiteDebuggerControl
+    // service. The extension hosts no gRPC service itself.
 
     std::cout << "  65C02 coprocessor (3 MHz, single-threaded)\n";
 }
@@ -68,7 +65,6 @@ void SecondProcessor65C02Extension::shutdown()
         tube_socket_->install_backend(nullptr);
     }
 
-    debugger_service_.reset();
     runner_.reset();
     tube_ula_.reset();
 }
@@ -89,9 +85,16 @@ bool SecondProcessor65C02Extension::load_rom(std::array<uint8_t, 2048>& rom) con
         return file.gcount() == 2048;
     }
 
-    // Use the server's ROM path resolution. The extension's CMakeLists
-    // copies the Tube client ROM to the build roms/ directory alongside
-    // the MOS and BASIC ROMs, so server::RomPaths::find_rom() finds it.
+    // Otherwise resolve by name through server::RomPaths::find_rom(), whose
+    // search order does NOT depend on where this extension lives (built-in or
+    // plugin): (1) an explicit rom directory set on RomPaths, (2) $BEEBIUM_ROM_DIR,
+    // (3) a roms/ directory at or above the server executable, (4) the installed
+    // ../share/beebium/roms/, (5) the compile-time BEEBIUM_DEFAULT_ROM_DIR. The
+    // Tube client ROM reaches those locations independently of this plugin: the
+    // server copies it into the build roms/ directory and installs the whole rom
+    // set into share/beebium/roms, and this extension's CMakeLists also copies it
+    // into the build roms/ directory. So the lookup succeeds whether the 65C02
+    // runs as a built-in or is loaded as a plugin from extensions/.
     auto rom_filepath = server::RomPaths::find_rom(ROM_FILENAME);
     std::ifstream file(rom_filepath, std::ios::binary);
     if (!file.good()) {

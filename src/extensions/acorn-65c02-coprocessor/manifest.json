@@ -1,5 +1,6 @@
 {
     "name": "acorn-65c02-coprocessor",
+    "display_name": "Acorn 65C02 Co-processor",
     "description": "Acorn 65C02 3 MHz second processor",
     "library": "acorn-65c02-coprocessor",
     "attaches_to": ["tube"],

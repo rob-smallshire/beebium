@@ -12,24 +12,26 @@
 
 #pragma once
 
+#include "beebium/extension/Cpu6502DebugTarget.hpp"
 #include "beebium/service/DebuggerService.hpp"
-#include "beebium/tube/ParasiteRunner.hpp"
 #include "debugger.grpc.pb.h"
 
 namespace beebium {
 
-// Adapter that exposes DebuggerControlServiceImpl<ParasiteRunner> under the
+// Adapter that exposes DebuggerControlServiceImpl<Cpu6502DebugTarget> under the
 // ParasiteDebuggerControl proto service name.
 //
 // Both DebuggerControl and ParasiteDebuggerControl have identical RPCs and
 // share message types. This adapter inherits from the generated
 // ParasiteDebuggerControl::Service and delegates each RPC to the underlying
 // DebuggerControlServiceImpl, allowing host and parasite debuggers to coexist
-// on the same gRPC server.
+// on the same gRPC server. It lives in the server because the server, not the
+// coprocessor extension, instantiates the debugger against the abstract
+// Cpu6502DebugTarget interface.
 
 class ParasiteDebuggerAdapter final : public ParasiteDebuggerControl::Service {
 public:
-    explicit ParasiteDebuggerAdapter(service::DebuggerControlServiceImpl<ParasiteRunner>& impl)
+    explicit ParasiteDebuggerAdapter(service::DebuggerControlServiceImpl<Cpu6502DebugTarget>& impl)
         : impl_(impl) {}
 
     // Forward each RPC to the underlying implementation.
@@ -132,7 +134,7 @@ public:
 #undef FORWARD_UNARY
 
 private:
-    service::DebuggerControlServiceImpl<ParasiteRunner>& impl_;
+    service::DebuggerControlServiceImpl<Cpu6502DebugTarget>& impl_;
 };
 
 }  // namespace beebium

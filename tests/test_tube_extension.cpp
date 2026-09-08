@@ -97,7 +97,7 @@ TEST_CASE("65C02 extension: boots and produces R1 banner", "[tube][extension]") 
     CHECK(!tube_socket.enabled());
 }
 
-TEST_CASE("65C02 extension: cross-processor stop via counterpart callback", "[tube][extension]") {
+TEST_CASE("65C02 extension: coprocessor pauses through the Coprocessor interface", "[tube][extension]") {
     TubeSocket tube_socket;
     ExtensionContext ctx(nullptr, nullptr, &tube_socket);
 
@@ -113,11 +113,10 @@ TEST_CASE("65C02 extension: cross-processor stop via counterpart callback", "[tu
     uint64_t host_cycle = 0;
     run_coprocessor_to(tube_socket, *ext.runner(), host_cycle, 100000);
 
-    // Simulate cross-processor stop: calling the parasite_pause_callback
-    // should pause the parasite runner.
+    // The server pauses the coprocessor through the abstract Coprocessor
+    // interface when a host breakpoint with stop_counterpart fires.
     REQUIRE(!ext.runner()->is_paused());
-    auto pause_cb = ext.parasite_pause_callback();
-    pause_cb();
+    ext.coprocessor()->pause();
     CHECK(ext.runner()->is_paused());
 
     // Running the coprocessor while paused advances host time but runs no

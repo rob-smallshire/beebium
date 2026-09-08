@@ -12,11 +12,10 @@
 
 #pragma once
 
-#include "beebium/extension/PeripheralExtension.hpp"
+#include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/tube/ParasiteRunner.hpp"
 #include "beebium/tube/TubeSocket.hpp"
 #include "beebium/tube/TubeUla.hpp"
-#include "beebium/service/DebuggerService.hpp"
 
 #include <array>
 #include <cstdint>
@@ -41,7 +40,7 @@ namespace beebium {
 //   init()     -- load ROM, create components, install backend + coprocessor
 //   shutdown() -- remove coprocessor, uninstall backend
 
-class SecondProcessor65C02Extension : public PeripheralExtension {
+class SecondProcessor65C02Extension : public CoprocessorExtension {
 public:
     SecondProcessor65C02Extension() = default;
     ~SecondProcessor65C02Extension() override { shutdown(); }
@@ -60,33 +59,16 @@ public:
     void init(ExtensionContext& ctx) override;
     void shutdown() override;
 
-    // --- Cross-processor debugger coordination ---
+    // --- CoprocessorExtension interface ---
 
-    // Wire the counterpart stop callbacks between host and parasite
-    // debugger services. Call after both debugger services exist.
-    // host_pause: callback to pause the host Machine.
-    void wire_counterpart_stop(std::function<void()> host_pause) {
-        // When parasite hits a breakpoint with stop_counterpart,
-        // pause the host.
-        if (debugger_service_)
-            debugger_service_->set_counterpart_stop_callback(std::move(host_pause));
-    }
+    Coprocessor* coprocessor() override { return runner_.get(); }
+    TubeHostBackend* tube_backend() override { return tube_ula_.get(); }
+    CoprocessorDebugTarget* debug_target() override { return runner_.get(); }
 
-    // Get the callback that pauses the parasite.
-    // The host's DebuggerService should use this as its counterpart stop callback.
-    std::function<void()> parasite_pause_callback() {
-        return [this] {
-            if (runner_) runner_->pause();
-        };
-    }
-
-    // --- Accessors ---
+    // --- Accessors (for tests linking the extension directly) ---
 
     TubeUla* tube_ula() { return tube_ula_.get(); }
     ParasiteRunner* runner() { return runner_.get(); }
-    service::DebuggerControlServiceImpl<ParasiteRunner>* debugger_service() {
-        return debugger_service_.get();
-    }
     bool running() const { return runner_ != nullptr; }
 
 private:
@@ -94,10 +76,6 @@ private:
 
     std::unique_ptr<TubeUla> tube_ula_;
     std::unique_ptr<ParasiteRunner> runner_;
-    // The parasite debugger impl. The server wraps this in a
-    // ParasiteDebuggerAdapter and registers it as the ParasiteDebuggerControl
-    // gRPC service -- the extension does not host gRPC services itself.
-    std::unique_ptr<service::DebuggerControlServiceImpl<ParasiteRunner>> debugger_service_;
     TubeSocket* tube_socket_ = nullptr;  // non-owning, from ExtensionContext
 };
 

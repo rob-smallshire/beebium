@@ -204,6 +204,7 @@ add_library(beebium_extension_api SHARED
     OneMHzBusPort.cpp
     EconetTransportExtension.cpp
     CoprocessorDebugTarget.cpp
+    CoprocessorExtension.cpp
     ExtensionStorage.cpp
     ExtensionUi.cpp
     ExtensionRpc.cpp
