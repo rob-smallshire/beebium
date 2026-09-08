@@ -819,6 +819,83 @@ Behavioural identity is the criterion: this step changes nothing the
 emulated machines can observe.
 
 
+## Step 3: batching
+
+### Goal
+
+Stop calling the coprocessor every host cycle. Run it in batches of up to
+`MAX_COPROCESSOR_SKEW` host cycles, and exactly to the host's cycle before
+any host Tube register access, so that the contract of Step 2 is honoured
+with the cheapest strategy that honours it. This is the mechanism a fast
+coprocessor core needs: inside one `run_until` call it may now execute a
+whole batch without returning.
+
+### Strategy
+
+- `Machine::step()` no longer calls `run_coprocessor_until` on every
+  cycle. It calls `tube_socket.host_cycle(state_.cycle_count)` as its
+  first action on every path. That stores host time `H` in the socket
+  (one store per cycle, replacing the Step 2 observer-only store) and
+  runs the coprocessor to `H` only when `H - coprocessor_time() >=
+  MAX_COPROCESSOR_SKEW`. Between those points the coprocessor lags by
+  fewer than Δ cycles, which Step 2 permits.
+- `TubeSocket::read()` and `write()` run the coprocessor to the stored
+  `H` before performing the access, so every host register access is
+  exact. Because `host_cycle(H)` runs before the host CPU's tick in the
+  same `step()`, the stored `H` is the cycle of the access.
+- During a Tube bus stretch the host is halted waiting for the
+  coprocessor, so the stretch path syncs on every cycle, as today.
+- Whenever the host stops, on pause, on a breakpoint or watchpoint hit,
+  and at the end of every `run()` chunk, `Machine` syncs the coprocessor
+  to `H` so that a stopped machine presents both processors at the same
+  time to the debugger and to `GetTubeState`. Single-stepping the host
+  therefore keeps the coprocessor within a cycle of it, as now.
+- Interrupt lines are unchanged in mechanism: the host's IRQ aggregator
+  polls HIRQ every cycle and sees ULA state as of `C`; the coprocessor
+  sees PIRQ and PNMI when it next runs. Both latencies are bounded by Δ,
+  4 us, per Step 2.
+- `MAX_COPROCESSOR_SKEW` stays at 8 in this step. Raising it is a later
+  decision made against the measurements this step produces.
+
+### What is removed
+
+`TubeSocket::set_observer_host_time` and `observer_host_time_`: the socket
+now always holds host time, and the Step 2 observer reads it.
+
+### Tests
+
+- The Step 2 skew tests pass unchanged: they assert the bound, and now
+  observe intervals of up to Δ rather than 1.
+- A test that the strategy actually batches: across a 65C02 boot the
+  observer's `max_interval()` equals `MAX_COPROCESSOR_SKEW`, so the
+  optimisation cannot be silently lost.
+- Interrupt latency tests at the register level, driven through a
+  `Machine` with the in-process ULA and a stub coprocessor: a coprocessor
+  write to R4 with Q set is reflected on the host's IRQ input within Δ
+  host cycles; a host write to R1 with I set is seen as PIRQ by the
+  coprocessor on its next `run_until`, which arrives within Δ cycles.
+- A test that pausing the host syncs the coprocessor to `H`: after
+  `machine.pause()`, `coprocessor_time() == cycle_count`.
+- Debugger single-step of the host keeps `coprocessor_time()` within one
+  cycle of `cycle_count`.
+
+### Measurement
+
+Before and after, on the same build type and machine, report the
+emulation thread's busy fraction and the parasite's share of it for the
+idle-at-BASIC-prompt case and for a CE2023 run, using the method in
+`docs/discussion/cross-emulator-tube-analysis.md` (macOS `sample`, five
+seconds) or `perf` on Linux. Numbers, not a target; they decide whether
+raising Δ is worth anything and they are the baseline for a fast core.
+
+### Acceptance
+
+Every suite in Step 2's list passes, including CE2023 and all three
+scenario suites, against the batching strategy. This step changes
+interrupt latency by up to 4 us of emulated time and nothing else; if any
+test outcome changes, the cause is found before merge.
+
+
 ## Later steps (for orientation, not for implementation now)
 
 - **Step 1c, the 65C102 4 MHz second processor.** Specified below.
@@ -831,10 +908,13 @@ emulated machines can observe.
   design of its own, building on `docs/discussion/debugger-requirements.md`;
   `CoprocessorDebugTarget` is the seam it plugs into.
 - **Step 2, skew contract.** Specified above.
-- **Step 3, batching.** `Machine::step()` calls `run_coprocessor_until` at
-  most every Δ host cycles, or immediately before any host access to the
-  Tube registers, whichever comes first. This is where a heavy coprocessor
-  core gets to run a tight loop.
+- **Step 3, batching.** Specified above.
+- **Step 3b, a fast 65C02 core for the coprocessor plugin.** With batching
+  in place, the 65C02 runner may execute instruction-at-a-time inside
+  `run_until`, counting cycles only to find the batch's end and dropping
+  to bus-cycle precision around Tube register accesses, in the manner of
+  PiTubeDirect's fast core (see `cross-emulator-tube-analysis.md`). A
+  plugin-internal change, measured against the Step 3 baseline.
 - **Step 4, execution strategies.** A second implementation of the same
   contract that runs the coprocessor on a worker thread, spinning during
   the host's pacing burst and parked while the host sleeps, for
