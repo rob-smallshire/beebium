@@ -8,6 +8,7 @@ import {
     overflow,
     negative,
     formatRegisters,
+    StatusRegister,
     type Registers,
 } from "../src/cpu.js";
 
@@ -154,5 +155,35 @@ describe("formatRegisters", () => {
         const result = formatRegisters(regs);
         // 0x83 = 1000_0011 = N, Z, C
         expect(result).toContain("[Nv-bdiZC]");
+    });
+});
+
+describe("StatusRegister", () => {
+    const SIX502_FLAGS = ["C", "Z", "I", "D", "B", "", "V", "N"];
+
+    it("reads flags by name", () => {
+        const s = new StatusRegister(0b1000_0011, SIX502_FLAGS);
+        expect(s.flag("C")).toBe(true);
+        expect(s.flag("Z")).toBe(true);
+        expect(s.flag("N")).toBe(true);
+        expect(s.flag("V")).toBe(false);
+    });
+
+    it("exposes 6502 aliases when the flags match", () => {
+        const s = new StatusRegister(0b0100_0001, SIX502_FLAGS);
+        expect(s.carry).toBe(true);
+        expect(s.overflow).toBe(true);
+        expect(s.negative).toBe(false);
+    });
+
+    it("renders by name, MSB first", () => {
+        expect(new StatusRegister(0b1000_0011, SIX502_FLAGS).toString()).toBe("Nv-bdiZC");
+    });
+
+    it("has no 6502 aliases when the flags register uses other names", () => {
+        const s = new StatusRegister(0xFF, ["HALT", "OVER", "", "SIGN"]);
+        expect(s.flag("HALT")).toBe(true);
+        expect(s.has("C")).toBe(false);
+        expect(() => s.carry).toThrow();
     });
 });

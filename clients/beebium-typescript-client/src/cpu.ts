@@ -67,6 +67,96 @@ export function negative(p: number): boolean {
     return !!(p & 0x80);
 }
 
+/**
+ * A CPU flags register decoded by name, built from the descriptor's flag
+ * names (bit 0 first, "" for an unused bit). Flags are read by name --
+ * status.flag("C") -- and rendered by name. For a 6502 the familiar names
+ * (carry, zero, interruptDisable, decimal, breakFlag, overflow, negative) are
+ * available as getters, but only when the descriptor carries the matching
+ * flag; on a CPU whose flags use other names they throw rather than mislead.
+ */
+export class StatusRegister {
+    readonly value: number;
+    readonly flagNames: readonly string[];
+    private readonly bitOf: Map<string, number>;
+
+    // 6502 getter name -> descriptor flag name.
+    private static readonly ALIASES: Record<string, string> = {
+        carry: "C",
+        zero: "Z",
+        interruptDisable: "I",
+        decimal: "D",
+        breakFlag: "B",
+        overflow: "V",
+        negative: "N",
+    };
+
+    constructor(value: number, flagNames: readonly string[]) {
+        this.value = value;
+        this.flagNames = flagNames;
+        this.bitOf = new Map();
+        flagNames.forEach((name, i) => {
+            if (name) this.bitOf.set(name, i);
+        });
+    }
+
+    /** The flag of the given descriptor name (e.g. "C", "N"). Throws if absent. */
+    flag(name: string): boolean {
+        const bit = this.bitOf.get(name);
+        if (bit === undefined) {
+            throw new Error(`no flag ${name}`);
+        }
+        return !!(this.value & (1 << bit));
+    }
+
+    /** Whether this flags register has a flag of the given name. */
+    has(name: string): boolean {
+        return this.bitOf.has(name);
+    }
+
+    private alias(getter: string): boolean {
+        return this.flag(StatusRegister.ALIASES[getter]!);
+    }
+
+    get carry(): boolean {
+        return this.alias("carry");
+    }
+    get zero(): boolean {
+        return this.alias("zero");
+    }
+    get interruptDisable(): boolean {
+        return this.alias("interruptDisable");
+    }
+    get decimal(): boolean {
+        return this.alias("decimal");
+    }
+    get breakFlag(): boolean {
+        return this.alias("breakFlag");
+    }
+    get overflow(): boolean {
+        return this.alias("overflow");
+    }
+    get negative(): boolean {
+        return this.alias("negative");
+    }
+
+    /** Render flags by name, MSB first: set uppercase, clear lowercase, "-" unused. */
+    toString(): string {
+        let s = "";
+        for (let bit = this.flagNames.length - 1; bit >= 0; bit--) {
+            const name = this.flagNames[bit]!;
+            if (!name) {
+                s += "-";
+            } else if (this.value & (1 << bit)) {
+                s += name.toUpperCase();
+            } else {
+                s += name.toLowerCase();
+            }
+        }
+        return s;
+    }
+}
+
 /** Format the 6502 registers as a human-readable string. */
 export function formatRegisters(r: Registers): string {
     const p = r.p ?? 0;
@@ -157,6 +247,18 @@ export class CPU {
             {},
         );
         return toSignals(response);
+    }
+
+    /** Read the flags register, decoded by the descriptor's flag names. */
+    async getStatus(): Promise<StatusRegister> {
+        const descriptor = await this.getDescriptor();
+        const flagsReg = descriptor.registers.find((r) => r.role === RegisterRole.FLAGS);
+        if (flagsReg === undefined) {
+            throw new Error("this CPU has no flags register");
+        }
+        const regs = await this.getRegisters();
+        const value = regs[flagsReg.name.toLowerCase()] ?? 0;
+        return new StatusRegister(value, flagsReg.flagNames);
     }
 
     /** Get the accumulator register. */

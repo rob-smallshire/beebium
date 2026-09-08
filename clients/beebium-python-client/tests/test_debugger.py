@@ -736,12 +736,31 @@ class TestStatusRegister:
     def test_int_returns_raw_byte(self):
         assert int(StatusRegister(0x42)) == 0x42
 
+    def test_flags_read_by_name(self):
+        status = StatusRegister(0b1000_0011, ["C", "Z", "I", "D", "B", "", "V", "N"])
+        assert status.flag("C") and status.flag("Z") and status.flag("N")
+        assert status["C"] and not status["V"]
+        assert "C" in status and "V" in status
+
+    def test_aliases_absent_when_flag_names_differ(self):
+        # A CPU whose flags register uses other names has no 6502 aliases.
+        status = StatusRegister(0xFF, ["HALT", "OVER", "", "SIGN"])
+        assert status.flag("HALT") and status.flag("SIGN")
+        with pytest.raises(AttributeError):
+            _ = status.carry
+        with pytest.raises(AttributeError):
+            _ = status.overflow
+
     def test_registers_status_property(self):
         # Registers is built from a descriptor; .status finds the FLAGS register.
         descriptor = debugger_pb2.CpuDescriptor(family="6502")
         for name in ("A", "X", "Y", "SP", "PC"):
             descriptor.registers.add(name=name)
-        descriptor.registers.add(name="P", role=debugger_pb2.FLAGS)
+        descriptor.registers.add(
+            name="P",
+            role=debugger_pb2.FLAGS,
+            flag_names=["C", "Z", "I", "D", "B", "", "V", "N"],
+        )
         regs = Registers(
             descriptor, {"A": 0, "X": 0, "Y": 0, "SP": 0, "PC": 0, "P": 0x40}
         )  # V set

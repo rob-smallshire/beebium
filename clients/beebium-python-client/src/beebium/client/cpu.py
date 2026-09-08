@@ -27,66 +27,78 @@ from dataclasses import dataclass
 from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
 
 
-@dataclass(frozen=True)
 class StatusRegister:
-    """The 6502 processor status register (P), decoded into named flags.
+    """A CPU flags register decoded by name, built from the descriptor.
 
-    An immutable value object wrapping the raw status byte. Bit positions
-    follow the NMOS 6502 (bit 5 is unused and always reads as set).
+    An immutable value object wrapping the raw flags byte and the flag names
+    the descriptor gives for it (bit 0 first, "" for an unused bit). Flags are
+    read by name -- ``status.flag("C")`` or ``status["C"]`` -- and rendered by
+    name. For a 6502 the familiar property names (``carry``, ``zero``,
+    ``interrupt_disable``, ``decimal``, ``break_flag``, ``overflow``,
+    ``negative``) are available as aliases, but only when the descriptor carries
+    the matching flag; on a CPU whose flags register uses other names they are
+    absent rather than misleading.
     """
 
-    value: int  # Raw status byte (0-255)
+    # 6502 property name -> descriptor flag name.
+    _ALIASES = {
+        "carry": "C",
+        "zero": "Z",
+        "interrupt_disable": "I",
+        "decimal": "D",
+        "break_flag": "B",
+        "overflow": "V",
+        "negative": "N",
+    }
+
+    def __init__(self, value: int, flag_names: list[str] | None = None):
+        self._value = value
+        # Default to the 6502 layout so StatusRegister(byte) keeps working.
+        names = flag_names if flag_names is not None else ["C", "Z", "I", "D", "B", "", "V", "N"]
+        self._flag_names = list(names)
+        self._bit_of = {name: i for i, name in enumerate(self._flag_names) if name}
 
     @property
-    def carry(self) -> bool:
-        """Carry flag (bit 0)."""
-        return bool(self.value & 0x01)
+    def value(self) -> int:
+        """The raw flags byte."""
+        return self._value
 
-    @property
-    def zero(self) -> bool:
-        """Zero flag (bit 1)."""
-        return bool(self.value & 0x02)
+    def flag(self, name: str) -> bool:
+        """The flag of the given descriptor name (e.g. "C", "N")."""
+        return bool(self._value & (1 << self._bit_of[name]))
 
-    @property
-    def interrupt_disable(self) -> bool:
-        """Interrupt disable flag (bit 2)."""
-        return bool(self.value & 0x04)
+    def __getitem__(self, name: str) -> bool:
+        return self.flag(name)
 
-    @property
-    def decimal(self) -> bool:
-        """Decimal mode flag (bit 3)."""
-        return bool(self.value & 0x08)
+    def __contains__(self, name: str) -> bool:
+        return name in self._bit_of
 
-    @property
-    def break_flag(self) -> bool:
-        """Break flag (bit 4)."""
-        return bool(self.value & 0x10)
-
-    @property
-    def overflow(self) -> bool:
-        """Overflow flag (bit 6)."""
-        return bool(self.value & 0x40)
-
-    @property
-    def negative(self) -> bool:
-        """Negative flag (bit 7)."""
-        return bool(self.value & 0x80)
+    def __getattr__(self, name: str) -> bool:
+        # 6502 property aliases, present only when the descriptor has the flag.
+        aliases = type(self)._ALIASES
+        if name in aliases and aliases[name] in self.__dict__["_bit_of"]:
+            return self.flag(aliases[name])
+        raise AttributeError(f"{type(self).__name__!r} has no flag {name!r}")
 
     def __int__(self) -> int:
-        return self.value
+        return self._value
 
     def __str__(self) -> str:
-        """Render as the conventional flag string (uppercase = set)."""
-        return (
-            ("N" if self.negative else "n")
-            + ("V" if self.overflow else "v")
-            + "-"
-            + ("B" if self.break_flag else "b")
-            + ("D" if self.decimal else "d")
-            + ("I" if self.interrupt_disable else "i")
-            + ("Z" if self.zero else "z")
-            + ("C" if self.carry else "c")
-        )
+        """Render flags by name, MSB first: set uppercase, clear lowercase.
+
+        An unused bit renders as "-". Single-letter 6502 names give the
+        conventional string (e.g. "Nv-bdiZC").
+        """
+        chars = []
+        for bit in range(len(self._flag_names) - 1, -1, -1):
+            name = self._flag_names[bit]
+            if not name:
+                chars.append("-")
+            elif self._value & (1 << bit):
+                chars.append(name.upper())
+            else:
+                chars.append(name.lower())
+        return "".join(chars)
 
 
 @dataclass(frozen=True)
@@ -154,7 +166,7 @@ class Registers(Mapping):
         """
         for reg in self._descriptor.registers:
             if reg.role == debugger_pb2.FLAGS:
-                return StatusRegister(self._values[reg.name])
+                return StatusRegister(self._values[reg.name], list(reg.flag_names))
         raise AttributeError("this CPU has no flags register")
 
     def __str__(self) -> str:
@@ -165,7 +177,7 @@ class Registers(Mapping):
         text = " ".join(parts)
         for reg in self._descriptor.registers:
             if reg.role == debugger_pb2.FLAGS:
-                text += f" [{StatusRegister(self._values[reg.name])}]"
+                text += f" [{StatusRegister(self._values[reg.name], list(reg.flag_names))}]"
                 break
         return text
 
