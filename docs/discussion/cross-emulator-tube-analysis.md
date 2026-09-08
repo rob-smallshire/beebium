@@ -228,6 +228,88 @@ Note: this dummy read detection is for the HOST side only (monitoring the
 real BBC Micro's bus via GPIO).  It has no direct relevance to the
 parasite-side emulation.
 
+### Execution Speed and Clocking
+
+Findings from a source review made for the Beebium Tube architecture
+programme (September 2026), answering why PiTubeDirect's coprocessor runs
+at hundreds of MHz-equivalent while Beebium's lockstep uses a fraction of
+one core at 3 MHz.  Line references are to `src/`.
+
+**Where the headline number comes from.**  The comment at
+`copro-65tubeasm.S:12` records "280.72 MHz" (272.41 MHz with
+`FIX_STACK_WRAP_BUG`) for the fast 65tube assembly core on a Pi Zero.  It
+is an effective-6502 figure derived from the CLOCKS BBC BASIC benchmark
+against a real 2 MHz 6502, not a measured clock.  Performance is logged
+through the ARM PMU cycle counter (`performance.c:180-218`).
+
+**Instruction level, no cycle counting, no pacing.**  The fast core
+(copro 0/2) executes instructions and never counts cycles; between Tube
+accesses it runs flat out.  A slow variant (copro 1/3, selected at
+`copro-65tube.c:86`) paces per opcode: `Event_Handler_Single_Core_Slow`
+(`copro-65tubeasm.S:3279`) reads a `timing_table` of cycles per opcode,
+scales by `copro_speed` (`tube-ula.c:195`), and busy-waits on the PMU
+counter in `waste_time` (`:3315`).  That is the pattern for a fast core
+held to a nominal MHz.  The C core (`lib6502.c`) does count cycles via
+`tick`/`tickIf` (`:24-25`, `:188-215`) but nothing paces on the count.
+
+**The host is the only clock.**  There is no virtual time.  The VideoCore
+does the GPIO handshake and posts each host register access as a mailbox
+message; the ARM FIQ (`tube.S:20`) runs `tube_io_handler`
+(`tube-ula.c:676`) on the *same* core as the emulator (`tube-client.c:136`,
+cores 1-3 spin).  Ordering is preserved because every host access is
+serialised through that one path and the parasite only ever observes ULA
+register and FIFO state, never bus cycles.  Control-register writes must
+become visible within three bus cycles, 1.5 us (`tube-ula.c:685`).
+`tube_host_read` pre-loads the next value into `tube_regs[]`
+(`tube-ula.c:246-254`) so the access side never computes on the critical
+path.
+
+**Interrupt delivery costs nothing in the hot path.**  The FIQ ORs
+`EVENT_HANDLER_FLAG` into r7, the opcode dispatch-table base
+(`tube.S:45-47`).  The next `FETCH_NEXT` therefore lands in a shadow
+256-entry table (`copro-65tubeasm.S:3577`) whose entries all branch to
+`Event_Handler` (`:3207`).  No per-instruction polling.  IRQ level is
+re-sampled on CLI/PLP/RTI via `CHECK_IRQ` (`:307`); NMI is edge-handled
+once (`handle_nmi`, `:3233`).  `tube_irq` is the bitfield at
+`tube-defs.h:41-47`.  The C core instead polls `tube_irq & 7` every
+instruction and externalises state only when a bit is set
+(`copro-lib6502.c:119`).
+
+**Fast-core techniques.**  Full 6502 state in ARM registers
+(`copro-65tubeasm.S:46-94`); PC held as a native pointer into the flat
+64K array (`USE_MEMORY_POINTER`), with the 64K image also mapped at page 16
+so `$FFFF,X` wraps without masking (`copro-65tube.c:78`); N/Z/C carried on
+the ARM CPSR, V/D/I in r4 and folded in on PHP (`:994`); each opcode a
+64-byte aligned block dispatched by `add pc, instt, opcode, lsl #6`
+(`:119-128`); a single shift-and-compare against `0xFEE0 >> 5` (`:3160`)
+traps the 32-byte MMIO window in `LOAD_ABSOLUTE`/`STORE_ABSOLUTE`
+(`:551`, `:574`), everything else being a raw array access.
+
+**Not modelled.**  Exact per-instruction cycle counts (fast variant),
+the page-cross dummy read (see above: indexed modes compute the final
+effective address and load once, `EA_ABSOLUTE_INDEXED` `:430`), the
+read-modify-write double write (a single `STORE_BYTE`), and undocumented
+opcodes (NOPs, e.g. `opcode_02` `:946`).  Earlier Beebium notes suggested
+the speed ratio hid the dummy-read problem; it does not.  The cores never
+issue the read, so the problem cannot arise, and PiTubeDirect is not a
+counter-example to the B2 PR 569 fix.
+
+**Relevance to Beebium.**  Beebium's profile (release build, ROM/RAM
+board, 65C02 coprocessor, idle at the BASIC prompt, macOS `sample`) shows
+the emulation thread about 13% busy, of which the parasite is about a
+quarter at roughly 11 ns per emulated cycle; the host CPU, VIAs, video and
+per-cycle bookkeeping are the rest.  The difference is structural: a
+cycle-accurate lockstep of two machines and all their peripherals against
+one free-running CPU with no peripherals and nothing to keep in step with.
+What transfers, through the `run_until` contract in
+`docs/tube-coprocessor-contract.md`: instruction-level execution inside a
+quantum with cycles counted only to find the quantum's end and bus-cycle
+precision only around Tube register accesses; event-flag interrupt
+delivery instead of per-cycle sampling; and the slow variant's pattern for
+a nominal-speed mode on top of a fast core.  What does not transfer: the
+omission of the dummy read.  Because Beebium models bus cycles, it must
+keep routing fixup-cycle reads through `peek()`.
+
 ---
 
 ## jsbeeb
