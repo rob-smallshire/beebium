@@ -29,7 +29,8 @@ a natural fit for process separation. This was the original design motivation.
 | 13 Mar 2026 | Dual-process, POSIX shared memory | `master` | Removed |
 | 13 Mar - 6 Apr 2026 | Dual-process in production, pacing work | `master`, `smooth-pacing` | Removed |
 | 6-7 Apr 2026 | In-process, multi-threaded with atomics | `tube-extension-redesign` | Removed |
-| 8 Apr 2026 | Single-threaded lockstep | `single-threaded-tube` | **Current** |
+| 8 Apr 2026 | Single-threaded lockstep | `single-threaded-tube` | Generalised in Phase 4 |
+| Sep 2026 | Coprocessor contract: lockstep as a contract, coprocessors as plugins | `master` | **Current** |
 
 
 ---
@@ -728,6 +729,36 @@ src/extensions/acorn-65c02-coprocessor/
 
 
 ---
+
+## Phase 4: The Coprocessor Contract (September 2026)
+
+The lockstep model was kept and generalised. Its execution order became a
+stated contract between the core and a coprocessor extension, so that the
+thread count is an execution strategy and coprocessors are added by adding
+a plugin. The full record, with the reasoning for each step, is
+`docs/tube-coprocessor-contract.md`; the as-built description is
+`docs/tube-subsystem.md`; adding a coprocessor is
+`docs/coprocessor-extension-guide.md`.
+
+| Step | Content |
+|------|---------|
+| 1 | `Coprocessor` interface driven by host time in host cycles; `CoprocessorClock` exact rational conversion; ratio owned by the coprocessor. Fixed two lockstep defects: the parasite frozen during host 1MHz stretches, and a double advance on the cycle completing a Tube stretch. |
+| 1b | The 65C02 coprocessor became a plugin. `CoprocessorExtension` and `TubeInspection` interfaces; the server holds no concrete coprocessor type. |
+| 1c | The 65C102 4 MHz coprocessor as a second plugin from the same class. |
+| 1e | Firmware packaged with the plugin and declared in its manifest. |
+| 2 | The skew bound, 8 host cycles, named and tested. |
+| 3 | Batching: the coprocessor runs in batches within the bound, exactly before any host Tube access. Emulation thread busy time fell from 23% to 16% at the BASIC prompt. |
+| 1d | A family-agnostic debugger: a `CpuDescriptor` per CPU, one debugger service for host and coprocessor, 32-bit addresses throughout, "parasite" retired from the code. |
+
+Before any of it, a period pin-level test program for the Tube ULA was
+transliterated into `tests/test_tube_ula_vectors.cpp` and found two ULA
+defects (empty-FIFO reads and the coprocessor R3 status layout), which were
+fixed first. The multi-process target was dropped as poorly motivated: the
+things wanted from it, isolation, independent debugging and plugability,
+are all delivered by the extension boundary, and a multi-threaded strategy
+remains available under the same contract should a coprocessor ever
+justify it.
+
 
 ## Architecture-Independent Correctness Fixes
 

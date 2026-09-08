@@ -229,6 +229,9 @@ WD1770 controller with:
 - `grpc-server.md` - Service API documentation
 - `lifecycle-management.md` - Connection liveness (heartbeat, graceful/crash/unreachable), client teardown, window/server shutdown, and the rules behind them
 - `screen-text-library.md` - Reading text off the screen: the standalone recognition library and its CLI
+- `tube-subsystem.md` - The Tube as built: hardware reference, the coprocessor contract in summary, execution, debugger, plugins and firmware
+- `tube-coprocessor-contract.md` - The normative coprocessor contract and the step-by-step record of the architecture programme
+- `coprocessor-extension-guide.md` - How to add a new coprocessor (Z80, 6809, NS32016, 80186...) as a plugin
 - `keyboard.md` - Keyboard matrix and input handling
 - `frontend-modifier-keys.md` - How a front-end must translate host modifier keys (SHIFT/CTRL) to avoid stuck-modifier desync; platform-independent rules plus macOS specifics, for future front-ends
 - `frontend-local-server-gating.md` - How a front-end discovers whether the server shares its filesystem (SystemInfo.host_fingerprint), and which path-exchanging features must be gated on it; platform-independent rules plus macOS specifics, for future front-ends
@@ -293,6 +296,7 @@ Complete transcripts of BBC Micro documentation:
 - SN76489 sound chip
 - WD1770 disc controller with SSD/DSD support
 - Keyboard matrix with type-ahead
+- Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
 - gRPC service layer (8 services)
 - macOS frontend with Metal rendering
 - Service advertisement AND browse/discovery over mDNS on all platforms: macOS (Bonjour), Linux (Avahi, dlopen'd), Windows (dual-provider: Apple Bonjour dnssd.dll when installed, else native DnsService*, selected at runtime). Full bidirectional AUN peer discovery everywhere
@@ -300,7 +304,6 @@ Complete transcripts of BBC Micro documentation:
 
 ### Future Work
 
-- Tube co-processor support
 - Econet/AUN networking
 - Additional platform frontends (Windows, Linux)
 - CRT shader pipeline
