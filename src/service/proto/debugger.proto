@@ -42,11 +42,7 @@ service DebuggerControl {
     rpc ListWatchpoints(Empty) returns (ListWatchpointsResponse);
     rpc ClearWatchpoints(Empty) returns (ClearWatchpointsResponse);
 
-    // CPU state
-    rpc Get6502State(Get6502StateRequest) returns (Cpu6502State);
-    rpc Set6502State(Set6502StateRequest) returns (Cpu6502State);
-
-    // Family-agnostic CPU register model. The CPU describes itself
+    // CPU state (family-agnostic register model). The CPU describes itself
     // (GetCpuDescriptor); the state is name/value pairs in descriptor order.
     // SetCpuState accepts any subset of registers by name and returns the
     // full state.
@@ -84,8 +80,6 @@ service ParasiteDebuggerControl {
     rpc EnableWatchpoint(EnableWatchpointRequest) returns (EnableWatchpointResponse);
     rpc ListWatchpoints(Empty) returns (ListWatchpointsResponse);
     rpc ClearWatchpoints(Empty) returns (ClearWatchpointsResponse);
-    rpc Get6502State(Get6502StateRequest) returns (Cpu6502State);
-    rpc Set6502State(Set6502StateRequest) returns (Cpu6502State);
     rpc GetCpuDescriptor(Empty) returns (CpuDescriptor);
     rpc GetCpuState(Empty) returns (CpuState);
     rpc SetCpuState(CpuState) returns (CpuState);
@@ -304,39 +298,6 @@ message EnableWatchpointResponse {
 
 message ClearWatchpointsResponse {
     uint32 count_removed = 1;
-}
-
-// === CPU 6502 ===
-
-message Get6502StateRequest {}
-
-message Cpu6502State {
-    uint32 a = 1;
-    uint32 x = 2;
-    uint32 y = 3;
-    uint32 sp = 4;
-    uint32 pc = 5;
-    uint32 p = 6;
-
-    // Interrupt handler tracking (detected via M6502ReadType_Interrupt
-    // entry and RTI exit).
-    bool in_nmi_handler = 7;
-    bool in_irq_handler = 8;
-
-    // M6502 interrupt line state.
-    bool nmi_pending = 9;       // NMI edge latched, waiting to be taken
-    bool irq_pending = 10;      // IRQ asserted and I flag clear
-    uint32 device_irq_flags = 11;  // Which devices are asserting IRQ
-    uint32 device_nmi_flags = 12;  // Which devices are asserting NMI
-}
-
-message Set6502StateRequest {
-    optional uint32 a = 1;
-    optional uint32 x = 2;
-    optional uint32 y = 3;
-    optional uint32 sp = 4;
-    optional uint32 pc = 5;
-    optional uint32 p = 6;
 }
 
 // === Family-agnostic CPU register model ===

@@ -168,16 +168,6 @@ class DebuggerControlStub(object):
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ClearWatchpointsResponse.FromString,
                 _registered_method=True)
-        self.Get6502State = channel.unary_unary(
-                '/beebium.DebuggerControl/Get6502State',
-                request_serializer=debugger__pb2.Get6502StateRequest.SerializeToString,
-                response_deserializer=debugger__pb2.Cpu6502State.FromString,
-                _registered_method=True)
-        self.Set6502State = channel.unary_unary(
-                '/beebium.DebuggerControl/Set6502State',
-                request_serializer=debugger__pb2.Set6502StateRequest.SerializeToString,
-                response_deserializer=debugger__pb2.Cpu6502State.FromString,
-                _registered_method=True)
         self.GetCpuDescriptor = channel.unary_unary(
                 '/beebium.DebuggerControl/GetCpuDescriptor',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
@@ -350,21 +340,8 @@ class DebuggerControlServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Get6502State(self, request, context):
-        """CPU state
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Set6502State(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def GetCpuDescriptor(self, request, context):
-        """Family-agnostic CPU register model. The CPU describes itself
+        """CPU state (family-agnostic register model). The CPU describes itself
         (GetCpuDescriptor); the state is name/value pairs in descriptor order.
         SetCpuState accepts any subset of registers by name and returns the
         full state.
@@ -507,16 +484,6 @@ def add_DebuggerControlServicer_to_server(servicer, server):
                     servicer.ClearWatchpoints,
                     request_deserializer=debugger__pb2.Empty.FromString,
                     response_serializer=debugger__pb2.ClearWatchpointsResponse.SerializeToString,
-            ),
-            'Get6502State': grpc.unary_unary_rpc_method_handler(
-                    servicer.Get6502State,
-                    request_deserializer=debugger__pb2.Get6502StateRequest.FromString,
-                    response_serializer=debugger__pb2.Cpu6502State.SerializeToString,
-            ),
-            'Set6502State': grpc.unary_unary_rpc_method_handler(
-                    servicer.Set6502State,
-                    request_deserializer=debugger__pb2.Set6502StateRequest.FromString,
-                    response_serializer=debugger__pb2.Cpu6502State.SerializeToString,
             ),
             'GetCpuDescriptor': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCpuDescriptor,
@@ -1195,60 +1162,6 @@ class DebuggerControl(object):
             _registered_method=True)
 
     @staticmethod
-    def Get6502State(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.DebuggerControl/Get6502State',
-            debugger__pb2.Get6502StateRequest.SerializeToString,
-            debugger__pb2.Cpu6502State.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Set6502State(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.DebuggerControl/Set6502State',
-            debugger__pb2.Set6502StateRequest.SerializeToString,
-            debugger__pb2.Cpu6502State.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def GetCpuDescriptor(request,
             target,
             options=(),
@@ -1462,16 +1375,6 @@ class ParasiteDebuggerControlStub(object):
                 request_serializer=debugger__pb2.Empty.SerializeToString,
                 response_deserializer=debugger__pb2.ClearWatchpointsResponse.FromString,
                 _registered_method=True)
-        self.Get6502State = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/Get6502State',
-                request_serializer=debugger__pb2.Get6502StateRequest.SerializeToString,
-                response_deserializer=debugger__pb2.Cpu6502State.FromString,
-                _registered_method=True)
-        self.Set6502State = channel.unary_unary(
-                '/beebium.ParasiteDebuggerControl/Set6502State',
-                request_serializer=debugger__pb2.Set6502StateRequest.SerializeToString,
-                response_deserializer=debugger__pb2.Cpu6502State.FromString,
-                _registered_method=True)
         self.GetCpuDescriptor = channel.unary_unary(
                 '/beebium.ParasiteDebuggerControl/GetCpuDescriptor',
                 request_serializer=debugger__pb2.Empty.SerializeToString,
@@ -1639,18 +1542,6 @@ class ParasiteDebuggerControlServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Get6502State(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Set6502State(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def GetCpuDescriptor(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -1791,16 +1682,6 @@ def add_ParasiteDebuggerControlServicer_to_server(servicer, server):
                     servicer.ClearWatchpoints,
                     request_deserializer=debugger__pb2.Empty.FromString,
                     response_serializer=debugger__pb2.ClearWatchpointsResponse.SerializeToString,
-            ),
-            'Get6502State': grpc.unary_unary_rpc_method_handler(
-                    servicer.Get6502State,
-                    request_deserializer=debugger__pb2.Get6502StateRequest.FromString,
-                    response_serializer=debugger__pb2.Cpu6502State.SerializeToString,
-            ),
-            'Set6502State': grpc.unary_unary_rpc_method_handler(
-                    servicer.Set6502State,
-                    request_deserializer=debugger__pb2.Set6502StateRequest.FromString,
-                    response_serializer=debugger__pb2.Cpu6502State.SerializeToString,
             ),
             'GetCpuDescriptor': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCpuDescriptor,
@@ -2469,60 +2350,6 @@ class ParasiteDebuggerControl(object):
             '/beebium.ParasiteDebuggerControl/ClearWatchpoints',
             debugger__pb2.Empty.SerializeToString,
             debugger__pb2.ClearWatchpointsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Get6502State(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.ParasiteDebuggerControl/Get6502State',
-            debugger__pb2.Get6502StateRequest.SerializeToString,
-            debugger__pb2.Cpu6502State.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Set6502State(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/beebium.ParasiteDebuggerControl/Set6502State',
-            debugger__pb2.Set6502StateRequest.SerializeToString,
-            debugger__pb2.Cpu6502State.FromString,
             options,
             channel_credentials,
             insecure,
