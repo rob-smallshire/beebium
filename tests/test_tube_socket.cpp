@@ -375,12 +375,15 @@ TEST_CASE("TubeSocket: run_coprocessor_until passes host time through unchanged"
     RecordingCoprocessor cop;
     socket.install_coprocessor(&cop);
 
+    // install_coprocessor() runs the coprocessor to the current host time
+    // (0 here) at once, establishing its origin at install; that is the
+    // leading 0. Every later call is forwarded unchanged.
     socket.run_coprocessor_until(0);
     socket.run_coprocessor_until(1);
     socket.run_coprocessor_until(1);   // idempotent second call still forwarded
     socket.run_coprocessor_until(42);
 
-    CHECK(cop.run_until_args == std::vector<uint64_t>{0, 1, 1, 42});
+    CHECK(cop.run_until_args == std::vector<uint64_t>{0, 0, 1, 1, 42});
 }
 
 TEST_CASE("TubeSocket: run_coprocessor_until is a no-op when nothing is installed", "[tube][socket][coprocessor]") {
@@ -399,7 +402,8 @@ TEST_CASE("TubeSocket: run_coprocessor_until stops after remove_coprocessor", "[
     socket.remove_coprocessor();
     socket.run_coprocessor_until(6);   // no longer forwarded
 
-    CHECK(cop.run_until_args == std::vector<uint64_t>{5});
+    // The leading 0 is the origin-establishing call made at install.
+    CHECK(cop.run_until_args == std::vector<uint64_t>{0, 5});
 }
 
 
