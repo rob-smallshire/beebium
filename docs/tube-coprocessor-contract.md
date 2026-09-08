@@ -110,13 +110,17 @@ installed in the socket, as it does today for the `ParasiteTickable`.
   `run_until`; the coprocessor handles it. The method stays on the
   interface because the debugger's cross-processor stop logic uses it.
 
-### Reset
+### Origin and reset
 
-- `reset()` restarts the coprocessor and discards its time base. The next
-  `run_until(t)` establishes `t` as the new origin `t0` with zero cycles
-  due. This is required because a hard host reset zeroes
-  `state_.cycle_count`, so host time legitimately goes backwards across a
-  reset.
+- A coprocessor has no time base until its first `run_until(t)`, which
+  establishes `t` as the origin `t0` with zero cycles due. A coprocessor
+  installed into a machine that has already been running for a long time
+  therefore starts from the host's current time; it never runs a catch-up
+  burst from host time zero.
+- `reset()` restarts the coprocessor and discards its time base, so the
+  next `run_until(t)` establishes a new origin exactly as at construction.
+  This is required because a hard host reset zeroes `state_.cycle_count`,
+  so host time legitimately goes backwards across a reset.
 
 ### `TubeSocket` changes
 
@@ -190,7 +194,8 @@ class CoprocessorClock {
 public:
     explicit CoprocessorClock(ClockRatio ratio);
 
-    // Discard the time base: the next cycles_due() call defines the origin.
+    // Discard the time base: the next cycles_due() call defines the origin
+    // and returns zero. A newly constructed clock is in this state.
     void rebase();
 
     // Number of coprocessor cycles that became due since the previous call,
