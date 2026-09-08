@@ -330,8 +330,6 @@ def test_l3fs_floppy_client_login(
                 print(f"  Client send_stage_log: {client_status_after.send_stage_log}")
                 print(f"  Server ticks_with_timer_active: {server_status_after.ticks_with_timer_active}")
                 print(f"  Client ticks_with_timer_active: {client_status_after.ticks_with_timer_active}")
-                print(f"  Server read_stretch_parasite_ticks: {server_status_after.read_stretch_parasite_ticks}")
-                print(f"  Client read_stretch_parasite_ticks: {client_status_after.read_stretch_parasite_ticks}")
 
                 server_tick_delta = _delta(server_status_after, server_status_before, 'tick_count')
                 client_tick_delta = _delta(client_status_after, client_status_before, 'tick_count')
