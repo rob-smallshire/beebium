@@ -1191,8 +1191,9 @@ jobs:
   # The Tube and file-server scenario suites under integration_tests/ drive
   # full machines (Tube coprocessor, SCSI hard disc, Econet over AUN
   # loopback) through the Python client. Running them here keeps them in
-  # step with the client and tool APIs they depend on. Every test in them
-  # is marked slow and deselected unless asked for, hence -m slow.
+  # step with the client and tool APIs they depend on. The wfsinit and l3fs
+  # projects mark every test slow and deselect them unless asked for, so
+  # those two are run with -m slow; tube-save has no such gate.
   scenario-integration-linux:
     name: Scenario Integration Tests (Linux)
     runs-on: ubuntu-latest
@@ -1240,12 +1241,16 @@ jobs:
         # test's wall-clock time, slowest first.
         run: |
           status=0
-          for project in tube-save wfsinit l3fs; do
+          run_suite() {
+            local project="$1"; shift
             echo "::group::integration_tests/${project}"
             (cd "integration_tests/${project}" \
-              && uv run pytest -m slow -v --durations=0 --timeout=600) || status=1
+              && uv run pytest "$@" -v --durations=0 --timeout=600) || status=1
             echo "::endgroup::"
-          done
+          }
+          run_suite tube-save
+          run_suite wfsinit -m slow
+          run_suite l3fs -m slow
           exit "${status}"
 
   python-integration-windows:
