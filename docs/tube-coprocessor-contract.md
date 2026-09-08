@@ -1079,7 +1079,12 @@ execution control, flat memory access, region model with `machine_type()`
 (the machine's identity such as "model-b-romram" or "Tube65C02", a
 different concept from the descriptor's CPU family and kept separate),
 breakpoint and watchpoint surface, `prepare_for_step` and `finish_step`.
-It carries no `M6502` reference and no 6502 register names.
+It carries no `M6502` reference and no 6502 register names, and no
+16-bit address assumption: every address and program-counter parameter
+on the interface is 32 bits, `BreakpointEntry` and `WatchpointEntry`
+hold 32-bit ranges, and the service bounds addresses by the descriptor's
+`address_bits` rather than by `0xFFFF`. A 16-bit family's implementation
+narrows inside itself.
 
 `DebuggerControlServiceImpl` stops being a template: it is one concrete
 service over a `CpuDebugTarget&`, and the two generated gRPC service
@@ -1116,7 +1121,11 @@ transliteration keeps the pin names the original program uses.
   6502 code reading `.a`, `.x`, `.pc` keeps working and a Z80's `.hl`
   appears with no client change. `cpu.descriptor` exposes the descriptor;
   `cpu.signals` the interrupt lines. `Registers` as a fixed dataclass
-  goes. `connect_parasite()` becomes `connect_coprocessor()`. The
+  goes. `cpu.registers.status` is built from the FLAGS-role register and
+  its `flag_names`: flags are read by name (`status.flag("C")`,
+  `status["C"]`), rendered by name, and the 6502 property names (`carry`,
+  `zero`, ...) are kept as aliases that exist only when the descriptor
+  carries the corresponding flag names. `connect_parasite()` becomes `connect_coprocessor()`. The
   disassembler stays 6502-only and client-side; other families bring
   their own later.
 - **TypeScript.** The same shape.
