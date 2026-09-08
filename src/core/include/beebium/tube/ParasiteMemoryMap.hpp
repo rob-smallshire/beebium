@@ -14,6 +14,7 @@
 
 #include "TubeParasiteBackend.hpp"
 
+#include "beebium/extension/Cpu6502DebugTarget.hpp"
 #include "beebium/MemoryRegion.hpp"
 
 #include <array>
@@ -43,9 +44,10 @@ namespace beebium {
 //
 // Reference: 6502 Second Processor Service Manual, Sections 5.1-5.3.
 
-class ParasiteMemoryMap {
+class ParasiteMemoryMap : public Cpu6502MemoryModel {
 public:
     static constexpr std::string_view MACHINE_TYPE = "Tube65C02";
+    std::string_view machine_type() const override { return MACHINE_TYPE; }
 
     static constexpr std::string_view REGION_RAM = "ram";
     static constexpr std::string_view REGION_ROM = "rom";
@@ -111,7 +113,7 @@ public:
     }
 
     // Memory region discovery for debugger.
-    std::vector<MemoryRegionDescriptor> get_memory_regions() const {
+    std::vector<MemoryRegionDescriptor> get_memory_regions() const override {
         std::vector<MemoryRegionDescriptor> regions;
 
         // Full 64 KB RAM
@@ -132,7 +134,7 @@ public:
     }
 
     // Read from a named memory region without side effects.
-    uint8_t peek_region(std::string_view name, uint32_t address) const {
+    uint8_t peek_region(std::string_view name, uint32_t address) const override {
         if (name == REGION_RAM) {
             return ram_[static_cast<uint16_t>(address)];
         }
@@ -152,7 +154,7 @@ public:
     }
 
     // Read from a named memory region (may have side effects).
-    uint8_t read_region(std::string_view name, uint32_t address) {
+    uint8_t read_region(std::string_view name, uint32_t address) override {
         if (name == REGION_RAM) {
             return ram_[static_cast<uint16_t>(address)];
         }
@@ -172,7 +174,7 @@ public:
     }
 
     // Write to a named memory region.
-    void write_region(std::string_view name, uint32_t address, uint8_t value) {
+    void write_region(std::string_view name, uint32_t address, uint8_t value) override {
         if (name == REGION_RAM) {
             ram_[static_cast<uint16_t>(address)] = value;
             return;

@@ -18,6 +18,7 @@
 #include "ParasiteMemoryMap.hpp"
 #include "TubeParasiteBackend.hpp"
 #include "../Types.hpp"
+#include "beebium/extension/Cpu6502DebugTarget.hpp"
 
 #include <algorithm>
 #include <array>
@@ -43,7 +44,7 @@ namespace beebium {
 // 3/2). Future coprocessors (6809, Z80, 80186, 32016) would have their own
 // runner classes with different CPU and memory map types and clock ratios.
 
-class ParasiteRunner : public Coprocessor {
+class ParasiteRunner : public Coprocessor, public Cpu6502DebugTarget {
 public:
     using Memory = ParasiteMemoryMap;
     using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint16_t pc)>;

@@ -723,7 +723,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::GetMemoryRegions(
     std::lock_guard<std::mutex> lock(mutex_);
 
     // Get machine type from hardware
-    response->set_machine_type(std::string(machine_.memory().MACHINE_TYPE));
+    response->set_machine_type(std::string(machine_.memory().machine_type()));
 
     // Get regions from hardware
     auto regions = machine_.memory().get_memory_regions();

@@ -66,6 +66,7 @@ class ModelBRomRamBoardHardware {
 public:
     // Machine identification and region names (compile-time constants)
     static constexpr std::string_view MACHINE_TYPE = "model-b-romram";
+    constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
     static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B with ROM/RAM Board";
     static constexpr std::string_view MACHINE_DESCRIPTION = "Model B with expansion board providing 16 independent sideways slots";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";

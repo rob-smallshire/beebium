@@ -94,6 +94,9 @@ class ModelBHardware {
 public:
     // Machine identification and region names (compile-time constants)
     static constexpr std::string_view MACHINE_TYPE = "model-b";
+    // Instance accessor so the debugger template reaches the machine type
+    // through the same call on a concrete memory map and on Cpu6502MemoryModel.
+    constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
     static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B";
     static constexpr std::string_view MACHINE_DESCRIPTION = "The original BBC Microcomputer with 32KB RAM";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";

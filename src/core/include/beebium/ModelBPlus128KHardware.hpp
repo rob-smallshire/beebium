@@ -120,6 +120,7 @@ class ModelBPlus128KHardware {
 public:
     // Machine identification and region names (compile-time constants)
     static constexpr std::string_view MACHINE_TYPE = "model-b-plus-128k";
+    constexpr std::string_view machine_type() const { return MACHINE_TYPE; }
     static constexpr std::string_view MACHINE_DISPLAY_NAME = "BBC Model B+ 128K";
     static constexpr std::string_view MACHINE_DESCRIPTION = "Enhanced Model B with 64KB RAM and built-in FDC";
     static constexpr std::string_view REGION_MAIN_RAM = "main_ram";
