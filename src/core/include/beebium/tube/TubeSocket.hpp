@@ -179,11 +179,6 @@ public:
 
     void remove_coprocessor() { coprocessor_ = nullptr; }
 
-    // Diagnostic: parasite PC for stretch deadlock investigation
-    uint16_t diag_parasite_pc() const {
-        return coprocessor_ ? coprocessor_->diag_pc() : 0xFFFF;
-    }
-
     // Run the coprocessor forward to the given host cycle. Called from
     // Machine::step() as its first action, on every path, so the coprocessor's
     // clock runs continuously whatever the host bus is doing. The coprocessor

@@ -41,7 +41,6 @@ public:
     bool is_paused() const override { return paused; }
     void reset() override { ++reset_count; }
     ClockRatio clock_ratio() const override { return ClockRatio{3, 2}; }
-    uint16_t diag_pc() const override { return 0x1234; }
 };
 
 }  // namespace
@@ -403,17 +402,6 @@ TEST_CASE("TubeSocket: run_coprocessor_until stops after remove_coprocessor", "[
     CHECK(cop.run_until_args == std::vector<uint64_t>{5});
 }
 
-TEST_CASE("TubeSocket: diag_parasite_pc delegates to the coprocessor, else 0xFFFF", "[tube][socket][coprocessor]") {
-    TubeSocket socket;
-    CHECK(socket.diag_parasite_pc() == 0xFFFF);   // none installed
-
-    RecordingCoprocessor cop;
-    socket.install_coprocessor(&cop);
-    CHECK(socket.diag_parasite_pc() == 0x1234);
-
-    socket.remove_coprocessor();
-    CHECK(socket.diag_parasite_pc() == 0xFFFF);
-}
 
 TEST_CASE("TubeSocket: reset() resets the installed coprocessor", "[tube][socket][coprocessor]") {
     TubeSocket socket;

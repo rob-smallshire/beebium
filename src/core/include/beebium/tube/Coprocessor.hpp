@@ -63,9 +63,6 @@ public:
 
     // Exact clock ratio, coprocessor cycles per host cycle.
     virtual ClockRatio clock_ratio() const = 0;
-
-    // Diagnostic: current parasite PC, or 0xFFFF if not applicable.
-    virtual uint16_t diag_pc() const { return 0xFFFF; }
 };
 
 }  // namespace beebium

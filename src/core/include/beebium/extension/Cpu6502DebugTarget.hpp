@@ -12,15 +12,21 @@
 
 #pragma once
 
+#include "Export.hpp"
+#include "CoprocessorDebugTarget.hpp"
 #include "beebium/MemoryRegion.hpp"
 #include "beebium/Types.hpp"
-
-#include <6502/6502.h>
 
 #include <cstdint>
 #include <functional>
 #include <string_view>
 #include <vector>
+
+// M6502 is a C struct from the 6502 library. Only a reference to it appears
+// here, so a forward declaration keeps this header (and the extension API's
+// anchor for it) free of the 6502 include path; consumers that read register
+// fields include <6502/6502.h> themselves.
+struct M6502;
 
 namespace beebium {
 
@@ -42,14 +48,21 @@ public:
     virtual std::string_view machine_type() const = 0;
 };
 
-// Abstract debugger target: exactly the members service::DebuggerControlServiceImpl<T>
-// invokes on its T. The server instantiates the debugger template once against
-// this interface and a coprocessor supplies an implementation through
-// CoprocessorExtension::debug_target(); ParasiteRunner implements it in the
-// plugin, so the server needs no concrete coprocessor type.
-class Cpu6502DebugTarget {
+// Abstract debugger target for the 6502 family: exactly the members
+// service::DebuggerControlServiceImpl<T> invokes on its T. The server
+// dynamic_casts a coprocessor's CoprocessorDebugTarget to this and, on success,
+// instantiates the debugger template once against it; ParasiteRunner implements
+// it in the plugin, so the server needs no concrete coprocessor type. Its
+// 16-bit addresses and 6502 registers are honest for the family.
+//
+// Exported (BEEBIUM_EXT_API) with an out-of-line key function so its typeinfo
+// is a single symbol across the plugin boundary for the server's dynamic_cast.
+class BEEBIUM_EXT_API Cpu6502DebugTarget : public CoprocessorDebugTarget {
 public:
-    virtual ~Cpu6502DebugTarget() = default;
+    ~Cpu6502DebugTarget() override;
+
+    // This interface is the 6502 family.
+    std::string_view cpu_family() const override { return "6502"; }
 
     using BreakpointHitCallback =
         std::function<void(const BreakpointEntry& bp, uint16_t pc)>;
