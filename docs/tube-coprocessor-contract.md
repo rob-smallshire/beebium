@@ -57,7 +57,9 @@ public:
     // the point equivalent to host_cycle. See "Time" below.
     virtual void run_until(uint64_t host_cycle) = 0;
 
-    // True while the debugger has stopped this coprocessor. See "Pause".
+    // Debugger stop and resume, and the current state. See "Pause".
+    virtual void pause() = 0;
+    virtual void resume() = 0;
     virtual bool is_paused() const = 0;
 
     // Hardware reset, propagated from the host's reset line through the
@@ -107,8 +109,9 @@ installed in the socket, as it does today for the `ParasiteTickable`.
   catch up on a running one when it resumes; this is the existing
   behaviour of `TubeSocket::tick_parasite()` and must be preserved exactly.
 - The socket therefore does not need to test `is_paused()` before calling
-  `run_until`; the coprocessor handles it. The method stays on the
-  interface because the debugger's cross-processor stop logic uses it.
+  `run_until`; the coprocessor handles it. `pause()`, `resume()` and
+  `is_paused()` are on the interface because the debugger's cross-processor
+  stop logic uses them.
 
 ### Origin and reset
 
@@ -331,14 +334,17 @@ public:
 
     // Debugger access, or nullptr if this coprocessor offers none.
     virtual Cpu6502DebugTarget* debug_target() { return nullptr; }
-
-    // Cross-processor stop. The server calls pause() when a host
-    // breakpoint with stop_counterpart fires; the coprocessor calls the
-    // installed callback when one of its own such breakpoints fires.
-    virtual void pause() = 0;
-    virtual void set_counterpart_stop_callback(std::function<void()> pause_host) = 0;
 };
 ```
+
+   Cross-processor stop needs nothing on this class. Breakpoint detection
+   for both processors lives in the two `DebuggerControlServiceImpl`
+   instances, and after this step the server owns both, so it wires both
+   directions itself: the host impl's counterpart callback calls
+   `coprocessor()->pause()`, the coprocessor impl's counterpart callback
+   calls `machine.pause()`. For that, `pause()` and `resume()` move onto
+   the `Coprocessor` interface beside `is_paused()`, which is where the
+   Step 1 contract already said pause belonged; `ParasiteRunner` has both.
 
    Whether the extension installs its backend and coprocessor into the
    socket itself in `init()` (as today) or the server does it from these
@@ -351,15 +357,21 @@ public:
    that `service::DebuggerControlServiceImpl<T>` requires of its `T`:
    execution control (`cycle_count`, `sequence`, `is_paused`, `pause`,
    `resume`, `reset`, `step`, `step_instruction`, `prepare_for_step`,
-   `wait_until_idle`), registers and their setters (`a`, `x`, `y`, `sp`,
-   `pc`, `p`), `in_nmi_handler`, `in_irq_handler`, `cpu()` returning
-   `const M6502&`, breakpoint and watchpoint entries, setters and hit
-   callbacks, and `memory()` returning an abstract memory-region model with
+   `wait_until_idle`), flat memory access (`read`, `peek`, `write`),
+   registers and their setters (`a`, `x`, `y`, `sp`, `pc`, `p`),
+   `in_nmi_handler`, `in_irq_handler`, `cpu()` returning `const M6502&`,
+   breakpoint and watchpoint entries, setters and hit callbacks, and
+   `memory()` returning an abstract memory-region model with
    `get_memory_regions`, `peek_region`, `read_region`, `write_region` and
-   the machine type name. The template's one static-member use,
-   `memory().MACHINE_TYPE`, must be reworked so the same template
-   instantiates unchanged for the host `Machine` types and for this
-   interface; a small trait or an accessor that both provide is fine.
+   `machine_type()`. The memory model deliberately has no PC-aware
+   read/write: the parasite's map has none today, so the template's
+   PC-unaware path is the existing behaviour and stays so.
+
+   The template's one static-member use, `memory().MACHINE_TYPE`, becomes
+   a `machine_type()` accessor: a one-line member on each host memory
+   policy returning its existing `MACHINE_TYPE` constant, and a pure
+   virtual on the abstract memory model. The constants remain the single
+   source of truth.
 
    The server instantiates `DebuggerControlServiceImpl<Cpu6502DebugTarget>`
    once against this interface and wraps it in `ParasiteDebuggerAdapter`,
@@ -367,13 +379,22 @@ public:
    implements the interface in the plugin; it already has every method,
    so this is adding `override`s.
 
-3. `TubeHostBackend` gains the virtuals the server needs so that no code
-   outside the plugin touches `TubeUla`:
-   - `virtual bool try_complete_stretch()` (default: return true)
-   - `virtual uint8_t control_flags() const` and
-     `virtual uint8_t parasite_peek(uint8_t offset) const`, plus whatever
-     else `DeviceInspectionService::GetTubeState` reads; enumerate by
-     reading that service, not from memory.
+3. `TubeHostBackend` gains what the server needs so that no code outside
+   the plugin touches `TubeUla`:
+   - `virtual bool try_complete_stretch()` (default: return true).
+   - `virtual const TubeInspection* inspection() const` (default: nullptr).
+     `TubeInspection`, in `beebium/tube/TubeInspection.hpp` alongside the
+     `Counters` and `TraceEntry` types moved out of `TubeUla`, is the
+     read-only diagnostic surface `DeviceInspectionService::GetTubeState`
+     needs: `control_flags`, `host_peek`, `parasite_peek`, `hirq`, `pirq`,
+     `pnmi`, `counters`, `trace_snapshot`. `TubeUla` implements it.
+     Grouping the diagnostics behind one accessor keeps the register-access
+     interface that `Machine` calls every cycle small.
+   - `GetTubeState` fills from `inspection()` whenever the backend offers
+     one, so its output for the 65C02 is identical before and after this
+     step. Add a test asserting exactly that: the same sequence of register
+     traffic through an installed backend and through the socket's owned
+     ULA yields the same `GetTubeState` response.
 
    `TubeSocket::tube_ula()` then returns the socket's *owned* in-process
    `TubeUla` only (the `enable()` path used by tests) and never casts an
@@ -422,8 +443,9 @@ Test-first. New:
 - `tests/test_coprocessor_extension.cpp`: a stub `CoprocessorExtension`
   installed through the same path the server uses, verifying the server-
   side wiring end to end without the 65C02: the coprocessor and backend
-  land in the socket, `pause()` is invoked by the host-side counterpart
-  callback, and the coprocessor's counterpart callback pauses the host.
+  land in the socket, a host breakpoint with `stop_counterpart` pauses the
+  coprocessor, and a coprocessor breakpoint with `stop_counterpart` pauses
+  the host.
 - A test that `DebuggerControlServiceImpl<Cpu6502DebugTarget>` drives a
   `ParasiteRunner` through the interface: read and write registers and
   memory, step, breakpoint hit. If `test_tube_inprocess.cpp` already covers
