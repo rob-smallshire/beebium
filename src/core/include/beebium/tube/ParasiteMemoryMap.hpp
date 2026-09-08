@@ -14,7 +14,6 @@
 
 #include "TubeParasiteBackend.hpp"
 
-#include "beebium/extension/Cpu6502DebugTarget.hpp"
 #include "beebium/MemoryRegion.hpp"
 
 #include <array>
@@ -44,10 +43,13 @@ namespace beebium {
 //
 // Reference: 6502 Second Processor Service Manual, Sections 5.1-5.3.
 
-class ParasiteMemoryMap : public Cpu6502MemoryModel {
+// Provides the region-model surface (get_memory_regions/peek_region/
+// read_region/write_region/machine_type) that ParasiteRunner forwards to the
+// debugger as part of the CpuDebugTarget contract.
+class ParasiteMemoryMap {
 public:
     static constexpr std::string_view MACHINE_TYPE = "Tube65C02";
-    std::string_view machine_type() const override { return MACHINE_TYPE; }
+    std::string_view machine_type() const { return MACHINE_TYPE; }
 
     static constexpr std::string_view REGION_RAM = "ram";
     static constexpr std::string_view REGION_ROM = "rom";
@@ -113,7 +115,7 @@ public:
     }
 
     // Memory region discovery for debugger.
-    std::vector<MemoryRegionDescriptor> get_memory_regions() const override {
+    std::vector<MemoryRegionDescriptor> get_memory_regions() const {
         std::vector<MemoryRegionDescriptor> regions;
 
         // Full 64 KB RAM
@@ -134,7 +136,7 @@ public:
     }
 
     // Read from a named memory region without side effects.
-    uint8_t peek_region(std::string_view name, uint32_t address) const override {
+    uint8_t peek_region(std::string_view name, uint32_t address) const {
         if (name == REGION_RAM) {
             return ram_[static_cast<uint16_t>(address)];
         }
@@ -154,7 +156,7 @@ public:
     }
 
     // Read from a named memory region (may have side effects).
-    uint8_t read_region(std::string_view name, uint32_t address) override {
+    uint8_t read_region(std::string_view name, uint32_t address) {
         if (name == REGION_RAM) {
             return ram_[static_cast<uint16_t>(address)];
         }
@@ -174,7 +176,7 @@ public:
     }
 
     // Write to a named memory region.
-    void write_region(std::string_view name, uint32_t address, uint8_t value) override {
+    void write_region(std::string_view name, uint32_t address, uint8_t value) {
         if (name == REGION_RAM) {
             ram_[static_cast<uint16_t>(address)] = value;
             return;

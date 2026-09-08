@@ -29,7 +29,7 @@
 #include "beebium/extension/PluginLoader.hpp"
 #include "beebium/service/PeripheralExtensionService.hpp"
 #include "beebium/extension/CoprocessorExtension.hpp"
-#include "beebium/extension/Cpu6502DebugTarget.hpp"
+#include "beebium/extension/CpuDebugTarget.hpp"
 #include "ParasiteDebuggerAdapter.hpp"
 #include "beebium/Machines.hpp"
 #include "beebium/SidewaysRomHeader.hpp"
@@ -2122,32 +2122,24 @@ public:
                 }
             }
 
-            // The parasite (second processor) debugger is the one genuine core
-            // gRPC service contributed by an extension: the same DebuggerControl
-            // proto as the host debugger, consumed by the typed debugger clients.
-            // The server, not the extension, instantiates the debugger against
-            // the abstract Cpu6502DebugTarget and wraps it in the adapter, so no
-            // extension hosts a gRPC service. Both must outlive the server, hence
+            // The coprocessor debugger is the one genuine core gRPC service
+            // contributed by an extension: the same DebuggerControl proto as the
+            // host debugger, consumed by the typed debugger clients. The server,
+            // not the extension, instantiates the debugger against the abstract
+            // CpuDebugTarget and wraps it in the adapter, so no extension hosts a
+            // gRPC service. The target describes its own CPU, so any family is
+            // served through the one service. Both must outlive the server, hence
             // these enclosing-scope owners.
-            std::unique_ptr<beebium::service::DebuggerControlServiceImpl<beebium::Cpu6502DebugTarget>>
+            std::unique_ptr<beebium::service::DebuggerControlServiceImpl>
                 parasite_debugger_impl;
             std::unique_ptr<beebium::ParasiteDebuggerAdapter> parasite_debugger_adapter;
             if (coprocessor_ext) {
                 if (auto* target = coprocessor_ext->debug_target()) {
-                    // The server can serve the 6502 family today. Other families
-                    // simply get no debugger rather than blocking the machine.
-                    if (auto* cpu6502 = dynamic_cast<beebium::Cpu6502DebugTarget*>(target)) {
-                        parasite_debugger_impl = std::make_unique<
-                            beebium::service::DebuggerControlServiceImpl<beebium::Cpu6502DebugTarget>>(
-                                *cpu6502);
-                        parasite_debugger_adapter =
-                            std::make_unique<beebium::ParasiteDebuggerAdapter>(*parasite_debugger_impl);
-                        extension_services.push_back(parasite_debugger_adapter.get());
-                    } else {
-                        std::cout << "No debugger available for coprocessor CPU family '"
-                                  << target->cpu_family()
-                                  << "'; continuing without a coprocessor debugger.\n";
-                    }
+                    parasite_debugger_impl =
+                        std::make_unique<beebium::service::DebuggerControlServiceImpl>(*target);
+                    parasite_debugger_adapter =
+                        std::make_unique<beebium::ParasiteDebuggerAdapter>(*parasite_debugger_impl);
+                    extension_services.push_back(parasite_debugger_adapter.get());
                 }
             }
 

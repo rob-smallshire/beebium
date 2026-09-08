@@ -457,7 +457,30 @@ TEST_CASE("DebuggerControl ClearBreakpoints removes all breakpoints", "[grpc][de
 // CPU 6502 State Tests
 //////////////////////////////////////////////////////////////////////////////
 
-TEST_CASE("DebuggerControl Get6502State returns CPU registers", "[grpc][debugger]") {
+// Helpers over the family-agnostic CpuState: registers and signals are
+// name/value pairs, so tests look them up by name.
+namespace {
+uint64_t reg_of(const beebium::CpuState& s, const std::string& name) {
+    for (const auto& rv : s.registers()) {
+        if (rv.name() == name) return rv.value();
+    }
+    FAIL("register not present: " << name);
+    return 0;
+}
+const beebium::SignalState* signal_of(const beebium::CpuState& s, const std::string& name) {
+    for (const auto& ss : s.signals()) {
+        if (ss.name() == name) return &ss;
+    }
+    return nullptr;
+}
+void set_reg(beebium::CpuState& s, const std::string& name, uint64_t value) {
+    auto* rv = s.add_registers();
+    rv->set_name(name);
+    rv->set_value(value);
+}
+}  // namespace
+
+TEST_CASE("DebuggerControl GetCpuState returns CPU registers", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
 
     // Set some known values
@@ -468,77 +491,91 @@ TEST_CASE("DebuggerControl Get6502State returns CPU registers", "[grpc][debugger
     fixture.machine().set_p(0x24);  // N=0, V=0, B=1, D=0, I=1, Z=0, C=0
 
     grpc::ClientContext context;
-    beebium::Get6502StateRequest request;
-    beebium::Cpu6502State response;
+    beebium::Empty request;
+    beebium::CpuState response;
 
-    auto status = fixture.debugger().Get6502State(&context, request, &response);
+    auto status = fixture.debugger().GetCpuState(&context, request, &response);
 
     REQUIRE(status.ok());
-    CHECK(response.a() == 0x42);
-    CHECK(response.x() == 0x11);
-    CHECK(response.y() == 0x22);
-    CHECK(response.sp() == 0xFF);
-    CHECK(response.p() == 0x24);
+    CHECK(reg_of(response, "A") == 0x42);
+    CHECK(reg_of(response, "X") == 0x11);
+    CHECK(reg_of(response, "Y") == 0x22);
+    CHECK(reg_of(response, "SP") == 0xFF);
+    CHECK(reg_of(response, "P") == 0x24);
 }
 
-TEST_CASE("DebuggerControl Set6502State sets individual registers", "[grpc][debugger]") {
+TEST_CASE("DebuggerControl SetCpuState sets individual registers", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
 
     grpc::ClientContext context;
-    beebium::Set6502StateRequest request;
-    request.set_a(0xAA);
-    request.set_x(0xBB);
-    beebium::Cpu6502State response;
+    beebium::CpuState request;
+    set_reg(request, "A", 0xAA);
+    set_reg(request, "X", 0xBB);
+    beebium::CpuState response;
 
-    auto status = fixture.debugger().Set6502State(&context, request, &response);
+    auto status = fixture.debugger().SetCpuState(&context, request, &response);
 
     REQUIRE(status.ok());
 
     // The response is the atomically read-back state reflecting the writes.
-    CHECK(response.a() == 0xAA);
-    CHECK(response.x() == 0xBB);
+    CHECK(reg_of(response, "A") == 0xAA);
+    CHECK(reg_of(response, "X") == 0xBB);
 
     // Check the values were set
     CHECK(fixture.machine().a() == 0xAA);
     CHECK(fixture.machine().x() == 0xBB);
 }
 
-TEST_CASE("DebuggerControl Set6502State can set PC", "[grpc][debugger]") {
+TEST_CASE("DebuggerControl SetCpuState can set PC", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
 
     grpc::ClientContext context;
-    beebium::Set6502StateRequest request;
-    request.set_pc(0xC000);
-    beebium::Cpu6502State response;
+    beebium::CpuState request;
+    set_reg(request, "PC", 0xC000);
+    beebium::CpuState response;
 
-    auto status = fixture.debugger().Set6502State(&context, request, &response);
+    auto status = fixture.debugger().SetCpuState(&context, request, &response);
 
     REQUIRE(status.ok());
-    CHECK(response.pc() == 0xC000);
+    CHECK(reg_of(response, "PC") == 0xC000);
     CHECK(fixture.machine().pc() == 0xC000);
 }
 
-TEST_CASE("DebuggerControl Get6502State returns interrupt handler state", "[grpc][debugger]") {
+TEST_CASE("DebuggerControl SetCpuState rejects an unknown register", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
 
     grpc::ClientContext context;
-    beebium::Get6502StateRequest request;
-    beebium::Cpu6502State response;
+    beebium::CpuState request;
+    set_reg(request, "ZZ", 1);
+    beebium::CpuState response;
 
-    auto status = fixture.debugger().Get6502State(&context, request, &response);
+    auto status = fixture.debugger().SetCpuState(&context, request, &response);
+
+    CHECK_FALSE(status.ok());
+    CHECK(status.error_message().find("ZZ") != std::string::npos);
+}
+
+TEST_CASE("DebuggerControl GetCpuState returns interrupt signal state", "[grpc][debugger]") {
+    DebuggerTestFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::Empty request;
+    beebium::CpuState response;
+
+    auto status = fixture.debugger().GetCpuState(&context, request, &response);
 
     REQUIRE(status.ok());
 
-    // At rest, not inside any interrupt handler
-    CHECK_FALSE(response.in_nmi_handler());
-    CHECK_FALSE(response.in_irq_handler());
+    // The 6502 reports IRQ and NMI signals.
+    const auto* irq = signal_of(response, "IRQ");
+    const auto* nmi = signal_of(response, "NMI");
+    REQUIRE(irq != nullptr);
+    REQUIRE(nmi != nullptr);
 
-    // Interrupt line state fields are present and reasonable
-    // (nmi_pending/irq_pending depend on machine state, just check they're accessible)
-    CHECK_FALSE(response.nmi_pending());
-    // device flags are bitmasks -- just verify they're accessible
-    (void)response.device_irq_flags();
-    (void)response.device_nmi_flags();
+    // At rest, not inside any interrupt handler and no NMI edge latched.
+    CHECK_FALSE(nmi->in_handler());
+    CHECK_FALSE(irq->in_handler());
+    CHECK_FALSE(nmi->pending());
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -604,10 +641,10 @@ TEST_CASE("Sequence counter increments on register write", "[grpc][debugger]") {
     // Write a register
     {
         grpc::ClientContext context;
-        beebium::Set6502StateRequest request;
-        request.set_a(0x99);
-        beebium::Cpu6502State response;
-        fixture.debugger().Set6502State(&context, request, &response);
+        beebium::CpuState request;
+        set_reg(request, "A", 0x99);
+        beebium::CpuState response;
+        fixture.debugger().SetCpuState(&context, request, &response);
     }
 
     // Get new sequence

@@ -10,16 +10,15 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Drives DebuggerControlServiceImpl instantiated against the abstract
-// Cpu6502DebugTarget interface (not the concrete ParasiteRunner), the way the
-// server does after Step 1b. A ParasiteRunner is supplied only as a
-// Cpu6502DebugTarget&, proving the template instantiates and works through the
-// interface: registers, memory, stepping and the machine_type() accessor that
-// replaced the former static MACHINE_TYPE member.
+// Drives the concrete DebuggerControlServiceImpl against the abstract
+// CpuDebugTarget interface (not the concrete ParasiteRunner), the way the
+// server does. A ParasiteRunner is supplied only as a CpuDebugTarget&, proving
+// the service works through the interface: the register model, memory,
+// stepping and the machine_type() accessor.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <beebium/extension/Cpu6502DebugTarget.hpp>
+#include <beebium/extension/CpuDebugTarget.hpp>
 #include <beebium/service/DebuggerService.hpp>
 #include <beebium/tube/ParasiteRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
@@ -43,7 +42,7 @@ std::array<uint8_t, 2048> make_nop_rom(uint16_t entry = 0xF800) {
 
 }  // namespace
 
-TEST_CASE("DebuggerControlServiceImpl drives a ParasiteRunner through Cpu6502DebugTarget",
+TEST_CASE("DebuggerControlServiceImpl drives a ParasiteRunner through CpuDebugTarget",
           "[parasite][debugger][coprocessor]") {
     TubeUla tube;
     auto rom = make_nop_rom();
@@ -51,26 +50,53 @@ TEST_CASE("DebuggerControlServiceImpl drives a ParasiteRunner through Cpu6502Deb
     runner.reset();
 
     // The server sees only the abstract interface.
-    Cpu6502DebugTarget& target = runner;
-    CHECK(target.cpu_family() == "6502");
-    service::DebuggerControlServiceImpl<Cpu6502DebugTarget> impl(target);
+    CpuDebugTarget& target = runner;
+    CHECK(target.cpu_descriptor().family == "6502");
+    service::DebuggerControlServiceImpl impl(target);
+
+    // Helper: find a register's value in a CpuState by name.
+    auto reg = [](const CpuState& s, const std::string& name) -> uint64_t {
+        for (const auto& rv : s.registers()) {
+            if (rv.name() == name) return rv.value();
+        }
+        FAIL("register not present: " << name);
+        return 0;
+    };
 
     // Registers: set through the service, read back.
     {
-        Set6502StateRequest req;
-        req.set_a(0x42);
-        req.set_x(0x37);
-        Cpu6502State resp;
-        auto status = impl.Set6502State(nullptr, &req, &resp);
+        CpuState req;
+        auto* a = req.add_registers();
+        a->set_name("A");
+        a->set_value(0x42);
+        auto* x = req.add_registers();
+        x->set_name("X");
+        x->set_value(0x37);
+        CpuState resp;
+        auto status = impl.SetCpuState(nullptr, &req, &resp);
         REQUIRE(status.ok());
         CHECK(runner.a() == 0x42);
         CHECK(runner.x() == 0x37);
+        CHECK(reg(resp, "A") == 0x42);
+        CHECK(reg(resp, "X") == 0x37);
 
-        Get6502StateRequest greq;
-        Cpu6502State gresp;
-        REQUIRE(impl.Get6502State(nullptr, &greq, &gresp).ok());
-        CHECK(gresp.a() == 0x42);
-        CHECK(gresp.x() == 0x37);
+        Empty greq;
+        CpuState gresp;
+        REQUIRE(impl.GetCpuState(nullptr, &greq, &gresp).ok());
+        CHECK(reg(gresp, "A") == 0x42);
+        CHECK(reg(gresp, "X") == 0x37);
+    }
+
+    // An unknown register name is rejected, naming the offender.
+    {
+        CpuState req;
+        auto* bad = req.add_registers();
+        bad->set_name("ZZ");
+        bad->set_value(1);
+        CpuState resp;
+        auto status = impl.SetCpuState(nullptr, &req, &resp);
+        CHECK_FALSE(status.ok());
+        CHECK(status.error_message().find("ZZ") != std::string::npos);
     }
 
     // Memory: write through the service, read back.

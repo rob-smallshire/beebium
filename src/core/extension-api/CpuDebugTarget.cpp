@@ -10,19 +10,16 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Vtable anchors for the coprocessor debugger interfaces. Out-of-line key
-// functions give each class a single vtable+typeinfo definition site in this
-// shared library, so the server's dynamic_cast across the plugin boundary
-// resolves to one typeinfo. Without an anchor, a hidden-visibility weak
-// typeinfo would be emitted per module and the cast would fail.
+// Vtable anchor for the CPU debugger interface. An out-of-line key function
+// gives the class a single vtable+typeinfo definition site in this shared
+// library, so the server's dynamic_cast across the plugin boundary resolves to
+// one typeinfo. Without an anchor, a hidden-visibility weak typeinfo would be
+// emitted per module and the cast would fail.
 
-#include <beebium/extension/CoprocessorDebugTarget.hpp>
-#include <beebium/extension/Cpu6502DebugTarget.hpp>
+#include <beebium/extension/CpuDebugTarget.hpp>
 
 namespace beebium {
 
-CoprocessorDebugTarget::~CoprocessorDebugTarget() = default;
-
-Cpu6502DebugTarget::~Cpu6502DebugTarget() = default;
+CpuDebugTarget::~CpuDebugTarget() = default;
 
 }  // namespace beebium

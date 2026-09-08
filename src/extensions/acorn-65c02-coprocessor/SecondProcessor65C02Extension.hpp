@@ -74,7 +74,7 @@ public:
 
     Coprocessor* coprocessor() override { return runner_.get(); }
     TubeHostBackend* tube_backend() override { return tube_ula_.get(); }
-    CoprocessorDebugTarget* debug_target() override { return runner_.get(); }
+    CpuDebugTarget* debug_target() override { return runner_.get(); }
 
     // --- Accessors (for tests linking the extension directly) ---
 

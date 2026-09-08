@@ -14,6 +14,8 @@
 #define BEEBIUM_SERVICE_DEBUGGER_SERVICE_HPP
 
 #include "debugger.grpc.pb.h"
+#include "beebium/extension/CpuDebugTarget.hpp"
+#include "beebium/Cpu6502Descriptor.hpp"
 #include "beebium/MemoryRegion.hpp"
 #include "beebium/Types.hpp"
 #include <moodycamel/readerwriterqueue.h>
@@ -21,56 +23,37 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <sstream>
 #include <iomanip>
-#include <concepts>
 
 namespace beebium::service {
 
-// Concept to detect if a memory type has PC-aware access methods
-template<typename T>
-concept HasPcAwareMemory = requires(T& m, uint16_t addr, uint16_t pc, uint8_t val) {
-    { m.read_with_pc(addr, pc) } -> std::same_as<uint8_t>;
-    { m.write_with_pc(addr, val, pc) } -> std::same_as<void>;
-};
-
-// Helper to read with PC context when available, otherwise use regular read
-template<typename Machine>
-uint8_t read_with_optional_pc(Machine& machine, uint16_t addr, bool has_pc, uint16_t pc) {
-    if constexpr (HasPcAwareMemory<decltype(machine.memory())>) {
-        if (has_pc) {
-            return machine.memory().read_with_pc(addr, pc);
-        }
-    }
-    return machine.read(addr);
+// PC-aware access falls back to the plain access when no PC is supplied. The
+// target's read_with_pc/peek_with_pc/write_with_pc default to the plain form;
+// only the host adapter, whose memory routing depends on the program counter,
+// overrides them.
+inline uint8_t read_with_optional_pc(CpuDebugTarget& target, uint16_t addr, bool has_pc, uint16_t pc) {
+    return has_pc ? target.read_with_pc(addr, pc) : target.read(addr);
 }
 
-// Helper to peek with PC context when available, otherwise use regular peek
-template<typename Machine>
-uint8_t peek_with_optional_pc(Machine& machine, uint16_t addr, bool has_pc, uint16_t pc) {
-    if constexpr (HasPcAwareMemory<decltype(machine.memory())>) {
-        if (has_pc) {
-            // For peek with PC, we use the PC-aware read (side-effect-free routing)
-            return machine.memory().read_with_pc(addr, pc);
-        }
-    }
-    return machine.peek(addr);
+inline uint8_t peek_with_optional_pc(CpuDebugTarget& target, uint16_t addr, bool has_pc, uint16_t pc) {
+    return has_pc ? target.peek_with_pc(addr, pc) : target.peek(addr);
 }
 
-// Helper to write with PC context when available, otherwise use regular write
-template<typename Machine>
-void write_with_optional_pc(Machine& machine, uint16_t addr, uint8_t val, bool has_pc, uint16_t pc) {
-    if constexpr (HasPcAwareMemory<decltype(machine.memory())>) {
-        if (has_pc) {
-            machine.memory().write_with_pc(addr, val, pc);
-            return;
-        }
+inline void write_with_optional_pc(CpuDebugTarget& target, uint16_t addr, uint8_t val, bool has_pc, uint16_t pc) {
+    if (has_pc) {
+        target.write_with_pc(addr, val, pc);
+    } else {
+        target.write(addr, val);
     }
-    machine.write(addr, val);
 }
 
 /// Internal breakpoint record (service-layer, holds parsed condition)
@@ -85,10 +68,9 @@ struct BreakpointRecord {
 };
 
 /// gRPC service implementation for DebuggerControl
-template<typename MachineType>
 class DebuggerControlServiceImpl final : public DebuggerControl::Service {
 public:
-    explicit DebuggerControlServiceImpl(MachineType& machine);
+    explicit DebuggerControlServiceImpl(CpuDebugTarget& machine);
     ~DebuggerControlServiceImpl() override = default;
 
     // Non-copyable
@@ -215,16 +197,21 @@ public:
         const Empty* request,
         ClearWatchpointsResponse* response) override;
 
-    // CPU state
-    grpc::Status Get6502State(
+    // CPU state (family-agnostic register model)
+    grpc::Status GetCpuDescriptor(
         grpc::ServerContext* context,
-        const Get6502StateRequest* request,
-        Cpu6502State* response) override;
+        const Empty* request,
+        CpuDescriptor* response) override;
 
-    grpc::Status Set6502State(
+    grpc::Status GetCpuState(
         grpc::ServerContext* context,
-        const Set6502StateRequest* request,
-        Cpu6502State* response) override;
+        const Empty* request,
+        CpuState* response) override;
+
+    grpc::Status SetCpuState(
+        grpc::ServerContext* context,
+        const CpuState* request,
+        CpuState* response) override;
 
     // Event streaming
     grpc::Status WatchExecutionState(
@@ -233,7 +220,6 @@ public:
         grpc::ServerWriter<ExecutionStateEvent>* writer) override;
 
 private:
-    void populate_6502_state(Cpu6502State* response);
     void fill_execution_state(ExecutionState* state);
     void update_breakpoint_entries();
     void update_watchpoint_entries();
@@ -251,7 +237,14 @@ public:
     }
 
 private:
-    MachineType& machine_;
+    CpuDebugTarget& machine_;
+    // The target's CPU description, cached once at construction, and a
+    // register-name -> index map over it. Conditional breakpoints read 6502
+    // registers by name (6502-only, like the disassembler); reg_value_by_name
+    // returns 0 for a name the CPU does not have.
+    cpu::CpuDescriptor descriptor_;
+    std::unordered_map<std::string, size_t> register_index_;
+    uint64_t reg_value_by_name(std::string_view name) const;
     CounterpartStopCallback counterpart_stop_cb_;
     std::mutex mutex_;
     std::vector<BreakpointRecord> breakpoints_;
@@ -355,9 +348,11 @@ private:
 // DebuggerControlServiceImpl template implementation
 //////////////////////////////////////////////////////////////////////////////
 
-template<typename MachineType>
-DebuggerControlServiceImpl<MachineType>::DebuggerControlServiceImpl(MachineType& machine)
-    : machine_(machine) {
+DebuggerControlServiceImpl::DebuggerControlServiceImpl(CpuDebugTarget& machine)
+    : machine_(machine), descriptor_(machine.cpu_descriptor()) {
+    for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
+        register_index_[descriptor_.registers[i].name] = i;
+    }
     machine_.set_breakpoint_hit_callback([this](const beebium::BreakpointEntry& bp, uint16_t pc) {
         // Increment hit counter
         auto& mutable_bp = const_cast<beebium::BreakpointEntry&>(bp);
@@ -367,13 +362,17 @@ DebuggerControlServiceImpl<MachineType>::DebuggerControlServiceImpl(MachineType&
         bool should_stop = true;
         if (bp.condition) {
             beebium::ExprCpuState cpu_state{
-                machine_.a(), machine_.x(), machine_.y(),
-                machine_.sp(), machine_.p(),
-                machine_.cpu().opcode_pc.w, machine_.cycle_count(),
+                static_cast<uint8_t>(reg_value_by_name("A")),
+                static_cast<uint8_t>(reg_value_by_name("X")),
+                static_cast<uint8_t>(reg_value_by_name("Y")),
+                static_cast<uint8_t>(reg_value_by_name("SP")),
+                static_cast<uint8_t>(reg_value_by_name("P")),
+                static_cast<uint16_t>(reg_value_by_name("PC")),
+                machine_.cycle_count(),
                 bp.hit_count
             };
             auto peek_fn = [](void* ctx, uint16_t a) -> uint8_t {
-                return static_cast<MachineType*>(ctx)->peek(a);
+                return static_cast<CpuDebugTarget*>(ctx)->peek(a);
             };
             should_stop = beebium::evaluate(
                 *bp.condition, cpu_state, peek_fn, &machine_) != 0;
@@ -405,13 +404,17 @@ DebuggerControlServiceImpl<MachineType>::DebuggerControlServiceImpl(MachineType&
             bool should_stop = true;
             if (wp.condition) {
                 beebium::ExprCpuState cpu_state{
-                    machine_.a(), machine_.x(), machine_.y(),
-                    machine_.sp(), machine_.p(),
-                    machine_.cpu().opcode_pc.w, machine_.cycle_count(),
+                    static_cast<uint8_t>(reg_value_by_name("A")),
+                    static_cast<uint8_t>(reg_value_by_name("X")),
+                    static_cast<uint8_t>(reg_value_by_name("Y")),
+                    static_cast<uint8_t>(reg_value_by_name("SP")),
+                    static_cast<uint8_t>(reg_value_by_name("P")),
+                    static_cast<uint16_t>(reg_value_by_name("PC")),
+                    machine_.cycle_count(),
                     wp.hit_count
                 };
                 auto peek_fn = [](void* ctx, uint16_t a) -> uint8_t {
-                    return static_cast<MachineType*>(ctx)->peek(a);
+                    return static_cast<CpuDebugTarget*>(ctx)->peek(a);
                 };
                 should_stop = beebium::evaluate(
                     *wp.condition, cpu_state, peek_fn, &machine_) != 0;
@@ -442,16 +445,14 @@ DebuggerControlServiceImpl<MachineType>::DebuggerControlServiceImpl(MachineType&
         });
 }
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::fill_execution_state(ExecutionState* state) {
+void DebuggerControlServiceImpl::fill_execution_state(ExecutionState* state) {
     state->set_is_running(!machine_.is_paused());
     state->set_cycle_count(machine_.cycle_count());
     state->set_halt_reason(halt_reason_);
     state->set_sequence(machine_.sequence());
 }
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::enqueue_event(StopReason reason) {
+void DebuggerControlServiceImpl::enqueue_event(StopReason reason) {
     ExecutionEvent evt;
     evt.reason = reason;
     evt.is_running = !machine_.is_paused();
@@ -462,8 +463,7 @@ void DebuggerControlServiceImpl<MachineType>::enqueue_event(StopReason reason) {
     notify_subscribers();
 }
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::update_breakpoint_entries() {
+void DebuggerControlServiceImpl::update_breakpoint_entries() {
     // Snapshot live hit counts back into service-layer records
     for (const auto& entry : machine_.breakpoint_entries()) {
         for (auto& bp : breakpoints_) {
@@ -489,8 +489,7 @@ void DebuggerControlServiceImpl<MachineType>::update_breakpoint_entries() {
     machine_.set_breakpoint_entries(std::move(entries));
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::GetState(
+grpc::Status DebuggerControlServiceImpl::GetState(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ExecutionState* response) {
@@ -500,8 +499,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::GetState(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::Run(
+grpc::Status DebuggerControlServiceImpl::Run(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     RunResponse* response) {
@@ -531,8 +529,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::Run(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::Stop(
+grpc::Status DebuggerControlServiceImpl::Stop(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     StopResponse* response) {
@@ -547,8 +544,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::Stop(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::Reset(
+grpc::Status DebuggerControlServiceImpl::Reset(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ResetResponse* response) {
@@ -572,8 +568,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::Reset(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::StepInstruction(
+grpc::Status DebuggerControlServiceImpl::StepInstruction(
     grpc::ServerContext* /*context*/,
     const StepRequest* request,
     StepResponse* response) {
@@ -608,8 +603,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::StepInstruction(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::StepCycle(
+grpc::Status DebuggerControlServiceImpl::StepCycle(
     grpc::ServerContext* /*context*/,
     const StepRequest* request,
     StepResponse* response) {
@@ -642,8 +636,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::StepCycle(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::ReadMemory(
+grpc::Status DebuggerControlServiceImpl::ReadMemory(
     grpc::ServerContext* /*context*/,
     const ReadMemoryRequest* request,
     ReadMemoryResponse* response) {
@@ -668,8 +661,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ReadMemory(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::WriteMemory(
+grpc::Status DebuggerControlServiceImpl::WriteMemory(
     grpc::ServerContext* /*context*/,
     const WriteMemoryRequest* request,
     WriteMemoryResponse* response) {
@@ -690,8 +682,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::WriteMemory(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::PeekMemory(
+grpc::Status DebuggerControlServiceImpl::PeekMemory(
     grpc::ServerContext* /*context*/,
     const PeekMemoryRequest* request,
     PeekMemoryResponse* response) {
@@ -716,8 +707,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::PeekMemory(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::GetMemoryRegions(
+grpc::Status DebuggerControlServiceImpl::GetMemoryRegions(
     grpc::ServerContext* /*context*/,
     const GetMemoryRegionsRequest* /*request*/,
     GetMemoryRegionsResponse* response) {
@@ -725,10 +715,10 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::GetMemoryRegions(
     std::lock_guard<std::mutex> lock(mutex_);
 
     // Get machine type from hardware
-    response->set_machine_type(std::string(machine_.memory().machine_type()));
+    response->set_machine_type(std::string(machine_.machine_type()));
 
     // Get regions from hardware
-    auto regions = machine_.memory().get_memory_regions();
+    auto regions = machine_.get_memory_regions();
     for (const auto& region : regions) {
         auto* pb_region = response->add_regions();
         pb_region->set_name(std::string(region.name));
@@ -744,8 +734,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::GetMemoryRegions(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::PeekRegion(
+grpc::Status DebuggerControlServiceImpl::PeekRegion(
     grpc::ServerContext* /*context*/,
     const RegionAccessRequest* request,
     RegionAccessResponse* response) {
@@ -762,7 +751,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::PeekRegion(
 
         for (uint32_t i = 0; i < length; ++i) {
             data.push_back(static_cast<char>(
-                machine_.memory().peek_region(region_name, address + i)));
+                machine_.peek_region(region_name, address + i)));
         }
 
         response->set_data(std::move(data));
@@ -772,8 +761,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::PeekRegion(
     }
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::ReadRegion(
+grpc::Status DebuggerControlServiceImpl::ReadRegion(
     grpc::ServerContext* /*context*/,
     const RegionAccessRequest* request,
     RegionAccessResponse* response) {
@@ -790,7 +778,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ReadRegion(
 
         for (uint32_t i = 0; i < length; ++i) {
             data.push_back(static_cast<char>(
-                machine_.memory().read_region(region_name, address + i)));
+                machine_.read_region(region_name, address + i)));
         }
 
         response->set_data(std::move(data));
@@ -800,8 +788,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ReadRegion(
     }
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::WriteRegion(
+grpc::Status DebuggerControlServiceImpl::WriteRegion(
     grpc::ServerContext* /*context*/,
     const WriteRegionRequest* request,
     WriteRegionResponse* response) {
@@ -814,7 +801,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::WriteRegion(
 
     try {
         for (size_t i = 0; i < data.size(); ++i) {
-            machine_.memory().write_region(region_name, address + static_cast<uint32_t>(i),
+            machine_.write_region(region_name, address + static_cast<uint32_t>(i),
                 static_cast<uint8_t>(data[i]));
         }
 
@@ -827,8 +814,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::WriteRegion(
     }
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::AddBreakpoint(
+grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
     grpc::ServerContext* /*context*/,
     const AddBreakpointRequest* request,
     AddBreakpointResponse* response) {
@@ -868,8 +854,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::AddBreakpoint(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::RemoveBreakpoint(
+grpc::Status DebuggerControlServiceImpl::RemoveBreakpoint(
     grpc::ServerContext* /*context*/,
     const RemoveBreakpointRequest* request,
     RemoveBreakpointResponse* response) {
@@ -891,8 +876,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::RemoveBreakpoint(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::EnableBreakpoint(
+grpc::Status DebuggerControlServiceImpl::EnableBreakpoint(
     grpc::ServerContext* /*context*/,
     const EnableBreakpointRequest* request,
     EnableBreakpointResponse* response) {
@@ -914,8 +898,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::EnableBreakpoint(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::ListBreakpoints(
+grpc::Status DebuggerControlServiceImpl::ListBreakpoints(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ListBreakpointsResponse* response) {
@@ -952,8 +935,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ListBreakpoints(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::ClearBreakpoints(
+grpc::Status DebuggerControlServiceImpl::ClearBreakpoints(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ClearBreakpointsResponse* response) {
@@ -972,8 +954,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ClearBreakpoints(
 // Watchpoint RPCs - DebuggerControlServiceImpl
 //////////////////////////////////////////////////////////////////////////////
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::update_watchpoint_entries() {
+void DebuggerControlServiceImpl::update_watchpoint_entries() {
     // Snapshot live hit counts back into service-layer records
     for (const auto& entry : machine_.watchpoint_entries()) {
         for (auto& wp : watchpoints_) {
@@ -1000,8 +981,7 @@ void DebuggerControlServiceImpl<MachineType>::update_watchpoint_entries() {
     machine_.set_watchpoint_entries(std::move(entries));
 }
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::enqueue_event(
+void DebuggerControlServiceImpl::enqueue_event(
     StopReason reason, const WatchpointHitInfo& watchpoint_hit) {
     ExecutionEvent evt;
     evt.reason = reason;
@@ -1015,14 +995,12 @@ void DebuggerControlServiceImpl<MachineType>::enqueue_event(
     notify_subscribers();
 }
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::signal_counterpart_stop() {
+void DebuggerControlServiceImpl::signal_counterpart_stop() {
     if (counterpart_stop_cb_)
         counterpart_stop_cb_();
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::AddWatchpoint(
+grpc::Status DebuggerControlServiceImpl::AddWatchpoint(
     grpc::ServerContext* /*context*/,
     const AddWatchpointRequest* request,
     AddWatchpointResponse* response) {
@@ -1067,8 +1045,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::AddWatchpoint(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::RemoveWatchpoint(
+grpc::Status DebuggerControlServiceImpl::RemoveWatchpoint(
     grpc::ServerContext* /*context*/,
     const RemoveWatchpointRequest* request,
     RemoveWatchpointResponse* response) {
@@ -1090,8 +1067,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::RemoveWatchpoint(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::EnableWatchpoint(
+grpc::Status DebuggerControlServiceImpl::EnableWatchpoint(
     grpc::ServerContext* /*context*/,
     const EnableWatchpointRequest* request,
     EnableWatchpointResponse* response) {
@@ -1113,8 +1089,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::EnableWatchpoint(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::ListWatchpoints(
+grpc::Status DebuggerControlServiceImpl::ListWatchpoints(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ListWatchpointsResponse* response) {
@@ -1154,8 +1129,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ListWatchpoints(
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::ClearWatchpoints(
+grpc::Status DebuggerControlServiceImpl::ClearWatchpoints(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ClearWatchpointsResponse* response) {
@@ -1174,8 +1148,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::ClearWatchpoints(
 // Event Streaming - DebuggerControlServiceImpl
 //////////////////////////////////////////////////////////////////////////////
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::WatchExecutionState(
+grpc::Status DebuggerControlServiceImpl::WatchExecutionState(
     grpc::ServerContext* context,
     const WatchExecutionStateRequest* /*request*/,
     grpc::ServerWriter<ExecutionStateEvent>* writer) {
@@ -1250,70 +1223,100 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::WatchExecutionState(
 // CPU State - DebuggerControlServiceImpl
 //////////////////////////////////////////////////////////////////////////////
 
-template<typename MachineType>
-void DebuggerControlServiceImpl<MachineType>::populate_6502_state(
-    Cpu6502State* response) {
-    // Caller must hold mutex_.
-    response->set_a(machine_.a());
-    response->set_x(machine_.x());
-    response->set_y(machine_.y());
-    response->set_sp(machine_.sp());
-    response->set_pc(machine_.cpu().opcode_pc.w);
-    response->set_p(machine_.p());
-
-    // Interrupt handler tracking
-    response->set_in_nmi_handler(machine_.in_nmi_handler());
-    response->set_in_irq_handler(machine_.in_irq_handler());
-
-    // M6502 interrupt line state
-    response->set_nmi_pending(machine_.cpu().nmi_flags != 0);
-    response->set_irq_pending(machine_.cpu().irq_flags != 0
-                              && !(machine_.p() & 0x04));
-    response->set_device_irq_flags(machine_.cpu().device_irq_flags);
-    response->set_device_nmi_flags(machine_.cpu().device_nmi_flags);
+uint64_t DebuggerControlServiceImpl::reg_value_by_name(std::string_view name) const {
+    auto it = register_index_.find(std::string(name));
+    if (it == register_index_.end()) return 0;
+    return machine_.register_value(it->second);
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::Get6502State(
+grpc::Status DebuggerControlServiceImpl::GetCpuDescriptor(
     grpc::ServerContext* /*context*/,
-    const Get6502StateRequest* /*request*/,
-    Cpu6502State* response) {
+    const Empty* /*request*/,
+    ::beebium::CpuDescriptor* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    populate_6502_state(response);
+    response->set_family(descriptor_.family);
+    response->set_address_bits(descriptor_.address_bits);
+    response->set_little_endian(descriptor_.little_endian);
+    for (const auto& reg : descriptor_.registers) {
+        auto* pb_reg = response->add_registers();
+        pb_reg->set_name(reg.name);
+        pb_reg->set_width_bits(reg.width_bits);
+        pb_reg->set_role(static_cast<::beebium::RegisterRole>(reg.role));
+        for (const auto& flag : reg.flag_names) {
+            pb_reg->add_flag_names(flag);
+        }
+    }
+    for (const auto& signal : descriptor_.signals) {
+        response->add_signals(signal);
+    }
     return grpc::Status::OK;
 }
 
-template<typename MachineType>
-grpc::Status DebuggerControlServiceImpl<MachineType>::Set6502State(
+grpc::Status DebuggerControlServiceImpl::GetCpuState(
     grpc::ServerContext* /*context*/,
-    const Set6502StateRequest* request,
-    Cpu6502State* response) {
+    const Empty* /*request*/,
+    CpuState* response) {
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
+        auto* rv = response->add_registers();
+        rv->set_name(descriptor_.registers[i].name);
+        rv->set_value(machine_.register_value(i));
+    }
+    for (size_t i = 0; i < descriptor_.signals.size(); ++i) {
+        cpu::SignalStateValue s = machine_.signal_state(i);
+        auto* ss = response->add_signals();
+        ss->set_name(descriptor_.signals[i]);
+        ss->set_asserted(s.asserted);
+        ss->set_pending(s.pending);
+        ss->set_in_handler(s.in_handler);
+    }
+    response->set_cycle_count(machine_.cycle_count());
+    return grpc::Status::OK;
+}
+
+grpc::Status DebuggerControlServiceImpl::SetCpuState(
+    grpc::ServerContext* /*context*/,
+    const CpuState* request,
+    CpuState* response) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (request->has_a()) {
-        machine_.set_a(static_cast<uint8_t>(request->a()));
+    // Reject any register name the CPU does not have, naming the offenders, so
+    // a typo fails loudly rather than being silently ignored.
+    std::string unknown;
+    for (const auto& rv : request->registers()) {
+        if (register_index_.find(rv.name()) == register_index_.end()) {
+            if (!unknown.empty()) unknown += ", ";
+            unknown += rv.name();
+        }
     }
-    if (request->has_x()) {
-        machine_.set_x(static_cast<uint8_t>(request->x()));
-    }
-    if (request->has_y()) {
-        machine_.set_y(static_cast<uint8_t>(request->y()));
-    }
-    if (request->has_sp()) {
-        machine_.set_sp(static_cast<uint8_t>(request->sp()));
-    }
-    if (request->has_pc()) {
-        machine_.set_pc(static_cast<uint16_t>(request->pc()));
-    }
-    if (request->has_p()) {
-        machine_.set_p(static_cast<uint8_t>(request->p()));
+    if (!unknown.empty()) {
+        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                            "unknown register(s): " + unknown);
     }
 
-    // Read back the resulting state under the same lock, so the write and the
-    // returned snapshot are atomic (no instruction can execute in between).
-    populate_6502_state(response);
+    // Apply the given subset by name.
+    for (const auto& rv : request->registers()) {
+        machine_.set_register_value(register_index_.at(rv.name()), rv.value());
+    }
+
+    // Read back the resulting full state under the same lock, so the write and
+    // the returned snapshot are atomic (no instruction can execute in between).
+    for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
+        auto* out = response->add_registers();
+        out->set_name(descriptor_.registers[i].name);
+        out->set_value(machine_.register_value(i));
+    }
+    for (size_t i = 0; i < descriptor_.signals.size(); ++i) {
+        cpu::SignalStateValue s = machine_.signal_state(i);
+        auto* ss = response->add_signals();
+        ss->set_name(descriptor_.signals[i]);
+        ss->set_asserted(s.asserted);
+        ss->set_pending(s.pending);
+        ss->set_in_handler(s.in_handler);
+    }
+    response->set_cycle_count(machine_.cycle_count());
     return grpc::Status::OK;
 }
 

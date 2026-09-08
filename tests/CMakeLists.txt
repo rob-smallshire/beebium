@@ -1290,13 +1290,21 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_tube_inspection)
 
-    # Debugger driven through the abstract Cpu6502DebugTarget interface
+    # Debugger driven through the abstract CpuDebugTarget interface
     add_executable(test_parasite_debug_target test_parasite_debug_target.cpp)
     target_link_libraries(test_parasite_debug_target PRIVATE
         beebium_service
         Catch2::Catch2WithMain
     )
     catch_discover_tests(test_parasite_debug_target)
+
+    # A made-up CPU family is fully served through the family-agnostic interface
+    add_executable(test_stub_cpu_family test_stub_cpu_family.cpp)
+    target_link_libraries(test_stub_cpu_family PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_stub_cpu_family)
 
     # Server-facing coprocessor wiring through the abstract interfaces
     add_executable(test_coprocessor_extension test_coprocessor_extension.cpp)

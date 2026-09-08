@@ -18,13 +18,16 @@
 #include "ParasiteMemoryMap.hpp"
 #include "TubeParasiteBackend.hpp"
 #include "../Types.hpp"
-#include "beebium/extension/Cpu6502DebugTarget.hpp"
+#include "../Cpu6502Descriptor.hpp"
+#include "beebium/extension/CpuDebugTarget.hpp"
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace beebium {
@@ -44,7 +47,7 @@ namespace beebium {
 // 3/2). Future coprocessors (6809, Z80, 80186, 32016) would have their own
 // runner classes with different CPU and memory map types and clock ratios.
 
-class ParasiteRunner : public Coprocessor, public Cpu6502DebugTarget {
+class ParasiteRunner : public Coprocessor, public CpuDebugTarget {
 public:
     using Memory = ParasiteMemoryMap;
     using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint16_t pc)>;
@@ -99,6 +102,35 @@ public:
     // --- Sequence counter (increments on mutations, for change detection) ---
 
     uint64_t sequence() const { return sequence_; }
+
+    // --- Family-agnostic CPU description and register/signal access ---
+
+    const cpu::CpuDescriptor& cpu_descriptor() const override { return cpu6502_descriptor(); }
+    uint64_t register_value(size_t index) const override {
+        return cpu6502_register_value(index, *this);
+    }
+    void set_register_value(size_t index, uint64_t value) override {
+        cpu6502_set_register_value(index, *this, value);
+    }
+    cpu::SignalStateValue signal_state(size_t index) const override {
+        return cpu6502_signal_state(index, cpu(), p(), in_nmi_handler(), in_irq_handler());
+    }
+
+    // --- Memory-region model (delegates to the parasite's memory map) ---
+
+    std::vector<MemoryRegionDescriptor> get_memory_regions() const override {
+        return memory_.get_memory_regions();
+    }
+    uint8_t peek_region(std::string_view name, uint32_t address) const override {
+        return memory_.peek_region(name, address);
+    }
+    uint8_t read_region(std::string_view name, uint32_t address) override {
+        return memory_.read_region(name, address);
+    }
+    void write_region(std::string_view name, uint32_t address, uint8_t value) override {
+        memory_.write_region(name, address, value);
+    }
+    std::string_view machine_type() const override { return memory_.machine_type(); }
 
     // --- CPU register accessors (debugger convenience) ---
 

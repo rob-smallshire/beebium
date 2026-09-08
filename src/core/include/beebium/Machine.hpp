@@ -466,7 +466,7 @@ public:
     // Called by the debugger after a single-step batch (StepInstruction /
     // StepCycle), the symmetric partner of prepare_for_step(). Syncs the
     // coprocessor to the host so a single-stepped machine shows both processors
-    // within a cycle of each other. (Cpu6502DebugTarget provides a no-op
+    // within a cycle of each other. (CpuDebugTarget provides a no-op
     // finish_step(); only the host has a coprocessor to sync.)
     void finish_step() {
         state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);

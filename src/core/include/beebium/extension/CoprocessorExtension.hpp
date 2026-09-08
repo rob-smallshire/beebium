@@ -19,7 +19,7 @@ namespace beebium {
 
 class Coprocessor;
 class TubeHostBackend;
-class CoprocessorDebugTarget;
+class CpuDebugTarget;
 
 // A peripheral extension that supplies a Tube coprocessor. It is how the
 // server reaches a coprocessor without any concrete coprocessor type: the
@@ -46,10 +46,10 @@ public:
     // backend. Valid after init().
     virtual TubeHostBackend* tube_backend() = 0;
 
-    // Debugger access, or nullptr if this coprocessor offers none. The server
-    // matches its family (CoprocessorDebugTarget::cpu_family()) against the
-    // debugger interfaces it can serve.
-    virtual CoprocessorDebugTarget* debug_target() { return nullptr; }
+    // Debugger access, or nullptr if this coprocessor offers none. The target
+    // describes its own CPU (CpuDebugTarget::cpu_descriptor()), so the server
+    // serves any family through the one debugger service.
+    virtual CpuDebugTarget* debug_target() { return nullptr; }
 };
 
 }  // namespace beebium

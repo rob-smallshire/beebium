@@ -12,26 +12,26 @@
 
 #pragma once
 
-#include "beebium/extension/Cpu6502DebugTarget.hpp"
+#include "beebium/extension/CpuDebugTarget.hpp"
 #include "beebium/service/DebuggerService.hpp"
 #include "debugger.grpc.pb.h"
 
 namespace beebium {
 
-// Adapter that exposes DebuggerControlServiceImpl<Cpu6502DebugTarget> under the
+// Adapter that exposes a DebuggerControlServiceImpl under the
 // ParasiteDebuggerControl proto service name.
 //
 // Both DebuggerControl and ParasiteDebuggerControl have identical RPCs and
 // share message types. This adapter inherits from the generated
 // ParasiteDebuggerControl::Service and delegates each RPC to the underlying
-// DebuggerControlServiceImpl, allowing host and parasite debuggers to coexist
+// DebuggerControlServiceImpl, allowing host and coprocessor debuggers to coexist
 // on the same gRPC server. It lives in the server because the server, not the
 // coprocessor extension, instantiates the debugger against the abstract
-// Cpu6502DebugTarget interface.
+// CpuDebugTarget interface.
 
 class ParasiteDebuggerAdapter final : public ParasiteDebuggerControl::Service {
 public:
-    explicit ParasiteDebuggerAdapter(service::DebuggerControlServiceImpl<Cpu6502DebugTarget>& impl)
+    explicit ParasiteDebuggerAdapter(service::DebuggerControlServiceImpl& impl)
         : impl_(impl) {}
 
     // Forward each RPC to the underlying implementation.
@@ -124,17 +124,20 @@ public:
     grpc::Status ClearWatchpoints(grpc::ServerContext* ctx, const Empty* req, ClearWatchpointsResponse* resp) override
     { return impl_.ClearWatchpoints(ctx, req, resp); }
 
-    // CPU state
-    grpc::Status Get6502State(grpc::ServerContext* ctx, const Get6502StateRequest* req, Cpu6502State* resp) override
-    { return impl_.Get6502State(ctx, req, resp); }
+    // CPU state (family-agnostic register model)
+    grpc::Status GetCpuDescriptor(grpc::ServerContext* ctx, const Empty* req, CpuDescriptor* resp) override
+    { return impl_.GetCpuDescriptor(ctx, req, resp); }
 
-    grpc::Status Set6502State(grpc::ServerContext* ctx, const Set6502StateRequest* req, Cpu6502State* resp) override
-    { return impl_.Set6502State(ctx, req, resp); }
+    grpc::Status GetCpuState(grpc::ServerContext* ctx, const Empty* req, CpuState* resp) override
+    { return impl_.GetCpuState(ctx, req, resp); }
+
+    grpc::Status SetCpuState(grpc::ServerContext* ctx, const CpuState* req, CpuState* resp) override
+    { return impl_.SetCpuState(ctx, req, resp); }
 
 #undef FORWARD_UNARY
 
 private:
-    service::DebuggerControlServiceImpl<Cpu6502DebugTarget>& impl_;
+    service::DebuggerControlServiceImpl& impl_;
 };
 
 }  // namespace beebium

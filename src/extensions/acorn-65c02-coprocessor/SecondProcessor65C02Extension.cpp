@@ -46,7 +46,7 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
     tube_socket_->install_coprocessor(runner_.get());
 
     // The debugger is the server's concern: it reads debug_target() (the
-    // runner, a Cpu6502DebugTarget), instantiates DebuggerControlServiceImpl
+    // runner, a CpuDebugTarget), instantiates DebuggerControlServiceImpl
     // against the abstract interface and registers the ParasiteDebuggerControl
     // service. The extension hosts no gRPC service itself.
 

@@ -16,6 +16,7 @@
 #include "beebium/service/VideoService.hpp"
 #include "beebium/service/KeyboardService.hpp"
 #include "beebium/service/DebuggerService.hpp"
+#include "beebium/service/HostDebugTarget.hpp"
 #include "beebium/service/DeviceInspectionService.hpp"
 #include "beebium/service/DiscService.hpp"
 #include "beebium/service/IndicatorService.hpp"
@@ -111,7 +112,7 @@ public:
     }
 
     /// Access the host DebuggerService (for wiring cross-processor stop).
-    DebuggerControlServiceImpl<MachineType>& debugger_service() {
+    DebuggerControlServiceImpl& debugger_service() {
         return *impl_->debugger_control_service;
     }
 
@@ -146,7 +147,10 @@ private:
         TeletextGrid teletext_grid;
         std::unique_ptr<VideoServiceImpl> video_service;
         std::unique_ptr<KeyboardServiceImpl> keyboard_service;
-        std::unique_ptr<DebuggerControlServiceImpl<MachineType>> debugger_control_service;
+        // The host debugger targets the Machine through this adapter; it must
+        // outlive the service, so it is declared before it and destroyed after.
+        std::unique_ptr<HostDebugTarget<MachineType>> host_debug_target;
+        std::unique_ptr<DebuggerControlServiceImpl> debugger_control_service;
         std::unique_ptr<DeviceInspectionServiceImpl<MachineType>> device_inspection_service;
         std::unique_ptr<DiscServiceImpl<MachineType>> disc_service;
         std::unique_ptr<IndicatorServiceImpl<MachineType>> indicator_service;
@@ -246,8 +250,9 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         impl_->machine.state().memory.system_via_peripheral,
         std::move(break_callbacks));
 
-    impl_->debugger_control_service = std::make_unique<DebuggerControlServiceImpl<MachineType>>(
-        impl_->machine);
+    impl_->host_debug_target = std::make_unique<HostDebugTarget<MachineType>>(impl_->machine);
+    impl_->debugger_control_service = std::make_unique<DebuggerControlServiceImpl>(
+        *impl_->host_debug_target);
 
     impl_->device_inspection_service = std::make_unique<DeviceInspectionServiceImpl<MachineType>>(
         impl_->machine);

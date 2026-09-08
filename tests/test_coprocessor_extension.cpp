@@ -20,8 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <beebium/extension/CoprocessorExtension.hpp>
-#include <beebium/extension/CoprocessorDebugTarget.hpp>
-#include <beebium/extension/Cpu6502DebugTarget.hpp>
+#include <beebium/extension/CpuDebugTarget.hpp>
 #include <beebium/service/DebuggerService.hpp>
 #include <beebium/tube/Coprocessor.hpp>
 #include <beebium/tube/ParasiteRunner.hpp>
@@ -90,12 +89,6 @@ public:
     // debug_target() defaults to nullptr: this stub offers no debugger.
 };
 
-// A debug target of a family the server cannot serve today.
-class Z80DebugTarget : public CoprocessorDebugTarget {
-public:
-    std::string_view cpu_family() const override { return "z80"; }
-};
-
 }  // namespace
 
 TEST_CASE("CoprocessorExtension: coprocessor and backend land in the socket", "[coprocessor][extension]") {
@@ -121,22 +114,19 @@ TEST_CASE("CoprocessorExtension: coprocessor and backend land in the socket", "[
     CHECK(ext.debug_target() == nullptr);
 }
 
-TEST_CASE("CoprocessorExtension: an unserved CPU family is rejected by the server's cast",
+TEST_CASE("CoprocessorExtension: a coprocessor describes its own CPU through the interface",
           "[coprocessor][extension]") {
-    // The server does dynamic_cast<Cpu6502DebugTarget*>(target) and, on failure,
-    // continues without a coprocessor debugger.
-    Z80DebugTarget z80;
-    CoprocessorDebugTarget* target = &z80;
-    CHECK(target->cpu_family() == "z80");
-    CHECK(dynamic_cast<Cpu6502DebugTarget*>(target) == nullptr);
-
-    // A 6502 target casts successfully and reports its family.
+    // The server no longer casts to a family: it reads the description off the
+    // abstract CpuDebugTarget. A 6502 coprocessor names its family and lists its
+    // registers in display order.
     TubeUla ula;
     auto rom = make_nop_rom();
     ParasiteRunner runner(ula, rom);
-    CoprocessorDebugTarget* runner_target = &runner;  // upcast through Cpu6502DebugTarget
-    CHECK(runner_target->cpu_family() == "6502");
-    CHECK(dynamic_cast<Cpu6502DebugTarget*>(runner_target) == &runner);
+    CpuDebugTarget* target = &runner;
+    CHECK(target->cpu_descriptor().family == "6502");
+    REQUIRE(target->cpu_descriptor().registers.size() == 6);
+    CHECK(target->cpu_descriptor().registers[0].name == "A");
+    CHECK(target->cpu_descriptor().signals.size() == 2);
 }
 
 TEST_CASE("CoprocessorExtension: cross-processor stop is wired both ways server-side",
@@ -151,8 +141,8 @@ TEST_CASE("CoprocessorExtension: cross-processor stop is wired both ways server-
     host.reset();
     cop.reset();
 
-    service::DebuggerControlServiceImpl<Cpu6502DebugTarget> host_impl(host);
-    service::DebuggerControlServiceImpl<Cpu6502DebugTarget> cop_impl(cop);
+    service::DebuggerControlServiceImpl host_impl(host);
+    service::DebuggerControlServiceImpl cop_impl(cop);
 
     host_impl.set_counterpart_stop_callback([&] { cop.pause(); });
     cop_impl.set_counterpart_stop_callback([&] { host.pause(); });
