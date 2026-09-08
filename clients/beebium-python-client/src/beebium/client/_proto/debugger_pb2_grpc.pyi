@@ -80,6 +80,14 @@ class DebuggerControlStub:
     Get6502State: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Get6502StateRequest, _debugger_pb2.Cpu6502State]
     """CPU state"""
     Set6502State: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Set6502StateRequest, _debugger_pb2.Cpu6502State]
+    GetCpuDescriptor: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuDescriptor]
+    """Family-agnostic CPU register model. The CPU describes itself
+    (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+    SetCpuState accepts any subset of registers by name and returns the
+    full state.
+    """
+    GetCpuState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuState]
+    SetCpuState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.CpuState, _debugger_pb2.CpuState]
 
 @_typing.type_check_only
 class DebuggerControlAsyncStub(DebuggerControlStub):
@@ -121,6 +129,14 @@ class DebuggerControlAsyncStub(DebuggerControlStub):
     Get6502State: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Get6502StateRequest, _debugger_pb2.Cpu6502State]  # type: ignore[assignment]
     """CPU state"""
     Set6502State: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Set6502StateRequest, _debugger_pb2.Cpu6502State]  # type: ignore[assignment]
+    GetCpuDescriptor: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuDescriptor]  # type: ignore[assignment]
+    """Family-agnostic CPU register model. The CPU describes itself
+    (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+    SetCpuState accepts any subset of registers by name and returns the
+    full state.
+    """
+    GetCpuState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuState]  # type: ignore[assignment]
+    SetCpuState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.CpuState, _debugger_pb2.CpuState]  # type: ignore[assignment]
 
 class DebuggerControlServicer(metaclass=_abc_1.ABCMeta):
     """Generic debugger service for 6502-based machines.
@@ -316,6 +332,32 @@ class DebuggerControlServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.Cpu6502State, _abc.Awaitable[_debugger_pb2.Cpu6502State]]: ...
 
+    @_abc_1.abstractmethod
+    def GetCpuDescriptor(
+        self,
+        request: _debugger_pb2.Empty,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.CpuDescriptor, _abc.Awaitable[_debugger_pb2.CpuDescriptor]]:
+        """Family-agnostic CPU register model. The CPU describes itself
+        (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+        SetCpuState accepts any subset of registers by name and returns the
+        full state.
+        """
+
+    @_abc_1.abstractmethod
+    def GetCpuState(
+        self,
+        request: _debugger_pb2.Empty,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.CpuState, _abc.Awaitable[_debugger_pb2.CpuState]]: ...
+
+    @_abc_1.abstractmethod
+    def SetCpuState(
+        self,
+        request: _debugger_pb2.CpuState,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.CpuState, _abc.Awaitable[_debugger_pb2.CpuState]]: ...
+
 def add_DebuggerControlServicer_to_server(servicer: DebuggerControlServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
 
 class ParasiteDebuggerControlStub:
@@ -354,6 +396,9 @@ class ParasiteDebuggerControlStub:
     ClearWatchpoints: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ClearWatchpointsResponse]
     Get6502State: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Get6502StateRequest, _debugger_pb2.Cpu6502State]
     Set6502State: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Set6502StateRequest, _debugger_pb2.Cpu6502State]
+    GetCpuDescriptor: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuDescriptor]
+    GetCpuState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuState]
+    SetCpuState: _grpc.UnaryUnaryMultiCallable[_debugger_pb2.CpuState, _debugger_pb2.CpuState]
 
 @_typing.type_check_only
 class ParasiteDebuggerControlAsyncStub(ParasiteDebuggerControlStub):
@@ -389,6 +434,9 @@ class ParasiteDebuggerControlAsyncStub(ParasiteDebuggerControlStub):
     ClearWatchpoints: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.ClearWatchpointsResponse]  # type: ignore[assignment]
     Get6502State: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Get6502StateRequest, _debugger_pb2.Cpu6502State]  # type: ignore[assignment]
     Set6502State: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Set6502StateRequest, _debugger_pb2.Cpu6502State]  # type: ignore[assignment]
+    GetCpuDescriptor: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuDescriptor]  # type: ignore[assignment]
+    GetCpuState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.Empty, _debugger_pb2.CpuState]  # type: ignore[assignment]
+    SetCpuState: _aio.UnaryUnaryMultiCallable[_debugger_pb2.CpuState, _debugger_pb2.CpuState]  # type: ignore[assignment]
 
 class ParasiteDebuggerControlServicer(metaclass=_abc_1.ABCMeta):
     """Parasite (second processor) debugger service.
@@ -577,6 +625,27 @@ class ParasiteDebuggerControlServicer(metaclass=_abc_1.ABCMeta):
         request: _debugger_pb2.Set6502StateRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_debugger_pb2.Cpu6502State, _abc.Awaitable[_debugger_pb2.Cpu6502State]]: ...
+
+    @_abc_1.abstractmethod
+    def GetCpuDescriptor(
+        self,
+        request: _debugger_pb2.Empty,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.CpuDescriptor, _abc.Awaitable[_debugger_pb2.CpuDescriptor]]: ...
+
+    @_abc_1.abstractmethod
+    def GetCpuState(
+        self,
+        request: _debugger_pb2.Empty,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.CpuState, _abc.Awaitable[_debugger_pb2.CpuState]]: ...
+
+    @_abc_1.abstractmethod
+    def SetCpuState(
+        self,
+        request: _debugger_pb2.CpuState,
+        context: _ServicerContext,
+    ) -> _typing.Union[_debugger_pb2.CpuState, _abc.Awaitable[_debugger_pb2.CpuState]]: ...
 
 def add_ParasiteDebuggerControlServicer_to_server(servicer: ParasiteDebuggerControlServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
 

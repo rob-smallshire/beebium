@@ -178,6 +178,21 @@ class DebuggerControlStub(object):
                 request_serializer=debugger__pb2.Set6502StateRequest.SerializeToString,
                 response_deserializer=debugger__pb2.Cpu6502State.FromString,
                 _registered_method=True)
+        self.GetCpuDescriptor = channel.unary_unary(
+                '/beebium.DebuggerControl/GetCpuDescriptor',
+                request_serializer=debugger__pb2.Empty.SerializeToString,
+                response_deserializer=debugger__pb2.CpuDescriptor.FromString,
+                _registered_method=True)
+        self.GetCpuState = channel.unary_unary(
+                '/beebium.DebuggerControl/GetCpuState',
+                request_serializer=debugger__pb2.Empty.SerializeToString,
+                response_deserializer=debugger__pb2.CpuState.FromString,
+                _registered_method=True)
+        self.SetCpuState = channel.unary_unary(
+                '/beebium.DebuggerControl/SetCpuState',
+                request_serializer=debugger__pb2.CpuState.SerializeToString,
+                response_deserializer=debugger__pb2.CpuState.FromString,
+                _registered_method=True)
 
 
 class DebuggerControlServicer(object):
@@ -348,6 +363,28 @@ class DebuggerControlServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCpuDescriptor(self, request, context):
+        """Family-agnostic CPU register model. The CPU describes itself
+        (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+        SetCpuState accepts any subset of registers by name and returns the
+        full state.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCpuState(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetCpuState(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DebuggerControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -480,6 +517,21 @@ def add_DebuggerControlServicer_to_server(servicer, server):
                     servicer.Set6502State,
                     request_deserializer=debugger__pb2.Set6502StateRequest.FromString,
                     response_serializer=debugger__pb2.Cpu6502State.SerializeToString,
+            ),
+            'GetCpuDescriptor': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCpuDescriptor,
+                    request_deserializer=debugger__pb2.Empty.FromString,
+                    response_serializer=debugger__pb2.CpuDescriptor.SerializeToString,
+            ),
+            'GetCpuState': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCpuState,
+                    request_deserializer=debugger__pb2.Empty.FromString,
+                    response_serializer=debugger__pb2.CpuState.SerializeToString,
+            ),
+            'SetCpuState': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetCpuState,
+                    request_deserializer=debugger__pb2.CpuState.FromString,
+                    response_serializer=debugger__pb2.CpuState.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1196,6 +1248,87 @@ class DebuggerControl(object):
             metadata,
             _registered_method=True)
 
+    @staticmethod
+    def GetCpuDescriptor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/GetCpuDescriptor',
+            debugger__pb2.Empty.SerializeToString,
+            debugger__pb2.CpuDescriptor.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCpuState(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/GetCpuState',
+            debugger__pb2.Empty.SerializeToString,
+            debugger__pb2.CpuState.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetCpuState(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.DebuggerControl/SetCpuState',
+            debugger__pb2.CpuState.SerializeToString,
+            debugger__pb2.CpuState.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
 
 class ParasiteDebuggerControlStub(object):
     """Parasite (second processor) debugger service.
@@ -1338,6 +1471,21 @@ class ParasiteDebuggerControlStub(object):
                 '/beebium.ParasiteDebuggerControl/Set6502State',
                 request_serializer=debugger__pb2.Set6502StateRequest.SerializeToString,
                 response_deserializer=debugger__pb2.Cpu6502State.FromString,
+                _registered_method=True)
+        self.GetCpuDescriptor = channel.unary_unary(
+                '/beebium.ParasiteDebuggerControl/GetCpuDescriptor',
+                request_serializer=debugger__pb2.Empty.SerializeToString,
+                response_deserializer=debugger__pb2.CpuDescriptor.FromString,
+                _registered_method=True)
+        self.GetCpuState = channel.unary_unary(
+                '/beebium.ParasiteDebuggerControl/GetCpuState',
+                request_serializer=debugger__pb2.Empty.SerializeToString,
+                response_deserializer=debugger__pb2.CpuState.FromString,
+                _registered_method=True)
+        self.SetCpuState = channel.unary_unary(
+                '/beebium.ParasiteDebuggerControl/SetCpuState',
+                request_serializer=debugger__pb2.CpuState.SerializeToString,
+                response_deserializer=debugger__pb2.CpuState.FromString,
                 _registered_method=True)
 
 
@@ -1503,6 +1651,24 @@ class ParasiteDebuggerControlServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCpuDescriptor(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCpuState(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetCpuState(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ParasiteDebuggerControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -1635,6 +1801,21 @@ def add_ParasiteDebuggerControlServicer_to_server(servicer, server):
                     servicer.Set6502State,
                     request_deserializer=debugger__pb2.Set6502StateRequest.FromString,
                     response_serializer=debugger__pb2.Cpu6502State.SerializeToString,
+            ),
+            'GetCpuDescriptor': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCpuDescriptor,
+                    request_deserializer=debugger__pb2.Empty.FromString,
+                    response_serializer=debugger__pb2.CpuDescriptor.SerializeToString,
+            ),
+            'GetCpuState': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCpuState,
+                    request_deserializer=debugger__pb2.Empty.FromString,
+                    response_serializer=debugger__pb2.CpuState.SerializeToString,
+            ),
+            'SetCpuState': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetCpuState,
+                    request_deserializer=debugger__pb2.CpuState.FromString,
+                    response_serializer=debugger__pb2.CpuState.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -2342,6 +2523,87 @@ class ParasiteDebuggerControl(object):
             '/beebium.ParasiteDebuggerControl/Set6502State',
             debugger__pb2.Set6502StateRequest.SerializeToString,
             debugger__pb2.Cpu6502State.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCpuDescriptor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.ParasiteDebuggerControl/GetCpuDescriptor',
+            debugger__pb2.Empty.SerializeToString,
+            debugger__pb2.CpuDescriptor.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCpuState(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.ParasiteDebuggerControl/GetCpuState',
+            debugger__pb2.Empty.SerializeToString,
+            debugger__pb2.CpuState.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetCpuState(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.ParasiteDebuggerControl/SetCpuState',
+            debugger__pb2.CpuState.SerializeToString,
+            debugger__pb2.CpuState.FromString,
             options,
             channel_credentials,
             insecure,

@@ -73,6 +73,32 @@ WATCHPOINT_WRITE: WatchpointType.ValueType  # 1
 WATCHPOINT_BOTH: WatchpointType.ValueType  # 2
 Global___WatchpointType: _TypeAlias = WatchpointType  # noqa: Y015
 
+class _RegisterRole:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _RegisterRoleEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_RegisterRole.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    REGISTER_ROLE_NONE: _RegisterRole.ValueType  # 0
+    PROGRAM_COUNTER: _RegisterRole.ValueType  # 1
+    STACK_POINTER: _RegisterRole.ValueType  # 2
+    FLAGS: _RegisterRole.ValueType  # 3
+
+class RegisterRole(_RegisterRole, metaclass=_RegisterRoleEnumTypeWrapper):
+    """=== Family-agnostic CPU register model ===
+
+    The coprocessor (and the host's own CPU) describe themselves so the
+    protos, the server and the clients need not name a CPU family. The
+    descriptor lists the registers in display order and the interrupt
+    signals; the state carries values in the same order.
+    """
+
+REGISTER_ROLE_NONE: RegisterRole.ValueType  # 0
+PROGRAM_COUNTER: RegisterRole.ValueType  # 1
+STACK_POINTER: RegisterRole.ValueType  # 2
+FLAGS: RegisterRole.ValueType  # 3
+Global___RegisterRole: _TypeAlias = RegisterRole  # noqa: Y015
+
 @_typing.final
 class Empty(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
@@ -1018,6 +1044,158 @@ class Set6502StateRequest(_message.Message):
     def WhichOneof(self, oneof_group: _WhichOneofArgType__y) -> _WhichOneofReturnType__y | None: ...
 
 Global___Set6502StateRequest: _TypeAlias = Set6502StateRequest  # noqa: Y015
+
+@_typing.final
+class RegisterDescriptor(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    WIDTH_BITS_FIELD_NUMBER: _builtins.int
+    ROLE_FIELD_NUMBER: _builtins.int
+    FLAG_NAMES_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    """"A", "PC", "HL", "SP", "P" """
+    width_bits: _builtins.int
+    role: Global___RegisterRole.ValueType
+    @_builtins.property
+    def flag_names(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """for FLAGS: bit 0 first, "" for unused"""
+
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        width_bits: _builtins.int = ...,
+        role: Global___RegisterRole.ValueType = ...,
+        flag_names: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["flag_names", b"flag_names", "name", b"name", "role", b"role", "width_bits", b"width_bits"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RegisterDescriptor: _TypeAlias = RegisterDescriptor  # noqa: Y015
+
+@_typing.final
+class CpuDescriptor(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    FAMILY_FIELD_NUMBER: _builtins.int
+    ADDRESS_BITS_FIELD_NUMBER: _builtins.int
+    LITTLE_ENDIAN_FIELD_NUMBER: _builtins.int
+    REGISTERS_FIELD_NUMBER: _builtins.int
+    SIGNALS_FIELD_NUMBER: _builtins.int
+    family: _builtins.str
+    """"6502", "z80", "6809", "ns32016", "80186" """
+    address_bits: _builtins.int
+    """16, 24, 32"""
+    little_endian: _builtins.bool
+    @_builtins.property
+    def registers(self) -> _containers.RepeatedCompositeFieldContainer[Global___RegisterDescriptor]:
+        """display order"""
+
+    @_builtins.property
+    def signals(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """interrupt line names, e.g. "IRQ", "NMI" """
+
+    def __init__(
+        self,
+        *,
+        family: _builtins.str = ...,
+        address_bits: _builtins.int = ...,
+        little_endian: _builtins.bool = ...,
+        registers: _abc.Iterable[Global___RegisterDescriptor] | None = ...,
+        signals: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_bits", b"address_bits", "family", b"family", "little_endian", b"little_endian", "registers", b"registers", "signals", b"signals"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CpuDescriptor: _TypeAlias = CpuDescriptor  # noqa: Y015
+
+@_typing.final
+class RegisterValue(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    VALUE_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    value: _builtins.int
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        value: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "value", b"value"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___RegisterValue: _TypeAlias = RegisterValue  # noqa: Y015
+
+@_typing.final
+class SignalState(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    ASSERTED_FIELD_NUMBER: _builtins.int
+    PENDING_FIELD_NUMBER: _builtins.int
+    IN_HANDLER_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    asserted: _builtins.bool
+    pending: _builtins.bool
+    in_handler: _builtins.bool
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        asserted: _builtins.bool = ...,
+        pending: _builtins.bool = ...,
+        in_handler: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["asserted", b"asserted", "in_handler", b"in_handler", "name", b"name", "pending", b"pending"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SignalState: _TypeAlias = SignalState  # noqa: Y015
+
+@_typing.final
+class CpuState(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    REGISTERS_FIELD_NUMBER: _builtins.int
+    SIGNALS_FIELD_NUMBER: _builtins.int
+    CYCLE_COUNT_FIELD_NUMBER: _builtins.int
+    cycle_count: _builtins.int
+    @_builtins.property
+    def registers(self) -> _containers.RepeatedCompositeFieldContainer[Global___RegisterValue]:
+        """descriptor order (subset for SetCpuState)"""
+
+    @_builtins.property
+    def signals(self) -> _containers.RepeatedCompositeFieldContainer[Global___SignalState]:
+        """descriptor.signals order"""
+
+    def __init__(
+        self,
+        *,
+        registers: _abc.Iterable[Global___RegisterValue] | None = ...,
+        signals: _abc.Iterable[Global___SignalState] | None = ...,
+        cycle_count: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cycle_count", b"cycle_count", "registers", b"registers", "signals", b"signals"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CpuState: _TypeAlias = CpuState  # noqa: Y015
 
 @_typing.final
 class GetMemoryRegionsRequest(_message.Message):
