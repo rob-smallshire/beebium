@@ -845,11 +845,20 @@ whole batch without returning.
   same `step()`, the stored `H` is the cycle of the access.
 - During a Tube bus stretch the host is halted waiting for the
   coprocessor, so the stretch path syncs on every cycle, as today.
-- Whenever the host stops, on pause, on a breakpoint or watchpoint hit,
-  and at the end of every `run()` chunk, `Machine` syncs the coprocessor
-  to `H` so that a stopped machine presents both processors at the same
-  time to the debugger and to `GetTubeState`. Single-stepping the host
-  therefore keeps the coprocessor within a cycle of it, as now.
+- Whenever the host stops, on a breakpoint or watchpoint hit and at the
+  end of every `run()` chunk, `Machine` syncs the coprocessor to `H` so
+  that a stopped machine presents both processors at the same time to the
+  debugger and to `GetTubeState`. `pause()` is called from an RPC thread
+  while `run()` may be executing on the emulation thread, so it syncs
+  only when the machine is not running; a running machine syncs itself on
+  the exit from `run()` that the pause causes. The emulation thread owns
+  the coprocessor while `run()` executes and nothing else touches it.
+- The debugger's single-step RPCs sync exactly: the debug-target
+  contract gains `finish_step()`, a no-op hook symmetric with
+  `prepare_for_step()`, which `DebuggerControlServiceImpl` calls after
+  both `StepInstruction` and `StepCycle`; the host `Machine` runs the
+  coprocessor to `H` in it, the parasite target leaves it empty. Single
+  stepping the host therefore leaves the coprocessor at the host's cycle.
 - Interrupt lines are unchanged in mechanism: the host's IRQ aggregator
   polls HIRQ every cycle and sees ULA state as of `C`; the coprocessor
   sees PIRQ and PNMI when it next runs. Both latencies are bounded by Δ,
