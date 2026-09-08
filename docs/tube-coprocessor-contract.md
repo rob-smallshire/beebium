@@ -283,8 +283,196 @@ latent dependency on the old behaviour, and is to be understood before
 merge, not accepted as a side effect.
 
 
+## Step 1b: the coprocessor as a plugin
+
+### Goal
+
+`acorn-65c02-coprocessor` becomes a plugin loaded from `<exe-dir>/extensions/`
+like every other peripheral, and the server retains no link-time knowledge
+of any concrete coprocessor type. After this step a new coprocessor is
+added by adding a directory under `src/extensions/`, nothing else.
+
+### Why it is not one today
+
+`BuiltinExtensions.hpp` lists it as a built-in for two reasons, both in
+`ServerMain`: it does `dynamic_cast<SecondProcessor65C02Extension*>` to
+obtain the parasite debugger implementation for the `ParasiteDebuggerControl`
+gRPC service and to wire cross-processor breakpoint stops, and the
+extension's static library PUBLIC-links `beebium_service`. Two further
+concrete-type dependencies sit behind `TubeSocket::tube_ula()`, which
+`dynamic_cast`s the installed backend to `TubeUla`: `Machine::step()` uses
+it to complete a bus stretch and for a stretch diagnostic, and
+`DeviceInspectionService::GetTubeState` uses it to read ULA state. A plugin
+carries its own copy of `TubeUla` and the parasite classes, so none of those
+casts can succeed across the boundary.
+
+### Design rule
+
+The server, the service layer and `Machine` talk to a coprocessor only
+through abstract interfaces exported from the extension API library
+(`beebium_extension_api`, marked `BEEBIUM_EXT_API`). `dynamic_cast` to such
+an exported interface is permitted, matching how `ServerMain` already finds
+`EconetTransportExtension` and `PeripheralExtension`. `dynamic_cast` to a
+concrete class defined outside the API library is not.
+
+### Interfaces to add (extension API library)
+
+1. `beebium/extension/CoprocessorExtension.hpp`
+
+```cpp
+class BEEBIUM_EXT_API CoprocessorExtension : public PeripheralExtension {
+public:
+    // The coprocessor to install in the TubeSocket. Valid after init().
+    virtual Coprocessor* coprocessor() = 0;
+
+    // The host-facing bridge (Tube ULA or other) to install as the socket
+    // backend. Valid after init().
+    virtual TubeHostBackend* tube_backend() = 0;
+
+    // Debugger access, or nullptr if this coprocessor offers none.
+    virtual Cpu6502DebugTarget* debug_target() { return nullptr; }
+
+    // Cross-processor stop. The server calls pause() when a host
+    // breakpoint with stop_counterpart fires; the coprocessor calls the
+    // installed callback when one of its own such breakpoints fires.
+    virtual void pause() = 0;
+    virtual void set_counterpart_stop_callback(std::function<void()> pause_host) = 0;
+};
+```
+
+   Whether the extension installs its backend and coprocessor into the
+   socket itself in `init()` (as today) or the server does it from these
+   accessors is the developer's choice; either way `init()` must leave the
+   socket populated and `shutdown()` must leave it empty.
+
+2. `beebium/extension/Cpu6502DebugTarget.hpp`
+
+   An abstract class exposing, as virtual functions, exactly the members
+   that `service::DebuggerControlServiceImpl<T>` requires of its `T`:
+   execution control (`cycle_count`, `sequence`, `is_paused`, `pause`,
+   `resume`, `reset`, `step`, `step_instruction`, `prepare_for_step`,
+   `wait_until_idle`), registers and their setters (`a`, `x`, `y`, `sp`,
+   `pc`, `p`), `in_nmi_handler`, `in_irq_handler`, `cpu()` returning
+   `const M6502&`, breakpoint and watchpoint entries, setters and hit
+   callbacks, and `memory()` returning an abstract memory-region model with
+   `get_memory_regions`, `peek_region`, `read_region`, `write_region` and
+   the machine type name. The template's one static-member use,
+   `memory().MACHINE_TYPE`, must be reworked so the same template
+   instantiates unchanged for the host `Machine` types and for this
+   interface; a small trait or an accessor that both provide is fine.
+
+   The server instantiates `DebuggerControlServiceImpl<Cpu6502DebugTarget>`
+   once against this interface and wraps it in `ParasiteDebuggerAdapter`,
+   which moves out of the extension into the server. `ParasiteRunner`
+   implements the interface in the plugin; it already has every method,
+   so this is adding `override`s.
+
+3. `TubeHostBackend` gains the virtuals the server needs so that no code
+   outside the plugin touches `TubeUla`:
+   - `virtual bool try_complete_stretch()` (default: return true)
+   - `virtual uint8_t control_flags() const` and
+     `virtual uint8_t parasite_peek(uint8_t offset) const`, plus whatever
+     else `DeviceInspectionService::GetTubeState` reads; enumerate by
+     reading that service, not from memory.
+
+   `TubeSocket::tube_ula()` then returns the socket's *owned* in-process
+   `TubeUla` only (the `enable()` path used by tests) and never casts an
+   installed backend. `TubeSocket::try_complete_tube_stretch()` calls the
+   backend virtual. The `STRETCH-INFO` `fprintf` diagnostic in
+   `Machine::step()`, with its static counters, is deleted rather than
+   virtualised; it is a dead investigation aid.
+
+### Server changes
+
+- Both `dynamic_cast<SecondProcessor65C02Extension*>` sites become
+  `dynamic_cast<CoprocessorExtension*>` and use the interface. If more than
+  one `CoprocessorExtension` attaches to `tube`, the server refuses to
+  start with a clear message: there is one Tube socket.
+- `#include "SecondProcessor65C02Extension.hpp"` disappears from
+  `src/server` and `src/service`. The extension is removed from
+  `BuiltinExtensions.hpp` and from the server's link list.
+- `read_stretch_parasite_ticks` stays untouched (proto dependency), as noted.
+
+### Plugin build
+
+- Add a SHARED plugin target in `src/extensions/acorn-65c02-coprocessor`
+  following `test-scratch-ram`: `plugin_entry.cpp` exporting
+  `beebium_create_extension`, a `manifest.json` carrying what the built-in
+  manifest carried (name, display name, description, cli `tube-65c02`,
+  `attaches_to: ["tube"]`, the `rom` parameter), and
+  `beebium_finalize_plugin(NAME acorn-65c02-coprocessor)`.
+- The plugin needs the Tube bridge, parasite runner, parasite CPU and the
+  6502 core. Link `beebium_core` and `6502_lib` into the shared object,
+  enabling `POSITION_INDEPENDENT_CODE` on those static libraries if it is
+  not already on. Set `CXX_VISIBILITY_PRESET hidden` on the plugin so its
+  private copies of those classes never interpose on the server's own.
+- Keep the static library target for the tests that link the extension
+  directly (`test_tube_extension`, `test_boot_tube` and friends), as
+  `test-scratch-ram` does.
+- The `beebium-servers` aggregate must build the plugin so that every
+  artifact, package and the macOS app bundle (which copies `extensions/`
+  when present) picks it up without further change.
+- ROM discovery must still find `acorn-tube-6502_1_10.rom` from the plugin;
+  check the lookup does not assume the built-in's location.
+
+### Tests
+
+Test-first. New:
+
+- `tests/test_coprocessor_extension.cpp`: a stub `CoprocessorExtension`
+  installed through the same path the server uses, verifying the server-
+  side wiring end to end without the 65C02: the coprocessor and backend
+  land in the socket, `pause()` is invoked by the host-side counterpart
+  callback, and the coprocessor's counterpart callback pauses the host.
+- A test that `DebuggerControlServiceImpl<Cpu6502DebugTarget>` drives a
+  `ParasiteRunner` through the interface: read and write registers and
+  memory, step, breakpoint hit. If `test_tube_inprocess.cpp` already covers
+  cross-processor stop through the concrete type, migrate it to the
+  interface rather than duplicating.
+
+Existing tests to update, with intent preserved:
+
+- `test_extension_subcommands.cpp`: `tube-65c02` is now listed as a plugin
+  from the default extensions directory, like `acorn-rtc`, and its
+  `attaches_to` still reports `tube`. The built-in assertions move to the
+  plugin group; the negative assertion in the `--attaches-to serial-port`
+  test is unchanged.
+- `test_extension_resolver.cpp`: unaffected in substance; adjust wording.
+- Any test that constructed the server with a synthetic `argv[0]` and
+  expected `--tube-65c02` to resolve without a plugin directory must be
+  given one, as the plugin tests already do.
+
+### Acceptance
+
+- Everything in Step 1's acceptance list, unchanged in outcome, with the
+  server built with the plugin and no built-in coprocessor.
+- `beebium-model-b-romram list-extensions` shows `tube-65c02` sourced from
+  the extensions directory; `describe-extension tube-65c02` still shows
+  the `rom` parameter.
+- The wfsinit file-load tests, which read parasite memory through
+  `connect_parasite()`, pass: that is the `ParasiteDebuggerControl` service
+  working through the new interface.
+- `grep -rn SecondProcessor65C02Extension src/server src/service` finds
+  nothing.
+- A build with `-DBEEBIUM_BUILD_SERVICE=OFF` still configures and builds
+  the static extension library and its tests.
+
+### Consequences to state
+
+- A server started from a build tree without the plugin built, or an
+  installed tree missing `extensions/acorn-65c02-coprocessor/`, no longer
+  has a Tube. This is the same situation as every other plugin today and
+  the artifacts already ship the tree; it is worth a sentence in
+  `docs/deployment.md`.
+
+
 ## Later steps (for orientation, not for implementation now)
 
+- **Step 1c, the 65C102 4 MHz second processor.** Once the plugin exists,
+  a second manifest and entry point in the same source directory, ratio
+  2/1, CLI `tube-65c102`. Software-identical to the 65C02 second processor;
+  only the clock differs. Gives the programme two coprocessor instances to
+  exercise the contract with.
 - **Step 2, skew contract.** Name the maximum permitted skew Δ, in host
   cycles, between the host's time and the coprocessor's. Register accesses
   remain exact; interrupt-line delivery is permitted up to Δ of latency.
