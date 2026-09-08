@@ -16,6 +16,8 @@
 
 namespace beebium {
 
+class TubeInspection;
+
 // Abstract host-side interface for the Tube ULA.
 //
 // Implemented by:
@@ -60,6 +62,17 @@ public:
     // Called by Machine::run() after resume, before the step loop.
     // Default: no-op.
     virtual void complete_pending_write() {}
+
+    // Attempt to complete a pending bus stretch. Returns true if the stretch
+    // cleared (or was never active). Called from Machine::step() while a Tube
+    // stretch is active. Default: nothing to complete, so true.
+    virtual bool try_complete_stretch() { return true; }
+
+    // Read-only diagnostic surface, or nullptr if this backend offers none.
+    // DeviceInspectionService::GetTubeState fills from it when present, so the
+    // Tube state it reports is identical whether the backend is the socket's
+    // own in-process ULA or one installed by a coprocessor extension.
+    virtual const TubeInspection* inspection() const { return nullptr; }
 
     // Full hardware reset (HRST).
     virtual void reset() = 0;

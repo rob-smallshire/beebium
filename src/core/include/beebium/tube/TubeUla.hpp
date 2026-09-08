@@ -13,6 +13,7 @@
 #pragma once
 
 #include "TubeHostBackend.hpp"
+#include "TubeInspection.hpp"
 #include "TubeParasiteBackend.hpp"
 
 #include <algorithm>
@@ -39,21 +40,10 @@ namespace beebium {
 // the perspective by calling host_read/host_write or parasite_read/
 // parasite_write.
 
-class TubeUla : public TubeHostBackend, public TubeParasiteBackend {
+class TubeUla : public TubeHostBackend, public TubeParasiteBackend, public TubeInspection {
 public:
-    // Status flag bits (bits 7 and 6 of status register reads)
-    static constexpr uint8_t DATA_AVAILABLE = 0x80;  // bit 7
-    static constexpr uint8_t SPACE_AVAILABLE = 0x40;  // bit 6
-
-    // Control flag bits (written via host offset 0)
-    static constexpr uint8_t FLAG_S = 0x80;  // set/clear mode select
-    static constexpr uint8_t FLAG_T = 0x40;  // soft reset (clear all registers)
-    static constexpr uint8_t FLAG_P = 0x20;  // parasite reset
-    static constexpr uint8_t FLAG_V = 0x10;  // two-byte mode for R3
-    static constexpr uint8_t FLAG_M = 0x08;  // enable PNMI from R3
-    static constexpr uint8_t FLAG_J = 0x04;  // enable PIRQ from R4
-    static constexpr uint8_t FLAG_I = 0x02;  // enable PIRQ from R1
-    static constexpr uint8_t FLAG_Q = 0x01;  // enable HIRQ from R4
+    // The status flag bits, control flag bits, TransferCounters and TraceEntry
+    // types are inherited from TubeInspection, the single source of truth.
 
     TubeUla();
 
@@ -79,13 +69,16 @@ public:
     // TubeSocket adapts hirq() to the generic IrqSource::irq_pending() interface.
     bool hirq() const override;
     bool pirq() const override;
-    bool pnmi() const;
+    bool pnmi() const override;
     bool pnmi_level() const override;
 
     // Read control flags (bits 0-5: Q, I, J, M, V, P).
-    uint8_t control_flags() const {
+    uint8_t control_flags() const override {
         return control_flags_;
     }
+
+    // The read-only diagnostic surface is this ULA itself.
+    const TubeInspection* inspection() const override { return this; }
 
     // Test whether the parasite reset line is currently asserted.
     bool parasite_reset_active() const {
@@ -98,7 +91,7 @@ public:
 
     // Attempt to complete a pending bus stretch operation.
     // Returns true if the stretch cleared (or was not active).
-    bool try_complete_stretch();
+    bool try_complete_stretch() override;
 
     // Access the NMI edge detector state (parasite-local).
     bool prev_pnmi() const { return prev_pnmi_; }
@@ -178,63 +171,13 @@ private:
     uint8_t pending_value_ = 0;
 
 public:
-    // Transfer counters: count every byte written/read on each register direction.
-    // Incremented on every host_read/host_write/parasite_read/parasite_write that
-    // transfers data.  Not reset by soft_reset (T flag) so they accumulate across
-    // the session.  Reset only by hard reset.
-    struct TransferCounters {
-        uint64_t r1_h2p_writes = 0;
-        uint64_t r1_h2p_reads = 0;
-        uint64_t r2_h2p_writes = 0;
-        uint64_t r2_h2p_reads = 0;
-        uint64_t r3_h2p_writes = 0;
-        uint64_t r3_h2p_reads = 0;
-        uint64_t r4_h2p_writes = 0;
-        uint64_t r4_h2p_reads = 0;
-        uint64_t r1_p2h_writes = 0;
-        uint64_t r1_p2h_reads = 0;
-        uint64_t r2_p2h_writes = 0;
-        uint64_t r2_p2h_reads = 0;
-        uint64_t r3_p2h_writes = 0;
-        uint64_t r3_p2h_reads = 0;
-        uint64_t r4_p2h_writes = 0;
-        uint64_t r4_p2h_reads = 0;
-
-        void reset() {
-            r1_h2p_writes = 0;
-            r1_h2p_reads = 0;
-            r2_h2p_writes = 0;
-            r2_h2p_reads = 0;
-            r3_h2p_writes = 0;
-            r3_h2p_reads = 0;
-            r4_h2p_writes = 0;
-            r4_h2p_reads = 0;
-            r1_p2h_writes = 0;
-            r1_p2h_reads = 0;
-            r2_p2h_writes = 0;
-            r2_p2h_reads = 0;
-            r3_p2h_writes = 0;
-            r3_p2h_reads = 0;
-            r4_p2h_writes = 0;
-            r4_p2h_reads = 0;
-        }
-    };
-
-    const TransferCounters& counters() const { return counters_; }
-
-    // Protocol trace: ring buffer of register data read/write events.
-    // Records the last N data bytes transferred on each register, with
-    // direction and register info encoded in the tag byte.
-    // Tag encoding: bits 7-4 = register (1-4), bit 3 = direction (0=H2P, 1=P2H),
-    //               bit 2 = side (0=host access, 1=parasite access).
-    static constexpr size_t TRACE_SIZE = 1024;
-    struct TraceEntry {
-        uint8_t tag;    // register + direction + side
-        uint8_t value;  // data byte
-    };
+    // Transfer counters and the protocol trace ring buffer accumulate across
+    // the session (reset only by hard reset). TransferCounters, TraceEntry and
+    // TRACE_SIZE are inherited from TubeInspection.
+    const TransferCounters& counters() const override { return counters_; }
 
     // Snapshot the trace buffer. Returns entries oldest-first.
-    size_t trace_snapshot(TraceEntry* out, size_t max_entries) const {
+    size_t trace_snapshot(TraceEntry* out, size_t max_entries) const override {
         size_t pos = trace_pos_;
         size_t count = std::min(trace_count_, max_entries);
         count = std::min(count, TRACE_SIZE);
@@ -245,7 +188,7 @@ public:
         return count;
     }
 
-    size_t trace_count() const { return trace_count_; }
+    size_t trace_count() const override { return trace_count_; }
 
 private:
     void trace_event(uint8_t tag, uint8_t value) {

@@ -217,25 +217,6 @@ public:
                 // replayed, host CPU can now proceed with the next cycle.
             } else {
                 // Host still stretched. Tick peripherals but not host CPU.
-                // Diagnostic: log the stretch register/direction periodically
-                if constexpr (HasEconetSocket<MemoryPolicy>) {
-                    auto* da = state_.memory.econet_socket.adlc();
-                    if (da && da->rx_frames_received_count() >= 4) {
-                        static uint64_t s_first = 0;
-                        static uint64_t s_count = 0;
-                        if (s_count == 0) s_first = state_.cycle_count;
-                        uint64_t since = state_.cycle_count - s_first;
-                        if (since == 0 || since == 1000 || since == 10000 || since == 100000 || since == 400000) {
-                            auto* ula = state_.memory.tube_socket.tube_ula();
-                            uint16_t pc = state_.memory.tube_socket.diag_parasite_pc();
-                            fprintf(stderr, "[STRETCH-INFO+%llu] tube_ula offset=%u (write stretch), parasite_pc=0x%04X\n",
-                                    static_cast<unsigned long long>(since),
-                                    ula ? ula->pending_offset() : 99,
-                                    pc);
-                        }
-                        ++s_count;
-                    }
-                }
                 tick_stretch_cycle();
                 ++state_.cycle_count;
                 ++sequence_;

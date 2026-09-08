@@ -15,7 +15,7 @@
 
 #include "debugger.grpc.pb.h"
 #include <beebium/tube/TubeSocket.hpp>
-#include <beebium/tube/TubeUla.hpp>
+#include <beebium/tube/TubeInspection.hpp>
 #include <grpcpp/grpcpp.h>
 #include <mutex>
 #include <string>
@@ -66,32 +66,34 @@ void fill_via_state(ViaType& via, ViaState* response) {
     response->set_cb2(state.port_b.c2 != 0);
 }
 
-// Helper to fill TubeState from a TubeUla (in-process mode).
-inline void fill_tube_state_from_ula(const TubeUla& ula, TubeState* response) {
+// Helper to fill TubeState from a Tube ULA's read-only diagnostic surface.
+// Works for the socket's own in-process ULA and for a coprocessor extension's
+// installed backend alike, so GetTubeState output is identical for both.
+inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState* response) {
     uint8_t flags = ula.control_flags();
 
     // Control flags.
     auto* cf = response->mutable_control_flags();
-    cf->set_q((flags & TubeUla::FLAG_Q) != 0);
-    cf->set_i((flags & TubeUla::FLAG_I) != 0);
-    cf->set_j((flags & TubeUla::FLAG_J) != 0);
-    cf->set_m((flags & TubeUla::FLAG_M) != 0);
-    cf->set_v((flags & TubeUla::FLAG_V) != 0);
-    cf->set_p((flags & TubeUla::FLAG_P) != 0);
+    cf->set_q((flags & TubeInspection::FLAG_Q) != 0);
+    cf->set_i((flags & TubeInspection::FLAG_I) != 0);
+    cf->set_j((flags & TubeInspection::FLAG_J) != 0);
+    cf->set_m((flags & TubeInspection::FLAG_M) != 0);
+    cf->set_v((flags & TubeInspection::FLAG_V) != 0);
+    cf->set_p((flags & TubeInspection::FLAG_P) != 0);
 
-    uint8_t threshold = (flags & TubeUla::FLAG_V) ? 2 : 1;
+    uint8_t threshold = (flags & TubeInspection::FLAG_V) ? 2 : 1;
 
     // R1 H-to-P latch: peek data register (offset 1 from parasite perspective).
     auto* r1_h2p = response->mutable_r1_h2p();
     r1_h2p->set_value(ula.parasite_peek(1));
     // Data available = parasite can read from H-to-P
-    r1_h2p->set_data_available((ula.parasite_peek(0) & TubeUla::DATA_AVAILABLE) != 0);
+    r1_h2p->set_data_available((ula.parasite_peek(0) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R1 P-to-H FIFO.
     auto* r1_p2h = response->mutable_r1_p2h();
     // Status from host side tells us about P-to-H
     uint8_t r1_host_status = ula.host_peek(0);
-    r1_p2h->set_data_available((r1_host_status & TubeUla::DATA_AVAILABLE) != 0);
+    r1_p2h->set_data_available((r1_host_status & TubeInspection::DATA_AVAILABLE) != 0);
     // We can peek the head of the FIFO, but to get all data we need to read
     // from the TubeUla's internal state. Since host_peek(1) only shows the head,
     // we set count from status and show what's visible.
@@ -108,18 +110,18 @@ inline void fill_tube_state_from_ula(const TubeUla& ula, TubeState* response) {
     // R2 H-to-P latch.
     auto* r2_h2p = response->mutable_r2_h2p();
     r2_h2p->set_value(ula.parasite_peek(3));
-    r2_h2p->set_data_available((ula.parasite_peek(2) & TubeUla::DATA_AVAILABLE) != 0);
+    r2_h2p->set_data_available((ula.parasite_peek(2) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R2 P-to-H latch.
     auto* r2_p2h = response->mutable_r2_p2h();
     r2_p2h->set_value(ula.host_peek(3));
-    r2_p2h->set_data_available((ula.host_peek(2) & TubeUla::DATA_AVAILABLE) != 0);
+    r2_p2h->set_data_available((ula.host_peek(2) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R3 H-to-P register.
     auto* r3_h2p = response->mutable_r3_h2p();
     r3_h2p->set_threshold(threshold);
     uint8_t parasite_r3_status = ula.parasite_peek(4);
-    bool h2p_has_data = (parasite_r3_status & TubeUla::DATA_AVAILABLE) != 0;
+    bool h2p_has_data = (parasite_r3_status & TubeInspection::DATA_AVAILABLE) != 0;
     r3_h2p->set_pending(h2p_has_data);
     uint8_t h2p_head = ula.parasite_peek(5);
     r3_h2p->set_count(h2p_has_data ? 1 : 0);  // Minimum visible count
@@ -131,7 +133,7 @@ inline void fill_tube_state_from_ula(const TubeUla& ula, TubeState* response) {
     auto* r3_p2h = response->mutable_r3_p2h();
     r3_p2h->set_threshold(threshold);
     uint8_t host_r3_status = ula.host_peek(4);
-    bool p2h_has_data = (host_r3_status & TubeUla::DATA_AVAILABLE) != 0;
+    bool p2h_has_data = (host_r3_status & TubeInspection::DATA_AVAILABLE) != 0;
     r3_p2h->set_pending(p2h_has_data);
     uint8_t p2h_head = ula.host_peek(5);
     r3_p2h->set_count(p2h_has_data ? 1 : 0);  // Minimum visible count
@@ -142,12 +144,12 @@ inline void fill_tube_state_from_ula(const TubeUla& ula, TubeState* response) {
     // R4 H-to-P latch.
     auto* r4_h2p = response->mutable_r4_h2p();
     r4_h2p->set_value(ula.parasite_peek(7));
-    r4_h2p->set_data_available((ula.parasite_peek(6) & TubeUla::DATA_AVAILABLE) != 0);
+    r4_h2p->set_data_available((ula.parasite_peek(6) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // R4 P-to-H latch.
     auto* r4_p2h = response->mutable_r4_p2h();
     r4_p2h->set_value(ula.host_peek(7));
-    r4_p2h->set_data_available((ula.host_peek(6) & TubeUla::DATA_AVAILABLE) != 0);
+    r4_p2h->set_data_available((ula.host_peek(6) & TubeInspection::DATA_AVAILABLE) != 0);
 
     // Host status registers.
     auto* hs = response->mutable_host_status();
@@ -192,7 +194,7 @@ inline void fill_tube_state_from_ula(const TubeUla& ula, TubeState* response) {
 
     // Protocol trace.
     {
-        std::array<TubeUla::TraceEntry, TubeUla::TRACE_SIZE> buf;
+        std::array<TubeInspection::TraceEntry, TubeInspection::TRACE_SIZE> buf;
         size_t count = ula.trace_snapshot(buf.data(), buf.size());
         for (size_t i = 0; i < count; ++i) {
             auto* entry = response->add_trace();
@@ -376,14 +378,15 @@ public:
             return grpc::Status::OK;
         }
 
-        // In-process mode: full state available from TubeUla.
-        if (const auto* ula = tube.tube_ula()) {
-            fill_tube_state_from_ula(*ula, response);
+        // Full state from the backend's diagnostic surface, whether that is
+        // the socket's own in-process ULA or a coprocessor extension's
+        // installed backend.
+        if (const auto* insp = tube.tube_inspection()) {
+            fill_tube_state_from_inspection(*insp, response);
             return grpc::Status::OK;
         }
 
-        // Extension-provided backend: no TubeUla available for direct inspection.
-        // TODO: Add a diagnostic interface to TubeHostBackend for state inspection.
+        // Backend offers no inspection surface.
         response->set_enabled(true);
         return grpc::Status::OK;
     }

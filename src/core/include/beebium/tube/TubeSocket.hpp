@@ -203,24 +203,28 @@ public:
 
     // Attempt to complete a pending stretch operation.
     // Returns true if the stretch cleared (or was not active).
+    // Routed through the backend virtual so nothing here casts to TubeUla.
     bool try_complete_tube_stretch() {
-        auto* ula = tube_ula();
-        return ula ? ula->try_complete_stretch() : true;
+        return active_backend()->try_complete_stretch();
     }
 
     // --- Accessors ---
 
-    // Access the underlying TubeUla.
-    // Checks the installed (extension-owned) backend first, then the owned
-    // backend. Returns nullptr if neither is a TubeUla.
+    // The active backend's read-only diagnostic surface, or nullptr if it
+    // offers none. Works whatever the backend: the socket's own in-process
+    // TubeUla or one installed by a coprocessor extension. Used by
+    // DeviceInspectionService::GetTubeState.
+    const TubeInspection* tube_inspection() const {
+        return active_backend()->inspection();
+    }
+
+    // Access the socket's OWNED in-process TubeUla, used by the enable() test
+    // path. Returns nullptr when a coprocessor extension has installed its own
+    // backend -- the socket never casts an installed backend to TubeUla.
     TubeUla* tube_ula() {
-        if (installed_backend_)
-            return dynamic_cast<TubeUla*>(installed_backend_);
         return dynamic_cast<TubeUla*>(backend_.get());
     }
     const TubeUla* tube_ula() const {
-        if (installed_backend_)
-            return dynamic_cast<const TubeUla*>(installed_backend_);
         return dynamic_cast<const TubeUla*>(backend_.get());
     }
 

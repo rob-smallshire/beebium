@@ -1253,6 +1253,14 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_grpc_debugger)
 
+    # Tube inspection equivalence (owned ULA vs installed backend)
+    add_executable(test_tube_inspection test_tube_inspection.cpp)
+    target_link_libraries(test_tube_inspection PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_tube_inspection)
+
     # Disc service tests
     add_executable(test_grpc_disc test_grpc_disc.cpp)
     target_link_libraries(test_grpc_disc PRIVATE
