@@ -137,6 +137,7 @@ set(BEEBIUM_SERVERS_DEPS
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
         beebium_ext_acorn_65c02_plugin
+        beebium_ext_acorn_65c102_plugin
         beebium_ext_acorn_rtc_plugin
         beebium_ext_acorn_scsi_plugin
         beebium_ext_piconet_plugin

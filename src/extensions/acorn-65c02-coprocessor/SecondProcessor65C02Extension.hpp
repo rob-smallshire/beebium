@@ -21,11 +21,12 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace beebium {
 
-// Acorn 65C02 3 MHz second processor, implemented as a Peripheral Extension.
+// Acorn 65C02-family second processor, implemented as a Peripheral Extension.
 //
 // Owns everything on the parasite side of the Tube cable:
 //   - TubeUla (register bridge)
@@ -33,8 +34,14 @@ namespace beebium {
 //
 // The TubeUla is installed into the host's TubeSocket as the backend.
 // The ParasiteRunner is installed as the Coprocessor so that Machine::step()
-// drives the parasite in host time (single-threaded model). The clock ratio
-// is 3:2 (3 MHz parasite, 2 MHz host) and lives with the runner.
+// drives the parasite in host time (single-threaded model).
+//
+// One class serves both members of the family: the 3 MHz 65C02 second
+// processor (ratio 3/2) and the 4 MHz 65C102 second processor (ratio 2/1).
+// They are software-identical -- same 2 KB Tube client ROM, same 64 KB RAM --
+// so only the clock ratio and the display identity differ, and each plugin
+// entry point constructs this class with the right pair. The clock ratio lives
+// with the runner.
 //
 // Lifecycle:
 //   init()     -- load ROM, create components, install backend + coprocessor
@@ -42,7 +49,11 @@ namespace beebium {
 
 class SecondProcessor65C02Extension : public CoprocessorExtension {
 public:
-    SecondProcessor65C02Extension() = default;
+    // clock_ratio: parasite/host cycle ratio (3/2 for the 65C02, 2/1 for the
+    // 65C102). cpu_label: short identity for the startup log line.
+    explicit SecondProcessor65C02Extension(ClockRatio clock_ratio = ClockRatio{3, 2},
+                                           std::string cpu_label = "65C02 (3 MHz)")
+        : clock_ratio_(clock_ratio), cpu_label_(std::move(cpu_label)) {}
     ~SecondProcessor65C02Extension() override { shutdown(); }
 
     // --- PeripheralExtension interface ---
@@ -74,6 +85,8 @@ public:
 private:
     bool load_rom(std::array<uint8_t, 2048>& rom) const;
 
+    ClockRatio clock_ratio_;
+    std::string cpu_label_;
     std::unique_ptr<TubeUla> tube_ula_;
     std::unique_ptr<ParasiteRunner> runner_;
     TubeSocket* tube_socket_ = nullptr;  // non-owning, from ExtensionContext

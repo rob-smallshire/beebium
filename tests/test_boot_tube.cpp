@@ -159,6 +159,53 @@ TEST_CASE("Model B with 65C02 second processor boots with Tube banner",
     CHECK(screen_contains(machine, ">"));
 }
 
+TEST_CASE("Model B with 65C102 4 MHz second processor boots and runs at 2x host",
+          "[boot][tube]") {
+    if (!base_roms_available()) SKIP("Base ROMs not available");
+    if (!tube_rom_available()) SKIP("Tube 6502 ROM not available");
+    if (!dnfs_rom_available()) SKIP("DNFS ROM not available");
+
+    // The 65C102 is the 65C02 second processor with a 4 MHz clock: identical
+    // software and ROM, ratio 2/1 instead of 3/2.
+    ModelB machine;
+    setup_tube_machine(machine);
+    machine.state().memory.tube_socket.enable();
+    machine.reset();
+
+    auto tube_rom = load_tube_rom();
+    TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
+    REQUIRE(tube != nullptr);
+    ParasiteRunner parasite(*tube, tube_rom, ClockRatio{2, 1});
+    parasite.reset();
+    machine.state().memory.tube_socket.install_coprocessor(&parasite);
+
+    // Capture the cycle origins right before running: the coprocessor's clock
+    // origin is the host cycle at the first step after install.
+    const uint64_t host_before = machine.state().cycle_count;
+    const uint64_t parasite_before = parasite.cycle_count();
+
+    machine.run(30'000'000);
+
+    INFO("Screen:\n" << dump_screen(machine));
+
+    // Same boot outcome as the 65C02: the Tube banner and the BASIC prompt.
+    CHECK(screen_contains(machine, "Acorn TUBE 6502 64K"));
+    CHECK_FALSE(screen_contains(machine, "BBC Computer 32K"));
+    CHECK(screen_contains(machine, ">"));
+
+    // Each step() drives the coprocessor to the host cycle at the START of the
+    // step, so after the run it trails the host by the final cycle. Advance it
+    // to the current host cycle -- exactly what the next step() would do -- so
+    // the counters line up at the same host time.
+    machine.state().memory.tube_socket.run_coprocessor_until(machine.state().cycle_count);
+
+    // The parasite ran exactly twice the host's cycles over the boot -- the 2/1
+    // ratio, measured by the cycle counters, not wall time.
+    const uint64_t host_cycles = machine.state().cycle_count - host_before;
+    const uint64_t parasite_cycles = parasite.cycle_count() - parasite_before;
+    CHECK(parasite_cycles == 2 * host_cycles);
+}
+
 TEST_CASE("Model B with Tube shows 64K memory (not 32K)",
           "[boot][tube]") {
     if (!base_roms_available()) SKIP("Base ROMs not available");

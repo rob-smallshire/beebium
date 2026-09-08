@@ -21,36 +21,30 @@ target_link_libraries(beebium_ext_acorn_65c02
     PUBLIC beebium_core
 )
 
-# Shared-object plugin. beebium_core (position-independent and linked with
-# hidden visibility below) brings the Tube bridge, parasite runner, parasite
-# CPU and 6502 core into the plugin; beebium_extension_api supplies the single
-# shared copy of the abstract interfaces the server dynamic_casts to. The
-# plugin does NOT link beebium_service: the debugger lives entirely in the
-# server now, so the plugin carries no gRPC or proto descriptors.
+# Shared-object plugin for the 3 MHz 65C02. It links the static library above
+# (so SecondProcessor65C02Extension is compiled exactly once and shared with the
+# 65C102 plugin) plus beebium_extension_api, the single shared copy of the
+# abstract interfaces the server dynamic_casts to. The static library brings the
+# Tube bridge, parasite runner, parasite CPU and 6502 core transitively via
+# beebium_core. The plugin does NOT link beebium_service: the debugger lives
+# entirely in the server now, so it carries no gRPC or proto descriptors.
+# plugin_entry.cpp constructs the extension with the default 3/2 ratio.
 if(BEEBIUM_BUILD_SERVICE)
     add_library(beebium_ext_acorn_65c02_plugin SHARED
-        SecondProcessor65C02Extension.cpp
         plugin_entry.cpp
-    )
-
-    target_include_directories(beebium_ext_acorn_65c02_plugin
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}
-            ${CMAKE_SOURCE_DIR}/src/server/include
     )
 
     target_link_libraries(beebium_ext_acorn_65c02_plugin
         PRIVATE
-            beebium_core
+            beebium_ext_acorn_65c02
             beebium_extension_api
     )
 
     set_target_properties(beebium_ext_acorn_65c02_plugin PROPERTIES
         PREFIX ""
         OUTPUT_NAME "acorn-65c02-coprocessor"
-        # Hide the plugin's private copies of the core classes so they never
-        # interpose on the server's own copies. beebium_create_extension is
-        # exported explicitly via BEEBIUM_PLUGIN_EXPORT.
+        # beebium_create_extension is exported explicitly via BEEBIUM_PLUGIN_EXPORT;
+        # everything else in the plugin's own translation units stays hidden.
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN YES
     )

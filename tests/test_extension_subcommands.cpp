@@ -121,6 +121,17 @@ TEST_CASE("list-extensions includes the tube-65c02 coprocessor plugin",
     REQUIRE(r.stdout_output.find("tube-65c02") != std::string::npos);
 }
 
+TEST_CASE("list-extensions includes both Tube coprocessor plugins",
+          "[integration][extension][list-extensions]") {
+    // The 65C02 (3 MHz) and 65C102 (4 MHz) are two plugins built from the same
+    // source; both appear from the default extensions directory.
+    auto r = run_command(EXECUTABLE + " list-extensions");
+    REQUIRE(r.exit_code == 0);
+    INFO("stdout: " << r.stdout_output);
+    REQUIRE(r.stdout_output.find("tube-65c02") != std::string::npos);
+    REQUIRE(r.stdout_output.find("tube-65c102") != std::string::npos);
+}
+
 TEST_CASE("list-extensions includes plugin extensions from the default directory",
           "[integration][extension][list-extensions]") {
     auto r = run_command(EXECUTABLE + " list-extensions");
@@ -216,6 +227,28 @@ TEST_CASE("describe-extension shows parameter detail for a known extension",
     REQUIRE(r.stdout_output.find("rom") != std::string::npos);  // parameter name
     // The synthesised invocation form tells the user how to invoke it.
     REQUIRE(r.stdout_output.find("Usage: --tube-65c02") != std::string::npos);
+}
+
+TEST_CASE("describe-extension shows the rom parameter for tube-65c102",
+          "[integration][extension][describe-extension]") {
+    auto r = run_command(EXECUTABLE + " --format pretty describe-extension tube-65c102");
+    REQUIRE(r.exit_code == 0);
+    INFO("stdout: " << r.stdout_output);
+    REQUIRE(r.stdout_output.find("tube-65c102") != std::string::npos);
+    REQUIRE(r.stdout_output.find("rom") != std::string::npos);
+    REQUIRE(r.stdout_output.find("Usage: --tube-65c102") != std::string::npos);
+}
+
+TEST_CASE("starting with both coprocessor flags fails with the single-socket message",
+          "[integration][extension][start]") {
+    // The Tube has one socket, so two coprocessors cannot both attach. The
+    // server refuses to start with a clear message.
+    auto r = run_command(EXECUTABLE + " start --tube-65c02 --tube-65c102 --port 0 --wait");
+    INFO("stdout: " << r.stdout_output);
+    INFO("stderr: " << r.stderr_output);
+    REQUIRE(r.exit_code != 0);
+    auto combined = r.stdout_output + r.stderr_output;
+    REQUIRE(combined.find("more than one coprocessor attached to the Tube") != std::string::npos);
 }
 
 TEST_CASE("describe-extension errors for unknown extension",

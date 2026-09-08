@@ -1,0 +1,16 @@
+{
+    "name": "acorn-65c102-coprocessor",
+    "display_name": "Acorn 65C102 Co-processor",
+    "description": "Acorn 65C102 4 MHz second processor",
+    "library": "acorn-65c102-coprocessor",
+    "attaches_to": ["tube"],
+    "cli": "tube-65c102",
+    "parameters": [
+        {
+            "key": "rom",
+            "type": "filepath",
+            "description": "Path to 2KB Tube client ROM image",
+            "required": false
+        }
+    ]
+}
