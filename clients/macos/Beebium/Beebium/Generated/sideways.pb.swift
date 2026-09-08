@@ -394,6 +394,13 @@ struct Beebium_SidewaysEvent: Sendable {
   init() {}
 }
 
+/// Architectural placeholder: announces that ConfigureSlot reconfigured
+/// a slot at runtime. Not currently emitted - no UI path reconfigures
+/// sideways slots on a running machine, so no real consumer is missing
+/// updates today. The message and the client-side handlers exist so
+/// that when hot-plug cartridge support lands (Master 128 cart ports,
+/// Electron Plus 1, ...), the emitter inside ConfigureSlot becomes a
+/// one-liner and every existing client already reacts correctly.
 struct Beebium_SlotConfiguredEvent: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for

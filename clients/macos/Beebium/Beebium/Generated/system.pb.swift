@@ -569,7 +569,7 @@ struct Beebium_SetSpeedMultiplierResponse: Sendable {
 }
 
 /// Pacing statistics snapshot.
-/// Available from both host and parasite SystemService instances.
+/// Available from both host and coprocessor SystemService instances.
 struct Beebium_PacingStats: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for

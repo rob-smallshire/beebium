@@ -21,6 +21,140 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
+enum Beebium_StopReason: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+  case unknown // = 0
+  case breakpoint // = 1
+  case manual // = 2
+  case error // = 3
+  case stepComplete // = 4
+  case watchpoint // = 5
+  case counterpart // = 6
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .unknown
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unknown
+    case 1: self = .breakpoint
+    case 2: self = .manual
+    case 3: self = .error
+    case 4: self = .stepComplete
+    case 5: self = .watchpoint
+    case 6: self = .counterpart
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .unknown: return 0
+    case .breakpoint: return 1
+    case .manual: return 2
+    case .error: return 3
+    case .stepComplete: return 4
+    case .watchpoint: return 5
+    case .counterpart: return 6
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_StopReason] = [
+    .unknown,
+    .breakpoint,
+    .manual,
+    .error,
+    .stepComplete,
+    .watchpoint,
+    .counterpart,
+  ]
+
+}
+
+enum Beebium_WatchpointType: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+  case watchpointRead // = 0
+  case watchpointWrite // = 1
+  case watchpointBoth // = 2
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .watchpointRead
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .watchpointRead
+    case 1: self = .watchpointWrite
+    case 2: self = .watchpointBoth
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .watchpointRead: return 0
+    case .watchpointWrite: return 1
+    case .watchpointBoth: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_WatchpointType] = [
+    .watchpointRead,
+    .watchpointWrite,
+    .watchpointBoth,
+  ]
+
+}
+
+enum Beebium_RegisterRole: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+  case none // = 0
+  case programCounter // = 1
+  case stackPointer // = 2
+  case flags // = 3
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .none
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .none
+    case 1: self = .programCounter
+    case 2: self = .stackPointer
+    case 3: self = .flags
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .none: return 0
+    case .programCounter: return 1
+    case .stackPointer: return 2
+    case .flags: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_RegisterRole] = [
+    .none,
+    .programCounter,
+    .stackPointer,
+    .flags,
+  ]
+
+}
+
 struct Beebium_Empty: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -137,6 +271,69 @@ struct Beebium_StepResponse: Sendable {
   init() {}
 
   fileprivate var _state: Beebium_ExecutionState? = nil
+}
+
+struct Beebium_WatchExecutionStateRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ExecutionStateEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var reason: Beebium_StopReason = .unknown
+
+  var state: Beebium_ExecutionState {
+    get {return _state ?? Beebium_ExecutionState()}
+    set {_state = newValue}
+  }
+  /// Returns true if `state` has been explicitly set.
+  var hasState: Bool {return self._state != nil}
+  /// Clears the value of `state`. Subsequent reads from it will return its default value.
+  mutating func clearState() {self._state = nil}
+
+  var message: String = String()
+
+  var watchpointHit: Beebium_WatchpointHitInfo {
+    get {return _watchpointHit ?? Beebium_WatchpointHitInfo()}
+    set {_watchpointHit = newValue}
+  }
+  /// Returns true if `watchpointHit` has been explicitly set.
+  var hasWatchpointHit: Bool {return self._watchpointHit != nil}
+  /// Clears the value of `watchpointHit`. Subsequent reads from it will return its default value.
+  mutating func clearWatchpointHit() {self._watchpointHit = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _state: Beebium_ExecutionState? = nil
+  fileprivate var _watchpointHit: Beebium_WatchpointHitInfo? = nil
+}
+
+struct Beebium_WatchpointHitInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var watchpointID: UInt32 = 0
+
+  var address: UInt32 = 0
+
+  var value: UInt32 = 0
+
+  var isWrite: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
 }
 
 struct Beebium_ReadMemoryRequest: Sendable {
@@ -261,11 +458,32 @@ struct Beebium_AddBreakpointRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var address: UInt32 = 0
+  /// start of range (inclusive)
+  var startAddress: UInt32 = 0
+
+  /// end of range (exclusive); 0 means start+1 (single address)
+  var endAddress: UInt32 = 0
+
+  var stopCounterpart: Bool = false
+
+  /// optional condition expression (use `hits` for hit counts)
+  var condition: String = String()
+
+  /// absent means enabled (default true)
+  var enabled: Bool {
+    get {return _enabled ?? false}
+    set {_enabled = newValue}
+  }
+  /// Returns true if `enabled` has been explicitly set.
+  var hasEnabled: Bool {return self._enabled != nil}
+  /// Clears the value of `enabled`. Subsequent reads from it will return its default value.
+  mutating func clearEnabled() {self._enabled = nil}
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
+
+  fileprivate var _enabled: Bool? = nil
 }
 
 struct Beebium_AddBreakpointResponse: Sendable {
@@ -325,7 +543,43 @@ struct Beebium_Breakpoint: Sendable {
 
   var id: UInt32 = 0
 
-  var address: UInt32 = 0
+  var startAddress: UInt32 = 0
+
+  var endAddress: UInt32 = 0
+
+  var condition: String = String()
+
+  var stopCounterpart: Bool = false
+
+  var hitCount: UInt64 = 0
+
+  var enabled: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_EnableBreakpointRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var id: UInt32 = 0
+
+  var enabled: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_EnableBreakpointResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -344,115 +598,242 @@ struct Beebium_ClearBreakpointsResponse: Sendable {
   init() {}
 }
 
-struct Beebium_Get6502StateRequest: Sendable {
+struct Beebium_AddWatchpointRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  var unknownFields = SwiftProtobuf.UnknownStorage()
+  var startAddress: UInt32 = 0
 
-  init() {}
-}
+  /// exclusive [start, end)
+  var endAddress: UInt32 = 0
 
-struct Beebium_Cpu6502State: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+  var type: Beebium_WatchpointType = .watchpointRead
 
-  var a: UInt32 = 0
+  var stopCounterpart: Bool = false
 
-  var x: UInt32 = 0
+  /// optional condition expression (use `hits` for hit counts)
+  var condition: String = String()
 
-  var y: UInt32 = 0
-
-  var sp: UInt32 = 0
-
-  var pc: UInt32 = 0
-
-  var p: UInt32 = 0
-
-  var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  init() {}
-}
-
-struct Beebium_Set6502StateRequest: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  var a: UInt32 {
-    get {return _a ?? 0}
-    set {_a = newValue}
+  /// absent means enabled (default true)
+  var enabled: Bool {
+    get {return _enabled ?? false}
+    set {_enabled = newValue}
   }
-  /// Returns true if `a` has been explicitly set.
-  var hasA: Bool {return self._a != nil}
-  /// Clears the value of `a`. Subsequent reads from it will return its default value.
-  mutating func clearA() {self._a = nil}
-
-  var x: UInt32 {
-    get {return _x ?? 0}
-    set {_x = newValue}
-  }
-  /// Returns true if `x` has been explicitly set.
-  var hasX: Bool {return self._x != nil}
-  /// Clears the value of `x`. Subsequent reads from it will return its default value.
-  mutating func clearX() {self._x = nil}
-
-  var y: UInt32 {
-    get {return _y ?? 0}
-    set {_y = newValue}
-  }
-  /// Returns true if `y` has been explicitly set.
-  var hasY: Bool {return self._y != nil}
-  /// Clears the value of `y`. Subsequent reads from it will return its default value.
-  mutating func clearY() {self._y = nil}
-
-  var sp: UInt32 {
-    get {return _sp ?? 0}
-    set {_sp = newValue}
-  }
-  /// Returns true if `sp` has been explicitly set.
-  var hasSp: Bool {return self._sp != nil}
-  /// Clears the value of `sp`. Subsequent reads from it will return its default value.
-  mutating func clearSp() {self._sp = nil}
-
-  var pc: UInt32 {
-    get {return _pc ?? 0}
-    set {_pc = newValue}
-  }
-  /// Returns true if `pc` has been explicitly set.
-  var hasPc: Bool {return self._pc != nil}
-  /// Clears the value of `pc`. Subsequent reads from it will return its default value.
-  mutating func clearPc() {self._pc = nil}
-
-  var p: UInt32 {
-    get {return _p ?? 0}
-    set {_p = newValue}
-  }
-  /// Returns true if `p` has been explicitly set.
-  var hasP: Bool {return self._p != nil}
-  /// Clears the value of `p`. Subsequent reads from it will return its default value.
-  mutating func clearP() {self._p = nil}
+  /// Returns true if `enabled` has been explicitly set.
+  var hasEnabled: Bool {return self._enabled != nil}
+  /// Clears the value of `enabled`. Subsequent reads from it will return its default value.
+  mutating func clearEnabled() {self._enabled = nil}
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 
-  fileprivate var _a: UInt32? = nil
-  fileprivate var _x: UInt32? = nil
-  fileprivate var _y: UInt32? = nil
-  fileprivate var _sp: UInt32? = nil
-  fileprivate var _pc: UInt32? = nil
-  fileprivate var _p: UInt32? = nil
+  fileprivate var _enabled: Bool? = nil
 }
 
-struct Beebium_Set6502StateResponse: Sendable {
+struct Beebium_AddWatchpointResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   var success: Bool = false
+
+  var id: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_RemoveWatchpointRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var id: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_RemoveWatchpointResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ListWatchpointsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var watchpoints: [Beebium_WatchpointInfo] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_WatchpointInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var id: UInt32 = 0
+
+  var startAddress: UInt32 = 0
+
+  var endAddress: UInt32 = 0
+
+  var type: Beebium_WatchpointType = .watchpointRead
+
+  var condition: String = String()
+
+  var stopCounterpart: Bool = false
+
+  var hitCount: UInt64 = 0
+
+  var enabled: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_EnableWatchpointRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var id: UInt32 = 0
+
+  var enabled: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_EnableWatchpointResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_ClearWatchpointsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var countRemoved: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_RegisterDescriptor: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// "A", "PC", "HL", "SP", "P"
+  var name: String = String()
+
+  var widthBits: UInt32 = 0
+
+  var role: Beebium_RegisterRole = .none
+
+  /// for FLAGS: bit 0 first, "" for unused
+  var flagNames: [String] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_CpuDescriptor: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// "6502", "z80", "6809", "ns32016", "80186"
+  var family: String = String()
+
+  /// 16, 24, 32
+  var addressBits: UInt32 = 0
+
+  var littleEndian: Bool = false
+
+  /// display order
+  var registers: [Beebium_RegisterDescriptor] = []
+
+  /// interrupt line names, e.g. "IRQ", "NMI"
+  var signals: [String] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_RegisterValue: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var name: String = String()
+
+  var value: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_SignalState: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var name: String = String()
+
+  var asserted: Bool = false
+
+  var pending: Bool = false
+
+  var inHandler: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_CpuState: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// descriptor order (subset for SetCpuState)
+  var registers: [Beebium_RegisterValue] = []
+
+  /// descriptor.signals order
+  var signals: [Beebium_SignalState] = []
+
+  var cycleCount: UInt64 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -929,9 +1310,426 @@ struct Beebium_SoundChannelState: Sendable {
   init() {}
 }
 
+struct Beebium_GetTubeStateRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Complete Tube ULA state, modelling the real hardware's registers, FIFOs,
+/// latches, control flags, and interrupt outputs.
+///
+/// The Tube ULA has four register pairs (R1-R4), each with a host-to-coprocessor
+/// (H-to-P) and coprocessor-to-host (P-to-H) direction. Each direction uses
+/// specific hardware: latches, FIFOs, or 2-byte shift registers.
+///
+/// Status bits are provided from both host and coprocessor perspectives, since
+/// each side sees different views of the same registers.
+struct Beebium_TubeState: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Control flags (6 bits, written by host via R1 status register).
+  var controlFlags: Beebium_TubeControlFlags {
+    get {return _storage._controlFlags ?? Beebium_TubeControlFlags()}
+    set {_uniqueStorage()._controlFlags = newValue}
+  }
+  /// Returns true if `controlFlags` has been explicitly set.
+  var hasControlFlags: Bool {return _storage._controlFlags != nil}
+  /// Clears the value of `controlFlags`. Subsequent reads from it will return its default value.
+  mutating func clearControlFlags() {_uniqueStorage()._controlFlags = nil}
+
+  /// Register 1: H-to-P is a 1-byte latch; P-to-H is a 24-byte FIFO.
+  var r1H2P: Beebium_TubeLatchState {
+    get {return _storage._r1H2P ?? Beebium_TubeLatchState()}
+    set {_uniqueStorage()._r1H2P = newValue}
+  }
+  /// Returns true if `r1H2P` has been explicitly set.
+  var hasR1H2P: Bool {return _storage._r1H2P != nil}
+  /// Clears the value of `r1H2P`. Subsequent reads from it will return its default value.
+  mutating func clearR1H2P() {_uniqueStorage()._r1H2P = nil}
+
+  /// Coprocessor-to-host 24-byte FIFO
+  var r1P2H: Beebium_TubeFifo24State {
+    get {return _storage._r1P2H ?? Beebium_TubeFifo24State()}
+    set {_uniqueStorage()._r1P2H = newValue}
+  }
+  /// Returns true if `r1P2H` has been explicitly set.
+  var hasR1P2H: Bool {return _storage._r1P2H != nil}
+  /// Clears the value of `r1P2H`. Subsequent reads from it will return its default value.
+  mutating func clearR1P2H() {_uniqueStorage()._r1P2H = nil}
+
+  /// Register 2: 1-byte latch in each direction (no bus stretching).
+  var r2H2P: Beebium_TubeLatchState {
+    get {return _storage._r2H2P ?? Beebium_TubeLatchState()}
+    set {_uniqueStorage()._r2H2P = newValue}
+  }
+  /// Returns true if `r2H2P` has been explicitly set.
+  var hasR2H2P: Bool {return _storage._r2H2P != nil}
+  /// Clears the value of `r2H2P`. Subsequent reads from it will return its default value.
+  mutating func clearR2H2P() {_uniqueStorage()._r2H2P = nil}
+
+  var r2P2H: Beebium_TubeLatchState {
+    get {return _storage._r2P2H ?? Beebium_TubeLatchState()}
+    set {_uniqueStorage()._r2P2H = newValue}
+  }
+  /// Returns true if `r2P2H` has been explicitly set.
+  var hasR2P2H: Bool {return _storage._r2P2H != nil}
+  /// Clears the value of `r2P2H`. Subsequent reads from it will return its default value.
+  mutating func clearR2P2H() {_uniqueStorage()._r2P2H = nil}
+
+  /// Register 3: 2-byte shift register in each direction.
+  /// Threshold mode (1 or 2 bytes) is selected by the V flag.
+  var r3H2P: Beebium_TubeReg3State {
+    get {return _storage._r3H2P ?? Beebium_TubeReg3State()}
+    set {_uniqueStorage()._r3H2P = newValue}
+  }
+  /// Returns true if `r3H2P` has been explicitly set.
+  var hasR3H2P: Bool {return _storage._r3H2P != nil}
+  /// Clears the value of `r3H2P`. Subsequent reads from it will return its default value.
+  mutating func clearR3H2P() {_uniqueStorage()._r3H2P = nil}
+
+  var r3P2H: Beebium_TubeReg3State {
+    get {return _storage._r3P2H ?? Beebium_TubeReg3State()}
+    set {_uniqueStorage()._r3P2H = newValue}
+  }
+  /// Returns true if `r3P2H` has been explicitly set.
+  var hasR3P2H: Bool {return _storage._r3P2H != nil}
+  /// Clears the value of `r3P2H`. Subsequent reads from it will return its default value.
+  mutating func clearR3P2H() {_uniqueStorage()._r3P2H = nil}
+
+  /// Register 4: 1-byte latch in each direction.
+  var r4H2P: Beebium_TubeLatchState {
+    get {return _storage._r4H2P ?? Beebium_TubeLatchState()}
+    set {_uniqueStorage()._r4H2P = newValue}
+  }
+  /// Returns true if `r4H2P` has been explicitly set.
+  var hasR4H2P: Bool {return _storage._r4H2P != nil}
+  /// Clears the value of `r4H2P`. Subsequent reads from it will return its default value.
+  mutating func clearR4H2P() {_uniqueStorage()._r4H2P = nil}
+
+  var r4P2H: Beebium_TubeLatchState {
+    get {return _storage._r4P2H ?? Beebium_TubeLatchState()}
+    set {_uniqueStorage()._r4P2H = newValue}
+  }
+  /// Returns true if `r4P2H` has been explicitly set.
+  var hasR4P2H: Bool {return _storage._r4P2H != nil}
+  /// Clears the value of `r4P2H`. Subsequent reads from it will return its default value.
+  mutating func clearR4P2H() {_uniqueStorage()._r4P2H = nil}
+
+  /// Status registers (as read by host at offsets 0/2/4/6).
+  var hostStatus: Beebium_TubeHostStatus {
+    get {return _storage._hostStatus ?? Beebium_TubeHostStatus()}
+    set {_uniqueStorage()._hostStatus = newValue}
+  }
+  /// Returns true if `hostStatus` has been explicitly set.
+  var hasHostStatus: Bool {return _storage._hostStatus != nil}
+  /// Clears the value of `hostStatus`. Subsequent reads from it will return its default value.
+  mutating func clearHostStatus() {_uniqueStorage()._hostStatus = nil}
+
+  /// Status registers (as read by coprocessor at offsets 0/2/4/6).
+  var coprocessorStatus: Beebium_TubeCoprocessorStatus {
+    get {return _storage._coprocessorStatus ?? Beebium_TubeCoprocessorStatus()}
+    set {_uniqueStorage()._coprocessorStatus = newValue}
+  }
+  /// Returns true if `coprocessorStatus` has been explicitly set.
+  var hasCoprocessorStatus: Bool {return _storage._coprocessorStatus != nil}
+  /// Clears the value of `coprocessorStatus`. Subsequent reads from it will return its default value.
+  mutating func clearCoprocessorStatus() {_uniqueStorage()._coprocessorStatus = nil}
+
+  /// Interrupt outputs.
+  var interrupts: Beebium_TubeInterrupts {
+    get {return _storage._interrupts ?? Beebium_TubeInterrupts()}
+    set {_uniqueStorage()._interrupts = newValue}
+  }
+  /// Returns true if `interrupts` has been explicitly set.
+  var hasInterrupts: Bool {return _storage._interrupts != nil}
+  /// Clears the value of `interrupts`. Subsequent reads from it will return its default value.
+  mutating func clearInterrupts() {_uniqueStorage()._interrupts = nil}
+
+  /// Bus stretching state.
+  var hostStretched: Bool {
+    get {return _storage._hostStretched}
+    set {_uniqueStorage()._hostStretched = newValue}
+  }
+
+  /// Whether the Tube socket is populated (has a second processor attached).
+  var enabled: Bool {
+    get {return _storage._enabled}
+    set {_uniqueStorage()._enabled = newValue}
+  }
+
+  /// Per-register transfer counters (bytes transferred since reset).
+  var counters: Beebium_TubeTransferCounters {
+    get {return _storage._counters ?? Beebium_TubeTransferCounters()}
+    set {_uniqueStorage()._counters = newValue}
+  }
+  /// Returns true if `counters` has been explicitly set.
+  var hasCounters: Bool {return _storage._counters != nil}
+  /// Clears the value of `counters`. Subsequent reads from it will return its default value.
+  mutating func clearCounters() {_uniqueStorage()._counters = nil}
+
+  /// Protocol trace: last N register data events (ring buffer, oldest first).
+  /// Each entry is a tag byte (register/direction/side) and a data byte.
+  var trace: [Beebium_TubeTraceEntry] {
+    get {return _storage._trace}
+    set {_uniqueStorage()._trace = newValue}
+  }
+
+  var traceTotalCount: UInt64 {
+    get {return _storage._traceTotalCount}
+    set {_uniqueStorage()._traceTotalCount = newValue}
+  }
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// A single entry in the Tube protocol trace ring buffer.
+struct Beebium_TubeTraceEntry: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// bits 7-4: register (1-4), bit 3: dir (0=H2P,1=P2H), bit 2: side (0=host,1=coprocessor)
+  var tag: UInt32 = 0
+
+  /// data byte
+  var value: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Per-register byte transfer counters for Tube diagnostics.
+/// Each counter records total bytes written or read for a register direction.
+/// Stored in shared memory so both host and coprocessor can read all counters.
+struct Beebium_TubeTransferCounters: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Host-to-coprocessor direction
+  var r1H2PWrites: UInt64 = 0
+
+  var r1H2PReads: UInt64 = 0
+
+  var r2H2PWrites: UInt64 = 0
+
+  var r2H2PReads: UInt64 = 0
+
+  var r3H2PWrites: UInt64 = 0
+
+  var r3H2PReads: UInt64 = 0
+
+  var r4H2PWrites: UInt64 = 0
+
+  var r4H2PReads: UInt64 = 0
+
+  /// Coprocessor-to-host direction
+  var r1P2HWrites: UInt64 = 0
+
+  var r1P2HReads: UInt64 = 0
+
+  var r2P2HWrites: UInt64 = 0
+
+  var r2P2HReads: UInt64 = 0
+
+  var r3P2HWrites: UInt64 = 0
+
+  var r3P2HReads: UInt64 = 0
+
+  var r4P2HWrites: UInt64 = 0
+
+  var r4P2HReads: UInt64 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Tube ULA control flags (bits 0-5 of the control register).
+struct Beebium_TubeControlFlags: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Bit 0: Enable HIRQ from R4
+  var q: Bool = false
+
+  /// Bit 1: Enable PIRQ from R1
+  var i: Bool = false
+
+  /// Bit 2: Enable PIRQ from R4
+  var j: Bool = false
+
+  /// Bit 3: Enable PNMI from R3
+  var m: Bool = false
+
+  /// Bit 4: Two-byte mode for R3
+  var v: Bool = false
+
+  /// Bit 5: Coprocessor reset
+  var p: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Single-byte latch state (R1 H-to-P, R2 both directions, R4 both directions).
+struct Beebium_TubeLatchState: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Current data byte in the latch
+  var value: UInt32 = 0
+
+  /// Latch contains unread data
+  var dataAvailable: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// 24-byte FIFO state (R1 P-to-H only).
+struct Beebium_TubeFifo24State: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Number of bytes currently in the FIFO (0-24)
+  var count: UInt32 = 0
+
+  /// FIFO contents in read order (head to tail)
+  var data: Data = Data()
+
+  /// count > 0
+  var dataAvailable: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// 2-byte shift register state (R3 in each direction).
+struct Beebium_TubeReg3State: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Number of bytes in the register (0-2)
+  var count: UInt32 = 0
+
+  /// Register contents in read order (up to 2 bytes)
+  var data: Data = Data()
+
+  /// Complete transfer awaiting consumption
+  var pending: Bool = false
+
+  /// Current threshold (1 or 2, from V flag)
+  var threshold: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Host-perspective status registers (what the host reads at offsets 0/2/4/6).
+struct Beebium_TubeHostStatus: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Offset 0: control flags + R1 status bits
+  var r1Status: UInt32 = 0
+
+  /// Offset 2: R2 status bits (bits 7:6 + 0x3F)
+  var r2Status: UInt32 = 0
+
+  /// Offset 4: R3 status bits
+  var r3Status: UInt32 = 0
+
+  /// Offset 6: R4 status bits
+  var r4Status: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Coprocessor-perspective status registers (what the coprocessor reads at offsets 0/2/4/6).
+struct Beebium_TubeCoprocessorStatus: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Offset 0: control flags + R1 status bits
+  var r1Status: UInt32 = 0
+
+  /// Offset 2: R2 status bits
+  var r2Status: UInt32 = 0
+
+  /// Offset 4: R3 status bits (N F3 1 1 1 1 1 1; N at bit 7)
+  var r3Status: UInt32 = 0
+
+  /// Offset 6: R4 status bits
+  var r4Status: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Tube interrupt output state.
+struct Beebium_TubeInterrupts: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Host IRQ: Q=1 AND R4 P-to-H has data
+  var hirq: Bool = false
+
+  /// Coprocessor IRQ: (I=1 AND R1 H-to-P has data) OR (J=1 AND R4 H-to-P has data)
+  var pirq: Bool = false
+
+  /// PNMI level (combinational, before edge detection)
+  var pnmiLevel: Bool = false
+
+  /// PNMI latched rising edge
+  var pnmiEdge: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "beebium"
+
+extension Beebium_StopReason: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0STOP_REASON_UNKNOWN\0\u{1}STOP_REASON_BREAKPOINT\0\u{1}STOP_REASON_MANUAL\0\u{1}STOP_REASON_ERROR\0\u{1}STOP_REASON_STEP_COMPLETE\0\u{1}STOP_REASON_WATCHPOINT\0\u{1}STOP_REASON_COUNTERPART\0")
+}
+
+extension Beebium_WatchpointType: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0WATCHPOINT_READ\0\u{1}WATCHPOINT_WRITE\0\u{1}WATCHPOINT_BOTH\0")
+}
+
+extension Beebium_RegisterRole: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0REGISTER_ROLE_NONE\0\u{1}PROGRAM_COUNTER\0\u{1}STACK_POINTER\0\u{1}FLAGS\0")
+}
 
 extension Beebium_Empty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".Empty"
@@ -1185,6 +1983,119 @@ extension Beebium_StepResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 }
 
+extension Beebium_WatchExecutionStateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".WatchExecutionStateRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_WatchExecutionStateRequest, rhs: Beebium_WatchExecutionStateRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ExecutionStateEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ExecutionStateEvent"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}reason\0\u{1}state\0\u{1}message\0\u{3}watchpoint_hit\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.reason) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._state) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.message) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._watchpointHit) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.reason != .unknown {
+      try visitor.visitSingularEnumField(value: self.reason, fieldNumber: 1)
+    }
+    try { if let v = self._state {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.message.isEmpty {
+      try visitor.visitSingularStringField(value: self.message, fieldNumber: 3)
+    }
+    try { if let v = self._watchpointHit {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ExecutionStateEvent, rhs: Beebium_ExecutionStateEvent) -> Bool {
+    if lhs.reason != rhs.reason {return false}
+    if lhs._state != rhs._state {return false}
+    if lhs.message != rhs.message {return false}
+    if lhs._watchpointHit != rhs._watchpointHit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_WatchpointHitInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".WatchpointHitInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}watchpoint_id\0\u{1}address\0\u{1}value\0\u{3}is_write\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.watchpointID) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.address) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.value) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isWrite) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.watchpointID != 0 {
+      try visitor.visitSingularUInt32Field(value: self.watchpointID, fieldNumber: 1)
+    }
+    if self.address != 0 {
+      try visitor.visitSingularUInt32Field(value: self.address, fieldNumber: 2)
+    }
+    if self.value != 0 {
+      try visitor.visitSingularUInt32Field(value: self.value, fieldNumber: 3)
+    }
+    if self.isWrite != false {
+      try visitor.visitSingularBoolField(value: self.isWrite, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_WatchpointHitInfo, rhs: Beebium_WatchpointHitInfo) -> Bool {
+    if lhs.watchpointID != rhs.watchpointID {return false}
+    if lhs.address != rhs.address {return false}
+    if lhs.value != rhs.value {return false}
+    if lhs.isWrite != rhs.isWrite {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension Beebium_ReadMemoryRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ReadMemoryRequest"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}address\0\u{1}length\0\u{3}simulated_pc\0")
@@ -1409,7 +2320,7 @@ extension Beebium_WriteMemoryResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_AddBreakpointRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".AddBreakpointRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}address\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}start_address\0\u{3}end_address\0\u{3}stop_counterpart\0\u{1}condition\0\u{1}enabled\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1417,21 +2328,45 @@ extension Beebium_AddBreakpointRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.address) }()
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.startAddress) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.endAddress) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.stopCounterpart) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.condition) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self._enabled) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.address != 0 {
-      try visitor.visitSingularUInt32Field(value: self.address, fieldNumber: 1)
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.startAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.startAddress, fieldNumber: 1)
     }
+    if self.endAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.endAddress, fieldNumber: 2)
+    }
+    if self.stopCounterpart != false {
+      try visitor.visitSingularBoolField(value: self.stopCounterpart, fieldNumber: 3)
+    }
+    if !self.condition.isEmpty {
+      try visitor.visitSingularStringField(value: self.condition, fieldNumber: 4)
+    }
+    try { if let v = self._enabled {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 5)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_AddBreakpointRequest, rhs: Beebium_AddBreakpointRequest) -> Bool {
-    if lhs.address != rhs.address {return false}
+    if lhs.startAddress != rhs.startAddress {return false}
+    if lhs.endAddress != rhs.endAddress {return false}
+    if lhs.stopCounterpart != rhs.stopCounterpart {return false}
+    if lhs.condition != rhs.condition {return false}
+    if lhs._enabled != rhs._enabled {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1564,7 +2499,7 @@ extension Beebium_ListBreakpointsResponse: SwiftProtobuf.Message, SwiftProtobuf.
 
 extension Beebium_Breakpoint: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".Breakpoint"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}address\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}start_address\0\u{3}end_address\0\u{1}condition\0\u{3}stop_counterpart\0\u{3}hit_count\0\u{1}enabled\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1573,7 +2508,12 @@ extension Beebium_Breakpoint: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularUInt32Field(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.address) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.startAddress) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.endAddress) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.condition) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.stopCounterpart) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.hitCount) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
       default: break
       }
     }
@@ -1583,15 +2523,100 @@ extension Beebium_Breakpoint: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if self.id != 0 {
       try visitor.visitSingularUInt32Field(value: self.id, fieldNumber: 1)
     }
-    if self.address != 0 {
-      try visitor.visitSingularUInt32Field(value: self.address, fieldNumber: 2)
+    if self.startAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.startAddress, fieldNumber: 2)
+    }
+    if self.endAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.endAddress, fieldNumber: 3)
+    }
+    if !self.condition.isEmpty {
+      try visitor.visitSingularStringField(value: self.condition, fieldNumber: 4)
+    }
+    if self.stopCounterpart != false {
+      try visitor.visitSingularBoolField(value: self.stopCounterpart, fieldNumber: 5)
+    }
+    if self.hitCount != 0 {
+      try visitor.visitSingularUInt64Field(value: self.hitCount, fieldNumber: 6)
+    }
+    if self.enabled != false {
+      try visitor.visitSingularBoolField(value: self.enabled, fieldNumber: 7)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_Breakpoint, rhs: Beebium_Breakpoint) -> Bool {
     if lhs.id != rhs.id {return false}
-    if lhs.address != rhs.address {return false}
+    if lhs.startAddress != rhs.startAddress {return false}
+    if lhs.endAddress != rhs.endAddress {return false}
+    if lhs.condition != rhs.condition {return false}
+    if lhs.stopCounterpart != rhs.stopCounterpart {return false}
+    if lhs.hitCount != rhs.hitCount {return false}
+    if lhs.enabled != rhs.enabled {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EnableBreakpointRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EnableBreakpointRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}enabled\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.id != 0 {
+      try visitor.visitSingularUInt32Field(value: self.id, fieldNumber: 1)
+    }
+    if self.enabled != false {
+      try visitor.visitSingularBoolField(value: self.enabled, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EnableBreakpointRequest, rhs: Beebium_EnableBreakpointRequest) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.enabled != rhs.enabled {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EnableBreakpointResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EnableBreakpointResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EnableBreakpointResponse, rhs: Beebium_EnableBreakpointResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1627,28 +2652,9 @@ extension Beebium_ClearBreakpointsResponse: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Beebium_Get6502StateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".Get6502StateRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
-
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
-  }
-
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  static func ==(lhs: Beebium_Get6502StateRequest, rhs: Beebium_Get6502StateRequest) -> Bool {
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Beebium_Cpu6502State: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".Cpu6502State"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}a\0\u{1}x\0\u{1}y\0\u{1}sp\0\u{1}pc\0\u{1}p\0")
+extension Beebium_AddWatchpointRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AddWatchpointRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}start_address\0\u{3}end_address\0\u{1}type\0\u{3}stop_counterpart\0\u{1}condition\0\u{1}enabled\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1656,67 +2662,12 @@ extension Beebium_Cpu6502State: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.a) }()
-      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.x) }()
-      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.y) }()
-      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.sp) }()
-      case 5: try { try decoder.decodeSingularUInt32Field(value: &self.pc) }()
-      case 6: try { try decoder.decodeSingularUInt32Field(value: &self.p) }()
-      default: break
-      }
-    }
-  }
-
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.a != 0 {
-      try visitor.visitSingularUInt32Field(value: self.a, fieldNumber: 1)
-    }
-    if self.x != 0 {
-      try visitor.visitSingularUInt32Field(value: self.x, fieldNumber: 2)
-    }
-    if self.y != 0 {
-      try visitor.visitSingularUInt32Field(value: self.y, fieldNumber: 3)
-    }
-    if self.sp != 0 {
-      try visitor.visitSingularUInt32Field(value: self.sp, fieldNumber: 4)
-    }
-    if self.pc != 0 {
-      try visitor.visitSingularUInt32Field(value: self.pc, fieldNumber: 5)
-    }
-    if self.p != 0 {
-      try visitor.visitSingularUInt32Field(value: self.p, fieldNumber: 6)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  static func ==(lhs: Beebium_Cpu6502State, rhs: Beebium_Cpu6502State) -> Bool {
-    if lhs.a != rhs.a {return false}
-    if lhs.x != rhs.x {return false}
-    if lhs.y != rhs.y {return false}
-    if lhs.sp != rhs.sp {return false}
-    if lhs.pc != rhs.pc {return false}
-    if lhs.p != rhs.p {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Beebium_Set6502StateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".Set6502StateRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}a\0\u{1}x\0\u{1}y\0\u{1}sp\0\u{1}pc\0\u{1}p\0")
-
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt32Field(value: &self._a) }()
-      case 2: try { try decoder.decodeSingularUInt32Field(value: &self._x) }()
-      case 3: try { try decoder.decodeSingularUInt32Field(value: &self._y) }()
-      case 4: try { try decoder.decodeSingularUInt32Field(value: &self._sp) }()
-      case 5: try { try decoder.decodeSingularUInt32Field(value: &self._pc) }()
-      case 6: try { try decoder.decodeSingularUInt32Field(value: &self._p) }()
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.startAddress) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.endAddress) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.type) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.stopCounterpart) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.condition) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self._enabled) }()
       default: break
       }
     }
@@ -1727,41 +2678,106 @@ extension Beebium_Set6502StateRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._a {
-      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 1)
-    } }()
-    try { if let v = self._x {
-      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 2)
-    } }()
-    try { if let v = self._y {
-      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 3)
-    } }()
-    try { if let v = self._sp {
-      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 4)
-    } }()
-    try { if let v = self._pc {
-      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 5)
-    } }()
-    try { if let v = self._p {
-      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 6)
+    if self.startAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.startAddress, fieldNumber: 1)
+    }
+    if self.endAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.endAddress, fieldNumber: 2)
+    }
+    if self.type != .watchpointRead {
+      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 3)
+    }
+    if self.stopCounterpart != false {
+      try visitor.visitSingularBoolField(value: self.stopCounterpart, fieldNumber: 4)
+    }
+    if !self.condition.isEmpty {
+      try visitor.visitSingularStringField(value: self.condition, fieldNumber: 5)
+    }
+    try { if let v = self._enabled {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 6)
     } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_Set6502StateRequest, rhs: Beebium_Set6502StateRequest) -> Bool {
-    if lhs._a != rhs._a {return false}
-    if lhs._x != rhs._x {return false}
-    if lhs._y != rhs._y {return false}
-    if lhs._sp != rhs._sp {return false}
-    if lhs._pc != rhs._pc {return false}
-    if lhs._p != rhs._p {return false}
+  static func ==(lhs: Beebium_AddWatchpointRequest, rhs: Beebium_AddWatchpointRequest) -> Bool {
+    if lhs.startAddress != rhs.startAddress {return false}
+    if lhs.endAddress != rhs.endAddress {return false}
+    if lhs.type != rhs.type {return false}
+    if lhs.stopCounterpart != rhs.stopCounterpart {return false}
+    if lhs.condition != rhs.condition {return false}
+    if lhs._enabled != rhs._enabled {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Beebium_Set6502StateResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = _protobuf_package + ".Set6502StateResponse"
+extension Beebium_AddWatchpointResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AddWatchpointResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}id\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.id) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if self.id != 0 {
+      try visitor.visitSingularUInt32Field(value: self.id, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AddWatchpointResponse, rhs: Beebium_AddWatchpointResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.id != rhs.id {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RemoveWatchpointRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".RemoveWatchpointRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.id) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.id != 0 {
+      try visitor.visitSingularUInt32Field(value: self.id, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_RemoveWatchpointRequest, rhs: Beebium_RemoveWatchpointRequest) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RemoveWatchpointResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".RemoveWatchpointResponse"
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1783,8 +2799,413 @@ extension Beebium_Set6502StateResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_Set6502StateResponse, rhs: Beebium_Set6502StateResponse) -> Bool {
+  static func ==(lhs: Beebium_RemoveWatchpointResponse, rhs: Beebium_RemoveWatchpointResponse) -> Bool {
     if lhs.success != rhs.success {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ListWatchpointsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ListWatchpointsResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}watchpoints\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.watchpoints) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.watchpoints.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.watchpoints, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ListWatchpointsResponse, rhs: Beebium_ListWatchpointsResponse) -> Bool {
+    if lhs.watchpoints != rhs.watchpoints {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_WatchpointInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".WatchpointInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}start_address\0\u{3}end_address\0\u{1}type\0\u{1}condition\0\u{3}stop_counterpart\0\u{3}hit_count\0\u{1}enabled\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.startAddress) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.endAddress) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.type) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.condition) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.stopCounterpart) }()
+      case 7: try { try decoder.decodeSingularUInt64Field(value: &self.hitCount) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.id != 0 {
+      try visitor.visitSingularUInt32Field(value: self.id, fieldNumber: 1)
+    }
+    if self.startAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.startAddress, fieldNumber: 2)
+    }
+    if self.endAddress != 0 {
+      try visitor.visitSingularUInt32Field(value: self.endAddress, fieldNumber: 3)
+    }
+    if self.type != .watchpointRead {
+      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 4)
+    }
+    if !self.condition.isEmpty {
+      try visitor.visitSingularStringField(value: self.condition, fieldNumber: 5)
+    }
+    if self.stopCounterpart != false {
+      try visitor.visitSingularBoolField(value: self.stopCounterpart, fieldNumber: 6)
+    }
+    if self.hitCount != 0 {
+      try visitor.visitSingularUInt64Field(value: self.hitCount, fieldNumber: 7)
+    }
+    if self.enabled != false {
+      try visitor.visitSingularBoolField(value: self.enabled, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_WatchpointInfo, rhs: Beebium_WatchpointInfo) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.startAddress != rhs.startAddress {return false}
+    if lhs.endAddress != rhs.endAddress {return false}
+    if lhs.type != rhs.type {return false}
+    if lhs.condition != rhs.condition {return false}
+    if lhs.stopCounterpart != rhs.stopCounterpart {return false}
+    if lhs.hitCount != rhs.hitCount {return false}
+    if lhs.enabled != rhs.enabled {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EnableWatchpointRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EnableWatchpointRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}enabled\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.id != 0 {
+      try visitor.visitSingularUInt32Field(value: self.id, fieldNumber: 1)
+    }
+    if self.enabled != false {
+      try visitor.visitSingularBoolField(value: self.enabled, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EnableWatchpointRequest, rhs: Beebium_EnableWatchpointRequest) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.enabled != rhs.enabled {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EnableWatchpointResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EnableWatchpointResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EnableWatchpointResponse, rhs: Beebium_EnableWatchpointResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ClearWatchpointsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ClearWatchpointsResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}count_removed\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.countRemoved) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.countRemoved != 0 {
+      try visitor.visitSingularUInt32Field(value: self.countRemoved, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ClearWatchpointsResponse, rhs: Beebium_ClearWatchpointsResponse) -> Bool {
+    if lhs.countRemoved != rhs.countRemoved {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RegisterDescriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".RegisterDescriptor"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}width_bits\0\u{1}role\0\u{3}flag_names\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.widthBits) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.role) }()
+      case 4: try { try decoder.decodeRepeatedStringField(value: &self.flagNames) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if self.widthBits != 0 {
+      try visitor.visitSingularUInt32Field(value: self.widthBits, fieldNumber: 2)
+    }
+    if self.role != .none {
+      try visitor.visitSingularEnumField(value: self.role, fieldNumber: 3)
+    }
+    if !self.flagNames.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.flagNames, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_RegisterDescriptor, rhs: Beebium_RegisterDescriptor) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.widthBits != rhs.widthBits {return false}
+    if lhs.role != rhs.role {return false}
+    if lhs.flagNames != rhs.flagNames {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CpuDescriptor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CpuDescriptor"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}family\0\u{3}address_bits\0\u{3}little_endian\0\u{1}registers\0\u{1}signals\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.family) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.addressBits) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.littleEndian) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.registers) }()
+      case 5: try { try decoder.decodeRepeatedStringField(value: &self.signals) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.family.isEmpty {
+      try visitor.visitSingularStringField(value: self.family, fieldNumber: 1)
+    }
+    if self.addressBits != 0 {
+      try visitor.visitSingularUInt32Field(value: self.addressBits, fieldNumber: 2)
+    }
+    if self.littleEndian != false {
+      try visitor.visitSingularBoolField(value: self.littleEndian, fieldNumber: 3)
+    }
+    if !self.registers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.registers, fieldNumber: 4)
+    }
+    if !self.signals.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.signals, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CpuDescriptor, rhs: Beebium_CpuDescriptor) -> Bool {
+    if lhs.family != rhs.family {return false}
+    if lhs.addressBits != rhs.addressBits {return false}
+    if lhs.littleEndian != rhs.littleEndian {return false}
+    if lhs.registers != rhs.registers {return false}
+    if lhs.signals != rhs.signals {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_RegisterValue: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".RegisterValue"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}value\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.value) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if self.value != 0 {
+      try visitor.visitSingularUInt64Field(value: self.value, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_RegisterValue, rhs: Beebium_RegisterValue) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.value != rhs.value {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_SignalState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SignalState"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}asserted\0\u{1}pending\0\u{3}in_handler\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.asserted) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.pending) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.inHandler) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if self.asserted != false {
+      try visitor.visitSingularBoolField(value: self.asserted, fieldNumber: 2)
+    }
+    if self.pending != false {
+      try visitor.visitSingularBoolField(value: self.pending, fieldNumber: 3)
+    }
+    if self.inHandler != false {
+      try visitor.visitSingularBoolField(value: self.inHandler, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SignalState, rhs: Beebium_SignalState) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.asserted != rhs.asserted {return false}
+    if lhs.pending != rhs.pending {return false}
+    if lhs.inHandler != rhs.inHandler {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CpuState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CpuState"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}registers\0\u{1}signals\0\u{3}cycle_count\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.registers) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.signals) }()
+      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.cycleCount) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.registers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.registers, fieldNumber: 1)
+    }
+    if !self.signals.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.signals, fieldNumber: 2)
+    }
+    if self.cycleCount != 0 {
+      try visitor.visitSingularUInt64Field(value: self.cycleCount, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CpuState, rhs: Beebium_CpuState) -> Bool {
+    if lhs.registers != rhs.registers {return false}
+    if lhs.signals != rhs.signals {return false}
+    if lhs.cycleCount != rhs.cycleCount {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2666,6 +4087,657 @@ extension Beebium_SoundChannelState: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs.noiseRate != rhs.noiseRate {return false}
     if lhs.whiteNoise != rhs.whiteNoise {return false}
     if lhs.lfsrState != rhs.lfsrState {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_GetTubeStateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".GetTubeStateRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_GetTubeStateRequest, rhs: Beebium_GetTubeStateRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeState"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}control_flags\0\u{3}r1_h2p\0\u{3}r1_p2h\0\u{3}r2_h2p\0\u{3}r2_p2h\0\u{3}r3_h2p\0\u{3}r3_p2h\0\u{3}r4_h2p\0\u{3}r4_p2h\0\u{3}host_status\0\u{3}coprocessor_status\0\u{1}interrupts\0\u{3}host_stretched\0\u{1}enabled\0\u{1}counters\0\u{1}trace\0\u{3}trace_total_count\0")
+
+  fileprivate class _StorageClass {
+    var _controlFlags: Beebium_TubeControlFlags? = nil
+    var _r1H2P: Beebium_TubeLatchState? = nil
+    var _r1P2H: Beebium_TubeFifo24State? = nil
+    var _r2H2P: Beebium_TubeLatchState? = nil
+    var _r2P2H: Beebium_TubeLatchState? = nil
+    var _r3H2P: Beebium_TubeReg3State? = nil
+    var _r3P2H: Beebium_TubeReg3State? = nil
+    var _r4H2P: Beebium_TubeLatchState? = nil
+    var _r4P2H: Beebium_TubeLatchState? = nil
+    var _hostStatus: Beebium_TubeHostStatus? = nil
+    var _coprocessorStatus: Beebium_TubeCoprocessorStatus? = nil
+    var _interrupts: Beebium_TubeInterrupts? = nil
+    var _hostStretched: Bool = false
+    var _enabled: Bool = false
+    var _counters: Beebium_TubeTransferCounters? = nil
+    var _trace: [Beebium_TubeTraceEntry] = []
+    var _traceTotalCount: UInt64 = 0
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _controlFlags = source._controlFlags
+      _r1H2P = source._r1H2P
+      _r1P2H = source._r1P2H
+      _r2H2P = source._r2H2P
+      _r2P2H = source._r2P2H
+      _r3H2P = source._r3H2P
+      _r3P2H = source._r3P2H
+      _r4H2P = source._r4H2P
+      _r4P2H = source._r4P2H
+      _hostStatus = source._hostStatus
+      _coprocessorStatus = source._coprocessorStatus
+      _interrupts = source._interrupts
+      _hostStretched = source._hostStretched
+      _enabled = source._enabled
+      _counters = source._counters
+      _trace = source._trace
+      _traceTotalCount = source._traceTotalCount
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._controlFlags) }()
+        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._r1H2P) }()
+        case 3: try { try decoder.decodeSingularMessageField(value: &_storage._r1P2H) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._r2H2P) }()
+        case 5: try { try decoder.decodeSingularMessageField(value: &_storage._r2P2H) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._r3H2P) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._r3P2H) }()
+        case 8: try { try decoder.decodeSingularMessageField(value: &_storage._r4H2P) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._r4P2H) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._hostStatus) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._coprocessorStatus) }()
+        case 12: try { try decoder.decodeSingularMessageField(value: &_storage._interrupts) }()
+        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._hostStretched) }()
+        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._enabled) }()
+        case 15: try { try decoder.decodeSingularMessageField(value: &_storage._counters) }()
+        case 16: try { try decoder.decodeRepeatedMessageField(value: &_storage._trace) }()
+        case 17: try { try decoder.decodeSingularUInt64Field(value: &_storage._traceTotalCount) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      try { if let v = _storage._controlFlags {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+      } }()
+      try { if let v = _storage._r1H2P {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      } }()
+      try { if let v = _storage._r1P2H {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._r2H2P {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._r2P2H {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._r3H2P {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._r3P2H {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._r4H2P {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._r4P2H {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      try { if let v = _storage._hostStatus {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
+      try { if let v = _storage._coprocessorStatus {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      } }()
+      try { if let v = _storage._interrupts {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      } }()
+      if _storage._hostStretched != false {
+        try visitor.visitSingularBoolField(value: _storage._hostStretched, fieldNumber: 13)
+      }
+      if _storage._enabled != false {
+        try visitor.visitSingularBoolField(value: _storage._enabled, fieldNumber: 14)
+      }
+      try { if let v = _storage._counters {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
+      } }()
+      if !_storage._trace.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._trace, fieldNumber: 16)
+      }
+      if _storage._traceTotalCount != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._traceTotalCount, fieldNumber: 17)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeState, rhs: Beebium_TubeState) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._controlFlags != rhs_storage._controlFlags {return false}
+        if _storage._r1H2P != rhs_storage._r1H2P {return false}
+        if _storage._r1P2H != rhs_storage._r1P2H {return false}
+        if _storage._r2H2P != rhs_storage._r2H2P {return false}
+        if _storage._r2P2H != rhs_storage._r2P2H {return false}
+        if _storage._r3H2P != rhs_storage._r3H2P {return false}
+        if _storage._r3P2H != rhs_storage._r3P2H {return false}
+        if _storage._r4H2P != rhs_storage._r4H2P {return false}
+        if _storage._r4P2H != rhs_storage._r4P2H {return false}
+        if _storage._hostStatus != rhs_storage._hostStatus {return false}
+        if _storage._coprocessorStatus != rhs_storage._coprocessorStatus {return false}
+        if _storage._interrupts != rhs_storage._interrupts {return false}
+        if _storage._hostStretched != rhs_storage._hostStretched {return false}
+        if _storage._enabled != rhs_storage._enabled {return false}
+        if _storage._counters != rhs_storage._counters {return false}
+        if _storage._trace != rhs_storage._trace {return false}
+        if _storage._traceTotalCount != rhs_storage._traceTotalCount {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeTraceEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeTraceEntry"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}tag\0\u{1}value\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.tag) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.value) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.tag != 0 {
+      try visitor.visitSingularUInt32Field(value: self.tag, fieldNumber: 1)
+    }
+    if self.value != 0 {
+      try visitor.visitSingularUInt32Field(value: self.value, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeTraceEntry, rhs: Beebium_TubeTraceEntry) -> Bool {
+    if lhs.tag != rhs.tag {return false}
+    if lhs.value != rhs.value {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeTransferCounters: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeTransferCounters"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}r1_h2p_writes\0\u{3}r1_h2p_reads\0\u{3}r2_h2p_writes\0\u{3}r2_h2p_reads\0\u{3}r3_h2p_writes\0\u{3}r3_h2p_reads\0\u{3}r4_h2p_writes\0\u{3}r4_h2p_reads\0\u{3}r1_p2h_writes\0\u{3}r1_p2h_reads\0\u{3}r2_p2h_writes\0\u{3}r2_p2h_reads\0\u{3}r3_p2h_writes\0\u{3}r3_p2h_reads\0\u{3}r4_p2h_writes\0\u{3}r4_p2h_reads\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.r1H2PWrites) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.r1H2PReads) }()
+      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.r2H2PWrites) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.r2H2PReads) }()
+      case 5: try { try decoder.decodeSingularUInt64Field(value: &self.r3H2PWrites) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.r3H2PReads) }()
+      case 7: try { try decoder.decodeSingularUInt64Field(value: &self.r4H2PWrites) }()
+      case 8: try { try decoder.decodeSingularUInt64Field(value: &self.r4H2PReads) }()
+      case 9: try { try decoder.decodeSingularUInt64Field(value: &self.r1P2HWrites) }()
+      case 10: try { try decoder.decodeSingularUInt64Field(value: &self.r1P2HReads) }()
+      case 11: try { try decoder.decodeSingularUInt64Field(value: &self.r2P2HWrites) }()
+      case 12: try { try decoder.decodeSingularUInt64Field(value: &self.r2P2HReads) }()
+      case 13: try { try decoder.decodeSingularUInt64Field(value: &self.r3P2HWrites) }()
+      case 14: try { try decoder.decodeSingularUInt64Field(value: &self.r3P2HReads) }()
+      case 15: try { try decoder.decodeSingularUInt64Field(value: &self.r4P2HWrites) }()
+      case 16: try { try decoder.decodeSingularUInt64Field(value: &self.r4P2HReads) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.r1H2PWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r1H2PWrites, fieldNumber: 1)
+    }
+    if self.r1H2PReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r1H2PReads, fieldNumber: 2)
+    }
+    if self.r2H2PWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r2H2PWrites, fieldNumber: 3)
+    }
+    if self.r2H2PReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r2H2PReads, fieldNumber: 4)
+    }
+    if self.r3H2PWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r3H2PWrites, fieldNumber: 5)
+    }
+    if self.r3H2PReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r3H2PReads, fieldNumber: 6)
+    }
+    if self.r4H2PWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r4H2PWrites, fieldNumber: 7)
+    }
+    if self.r4H2PReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r4H2PReads, fieldNumber: 8)
+    }
+    if self.r1P2HWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r1P2HWrites, fieldNumber: 9)
+    }
+    if self.r1P2HReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r1P2HReads, fieldNumber: 10)
+    }
+    if self.r2P2HWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r2P2HWrites, fieldNumber: 11)
+    }
+    if self.r2P2HReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r2P2HReads, fieldNumber: 12)
+    }
+    if self.r3P2HWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r3P2HWrites, fieldNumber: 13)
+    }
+    if self.r3P2HReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r3P2HReads, fieldNumber: 14)
+    }
+    if self.r4P2HWrites != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r4P2HWrites, fieldNumber: 15)
+    }
+    if self.r4P2HReads != 0 {
+      try visitor.visitSingularUInt64Field(value: self.r4P2HReads, fieldNumber: 16)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeTransferCounters, rhs: Beebium_TubeTransferCounters) -> Bool {
+    if lhs.r1H2PWrites != rhs.r1H2PWrites {return false}
+    if lhs.r1H2PReads != rhs.r1H2PReads {return false}
+    if lhs.r2H2PWrites != rhs.r2H2PWrites {return false}
+    if lhs.r2H2PReads != rhs.r2H2PReads {return false}
+    if lhs.r3H2PWrites != rhs.r3H2PWrites {return false}
+    if lhs.r3H2PReads != rhs.r3H2PReads {return false}
+    if lhs.r4H2PWrites != rhs.r4H2PWrites {return false}
+    if lhs.r4H2PReads != rhs.r4H2PReads {return false}
+    if lhs.r1P2HWrites != rhs.r1P2HWrites {return false}
+    if lhs.r1P2HReads != rhs.r1P2HReads {return false}
+    if lhs.r2P2HWrites != rhs.r2P2HWrites {return false}
+    if lhs.r2P2HReads != rhs.r2P2HReads {return false}
+    if lhs.r3P2HWrites != rhs.r3P2HWrites {return false}
+    if lhs.r3P2HReads != rhs.r3P2HReads {return false}
+    if lhs.r4P2HWrites != rhs.r4P2HWrites {return false}
+    if lhs.r4P2HReads != rhs.r4P2HReads {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeControlFlags: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeControlFlags"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}q\0\u{1}i\0\u{1}j\0\u{1}m\0\u{1}v\0\u{1}p\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.q) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.i) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.j) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.m) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.v) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.p) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.q != false {
+      try visitor.visitSingularBoolField(value: self.q, fieldNumber: 1)
+    }
+    if self.i != false {
+      try visitor.visitSingularBoolField(value: self.i, fieldNumber: 2)
+    }
+    if self.j != false {
+      try visitor.visitSingularBoolField(value: self.j, fieldNumber: 3)
+    }
+    if self.m != false {
+      try visitor.visitSingularBoolField(value: self.m, fieldNumber: 4)
+    }
+    if self.v != false {
+      try visitor.visitSingularBoolField(value: self.v, fieldNumber: 5)
+    }
+    if self.p != false {
+      try visitor.visitSingularBoolField(value: self.p, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeControlFlags, rhs: Beebium_TubeControlFlags) -> Bool {
+    if lhs.q != rhs.q {return false}
+    if lhs.i != rhs.i {return false}
+    if lhs.j != rhs.j {return false}
+    if lhs.m != rhs.m {return false}
+    if lhs.v != rhs.v {return false}
+    if lhs.p != rhs.p {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeLatchState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeLatchState"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}value\0\u{3}data_available\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.value) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.dataAvailable) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.value != 0 {
+      try visitor.visitSingularUInt32Field(value: self.value, fieldNumber: 1)
+    }
+    if self.dataAvailable != false {
+      try visitor.visitSingularBoolField(value: self.dataAvailable, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeLatchState, rhs: Beebium_TubeLatchState) -> Bool {
+    if lhs.value != rhs.value {return false}
+    if lhs.dataAvailable != rhs.dataAvailable {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeFifo24State: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeFifo24State"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}count\0\u{1}data\0\u{3}data_available\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.count) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.data) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.dataAvailable) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.count != 0 {
+      try visitor.visitSingularUInt32Field(value: self.count, fieldNumber: 1)
+    }
+    if !self.data.isEmpty {
+      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 2)
+    }
+    if self.dataAvailable != false {
+      try visitor.visitSingularBoolField(value: self.dataAvailable, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeFifo24State, rhs: Beebium_TubeFifo24State) -> Bool {
+    if lhs.count != rhs.count {return false}
+    if lhs.data != rhs.data {return false}
+    if lhs.dataAvailable != rhs.dataAvailable {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeReg3State: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeReg3State"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}count\0\u{1}data\0\u{1}pending\0\u{1}threshold\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.count) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.data) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.pending) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.threshold) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.count != 0 {
+      try visitor.visitSingularUInt32Field(value: self.count, fieldNumber: 1)
+    }
+    if !self.data.isEmpty {
+      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 2)
+    }
+    if self.pending != false {
+      try visitor.visitSingularBoolField(value: self.pending, fieldNumber: 3)
+    }
+    if self.threshold != 0 {
+      try visitor.visitSingularUInt32Field(value: self.threshold, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeReg3State, rhs: Beebium_TubeReg3State) -> Bool {
+    if lhs.count != rhs.count {return false}
+    if lhs.data != rhs.data {return false}
+    if lhs.pending != rhs.pending {return false}
+    if lhs.threshold != rhs.threshold {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeHostStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeHostStatus"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}r1_status\0\u{3}r2_status\0\u{3}r3_status\0\u{3}r4_status\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.r1Status) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.r2Status) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.r3Status) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.r4Status) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.r1Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r1Status, fieldNumber: 1)
+    }
+    if self.r2Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r2Status, fieldNumber: 2)
+    }
+    if self.r3Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r3Status, fieldNumber: 3)
+    }
+    if self.r4Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r4Status, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeHostStatus, rhs: Beebium_TubeHostStatus) -> Bool {
+    if lhs.r1Status != rhs.r1Status {return false}
+    if lhs.r2Status != rhs.r2Status {return false}
+    if lhs.r3Status != rhs.r3Status {return false}
+    if lhs.r4Status != rhs.r4Status {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeCoprocessorStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeCoprocessorStatus"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}r1_status\0\u{3}r2_status\0\u{3}r3_status\0\u{3}r4_status\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.r1Status) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.r2Status) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.r3Status) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.r4Status) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.r1Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r1Status, fieldNumber: 1)
+    }
+    if self.r2Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r2Status, fieldNumber: 2)
+    }
+    if self.r3Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r3Status, fieldNumber: 3)
+    }
+    if self.r4Status != 0 {
+      try visitor.visitSingularUInt32Field(value: self.r4Status, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeCoprocessorStatus, rhs: Beebium_TubeCoprocessorStatus) -> Bool {
+    if lhs.r1Status != rhs.r1Status {return false}
+    if lhs.r2Status != rhs.r2Status {return false}
+    if lhs.r3Status != rhs.r3Status {return false}
+    if lhs.r4Status != rhs.r4Status {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_TubeInterrupts: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".TubeInterrupts"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}hirq\0\u{1}pirq\0\u{3}pnmi_level\0\u{3}pnmi_edge\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.hirq) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.pirq) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.pnmiLevel) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.pnmiEdge) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.hirq != false {
+      try visitor.visitSingularBoolField(value: self.hirq, fieldNumber: 1)
+    }
+    if self.pirq != false {
+      try visitor.visitSingularBoolField(value: self.pirq, fieldNumber: 2)
+    }
+    if self.pnmiLevel != false {
+      try visitor.visitSingularBoolField(value: self.pnmiLevel, fieldNumber: 3)
+    }
+    if self.pnmiEdge != false {
+      try visitor.visitSingularBoolField(value: self.pnmiEdge, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_TubeInterrupts, rhs: Beebium_TubeInterrupts) -> Bool {
+    if lhs.hirq != rhs.hirq {return false}
+    if lhs.pirq != rhs.pirq {return false}
+    if lhs.pnmiLevel != rhs.pnmiLevel {return false}
+    if lhs.pnmiEdge != rhs.pnmiEdge {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

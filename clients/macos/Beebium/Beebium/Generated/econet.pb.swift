@@ -201,11 +201,6 @@ struct Beebium_GetEconetStatusResponse: @unchecked Sendable {
     set {_uniqueStorage()._ticksWithTimerActive = newValue}
   }
 
-  var readStretchParasiteTicks: UInt64 {
-    get {return _storage._readStretchParasiteTicks}
-    set {_uniqueStorage()._readStretchParasiteTicks = newValue}
-  }
-
   /// Emulation-speed gating. requires_real_time is true when the active
   /// transport must run at real time (1x) -- it bridges to a real Econet line
   /// (Piconet). gated_by_speed is true when that transport is currently severed
@@ -528,7 +523,7 @@ extension Beebium_GetEconetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetEconetStatusResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_econet_socket\0\u{1}enabled\0\u{3}station_id\0\u{3}aun_mode\0\u{1}connected\0\u{2}\u{5}adlc\0\u{1}handshake\0\u{3}tick_count\0\u{3}cr1_0x82_write_count\0\u{3}rx_frames_received_count\0\u{3}rx_blocked_by_reset_count\0\u{3}scout_ack_generated_count\0\u{3}tx_frames_from_beeb_count\0\u{3}unexpected_tx_reset_count\0\u{3}tx_from_idle_count\0\u{3}max_handshake_timer_seen\0\u{3}watchdog_timeout_count\0\u{3}send_stage_log\0\u{3}ticks_with_timer_active\0\u{3}read_stretch_parasite_ticks\0\u{4}\u{2}requires_real_time\0\u{3}gated_by_speed\0\u{b}aun_port\0\u{b}peer_count\0\u{b}piconet\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}\u{c}\u{19}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_econet_socket\0\u{1}enabled\0\u{3}station_id\0\u{3}aun_mode\0\u{1}connected\0\u{2}\u{5}adlc\0\u{1}handshake\0\u{3}tick_count\0\u{3}cr1_0x82_write_count\0\u{3}rx_frames_received_count\0\u{3}rx_blocked_by_reset_count\0\u{3}scout_ack_generated_count\0\u{3}tx_frames_from_beeb_count\0\u{3}unexpected_tx_reset_count\0\u{3}tx_from_idle_count\0\u{3}max_handshake_timer_seen\0\u{3}watchdog_timeout_count\0\u{3}send_stage_log\0\u{3}ticks_with_timer_active\0\u{4}\u{3}requires_real_time\0\u{3}gated_by_speed\0\u{b}aun_port\0\u{b}peer_count\0\u{b}read_stretch_coprocessor_ticks\0\u{b}piconet\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}\u{c}\u{18}\u{1}\u{c}\u{19}\u{1}")
 
   fileprivate class _StorageClass {
     var _hasEconetSocket_p: Bool = false
@@ -550,7 +545,6 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
     var _watchdogTimeoutCount: UInt32 = 0
     var _sendStageLog: String = String()
     var _ticksWithTimerActive: UInt64 = 0
-    var _readStretchParasiteTicks: UInt64 = 0
     var _requiresRealTime: Bool = false
     var _gatedBySpeed: Bool = false
 
@@ -582,7 +576,6 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
       _watchdogTimeoutCount = source._watchdogTimeoutCount
       _sendStageLog = source._sendStageLog
       _ticksWithTimerActive = source._ticksWithTimerActive
-      _readStretchParasiteTicks = source._readStretchParasiteTicks
       _requiresRealTime = source._requiresRealTime
       _gatedBySpeed = source._gatedBySpeed
     }
@@ -622,7 +615,6 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
         case 21: try { try decoder.decodeSingularUInt32Field(value: &_storage._watchdogTimeoutCount) }()
         case 22: try { try decoder.decodeSingularStringField(value: &_storage._sendStageLog) }()
         case 23: try { try decoder.decodeSingularUInt64Field(value: &_storage._ticksWithTimerActive) }()
-        case 24: try { try decoder.decodeSingularUInt64Field(value: &_storage._readStretchParasiteTicks) }()
         case 26: try { try decoder.decodeSingularBoolField(value: &_storage._requiresRealTime) }()
         case 27: try { try decoder.decodeSingularBoolField(value: &_storage._gatedBySpeed) }()
         default: break
@@ -694,9 +686,6 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
       if _storage._ticksWithTimerActive != 0 {
         try visitor.visitSingularUInt64Field(value: _storage._ticksWithTimerActive, fieldNumber: 23)
       }
-      if _storage._readStretchParasiteTicks != 0 {
-        try visitor.visitSingularUInt64Field(value: _storage._readStretchParasiteTicks, fieldNumber: 24)
-      }
       if _storage._requiresRealTime != false {
         try visitor.visitSingularBoolField(value: _storage._requiresRealTime, fieldNumber: 26)
       }
@@ -731,7 +720,6 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
         if _storage._watchdogTimeoutCount != rhs_storage._watchdogTimeoutCount {return false}
         if _storage._sendStageLog != rhs_storage._sendStageLog {return false}
         if _storage._ticksWithTimerActive != rhs_storage._ticksWithTimerActive {return false}
-        if _storage._readStretchParasiteTicks != rhs_storage._readStretchParasiteTicks {return false}
         if _storage._requiresRealTime != rhs_storage._requiresRealTime {return false}
         if _storage._gatedBySpeed != rhs_storage._gatedBySpeed {return false}
         return true

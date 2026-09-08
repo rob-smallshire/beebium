@@ -25,12 +25,13 @@ struct Beebium_SubscribeViewRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Unique extension instance id (matches PeripheralExtensionService's
-  /// ExtensionInfo.id and EconetTransportService.EconetTransport.id).
-  /// For singleton extensions (AUN, Piconet) this is the manifest name;
-  /// for multi-instance extensions (e.g. SCSI hard discs sharing one
-  /// adapter) the registry auto-assigns disambiguated ids ("name",
-  /// "name-1", "name-2", ...).
+  /// Opaque, server-assigned extension instance id (matches
+  /// PeripheralExtensionService's ExtensionInfo.id and
+  /// EconetTransportService.EconetTransport.id). It is typically a
+  /// UUID; do not assume any relationship to the manifest name.
+  /// Clients must discover it via the relevant listing RPC
+  /// (ListExtensions / ListTransports) rather than hardcoding names,
+  /// so new extensions surface in frontends with no client changes.
   var extensionID: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()

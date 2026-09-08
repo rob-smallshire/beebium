@@ -22,7 +22,7 @@ struct DiscoveredMachine: Identifiable, Hashable {
     let port: Int
     let isLocal: Bool        // True if running on this Mac
     let uuid: String         // Machine UUID from TXT record
-    let role: String         // "host" or "parasite" from TXT record
+    let role: String         // "host" from the TXT record
     let econetStation: Int?  // Econet station number (1-254), nil if not enabled
     let econetNet: Int?      // Econet network number, nil if not in AUN mode
     let econetAunPort: Int?  // AUN UDP port, nil if not in AUN mode

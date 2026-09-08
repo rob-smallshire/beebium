@@ -12,9 +12,9 @@ import SwiftProtobuf
 
 
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
-/// in src/extensions/aun/ and is registered via the extension's
-/// grpc_services() hook so the gRPC server only exposes it when AUN is
-/// the active transport.
+/// in src/extensions/aun/ and is served via that extension's AunDispatcher
+/// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
+/// service block). It is reachable only when AUN is the active transport.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -207,9 +207,9 @@ internal struct Beebium_AunServiceNIOClient: Beebium_AunServiceClientProtocol {
 }
 
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
-/// in src/extensions/aun/ and is registered via the extension's
-/// grpc_services() hook so the gRPC server only exposes it when AUN is
-/// the active transport.
+/// in src/extensions/aun/ and is served via that extension's AunDispatcher
+/// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
+/// service block). It is reachable only when AUN is the active transport.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -462,9 +462,9 @@ internal enum Beebium_AunServiceClientMetadata {
 }
 
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
-/// in src/extensions/aun/ and is registered via the extension's
-/// grpc_services() hook so the gRPC server only exposes it when AUN is
-/// the active transport.
+/// in src/extensions/aun/ and is served via that extension's AunDispatcher
+/// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
+/// service block). It is reachable only when AUN is the active transport.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -556,9 +556,9 @@ extension Beebium_AunServiceProvider {
 }
 
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
-/// in src/extensions/aun/ and is registered via the extension's
-/// grpc_services() hook so the gRPC server only exposes it when AUN is
-/// the active transport.
+/// in src/extensions/aun/ and is served via that extension's AunDispatcher
+/// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
+/// service block). It is reachable only when AUN is the active transport.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense

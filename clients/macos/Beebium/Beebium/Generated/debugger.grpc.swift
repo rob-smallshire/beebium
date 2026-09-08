@@ -12,7 +12,7 @@ import SwiftProtobuf
 
 
 /// Generic debugger service for 6502-based machines.
-/// Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+/// Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
 ///
 /// Usage: instantiate `Beebium_DebuggerControlClient`, then call methods of this protocol to make API calls.
 internal protocol Beebium_DebuggerControlClientProtocol: GRPCClient {
@@ -48,6 +48,12 @@ internal protocol Beebium_DebuggerControlClientProtocol: GRPCClient {
     _ request: Beebium_StepRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_StepRequest, Beebium_StepResponse>
+
+  func watchExecutionState(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions?,
+    handler: @escaping (Beebium_ExecutionStateEvent) -> Void
+  ) -> ServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>
 
   func readMemory(
     _ request: Beebium_ReadMemoryRequest,
@@ -94,6 +100,11 @@ internal protocol Beebium_DebuggerControlClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>
 
+  func enableBreakpoint(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>
+
   func listBreakpoints(
     _ request: Beebium_Empty,
     callOptions: CallOptions?
@@ -104,15 +115,45 @@ internal protocol Beebium_DebuggerControlClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_Empty, Beebium_ClearBreakpointsResponse>
 
-  func get6502State(
-    _ request: Beebium_Get6502StateRequest,
+  func addWatchpoint(
+    _ request: Beebium_AddWatchpointRequest,
     callOptions: CallOptions?
-  ) -> UnaryCall<Beebium_Get6502StateRequest, Beebium_Cpu6502State>
+  ) -> UnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>
 
-  func set6502State(
-    _ request: Beebium_Set6502StateRequest,
+  func removeWatchpoint(
+    _ request: Beebium_RemoveWatchpointRequest,
     callOptions: CallOptions?
-  ) -> UnaryCall<Beebium_Set6502StateRequest, Beebium_Set6502StateResponse>
+  ) -> UnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>
+
+  func enableWatchpoint(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>
+
+  func listWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse>
+
+  func clearWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse>
+
+  func getCpuDescriptor(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuDescriptor>
+
+  func getCpuState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuState>
+
+  func setCpuState(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_CpuState, Beebium_CpuState>
 }
 
 extension Beebium_DebuggerControlClientProtocol {
@@ -225,6 +266,27 @@ extension Beebium_DebuggerControlClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeStepCycleInterceptors() ?? []
+    )
+  }
+
+  /// Event streaming
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to WatchExecutionState.
+  ///   - callOptions: Call options.
+  ///   - handler: A closure called when each response is received from the server.
+  /// - Returns: A `ServerStreamingCall` with futures for the metadata and status.
+  internal func watchExecutionState(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions? = nil,
+    handler: @escaping (Beebium_ExecutionStateEvent) -> Void
+  ) -> ServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent> {
+    return self.makeServerStreamingCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.watchExecutionState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? [],
+      handler: handler
     )
   }
 
@@ -390,6 +452,24 @@ extension Beebium_DebuggerControlClientProtocol {
     )
   }
 
+  /// Unary call to EnableBreakpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to EnableBreakpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func enableBreakpoint(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.enableBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? []
+    )
+  }
+
   /// Unary call to ListBreakpoints
   ///
   /// - Parameters:
@@ -426,39 +506,150 @@ extension Beebium_DebuggerControlClientProtocol {
     )
   }
 
-  /// CPU state
+  /// Watchpoints (address range + access type)
   ///
   /// - Parameters:
-  ///   - request: Request to send to Get6502State.
+  ///   - request: Request to send to AddWatchpoint.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func get6502State(
-    _ request: Beebium_Get6502StateRequest,
+  internal func addWatchpoint(
+    _ request: Beebium_AddWatchpointRequest,
     callOptions: CallOptions? = nil
-  ) -> UnaryCall<Beebium_Get6502StateRequest, Beebium_Cpu6502State> {
+  ) -> UnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse> {
     return self.makeUnaryCall(
-      path: Beebium_DebuggerControlClientMetadata.Methods.get6502State.path,
+      path: Beebium_DebuggerControlClientMetadata.Methods.addWatchpoint.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeGet6502StateInterceptors() ?? []
+      interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? []
     )
   }
 
-  /// Unary call to Set6502State
+  /// Unary call to RemoveWatchpoint
   ///
   /// - Parameters:
-  ///   - request: Request to send to Set6502State.
+  ///   - request: Request to send to RemoveWatchpoint.
   ///   - callOptions: Call options.
   /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
-  internal func set6502State(
-    _ request: Beebium_Set6502StateRequest,
+  internal func removeWatchpoint(
+    _ request: Beebium_RemoveWatchpointRequest,
     callOptions: CallOptions? = nil
-  ) -> UnaryCall<Beebium_Set6502StateRequest, Beebium_Set6502StateResponse> {
+  ) -> UnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse> {
     return self.makeUnaryCall(
-      path: Beebium_DebuggerControlClientMetadata.Methods.set6502State.path,
+      path: Beebium_DebuggerControlClientMetadata.Methods.removeWatchpoint.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeSet6502StateInterceptors() ?? []
+      interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to EnableWatchpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to EnableWatchpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func enableWatchpoint(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.enableWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ListWatchpoints
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ListWatchpoints.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func listWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.listWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ClearWatchpoints
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ClearWatchpoints.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func clearWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.clearWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? []
+    )
+  }
+
+  /// CPU state (family-agnostic register model). The CPU describes itself
+  /// (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+  /// SetCpuState accepts any subset of registers by name and returns the
+  /// full state.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetCpuDescriptor.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getCpuDescriptor(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuDescriptor> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.getCpuDescriptor.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to GetCpuState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetCpuState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getCpuState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuState> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.getCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to SetCpuState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to SetCpuState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func setCpuState(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_CpuState, Beebium_CpuState> {
+    return self.makeUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.setCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? []
     )
   }
 }
@@ -521,7 +712,7 @@ internal struct Beebium_DebuggerControlNIOClient: Beebium_DebuggerControlClientP
 }
 
 /// Generic debugger service for 6502-based machines.
-/// Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+/// Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 internal protocol Beebium_DebuggerControlAsyncClientProtocol: GRPCClient {
   static var serviceDescriptor: GRPCServiceDescriptor { get }
@@ -556,6 +747,11 @@ internal protocol Beebium_DebuggerControlAsyncClientProtocol: GRPCClient {
     _ request: Beebium_StepRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_StepRequest, Beebium_StepResponse>
+
+  func makeWatchExecutionStateCall(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>
 
   func makeReadMemoryCall(
     _ request: Beebium_ReadMemoryRequest,
@@ -602,6 +798,11 @@ internal protocol Beebium_DebuggerControlAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>
 
+  func makeEnableBreakpointCall(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>
+
   func makeListBreakpointsCall(
     _ request: Beebium_Empty,
     callOptions: CallOptions?
@@ -612,15 +813,45 @@ internal protocol Beebium_DebuggerControlAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearBreakpointsResponse>
 
-  func makeGet6502StateCall(
-    _ request: Beebium_Get6502StateRequest,
+  func makeAddWatchpointCall(
+    _ request: Beebium_AddWatchpointRequest,
     callOptions: CallOptions?
-  ) -> GRPCAsyncUnaryCall<Beebium_Get6502StateRequest, Beebium_Cpu6502State>
+  ) -> GRPCAsyncUnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>
 
-  func makeSet6502StateCall(
-    _ request: Beebium_Set6502StateRequest,
+  func makeRemoveWatchpointCall(
+    _ request: Beebium_RemoveWatchpointRequest,
     callOptions: CallOptions?
-  ) -> GRPCAsyncUnaryCall<Beebium_Set6502StateRequest, Beebium_Set6502StateResponse>
+  ) -> GRPCAsyncUnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>
+
+  func makeEnableWatchpointCall(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>
+
+  func makeListWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse>
+
+  func makeClearWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse>
+
+  func makeGetCpuDescriptorCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuDescriptor>
+
+  func makeGetCpuStateCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuState>
+
+  func makeSetCpuStateCall(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_CpuState, Beebium_CpuState>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -702,6 +933,18 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeStepCycleInterceptors() ?? []
+    )
+  }
+
+  internal func makeWatchExecutionStateCall(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent> {
+    return self.makeAsyncServerStreamingCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.watchExecutionState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? []
     )
   }
 
@@ -813,6 +1056,18 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
     )
   }
 
+  internal func makeEnableBreakpointCall(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.enableBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? []
+    )
+  }
+
   internal func makeListBreakpointsCall(
     _ request: Beebium_Empty,
     callOptions: CallOptions? = nil
@@ -837,27 +1092,99 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
     )
   }
 
-  internal func makeGet6502StateCall(
-    _ request: Beebium_Get6502StateRequest,
+  internal func makeAddWatchpointCall(
+    _ request: Beebium_AddWatchpointRequest,
     callOptions: CallOptions? = nil
-  ) -> GRPCAsyncUnaryCall<Beebium_Get6502StateRequest, Beebium_Cpu6502State> {
+  ) -> GRPCAsyncUnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse> {
     return self.makeAsyncUnaryCall(
-      path: Beebium_DebuggerControlClientMetadata.Methods.get6502State.path,
+      path: Beebium_DebuggerControlClientMetadata.Methods.addWatchpoint.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeGet6502StateInterceptors() ?? []
+      interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? []
     )
   }
 
-  internal func makeSet6502StateCall(
-    _ request: Beebium_Set6502StateRequest,
+  internal func makeRemoveWatchpointCall(
+    _ request: Beebium_RemoveWatchpointRequest,
     callOptions: CallOptions? = nil
-  ) -> GRPCAsyncUnaryCall<Beebium_Set6502StateRequest, Beebium_Set6502StateResponse> {
+  ) -> GRPCAsyncUnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse> {
     return self.makeAsyncUnaryCall(
-      path: Beebium_DebuggerControlClientMetadata.Methods.set6502State.path,
+      path: Beebium_DebuggerControlClientMetadata.Methods.removeWatchpoint.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeSet6502StateInterceptors() ?? []
+      interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeEnableWatchpointCall(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.enableWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeListWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.listWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func makeClearWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.clearWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetCpuDescriptorCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuDescriptor> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.getCpuDescriptor.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetCpuStateCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.getCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? []
+    )
+  }
+
+  internal func makeSetCpuStateCall(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_CpuState, Beebium_CpuState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.setCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? []
     )
   }
 }
@@ -933,6 +1260,18 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeStepCycleInterceptors() ?? []
+    )
+  }
+
+  internal func watchExecutionState(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncResponseStream<Beebium_ExecutionStateEvent> {
+    return self.performAsyncServerStreamingCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.watchExecutionState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? []
     )
   }
 
@@ -1044,6 +1383,18 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
     )
   }
 
+  internal func enableBreakpoint(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_EnableBreakpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.enableBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? []
+    )
+  }
+
   internal func listBreakpoints(
     _ request: Beebium_Empty,
     callOptions: CallOptions? = nil
@@ -1068,27 +1419,99 @@ extension Beebium_DebuggerControlAsyncClientProtocol {
     )
   }
 
-  internal func get6502State(
-    _ request: Beebium_Get6502StateRequest,
+  internal func addWatchpoint(
+    _ request: Beebium_AddWatchpointRequest,
     callOptions: CallOptions? = nil
-  ) async throws -> Beebium_Cpu6502State {
+  ) async throws -> Beebium_AddWatchpointResponse {
     return try await self.performAsyncUnaryCall(
-      path: Beebium_DebuggerControlClientMetadata.Methods.get6502State.path,
+      path: Beebium_DebuggerControlClientMetadata.Methods.addWatchpoint.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeGet6502StateInterceptors() ?? []
+      interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? []
     )
   }
 
-  internal func set6502State(
-    _ request: Beebium_Set6502StateRequest,
+  internal func removeWatchpoint(
+    _ request: Beebium_RemoveWatchpointRequest,
     callOptions: CallOptions? = nil
-  ) async throws -> Beebium_Set6502StateResponse {
+  ) async throws -> Beebium_RemoveWatchpointResponse {
     return try await self.performAsyncUnaryCall(
-      path: Beebium_DebuggerControlClientMetadata.Methods.set6502State.path,
+      path: Beebium_DebuggerControlClientMetadata.Methods.removeWatchpoint.path,
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
-      interceptors: self.interceptors?.makeSet6502StateInterceptors() ?? []
+      interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func enableWatchpoint(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_EnableWatchpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.enableWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func listWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ListWatchpointsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.listWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func clearWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ClearWatchpointsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.clearWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func getCpuDescriptor(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CpuDescriptor {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.getCpuDescriptor.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? []
+    )
+  }
+
+  internal func getCpuState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CpuState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.getCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? []
+    )
+  }
+
+  internal func setCpuState(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CpuState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DebuggerControlClientMetadata.Methods.setCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? []
     )
   }
 }
@@ -1130,6 +1553,9 @@ internal protocol Beebium_DebuggerControlClientInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when invoking 'stepCycle'.
   func makeStepCycleInterceptors() -> [ClientInterceptor<Beebium_StepRequest, Beebium_StepResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'watchExecutionState'.
+  func makeWatchExecutionStateInterceptors() -> [ClientInterceptor<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>]
+
   /// - Returns: Interceptors to use when invoking 'readMemory'.
   func makeReadMemoryInterceptors() -> [ClientInterceptor<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse>]
 
@@ -1157,17 +1583,38 @@ internal protocol Beebium_DebuggerControlClientInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when invoking 'removeBreakpoint'.
   func makeRemoveBreakpointInterceptors() -> [ClientInterceptor<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'enableBreakpoint'.
+  func makeEnableBreakpointInterceptors() -> [ClientInterceptor<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>]
+
   /// - Returns: Interceptors to use when invoking 'listBreakpoints'.
   func makeListBreakpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ListBreakpointsResponse>]
 
   /// - Returns: Interceptors to use when invoking 'clearBreakpoints'.
   func makeClearBreakpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ClearBreakpointsResponse>]
 
-  /// - Returns: Interceptors to use when invoking 'get6502State'.
-  func makeGet6502StateInterceptors() -> [ClientInterceptor<Beebium_Get6502StateRequest, Beebium_Cpu6502State>]
+  /// - Returns: Interceptors to use when invoking 'addWatchpoint'.
+  func makeAddWatchpointInterceptors() -> [ClientInterceptor<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>]
 
-  /// - Returns: Interceptors to use when invoking 'set6502State'.
-  func makeSet6502StateInterceptors() -> [ClientInterceptor<Beebium_Set6502StateRequest, Beebium_Set6502StateResponse>]
+  /// - Returns: Interceptors to use when invoking 'removeWatchpoint'.
+  func makeRemoveWatchpointInterceptors() -> [ClientInterceptor<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'enableWatchpoint'.
+  func makeEnableWatchpointInterceptors() -> [ClientInterceptor<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'listWatchpoints'.
+  func makeListWatchpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ListWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'clearWatchpoints'.
+  func makeClearWatchpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ClearWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'getCpuDescriptor'.
+  func makeGetCpuDescriptorInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_CpuDescriptor>]
+
+  /// - Returns: Interceptors to use when invoking 'getCpuState'.
+  func makeGetCpuStateInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_CpuState>]
+
+  /// - Returns: Interceptors to use when invoking 'setCpuState'.
+  func makeSetCpuStateInterceptors() -> [ClientInterceptor<Beebium_CpuState, Beebium_CpuState>]
 }
 
 internal enum Beebium_DebuggerControlClientMetadata {
@@ -1181,6 +1628,7 @@ internal enum Beebium_DebuggerControlClientMetadata {
       Beebium_DebuggerControlClientMetadata.Methods.reset,
       Beebium_DebuggerControlClientMetadata.Methods.stepInstruction,
       Beebium_DebuggerControlClientMetadata.Methods.stepCycle,
+      Beebium_DebuggerControlClientMetadata.Methods.watchExecutionState,
       Beebium_DebuggerControlClientMetadata.Methods.readMemory,
       Beebium_DebuggerControlClientMetadata.Methods.writeMemory,
       Beebium_DebuggerControlClientMetadata.Methods.peekMemory,
@@ -1190,10 +1638,17 @@ internal enum Beebium_DebuggerControlClientMetadata {
       Beebium_DebuggerControlClientMetadata.Methods.writeRegion,
       Beebium_DebuggerControlClientMetadata.Methods.addBreakpoint,
       Beebium_DebuggerControlClientMetadata.Methods.removeBreakpoint,
+      Beebium_DebuggerControlClientMetadata.Methods.enableBreakpoint,
       Beebium_DebuggerControlClientMetadata.Methods.listBreakpoints,
       Beebium_DebuggerControlClientMetadata.Methods.clearBreakpoints,
-      Beebium_DebuggerControlClientMetadata.Methods.get6502State,
-      Beebium_DebuggerControlClientMetadata.Methods.set6502State,
+      Beebium_DebuggerControlClientMetadata.Methods.addWatchpoint,
+      Beebium_DebuggerControlClientMetadata.Methods.removeWatchpoint,
+      Beebium_DebuggerControlClientMetadata.Methods.enableWatchpoint,
+      Beebium_DebuggerControlClientMetadata.Methods.listWatchpoints,
+      Beebium_DebuggerControlClientMetadata.Methods.clearWatchpoints,
+      Beebium_DebuggerControlClientMetadata.Methods.getCpuDescriptor,
+      Beebium_DebuggerControlClientMetadata.Methods.getCpuState,
+      Beebium_DebuggerControlClientMetadata.Methods.setCpuState,
     ]
   )
 
@@ -1232,6 +1687,12 @@ internal enum Beebium_DebuggerControlClientMetadata {
       name: "StepCycle",
       path: "/beebium.DebuggerControl/StepCycle",
       type: GRPCCallType.unary
+    )
+
+    internal static let watchExecutionState = GRPCMethodDescriptor(
+      name: "WatchExecutionState",
+      path: "/beebium.DebuggerControl/WatchExecutionState",
+      type: GRPCCallType.serverStreaming
     )
 
     internal static let readMemory = GRPCMethodDescriptor(
@@ -1288,6 +1749,12 @@ internal enum Beebium_DebuggerControlClientMetadata {
       type: GRPCCallType.unary
     )
 
+    internal static let enableBreakpoint = GRPCMethodDescriptor(
+      name: "EnableBreakpoint",
+      path: "/beebium.DebuggerControl/EnableBreakpoint",
+      type: GRPCCallType.unary
+    )
+
     internal static let listBreakpoints = GRPCMethodDescriptor(
       name: "ListBreakpoints",
       path: "/beebium.DebuggerControl/ListBreakpoints",
@@ -1300,22 +1767,1863 @@ internal enum Beebium_DebuggerControlClientMetadata {
       type: GRPCCallType.unary
     )
 
-    internal static let get6502State = GRPCMethodDescriptor(
-      name: "Get6502State",
-      path: "/beebium.DebuggerControl/Get6502State",
+    internal static let addWatchpoint = GRPCMethodDescriptor(
+      name: "AddWatchpoint",
+      path: "/beebium.DebuggerControl/AddWatchpoint",
       type: GRPCCallType.unary
     )
 
-    internal static let set6502State = GRPCMethodDescriptor(
-      name: "Set6502State",
-      path: "/beebium.DebuggerControl/Set6502State",
+    internal static let removeWatchpoint = GRPCMethodDescriptor(
+      name: "RemoveWatchpoint",
+      path: "/beebium.DebuggerControl/RemoveWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let enableWatchpoint = GRPCMethodDescriptor(
+      name: "EnableWatchpoint",
+      path: "/beebium.DebuggerControl/EnableWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listWatchpoints = GRPCMethodDescriptor(
+      name: "ListWatchpoints",
+      path: "/beebium.DebuggerControl/ListWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let clearWatchpoints = GRPCMethodDescriptor(
+      name: "ClearWatchpoints",
+      path: "/beebium.DebuggerControl/ClearWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuDescriptor = GRPCMethodDescriptor(
+      name: "GetCpuDescriptor",
+      path: "/beebium.DebuggerControl/GetCpuDescriptor",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuState = GRPCMethodDescriptor(
+      name: "GetCpuState",
+      path: "/beebium.DebuggerControl/GetCpuState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setCpuState = GRPCMethodDescriptor(
+      name: "SetCpuState",
+      path: "/beebium.DebuggerControl/SetCpuState",
+      type: GRPCCallType.unary
+    )
+  }
+}
+
+/// Coprocessor (second processor) debugger service.
+/// Same RPCs as DebuggerControl but registered under a distinct service name
+/// so both can coexist on the same gRPC server.
+///
+/// Usage: instantiate `Beebium_CoprocessorDebuggerControlClient`, then call methods of this protocol to make API calls.
+internal protocol Beebium_CoprocessorDebuggerControlClientProtocol: GRPCClient {
+  var serviceName: String { get }
+  var interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? { get }
+
+  func getState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ExecutionState>
+
+  func run(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_RunResponse>
+
+  func stop(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_StopResponse>
+
+  func reset(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ResetResponse>
+
+  func stepInstruction(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_StepRequest, Beebium_StepResponse>
+
+  func stepCycle(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_StepRequest, Beebium_StepResponse>
+
+  func watchExecutionState(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions?,
+    handler: @escaping (Beebium_ExecutionStateEvent) -> Void
+  ) -> ServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>
+
+  func readMemory(
+    _ request: Beebium_ReadMemoryRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse>
+
+  func writeMemory(
+    _ request: Beebium_WriteMemoryRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_WriteMemoryRequest, Beebium_WriteMemoryResponse>
+
+  func peekMemory(
+    _ request: Beebium_PeekMemoryRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_PeekMemoryRequest, Beebium_PeekMemoryResponse>
+
+  func getMemoryRegions(
+    _ request: Beebium_GetMemoryRegionsRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetMemoryRegionsRequest, Beebium_GetMemoryRegionsResponse>
+
+  func peekRegion(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>
+
+  func readRegion(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>
+
+  func writeRegion(
+    _ request: Beebium_WriteRegionRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_WriteRegionRequest, Beebium_WriteRegionResponse>
+
+  func addBreakpoint(
+    _ request: Beebium_AddBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AddBreakpointRequest, Beebium_AddBreakpointResponse>
+
+  func removeBreakpoint(
+    _ request: Beebium_RemoveBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>
+
+  func enableBreakpoint(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>
+
+  func listBreakpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ListBreakpointsResponse>
+
+  func clearBreakpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ClearBreakpointsResponse>
+
+  func addWatchpoint(
+    _ request: Beebium_AddWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>
+
+  func removeWatchpoint(
+    _ request: Beebium_RemoveWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>
+
+  func enableWatchpoint(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>
+
+  func listWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse>
+
+  func clearWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse>
+
+  func getCpuDescriptor(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuDescriptor>
+
+  func getCpuState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuState>
+
+  func setCpuState(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_CpuState, Beebium_CpuState>
+}
+
+extension Beebium_CoprocessorDebuggerControlClientProtocol {
+  internal var serviceName: String {
+    return "beebium.CoprocessorDebuggerControl"
+  }
+
+  /// Unary call to GetState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ExecutionState> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetStateInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to Run
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to Run.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func run(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_RunResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.run.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRunInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to Stop
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to Stop.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func stop(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_StopResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stop.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStopInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to Reset
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to Reset.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func reset(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ResetResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.reset.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeResetInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to StepInstruction
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to StepInstruction.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func stepInstruction(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_StepRequest, Beebium_StepResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepInstruction.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStepInstructionInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to StepCycle
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to StepCycle.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func stepCycle(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_StepRequest, Beebium_StepResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepCycle.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStepCycleInterceptors() ?? []
+    )
+  }
+
+  /// Server streaming call to WatchExecutionState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to WatchExecutionState.
+  ///   - callOptions: Call options.
+  ///   - handler: A closure called when each response is received from the server.
+  /// - Returns: A `ServerStreamingCall` with futures for the metadata and status.
+  internal func watchExecutionState(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions? = nil,
+    handler: @escaping (Beebium_ExecutionStateEvent) -> Void
+  ) -> ServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent> {
+    return self.makeServerStreamingCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.watchExecutionState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? [],
+      handler: handler
+    )
+  }
+
+  /// Unary call to ReadMemory
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ReadMemory.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func readMemory(
+    _ request: Beebium_ReadMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReadMemoryInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to WriteMemory
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to WriteMemory.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func writeMemory(
+    _ request: Beebium_WriteMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_WriteMemoryRequest, Beebium_WriteMemoryResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWriteMemoryInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to PeekMemory
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to PeekMemory.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func peekMemory(
+    _ request: Beebium_PeekMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_PeekMemoryRequest, Beebium_PeekMemoryResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePeekMemoryInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to GetMemoryRegions
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetMemoryRegions.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getMemoryRegions(
+    _ request: Beebium_GetMemoryRegionsRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetMemoryRegionsRequest, Beebium_GetMemoryRegionsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getMemoryRegions.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetMemoryRegionsInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to PeekRegion
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to PeekRegion.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func peekRegion(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePeekRegionInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ReadRegion
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ReadRegion.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func readRegion(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReadRegionInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to WriteRegion
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to WriteRegion.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func writeRegion(
+    _ request: Beebium_WriteRegionRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_WriteRegionRequest, Beebium_WriteRegionResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWriteRegionInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to AddBreakpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to AddBreakpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func addBreakpoint(
+    _ request: Beebium_AddBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AddBreakpointRequest, Beebium_AddBreakpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddBreakpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to RemoveBreakpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to RemoveBreakpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func removeBreakpoint(
+    _ request: Beebium_RemoveBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveBreakpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to EnableBreakpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to EnableBreakpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func enableBreakpoint(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ListBreakpoints
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ListBreakpoints.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func listBreakpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ListBreakpointsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listBreakpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBreakpointsInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ClearBreakpoints
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ClearBreakpoints.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func clearBreakpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ClearBreakpointsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearBreakpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearBreakpointsInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to AddWatchpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to AddWatchpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func addWatchpoint(
+    _ request: Beebium_AddWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to RemoveWatchpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to RemoveWatchpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func removeWatchpoint(
+    _ request: Beebium_RemoveWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to EnableWatchpoint
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to EnableWatchpoint.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func enableWatchpoint(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ListWatchpoints
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ListWatchpoints.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func listWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to ClearWatchpoints
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ClearWatchpoints.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func clearWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to GetCpuDescriptor
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetCpuDescriptor.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getCpuDescriptor(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuDescriptor> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuDescriptor.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to GetCpuState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetCpuState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getCpuState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_Empty, Beebium_CpuState> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to SetCpuState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to SetCpuState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func setCpuState(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_CpuState, Beebium_CpuState> {
+    return self.makeUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.setCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? []
+    )
+  }
+}
+
+@available(*, deprecated)
+extension Beebium_CoprocessorDebuggerControlClient: @unchecked Sendable {}
+
+@available(*, deprecated, renamed: "Beebium_CoprocessorDebuggerControlNIOClient")
+internal final class Beebium_CoprocessorDebuggerControlClient: Beebium_CoprocessorDebuggerControlClientProtocol {
+  private let lock = Lock()
+  private var _defaultCallOptions: CallOptions
+  private var _interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol?
+  internal let channel: GRPCChannel
+  internal var defaultCallOptions: CallOptions {
+    get { self.lock.withLock { return self._defaultCallOptions } }
+    set { self.lock.withLockVoid { self._defaultCallOptions = newValue } }
+  }
+  internal var interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? {
+    get { self.lock.withLock { return self._interceptors } }
+    set { self.lock.withLockVoid { self._interceptors = newValue } }
+  }
+
+  /// Creates a client for the beebium.CoprocessorDebuggerControl service.
+  ///
+  /// - Parameters:
+  ///   - channel: `GRPCChannel` to the service host.
+  ///   - defaultCallOptions: Options to use for each service call if the user doesn't provide them.
+  ///   - interceptors: A factory providing interceptors for each RPC.
+  internal init(
+    channel: GRPCChannel,
+    defaultCallOptions: CallOptions = CallOptions(),
+    interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? = nil
+  ) {
+    self.channel = channel
+    self._defaultCallOptions = defaultCallOptions
+    self._interceptors = interceptors
+  }
+}
+
+internal struct Beebium_CoprocessorDebuggerControlNIOClient: Beebium_CoprocessorDebuggerControlClientProtocol {
+  internal var channel: GRPCChannel
+  internal var defaultCallOptions: CallOptions
+  internal var interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol?
+
+  /// Creates a client for the beebium.CoprocessorDebuggerControl service.
+  ///
+  /// - Parameters:
+  ///   - channel: `GRPCChannel` to the service host.
+  ///   - defaultCallOptions: Options to use for each service call if the user doesn't provide them.
+  ///   - interceptors: A factory providing interceptors for each RPC.
+  internal init(
+    channel: GRPCChannel,
+    defaultCallOptions: CallOptions = CallOptions(),
+    interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? = nil
+  ) {
+    self.channel = channel
+    self.defaultCallOptions = defaultCallOptions
+    self.interceptors = interceptors
+  }
+}
+
+/// Coprocessor (second processor) debugger service.
+/// Same RPCs as DebuggerControl but registered under a distinct service name
+/// so both can coexist on the same gRPC server.
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+internal protocol Beebium_CoprocessorDebuggerControlAsyncClientProtocol: GRPCClient {
+  static var serviceDescriptor: GRPCServiceDescriptor { get }
+  var interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? { get }
+
+  func makeGetStateCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ExecutionState>
+
+  func makeRunCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_RunResponse>
+
+  func makeStopCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_StopResponse>
+
+  func makeResetCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ResetResponse>
+
+  func makeStepInstructionCall(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_StepRequest, Beebium_StepResponse>
+
+  func makeStepCycleCall(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_StepRequest, Beebium_StepResponse>
+
+  func makeWatchExecutionStateCall(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>
+
+  func makeReadMemoryCall(
+    _ request: Beebium_ReadMemoryRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse>
+
+  func makeWriteMemoryCall(
+    _ request: Beebium_WriteMemoryRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_WriteMemoryRequest, Beebium_WriteMemoryResponse>
+
+  func makePeekMemoryCall(
+    _ request: Beebium_PeekMemoryRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_PeekMemoryRequest, Beebium_PeekMemoryResponse>
+
+  func makeGetMemoryRegionsCall(
+    _ request: Beebium_GetMemoryRegionsRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetMemoryRegionsRequest, Beebium_GetMemoryRegionsResponse>
+
+  func makePeekRegionCall(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>
+
+  func makeReadRegionCall(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>
+
+  func makeWriteRegionCall(
+    _ request: Beebium_WriteRegionRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_WriteRegionRequest, Beebium_WriteRegionResponse>
+
+  func makeAddBreakpointCall(
+    _ request: Beebium_AddBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AddBreakpointRequest, Beebium_AddBreakpointResponse>
+
+  func makeRemoveBreakpointCall(
+    _ request: Beebium_RemoveBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>
+
+  func makeEnableBreakpointCall(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>
+
+  func makeListBreakpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ListBreakpointsResponse>
+
+  func makeClearBreakpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearBreakpointsResponse>
+
+  func makeAddWatchpointCall(
+    _ request: Beebium_AddWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>
+
+  func makeRemoveWatchpointCall(
+    _ request: Beebium_RemoveWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>
+
+  func makeEnableWatchpointCall(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>
+
+  func makeListWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse>
+
+  func makeClearWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse>
+
+  func makeGetCpuDescriptorCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuDescriptor>
+
+  func makeGetCpuStateCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuState>
+
+  func makeSetCpuStateCall(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_CpuState, Beebium_CpuState>
+}
+
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+extension Beebium_CoprocessorDebuggerControlAsyncClientProtocol {
+  internal static var serviceDescriptor: GRPCServiceDescriptor {
+    return Beebium_CoprocessorDebuggerControlClientMetadata.serviceDescriptor
+  }
+
+  internal var interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? {
+    return nil
+  }
+
+  internal func makeGetStateCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ExecutionState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetStateInterceptors() ?? []
+    )
+  }
+
+  internal func makeRunCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_RunResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.run.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRunInterceptors() ?? []
+    )
+  }
+
+  internal func makeStopCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_StopResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stop.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStopInterceptors() ?? []
+    )
+  }
+
+  internal func makeResetCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ResetResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.reset.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeResetInterceptors() ?? []
+    )
+  }
+
+  internal func makeStepInstructionCall(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_StepRequest, Beebium_StepResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepInstruction.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStepInstructionInterceptors() ?? []
+    )
+  }
+
+  internal func makeStepCycleCall(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_StepRequest, Beebium_StepResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepCycle.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStepCycleInterceptors() ?? []
+    )
+  }
+
+  internal func makeWatchExecutionStateCall(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncServerStreamingCall<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent> {
+    return self.makeAsyncServerStreamingCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.watchExecutionState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? []
+    )
+  }
+
+  internal func makeReadMemoryCall(
+    _ request: Beebium_ReadMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReadMemoryInterceptors() ?? []
+    )
+  }
+
+  internal func makeWriteMemoryCall(
+    _ request: Beebium_WriteMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_WriteMemoryRequest, Beebium_WriteMemoryResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWriteMemoryInterceptors() ?? []
+    )
+  }
+
+  internal func makePeekMemoryCall(
+    _ request: Beebium_PeekMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_PeekMemoryRequest, Beebium_PeekMemoryResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePeekMemoryInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetMemoryRegionsCall(
+    _ request: Beebium_GetMemoryRegionsRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetMemoryRegionsRequest, Beebium_GetMemoryRegionsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getMemoryRegions.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetMemoryRegionsInterceptors() ?? []
+    )
+  }
+
+  internal func makePeekRegionCall(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePeekRegionInterceptors() ?? []
+    )
+  }
+
+  internal func makeReadRegionCall(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReadRegionInterceptors() ?? []
+    )
+  }
+
+  internal func makeWriteRegionCall(
+    _ request: Beebium_WriteRegionRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_WriteRegionRequest, Beebium_WriteRegionResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWriteRegionInterceptors() ?? []
+    )
+  }
+
+  internal func makeAddBreakpointCall(
+    _ request: Beebium_AddBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AddBreakpointRequest, Beebium_AddBreakpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddBreakpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeRemoveBreakpointCall(
+    _ request: Beebium_RemoveBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveBreakpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeEnableBreakpointCall(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeListBreakpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ListBreakpointsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listBreakpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBreakpointsInterceptors() ?? []
+    )
+  }
+
+  internal func makeClearBreakpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearBreakpointsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearBreakpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearBreakpointsInterceptors() ?? []
+    )
+  }
+
+  internal func makeAddWatchpointCall(
+    _ request: Beebium_AddWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeRemoveWatchpointCall(
+    _ request: Beebium_RemoveWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeEnableWatchpointCall(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func makeListWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ListWatchpointsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func makeClearWatchpointsCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_ClearWatchpointsResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetCpuDescriptorCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuDescriptor> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuDescriptor.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? []
+    )
+  }
+
+  internal func makeGetCpuStateCall(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_Empty, Beebium_CpuState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? []
+    )
+  }
+
+  internal func makeSetCpuStateCall(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_CpuState, Beebium_CpuState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.setCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? []
+    )
+  }
+}
+
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+extension Beebium_CoprocessorDebuggerControlAsyncClientProtocol {
+  internal func getState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ExecutionState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetStateInterceptors() ?? []
+    )
+  }
+
+  internal func run(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_RunResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.run.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRunInterceptors() ?? []
+    )
+  }
+
+  internal func stop(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_StopResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stop.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStopInterceptors() ?? []
+    )
+  }
+
+  internal func reset(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ResetResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.reset.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeResetInterceptors() ?? []
+    )
+  }
+
+  internal func stepInstruction(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_StepResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepInstruction.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStepInstructionInterceptors() ?? []
+    )
+  }
+
+  internal func stepCycle(
+    _ request: Beebium_StepRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_StepResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepCycle.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeStepCycleInterceptors() ?? []
+    )
+  }
+
+  internal func watchExecutionState(
+    _ request: Beebium_WatchExecutionStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncResponseStream<Beebium_ExecutionStateEvent> {
+    return self.performAsyncServerStreamingCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.watchExecutionState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? []
+    )
+  }
+
+  internal func readMemory(
+    _ request: Beebium_ReadMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ReadMemoryResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReadMemoryInterceptors() ?? []
+    )
+  }
+
+  internal func writeMemory(
+    _ request: Beebium_WriteMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_WriteMemoryResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWriteMemoryInterceptors() ?? []
+    )
+  }
+
+  internal func peekMemory(
+    _ request: Beebium_PeekMemoryRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_PeekMemoryResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekMemory.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePeekMemoryInterceptors() ?? []
+    )
+  }
+
+  internal func getMemoryRegions(
+    _ request: Beebium_GetMemoryRegionsRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_GetMemoryRegionsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getMemoryRegions.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetMemoryRegionsInterceptors() ?? []
+    )
+  }
+
+  internal func peekRegion(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_RegionAccessResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makePeekRegionInterceptors() ?? []
+    )
+  }
+
+  internal func readRegion(
+    _ request: Beebium_RegionAccessRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_RegionAccessResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReadRegionInterceptors() ?? []
+    )
+  }
+
+  internal func writeRegion(
+    _ request: Beebium_WriteRegionRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_WriteRegionResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeRegion.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeWriteRegionInterceptors() ?? []
+    )
+  }
+
+  internal func addBreakpoint(
+    _ request: Beebium_AddBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AddBreakpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddBreakpointInterceptors() ?? []
+    )
+  }
+
+  internal func removeBreakpoint(
+    _ request: Beebium_RemoveBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_RemoveBreakpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveBreakpointInterceptors() ?? []
+    )
+  }
+
+  internal func enableBreakpoint(
+    _ request: Beebium_EnableBreakpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_EnableBreakpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableBreakpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? []
+    )
+  }
+
+  internal func listBreakpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ListBreakpointsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listBreakpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListBreakpointsInterceptors() ?? []
+    )
+  }
+
+  internal func clearBreakpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ClearBreakpointsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearBreakpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearBreakpointsInterceptors() ?? []
+    )
+  }
+
+  internal func addWatchpoint(
+    _ request: Beebium_AddWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AddWatchpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func removeWatchpoint(
+    _ request: Beebium_RemoveWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_RemoveWatchpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func enableWatchpoint(
+    _ request: Beebium_EnableWatchpointRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_EnableWatchpointResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableWatchpoint.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? []
+    )
+  }
+
+  internal func listWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ListWatchpointsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func clearWatchpoints(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_ClearWatchpointsResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearWatchpoints.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? []
+    )
+  }
+
+  internal func getCpuDescriptor(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CpuDescriptor {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuDescriptor.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? []
+    )
+  }
+
+  internal func getCpuState(
+    _ request: Beebium_Empty,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CpuState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? []
+    )
+  }
+
+  internal func setCpuState(
+    _ request: Beebium_CpuState,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_CpuState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_CoprocessorDebuggerControlClientMetadata.Methods.setCpuState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? []
+    )
+  }
+}
+
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+internal struct Beebium_CoprocessorDebuggerControlAsyncClient: Beebium_CoprocessorDebuggerControlAsyncClientProtocol {
+  internal var channel: GRPCChannel
+  internal var defaultCallOptions: CallOptions
+  internal var interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol?
+
+  internal init(
+    channel: GRPCChannel,
+    defaultCallOptions: CallOptions = CallOptions(),
+    interceptors: Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol? = nil
+  ) {
+    self.channel = channel
+    self.defaultCallOptions = defaultCallOptions
+    self.interceptors = interceptors
+  }
+}
+
+internal protocol Beebium_CoprocessorDebuggerControlClientInterceptorFactoryProtocol: Sendable {
+
+  /// - Returns: Interceptors to use when invoking 'getState'.
+  func makeGetStateInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ExecutionState>]
+
+  /// - Returns: Interceptors to use when invoking 'run'.
+  func makeRunInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_RunResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'stop'.
+  func makeStopInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_StopResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'reset'.
+  func makeResetInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ResetResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'stepInstruction'.
+  func makeStepInstructionInterceptors() -> [ClientInterceptor<Beebium_StepRequest, Beebium_StepResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'stepCycle'.
+  func makeStepCycleInterceptors() -> [ClientInterceptor<Beebium_StepRequest, Beebium_StepResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'watchExecutionState'.
+  func makeWatchExecutionStateInterceptors() -> [ClientInterceptor<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>]
+
+  /// - Returns: Interceptors to use when invoking 'readMemory'.
+  func makeReadMemoryInterceptors() -> [ClientInterceptor<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'writeMemory'.
+  func makeWriteMemoryInterceptors() -> [ClientInterceptor<Beebium_WriteMemoryRequest, Beebium_WriteMemoryResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'peekMemory'.
+  func makePeekMemoryInterceptors() -> [ClientInterceptor<Beebium_PeekMemoryRequest, Beebium_PeekMemoryResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'getMemoryRegions'.
+  func makeGetMemoryRegionsInterceptors() -> [ClientInterceptor<Beebium_GetMemoryRegionsRequest, Beebium_GetMemoryRegionsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'peekRegion'.
+  func makePeekRegionInterceptors() -> [ClientInterceptor<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'readRegion'.
+  func makeReadRegionInterceptors() -> [ClientInterceptor<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'writeRegion'.
+  func makeWriteRegionInterceptors() -> [ClientInterceptor<Beebium_WriteRegionRequest, Beebium_WriteRegionResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'addBreakpoint'.
+  func makeAddBreakpointInterceptors() -> [ClientInterceptor<Beebium_AddBreakpointRequest, Beebium_AddBreakpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'removeBreakpoint'.
+  func makeRemoveBreakpointInterceptors() -> [ClientInterceptor<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'enableBreakpoint'.
+  func makeEnableBreakpointInterceptors() -> [ClientInterceptor<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'listBreakpoints'.
+  func makeListBreakpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ListBreakpointsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'clearBreakpoints'.
+  func makeClearBreakpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ClearBreakpointsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'addWatchpoint'.
+  func makeAddWatchpointInterceptors() -> [ClientInterceptor<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'removeWatchpoint'.
+  func makeRemoveWatchpointInterceptors() -> [ClientInterceptor<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'enableWatchpoint'.
+  func makeEnableWatchpointInterceptors() -> [ClientInterceptor<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'listWatchpoints'.
+  func makeListWatchpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ListWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'clearWatchpoints'.
+  func makeClearWatchpointsInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_ClearWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'getCpuDescriptor'.
+  func makeGetCpuDescriptorInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_CpuDescriptor>]
+
+  /// - Returns: Interceptors to use when invoking 'getCpuState'.
+  func makeGetCpuStateInterceptors() -> [ClientInterceptor<Beebium_Empty, Beebium_CpuState>]
+
+  /// - Returns: Interceptors to use when invoking 'setCpuState'.
+  func makeSetCpuStateInterceptors() -> [ClientInterceptor<Beebium_CpuState, Beebium_CpuState>]
+}
+
+internal enum Beebium_CoprocessorDebuggerControlClientMetadata {
+  internal static let serviceDescriptor = GRPCServiceDescriptor(
+    name: "CoprocessorDebuggerControl",
+    fullName: "beebium.CoprocessorDebuggerControl",
+    methods: [
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getState,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.run,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stop,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.reset,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepInstruction,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.stepCycle,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.watchExecutionState,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readMemory,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeMemory,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekMemory,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getMemoryRegions,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.peekRegion,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.readRegion,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.writeRegion,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addBreakpoint,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeBreakpoint,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableBreakpoint,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listBreakpoints,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearBreakpoints,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.addWatchpoint,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.removeWatchpoint,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.enableWatchpoint,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.listWatchpoints,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.clearWatchpoints,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuDescriptor,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.getCpuState,
+      Beebium_CoprocessorDebuggerControlClientMetadata.Methods.setCpuState,
+    ]
+  )
+
+  internal enum Methods {
+    internal static let getState = GRPCMethodDescriptor(
+      name: "GetState",
+      path: "/beebium.CoprocessorDebuggerControl/GetState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let run = GRPCMethodDescriptor(
+      name: "Run",
+      path: "/beebium.CoprocessorDebuggerControl/Run",
+      type: GRPCCallType.unary
+    )
+
+    internal static let stop = GRPCMethodDescriptor(
+      name: "Stop",
+      path: "/beebium.CoprocessorDebuggerControl/Stop",
+      type: GRPCCallType.unary
+    )
+
+    internal static let reset = GRPCMethodDescriptor(
+      name: "Reset",
+      path: "/beebium.CoprocessorDebuggerControl/Reset",
+      type: GRPCCallType.unary
+    )
+
+    internal static let stepInstruction = GRPCMethodDescriptor(
+      name: "StepInstruction",
+      path: "/beebium.CoprocessorDebuggerControl/StepInstruction",
+      type: GRPCCallType.unary
+    )
+
+    internal static let stepCycle = GRPCMethodDescriptor(
+      name: "StepCycle",
+      path: "/beebium.CoprocessorDebuggerControl/StepCycle",
+      type: GRPCCallType.unary
+    )
+
+    internal static let watchExecutionState = GRPCMethodDescriptor(
+      name: "WatchExecutionState",
+      path: "/beebium.CoprocessorDebuggerControl/WatchExecutionState",
+      type: GRPCCallType.serverStreaming
+    )
+
+    internal static let readMemory = GRPCMethodDescriptor(
+      name: "ReadMemory",
+      path: "/beebium.CoprocessorDebuggerControl/ReadMemory",
+      type: GRPCCallType.unary
+    )
+
+    internal static let writeMemory = GRPCMethodDescriptor(
+      name: "WriteMemory",
+      path: "/beebium.CoprocessorDebuggerControl/WriteMemory",
+      type: GRPCCallType.unary
+    )
+
+    internal static let peekMemory = GRPCMethodDescriptor(
+      name: "PeekMemory",
+      path: "/beebium.CoprocessorDebuggerControl/PeekMemory",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getMemoryRegions = GRPCMethodDescriptor(
+      name: "GetMemoryRegions",
+      path: "/beebium.CoprocessorDebuggerControl/GetMemoryRegions",
+      type: GRPCCallType.unary
+    )
+
+    internal static let peekRegion = GRPCMethodDescriptor(
+      name: "PeekRegion",
+      path: "/beebium.CoprocessorDebuggerControl/PeekRegion",
+      type: GRPCCallType.unary
+    )
+
+    internal static let readRegion = GRPCMethodDescriptor(
+      name: "ReadRegion",
+      path: "/beebium.CoprocessorDebuggerControl/ReadRegion",
+      type: GRPCCallType.unary
+    )
+
+    internal static let writeRegion = GRPCMethodDescriptor(
+      name: "WriteRegion",
+      path: "/beebium.CoprocessorDebuggerControl/WriteRegion",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addBreakpoint = GRPCMethodDescriptor(
+      name: "AddBreakpoint",
+      path: "/beebium.CoprocessorDebuggerControl/AddBreakpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeBreakpoint = GRPCMethodDescriptor(
+      name: "RemoveBreakpoint",
+      path: "/beebium.CoprocessorDebuggerControl/RemoveBreakpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let enableBreakpoint = GRPCMethodDescriptor(
+      name: "EnableBreakpoint",
+      path: "/beebium.CoprocessorDebuggerControl/EnableBreakpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listBreakpoints = GRPCMethodDescriptor(
+      name: "ListBreakpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ListBreakpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let clearBreakpoints = GRPCMethodDescriptor(
+      name: "ClearBreakpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ClearBreakpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addWatchpoint = GRPCMethodDescriptor(
+      name: "AddWatchpoint",
+      path: "/beebium.CoprocessorDebuggerControl/AddWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeWatchpoint = GRPCMethodDescriptor(
+      name: "RemoveWatchpoint",
+      path: "/beebium.CoprocessorDebuggerControl/RemoveWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let enableWatchpoint = GRPCMethodDescriptor(
+      name: "EnableWatchpoint",
+      path: "/beebium.CoprocessorDebuggerControl/EnableWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listWatchpoints = GRPCMethodDescriptor(
+      name: "ListWatchpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ListWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let clearWatchpoints = GRPCMethodDescriptor(
+      name: "ClearWatchpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ClearWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuDescriptor = GRPCMethodDescriptor(
+      name: "GetCpuDescriptor",
+      path: "/beebium.CoprocessorDebuggerControl/GetCpuDescriptor",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuState = GRPCMethodDescriptor(
+      name: "GetCpuState",
+      path: "/beebium.CoprocessorDebuggerControl/GetCpuState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setCpuState = GRPCMethodDescriptor(
+      name: "SetCpuState",
+      path: "/beebium.CoprocessorDebuggerControl/SetCpuState",
       type: GRPCCallType.unary
     )
   }
 }
 
 /// BBC Micro device state inspection.
-/// Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+/// Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
 ///
 /// Usage: instantiate `Beebium_DeviceInspectionClient`, then call methods of this protocol to make API calls.
 internal protocol Beebium_DeviceInspectionClientProtocol: GRPCClient {
@@ -1351,6 +3659,11 @@ internal protocol Beebium_DeviceInspectionClientProtocol: GRPCClient {
     _ request: Beebium_GetSoundGeneratorStateRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_GetSoundGeneratorStateRequest, Beebium_SoundGeneratorState>
+
+  func getTubeState(
+    _ request: Beebium_GetTubeStateRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState>
 }
 
 extension Beebium_DeviceInspectionClientProtocol {
@@ -1465,6 +3778,24 @@ extension Beebium_DeviceInspectionClientProtocol {
       interceptors: self.interceptors?.makeGetSoundGeneratorStateInterceptors() ?? []
     )
   }
+
+  /// Unary call to GetTubeState
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to GetTubeState.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func getTubeState(
+    _ request: Beebium_GetTubeStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState> {
+    return self.makeUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.getTubeState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
+    )
+  }
 }
 
 @available(*, deprecated)
@@ -1525,7 +3856,7 @@ internal struct Beebium_DeviceInspectionNIOClient: Beebium_DeviceInspectionClien
 }
 
 /// BBC Micro device state inspection.
-/// Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+/// Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 internal protocol Beebium_DeviceInspectionAsyncClientProtocol: GRPCClient {
   static var serviceDescriptor: GRPCServiceDescriptor { get }
@@ -1560,6 +3891,11 @@ internal protocol Beebium_DeviceInspectionAsyncClientProtocol: GRPCClient {
     _ request: Beebium_GetSoundGeneratorStateRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_GetSoundGeneratorStateRequest, Beebium_SoundGeneratorState>
+
+  func makeGetTubeStateCall(
+    _ request: Beebium_GetTubeStateRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1643,6 +3979,18 @@ extension Beebium_DeviceInspectionAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetSoundGeneratorStateInterceptors() ?? []
     )
   }
+
+  internal func makeGetTubeStateCall(
+    _ request: Beebium_GetTubeStateRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_GetTubeStateRequest, Beebium_TubeState> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.getTubeState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1718,6 +4066,18 @@ extension Beebium_DeviceInspectionAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetSoundGeneratorStateInterceptors() ?? []
     )
   }
+
+  internal func getTubeState(
+    _ request: Beebium_GetTubeStateRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_TubeState {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_DeviceInspectionClientMetadata.Methods.getTubeState.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -1756,6 +4116,9 @@ internal protocol Beebium_DeviceInspectionClientInterceptorFactoryProtocol: Send
 
   /// - Returns: Interceptors to use when invoking 'getSoundGeneratorState'.
   func makeGetSoundGeneratorStateInterceptors() -> [ClientInterceptor<Beebium_GetSoundGeneratorStateRequest, Beebium_SoundGeneratorState>]
+
+  /// - Returns: Interceptors to use when invoking 'getTubeState'.
+  func makeGetTubeStateInterceptors() -> [ClientInterceptor<Beebium_GetTubeStateRequest, Beebium_TubeState>]
 }
 
 internal enum Beebium_DeviceInspectionClientMetadata {
@@ -1769,6 +4132,7 @@ internal enum Beebium_DeviceInspectionClientMetadata {
       Beebium_DeviceInspectionClientMetadata.Methods.getVideoUlaState,
       Beebium_DeviceInspectionClientMetadata.Methods.getAddressableLatchState,
       Beebium_DeviceInspectionClientMetadata.Methods.getSoundGeneratorState,
+      Beebium_DeviceInspectionClientMetadata.Methods.getTubeState,
     ]
   )
 
@@ -1808,11 +4172,17 @@ internal enum Beebium_DeviceInspectionClientMetadata {
       path: "/beebium.DeviceInspection/GetSoundGeneratorState",
       type: GRPCCallType.unary
     )
+
+    internal static let getTubeState = GRPCMethodDescriptor(
+      name: "GetTubeState",
+      path: "/beebium.DeviceInspection/GetTubeState",
+      type: GRPCCallType.unary
+    )
   }
 }
 
 /// Generic debugger service for 6502-based machines.
-/// Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+/// Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
 ///
 /// To build a server, implement a class that conforms to this protocol.
 internal protocol Beebium_DebuggerControlProvider: CallHandlerProvider {
@@ -1830,6 +4200,9 @@ internal protocol Beebium_DebuggerControlProvider: CallHandlerProvider {
   func stepInstruction(request: Beebium_StepRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StepResponse>
 
   func stepCycle(request: Beebium_StepRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StepResponse>
+
+  /// Event streaming
+  func watchExecutionState(request: Beebium_WatchExecutionStateRequest, context: StreamingResponseCallContext<Beebium_ExecutionStateEvent>) -> EventLoopFuture<GRPCStatus>
 
   /// Memory access (16-bit address space)
   func readMemory(request: Beebium_ReadMemoryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ReadMemoryResponse>
@@ -1852,14 +4225,32 @@ internal protocol Beebium_DebuggerControlProvider: CallHandlerProvider {
 
   func removeBreakpoint(request: Beebium_RemoveBreakpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RemoveBreakpointResponse>
 
+  func enableBreakpoint(request: Beebium_EnableBreakpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_EnableBreakpointResponse>
+
   func listBreakpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListBreakpointsResponse>
 
   func clearBreakpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ClearBreakpointsResponse>
 
-  /// CPU state
-  func get6502State(request: Beebium_Get6502StateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_Cpu6502State>
+  /// Watchpoints (address range + access type)
+  func addWatchpoint(request: Beebium_AddWatchpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AddWatchpointResponse>
 
-  func set6502State(request: Beebium_Set6502StateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_Set6502StateResponse>
+  func removeWatchpoint(request: Beebium_RemoveWatchpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RemoveWatchpointResponse>
+
+  func enableWatchpoint(request: Beebium_EnableWatchpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_EnableWatchpointResponse>
+
+  func listWatchpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListWatchpointsResponse>
+
+  func clearWatchpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ClearWatchpointsResponse>
+
+  /// CPU state (family-agnostic register model). The CPU describes itself
+  /// (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+  /// SetCpuState accepts any subset of registers by name and returns the
+  /// full state.
+  func getCpuDescriptor(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CpuDescriptor>
+
+  func getCpuState(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CpuState>
+
+  func setCpuState(request: Beebium_CpuState, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CpuState>
 }
 
 extension Beebium_DebuggerControlProvider {
@@ -1926,6 +4317,15 @@ extension Beebium_DebuggerControlProvider {
         responseSerializer: ProtobufSerializer<Beebium_StepResponse>(),
         interceptors: self.interceptors?.makeStepCycleInterceptors() ?? [],
         userFunction: self.stepCycle(request:context:)
+      )
+
+    case "WatchExecutionState":
+      return ServerStreamingServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WatchExecutionStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ExecutionStateEvent>(),
+        interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? [],
+        userFunction: self.watchExecutionState(request:context:)
       )
 
     case "ReadMemory":
@@ -2009,6 +4409,15 @@ extension Beebium_DebuggerControlProvider {
         userFunction: self.removeBreakpoint(request:context:)
       )
 
+    case "EnableBreakpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableBreakpointResponse>(),
+        interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? [],
+        userFunction: self.enableBreakpoint(request:context:)
+      )
+
     case "ListBreakpoints":
       return UnaryServerHandler(
         context: context,
@@ -2027,22 +4436,76 @@ extension Beebium_DebuggerControlProvider {
         userFunction: self.clearBreakpoints(request:context:)
       )
 
-    case "Get6502State":
+    case "AddWatchpoint":
       return UnaryServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Get6502StateRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_Cpu6502State>(),
-        interceptors: self.interceptors?.makeGet6502StateInterceptors() ?? [],
-        userFunction: self.get6502State(request:context:)
+        requestDeserializer: ProtobufDeserializer<Beebium_AddWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AddWatchpointResponse>(),
+        interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? [],
+        userFunction: self.addWatchpoint(request:context:)
       )
 
-    case "Set6502State":
+    case "RemoveWatchpoint":
       return UnaryServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Set6502StateRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_Set6502StateResponse>(),
-        interceptors: self.interceptors?.makeSet6502StateInterceptors() ?? [],
-        userFunction: self.set6502State(request:context:)
+        requestDeserializer: ProtobufDeserializer<Beebium_RemoveWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RemoveWatchpointResponse>(),
+        interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? [],
+        userFunction: self.removeWatchpoint(request:context:)
+      )
+
+    case "EnableWatchpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableWatchpointResponse>(),
+        interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? [],
+        userFunction: self.enableWatchpoint(request:context:)
+      )
+
+    case "ListWatchpoints":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? [],
+        userFunction: self.listWatchpoints(request:context:)
+      )
+
+    case "ClearWatchpoints":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ClearWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? [],
+        userFunction: self.clearWatchpoints(request:context:)
+      )
+
+    case "GetCpuDescriptor":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuDescriptor>(),
+        interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? [],
+        userFunction: self.getCpuDescriptor(request:context:)
+      )
+
+    case "GetCpuState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? [],
+        userFunction: self.getCpuState(request:context:)
+      )
+
+    case "SetCpuState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CpuState>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? [],
+        userFunction: self.setCpuState(request:context:)
       )
 
     default:
@@ -2052,7 +4515,7 @@ extension Beebium_DebuggerControlProvider {
 }
 
 /// Generic debugger service for 6502-based machines.
-/// Can be instantiated for both host (Machine<Hardware>) and parasite (ParasiteRunner).
+/// Can be instantiated for both host (Machine<Hardware>) and coprocessor (CoprocessorRunner).
 ///
 /// To implement a server, implement an object which conforms to this protocol.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -2090,6 +4553,13 @@ internal protocol Beebium_DebuggerControlAsyncProvider: CallHandlerProvider, Sen
     request: Beebium_StepRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_StepResponse
+
+  /// Event streaming
+  func watchExecutionState(
+    request: Beebium_WatchExecutionStateRequest,
+    responseStream: GRPCAsyncResponseStreamWriter<Beebium_ExecutionStateEvent>,
+    context: GRPCAsyncServerCallContext
+  ) async throws
 
   /// Memory access (16-bit address space)
   func readMemory(
@@ -2139,6 +4609,11 @@ internal protocol Beebium_DebuggerControlAsyncProvider: CallHandlerProvider, Sen
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_RemoveBreakpointResponse
 
+  func enableBreakpoint(
+    request: Beebium_EnableBreakpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_EnableBreakpointResponse
+
   func listBreakpoints(
     request: Beebium_Empty,
     context: GRPCAsyncServerCallContext
@@ -2149,16 +4624,50 @@ internal protocol Beebium_DebuggerControlAsyncProvider: CallHandlerProvider, Sen
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_ClearBreakpointsResponse
 
-  /// CPU state
-  func get6502State(
-    request: Beebium_Get6502StateRequest,
+  /// Watchpoints (address range + access type)
+  func addWatchpoint(
+    request: Beebium_AddWatchpointRequest,
     context: GRPCAsyncServerCallContext
-  ) async throws -> Beebium_Cpu6502State
+  ) async throws -> Beebium_AddWatchpointResponse
 
-  func set6502State(
-    request: Beebium_Set6502StateRequest,
+  func removeWatchpoint(
+    request: Beebium_RemoveWatchpointRequest,
     context: GRPCAsyncServerCallContext
-  ) async throws -> Beebium_Set6502StateResponse
+  ) async throws -> Beebium_RemoveWatchpointResponse
+
+  func enableWatchpoint(
+    request: Beebium_EnableWatchpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_EnableWatchpointResponse
+
+  func listWatchpoints(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ListWatchpointsResponse
+
+  func clearWatchpoints(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ClearWatchpointsResponse
+
+  /// CPU state (family-agnostic register model). The CPU describes itself
+  /// (GetCpuDescriptor); the state is name/value pairs in descriptor order.
+  /// SetCpuState accepts any subset of registers by name and returns the
+  /// full state.
+  func getCpuDescriptor(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CpuDescriptor
+
+  func getCpuState(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CpuState
+
+  func setCpuState(
+    request: Beebium_CpuState,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CpuState
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -2232,6 +4741,15 @@ extension Beebium_DebuggerControlAsyncProvider {
         responseSerializer: ProtobufSerializer<Beebium_StepResponse>(),
         interceptors: self.interceptors?.makeStepCycleInterceptors() ?? [],
         wrapping: { try await self.stepCycle(request: $0, context: $1) }
+      )
+
+    case "WatchExecutionState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WatchExecutionStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ExecutionStateEvent>(),
+        interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? [],
+        wrapping: { try await self.watchExecutionState(request: $0, responseStream: $1, context: $2) }
       )
 
     case "ReadMemory":
@@ -2315,6 +4833,15 @@ extension Beebium_DebuggerControlAsyncProvider {
         wrapping: { try await self.removeBreakpoint(request: $0, context: $1) }
       )
 
+    case "EnableBreakpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableBreakpointResponse>(),
+        interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? [],
+        wrapping: { try await self.enableBreakpoint(request: $0, context: $1) }
+      )
+
     case "ListBreakpoints":
       return GRPCAsyncServerHandler(
         context: context,
@@ -2333,22 +4860,76 @@ extension Beebium_DebuggerControlAsyncProvider {
         wrapping: { try await self.clearBreakpoints(request: $0, context: $1) }
       )
 
-    case "Get6502State":
+    case "AddWatchpoint":
       return GRPCAsyncServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Get6502StateRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_Cpu6502State>(),
-        interceptors: self.interceptors?.makeGet6502StateInterceptors() ?? [],
-        wrapping: { try await self.get6502State(request: $0, context: $1) }
+        requestDeserializer: ProtobufDeserializer<Beebium_AddWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AddWatchpointResponse>(),
+        interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? [],
+        wrapping: { try await self.addWatchpoint(request: $0, context: $1) }
       )
 
-    case "Set6502State":
+    case "RemoveWatchpoint":
       return GRPCAsyncServerHandler(
         context: context,
-        requestDeserializer: ProtobufDeserializer<Beebium_Set6502StateRequest>(),
-        responseSerializer: ProtobufSerializer<Beebium_Set6502StateResponse>(),
-        interceptors: self.interceptors?.makeSet6502StateInterceptors() ?? [],
-        wrapping: { try await self.set6502State(request: $0, context: $1) }
+        requestDeserializer: ProtobufDeserializer<Beebium_RemoveWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RemoveWatchpointResponse>(),
+        interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? [],
+        wrapping: { try await self.removeWatchpoint(request: $0, context: $1) }
+      )
+
+    case "EnableWatchpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableWatchpointResponse>(),
+        interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? [],
+        wrapping: { try await self.enableWatchpoint(request: $0, context: $1) }
+      )
+
+    case "ListWatchpoints":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? [],
+        wrapping: { try await self.listWatchpoints(request: $0, context: $1) }
+      )
+
+    case "ClearWatchpoints":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ClearWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? [],
+        wrapping: { try await self.clearWatchpoints(request: $0, context: $1) }
+      )
+
+    case "GetCpuDescriptor":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuDescriptor>(),
+        interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? [],
+        wrapping: { try await self.getCpuDescriptor(request: $0, context: $1) }
+      )
+
+    case "GetCpuState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? [],
+        wrapping: { try await self.getCpuState(request: $0, context: $1) }
+      )
+
+    case "SetCpuState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CpuState>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? [],
+        wrapping: { try await self.setCpuState(request: $0, context: $1) }
       )
 
     default:
@@ -2382,6 +4963,10 @@ internal protocol Beebium_DebuggerControlServerInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when handling 'stepCycle'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeStepCycleInterceptors() -> [ServerInterceptor<Beebium_StepRequest, Beebium_StepResponse>]
+
+  /// - Returns: Interceptors to use when handling 'watchExecutionState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeWatchExecutionStateInterceptors() -> [ServerInterceptor<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>]
 
   /// - Returns: Interceptors to use when handling 'readMemory'.
   ///   Defaults to calling `self.makeInterceptors()`.
@@ -2419,6 +5004,10 @@ internal protocol Beebium_DebuggerControlServerInterceptorFactoryProtocol: Senda
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeRemoveBreakpointInterceptors() -> [ServerInterceptor<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>]
 
+  /// - Returns: Interceptors to use when handling 'enableBreakpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeEnableBreakpointInterceptors() -> [ServerInterceptor<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>]
+
   /// - Returns: Interceptors to use when handling 'listBreakpoints'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeListBreakpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ListBreakpointsResponse>]
@@ -2427,13 +5016,37 @@ internal protocol Beebium_DebuggerControlServerInterceptorFactoryProtocol: Senda
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeClearBreakpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ClearBreakpointsResponse>]
 
-  /// - Returns: Interceptors to use when handling 'get6502State'.
+  /// - Returns: Interceptors to use when handling 'addWatchpoint'.
   ///   Defaults to calling `self.makeInterceptors()`.
-  func makeGet6502StateInterceptors() -> [ServerInterceptor<Beebium_Get6502StateRequest, Beebium_Cpu6502State>]
+  func makeAddWatchpointInterceptors() -> [ServerInterceptor<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>]
 
-  /// - Returns: Interceptors to use when handling 'set6502State'.
+  /// - Returns: Interceptors to use when handling 'removeWatchpoint'.
   ///   Defaults to calling `self.makeInterceptors()`.
-  func makeSet6502StateInterceptors() -> [ServerInterceptor<Beebium_Set6502StateRequest, Beebium_Set6502StateResponse>]
+  func makeRemoveWatchpointInterceptors() -> [ServerInterceptor<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'enableWatchpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeEnableWatchpointInterceptors() -> [ServerInterceptor<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'listWatchpoints'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeListWatchpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ListWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'clearWatchpoints'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeClearWatchpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ClearWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'getCpuDescriptor'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetCpuDescriptorInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_CpuDescriptor>]
+
+  /// - Returns: Interceptors to use when handling 'getCpuState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetCpuStateInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_CpuState>]
+
+  /// - Returns: Interceptors to use when handling 'setCpuState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeSetCpuStateInterceptors() -> [ServerInterceptor<Beebium_CpuState, Beebium_CpuState>]
 }
 
 internal enum Beebium_DebuggerControlServerMetadata {
@@ -2447,6 +5060,7 @@ internal enum Beebium_DebuggerControlServerMetadata {
       Beebium_DebuggerControlServerMetadata.Methods.reset,
       Beebium_DebuggerControlServerMetadata.Methods.stepInstruction,
       Beebium_DebuggerControlServerMetadata.Methods.stepCycle,
+      Beebium_DebuggerControlServerMetadata.Methods.watchExecutionState,
       Beebium_DebuggerControlServerMetadata.Methods.readMemory,
       Beebium_DebuggerControlServerMetadata.Methods.writeMemory,
       Beebium_DebuggerControlServerMetadata.Methods.peekMemory,
@@ -2456,10 +5070,17 @@ internal enum Beebium_DebuggerControlServerMetadata {
       Beebium_DebuggerControlServerMetadata.Methods.writeRegion,
       Beebium_DebuggerControlServerMetadata.Methods.addBreakpoint,
       Beebium_DebuggerControlServerMetadata.Methods.removeBreakpoint,
+      Beebium_DebuggerControlServerMetadata.Methods.enableBreakpoint,
       Beebium_DebuggerControlServerMetadata.Methods.listBreakpoints,
       Beebium_DebuggerControlServerMetadata.Methods.clearBreakpoints,
-      Beebium_DebuggerControlServerMetadata.Methods.get6502State,
-      Beebium_DebuggerControlServerMetadata.Methods.set6502State,
+      Beebium_DebuggerControlServerMetadata.Methods.addWatchpoint,
+      Beebium_DebuggerControlServerMetadata.Methods.removeWatchpoint,
+      Beebium_DebuggerControlServerMetadata.Methods.enableWatchpoint,
+      Beebium_DebuggerControlServerMetadata.Methods.listWatchpoints,
+      Beebium_DebuggerControlServerMetadata.Methods.clearWatchpoints,
+      Beebium_DebuggerControlServerMetadata.Methods.getCpuDescriptor,
+      Beebium_DebuggerControlServerMetadata.Methods.getCpuState,
+      Beebium_DebuggerControlServerMetadata.Methods.setCpuState,
     ]
   )
 
@@ -2498,6 +5119,12 @@ internal enum Beebium_DebuggerControlServerMetadata {
       name: "StepCycle",
       path: "/beebium.DebuggerControl/StepCycle",
       type: GRPCCallType.unary
+    )
+
+    internal static let watchExecutionState = GRPCMethodDescriptor(
+      name: "WatchExecutionState",
+      path: "/beebium.DebuggerControl/WatchExecutionState",
+      type: GRPCCallType.serverStreaming
     )
 
     internal static let readMemory = GRPCMethodDescriptor(
@@ -2554,6 +5181,12 @@ internal enum Beebium_DebuggerControlServerMetadata {
       type: GRPCCallType.unary
     )
 
+    internal static let enableBreakpoint = GRPCMethodDescriptor(
+      name: "EnableBreakpoint",
+      path: "/beebium.DebuggerControl/EnableBreakpoint",
+      type: GRPCCallType.unary
+    )
+
     internal static let listBreakpoints = GRPCMethodDescriptor(
       name: "ListBreakpoints",
       path: "/beebium.DebuggerControl/ListBreakpoints",
@@ -2566,21 +5199,1106 @@ internal enum Beebium_DebuggerControlServerMetadata {
       type: GRPCCallType.unary
     )
 
-    internal static let get6502State = GRPCMethodDescriptor(
-      name: "Get6502State",
-      path: "/beebium.DebuggerControl/Get6502State",
+    internal static let addWatchpoint = GRPCMethodDescriptor(
+      name: "AddWatchpoint",
+      path: "/beebium.DebuggerControl/AddWatchpoint",
       type: GRPCCallType.unary
     )
 
-    internal static let set6502State = GRPCMethodDescriptor(
-      name: "Set6502State",
-      path: "/beebium.DebuggerControl/Set6502State",
+    internal static let removeWatchpoint = GRPCMethodDescriptor(
+      name: "RemoveWatchpoint",
+      path: "/beebium.DebuggerControl/RemoveWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let enableWatchpoint = GRPCMethodDescriptor(
+      name: "EnableWatchpoint",
+      path: "/beebium.DebuggerControl/EnableWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listWatchpoints = GRPCMethodDescriptor(
+      name: "ListWatchpoints",
+      path: "/beebium.DebuggerControl/ListWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let clearWatchpoints = GRPCMethodDescriptor(
+      name: "ClearWatchpoints",
+      path: "/beebium.DebuggerControl/ClearWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuDescriptor = GRPCMethodDescriptor(
+      name: "GetCpuDescriptor",
+      path: "/beebium.DebuggerControl/GetCpuDescriptor",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuState = GRPCMethodDescriptor(
+      name: "GetCpuState",
+      path: "/beebium.DebuggerControl/GetCpuState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setCpuState = GRPCMethodDescriptor(
+      name: "SetCpuState",
+      path: "/beebium.DebuggerControl/SetCpuState",
+      type: GRPCCallType.unary
+    )
+  }
+}
+/// Coprocessor (second processor) debugger service.
+/// Same RPCs as DebuggerControl but registered under a distinct service name
+/// so both can coexist on the same gRPC server.
+///
+/// To build a server, implement a class that conforms to this protocol.
+internal protocol Beebium_CoprocessorDebuggerControlProvider: CallHandlerProvider {
+  var interceptors: Beebium_CoprocessorDebuggerControlServerInterceptorFactoryProtocol? { get }
+
+  func getState(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ExecutionState>
+
+  func run(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RunResponse>
+
+  func stop(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StopResponse>
+
+  func reset(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ResetResponse>
+
+  func stepInstruction(request: Beebium_StepRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StepResponse>
+
+  func stepCycle(request: Beebium_StepRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_StepResponse>
+
+  func watchExecutionState(request: Beebium_WatchExecutionStateRequest, context: StreamingResponseCallContext<Beebium_ExecutionStateEvent>) -> EventLoopFuture<GRPCStatus>
+
+  func readMemory(request: Beebium_ReadMemoryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ReadMemoryResponse>
+
+  func writeMemory(request: Beebium_WriteMemoryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_WriteMemoryResponse>
+
+  func peekMemory(request: Beebium_PeekMemoryRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_PeekMemoryResponse>
+
+  func getMemoryRegions(request: Beebium_GetMemoryRegionsRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_GetMemoryRegionsResponse>
+
+  func peekRegion(request: Beebium_RegionAccessRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RegionAccessResponse>
+
+  func readRegion(request: Beebium_RegionAccessRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RegionAccessResponse>
+
+  func writeRegion(request: Beebium_WriteRegionRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_WriteRegionResponse>
+
+  func addBreakpoint(request: Beebium_AddBreakpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AddBreakpointResponse>
+
+  func removeBreakpoint(request: Beebium_RemoveBreakpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RemoveBreakpointResponse>
+
+  func enableBreakpoint(request: Beebium_EnableBreakpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_EnableBreakpointResponse>
+
+  func listBreakpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListBreakpointsResponse>
+
+  func clearBreakpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ClearBreakpointsResponse>
+
+  func addWatchpoint(request: Beebium_AddWatchpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AddWatchpointResponse>
+
+  func removeWatchpoint(request: Beebium_RemoveWatchpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_RemoveWatchpointResponse>
+
+  func enableWatchpoint(request: Beebium_EnableWatchpointRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_EnableWatchpointResponse>
+
+  func listWatchpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListWatchpointsResponse>
+
+  func clearWatchpoints(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ClearWatchpointsResponse>
+
+  func getCpuDescriptor(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CpuDescriptor>
+
+  func getCpuState(request: Beebium_Empty, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CpuState>
+
+  func setCpuState(request: Beebium_CpuState, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_CpuState>
+}
+
+extension Beebium_CoprocessorDebuggerControlProvider {
+  internal var serviceName: Substring {
+    return Beebium_CoprocessorDebuggerControlServerMetadata.serviceDescriptor.fullName[...]
+  }
+
+  /// Determines, calls and returns the appropriate request handler, depending on the request's method.
+  /// Returns nil for methods not handled by this service.
+  internal func handle(
+    method name: Substring,
+    context: CallHandlerContext
+  ) -> GRPCServerHandlerProtocol? {
+    switch name {
+    case "GetState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ExecutionState>(),
+        interceptors: self.interceptors?.makeGetStateInterceptors() ?? [],
+        userFunction: self.getState(request:context:)
+      )
+
+    case "Run":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_RunResponse>(),
+        interceptors: self.interceptors?.makeRunInterceptors() ?? [],
+        userFunction: self.run(request:context:)
+      )
+
+    case "Stop":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_StopResponse>(),
+        interceptors: self.interceptors?.makeStopInterceptors() ?? [],
+        userFunction: self.stop(request:context:)
+      )
+
+    case "Reset":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ResetResponse>(),
+        interceptors: self.interceptors?.makeResetInterceptors() ?? [],
+        userFunction: self.reset(request:context:)
+      )
+
+    case "StepInstruction":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_StepRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_StepResponse>(),
+        interceptors: self.interceptors?.makeStepInstructionInterceptors() ?? [],
+        userFunction: self.stepInstruction(request:context:)
+      )
+
+    case "StepCycle":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_StepRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_StepResponse>(),
+        interceptors: self.interceptors?.makeStepCycleInterceptors() ?? [],
+        userFunction: self.stepCycle(request:context:)
+      )
+
+    case "WatchExecutionState":
+      return ServerStreamingServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WatchExecutionStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ExecutionStateEvent>(),
+        interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? [],
+        userFunction: self.watchExecutionState(request:context:)
+      )
+
+    case "ReadMemory":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ReadMemoryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ReadMemoryResponse>(),
+        interceptors: self.interceptors?.makeReadMemoryInterceptors() ?? [],
+        userFunction: self.readMemory(request:context:)
+      )
+
+    case "WriteMemory":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WriteMemoryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_WriteMemoryResponse>(),
+        interceptors: self.interceptors?.makeWriteMemoryInterceptors() ?? [],
+        userFunction: self.writeMemory(request:context:)
+      )
+
+    case "PeekMemory":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_PeekMemoryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_PeekMemoryResponse>(),
+        interceptors: self.interceptors?.makePeekMemoryInterceptors() ?? [],
+        userFunction: self.peekMemory(request:context:)
+      )
+
+    case "GetMemoryRegions":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetMemoryRegionsRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_GetMemoryRegionsResponse>(),
+        interceptors: self.interceptors?.makeGetMemoryRegionsInterceptors() ?? [],
+        userFunction: self.getMemoryRegions(request:context:)
+      )
+
+    case "PeekRegion":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RegionAccessRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RegionAccessResponse>(),
+        interceptors: self.interceptors?.makePeekRegionInterceptors() ?? [],
+        userFunction: self.peekRegion(request:context:)
+      )
+
+    case "ReadRegion":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RegionAccessRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RegionAccessResponse>(),
+        interceptors: self.interceptors?.makeReadRegionInterceptors() ?? [],
+        userFunction: self.readRegion(request:context:)
+      )
+
+    case "WriteRegion":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WriteRegionRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_WriteRegionResponse>(),
+        interceptors: self.interceptors?.makeWriteRegionInterceptors() ?? [],
+        userFunction: self.writeRegion(request:context:)
+      )
+
+    case "AddBreakpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AddBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AddBreakpointResponse>(),
+        interceptors: self.interceptors?.makeAddBreakpointInterceptors() ?? [],
+        userFunction: self.addBreakpoint(request:context:)
+      )
+
+    case "RemoveBreakpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RemoveBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RemoveBreakpointResponse>(),
+        interceptors: self.interceptors?.makeRemoveBreakpointInterceptors() ?? [],
+        userFunction: self.removeBreakpoint(request:context:)
+      )
+
+    case "EnableBreakpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableBreakpointResponse>(),
+        interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? [],
+        userFunction: self.enableBreakpoint(request:context:)
+      )
+
+    case "ListBreakpoints":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListBreakpointsResponse>(),
+        interceptors: self.interceptors?.makeListBreakpointsInterceptors() ?? [],
+        userFunction: self.listBreakpoints(request:context:)
+      )
+
+    case "ClearBreakpoints":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ClearBreakpointsResponse>(),
+        interceptors: self.interceptors?.makeClearBreakpointsInterceptors() ?? [],
+        userFunction: self.clearBreakpoints(request:context:)
+      )
+
+    case "AddWatchpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AddWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AddWatchpointResponse>(),
+        interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? [],
+        userFunction: self.addWatchpoint(request:context:)
+      )
+
+    case "RemoveWatchpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RemoveWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RemoveWatchpointResponse>(),
+        interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? [],
+        userFunction: self.removeWatchpoint(request:context:)
+      )
+
+    case "EnableWatchpoint":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableWatchpointResponse>(),
+        interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? [],
+        userFunction: self.enableWatchpoint(request:context:)
+      )
+
+    case "ListWatchpoints":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? [],
+        userFunction: self.listWatchpoints(request:context:)
+      )
+
+    case "ClearWatchpoints":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ClearWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? [],
+        userFunction: self.clearWatchpoints(request:context:)
+      )
+
+    case "GetCpuDescriptor":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuDescriptor>(),
+        interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? [],
+        userFunction: self.getCpuDescriptor(request:context:)
+      )
+
+    case "GetCpuState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? [],
+        userFunction: self.getCpuState(request:context:)
+      )
+
+    case "SetCpuState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CpuState>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? [],
+        userFunction: self.setCpuState(request:context:)
+      )
+
+    default:
+      return nil
+    }
+  }
+}
+
+/// Coprocessor (second processor) debugger service.
+/// Same RPCs as DebuggerControl but registered under a distinct service name
+/// so both can coexist on the same gRPC server.
+///
+/// To implement a server, implement an object which conforms to this protocol.
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+internal protocol Beebium_CoprocessorDebuggerControlAsyncProvider: CallHandlerProvider, Sendable {
+  static var serviceDescriptor: GRPCServiceDescriptor { get }
+  var interceptors: Beebium_CoprocessorDebuggerControlServerInterceptorFactoryProtocol? { get }
+
+  func getState(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ExecutionState
+
+  func run(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_RunResponse
+
+  func stop(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_StopResponse
+
+  func reset(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ResetResponse
+
+  func stepInstruction(
+    request: Beebium_StepRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_StepResponse
+
+  func stepCycle(
+    request: Beebium_StepRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_StepResponse
+
+  func watchExecutionState(
+    request: Beebium_WatchExecutionStateRequest,
+    responseStream: GRPCAsyncResponseStreamWriter<Beebium_ExecutionStateEvent>,
+    context: GRPCAsyncServerCallContext
+  ) async throws
+
+  func readMemory(
+    request: Beebium_ReadMemoryRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ReadMemoryResponse
+
+  func writeMemory(
+    request: Beebium_WriteMemoryRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_WriteMemoryResponse
+
+  func peekMemory(
+    request: Beebium_PeekMemoryRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_PeekMemoryResponse
+
+  func getMemoryRegions(
+    request: Beebium_GetMemoryRegionsRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_GetMemoryRegionsResponse
+
+  func peekRegion(
+    request: Beebium_RegionAccessRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_RegionAccessResponse
+
+  func readRegion(
+    request: Beebium_RegionAccessRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_RegionAccessResponse
+
+  func writeRegion(
+    request: Beebium_WriteRegionRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_WriteRegionResponse
+
+  func addBreakpoint(
+    request: Beebium_AddBreakpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AddBreakpointResponse
+
+  func removeBreakpoint(
+    request: Beebium_RemoveBreakpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_RemoveBreakpointResponse
+
+  func enableBreakpoint(
+    request: Beebium_EnableBreakpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_EnableBreakpointResponse
+
+  func listBreakpoints(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ListBreakpointsResponse
+
+  func clearBreakpoints(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ClearBreakpointsResponse
+
+  func addWatchpoint(
+    request: Beebium_AddWatchpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AddWatchpointResponse
+
+  func removeWatchpoint(
+    request: Beebium_RemoveWatchpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_RemoveWatchpointResponse
+
+  func enableWatchpoint(
+    request: Beebium_EnableWatchpointRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_EnableWatchpointResponse
+
+  func listWatchpoints(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ListWatchpointsResponse
+
+  func clearWatchpoints(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_ClearWatchpointsResponse
+
+  func getCpuDescriptor(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CpuDescriptor
+
+  func getCpuState(
+    request: Beebium_Empty,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CpuState
+
+  func setCpuState(
+    request: Beebium_CpuState,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_CpuState
+}
+
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+extension Beebium_CoprocessorDebuggerControlAsyncProvider {
+  internal static var serviceDescriptor: GRPCServiceDescriptor {
+    return Beebium_CoprocessorDebuggerControlServerMetadata.serviceDescriptor
+  }
+
+  internal var serviceName: Substring {
+    return Beebium_CoprocessorDebuggerControlServerMetadata.serviceDescriptor.fullName[...]
+  }
+
+  internal var interceptors: Beebium_CoprocessorDebuggerControlServerInterceptorFactoryProtocol? {
+    return nil
+  }
+
+  internal func handle(
+    method name: Substring,
+    context: CallHandlerContext
+  ) -> GRPCServerHandlerProtocol? {
+    switch name {
+    case "GetState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ExecutionState>(),
+        interceptors: self.interceptors?.makeGetStateInterceptors() ?? [],
+        wrapping: { try await self.getState(request: $0, context: $1) }
+      )
+
+    case "Run":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_RunResponse>(),
+        interceptors: self.interceptors?.makeRunInterceptors() ?? [],
+        wrapping: { try await self.run(request: $0, context: $1) }
+      )
+
+    case "Stop":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_StopResponse>(),
+        interceptors: self.interceptors?.makeStopInterceptors() ?? [],
+        wrapping: { try await self.stop(request: $0, context: $1) }
+      )
+
+    case "Reset":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ResetResponse>(),
+        interceptors: self.interceptors?.makeResetInterceptors() ?? [],
+        wrapping: { try await self.reset(request: $0, context: $1) }
+      )
+
+    case "StepInstruction":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_StepRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_StepResponse>(),
+        interceptors: self.interceptors?.makeStepInstructionInterceptors() ?? [],
+        wrapping: { try await self.stepInstruction(request: $0, context: $1) }
+      )
+
+    case "StepCycle":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_StepRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_StepResponse>(),
+        interceptors: self.interceptors?.makeStepCycleInterceptors() ?? [],
+        wrapping: { try await self.stepCycle(request: $0, context: $1) }
+      )
+
+    case "WatchExecutionState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WatchExecutionStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ExecutionStateEvent>(),
+        interceptors: self.interceptors?.makeWatchExecutionStateInterceptors() ?? [],
+        wrapping: { try await self.watchExecutionState(request: $0, responseStream: $1, context: $2) }
+      )
+
+    case "ReadMemory":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_ReadMemoryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_ReadMemoryResponse>(),
+        interceptors: self.interceptors?.makeReadMemoryInterceptors() ?? [],
+        wrapping: { try await self.readMemory(request: $0, context: $1) }
+      )
+
+    case "WriteMemory":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WriteMemoryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_WriteMemoryResponse>(),
+        interceptors: self.interceptors?.makeWriteMemoryInterceptors() ?? [],
+        wrapping: { try await self.writeMemory(request: $0, context: $1) }
+      )
+
+    case "PeekMemory":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_PeekMemoryRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_PeekMemoryResponse>(),
+        interceptors: self.interceptors?.makePeekMemoryInterceptors() ?? [],
+        wrapping: { try await self.peekMemory(request: $0, context: $1) }
+      )
+
+    case "GetMemoryRegions":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetMemoryRegionsRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_GetMemoryRegionsResponse>(),
+        interceptors: self.interceptors?.makeGetMemoryRegionsInterceptors() ?? [],
+        wrapping: { try await self.getMemoryRegions(request: $0, context: $1) }
+      )
+
+    case "PeekRegion":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RegionAccessRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RegionAccessResponse>(),
+        interceptors: self.interceptors?.makePeekRegionInterceptors() ?? [],
+        wrapping: { try await self.peekRegion(request: $0, context: $1) }
+      )
+
+    case "ReadRegion":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RegionAccessRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RegionAccessResponse>(),
+        interceptors: self.interceptors?.makeReadRegionInterceptors() ?? [],
+        wrapping: { try await self.readRegion(request: $0, context: $1) }
+      )
+
+    case "WriteRegion":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_WriteRegionRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_WriteRegionResponse>(),
+        interceptors: self.interceptors?.makeWriteRegionInterceptors() ?? [],
+        wrapping: { try await self.writeRegion(request: $0, context: $1) }
+      )
+
+    case "AddBreakpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AddBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AddBreakpointResponse>(),
+        interceptors: self.interceptors?.makeAddBreakpointInterceptors() ?? [],
+        wrapping: { try await self.addBreakpoint(request: $0, context: $1) }
+      )
+
+    case "RemoveBreakpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RemoveBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RemoveBreakpointResponse>(),
+        interceptors: self.interceptors?.makeRemoveBreakpointInterceptors() ?? [],
+        wrapping: { try await self.removeBreakpoint(request: $0, context: $1) }
+      )
+
+    case "EnableBreakpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableBreakpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableBreakpointResponse>(),
+        interceptors: self.interceptors?.makeEnableBreakpointInterceptors() ?? [],
+        wrapping: { try await self.enableBreakpoint(request: $0, context: $1) }
+      )
+
+    case "ListBreakpoints":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListBreakpointsResponse>(),
+        interceptors: self.interceptors?.makeListBreakpointsInterceptors() ?? [],
+        wrapping: { try await self.listBreakpoints(request: $0, context: $1) }
+      )
+
+    case "ClearBreakpoints":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ClearBreakpointsResponse>(),
+        interceptors: self.interceptors?.makeClearBreakpointsInterceptors() ?? [],
+        wrapping: { try await self.clearBreakpoints(request: $0, context: $1) }
+      )
+
+    case "AddWatchpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AddWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AddWatchpointResponse>(),
+        interceptors: self.interceptors?.makeAddWatchpointInterceptors() ?? [],
+        wrapping: { try await self.addWatchpoint(request: $0, context: $1) }
+      )
+
+    case "RemoveWatchpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_RemoveWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_RemoveWatchpointResponse>(),
+        interceptors: self.interceptors?.makeRemoveWatchpointInterceptors() ?? [],
+        wrapping: { try await self.removeWatchpoint(request: $0, context: $1) }
+      )
+
+    case "EnableWatchpoint":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_EnableWatchpointRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_EnableWatchpointResponse>(),
+        interceptors: self.interceptors?.makeEnableWatchpointInterceptors() ?? [],
+        wrapping: { try await self.enableWatchpoint(request: $0, context: $1) }
+      )
+
+    case "ListWatchpoints":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ListWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeListWatchpointsInterceptors() ?? [],
+        wrapping: { try await self.listWatchpoints(request: $0, context: $1) }
+      )
+
+    case "ClearWatchpoints":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_ClearWatchpointsResponse>(),
+        interceptors: self.interceptors?.makeClearWatchpointsInterceptors() ?? [],
+        wrapping: { try await self.clearWatchpoints(request: $0, context: $1) }
+      )
+
+    case "GetCpuDescriptor":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuDescriptor>(),
+        interceptors: self.interceptors?.makeGetCpuDescriptorInterceptors() ?? [],
+        wrapping: { try await self.getCpuDescriptor(request: $0, context: $1) }
+      )
+
+    case "GetCpuState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_Empty>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeGetCpuStateInterceptors() ?? [],
+        wrapping: { try await self.getCpuState(request: $0, context: $1) }
+      )
+
+    case "SetCpuState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_CpuState>(),
+        responseSerializer: ProtobufSerializer<Beebium_CpuState>(),
+        interceptors: self.interceptors?.makeSetCpuStateInterceptors() ?? [],
+        wrapping: { try await self.setCpuState(request: $0, context: $1) }
+      )
+
+    default:
+      return nil
+    }
+  }
+}
+
+internal protocol Beebium_CoprocessorDebuggerControlServerInterceptorFactoryProtocol: Sendable {
+
+  /// - Returns: Interceptors to use when handling 'getState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetStateInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ExecutionState>]
+
+  /// - Returns: Interceptors to use when handling 'run'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRunInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_RunResponse>]
+
+  /// - Returns: Interceptors to use when handling 'stop'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeStopInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_StopResponse>]
+
+  /// - Returns: Interceptors to use when handling 'reset'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeResetInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ResetResponse>]
+
+  /// - Returns: Interceptors to use when handling 'stepInstruction'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeStepInstructionInterceptors() -> [ServerInterceptor<Beebium_StepRequest, Beebium_StepResponse>]
+
+  /// - Returns: Interceptors to use when handling 'stepCycle'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeStepCycleInterceptors() -> [ServerInterceptor<Beebium_StepRequest, Beebium_StepResponse>]
+
+  /// - Returns: Interceptors to use when handling 'watchExecutionState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeWatchExecutionStateInterceptors() -> [ServerInterceptor<Beebium_WatchExecutionStateRequest, Beebium_ExecutionStateEvent>]
+
+  /// - Returns: Interceptors to use when handling 'readMemory'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeReadMemoryInterceptors() -> [ServerInterceptor<Beebium_ReadMemoryRequest, Beebium_ReadMemoryResponse>]
+
+  /// - Returns: Interceptors to use when handling 'writeMemory'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeWriteMemoryInterceptors() -> [ServerInterceptor<Beebium_WriteMemoryRequest, Beebium_WriteMemoryResponse>]
+
+  /// - Returns: Interceptors to use when handling 'peekMemory'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makePeekMemoryInterceptors() -> [ServerInterceptor<Beebium_PeekMemoryRequest, Beebium_PeekMemoryResponse>]
+
+  /// - Returns: Interceptors to use when handling 'getMemoryRegions'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetMemoryRegionsInterceptors() -> [ServerInterceptor<Beebium_GetMemoryRegionsRequest, Beebium_GetMemoryRegionsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'peekRegion'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makePeekRegionInterceptors() -> [ServerInterceptor<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>]
+
+  /// - Returns: Interceptors to use when handling 'readRegion'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeReadRegionInterceptors() -> [ServerInterceptor<Beebium_RegionAccessRequest, Beebium_RegionAccessResponse>]
+
+  /// - Returns: Interceptors to use when handling 'writeRegion'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeWriteRegionInterceptors() -> [ServerInterceptor<Beebium_WriteRegionRequest, Beebium_WriteRegionResponse>]
+
+  /// - Returns: Interceptors to use when handling 'addBreakpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeAddBreakpointInterceptors() -> [ServerInterceptor<Beebium_AddBreakpointRequest, Beebium_AddBreakpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'removeBreakpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRemoveBreakpointInterceptors() -> [ServerInterceptor<Beebium_RemoveBreakpointRequest, Beebium_RemoveBreakpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'enableBreakpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeEnableBreakpointInterceptors() -> [ServerInterceptor<Beebium_EnableBreakpointRequest, Beebium_EnableBreakpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'listBreakpoints'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeListBreakpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ListBreakpointsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'clearBreakpoints'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeClearBreakpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ClearBreakpointsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'addWatchpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeAddWatchpointInterceptors() -> [ServerInterceptor<Beebium_AddWatchpointRequest, Beebium_AddWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'removeWatchpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRemoveWatchpointInterceptors() -> [ServerInterceptor<Beebium_RemoveWatchpointRequest, Beebium_RemoveWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'enableWatchpoint'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeEnableWatchpointInterceptors() -> [ServerInterceptor<Beebium_EnableWatchpointRequest, Beebium_EnableWatchpointResponse>]
+
+  /// - Returns: Interceptors to use when handling 'listWatchpoints'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeListWatchpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ListWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'clearWatchpoints'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeClearWatchpointsInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_ClearWatchpointsResponse>]
+
+  /// - Returns: Interceptors to use when handling 'getCpuDescriptor'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetCpuDescriptorInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_CpuDescriptor>]
+
+  /// - Returns: Interceptors to use when handling 'getCpuState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetCpuStateInterceptors() -> [ServerInterceptor<Beebium_Empty, Beebium_CpuState>]
+
+  /// - Returns: Interceptors to use when handling 'setCpuState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeSetCpuStateInterceptors() -> [ServerInterceptor<Beebium_CpuState, Beebium_CpuState>]
+}
+
+internal enum Beebium_CoprocessorDebuggerControlServerMetadata {
+  internal static let serviceDescriptor = GRPCServiceDescriptor(
+    name: "CoprocessorDebuggerControl",
+    fullName: "beebium.CoprocessorDebuggerControl",
+    methods: [
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.getState,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.run,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.stop,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.reset,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.stepInstruction,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.stepCycle,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.watchExecutionState,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.readMemory,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.writeMemory,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.peekMemory,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.getMemoryRegions,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.peekRegion,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.readRegion,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.writeRegion,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.addBreakpoint,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.removeBreakpoint,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.enableBreakpoint,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.listBreakpoints,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.clearBreakpoints,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.addWatchpoint,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.removeWatchpoint,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.enableWatchpoint,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.listWatchpoints,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.clearWatchpoints,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.getCpuDescriptor,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.getCpuState,
+      Beebium_CoprocessorDebuggerControlServerMetadata.Methods.setCpuState,
+    ]
+  )
+
+  internal enum Methods {
+    internal static let getState = GRPCMethodDescriptor(
+      name: "GetState",
+      path: "/beebium.CoprocessorDebuggerControl/GetState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let run = GRPCMethodDescriptor(
+      name: "Run",
+      path: "/beebium.CoprocessorDebuggerControl/Run",
+      type: GRPCCallType.unary
+    )
+
+    internal static let stop = GRPCMethodDescriptor(
+      name: "Stop",
+      path: "/beebium.CoprocessorDebuggerControl/Stop",
+      type: GRPCCallType.unary
+    )
+
+    internal static let reset = GRPCMethodDescriptor(
+      name: "Reset",
+      path: "/beebium.CoprocessorDebuggerControl/Reset",
+      type: GRPCCallType.unary
+    )
+
+    internal static let stepInstruction = GRPCMethodDescriptor(
+      name: "StepInstruction",
+      path: "/beebium.CoprocessorDebuggerControl/StepInstruction",
+      type: GRPCCallType.unary
+    )
+
+    internal static let stepCycle = GRPCMethodDescriptor(
+      name: "StepCycle",
+      path: "/beebium.CoprocessorDebuggerControl/StepCycle",
+      type: GRPCCallType.unary
+    )
+
+    internal static let watchExecutionState = GRPCMethodDescriptor(
+      name: "WatchExecutionState",
+      path: "/beebium.CoprocessorDebuggerControl/WatchExecutionState",
+      type: GRPCCallType.serverStreaming
+    )
+
+    internal static let readMemory = GRPCMethodDescriptor(
+      name: "ReadMemory",
+      path: "/beebium.CoprocessorDebuggerControl/ReadMemory",
+      type: GRPCCallType.unary
+    )
+
+    internal static let writeMemory = GRPCMethodDescriptor(
+      name: "WriteMemory",
+      path: "/beebium.CoprocessorDebuggerControl/WriteMemory",
+      type: GRPCCallType.unary
+    )
+
+    internal static let peekMemory = GRPCMethodDescriptor(
+      name: "PeekMemory",
+      path: "/beebium.CoprocessorDebuggerControl/PeekMemory",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getMemoryRegions = GRPCMethodDescriptor(
+      name: "GetMemoryRegions",
+      path: "/beebium.CoprocessorDebuggerControl/GetMemoryRegions",
+      type: GRPCCallType.unary
+    )
+
+    internal static let peekRegion = GRPCMethodDescriptor(
+      name: "PeekRegion",
+      path: "/beebium.CoprocessorDebuggerControl/PeekRegion",
+      type: GRPCCallType.unary
+    )
+
+    internal static let readRegion = GRPCMethodDescriptor(
+      name: "ReadRegion",
+      path: "/beebium.CoprocessorDebuggerControl/ReadRegion",
+      type: GRPCCallType.unary
+    )
+
+    internal static let writeRegion = GRPCMethodDescriptor(
+      name: "WriteRegion",
+      path: "/beebium.CoprocessorDebuggerControl/WriteRegion",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addBreakpoint = GRPCMethodDescriptor(
+      name: "AddBreakpoint",
+      path: "/beebium.CoprocessorDebuggerControl/AddBreakpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeBreakpoint = GRPCMethodDescriptor(
+      name: "RemoveBreakpoint",
+      path: "/beebium.CoprocessorDebuggerControl/RemoveBreakpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let enableBreakpoint = GRPCMethodDescriptor(
+      name: "EnableBreakpoint",
+      path: "/beebium.CoprocessorDebuggerControl/EnableBreakpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listBreakpoints = GRPCMethodDescriptor(
+      name: "ListBreakpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ListBreakpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let clearBreakpoints = GRPCMethodDescriptor(
+      name: "ClearBreakpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ClearBreakpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addWatchpoint = GRPCMethodDescriptor(
+      name: "AddWatchpoint",
+      path: "/beebium.CoprocessorDebuggerControl/AddWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeWatchpoint = GRPCMethodDescriptor(
+      name: "RemoveWatchpoint",
+      path: "/beebium.CoprocessorDebuggerControl/RemoveWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let enableWatchpoint = GRPCMethodDescriptor(
+      name: "EnableWatchpoint",
+      path: "/beebium.CoprocessorDebuggerControl/EnableWatchpoint",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listWatchpoints = GRPCMethodDescriptor(
+      name: "ListWatchpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ListWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let clearWatchpoints = GRPCMethodDescriptor(
+      name: "ClearWatchpoints",
+      path: "/beebium.CoprocessorDebuggerControl/ClearWatchpoints",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuDescriptor = GRPCMethodDescriptor(
+      name: "GetCpuDescriptor",
+      path: "/beebium.CoprocessorDebuggerControl/GetCpuDescriptor",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getCpuState = GRPCMethodDescriptor(
+      name: "GetCpuState",
+      path: "/beebium.CoprocessorDebuggerControl/GetCpuState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setCpuState = GRPCMethodDescriptor(
+      name: "SetCpuState",
+      path: "/beebium.CoprocessorDebuggerControl/SetCpuState",
       type: GRPCCallType.unary
     )
   }
 }
 /// BBC Micro device state inspection.
-/// Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+/// Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
 ///
 /// To build a server, implement a class that conforms to this protocol.
 internal protocol Beebium_DeviceInspectionProvider: CallHandlerProvider {
@@ -2597,6 +6315,8 @@ internal protocol Beebium_DeviceInspectionProvider: CallHandlerProvider {
   func getAddressableLatchState(request: Beebium_GetAddressableLatchStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AddressableLatchState>
 
   func getSoundGeneratorState(request: Beebium_GetSoundGeneratorStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SoundGeneratorState>
+
+  func getTubeState(request: Beebium_GetTubeStateRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_TubeState>
 }
 
 extension Beebium_DeviceInspectionProvider {
@@ -2665,6 +6385,15 @@ extension Beebium_DeviceInspectionProvider {
         userFunction: self.getSoundGeneratorState(request:context:)
       )
 
+    case "GetTubeState":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetTubeStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TubeState>(),
+        interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? [],
+        userFunction: self.getTubeState(request:context:)
+      )
+
     default:
       return nil
     }
@@ -2672,7 +6401,7 @@ extension Beebium_DeviceInspectionProvider {
 }
 
 /// BBC Micro device state inspection.
-/// Only available on the host; parasite returns UNIMPLEMENTED for all RPCs.
+/// Only available on the host; coprocessor returns UNIMPLEMENTED for all RPCs.
 ///
 /// To implement a server, implement an object which conforms to this protocol.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -2709,6 +6438,11 @@ internal protocol Beebium_DeviceInspectionAsyncProvider: CallHandlerProvider, Se
     request: Beebium_GetSoundGeneratorStateRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SoundGeneratorState
+
+  func getTubeState(
+    request: Beebium_GetTubeStateRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_TubeState
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -2784,6 +6518,15 @@ extension Beebium_DeviceInspectionAsyncProvider {
         wrapping: { try await self.getSoundGeneratorState(request: $0, context: $1) }
       )
 
+    case "GetTubeState":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_GetTubeStateRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_TubeState>(),
+        interceptors: self.interceptors?.makeGetTubeStateInterceptors() ?? [],
+        wrapping: { try await self.getTubeState(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -2815,6 +6558,10 @@ internal protocol Beebium_DeviceInspectionServerInterceptorFactoryProtocol: Send
   /// - Returns: Interceptors to use when handling 'getSoundGeneratorState'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetSoundGeneratorStateInterceptors() -> [ServerInterceptor<Beebium_GetSoundGeneratorStateRequest, Beebium_SoundGeneratorState>]
+
+  /// - Returns: Interceptors to use when handling 'getTubeState'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeGetTubeStateInterceptors() -> [ServerInterceptor<Beebium_GetTubeStateRequest, Beebium_TubeState>]
 }
 
 internal enum Beebium_DeviceInspectionServerMetadata {
@@ -2828,6 +6575,7 @@ internal enum Beebium_DeviceInspectionServerMetadata {
       Beebium_DeviceInspectionServerMetadata.Methods.getVideoUlaState,
       Beebium_DeviceInspectionServerMetadata.Methods.getAddressableLatchState,
       Beebium_DeviceInspectionServerMetadata.Methods.getSoundGeneratorState,
+      Beebium_DeviceInspectionServerMetadata.Methods.getTubeState,
     ]
   )
 
@@ -2865,6 +6613,12 @@ internal enum Beebium_DeviceInspectionServerMetadata {
     internal static let getSoundGeneratorState = GRPCMethodDescriptor(
       name: "GetSoundGeneratorState",
       path: "/beebium.DeviceInspection/GetSoundGeneratorState",
+      type: GRPCCallType.unary
+    )
+
+    internal static let getTubeState = GRPCMethodDescriptor(
+      name: "GetTubeState",
+      path: "/beebium.DeviceInspection/GetTubeState",
       type: GRPCCallType.unary
     )
   }
