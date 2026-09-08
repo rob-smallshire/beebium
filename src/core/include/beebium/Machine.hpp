@@ -196,25 +196,22 @@ public:
 
     // Execute one CPU cycle
     void step() {
-        // Run the Tube coprocessor forward to the current host cycle, as the
-        // first action on every path. cycle_count advances by exactly one per
-        // step() whatever path is taken, so the coprocessor's clock runs
-        // continuously -- during Tube stretches, during 1MHz bus stretches, and
-        // on normal cycles alike -- matching hardware, where the coprocessor's
-        // clock is independent of the host bus. A no-op when no coprocessor is
-        // installed; idempotent if reached twice at the same host time (the
-        // Tube-stretch completion fall-through below).
-        state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
-
-        // Supply the current host time to the Tube socket for the test-only
-        // skew observer. Inert in production (no observer installed).
-        state_.memory.tube_socket.set_observer_host_time(state_.cycle_count);
+        // Advance host time in the Tube socket, as the first action on every
+        // path. cycle_count advances by exactly one per step(). The socket runs
+        // the coprocessor in batches of up to MAX_COPROCESSOR_SKEW host cycles
+        // (Step 3), and exactly before any host register access; between those
+        // points the coprocessor lags by fewer than that bound, which the skew
+        // contract permits.
+        state_.memory.tube_socket.host_cycle(state_.cycle_count);
 
         // Handle Tube bus stretch (host CPU halted, coprocessor + peripherals continue).
         // When the host writes to a full Tube register, the Tube ULA holds the host
         // CPU's clock until the parasite drains the register. During stretch, the
-        // coprocessor and all peripherals (VIAs, video, sound) continue running.
+        // host is halted waiting for the coprocessor, so run it to this cycle every
+        // cycle (no batching here) -- otherwise the register would not drain and the
+        // stretch would last longer than the hardware's.
         if (tube_stretch_active_) {
+            state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
             if (state_.memory.tube_socket.try_complete_tube_stretch()) {
                 tube_stretch_active_ = false;
                 // Fall through to normal step -- the deferred write has been
@@ -433,17 +430,25 @@ public:
             // M6502_NextInstruction's post-increment).
             if (!breakpoint_entries_.empty() && M6502_IsAboutToExecute(&state_.cpu)) {
                 uint16_t pc = state_.cpu.opcode_pc.w;
+                bool hit_stop = false;
                 for (auto& bp : breakpoint_entries_) {
                     if (bp.start > pc) break;  // sorted by start: early exit
                     if (bp.matches(pc)) {
                         if (on_breakpoint_hit_) on_breakpoint_hit_(bp, pc);
-                        if (paused_.load()) return;
+                        if (paused_.load()) { hit_stop = true; break; }
                     }
                 }
+                if (hit_stop) break;  // fall through to the sync below
             }
 
             step();
         }
+
+        // The host has stopped (chunk finished, paused, or a breakpoint/
+        // watchpoint hit). Sync the coprocessor to the host so a stopped
+        // machine presents both processors at the same time to the debugger
+        // and to GetTubeState.
+        state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
     }
 
     // Execute one complete instruction (variable cycles)
@@ -456,6 +461,15 @@ public:
         } while (!M6502_IsAboutToExecute(&state_.cpu));
         in_run_.store(false, std::memory_order_release);
         return state_.cycle_count - start;
+    }
+
+    // Called by the debugger after a single-step batch (StepInstruction /
+    // StepCycle), the symmetric partner of prepare_for_step(). Syncs the
+    // coprocessor to the host so a single-stepped machine shows both processors
+    // within a cycle of each other. (Cpu6502DebugTarget provides a no-op
+    // finish_step(); only the host has a coprocessor to sync.)
+    void finish_step() {
+        state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
     }
 
     // State access
@@ -482,6 +496,13 @@ public:
     void pause() {
         paused_.store(true);
         ++sequence_;
+        // Sync the coprocessor to the host so a paused machine presents both
+        // processors at the same time. Only safe when the emulation loop is not
+        // running: if it is, it owns the coprocessor and syncs on exit (the
+        // run() chunk's end sync); doing it here too would race that thread.
+        if (!in_run_.load(std::memory_order_acquire)) {
+            state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+        }
     }
 
     void resume() {

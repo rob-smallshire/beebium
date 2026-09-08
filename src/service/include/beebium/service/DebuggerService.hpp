@@ -598,6 +598,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::StepInstruction(
         machine_.step_instruction();
         ++instructions;
     }
+    machine_.finish_step();  // sync the coprocessor to the stopped host
 
     halt_reason_.clear();
     response->set_success(true);
@@ -631,6 +632,7 @@ grpc::Status DebuggerControlServiceImpl<MachineType>::StepCycle(
     for (uint32_t i = 0; i < count; ++i) {
         machine_.step();
     }
+    machine_.finish_step();  // sync the coprocessor to the stopped host
 
     halt_reason_.clear();
     response->set_success(true);

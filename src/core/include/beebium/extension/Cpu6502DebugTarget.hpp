@@ -80,6 +80,10 @@ public:
     virtual uint64_t step_instruction() = 0;
     virtual void prepare_for_step() = 0;
     virtual void wait_until_idle() = 0;
+    // Called by the debugger after a single-step batch, the partner of
+    // prepare_for_step(). No-op for a coprocessor target (it has no peripheral
+    // to resync); the host Machine overrides it to sync its coprocessor.
+    virtual void finish_step() {}
 
     // Flat memory access.
     virtual uint8_t read(uint16_t addr) = 0;

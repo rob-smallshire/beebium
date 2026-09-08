@@ -123,8 +123,12 @@ public:
     // --- MemoryMappedDevice interface ---
 
     uint8_t read(uint16_t offset) {
+        // Sync the coprocessor to the current host time so the access is exact
+        // (contract 1): it sees every coprocessor cycle due before this bus
+        // cycle and none after it.
+        run_coprocessor_until(host_time_);
         if (register_access_observer_) {
-            register_access_observer_(observer_host_time_,
+            register_access_observer_(host_time_,
                                       static_cast<uint8_t>(offset), /*is_write=*/false);
         }
         // Reads complete immediately. The Tube ULA does not generate
@@ -140,8 +144,10 @@ public:
     }
 
     void write(uint16_t offset, uint8_t value) {
+        // Sync the coprocessor to the current host time so the access is exact.
+        run_coprocessor_until(host_time_);
         if (register_access_observer_) {
-            register_access_observer_(observer_host_time_,
+            register_access_observer_(host_time_,
                                       static_cast<uint8_t>(offset), /*is_write=*/true);
         }
         active_backend()->host_write(static_cast<uint8_t>(offset), value);
@@ -212,6 +218,22 @@ public:
         }
     }
 
+    // Called by Machine::step() first on every path. Stores host time H, and
+    // runs the coprocessor to H only once it has fallen a full
+    // MAX_COPROCESSOR_SKEW behind -- so the coprocessor runs in batches of up
+    // to that many host cycles rather than every cycle (the Step 3 strategy).
+    // Register accesses (read/write above), the Tube-stretch path and every
+    // host stop sync exactly via run_coprocessor_until(). A host time earlier
+    // than the last (a hard reset zeroes cycle_count) syncs immediately so the
+    // coprocessor's rebased clock re-establishes its origin here.
+    void host_cycle(uint64_t host_time) {
+        host_time_ = host_time;
+        if (host_time < coprocessor_time_
+            || host_time - coprocessor_time_ >= MAX_COPROCESSOR_SKEW) {
+            run_coprocessor_until(host_time);
+        }
+    }
+
     // Coprocessor time C: the host time the coprocessor has been run to, i.e.
     // the argument of the last run_coprocessor_until(). See the skew contract
     // in this class's comment. C <= host time in a single-threaded strategy.
@@ -231,21 +253,13 @@ public:
 
     // Observer invoked with (host_time, offset, is_write) immediately before
     // each host Tube register read or write, so a test can assert the skew
-    // contract (coprocessor_time() == host_time at every access). host_time is
-    // whatever Machine last supplied via set_observer_host_time(); the socket
-    // does not otherwise know the host clock. Unset in production.
+    // contract (coprocessor_time() == host_time at every access, given read/
+    // write sync first). host_time is the value host_cycle() last stored, which
+    // is always the current host time in Step 3. Unset in production.
     using RegisterAccessObserver =
         std::function<void(uint64_t host_time, uint8_t offset, bool is_write)>;
     void set_register_access_observer(RegisterAccessObserver observer) {
         register_access_observer_ = std::move(observer);
-    }
-
-    // Machine supplies the current host time each step for the observer. A
-    // no-op unless an observer is installed, so it costs nothing in production.
-    void set_observer_host_time(uint64_t host_time) {
-        if (register_access_observer_) {
-            observer_host_time_ = host_time;
-        }
     }
 
     // Check if the host is Tube bus-stretched.
@@ -302,10 +316,13 @@ private:
     // Coprocessor time C: host time of the last run_coprocessor_until() call.
     uint64_t coprocessor_time_ = 0;
 
-    // Test-only skew observation. When unset, the register-access path pays
-    // only a single null check and Machine's set_observer_host_time() is inert.
+    // Host time H, stored by host_cycle() every host cycle. read()/write() sync
+    // the coprocessor to it before each access.
+    uint64_t host_time_ = 0;
+
+    // Test-only register-access observer. When unset the access path pays only
+    // a single null check.
     RegisterAccessObserver register_access_observer_;
-    uint64_t observer_host_time_ = 0;
 
     // Diagnostic: parasite ticks consumed by the inline read stretch loop.
     // These ticks happen INSIDE a single host CPU cycle (no cycle_count

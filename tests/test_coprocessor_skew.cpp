@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 
 #include "test_econet_helpers.hpp"
@@ -145,6 +146,19 @@ public:
     ClockRatio clock_ratio() const override { return ClockRatio{3, 2}; }
 };
 
+// A stub coprocessor whose only behaviour is a callback on each run_until,
+// letting a socket-level test poke or observe the ULA at coprocessor-run time.
+class ActionStub : public Coprocessor {
+public:
+    std::function<void(uint64_t host_cycle)> on_run;
+    void run_until(uint64_t host_cycle) override { if (on_run) on_run(host_cycle); }
+    void pause() override {}
+    void resume() override {}
+    bool is_paused() const override { return false; }
+    void reset() override {}
+    ClockRatio clock_ratio() const override { return ClockRatio{1, 1}; }
+};
+
 }  // namespace
 
 TEST_CASE("Skew: exact accesses and bounded interval across a 65C02 boot",
@@ -176,7 +190,11 @@ TEST_CASE("Skew: exact accesses and bounded interval across a 65C02 boot",
     CHECK(obs.access_count() > 0);
     CHECK(obs.access_exactness_violations() == 0);   // contract 1
     CHECK(obs.interval_violations() == 0);            // contract 2
-    CHECK(obs.max_interval() <= TubeSocket::MAX_COPROCESSOR_SKEW);
+    // The strategy actually batches: idle stretches during boot let the
+    // coprocessor fall a full Delta behind before it is run, so this equals
+    // the bound. Asserting equality means the optimisation cannot be silently
+    // lost (e.g. by a stray per-cycle sync).
+    CHECK(obs.max_interval() == TubeSocket::MAX_COPROCESSOR_SKEW);
 }
 
 TEST_CASE("Skew: exact accesses and bounded interval across the CE2023 load",
@@ -227,6 +245,64 @@ TEST_CASE("Skew: exact accesses and bounded interval across the CE2023 load",
     CHECK(obs.max_interval() <= TubeSocket::MAX_COPROCESSOR_SKEW);
 }
 
+TEST_CASE("Skew: pausing the host syncs the coprocessor to it", "[tube][skew]") {
+    if (!base_roms_available()) SKIP("Base ROMs not available");
+    if (!tube_rom_available()) SKIP("Tube 6502 ROM not available");
+    if (!std::filesystem::exists(std::filesystem::path(BEEBIUM_ROM_DIR) / DNFS_ROM_FILENAME))
+        SKIP("DNFS ROM not available");
+
+    ModelB machine;
+    setup_tube_machine(machine);
+    machine.state().memory.tube_socket.enable();
+    machine.reset();
+    TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
+    REQUIRE(tube != nullptr);
+    auto tube_rom = load_tube_rom();
+    ParasiteRunner runner(*tube, tube_rom);
+    runner.reset();
+    machine.state().memory.tube_socket.install_coprocessor(&runner);
+
+    machine.run(5'000'000);
+
+    // Direct step()s (not run()) let the coprocessor batch behind by up to the
+    // bound, then pause() must bring it back to the host cycle.
+    for (int i = 0; i < 5; ++i) machine.step();
+    machine.pause();
+    CHECK(machine.state().memory.tube_socket.coprocessor_time() == machine.cycle_count());
+}
+
+TEST_CASE("Skew: single-stepping the host keeps the coprocessor within a cycle",
+          "[tube][skew]") {
+    if (!base_roms_available()) SKIP("Base ROMs not available");
+    if (!tube_rom_available()) SKIP("Tube 6502 ROM not available");
+    if (!std::filesystem::exists(std::filesystem::path(BEEBIUM_ROM_DIR) / DNFS_ROM_FILENAME))
+        SKIP("DNFS ROM not available");
+
+    ModelB machine;
+    setup_tube_machine(machine);
+    machine.state().memory.tube_socket.enable();
+    machine.reset();
+    TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
+    REQUIRE(tube != nullptr);
+    auto tube_rom = load_tube_rom();
+    ParasiteRunner runner(*tube, tube_rom);
+    runner.reset();
+    machine.state().memory.tube_socket.install_coprocessor(&runner);
+
+    machine.run(5'000'000);
+
+    // The debugger single-steps by step_instruction() then finish_step() (as
+    // DebuggerControlServiceImpl does), which syncs the coprocessor, so it
+    // never lags the single-stepping host by more than a cycle.
+    for (int i = 0; i < 50; ++i) {
+        machine.step_instruction();
+        machine.finish_step();
+        const uint64_t lag = machine.cycle_count()
+                           - machine.state().memory.tube_socket.coprocessor_time();
+        CHECK(lag <= 1);
+    }
+}
+
 TEST_CASE("Skew: the observer catches a deliberate interval violation",
           "[tube][skew]") {
     // A stub strategy that runs the coprocessor only every 9 host cycles
@@ -258,4 +334,77 @@ TEST_CASE("Skew: coprocessor_time() is re-established after reset()",
     socket.reset();
     socket.run_coprocessor_until(3);
     CHECK(socket.coprocessor_time() == 3);
+}
+
+TEST_CASE("Skew: a coprocessor HIRQ reaches the host's IRQ input within Delta",
+          "[tube][skew]") {
+    // In-process ULA; the host enables HIRQ (Q=1). The coprocessor then raises
+    // HIRQ by writing R4 P2H, and the host (which polls hirq() every cycle)
+    // sees it within Delta host cycles -- the batching latency.
+    TubeSocket socket;
+    socket.enable();
+    TubeUla* ula = socket.tube_ula();
+    REQUIRE(ula != nullptr);
+
+    socket.host_cycle(0);
+    socket.write(0, TubeUla::FLAG_S | TubeUla::FLAG_Q);  // Q=1
+    REQUIRE_FALSE(socket.irq_pending());  // Q set, but no R4 P-to-H data yet
+
+    constexpr uint64_t RAISE_AT = 1;
+    ActionStub stub;
+    bool raised = false;
+    stub.on_run = [&](uint64_t h) {
+        if (!raised && h >= RAISE_AT) { ula->parasite_write(7, 0x42); raised = true; }
+    };
+    socket.install_coprocessor(&stub);
+
+    bool seen = false;
+    uint64_t seen_at = 0;
+    for (uint64_t h = 1; h <= RAISE_AT + 4 * TubeSocket::MAX_COPROCESSOR_SKEW; ++h) {
+        socket.host_cycle(h);
+        if (!seen && socket.irq_pending()) { seen = true; seen_at = h; }
+    }
+    REQUIRE(raised);
+    REQUIRE(seen);
+    CHECK(seen_at >= RAISE_AT);
+    CHECK(seen_at - RAISE_AT <= TubeSocket::MAX_COPROCESSOR_SKEW);
+}
+
+TEST_CASE("Skew: a host PIRQ reaches the coprocessor within Delta",
+          "[tube][skew]") {
+    // In-process ULA; PIRQ from R1 enabled (I=1). A host write to R1 raises
+    // PIRQ, and the coprocessor sees it on its next run_until, within Delta.
+    TubeSocket socket;
+    socket.enable();
+    TubeUla* ula = socket.tube_ula();
+    REQUIRE(ula != nullptr);
+
+    socket.host_cycle(0);
+    socket.write(0, TubeUla::FLAG_S | TubeUla::FLAG_I);  // I=1
+
+    ActionStub stub;
+    bool pirq_seen = false;
+    uint64_t pirq_seen_at = 0;
+    stub.on_run = [&](uint64_t h) {
+        if (!pirq_seen && ula->pirq()) { pirq_seen = true; pirq_seen_at = h; }
+    };
+    socket.install_coprocessor(&stub);
+
+    constexpr uint64_t WRITE_AT = 3;
+    for (uint64_t h = 1; h < WRITE_AT; ++h) socket.host_cycle(h);
+
+    // The write syncs the coprocessor to WRITE_AT (before the write, so it does
+    // not yet see PIRQ), then raises PIRQ.
+    socket.host_cycle(WRITE_AT);
+    socket.write(1, 0x55);  // R1 H-to-P data, with I=1 -> PIRQ
+    REQUIRE(ula->pirq());
+    REQUIRE_FALSE(pirq_seen);  // the pre-write sync ran the coprocessor before PIRQ
+
+    for (uint64_t h = WRITE_AT + 1;
+         h <= WRITE_AT + 4 * TubeSocket::MAX_COPROCESSOR_SKEW && !pirq_seen; ++h) {
+        socket.host_cycle(h);
+    }
+    REQUIRE(pirq_seen);
+    CHECK(pirq_seen_at >= WRITE_AT);
+    CHECK(pirq_seen_at - WRITE_AT <= TubeSocket::MAX_COPROCESSOR_SKEW);
 }
