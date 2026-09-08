@@ -729,6 +729,96 @@ plus `grep -rn 'beebium/server' src/extensions/acorn-65c02-coprocessor
 src/extensions/acorn-65c102-coprocessor` finding nothing.
 
 
+## Step 2: the skew bound
+
+### Goal
+
+Name the maximum permitted divergence between host time and coprocessor
+time, define what stays exact and what may lag by up to that bound, and
+test that the execution strategy honours it. This step changes no
+behaviour: the current strategy runs the coprocessor to the host's cycle
+on every step, so its achieved skew is zero. It exists so that Step 3 can
+raise the call interval against a stated, tested contract rather than a
+description of the one strategy we have.
+
+### Definitions
+
+- **Host time** `H`: `state_.cycle_count` at the moment the host does
+  something.
+- **Coprocessor time** `C`: the host time the coprocessor has been run to,
+  that is the argument of the last completed `run_until`. In any
+  single-threaded strategy `C <= H` always; the coprocessor is never ahead.
+- **Skew**: `H - C`, in host cycles.
+
+### The contract
+
+1. **Register accesses are exact.** Immediately before the host reads or
+   writes any Tube register at host time `H`, `C == H`. The coprocessor has
+   therefore executed every cycle due before the access and none due after
+   it, so the ULA's state is what the hardware would present at that bus
+   cycle. The coprocessor's own register accesses are exact by construction
+   in a single-threaded strategy, because it runs only inside `run_until`
+   and sees every host access at times below its own.
+2. **Everything else may lag by at most Δ.** At any host cycle that is not
+   a Tube register access, `H - C <= MAX_COPROCESSOR_SKEW`. The only
+   observable consequence is interrupt latency: the host samples HIRQ from
+   ULA state as of `C`, so a HIRQ the coprocessor raises at coprocessor time
+   `c` reaches the host's IRQ input within Δ host cycles; symmetrically a
+   PIRQ or PNMI raised by a host write is seen by the coprocessor when it
+   next runs, which is within Δ. On the hardware the same latencies exist
+   and are the CPUs' own interrupt recognition times.
+3. **Reset and pause do not break the bound.** After `reset()` the
+   coprocessor's time base is re-established by the first `run_until` and
+   the bound holds from there. While paused the coprocessor's time still
+   advances with `run_until` calls (Step 1 semantics), so the bound holds
+   trivially.
+
+### The value
+
+`MAX_COPROCESSOR_SKEW` is 8 host cycles, 4 microseconds at 2 MHz, declared
+as a named constant in `TubeSocket`. Rationale: the tightest open-loop
+timing in the Tube protocol is the type 0 to 3 NMI transfer, where the host
+touches R3 every 24 us per byte (26 us per pair) and expects the parasite's
+NMI handler, a few dozen 3 MHz cycles, to have run in between. The
+coprocessor's interrupt latency under this contract is at most Δ plus its
+own recognition time; at 4 us that leaves the handler well over half the
+window. A larger Δ is a Step 3 decision to be made against measurements,
+not a Step 2 one; 8 is safe and the constant is the only place to change.
+
+### What is built
+
+- `TubeSocket` gains the constant and records the argument of the last
+  `run_coprocessor_until` as `coprocessor_time()`. It gains an optional
+  observer hook for tests: a callback invoked with `(host_time, offset,
+  is_write)` immediately before each host register access, where
+  `host_time` is supplied by `Machine` (the socket does not know the host
+  clock otherwise). Zero cost when unset; not for production use.
+- `Machine` passes `state_.cycle_count` to the socket for that hook.
+- The contract text above is added to the class comment of
+  `TubeSocket` in condensed form, present tense, so the code carries it.
+
+### Tests
+
+- `tests/test_coprocessor_skew.cpp`: a `SkewObserver` that installs the
+  hook and wraps the coprocessor, and asserts across a whole 65C02 boot to
+  the BASIC prompt, and across the CE2023 load, that (a) at every host
+  register access `coprocessor_time() == host_time`, and (b) at every
+  `run_coprocessor_until(H)` call `H - previous_C <= MAX_COPROCESSOR_SKEW`.
+  With the current strategy (b) observes 1 everywhere; the test asserts
+  the bound, not the observed value, so it keeps passing as Step 3 raises
+  the interval.
+- A test that deliberately violates the bound through the hook (a stub
+  strategy that calls `run_coprocessor_until` every 9 cycles) is caught by
+  the observer, proving the observer can fail.
+- A test that `coprocessor_time()` is re-established after `reset()`.
+
+### Acceptance
+
+Step 1e's acceptance list unchanged in outcome, plus the tests above.
+Behavioural identity is the criterion: this step changes nothing the
+emulated machines can observe.
+
+
 ## Later steps (for orientation, not for implementation now)
 
 - **Step 1c, the 65C102 4 MHz second processor.** Specified below.
@@ -740,11 +830,7 @@ src/extensions/acorn-65c102-coprocessor` finding nothing.
   the protos and in the Python, TypeScript and macOS clients. That is a
   design of its own, building on `docs/discussion/debugger-requirements.md`;
   `CoprocessorDebugTarget` is the seam it plugs into.
-- **Step 2, skew contract.** Name the maximum permitted skew Δ, in host
-  cycles, between the host's time and the coprocessor's. Register accesses
-  remain exact; interrupt-line delivery is permitted up to Δ of latency.
-  Add a test that asserts the socket never lets the two diverge by more
-  than Δ.
+- **Step 2, skew contract.** Specified above.
 - **Step 3, batching.** `Machine::step()` calls `run_coprocessor_until` at
   most every Δ host cycles, or immediately before any host access to the
   Tube registers, whichever comes first. This is where a heavy coprocessor
