@@ -82,13 +82,12 @@ function(add_beebium_server TARGET_NAME SOURCE_FILE)
     # aggregated into beebium-servers (the convenience target below)
     # so a single build invocation produces a complete extension tree.
     #
-    # The two built-in exceptions (acorn-65c02-coprocessor and aun)
-    # are statically linked. See BuiltinExtensions.hpp for their
-    # rationale and what would be required to convert each to a plugin.
+    # The built-in exceptions (aun and host-serial) are statically linked.
+    # See BuiltinExtensions.hpp for their rationale and what would be required
+    # to convert each to a plugin. acorn-65c02-coprocessor is now a plugin.
     target_link_libraries(${TARGET_NAME}
         PRIVATE
             beebium_service
-            beebium_ext_acorn_65c02
             beebium_ext_aun
             beebium_ext_host_serial
             nlohmann_json::nlohmann_json
@@ -137,6 +136,7 @@ set(BEEBIUM_SERVERS_DEPS
 )
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
+        beebium_ext_acorn_65c02_plugin
         beebium_ext_acorn_rtc_plugin
         beebium_ext_acorn_scsi_plugin
         beebium_ext_piconet_plugin

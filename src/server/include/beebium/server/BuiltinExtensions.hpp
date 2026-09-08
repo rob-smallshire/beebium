@@ -20,14 +20,13 @@
 // extensions that the server has link-time knowledge of -- typically
 // because ServerMain reaches into their type via dynamic_cast or
 // because they PUBLIC-link libraries (like beebium_service) that
-// cannot safely coexist with plugin copies. A cleaner plugin ABI (for
-// example, a virtual-interface adapter for cross-processor debugger
-// wiring) would unblock converting the remaining built-ins to plugins;
-// see the acorn-65c02-coprocessor notes below.
+// cannot safely coexist with plugin copies. The acorn-65c02-coprocessor
+// used to be here for exactly that reason; it is now a plugin, reached
+// through the abstract CoprocessorExtension interface, and no longer
+// appears in this table.
 
 #include "AunEconetTransportExtension.hpp"
 #include "HostSerialExtension.hpp"
-#include "SecondProcessor65C02Extension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/ExtensionManifest.hpp"
 
@@ -47,31 +46,6 @@ namespace detail {
 
 inline std::vector<Entry> make_entries() {
     std::vector<Entry> result;
-
-    // Acorn 65C02 3 MHz second processor (Tube co-processor).
-    //
-    // Built-in rather than a plugin because ServerMain does
-    // dynamic_cast<SecondProcessor65C02Extension*> on the loaded
-    // extension to wire cross-processor debugger callbacks, and the
-    // extension's inline non-virtual integration methods
-    // (running(), parasite_pause_callback(), wire_counterpart_stop())
-    // reach into private members that are not exposed through a
-    // cross-DLL virtual interface.
-    {
-        ExtensionManifest m;
-        m.name = "acorn-65c02-coprocessor";
-        m.display_name = "Acorn 65C02 Co-processor";
-        m.description = "Acorn 65C02 3 MHz second processor";
-        m.cli_name = "tube-65c02";
-        m.extension_kind = "peripheral";
-        m.attaches_to = {"tube"};
-        m.parameters.push_back(
-            {"rom", "filepath", "Path to 2KB Tube client ROM image",
-             -1, false, false, ""});
-        result.push_back({std::move(m),
-                          [] { return std::unique_ptr<Extension>(
-                              new SecondProcessor65C02Extension()); }});
-    }
 
     // AUN UDP econet transport.
     //

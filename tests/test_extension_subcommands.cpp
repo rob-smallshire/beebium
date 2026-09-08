@@ -111,8 +111,10 @@ TEST_CASE("list-extensions exits successfully with no args",
     REQUIRE(r.exit_code == 0);
 }
 
-TEST_CASE("list-extensions includes the built-in tube-65c02 extension",
+TEST_CASE("list-extensions includes the tube-65c02 coprocessor plugin",
           "[integration][extension][list-extensions]") {
+    // tube-65c02 is a plugin now, loaded from the default extensions directory
+    // beside the executable, like acorn-rtc.
     auto r = run_command(EXECUTABLE + " list-extensions");
     REQUIRE(r.exit_code == 0);
     INFO("stdout: " << r.stdout_output);
@@ -169,13 +171,14 @@ TEST_CASE("list-extensions --attaches-to serial-port shows only serial extension
     REQUIRE(r.stdout_output.find("tube-65c02") == std::string::npos);
 }
 
-TEST_CASE("list-extensions output carries attaches_to (built-in manifests too)",
+TEST_CASE("list-extensions output carries attaches_to (built-in and plugin manifests)",
           "[integration][extension][list-extensions][attachment-points]") {
     auto r = run_command(EXECUTABLE + " --format jsonl list-extensions");
     REQUIRE(r.exit_code == 0);
     INFO("stdout: " << r.stdout_output);
-    // host-serial is a built-in; tube-65c02 is the built-in coprocessor. Their
-    // attaches_to comes from BuiltinExtensions, so this also guards those.
+    // host-serial is a built-in; tube-65c02 is the coprocessor plugin. host-serial's
+    // attaches_to comes from BuiltinExtensions and tube-65c02's from its plugin
+    // manifest, so this guards both sources.
     REQUIRE(r.stdout_output.find(
         "\"cli_name\":\"host-serial\"") != std::string::npos);
     REQUIRE(r.stdout_output.find("\"attaches_to\":[\"serial-port\"]") != std::string::npos);
@@ -229,7 +232,7 @@ TEST_CASE("describe-extension requires a name argument",
     REQUIRE(r.exit_code != 0);
 }
 
-TEST_CASE("start --help lists the built-in tube-65c02 extension flag",
+TEST_CASE("start --help lists the tube-65c02 coprocessor plugin flag",
           "[integration][extension][start-help]") {
     auto r = run_command(EXECUTABLE + " start --help");
     INFO("stdout: " << r.stdout_output);
