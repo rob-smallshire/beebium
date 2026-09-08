@@ -44,9 +44,14 @@ public:
     // with the same value more than once runs nothing on the second call.
     virtual void run_until(uint64_t host_cycle) = 0;
 
-    // True while the debugger has stopped this coprocessor. While paused,
+    // Debugger stop and resume, and the current state. While paused,
     // run_until still advances the record of host time but runs no cycles;
-    // cycles that fall in a paused interval are lost, not deferred.
+    // cycles that fall in a paused interval are lost, not deferred. These are
+    // on the interface because the debugger's cross-processor stop logic uses
+    // them: the server pauses the coprocessor when a host breakpoint with
+    // stop_counterpart fires.
+    virtual void pause() = 0;
+    virtual void resume() = 0;
     virtual bool is_paused() const = 0;
 
     // Hardware reset, propagated from the host's reset line through the Tube

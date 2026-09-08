@@ -33,9 +33,12 @@ class RecordingCoprocessor : public Coprocessor {
 public:
     std::vector<uint64_t> run_until_args;
     int reset_count = 0;
+    bool paused = false;
 
     void run_until(uint64_t host_cycle) override { run_until_args.push_back(host_cycle); }
-    bool is_paused() const override { return false; }
+    void pause() override { paused = true; }
+    void resume() override { paused = false; }
+    bool is_paused() const override { return paused; }
     void reset() override { ++reset_count; }
     ClockRatio clock_ratio() const override { return ClockRatio{3, 2}; }
     uint16_t diag_pc() const override { return 0x1234; }

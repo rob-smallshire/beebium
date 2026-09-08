@@ -87,8 +87,8 @@ public:
 
     // --- Debugger pause/resume ---
 
-    void pause();
-    void resume();
+    void pause() override;
+    void resume() override;
     bool is_paused() const override { return paused_; }
     uint16_t diag_pc() const override { return cpu_.cpu().opcode_pc.w; }
     void prepare_for_step() {} // No bus stretching on parasite side
