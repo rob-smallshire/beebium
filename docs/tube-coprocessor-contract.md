@@ -138,19 +138,47 @@ coprocessor.
 
 ### `Machine::step()` changes
 
-Today `Machine::step()` calls `tick_parasite()` before the host CPU tick on
-a normal cycle and `tick_parasite_stretch()` on a bus-stretched cycle. Both
-become a single call, in the same place on both paths:
+`Machine::step()` has three paths: a Tube bus-stretch cycle (host CPU
+halted by the ULA), a 1MHz bus-stretch cycle (host CPU halted waiting for
+a 1MHz peripheral), and a normal cycle. Today the first calls
+`tick_parasite_stretch()`, the third calls `tick_parasite()`, and the
+second does not tick the parasite at all. On the step where a Tube stretch
+completes, the first path falls through into the third and the parasite is
+advanced twice for one host cycle.
+
+Both of those are defects in the current code, not behaviour to preserve.
+On the hardware the coprocessor's clock runs continuously whatever the
+host's bus is doing, and one host cycle is one host cycle. The contract
+therefore makes a single call, as the first action of `step()`, before any
+stretch handling, on every path:
 
 ```cpp
-state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+void step() {
+    state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+    ...
+}
 ```
 
-Because `cycle_count` advances by one per `step()` on both paths, the
-coprocessor sees exactly the sequence of host times it sees today, and the
-cycles it runs per call are exactly the 1, 2, 1, 2 pattern the current 3:2
-accumulator produces. Step 1 must be behaviourally identical to the current
-code: same interleaving, same results.
+Because `cycle_count` advances by exactly one per `step()` on every path,
+the coprocessor sees every host time exactly once, and the cycles it runs
+per call follow the 1, 2, 1, 2 pattern of the 3:2 ratio without gaps or
+doubling.
+
+Consequences, stated so they are recognised rather than discovered:
+
+- During a 1MHz stretch the coprocessor now runs, where before it was
+  frozen and those cycles were lost. 1MHz accesses are frequent (VIAs,
+  sound, the 1MHz bus), so the coprocessor gains real time relative to
+  the host across a session. This is the hardware behaviour.
+- On the step that completes a Tube stretch the coprocessor advances once,
+  not twice.
+
+Step 1's acceptance is therefore behavioural identity *except* for these
+two documented changes, whose only permitted effect is that the coprocessor
+runs continuously. Every boot, register, vector and scenario test must
+still pass. If a test outcome changes, that is a defect in the migration
+or a latent dependency on the frozen-parasite behaviour, and either way it
+is to be understood before merge, not accepted.
 
 ### `CoprocessorClock` helper
 
@@ -243,9 +271,11 @@ All of the following green, run locally before handing back:
 - A CE2023 run if `test_tube_ce2023_trace` is part of the ctest set above
   (it is), since it is the sharpest interleaving-sensitive test we have.
 
-Behavioural identity is the acceptance criterion for Step 1. If any
-scenario or boot test changes outcome, the change is a defect in the
-migration, not an acceptable side effect.
+Behavioural identity, apart from the two changes documented under
+`Machine::step()`, is the acceptance criterion for Step 1. If any scenario
+or boot test changes outcome, the change is a defect in the migration or a
+latent dependency on the old behaviour, and is to be understood before
+merge, not accepted as a side effect.
 
 
 ## Later steps (for orientation, not for implementation now)
