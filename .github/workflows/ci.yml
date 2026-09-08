@@ -150,6 +150,10 @@ jobs:
         # root-caused rather than silently masked by the retry.
         # Per-test durations are printed inline (Test #N ... Passed X sec).
         run: |
+          # pipefail: the pipe through tee must not hide ctest's exit status,
+          # or a failing test would only produce the warning below and the
+          # job would pass.
+          set -o pipefail
           ctest --test-dir build --output-on-failure --timeout 120 --repeat until-pass:2 2>&1 | tee ctest.log
           if grep -qE '\*\*\*(Failed|Timeout|Exception)' ctest.log; then
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
@@ -272,6 +276,10 @@ jobs:
         # root-caused rather than silently masked by the retry.
         # Per-test durations are printed inline (Test #N ... Passed X sec).
         run: |
+          # pipefail: the pipe through tee must not hide ctest's exit status,
+          # or a failing test would only produce the warning below and the
+          # job would pass.
+          set -o pipefail
           ctest --test-dir build --output-on-failure --timeout 120 --repeat until-pass:2 2>&1 | tee ctest.log
           if grep -qE '\*\*\*(Failed|Timeout|Exception)' ctest.log; then
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
@@ -387,6 +395,10 @@ jobs:
         # root-caused rather than silently masked by the retry.
         # Per-test durations are printed inline (Test #N ... Passed X sec).
         run: |
+          # pipefail: the pipe through tee must not hide ctest's exit status,
+          # or a failing test would only produce the warning below and the
+          # job would pass.
+          set -o pipefail
           ctest --test-dir build --output-on-failure --timeout 120 --repeat until-pass:2 2>&1 | tee ctest.log
           if grep -qE '\*\*\*(Failed|Timeout|Exception)' ctest.log; then
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
@@ -510,6 +522,10 @@ jobs:
         # See the other jobs for the rationale behind --timeout 120 and
         # --repeat until-pass:2.
         run: |
+          # pipefail: the pipe through tee must not hide ctest's exit status,
+          # or a failing test would only produce the warning below and the
+          # job would pass.
+          set -o pipefail
           ctest --test-dir build --output-on-failure --timeout 120 --repeat until-pass:2 2>&1 | tee ctest.log
           if grep -qE '\*\*\*(Failed|Timeout|Exception)' ctest.log; then
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
