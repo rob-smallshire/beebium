@@ -243,16 +243,20 @@ def _dump_hang_diagnostics(bbc):
 
 @pytest.mark.slow
 @pytest.mark.timeout(120)
+@pytest.mark.parametrize("tube_flag", ["--tube-65c02", "--tube-65c102"])
 def test_adfs_select_with_tube_and_scsi(
     server_filepath, mos_filepath, basic_filepath,
     anfs_filepath, adfs_filepath, dfs_filepath,
-    scsi_hdd_filepath,
+    scsi_hdd_filepath, tube_flag,
 ):
     """Selecting ADFS with *ADFS should return to the prompt, not deadlock.
 
     This is the minimal reproduction of the WFSINIT hang: boot with Tube,
     ADFS ROM, and SCSI disc, then type *ADFS. The Tube deadlocks during
-    ADFS filing system selection.
+    ADFS filing system selection. Parametrised over both coprocessors --
+    the 3 MHz 65C02 and the 4 MHz 65C102 -- since this is the heaviest
+    R2/R3/R4 Tube protocol exercise and the 65C102 runs the parasite at a
+    different rate relative to the host.
     """
     try:
         with Beebium.launch(
@@ -260,7 +264,7 @@ def test_adfs_select_with_tube_and_scsi(
             basic_filepath=basic_filepath,
             server_filepath=server_filepath,
             extra_args=[
-                "--tube-65c02",
+                tube_flag,
                 "--fdc", "acorn-1770",
                 "--sideways", f"9:rom:{anfs_filepath}",
                 "--sideways", f"10:rom:{adfs_filepath}",
