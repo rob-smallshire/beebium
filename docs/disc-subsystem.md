@@ -503,7 +503,7 @@ uint8_t poll_nmi() {
 }
 ```
 
-Note the ordering: NMI state is sampled **before** ticking the controller. This is critical for edge detection—after the CPU reads the DATA register (clearing DRQ), `poll_nmi()` returns 0. Then `tick()` may set DRQ for the next byte. On the next `poll_nmi()` call, we return 1, creating a clean 0→1 edge for the 6502's edge-triggered NMI detection.
+Note the ordering: NMI state is sampled **before** ticking the controller. This is critical for edge detection--after the CPU reads the DATA register (clearing DRQ), `poll_nmi()` returns 0. Then `tick()` may set DRQ for the next byte. On the next `poll_nmi()` call, we return 1, creating a clean 0→1 edge for the 6502's edge-triggered NMI detection.
 
 ### Motor Control
 
@@ -669,11 +669,11 @@ The WD1770 talks to drives (via `DiscDrive` pointers), and drives encapsulate th
 
 When implementing Intel 8271 support for Model B compatibility:
 
-1. **8271 does NOT have internal motor control** — the motor bit in the disc control register (0xFE80 bit 4) must directly control `DiscDrive::set_motor()`
+1. **8271 does NOT have internal motor control** -- the motor bit in the disc control register (0xFE80 bit 4) must directly control `DiscDrive::set_motor()`
 
-2. **DFS for 8271 explicitly sets motor bit** — the software writes to enable/disable motor
+2. **DFS for 8271 explicitly sets motor bit** -- the software writes to enable/disable motor
 
-3. **Same DiscDrive class can be used** — only the controller logic differs:
+3. **Same DiscDrive class can be used** -- only the controller logic differs:
    ```cpp
    // 8271 disc control register write handler
    void write(uint16_t, uint8_t value) {
@@ -685,7 +685,7 @@ When implementing Intel 8271 support for Model B compatibility:
    }
    ```
 
-4. **Detection mechanism** — DFS reads from 0xFE80 to distinguish controllers:
+4. **Detection mechanism** -- DFS reads from 0xFE80 to distinguish controllers:
    - 8271: Returns valid status (command/status registers at 0xFE80-0xFE83)
    - WD1770: Returns 0xFF (write-only latch, open bus on read)
 
@@ -981,7 +981,7 @@ The WD2791 and WD2793 are predecessors to the WD1770, with slightly different re
 #### Solidisk Controllers
 
 - **Solidisk 1770 FDC**: WD1770-based controller, typically used with Solidisk DDFS ROM.
-- **Solidisk DFDC**: Unique dual-controller board containing both an Intel 8271 and WD1770 with a physical switch to select between them. This allowed users to run both single-density (8271-compatible) and double-density (1770) software on the same machine. The DFDC presents an interesting emulation challenge — effectively two mutually-exclusive controllers sharing the same drives.
+- **Solidisk DFDC**: Unique dual-controller board containing both an Intel 8271 and WD1770 with a physical switch to select between them. This allowed users to run both single-density (8271-compatible) and double-density (1770) software on the same machine. The DFDC presents an interesting emulation challenge -- effectively two mutually-exclusive controllers sharing the same drives.
 
 #### Other Third-Party Controllers
 

@@ -174,7 +174,7 @@ The loader refuses to load the plugin if a declared image is missing or the
 wrong size, naming the plugin and the path. `Extension::load_rom(key, span)`
 loads it. `size` is the device's size and the image must match it exactly:
 a ROM image is the chip's contents, with no content rule for any part of it
-and no half-size or padded-dump acceptance — synthesising a missing part would
+and no half-size or padded-dump acceptance -- synthesising a missing part would
 be a guess. (The Acorn 6502/65C102 clients are the full 4 KB 2732: the lower
 2 KB is `&FF` in Acorn's firmware but is genuine ROM space a client may use,
 so the shipped image and any `rom=` override are the whole 4096 bytes; a 2 KB

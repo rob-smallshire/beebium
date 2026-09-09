@@ -7,9 +7,9 @@ SCSI bus), optionally exposing a typed control API and a GUI panel.
 
 It uses the existing extensions as worked examples:
 
-- **rpc-serial** (`src/extensions/rpc-serial/`) — a client-driven serial peer,
+- **rpc-serial** (`src/extensions/rpc-serial/`) -- a client-driven serial peer,
   shipped as a dynamically-loaded plugin. The smallest end-to-end example.
-- **host-serial** (`src/extensions/host-serial/`) — bridges the serial port to a
+- **host-serial** (`src/extensions/host-serial/`) -- bridges the serial port to a
   host PTY/device, with a typed config API *and* a GUI panel. Built **in** to
   the server rather than shipped as a plugin.
 
@@ -91,7 +91,7 @@ the attachment-point taxonomy and the config/manifest schema.
 ## Step 2: write the device
 
 The device implements the seam interface (e.g. `SerialPortDevice`). This is
-ordinary emulation code and out of scope here — see `RpcSerialEndpoint` for a
+ordinary emulation code and out of scope here -- see `RpcSerialEndpoint` for a
 queue-backed peer or `HostSerialEndpoint` for a host-port bridge. Two rules that
 bite extensions specifically:
 
@@ -106,7 +106,7 @@ bite extensions specifically:
 ## Step 3: expose a typed API with a dispatcher
 
 If clients (Python/TypeScript/Swift, or tests) need to drive your device, give
-it a typed API. **Do not host your own gRPC service** — an extension that links
+it a typed API. **Do not host your own gRPC service** -- an extension that links
 gRPC puts a second gRPC runtime in the process and corrupts it across the
 module boundary (gRPC #39198; see the design doc). Instead, the core hosts a
 single generic `ExtensionRpc` service and routes calls to plain C++ handlers you
@@ -115,7 +115,7 @@ register. Only opaque serialized bytes cross the boundary.
 ### 3a. Define your messages
 
 Write a `.proto` next to your extension. Keep a `service` block for
-documentation, but the gRPC stub is never compiled into your module — only the
+documentation, but the gRPC stub is never compiled into your module -- only the
 messages are.
 
 ```proto
@@ -176,7 +176,7 @@ copying from the existing dispatchers:
 - A **malformed request** is the one case that returns a non-OK `RpcStatus`
   (`kRpcInvalidArgument`). Everything maps cleanly to a gRPC status code.
 - **Domain "failures"** (validation, "device not active") can be reported
-  *in-band* — a `success`/`error` field in your response with an OK status —
+  *in-band* -- a `success`/`error` field in your response with an OK status --
   if your client checks that field. `AunDispatcher` does this; `RpcSerial`
   does not. Pick one per response type and be consistent.
 
@@ -204,8 +204,8 @@ std::vector<beebium::ExtensionRpcDispatcher*> rpc_dispatchers() override {
 
 Your handlers run on a gRPC worker thread. The emulation thread reads and
 clocks your device through the memory map *every cycle*. So whenever a handler
-mutates state the emulation thread also touches — poking a register, installing
-or removing a sub-device, arming an event buffer — it must halt the emulation
+mutates state the emulation thread also touches -- poking a register, installing
+or removing a sub-device, arming an event buffer -- it must halt the emulation
 thread across the mutation, or the two threads race (a torn write at best, a
 dereference of freed storage at worst).
 
@@ -229,8 +229,8 @@ so a long or blocking body there stalls the emulator.
 
 The server supplies the quiescer that halts the emulation thread (it forwards to
 the machine's pause/quiesce primitive) and wires it into every dispatcher for
-you; **a dispatcher author never sets it**. When no quiescer is wired — a
-standalone unit test with no running machine — `with_bus_stopped` simply runs
+you; **a dispatcher author never sets it**. When no quiescer is wired -- a
+standalone unit test with no running machine -- `with_bus_stopped` simply runs
 the closure directly, which is safe single-threaded. This is the peripheral
 analogue of the coprocessor debug target's `with_execution_stopped` (see
 `docs/coprocessor-extension-guide.md`); the emulation-thread ownership rule it
@@ -246,7 +246,7 @@ reference; see `docs/discussion/extension-ui-architecture.md`. Prefer an Indicat
 (action) over a Toggle when the state can change for reasons beyond the user's
 click (`feedback_state_vs_action_controls`).
 
-The typed dispatcher (Step 3) and the UI (Step 4) are **not** redundant — they
+The typed dispatcher (Step 3) and the UI (Step 4) are **not** redundant -- they
 serve different audiences (scripting vs. humans). See
 `feedback_extension_multi_api`.
 
@@ -277,7 +277,7 @@ serve different audiences (scripting vs. humans). See
 
 ### CMake: messages, not gRPC
 
-Compile the proto **messages only** — never the `.grpc.pb.cc` stub, and never
+Compile the proto **messages only** -- never the `.grpc.pb.cc` stub, and never
 link `gRPC::grpc++`. The plugin links protobuf for its own messages and
 `beebium_extension_api` for the dispatcher ABI:
 
@@ -306,7 +306,7 @@ beebium_finalize_plugin(TARGET beebium_ext_my_plugin NAME my-extension)
 > member on `#ifdef BEEBIUM_BUILD_SERVICE` (e.g. `unique_ptr<MyDispatcher>
 > dispatcher_;`), the flag **must** be `PUBLIC`, so every consumer that
 > compiles the header (tests that link the plugin) sees the same class layout.
-> A `PRIVATE` flag means the plugin compiles a bigger object than the test —
+> A `PRIVATE` flag means the plugin compiles a bigger object than the test --
 > different `sizeof`, and constructing in one module while destroying in
 > another corrupts the heap (`pointer being freed was not allocated`). The
 > simplest alternative is to keep the member unconditional. See the piconet
@@ -345,7 +345,7 @@ A non-OK `RpcStatus` surfaces as the `grpc.RpcError` it maps to.
 
 TypeScript is the same shape with `ExtensionChannel` from
 `clients/beebium-typescript-client/src/extension_rpc.ts` and ts-proto `encode`/`decode`
-(remember `Msg.encode(Msg.fromPartial({...})).finish()` — `encode` on a bare
+(remember `Msg.encode(Msg.fromPartial({...})).finish()` -- `encode` on a bare
 partial throws on unset string fields). Swift consumes the same generated
 messages over the same channel.
 
@@ -353,11 +353,11 @@ messages over the same channel.
 
 Two complementary levels, both cheap:
 
-- **Dispatcher unit test** — drive the dispatcher directly with a tiny
+- **Dispatcher unit test** -- drive the dispatcher directly with a tiny
   `RpcContext`, asserting the (serialize → invoke → parse) round-trip and the
   error cases (unknown method → `kRpcUnimplemented`, bad bytes →
   `kRpcInvalidArgument`). See `tests/test_rpc_serial_extension.cpp`.
-- **End-to-end channel test** — register your extension in a registry, stand up
+- **End-to-end channel test** -- register your extension in a registry, stand up
   the real `ExtensionRpcServiceImpl` over an in-process gRPC server, and call
   `ExtensionRpc.Invoke` through a stub. See `tests/test_grpc_aun_service.cpp`
   for the pattern and `tests/test_grpc_extension_rpc.cpp` for the harness.
@@ -372,9 +372,9 @@ request decodes to the right fields (`tests/test_aun.py`,
 - Any handler that mutates device state the emulation thread touches **must**
   wrap the mutation in `with_bus_stopped()` (see 3d). The server wires the
   quiescer; you never set it. Forgetting this is a data race, not a style nit.
-- Plugins are never `dlclose`d — they stay mapped for process lifetime
+- Plugins are never `dlclose`d -- they stay mapped for process lifetime
   (`feedback_plugin_no_dlclose`). Don't rely on unload-time cleanup.
-- Adding/removing a virtual on the `Extension` base is an **ABI break** — every
+- Adding/removing a virtual on the `Extension` base is an **ABI break** -- every
   plugin must be rebuilt against the host. They always are (built together).
 - Use the domain term (the extension's name) in user-facing CLI/APIs, not
   "plugin" (`feedback_ubiquitous_language`).

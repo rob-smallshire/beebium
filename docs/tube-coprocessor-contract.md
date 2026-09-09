@@ -750,9 +750,9 @@ server header to find a file.
   client ROM. The declared size is 4096: the full contents of the board's
   4 KB 2732, mapped at &F000-&FFFF. The image must be exactly 4096 bytes,
   with no content rule for either half (the lower half is genuine ROM address
-  space — a ReCo6502 client executes from it; Acorn's dumps leave it &FF).
-  There is NO half-size or padded-dump acceptance: a 2 KB file — the
-  upper-half-only image other emulators ship — is a fragment, and the model
+  space -- a ReCo6502 client executes from it; Acorn's dumps leave it &FF).
+  There is NO half-size or padded-dump acceptance: a 2 KB file -- the
+  upper-half-only image other emulators ship -- is a fragment, and the model
   does not synthesise the missing half. A `rom=` override of any other size
   fails at load with a one-sentence message naming the device and the
   expectation, e.g. "Tube client ROM must be the full 4096-byte 2732 image

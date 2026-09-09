@@ -411,6 +411,12 @@ private:
         } else {
             response.set_has_econet_socket(true);
 
+            // Snapshot the socket, ADLC, handshake and backend with the
+            // emulation thread parked. These are ticked every cycle and the raw
+            // adlc()/handshake()/backend() accessors are lock-free (valid only
+            // on the emulation thread or under quiesce), so reading their fields
+            // from a gRPC thread without pausing would tear.
+            machine_.with_emulation_paused([&] {
             auto& econet = machine_.state().memory.econet_socket;
             response.set_enabled(econet.enabled());
 
@@ -470,6 +476,7 @@ private:
             response.set_watchdog_timeout_count(econet.watchdog_timeout_count());
             response.set_send_stage_log(econet.send_stage_log_string());
             response.set_ticks_with_timer_active(econet.ticks_with_timer_active());
+            });
         }
     }
 

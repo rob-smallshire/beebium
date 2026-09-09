@@ -1348,6 +1348,15 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_stub_cpu_family)
 
+    # Tier 3 torn-read witness: a DeviceInspection getter snapshotting live
+    # device state against the emulation loop (meaningful under TSan).
+    add_executable(test_tier3_snapshots test_tier3_snapshots.cpp)
+    target_link_libraries(test_tier3_snapshots PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_tier3_snapshots)
+
     # Machine pause/quiesce primitive: correctness and data-race witnesses
     # (meaningful under TSan). Uses the host debugger service for the
     # WriteMemory-on-a-running-machine case.

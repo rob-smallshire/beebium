@@ -186,10 +186,15 @@ public:
                     if (!spec.slots.empty()) {
                         auto& sw = machine_.state().memory.sideways;
                         const auto probe = static_cast<uint8_t>(spec.slots[0]);
+                        // Copy the 16 KiB bank with the emulation thread parked
+                        // (as the header scanner does); the CPU may be writing
+                        // this RAM bank. Parse the private copy outside the pause.
                         std::vector<uint8_t> bytes(16384);
-                        for (uint16_t i = 0; i < 16384; ++i) {
-                            bytes[i] = sw.peek_bank(probe, i);
-                        }
+                        machine_.with_emulation_paused([&] {
+                            for (uint16_t i = 0; i < 16384; ++i) {
+                                bytes[i] = sw.peek_bank(probe, i);
+                            }
+                        });
                         parsed = beebium::parse_sideways_rom_header(bytes);
                     }
                 }
@@ -417,13 +422,16 @@ public:
 
             auto& sideways = machine_.state().memory.sideways;
 
-            // Read data from slot
+            // Read the requested span with the emulation thread parked; the CPU
+            // may be writing this RAM bank (see the header scanner).
             std::string data;
             data.reserve(length);
-            for (uint32_t i = 0; i < length; ++i) {
-                data.push_back(static_cast<char>(
-                    sideways.peek_bank(slot, static_cast<uint16_t>(offset + i))));
-            }
+            machine_.with_emulation_paused([&] {
+                for (uint32_t i = 0; i < length; ++i) {
+                    data.push_back(static_cast<char>(
+                        sideways.peek_bank(slot, static_cast<uint16_t>(offset + i))));
+                }
+            });
 
             response->set_success(true);
             response->set_data(std::move(data));

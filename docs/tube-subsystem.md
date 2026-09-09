@@ -183,7 +183,7 @@ read-only during boot mode, cleared by the first Tube-window access.
 The whole 4 KB device is modelled and shipped, not just the code half. Acorn's
 own client firmware occupies only the upper 2 KB (`&F800-&FFFF`) and leaves the
 lower half unprogrammed (`&FF`), but the lower half is genuine ROM address
-space — John Kortink's ReCo6502 client, for one, executes from it — so a client
+space -- John Kortink's ReCo6502 client, for one, executes from it -- so a client
 ROM image is the full 4096-byte device contents. There is no half-size or
 padded-dump acceptance: a 2 KB file (the upper-half-only image other emulators
 ship) is a fragment and is rejected.

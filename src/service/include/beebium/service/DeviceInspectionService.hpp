@@ -229,7 +229,12 @@ public:
         ViaState* response) override
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        fill_via_state(machine_.memory().system_via, response);
+        // The emulation thread ticks the VIA every cycle; snapshot it with that
+        // thread halted so the fields cannot tear (see docs/emulation-thread-
+        // ownership.md). Cheap: a register snapshot, well under a host cycle.
+        machine_.with_emulation_paused([&] {
+            fill_via_state(machine_.memory().system_via, response);
+        });
         return grpc::Status::OK;
     }
 
@@ -239,7 +244,9 @@ public:
         ViaState* response) override
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        fill_via_state(machine_.memory().user_via, response);
+        machine_.with_emulation_paused([&] {
+            fill_via_state(machine_.memory().user_via, response);
+        });
         return grpc::Status::OK;
     }
 
@@ -250,28 +257,32 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        auto& crtc = machine_.memory().crtc;
+        // Snapshot the CRTC (advanced every video cycle) with the emulation
+        // thread halted, so the register set and the timing counters agree.
+        machine_.with_emulation_paused([&] {
+            auto& crtc = machine_.memory().crtc;
 
-        // All 18 registers (R0-R17)
-        for (int i = 0; i < 18; ++i) {
-            response->add_registers(crtc.reg(static_cast<uint8_t>(i)));
-        }
+            // All 18 registers (R0-R17)
+            for (int i = 0; i < 18; ++i) {
+                response->add_registers(crtc.reg(static_cast<uint8_t>(i)));
+            }
 
-        // Current timing state
-        response->set_address_register(crtc.address_register());
-        response->set_column(crtc.column());
-        response->set_row(crtc.row());
-        response->set_raster(crtc.raster());
-        response->set_char_addr(crtc.address());
+            // Current timing state
+            response->set_address_register(crtc.address_register());
+            response->set_column(crtc.column());
+            response->set_row(crtc.row());
+            response->set_raster(crtc.raster());
+            response->set_char_addr(crtc.address());
 
-        // Computed values
-        response->set_screen_start(crtc.screen_start());
-        response->set_cursor_position(crtc.cursor_position());
+            // Computed values
+            response->set_screen_start(crtc.screen_start());
+            response->set_cursor_position(crtc.cursor_position());
 
-        // Sync and display state
-        response->set_in_hsync(crtc.in_hsync());
-        response->set_in_vsync(crtc.in_vsync());
-        response->set_display_enabled(crtc.display_enabled());
+            // Sync and display state
+            response->set_in_hsync(crtc.in_hsync());
+            response->set_in_vsync(crtc.in_vsync());
+            response->set_display_enabled(crtc.display_enabled());
+        });
 
         return grpc::Status::OK;
     }
@@ -283,15 +294,17 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        auto& ula = machine_.memory().video_ula;
+        machine_.with_emulation_paused([&] {
+            auto& ula = machine_.memory().video_ula;
 
-        // Control register
-        response->set_control(ula.control());
+            // Control register
+            response->set_control(ula.control());
 
-        // Palette (16 entries, logical -> physical)
-        for (int i = 0; i < 16; ++i) {
-            response->add_palette(ula.palette(static_cast<uint8_t>(i)));
-        }
+            // Palette (16 entries, logical -> physical)
+            for (int i = 0; i < 16; ++i) {
+                response->add_palette(ula.palette(static_cast<uint8_t>(i)));
+            }
+        });
 
         return grpc::Status::OK;
     }
@@ -303,19 +316,21 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        auto& latch = machine_.memory().addressable_latch;
+        machine_.with_emulation_paused([&] {
+            auto& latch = machine_.memory().addressable_latch;
 
-        // Raw 8-bit value
-        response->set_value(latch.value);
+            // Raw 8-bit value
+            response->set_value(latch.value);
 
-        // Decoded fields
-        response->set_screen_base(latch.screen_base());
-        response->set_sound_write_enable(latch.sound_write_enabled());
-        response->set_speech_read((latch.value & 0x02) == 0);  // Bit 1, active low
-        response->set_speech_write((latch.value & 0x04) == 0);  // Bit 2, active low
-        response->set_keyboard_write(latch.keyboard_enabled());
-        response->set_caps_lock_led(latch.caps_lock_led());
-        response->set_shift_lock_led(latch.shift_lock_led());
+            // Decoded fields
+            response->set_screen_base(latch.screen_base());
+            response->set_sound_write_enable(latch.sound_write_enabled());
+            response->set_speech_read((latch.value & 0x02) == 0);  // Bit 1, active low
+            response->set_speech_write((latch.value & 0x04) == 0);  // Bit 2, active low
+            response->set_keyboard_write(latch.keyboard_enabled());
+            response->set_caps_lock_led(latch.caps_lock_led());
+            response->set_shift_lock_led(latch.shift_lock_led());
+        });
 
         return grpc::Status::OK;
     }
@@ -327,39 +342,41 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        auto& chip = machine_.memory().sound_chip;
+        machine_.with_emulation_paused([&] {
+            auto& chip = machine_.memory().sound_chip;
 
-        // Always return chip-native ordering: Tone0, Tone1, Tone2, Noise
-        // MOS channel mapping is a client-side concern
+            // Always return chip-native ordering: Tone0, Tone1, Tone2, Noise
+            // MOS channel mapping is a client-side concern
 
-        // Tone channels (indices 0, 1, 2)
-        for (int i = 0; i < 3; ++i) {
-            auto tone = chip.get_tone_channel_state(static_cast<size_t>(i));
-            auto* channel = response->add_channels();
+            // Tone channels (indices 0, 1, 2)
+            for (int i = 0; i < 3; ++i) {
+                auto tone = chip.get_tone_channel_state(static_cast<size_t>(i));
+                auto* channel = response->add_channels();
 
-            channel->set_channel_id(static_cast<uint32_t>(i));
-            channel->set_channel_name("Tone" + std::to_string(i));
-            channel->set_frequency_divider(tone.frequency);
-            channel->set_counter(tone.counter);
-            channel->set_output_bit(tone.output_bit);
-            channel->set_volume(tone.volume);
-            channel->set_frequency_hz(tone.frequency_hz);
-        }
+                channel->set_channel_id(static_cast<uint32_t>(i));
+                channel->set_channel_name("Tone" + std::to_string(i));
+                channel->set_frequency_divider(tone.frequency);
+                channel->set_counter(tone.counter);
+                channel->set_output_bit(tone.output_bit);
+                channel->set_volume(tone.volume);
+                channel->set_frequency_hz(tone.frequency_hz);
+            }
 
-        // Noise channel (index 3)
-        auto noise = chip.get_noise_channel_state();
-        auto* noise_channel = response->add_channels();
+            // Noise channel (index 3)
+            auto noise = chip.get_noise_channel_state();
+            auto* noise_channel = response->add_channels();
 
-        noise_channel->set_channel_id(3);
-        noise_channel->set_channel_name("Noise");
-        noise_channel->set_noise_rate(noise.rate_select);
-        noise_channel->set_white_noise(noise.white_mode);
-        noise_channel->set_lfsr_state(noise.lfsr);
-        noise_channel->set_volume(noise.volume);
-        noise_channel->set_frequency_hz(noise.rate_hz);
+            noise_channel->set_channel_id(3);
+            noise_channel->set_channel_name("Noise");
+            noise_channel->set_noise_rate(noise.rate_select);
+            noise_channel->set_white_noise(noise.white_mode);
+            noise_channel->set_lfsr_state(noise.lfsr);
+            noise_channel->set_volume(noise.volume);
+            noise_channel->set_frequency_hz(noise.rate_hz);
 
-        // Latched register
-        response->set_latched_register(chip.latched_register());
+            // Latched register
+            response->set_latched_register(chip.latched_register());
+        });
 
         return grpc::Status::OK;
     }
@@ -371,23 +388,30 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        auto& tube = machine_.memory().tube_socket;
+        // Halt the emulation thread across the whole snapshot: the Tube ULA's
+        // registers, counters and protocol-trace ring (up to 1024 entries) are
+        // written on that thread on every Tube access, so an unsynchronised
+        // read tears both the ring's index math and its bytes.
+        machine_.with_emulation_paused([&] {
+            auto& tube = machine_.memory().tube_socket;
 
-        if (!tube.enabled()) {
-            response->set_enabled(false);
-            return grpc::Status::OK;
-        }
+            if (!tube.enabled()) {
+                response->set_enabled(false);
+                return;
+            }
 
-        // Full state from the backend's diagnostic surface, whether that is
-        // the socket's own in-process ULA or a coprocessor extension's
-        // installed backend.
-        if (const auto* insp = tube.tube_inspection()) {
-            fill_tube_state_from_inspection(*insp, response);
-            return grpc::Status::OK;
-        }
+            // Full state from the backend's diagnostic surface, whether that is
+            // the socket's own in-process ULA or a coprocessor extension's
+            // installed backend.
+            if (const auto* insp = tube.tube_inspection()) {
+                fill_tube_state_from_inspection(*insp, response);
+                return;
+            }
 
-        // Backend offers no inspection surface.
-        response->set_enabled(true);
+            // Backend offers no inspection surface.
+            response->set_enabled(true);
+        });
+
         return grpc::Status::OK;
     }
 

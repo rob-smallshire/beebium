@@ -259,34 +259,41 @@ public:
             constexpr bool is_socketed = HasOptionalDiscController<Memory>;
             response->set_is_socketed(is_socketed);
 
-            // Check if controller is present (Model B+ always, Model B via socket)
-            bool has_controller = disc_controller_present(machine_.state().memory);
-            response->set_has_disc_controller(has_controller);
+            // Snapshot the controller and drive state with the emulation thread
+            // parked. The emulation loop mutates this state -- and, crucially,
+            // completes a safe eject from tick_disc_drives, which frees the
+            // Disc that fill_drive_status dereferences via drive.disc(). Reading
+            // it unpaused is a use-after-free race against that autonomous eject.
+            machine_.with_emulation_paused([&] {
+                // Check if controller is present (Model B+ always, Model B via socket)
+                bool has_controller = disc_controller_present(machine_.state().memory);
+                response->set_has_disc_controller(has_controller);
 
-            if (has_controller) {
-                if constexpr (is_socketed) {
-                    // Model B with socket - report installed controller
-                    if (auto* ctrl = machine_.state().memory.disc_socket.controller()) {
-                        response->set_controller_type(std::string(ctrl->name()));
-                        response->set_installed_controller_id(
-                            std::string(machine_.state().memory.installed_controller_id()));
+                if (has_controller) {
+                    if constexpr (is_socketed) {
+                        // Model B with socket - report installed controller
+                        if (auto* ctrl = machine_.state().memory.disc_socket.controller()) {
+                            response->set_controller_type(std::string(ctrl->name()));
+                            response->set_installed_controller_id(
+                                std::string(machine_.state().memory.installed_controller_id()));
+                        }
+                    } else {
+                        // Model B+ with built-in controller
+                        response->set_controller_type("WD1770");
+                        response->set_installed_controller_id("");  // Built-in, not from registry
                     }
-                } else {
-                    // Model B+ with built-in controller
-                    response->set_controller_type("WD1770");
-                    response->set_installed_controller_id("");  // Built-in, not from registry
-                }
 
-                // Report drive status (only drives connected to controller)
-                fill_drive_status(response->add_drives(), 0,
-                    machine_.state().memory.disc_drive_0);
-                fill_drive_status(response->add_drives(), 1,
-                    machine_.state().memory.disc_drive_1);
-            } else {
-                response->set_controller_type("");
-                response->set_installed_controller_id("");
-                // Don't report drives if no controller to use them
-            }
+                    // Report drive status (only drives connected to controller)
+                    fill_drive_status(response->add_drives(), 0,
+                        machine_.state().memory.disc_drive_0);
+                    fill_drive_status(response->add_drives(), 1,
+                        machine_.state().memory.disc_drive_1);
+                } else {
+                    response->set_controller_type("");
+                    response->set_installed_controller_id("");
+                    // Don't report drives if no controller to use them
+                }
+            });
 
             return grpc::Status::OK;
         }

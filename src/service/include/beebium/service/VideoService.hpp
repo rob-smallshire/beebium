@@ -41,8 +41,15 @@ public:
     // ROM base font stands alone.
     using PeekByte = std::function<uint8_t(uint16_t)>;
 
+    // Runs a body with the emulation thread halted. The soft-font read walks
+    // guest RAM byte by byte (VDU font workspace), which the emulation thread
+    // rewrites on a VDU 23 redefinition; the server injects this to halt it
+    // across the read. Defaults to running the body directly (no machine, as in
+    // a unit test), which is safe single-threaded.
+    using RunPaused = std::function<void(const std::function<void()>&)>;
+
     VideoServiceImpl(FrameBuffer& frame_buffer, TeletextGrid& teletext_grid,
-                     PeekByte peek_byte = {});
+                     PeekByte peek_byte = {}, RunPaused with_paused = {});
     ~VideoServiceImpl() override;
 
     // Non-copyable
@@ -111,6 +118,7 @@ private:
     FrameBuffer& frame_buffer_;
     TeletextGrid& teletext_grid_;
     PeekByte peek_byte_;
+    RunPaused with_paused_;
 
     mutable std::mutex holds_mutex_;
     std::map<uint64_t, std::shared_ptr<const ScreenCapture>> holds_;

@@ -24,10 +24,12 @@ namespace beebium::service {
 
 VideoServiceImpl::VideoServiceImpl(FrameBuffer& frame_buffer,
                                    TeletextGrid& teletext_grid,
-                                   PeekByte peek_byte)
+                                   PeekByte peek_byte,
+                                   RunPaused with_paused)
     : frame_buffer_(frame_buffer)
     , teletext_grid_(teletext_grid)
-    , peek_byte_(std::move(peek_byte)) {
+    , peek_byte_(std::move(peek_byte))
+    , with_paused_(std::move(with_paused)) {
 }
 
 namespace {
@@ -162,9 +164,20 @@ VideoServiceImpl::capture_screen() const {
 
     // The font the machine was drawing with, read at the same instant. VDU 23
     // can redefine a glyph at any moment, and a font read later would recognise
-    // the held pixels as characters they were never drawn as.
+    // the held pixels as characters they were never drawn as. The read walks
+    // guest RAM byte by byte, so halt the emulation thread across the whole
+    // font assembly (the server injects with_paused_); a per-byte pause would
+    // be both wrong -- the glyphs must come from one instant -- and needlessly
+    // slow.
     if (peek_byte_) {
-        capture->glyph_sets = screen::assemble_glyph_sets(peek_byte_);
+        auto assemble = [&] {
+            capture->glyph_sets = screen::assemble_glyph_sets(peek_byte_);
+        };
+        if (with_paused_) {
+            with_paused_(assemble);
+        } else {
+            assemble();
+        }
     } else {
         capture->glyph_sets.push_back(
             screentext::builtin_glyph_set("acorn-mos-1.20"));

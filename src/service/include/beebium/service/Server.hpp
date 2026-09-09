@@ -235,9 +235,15 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     // The screen-text path reads the soft font out of guest RAM at
     // GetScreenText time. It reaches memory the way the debugger does, through
     // a side-effect-free peek, read-only and only on demand.
+    // The soft-font read walks guest RAM, which the emulation thread rewrites
+    // on a VDU 23 redefinition, so it runs with the emulation thread halted:
+    // the server supplies the quiescer (the service holds no Machine of its own).
     impl_->video_service = std::make_unique<VideoServiceImpl>(
         impl_->frame_buffer, impl_->teletext_grid,
-        [this](uint16_t address) { return impl_->machine.peek(address); });
+        [this](uint16_t address) { return impl_->machine.peek(address); },
+        [this](const std::function<void()>& fn) {
+            impl_->machine.with_emulation_paused(fn);
+        });
 
     // Create break callbacks that call Machine methods
     BreakCallbacks break_callbacks{
