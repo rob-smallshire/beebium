@@ -2070,6 +2070,22 @@ public:
                 beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr);
             extension_registry.resolve_and_init(extension_context);
 
+            // Wire the bus quiescer into every extension dispatcher. A
+            // dispatcher handler runs on a gRPC worker thread; when it mutates
+            // device state the emulation thread touches every cycle it must
+            // halt that thread across the mutation. The server supplies the
+            // quiescer (forwarding to Machine::with_emulation_paused), exactly
+            // as it injects the coprocessor debug target's execution quiescer
+            // below; a dispatcher author never sets it.
+            for (auto* ext : extension_registry.extensions()) {
+                for (auto* dispatcher : ext->rpc_dispatchers()) {
+                    dispatcher->set_bus_quiescer(
+                        [&machine](const std::function<void()>& fn) {
+                            machine.with_emulation_paused(fn);
+                        });
+                }
+            }
+
             // All registrations are complete -- close the registration window
             // and start the indicators consumer thread. From this point on,
             // any further register_indicator() call will throw.

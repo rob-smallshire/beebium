@@ -54,8 +54,14 @@ public:
     RpcStatus invoke(std::string_view method, std::string_view request,
                      std::string& response, RpcContext& /*ctx*/) override {
         if (method == "GetTime") {
-            chip_.advance_counters();
-            auto dt = chip_.current_datetime();
+            // The chip is memory-mapped; the emulation thread reads and clocks
+            // it every cycle. Advance and snapshot it with that thread halted so
+            // the counters cannot tick between advance and read.
+            Saf3019p::DateTime dt;
+            with_bus_stopped([&] {
+                chip_.advance_counters();
+                dt = chip_.current_datetime();
+            });
             GetRtcTimeResponse resp;
             resp.set_year(dt.year);
             resp.set_month(dt.month);
@@ -82,7 +88,10 @@ public:
             // initialise() validates the year against the active register
             // layout's representable range (which differs per layout), so let
             // it be the single source of truth rather than a fixed cap here.
-            if (!chip_.initialise(dt)) {
+            // It rewrites the chip's registers, so halt the emulation thread.
+            bool initialised = false;
+            with_bus_stopped([&] { initialised = chip_.initialise(dt); });
+            if (!initialised) {
                 auto [min_year, max_year] = Saf3019p::year_range(chip_.layout());
                 return RpcStatus::error(
                     kRpcInvalidArgument,
@@ -96,10 +105,18 @@ public:
             return serialized(resp.SerializeToString(&response));
         }
         if (method == "GetRegisters") {
-            chip_.advance_counters();
+            // Advance and read all eight registers as one snapshot with the
+            // emulation thread halted.
+            std::uint8_t regs[8];
+            with_bus_stopped([&] {
+                chip_.advance_counters();
+                for (int i = 0; i < 8; i++) {
+                    regs[i] = chip_.read_register(i);
+                }
+            });
             GetRtcRegistersResponse resp;
             for (int i = 0; i < 8; i++) {
-                resp.add_registers(chip_.read_register(i));
+                resp.add_registers(regs[i]);
             }
             return serialized(resp.SerializeToString(&response));
         }
@@ -112,7 +129,9 @@ public:
                     kRpcInvalidArgument,
                     "Register index must be 0-7, got " + std::to_string(reg));
             }
-            chip_.write_register(reg, static_cast<std::uint8_t>(req.bcd_value()));
+            with_bus_stopped([&] {
+                chip_.write_register(reg, static_cast<std::uint8_t>(req.bcd_value()));
+            });
             SetRtcRegisterResponse resp;
             return serialized(resp.SerializeToString(&response));
         }

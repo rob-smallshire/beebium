@@ -15,6 +15,7 @@
 
 #include "Export.hpp"
 
+#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
@@ -132,6 +133,34 @@ public:
                                                     std::string_view request,
                                                     RpcResponseWriter& writer,
                                                     RpcContext& ctx);
+
+    // The bus quiescer. A dispatcher handler runs on a gRPC worker thread; when
+    // it mutates device state the emulation thread also touches every cycle, it
+    // must halt that thread across the mutation. The server injects a quiescer
+    // that does so (it forwards to Machine::with_emulation_paused) and wires it
+    // into every dispatcher; a dispatcher author never sets it. Mutate device
+    // state through with_bus_stopped(), exactly as a coprocessor runner mutates
+    // its debug entries through with_execution_stopped().
+    //
+    // set by the server only:
+    void set_bus_quiescer(std::function<void(const std::function<void()>&)> quiescer) {
+        bus_quiescer_ = std::move(quiescer);
+    }
+
+protected:
+    // Run `fn` with the emulation thread halted, via the server-supplied
+    // quiescer. When none is set (a standalone unit test with no running
+    // machine) `fn` runs directly, which is safe single-threaded.
+    void with_bus_stopped(const std::function<void()>& fn) {
+        if (bus_quiescer_) {
+            bus_quiescer_(fn);
+        } else {
+            fn();
+        }
+    }
+
+private:
+    std::function<void(const std::function<void()>&)> bus_quiescer_;
 };
 
 }  // namespace beebium

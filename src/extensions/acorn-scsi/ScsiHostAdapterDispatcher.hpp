@@ -84,9 +84,17 @@ public:
         }
 
         // Attach an event buffer to the bus for the duration of this stream.
+        // The emulation thread reads the buffer pointer and pushes into it every
+        // cycle, so arm and detach it with that thread halted: the store must
+        // not race the read, and -- crucially -- the detach must complete before
+        // `buffer` (a stack local) is destroyed, so the emulation thread can
+        // never push into freed storage after this handler returns.
         ScsiBusEventBuffer buffer;
-        adapter_.bus().set_event_buffer(&buffer);
-        adapter_.bus().set_event_register_access(req.include_register_access());
+        const bool include_register_access = req.include_register_access();
+        with_bus_stopped([&] {
+            adapter_.bus().set_event_buffer(&buffer);
+            adapter_.bus().set_event_register_access(include_register_access);
+        });
 
         ScsiInternalEvent internal_event;
         while (buffer.pop(internal_event)) {
@@ -96,8 +104,10 @@ public:
             if (!writer.write(proto_event.SerializeAsString())) break;
         }
 
-        adapter_.bus().set_event_buffer(nullptr);
-        adapter_.bus().set_event_register_access(false);
+        with_bus_stopped([&] {
+            adapter_.bus().set_event_buffer(nullptr);
+            adapter_.bus().set_event_register_access(false);
+        });
         return RpcStatus::ok();
     }
 

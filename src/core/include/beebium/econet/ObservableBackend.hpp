@@ -17,8 +17,10 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace beebium {
@@ -77,7 +79,12 @@ public:
         bool connected = false;
     };
 
-    explicit ObservableBackend(NetworkBackend& wrapped) : wrapped_(wrapped) {
+    // Co-owns the backend it wraps: a reader (a SubscribeEconetEvents stream)
+    // may hold an ObservableBackend alive past a DisableEconet, and keeping the
+    // wrapped backend alive with it means the reference below never dangles,
+    // even though the reader path only touches the ring.
+    explicit ObservableBackend(std::shared_ptr<NetworkBackend> wrapped)
+        : owned_(std::move(wrapped)), wrapped_(*owned_) {
         last_connected_ = wrapped_.is_connected();
     }
 
@@ -199,6 +206,7 @@ private:
         if (count_ < CAPACITY) ++count_;
     }
 
+    std::shared_ptr<NetworkBackend> owned_;
     NetworkBackend& wrapped_;
 
     mutable std::mutex mutex_;

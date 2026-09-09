@@ -1062,6 +1062,16 @@ target_compile_definitions(test_debugger_entry_race PRIVATE
 )
 catch_discover_tests(test_debugger_entry_race)
 
+# Tier 2 quiesce witnesses: the extension-framework bus quiescer and the Econet
+# enable/disable lifetime model (meaningful under TSan). Needs only core + the
+# extension API (pulled in transitively by beebium_core).
+add_executable(test_tier2_quiesce test_tier2_quiesce.cpp)
+target_link_libraries(test_tier2_quiesce PRIVATE
+    beebium_core
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_tier2_quiesce)
+
 # Tube socket tests
 add_executable(test_tube_socket test_tube_socket.cpp)
 target_link_libraries(test_tube_socket PRIVATE beebium_core Catch2::Catch2WithMain)

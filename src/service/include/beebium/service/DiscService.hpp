@@ -339,7 +339,11 @@ public:
             response->set_error("Machine has no disc controller");
             return grpc::Status::OK;
         } else {
-            machine_.state().memory.set_spin_up_delay_enabled(request->enabled());
+            // The controller reads this flag from the emulation thread; park
+            // that thread across the write (see InsertDisc).
+            machine_.with_emulation_paused([&] {
+                machine_.state().memory.set_spin_up_delay_enabled(request->enabled());
+            });
             response->set_success(true);
             return grpc::Status::OK;
         }
@@ -403,9 +407,14 @@ public:
         } else {
             const std::string& controller_id = request->controller_id();
 
-            // Empty string or "none" removes the controller
+            // Empty string or "none" removes the controller. The emulation
+            // thread drives the controller object through the memory map every
+            // cycle, so destroying it must happen with that thread parked (see
+            // InsertDisc) or it dereferences freed storage.
             if (controller_id.empty() || controller_id == "none") {
-                machine_.state().memory.disc_socket.remove();
+                machine_.with_emulation_paused([&] {
+                    machine_.state().memory.disc_socket.remove();
+                });
                 response->set_success(true);
                 response->set_controller_type("");
                 return grpc::Status::OK;
@@ -427,7 +436,11 @@ public:
             }
 
             std::string controller_name(controller->name());
-            machine_.state().memory.install_disc_controller(std::move(controller), controller_id);
+            // Installing replaces the live controller object in the socket the
+            // emulation thread dereferences each cycle; park it across the swap.
+            machine_.with_emulation_paused([&] {
+                machine_.state().memory.install_disc_controller(std::move(controller), controller_id);
+            });
 
             response->set_success(true);
             response->set_controller_type(controller_name);

@@ -200,6 +200,42 @@ std::vector<beebium::ExtensionRpcDispatcher*> rpc_dispatchers() override {
 > `grpc_services()` returning `{}`; it is being retired as extensions move to
 > the channel. New extensions should not override it.
 
+### 3d. Mutating device state safely: the bus quiescer
+
+Your handlers run on a gRPC worker thread. The emulation thread reads and
+clocks your device through the memory map *every cycle*. So whenever a handler
+mutates state the emulation thread also touches — poking a register, installing
+or removing a sub-device, arming an event buffer — it must halt the emulation
+thread across the mutation, or the two threads race (a torn write at best, a
+dereference of freed storage at worst).
+
+`ExtensionRpcDispatcher` gives you exactly one tool for this: the protected
+helper `with_bus_stopped(fn)`. Run every device-state mutation inside it:
+
+```cpp
+if (method == "SetRegister") {
+    // ... parse and validate req ...
+    with_bus_stopped([&] {
+        device_.write_register(req.index(), req.value());
+    });
+    // ... build response ...
+}
+```
+
+Keep the closure tight: do parsing, validation and response building outside it,
+and put only the actual device mutation (and any read that must be consistent
+with it) inside. `with_bus_stopped` halts the emulation thread for the duration,
+so a long or blocking body there stalls the emulator.
+
+The server supplies the quiescer that halts the emulation thread (it forwards to
+the machine's pause/quiesce primitive) and wires it into every dispatcher for
+you; **a dispatcher author never sets it**. When no quiescer is wired — a
+standalone unit test with no running machine — `with_bus_stopped` simply runs
+the closure directly, which is safe single-threaded. This is the peripheral
+analogue of the coprocessor debug target's `with_execution_stopped` (see
+`docs/coprocessor-extension-guide.md`); the emulation-thread ownership rule it
+enforces is described in `docs/tube-coprocessor-contract.md`.
+
 ## Step 4 (optional): a GUI panel
 
 For a sidebar panel in graphical frontends, return an `ExtensionUi*` from
@@ -333,6 +369,9 @@ request decodes to the right fields (`tests/test_aun.py`,
 ## Gotchas checklist
 
 - Plugins **never** link gRPC. Messages only; `beebium_extension_api` for the ABI.
+- Any handler that mutates device state the emulation thread touches **must**
+  wrap the mutation in `with_bus_stopped()` (see 3d). The server wires the
+  quiescer; you never set it. Forgetting this is a data race, not a style nit.
 - Plugins are never `dlclose`d — they stay mapped for process lifetime
   (`feedback_plugin_no_dlclose`). Don't rely on unload-time cleanup.
 - Adding/removing a virtual on the `Extension` base is an **ABI break** — every

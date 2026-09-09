@@ -289,7 +289,10 @@ discovery::ServiceInfo SystemServiceImpl<MachineType>::build_service_info() {
         auto& econet = machine_.state().memory.econet_socket;
         if (econet.enabled()) {
             info.txt_records["econet_station"] = std::to_string(econet.station_id());
-            if (auto* aun = dynamic_cast<AunBackend*>(econet.backend())) {
+            // Take a co-owning handle so a concurrent DisableEconet cannot free
+            // the backend under this dynamic_cast/read.
+            auto backend = econet.backend_shared();
+            if (auto* aun = dynamic_cast<AunBackend*>(backend.get())) {
                 info.txt_records["econet_net"] = std::to_string(aun->local_net());
                 info.txt_records["econet_aun_port"] = std::to_string(aun->local_port());
             }

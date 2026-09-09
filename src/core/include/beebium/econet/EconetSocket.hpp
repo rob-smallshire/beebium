@@ -21,7 +21,9 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <utility>
 
 namespace beebium {
 
@@ -62,7 +64,10 @@ public:
     // handshake that NFS ROMs expect.
     void enable(uint8_t station_id, std::unique_ptr<NetworkBackend> backend,
                 bool aun_mode = false, bool requires_real_time = false) {
-        backend_ = std::move(backend);
+        // Build the whole chain into locals first (no heavy work under the
+        // lifetime lock, and nothing observable to a reader until it is
+        // published atomically below).
+        std::shared_ptr<NetworkBackend> backend_shared(std::move(backend));
         requires_real_time_ = requires_real_time;
         speed_gated_.store(false, std::memory_order_relaxed);
 
@@ -73,36 +78,64 @@ public:
         // Observation sits directly above the wire, so it records what
         // actually crossed the transport rather than what the handshake
         // intended -- and below the speed gate, so a gated transport shows as
-        // silence, which is what it is.
-        observable_ = std::make_unique<ObservableBackend>(*backend_);
+        // silence, which is what it is. It co-owns the backend so a reader
+        // holding it keeps the backend alive too.
+        auto observable = std::make_shared<ObservableBackend>(backend_shared);
 
-        NetworkBackend* wire = observable_.get();
+        NetworkBackend* wire = observable.get();
+        std::unique_ptr<SpeedGate> speed_gate;
         if (requires_real_time_) {
-            speed_gate_ = std::make_unique<SpeedGate>(*observable_, speed_gated_);
-            wire = speed_gate_.get();
-        } else {
-            speed_gate_.reset();
+            speed_gate = std::make_unique<SpeedGate>(*observable, speed_gated_);
+            wire = speed_gate.get();
         }
 
+        std::unique_ptr<FourWayHandshake> handshake;
+        std::unique_ptr<Mc6854> adlc;
         if (aun_mode) {
-            handshake_ = std::make_unique<FourWayHandshake>(*wire);
-            adlc_ = std::make_unique<Mc6854>(*handshake_);
+            handshake = std::make_unique<FourWayHandshake>(*wire);
+            adlc = std::make_unique<Mc6854>(*handshake);
         } else {
-            handshake_.reset();
-            adlc_ = std::make_unique<Mc6854>(*wire);
+            adlc = std::make_unique<Mc6854>(*wire);
+        }
+
+        // Publish. The shared_ptr members are guarded against reader threads;
+        // the raw-driven members (adlc_/handshake_/speed_gate_) are safe because
+        // the caller parks the emulation thread across enable().
+        {
+            std::lock_guard<std::mutex> lock(lifetime_mutex_);
+            backend_ = std::move(backend_shared);
+            observable_ = std::move(observable);
+            speed_gate_ = std::move(speed_gate);
+            handshake_ = std::move(handshake);
+            adlc_ = std::move(adlc);
         }
         station_id_ = station_id;
         enabled_ = true;
         bump_status_sequence();
     }
 
-    // Remove the Econet hardware (return to empty socket state).
+    // Remove the Econet hardware (return to empty socket state). The caller
+    // parks the emulation thread across this (the service wraps it in
+    // with_emulation_paused), so tearing down adlc_/handshake_ cannot race the
+    // per-cycle tick. A gRPC reader may still hold a co-owning copy of the
+    // observable or backend; releasing the socket's own references under the
+    // lifetime lock, and letting the objects actually die once the last copy
+    // drops, means such a reader never dereferences freed storage.
     void disable() {
-        adlc_.reset();
-        handshake_.reset();
-        speed_gate_.reset();
-        observable_.reset();
-        backend_.reset();
+        std::shared_ptr<ObservableBackend> observable_drop;
+        std::shared_ptr<NetworkBackend> backend_drop;
+        {
+            std::lock_guard<std::mutex> lock(lifetime_mutex_);
+            adlc_.reset();
+            handshake_.reset();
+            speed_gate_.reset();
+            observable_drop = std::move(observable_);
+            backend_drop = std::move(backend_);
+        }
+        // Destroy outside the lock; if a reader holds a copy these persist
+        // until it drops, and nothing ticks them once the ADLC is gone.
+        observable_drop.reset();
+        backend_drop.reset();
         enabled_ = false;
         requires_real_time_ = false;
         speed_gated_.store(false, std::memory_order_relaxed);
@@ -147,8 +180,13 @@ public:
     // the NFS ROM re-reads the station number).
     void set_station_id(uint8_t station_id) {
         station_id_ = station_id;
-        if (backend_) {
-            backend_->on_station_id_changed(station_id);
+        std::shared_ptr<NetworkBackend> backend;
+        {
+            std::lock_guard<std::mutex> lock(lifetime_mutex_);
+            backend = backend_;
+        }
+        if (backend) {
+            backend->on_station_id_changed(station_id);
         }
         bump_status_sequence();
     }
@@ -275,31 +313,70 @@ public:
     // observable through EconetService may have changed.
     uint64_t status_sequence() const {
         uint64_t seq = status_sequence_.load(std::memory_order_acquire);
-        if (backend_) seq += backend_->backend_status_sequence();
+        std::shared_ptr<NetworkBackend> backend;
+        {
+            std::lock_guard<std::mutex> lock(lifetime_mutex_);
+            backend = backend_;
+        }
+        if (backend) seq += backend->backend_status_sequence();
         return seq;
     }
 
+    // Raw accessors, LOCK-FREE by contract. adlc_/handshake_/backend_ are only
+    // ever replaced with the emulation thread parked (enable()/disable() run
+    // inside with_emulation_paused), so a reader ON THE EMULATION THREAD or with
+    // the machine quiesced needs no lock -- and the hot path (Machine::step ->
+    // nmi_pending, tick_rising/falling -> adlc_/handshake_) reads the members
+    // directly for exactly that reason. Do NOT add a lock here: it would put a
+    // mutex on the per-cycle emulation path. Any other thread (a gRPC status
+    // handler) must instead take a co-owning copy via backend_shared() /
+    // observable(); a raw pointer from here must not outlive the call, since a
+    // concurrent DisableEconet can free the pointee. (The remaining gRPC-thread
+    // readers of these raw accessors -- EconetService populate_status -- are a
+    // Tier 3 item; this branch introduces no new ones.)
     Mc6854* adlc() { return adlc_.get(); }
     const Mc6854* adlc() const { return adlc_.get(); }
     FourWayHandshake* handshake() { return handshake_.get(); }
     const FourWayHandshake* handshake() const { return handshake_.get(); }
-
     NetworkBackend* backend() { return backend_.get(); }
     const NetworkBackend* backend() const { return backend_.get(); }
 
+    // Co-owning handle to the backend. The caller holds the pointee alive for
+    // as long as it keeps the returned shared_ptr, so a read that races
+    // DisableEconet is safe. Null when no Econet hardware is fitted.
+    std::shared_ptr<NetworkBackend> backend_shared() const {
+        std::lock_guard<std::mutex> lock(lifetime_mutex_);
+        return backend_;
+    }
+
     // The frame recorder in the backend chain, or nullptr when no Econet
-    // hardware is fitted. Read by EconetService to serve SubscribeEconetEvents.
-    ObservableBackend* observable() { return observable_.get(); }
-    const ObservableBackend* observable() const { return observable_.get(); }
+    // hardware is fitted. Read by EconetService to serve SubscribeEconetEvents,
+    // which holds it for the life of the stream -- hence a co-owning handle
+    // that outlives a concurrent DisableEconet.
+    std::shared_ptr<ObservableBackend> observable() {
+        std::lock_guard<std::mutex> lock(lifetime_mutex_);
+        return observable_;
+    }
+    std::shared_ptr<const ObservableBackend> observable() const {
+        std::lock_guard<std::mutex> lock(lifetime_mutex_);
+        return observable_;
+    }
 
     // The top of the backend chain -- what the ADLC talks to. Exposed for
     // tests that want to drive frames through the chain without an ADLC.
+    // Lock-free like the other raw accessors: tests drive it single-threaded.
     NetworkBackend* backend_chain_for_test() {
         if (handshake_) return handshake_.get();
         if (speed_gate_) return speed_gate_.get();
         return observable_.get();
     }
     bool aun_mode() const { return handshake_ != nullptr; }
+
+    // Test hook: exposes the lifetime mutex so a test can prove the emulation
+    // thread's per-cycle path never locks it (see tests/test_tier2_quiesce.cpp,
+    // "Econet hot path takes no lifetime lock"). The mutex guards only the
+    // shared_ptr members' copy/assign, never the raw hot-path accessors.
+    std::mutex& lifetime_mutex_for_test() { return lifetime_mutex_; }
 
     uint64_t tick_count() const { return tick_count_; }
 
@@ -360,8 +437,19 @@ private:
         status_sequence_.fetch_add(1, std::memory_order_acq_rel);
     }
 
-    std::unique_ptr<NetworkBackend> backend_;
-    std::unique_ptr<ObservableBackend> observable_;  // records the wire traffic
+    // backend_ and observable_ are shared, not unique: a consumer on a gRPC
+    // thread (a SubscribeEconetEvents stream holding the observable, a
+    // SystemService read of the backend) can be using one while DisableEconet
+    // tears the socket down. Handing out a co-owning copy keeps the object
+    // alive for that use, so no raw pointer dangles. lifetime_mutex_ guards the
+    // shared_ptr MEMBERS themselves (their assignment/reset vs. a reader's
+    // copy) -- the emulation thread's per-cycle use goes through adlc_/
+    // handshake_, which enable()/disable() only touch with that thread parked
+    // (the service wraps them in with_emulation_paused), so the hot path needs
+    // no lock here.
+    mutable std::mutex lifetime_mutex_;
+    std::shared_ptr<NetworkBackend> backend_;
+    std::shared_ptr<ObservableBackend> observable_;  // records the wire traffic
     std::unique_ptr<SpeedGate> speed_gate_;  // present only when requires_real_time_
     std::unique_ptr<FourWayHandshake> handshake_;
     std::unique_ptr<Mc6854> adlc_;

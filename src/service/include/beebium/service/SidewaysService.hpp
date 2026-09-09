@@ -299,29 +299,21 @@ public:
             }
             response->set_actual_socket(actual_socket);
 
-            // Set the slot's type via the uniform mutator surface that
-            // every Hardware class exposes. Aliasing, S13 routing, and
-            // any per-machine quirks are the Memory's problem.
-            if constexpr (HasSlotMutators<Memory>) {
-                if (new_type == beebium::SlotType::Ram) {
-                    memory.configure_slot_as_ram(slot);
-                } else if (new_type == beebium::SlotType::Empty) {
-                    memory.configure_slot_as_empty(slot);
-                }
-                // SlotType::Rom is handled below: load_sideways_rom both
-                // configures and writes the image.
-            }
-
-            // Load image data if provided.
+            // Gather the image bytes first, off the emulation thread: file I/O
+            // must not run inside the quiesce below (a slow disk read would
+            // stall the emulator). Validation and errors happen here too.
+            std::vector<uint8_t> image;
+            bool have_image = false;
+            std::string image_filepath;
             if (request->has_url()) {
                 std::string url = request->url();
-                std::string filepath = (url.rfind("file://", 0) == 0)
+                image_filepath = (url.rfind("file://", 0) == 0)
                     ? url.substr(7) : url;
 
-                std::ifstream file(filepath, std::ios::binary | std::ios::ate);
+                std::ifstream file(image_filepath, std::ios::binary | std::ios::ate);
                 if (!file) {
                     response->set_success(false);
-                    response->set_error("Failed to open file: " + filepath);
+                    response->set_error("Failed to open file: " + image_filepath);
                     return grpc::Status::OK;
                 }
 
@@ -333,25 +325,15 @@ public:
                 }
 
                 file.seekg(0, std::ios::beg);
-                std::vector<uint8_t> data(static_cast<size_t>(size));
-                file.read(reinterpret_cast<char*>(data.data()), size);
+                image.resize(static_cast<size_t>(size));
+                file.read(reinterpret_cast<char*>(image.data()), size);
+                have_image = true;
 
                 // Store the full filepath as image_name so the Memory
                 // sidebar's Copy Path / Reveal in Finder actions have
                 // something useful; clients take the basename for display.
-                if constexpr (HasSlotMutators<Memory>) {
-                    if (new_type == beebium::SlotType::Ram) {
-                        memory.load_sideways_data(
-                            slot, data.data(), data.size(), filepath);
-                    } else {
-                        memory.load_sideways_rom(
-                            slot, data.data(), data.size(), filepath);
-                    }
-                }
-
                 response->set_image_name(
-                    std::filesystem::path(filepath).filename().string());
-
+                    std::filesystem::path(image_filepath).filename().string());
             } else if (request->has_data()) {
                 const std::string& data = request->data();
                 if (data.size() > 16384) {
@@ -359,16 +341,34 @@ public:
                     response->set_error("Image too large (max 16384 bytes)");
                     return grpc::Status::OK;
                 }
+                image.assign(data.begin(), data.end());
+                have_image = true;
+            }
 
-                const auto* bytes = reinterpret_cast<const uint8_t*>(data.data());
+            // Retype the slot and load its image as one atomic step with the
+            // emulation thread parked: it fetches instructions and reads data
+            // from this bank every cycle, so it must never observe a
+            // half-reconfigured slot or a bank being rewritten under it.
+            machine_.with_emulation_paused([&] {
                 if constexpr (HasSlotMutators<Memory>) {
                     if (new_type == beebium::SlotType::Ram) {
-                        memory.load_sideways_data(slot, bytes, data.size(), "");
-                    } else {
-                        memory.load_sideways_rom(slot, bytes, data.size(), "");
+                        memory.configure_slot_as_ram(slot);
+                    } else if (new_type == beebium::SlotType::Empty) {
+                        memory.configure_slot_as_empty(slot);
+                    }
+                    // SlotType::Rom is configured by load_sideways_rom below.
+
+                    if (have_image) {
+                        if (new_type == beebium::SlotType::Ram) {
+                            memory.load_sideways_data(
+                                slot, image.data(), image.size(), image_filepath);
+                        } else {
+                            memory.load_sideways_rom(
+                                slot, image.data(), image.size(), image_filepath);
+                        }
                     }
                 }
-            }
+            });
 
             response->set_success(true);
             return grpc::Status::OK;
@@ -582,10 +582,24 @@ private:
     void scan_slot(Sideways& sw, uint8_t slot) {
         if (slot >= slot_states_.size()) return;
 
+        // Copy the whole 16 KiB bank with the emulation thread parked: this
+        // runs on the scanner thread while the CPU may be writing that bank,
+        // so an unsynchronised read would race and could tear. The quiesce is
+        // scoped to the copy alone -- the hash, parse and emit below work on
+        // the private copy off the emulation thread. Measured cost of the
+        // quiesce+copy is ~0.6 microseconds per bank (release build,
+        // ModelBRomRamBoard, emulation loop running; see the [bench] case in
+        // tests/test_tier2_quiesce.cpp), incurred at most once a second per RAM
+        // slot and only while a client is monitoring headers -- about one host
+        // cycle's worth of pacing per second, negligible. (A change-driven
+        // publish from the emulation side was rejected: it would burden the
+        // instruction-fetch hot path to serve a rare, debug-facing observer.)
         std::vector<uint8_t> bytes(16384);
-        for (uint16_t i = 0; i < 16384; ++i) {
-            bytes[i] = sw.peek_bank(slot, i);
-        }
+        machine_.with_emulation_paused([&] {
+            for (uint16_t i = 0; i < 16384; ++i) {
+                bytes[i] = sw.peek_bank(slot, i);
+            }
+        });
 
         const size_t h = std::hash<std::string_view>{}(
             std::string_view(reinterpret_cast<const char*>(bytes.data()),

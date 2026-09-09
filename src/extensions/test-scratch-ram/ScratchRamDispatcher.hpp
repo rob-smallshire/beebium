@@ -60,8 +60,12 @@ public:
             if (req.value() > 255) {
                 return RpcStatus::error(kRpcInvalidArgument, "value must be 0-255");
             }
-            ram_.poke(static_cast<std::uint16_t>(req.offset()),
-                      static_cast<std::uint8_t>(req.value()));
+            // The emulation thread reads this RAM through the memory map every
+            // cycle; halt it across the write (see with_bus_stopped).
+            with_bus_stopped([&] {
+                ram_.poke(static_cast<std::uint16_t>(req.offset()),
+                          static_cast<std::uint8_t>(req.value()));
+            });
             ScratchRamWriteResponse resp;
             return serialized(resp.SerializeToString(&response));
         }

@@ -190,7 +190,12 @@ public:
                 // Fit hardware with no network connection
                 auto backend = std::make_unique<TestBackend>();
                 backend->set_connected(false);
-                econet.enable(station_id, std::move(backend), true);
+                // Fitting the hardware allocates the ADLC/handshake/backend the
+                // emulation thread ticks every cycle; build them with that
+                // thread parked.
+                machine_.with_emulation_paused([&] {
+                    econet.enable(station_id, std::move(backend), true);
+                });
                 response->set_success(true);
                 return grpc::Status::OK;
             }
@@ -209,7 +214,9 @@ public:
             }
 
             response->set_actual_aun_port(backend->local_port());
-            econet.enable(station_id, std::move(backend), true);
+            machine_.with_emulation_paused([&] {
+                econet.enable(station_id, std::move(backend), true);
+            });
             response->set_success(true);
             return grpc::Status::OK;
         }
@@ -239,7 +246,13 @@ public:
                 return grpc::Status::OK;
             }
 
-            econet.disable();
+            // Tearing down the ADLC/handshake/backend must not race the
+            // per-cycle tick; park the emulation thread across it. A gRPC
+            // reader holding a co-owning observable/backend handle is safe by
+            // construction (EconetSocket::disable).
+            machine_.with_emulation_paused([&] {
+                econet.disable();
+            });
             response->set_success(true);
             return grpc::Status::OK;
         }
@@ -292,7 +305,12 @@ public:
             return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
                                 "This machine has no Econet socket");
         } else {
-            auto* observable =
+            // Take a co-owning handle and hold it for the life of the stream.
+            // A concurrent DisableEconet releases the socket's own reference,
+            // but this handle keeps the recorder alive so the loop below never
+            // reads freed storage; once disabled nothing writes new events, so
+            // the stream simply goes quiet until the client disconnects.
+            std::shared_ptr<ObservableBackend> observable =
                 machine_.state().memory.econet_socket.observable();
             if (observable == nullptr) {
                 return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
