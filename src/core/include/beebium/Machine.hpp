@@ -490,26 +490,47 @@ public:
     // Sequence counter (increments on any mutation, for change detection)
     uint64_t sequence() const { return sequence_.load(); }
 
-    // Debug pause/resume for debugger integration
-    bool is_paused() const { return paused_.load(); }
+    // Debug pause/resume for debugger integration.
+    //
+    // Pause state has two independent sources, kept apart so neither can lose
+    // the other's intent (see paused_ and the members below):
+    //  - user_paused_: the logical pause a debugger client sets with pause()
+    //    and clears with resume(). is_paused() reports this.
+    //  - quiesce_depth_: raised by with_emulation_paused while a caller mutates
+    //    machine state the emulation thread would otherwise touch.
+    // The emulation loop reads the derived flag paused_ == (user_paused_ ||
+    // quiesce_depth_ > 0), recomputed under debug_mutex_ whenever either source
+    // changes. Reporting only the logical state means a transient quiesce does
+    // not make the machine look stopped to a client, and a resume() cannot
+    // release a machine another caller is still quiescing.
+    bool is_paused() const { return user_paused_.load(std::memory_order_acquire); }
 
     void pause() {
-        paused_.store(true);
-        ++sequence_;
-        // Sync the coprocessor to the host so a paused machine presents both
-        // processors at the same time. Only safe when the emulation loop is not
-        // running: if it is, it owns the coprocessor and syncs on exit (the
-        // run() chunk's end sync); doing it here too would race that thread.
-        if (!in_run_.load(std::memory_order_acquire)) {
+        std::lock_guard<std::mutex> lock(debug_mutex_);
+        user_paused_.store(true, std::memory_order_release);
+        recompute_paused_locked();
+        // Present both processors at the same cycle when we can prove the
+        // emulation thread is idle and no quiescer owns the machine. The lock is
+        // held across the sync so a quiescing caller cannot begin touching
+        // machine state while we drive the coprocessor. When the emulation loop
+        // owns execution (in_run_/emulation_busy_) or a quiesce is in progress,
+        // that owner is responsible for the coprocessor instead.
+        if (!in_run_.load(std::memory_order_acquire) &&
+            !emulation_busy_.load(std::memory_order_acquire) &&
+            quiesce_depth_ == 0) {
             state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
         }
+        ++sequence_;
     }
 
     void resume() {
         {
             std::lock_guard<std::mutex> lock(debug_mutex_);
-            paused_.store(false);
+            user_paused_.store(false, std::memory_order_release);
+            recompute_paused_locked();
         }
+        // Wake wait_if_paused so it re-tests paused_: it stays parked if a
+        // quiesce is still in progress, and runs on otherwise.
         debug_cv_.notify_all();
         ++sequence_;
     }
@@ -517,41 +538,47 @@ public:
     // Call before stepping cycles (no-op now, retained for interface compatibility).
     void prepare_for_step() {}
 
-    // Wait until the emulation loop has exited run() after a pause.
-    // Call from an RPC thread after pause() to ensure exclusive access.
+    // Wait until the emulation thread is idle: neither inside run() (in_run_)
+    // nor doing per-iteration work outside run() under an EmulationBusyScope
+    // (emulation_busy_). Call from a quiescing thread after raising the pause so
+    // the body that follows runs single-threaded against machine state.
     void wait_until_idle() {
-        while (in_run_.load(std::memory_order_acquire)) {
+        while (in_run_.load(std::memory_order_acquire) ||
+               emulation_busy_.load(std::memory_order_acquire)) {
             std::this_thread::yield();
         }
     }
 
-    // Run `f` with the emulation loop guaranteed not to be inside run().
+    // Run `f` with the emulation thread guaranteed not to be touching machine
+    // state. The machine is quiesced for the duration of `f` and its prior
+    // logical pause state is left untouched afterwards, so a debugger that had
+    // stopped the machine stays stopped and one that was running runs on.
     //
-    // If the machine was already paused (e.g. by the debugger) the prior
-    // paused state is preserved so the caller doesn't accidentally resume
-    // a paused machine. Otherwise the machine is paused for the duration
-    // of `f` and resumed afterwards.
-    //
-    // Note: pause() merely sets an atomic flag; the run loop only checks it
-    // between cycles. We unconditionally wait_until_idle() so that even when
-    // the machine was already "paused" by an earlier pause() that hadn't
-    // drained the loop yet (DebuggerService::Stop does this), `f` runs
-    // single-threaded against the CPU/memory state.
-    //
-    // Use this from gRPC service threads when mutating CPU/memory state
-    // that the emulation loop may be reading or writing concurrently.
+    // Use this from any thread (a gRPC service, an extension dispatcher) that
+    // mutates CPU/memory/device state the emulation loop may read or write.
+    // Never call it from the emulation thread itself: it waits for that thread
+    // to go idle and would wait for itself forever.
     template<typename F>
     void with_emulation_paused(F&& f) {
-        const bool was_paused = paused_.exchange(true);
+        // Serialise distinct quiescing callers, so only one body runs against
+        // machine state at a time. The mutex is RECURSIVE by necessity, not
+        // convenience: a quiescing body may legitimately call a Machine mutator
+        // that itself quiesces on the same thread -- e.g. DebuggerService's
+        // with_execution_change wraps a handler that calls
+        // Machine::set_watchpoint_entries, which is itself a with_emulation_paused.
+        // A non-recursive mutex would self-deadlock on that nesting. Do not
+        // "fix" it to std::mutex.
+        std::lock_guard<std::recursive_mutex> quiesce_lock(quiesce_mutex_);
+        begin_quiesce();
         wait_until_idle();
+        // Restore the derived pause flag however `f` returns (including by
+        // throwing), so an exception in a mutator cannot strand the machine
+        // paused.
+        struct EndQuiesceGuard {
+            Machine* machine;
+            ~EndQuiesceGuard() { machine->end_quiesce(); }
+        } end_guard{this};
         f();
-        if (!was_paused) {
-            {
-                std::lock_guard<std::mutex> lock(debug_mutex_);
-                paused_.store(false);
-            }
-            debug_cv_.notify_all();
-        }
     }
 
     // Block until not paused - call from emulation loop.
@@ -569,9 +596,18 @@ public:
         bool blocked = false;
         while (paused_.load() && !shutdown_requested_.load()) {
             blocked = true;
-            if (on_wake) {
+            // Run housekeeping only when the pause is purely logical. While a
+            // quiescer holds the machine (quiesce_depth_ > 0) its body may be
+            // mutating exactly the device state on_wake would touch (e.g. a disc
+            // controller being ejected vs. a drive tick), so on_wake must stand
+            // down. The busy flag is raised under debug_mutex_ so a quiescer
+            // that acquires the lock next sees us busy and wait_until_idle waits
+            // for on_wake to finish before its body runs.
+            if (on_wake && quiesce_depth_ == 0) {
+                emulation_busy_.store(true, std::memory_order_release);
                 lock.unlock();
                 on_wake();
+                emulation_busy_.store(false, std::memory_order_release);
                 lock.lock();
                 if (!paused_.load() || shutdown_requested_.load()) {
                     break;
@@ -693,7 +729,73 @@ public:
     CpuBindingType& cpu_binding() { return cpu_binding_; }
     VideoBindingType& video_binding() { return video_binding_; }
 
+    // RAII scope the emulation thread holds around the per-iteration work it
+    // performs outside run() -- ticking disc drives, adjusting emulation speed --
+    // and the run() call itself. It generalises run()'s in_run_ guard so
+    // wait_until_idle(), and therefore every quiescing caller, treats the
+    // emulation thread as busy for everything it touches, not only run().
+    //
+    // Construction re-tests paused_ under debug_mutex_: if a quiescer raised the
+    // pause in the window since the loop last checked, the scope is inactive and
+    // the caller must skip the work and loop back to wait_if_paused rather than
+    // touch machine state. Testing the flag and setting the busy flag under the
+    // same lock closes the window between the loop's pause check and the work.
+    class EmulationBusyScope {
+    public:
+        explicit EmulationBusyScope(Machine& machine) : machine_(&machine) {
+            std::lock_guard<std::mutex> lock(machine_->debug_mutex_);
+            if (machine_->paused_.load(std::memory_order_acquire)) {
+                return;  // a quiescer owns the machine; stay out of its way
+            }
+            machine_->emulation_busy_.store(true, std::memory_order_release);
+            active_ = true;
+        }
+        ~EmulationBusyScope() {
+            if (active_) {
+                machine_->emulation_busy_.store(false, std::memory_order_release);
+            }
+        }
+        EmulationBusyScope(const EmulationBusyScope&) = delete;
+        EmulationBusyScope& operator=(const EmulationBusyScope&) = delete;
+
+        // True when the scope holds the busy guard; false when a pause was in
+        // effect at construction and the caller must not touch machine state.
+        bool active() const { return active_; }
+
+    private:
+        Machine* machine_;
+        bool active_ = false;
+    };
+
 private:
+    // Recompute the derived pause flag the emulation loop reads. Must hold
+    // debug_mutex_ so the two sources are sampled atomically together.
+    void recompute_paused_locked() {
+        paused_.store(user_paused_.load(std::memory_order_relaxed) || quiesce_depth_ > 0,
+                      std::memory_order_release);
+    }
+
+    // Raise/lower the quiesce count around a with_emulation_paused body.
+    void begin_quiesce() {
+        std::lock_guard<std::mutex> lock(debug_mutex_);
+        ++quiesce_depth_;
+        recompute_paused_locked();
+    }
+    void end_quiesce() {
+        bool now_running;
+        {
+            std::lock_guard<std::mutex> lock(debug_mutex_);
+            --quiesce_depth_;
+            recompute_paused_locked();
+            now_running = !paused_.load(std::memory_order_relaxed);
+        }
+        // Only the last unwinding quiesce that leaves the machine logically
+        // running needs to wake a parked wait_if_paused.
+        if (now_running) {
+            debug_cv_.notify_all();
+        }
+    }
+
     State state_;
     CpuBindingType cpu_binding_;
     VideoBindingType video_binding_;
@@ -705,12 +807,24 @@ private:
     WatchpointHitCallback on_watchpoint_hit_;           // rare-path callback
     ProgramCounterHistogram* pc_histogram_ = nullptr;
 
-    // Debug pause/resume state (for debugger attach)
+    // Debug pause/resume state (for debugger attach). debug_mutex_ guards the
+    // relationship between the two pause sources and the derived flag; the
+    // atomics are read lock-free by the emulation loop on its hot path.
     mutable std::mutex debug_mutex_;
     std::condition_variable debug_cv_;
+    // Derived flag the emulation loop reads: user_paused_ || quiesce_depth_ > 0.
+    // Written only via recompute_paused_locked() under debug_mutex_.
     std::atomic<bool> paused_{false};
+    std::atomic<bool> user_paused_{false};  // Logical pause: pause()/resume()
+    int quiesce_depth_ = 0;                  // with_emulation_paused nesting (debug_mutex_)
+    // Serialises distinct with_emulation_paused callers; recursive so a
+    // quiescing body may re-enter on the same thread (see with_emulation_paused).
+    std::recursive_mutex quiesce_mutex_;
     std::atomic<bool> shutdown_requested_{false};  // For clean server shutdown
     std::atomic<bool> in_run_{false};              // True while run() is executing
+    // True while the emulation thread does per-iteration work outside run()
+    // under an EmulationBusyScope; wait_until_idle() waits on it too.
+    std::atomic<bool> emulation_busy_{false};
     std::atomic<uint64_t> sequence_{0};  // Increments on any mutation
 
     // Break key state (true when Break is held, CPU halted)

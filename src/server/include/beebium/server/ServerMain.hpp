@@ -1611,33 +1611,49 @@ void run_emulation_loop(MachineType& machine,
             break;
         }
 
-        // A pending safe eject completes here, on the thread that owns the
-        // drives, once the motor has been off long enough.
-        tick_disc_drives(machine);
-
-        // Keep the Econet socket informed of the current speed so a transport
-        // that requires real time (Piconet) is gated whenever speed != 1x. Cheap
-        // (an atomic compare); only bumps the status sequence on a change.
-        if constexpr (HasEconetSocket<Memory>) {
-            machine.memory().econet_socket.set_emulation_speed(
-                pacing_clock.speed_multiplier());
-        }
-
+        // Decide this iteration's cycle budget before entering the busy scope.
+        // wait_for_tick() sleeps until the next pacing tick and must stay
+        // OUTSIDE the scope: holding the emulation-busy guard across the sleep
+        // would make a quiescing caller wait out a whole tick.
+        uint64_t cycles = cycles_per_frame;
         if (use_pacing) {
             pacing_clock.wait_for_tick();
-            uint64_t cycles = pacing_clock.cycles_for_next_tick();
+            cycles = pacing_clock.cycles_for_next_tick();
+        }
+
+        // Everything below touches state the emulation thread owns -- disc
+        // drives, the Econet socket, the CPU and memory via run(). Enter the
+        // busy scope so a quiescing caller (a service or extension mutating that
+        // state) waits for all of it, not just run(). If a pause landed in the
+        // gap since wait_if_paused returned, the scope is inactive: skip the
+        // work and loop back to re-park rather than race the quiescer.
+        {
+            typename MachineType::EmulationBusyScope busy(machine);
+            if (!busy.active()) {
+                continue;
+            }
+
+            // A pending safe eject completes here, on the thread that owns the
+            // drives, once the motor has been off long enough.
+            tick_disc_drives(machine);
+
+            // Keep the Econet socket informed of the current speed so a
+            // transport that requires real time (Piconet) is gated whenever
+            // speed != 1x. Cheap (an atomic compare); only bumps the status
+            // sequence on a change.
+            if constexpr (HasEconetSocket<Memory>) {
+                machine.memory().econet_socket.set_emulation_speed(
+                    pacing_clock.speed_multiplier());
+            }
+
             auto run_start = std::chrono::steady_clock::now();
             machine.run(cycles);
             auto run_segment = std::chrono::steady_clock::now() - run_start;
             publish_run_duration += run_segment;
             log_run_duration += run_segment;
-            pacing_clock.report_cycles(machine.cycle_count());
-        } else {
-            auto run_start = std::chrono::steady_clock::now();
-            machine.run(cycles_per_frame);
-            auto run_segment = std::chrono::steady_clock::now() - run_start;
-            publish_run_duration += run_segment;
-            log_run_duration += run_segment;
+            if (use_pacing) {
+                pacing_clock.report_cycles(machine.cycle_count());
+            }
         }
 
         // Periodic pacing stats

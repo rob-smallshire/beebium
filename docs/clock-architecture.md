@@ -249,13 +249,25 @@ PacingClock pacing_clock(Memory::default_pacing_config());
 pacing_clock.start();
 
 while (running) {
-    machine.wait_if_paused();  // Debugger integration
+    machine.wait_if_paused();          // park while a debugger/quiescer holds the machine
+    pacing_clock.wait_for_tick();      // sleep OUTSIDE the busy scope below
+
+    // All work that touches state the emulation thread owns runs under the
+    // busy scope, so a quiescing caller (a service or extension mutating that
+    // state) waits for it. If a pause landed since wait_if_paused returned, the
+    // scope is inactive and the loop re-parks instead of racing.
+    MachineType::EmulationBusyScope busy(machine);
+    if (!busy.active()) continue;
     machine.run(pacing_clock.cycles_per_tick());
-    pacing_clock.wait_for_tick();
 }
 
 pacing_clock.stop();
 ```
+
+The emulation thread owns all guest state; any other thread that mutates it
+must halt the emulation thread across the mutation via
+`Machine::with_emulation_paused`. See the pause/quiesce primitive in
+`docs/tube-coprocessor-contract.md` ("Debugger entry mutation").
 
 ### Environment Variable Override
 

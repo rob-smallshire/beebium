@@ -718,20 +718,23 @@ grpc::Status DebuggerControlServiceImpl::WriteMemory(
     const WriteMemoryRequest* request,
     WriteMemoryResponse* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    // Writing guest memory mutates state the emulation loop reads and writes
+    // every bus cycle, so halt the executing thread across the write (the same
+    // lock order as the entry mutators).
+    return with_execution_change([&]() -> grpc::Status {
+        uint32_t address = request->address();
+        const std::string& data = request->data();
+        bool has_pc = request->has_simulated_pc();
+        uint32_t pc = has_pc ? request->simulated_pc() : 0;
 
-    uint32_t address = request->address();
-    const std::string& data = request->data();
-    bool has_pc = request->has_simulated_pc();
-    uint32_t pc = has_pc ? request->simulated_pc() : 0;
+        for (size_t i = 0; i < data.size() && (address + i) <= max_address(); ++i) {
+            uint32_t addr = address + i;
+            write_with_optional_pc(machine_, addr, static_cast<uint8_t>(data[i]), has_pc, pc);
+        }
 
-    for (size_t i = 0; i < data.size() && (address + i) <= max_address(); ++i) {
-        uint32_t addr = address + i;
-        write_with_optional_pc(machine_, addr, static_cast<uint8_t>(data[i]), has_pc, pc);
-    }
-
-    response->set_success(true);
-    return grpc::Status::OK;
+        response->set_success(true);
+        return grpc::Status::OK;
+    });
 }
 
 grpc::Status DebuggerControlServiceImpl::PeekMemory(
@@ -845,25 +848,27 @@ grpc::Status DebuggerControlServiceImpl::WriteRegion(
     const WriteRegionRequest* request,
     WriteRegionResponse* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    // A region write reaches the same live device/memory storage as WriteMemory;
+    // halt the executing thread across it.
+    return with_execution_change([&]() -> grpc::Status {
+        const std::string& region_name = request->region_name();
+        uint32_t address = request->address();
+        const std::string& data = request->data();
 
-    const std::string& region_name = request->region_name();
-    uint32_t address = request->address();
-    const std::string& data = request->data();
+        try {
+            for (size_t i = 0; i < data.size(); ++i) {
+                machine_.write_region(region_name, address + static_cast<uint32_t>(i),
+                    static_cast<uint8_t>(data[i]));
+            }
 
-    try {
-        for (size_t i = 0; i < data.size(); ++i) {
-            machine_.write_region(region_name, address + static_cast<uint32_t>(i),
-                static_cast<uint8_t>(data[i]));
+            response->set_success(true);
+            return grpc::Status::OK;
+        } catch (const std::invalid_argument& e) {
+            response->set_success(false);
+            response->set_error(e.what());
+            return grpc::Status::OK;
         }
-
-        response->set_success(true);
-        return grpc::Status::OK;
-    } catch (const std::invalid_argument& e) {
-        response->set_success(false);
-        response->set_error(e.what());
-        return grpc::Status::OK;
-    }
+    });
 }
 
 grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
@@ -957,36 +962,44 @@ grpc::Status DebuggerControlServiceImpl::ListBreakpoints(
     const Empty* /*request*/,
     ListBreakpointsResponse* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // Hit counts are only safe to read when the machine is paused
-    // (they're mutated by the emulation loop during run()).
-    const bool can_read_hits = machine_.is_paused();
-    const auto& live_entries = machine_.breakpoint_entries();
-
-    for (const auto& bp : breakpoints_) {
-        auto* pb_bp = response->add_breakpoints();
-        pb_bp->set_id(bp.id);
-        pb_bp->set_start_address(bp.start_address);
-        pb_bp->set_end_address(bp.end_address);
-        if (bp.condition) {
-            pb_bp->set_condition(bp.condition->source);
-        }
-        pb_bp->set_stop_counterpart(bp.stop_counterpart);
-        pb_bp->set_enabled(bp.enabled);
-        if (can_read_hits && bp.enabled) {
-            for (const auto& entry : live_entries) {
-                if (entry.id == bp.id) {
-                    pb_bp->set_hit_count(entry.hit_count);
-                    break;
+    // Live hit counts are plain integers the emulation loop bumps in the hit
+    // callback (kept plain, not atomic, so the entry vectors stay trivially
+    // sortable and copyable and the hot path pays nothing). The only
+    // cross-thread reader is here, so halt the executing thread across the read:
+    // wait_until_idle inside with_execution_stopped establishes the
+    // happens-before with the callback's last write. is_paused() alone is not
+    // enough -- the loop can still be finishing a run() chunk when a pause is
+    // observed.
+    return with_execution_change([&]() -> grpc::Status {
+        const auto& live_entries = machine_.breakpoint_entries();
+        for (const auto& bp : breakpoints_) {
+            auto* pb_bp = response->add_breakpoints();
+            pb_bp->set_id(bp.id);
+            pb_bp->set_start_address(bp.start_address);
+            pb_bp->set_end_address(bp.end_address);
+            if (bp.condition) {
+                pb_bp->set_condition(bp.condition->source);
+            }
+            pb_bp->set_stop_counterpart(bp.stop_counterpart);
+            pb_bp->set_enabled(bp.enabled);
+            // Enabled breakpoints have a live machine entry with the current
+            // count; disabled ones do not, so fall back to the last snapshot.
+            bool found = false;
+            if (bp.enabled) {
+                for (const auto& entry : live_entries) {
+                    if (entry.id == bp.id) {
+                        pb_bp->set_hit_count(entry.hit_count);
+                        found = true;
+                        break;
+                    }
                 }
             }
-        } else {
-            pb_bp->set_hit_count(bp.hit_count);
+            if (!found) {
+                pb_bp->set_hit_count(bp.hit_count);
+            }
         }
-    }
-
-    return grpc::Status::OK;
+        return grpc::Status::OK;
+    });
 }
 
 grpc::Status DebuggerControlServiceImpl::ClearBreakpoints(
@@ -1150,39 +1163,41 @@ grpc::Status DebuggerControlServiceImpl::ListWatchpoints(
     const Empty* /*request*/,
     ListWatchpointsResponse* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    const bool can_read_hits = machine_.is_paused();
-    const auto& live_entries = machine_.watchpoint_entries();
-
-    for (const auto& wp : watchpoints_) {
-        auto* pb_wp = response->add_watchpoints();
-        pb_wp->set_id(wp.id);
-        pb_wp->set_start_address(wp.start_address);
-        pb_wp->set_end_address(wp.end_address);
-        switch (wp.type) {
-            case beebium::WATCH_READ:  pb_wp->set_type(WATCHPOINT_READ); break;
-            case beebium::WATCH_WRITE: pb_wp->set_type(WATCHPOINT_WRITE); break;
-            default:                   pb_wp->set_type(WATCHPOINT_BOTH); break;
-        }
-        if (wp.condition) {
-            pb_wp->set_condition(wp.condition->source);
-        }
-        pb_wp->set_stop_counterpart(wp.stop_counterpart);
-        pb_wp->set_enabled(wp.enabled);
-        if (can_read_hits && wp.enabled) {
-            for (const auto& entry : live_entries) {
-                if (entry.id == wp.id) {
-                    pb_wp->set_hit_count(entry.hit_count);
-                    break;
+    // See ListBreakpoints: live hit counts are read with the executing thread
+    // halted so the read is ordered after the callback's last write.
+    return with_execution_change([&]() -> grpc::Status {
+        const auto& live_entries = machine_.watchpoint_entries();
+        for (const auto& wp : watchpoints_) {
+            auto* pb_wp = response->add_watchpoints();
+            pb_wp->set_id(wp.id);
+            pb_wp->set_start_address(wp.start_address);
+            pb_wp->set_end_address(wp.end_address);
+            switch (wp.type) {
+                case beebium::WATCH_READ:  pb_wp->set_type(WATCHPOINT_READ); break;
+                case beebium::WATCH_WRITE: pb_wp->set_type(WATCHPOINT_WRITE); break;
+                default:                   pb_wp->set_type(WATCHPOINT_BOTH); break;
+            }
+            if (wp.condition) {
+                pb_wp->set_condition(wp.condition->source);
+            }
+            pb_wp->set_stop_counterpart(wp.stop_counterpart);
+            pb_wp->set_enabled(wp.enabled);
+            bool found = false;
+            if (wp.enabled) {
+                for (const auto& entry : live_entries) {
+                    if (entry.id == wp.id) {
+                        pb_wp->set_hit_count(entry.hit_count);
+                        found = true;
+                        break;
+                    }
                 }
             }
-        } else {
-            pb_wp->set_hit_count(wp.hit_count);
+            if (!found) {
+                pb_wp->set_hit_count(wp.hit_count);
+            }
         }
-    }
-
-    return grpc::Status::OK;
+        return grpc::Status::OK;
+    });
 }
 
 grpc::Status DebuggerControlServiceImpl::ClearWatchpoints(
@@ -1336,44 +1351,47 @@ grpc::Status DebuggerControlServiceImpl::SetCpuState(
     const CpuState* request,
     CpuState* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // Reject any register name the CPU does not have, naming the offenders, so
-    // a typo fails loudly rather than being silently ignored.
-    std::string unknown;
-    for (const auto& rv : request->registers()) {
-        if (register_index_.find(rv.name()) == register_index_.end()) {
-            if (!unknown.empty()) unknown += ", ";
-            unknown += rv.name();
+    // Writing CPU registers races the executing thread just as memory writes
+    // do, so halt it across the write and read-back.
+    return with_execution_change([&]() -> grpc::Status {
+        // Reject any register name the CPU does not have, naming the offenders,
+        // so a typo fails loudly rather than being silently ignored.
+        std::string unknown;
+        for (const auto& rv : request->registers()) {
+            if (register_index_.find(rv.name()) == register_index_.end()) {
+                if (!unknown.empty()) unknown += ", ";
+                unknown += rv.name();
+            }
         }
-    }
-    if (!unknown.empty()) {
-        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                            "unknown register(s): " + unknown);
-    }
+        if (!unknown.empty()) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                                "unknown register(s): " + unknown);
+        }
 
-    // Apply the given subset by name.
-    for (const auto& rv : request->registers()) {
-        machine_.set_register_value(register_index_.at(rv.name()), rv.value());
-    }
+        // Apply the given subset by name.
+        for (const auto& rv : request->registers()) {
+            machine_.set_register_value(register_index_.at(rv.name()), rv.value());
+        }
 
-    // Read back the resulting full state under the same lock, so the write and
-    // the returned snapshot are atomic (no instruction can execute in between).
-    for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
-        auto* out = response->add_registers();
-        out->set_name(descriptor_.registers[i].name);
-        out->set_value(machine_.register_value(i));
-    }
-    for (size_t i = 0; i < descriptor_.signals.size(); ++i) {
-        cpu::SignalStateValue s = machine_.signal_state(i);
-        auto* ss = response->add_signals();
-        ss->set_name(descriptor_.signals[i]);
-        ss->set_asserted(s.asserted);
-        ss->set_pending(s.pending);
-        ss->set_in_handler(s.in_handler);
-    }
-    response->set_cycle_count(machine_.cycle_count());
-    return grpc::Status::OK;
+        // Read back the resulting full state under the same halt, so the write
+        // and the returned snapshot are atomic (no instruction can execute in
+        // between).
+        for (size_t i = 0; i < descriptor_.registers.size(); ++i) {
+            auto* out = response->add_registers();
+            out->set_name(descriptor_.registers[i].name);
+            out->set_value(machine_.register_value(i));
+        }
+        for (size_t i = 0; i < descriptor_.signals.size(); ++i) {
+            cpu::SignalStateValue s = machine_.signal_state(i);
+            auto* ss = response->add_signals();
+            ss->set_name(descriptor_.signals[i]);
+            ss->set_asserted(s.asserted);
+            ss->set_pending(s.pending);
+            ss->set_in_handler(s.in_handler);
+        }
+        response->set_cycle_count(machine_.cycle_count());
+        return grpc::Status::OK;
+    });
 }
 
 } // namespace beebium::service

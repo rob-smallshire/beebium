@@ -1326,6 +1326,16 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_stub_cpu_family)
 
+    # Machine pause/quiesce primitive: correctness and data-race witnesses
+    # (meaningful under TSan). Uses the host debugger service for the
+    # WriteMemory-on-a-running-machine case.
+    add_executable(test_pause_quiesce test_pause_quiesce.cpp)
+    target_link_libraries(test_pause_quiesce PRIVATE
+        beebium_service
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_pause_quiesce)
+
     # Server-facing coprocessor wiring through the abstract interfaces
     add_executable(test_coprocessor_extension test_coprocessor_extension.cpp)
     target_link_libraries(test_coprocessor_extension PRIVATE

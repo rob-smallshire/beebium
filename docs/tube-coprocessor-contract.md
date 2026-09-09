@@ -151,6 +151,51 @@ installed in the socket, as it does today for the `ParasiteTickable`.
   coprocessor's debug entries are mutated only while the host emulation loop
   is idle.
 
+#### The host quiesce primitive
+
+`with_execution_stopped` on the host is `Machine::with_emulation_paused`, the
+one primitive every caller uses to touch state the emulation thread owns. It is
+hardened so it is correct for every caller, not only the debugger:
+
+- **Logical pause is separate from quiescing.** A debugger client's pause is
+  `user_paused_` (set by `pause()`, cleared by `resume()`); a quiesce raises
+  `quiesce_depth_` for the duration of the body. The emulation loop reads the
+  derived flag `paused_ == user_paused_ || quiesce_depth_ > 0`, recomputed under
+  `debug_mutex_` whenever either source changes. `is_paused()` reports the
+  logical state only. Keeping them apart closes two windows: a `Stop` that lands
+  while another caller is quiescing is no longer discarded (it sets a distinct
+  source, which the quiesce's unwind preserves), and a transient quiesce never
+  makes a running machine look stopped to a client, nor does `resume()` release
+  a machine another caller is still quiescing.
+- **Quiescing callers are mutually exclusive.** `with_emulation_paused` holds a
+  quiesce mutex across the body, so only one body runs against machine state at
+  a time. The mutex is **recursive by necessity**: a quiescing body may call a
+  Machine mutator that itself quiesces on the same thread (a `DebuggerService`
+  `with_execution_change` handler calling `Machine::set_watchpoint_entries`,
+  itself a `with_emulation_paused`). A plain mutex would self-deadlock on that
+  nesting.
+- **The idle guarantee covers everything the emulation thread does, not just
+  `run()`.** The server loop enters a `Machine::EmulationBusyScope` around all
+  per-iteration work outside `run()` -- ticking disc drives, adjusting emulation
+  speed -- as well as `run()` itself; `wait_until_idle()` waits for that scope
+  and for `run()`. The scope re-tests the pause under `debug_mutex_` at entry,
+  so a quiesce that lands in the gap after `wait_if_paused` returns makes the
+  scope inactive and the loop re-parks rather than racing. The loop's `on_wake`
+  housekeeping (which ticks drives while the machine is parked) stands down
+  whenever `quiesce_depth_ > 0`, so a quiescing body mutating a device never
+  races the tick of that same device.
+- **All state-mutating debugger RPCs route through it.** `WriteMemory`,
+  `WriteRegion` and `SetCpuState` halt the executing thread across the write
+  exactly as the entry mutators do. `ListBreakpoints`/`ListWatchpoints` read
+  live hit counts with the thread halted (the counts stay plain integers on the
+  hot path; the halt gives the read a happens-before with the callback's last
+  write, which observing the pause flag alone would not).
+
+This is the contract for **any** service or extension that mutates state the
+emulation thread touches: wrap the mutation in `with_emulation_paused` (or, for
+a plugin dispatcher, the server-supplied quiescer). The TSan witnesses in
+`tests/test_pause_quiesce.cpp` enforce it.
+
 ### Origin and reset
 
 - A coprocessor has no time base until its first `run_until(t)`, which

@@ -808,8 +808,12 @@ owns the drives, so completing an eject there does not free the disc out from
 under the disc controller; and it is the one thread that always exists.
 Progress used to be a side effect of the `SubscribeDiscEvents` handler, which
 meant a server nobody was streaming from left a disc in `Ejecting` for ever.
-The loop keeps ticking across a debugger pause too -- a standing-still drive is
-exactly when it is safe for a disc to leave.
+The loop keeps ticking across a logical debugger pause too (the `on_wake`
+housekeeping in `wait_if_paused`) -- a standing-still drive is exactly when it is
+safe for a disc to leave. It does *not* tick while a caller is quiescing the
+machine (`with_emulation_paused`): a quiescing body may be mutating the very
+drive the tick would touch, so `on_wake` stands down until the quiesce ends. See
+the pause/quiesce primitive in `docs/tube-coprocessor-contract.md`.
 
 **The server never forces an eject.** A pending safe eject waits as long as the
 drive stays busy. Giving up is the caller's decision: eject again with
