@@ -84,24 +84,24 @@ public:
     void run(uint64_t cycles);
 
     // Execute one complete instruction. Returns the number of cycles taken.
-    uint64_t step_instruction();
+    uint64_t step_instruction() override;
 
     // Cycle counter.
-    uint64_t cycle_count() const { return cpu_.cycle_count(); }
+    uint64_t cycle_count() const override { return cpu_.cycle_count(); }
 
     // --- Debugger pause/resume ---
 
     void pause() override;
     void resume() override;
     bool is_paused() const override { return paused_; }
-    void prepare_for_step() {} // No bus stretching on coprocessor side
+    void prepare_for_step() override {} // No bus stretching on coprocessor side
 
     // Wait until run() has exited after a pause (no-op in single-threaded mode).
-    void wait_until_idle() {}
+    void wait_until_idle() override {}
 
     // --- Sequence counter (increments on mutations, for change detection) ---
 
-    uint64_t sequence() const { return sequence_; }
+    uint64_t sequence() const override { return sequence_; }
 
     // --- Family-agnostic CPU description and register/signal access ---
 
@@ -161,12 +161,12 @@ public:
 
     // The debugger interface uses 32-bit addresses; the 6502 map is 16-bit, so
     // truncate here.
-    uint8_t read(uint32_t addr) { return memory_.read(static_cast<uint16_t>(addr)); }
-    void write(uint32_t addr, uint8_t value) {
+    uint8_t read(uint32_t addr) override { return memory_.read(static_cast<uint16_t>(addr)); }
+    void write(uint32_t addr, uint8_t value) override {
         memory_.write(static_cast<uint16_t>(addr), value);
         ++sequence_;
     }
-    uint8_t peek(uint32_t addr) const { return memory_.peek(static_cast<uint16_t>(addr)); }
+    uint8_t peek(uint32_t addr) const override { return memory_.peek(static_cast<uint16_t>(addr)); }
 
     CoprocessorMemoryMap& memory() { return memory_; }
     const CoprocessorMemoryMap& memory() const { return memory_; }
@@ -177,11 +177,11 @@ public:
     // breakpoint/watchpoint checks happen inside step().
     void tick() { step(); }
 
-    void step();
+    void step() override;
 
     // --- Breakpoint management (sorted vector, modified only while stopped) ---
 
-    void set_breakpoint_entries(std::vector<BreakpointEntry> entries) {
+    void set_breakpoint_entries(std::vector<BreakpointEntry> entries) override {
         std::sort(entries.begin(), entries.end(),
                   [](const BreakpointEntry& a, const BreakpointEntry& b) {
                       return a.start < b.start;
@@ -189,9 +189,9 @@ public:
         breakpoint_entries_ = std::move(entries);
     }
 
-    const std::vector<BreakpointEntry>& breakpoint_entries() const { return breakpoint_entries_; }
+    const std::vector<BreakpointEntry>& breakpoint_entries() const override { return breakpoint_entries_; }
 
-    void set_breakpoint_hit_callback(BreakpointHitCallback cb) {
+    void set_breakpoint_hit_callback(BreakpointHitCallback cb) override {
         on_breakpoint_hit_ = std::move(cb);
     }
 
@@ -199,7 +199,7 @@ public:
 
     using WatchpointHitCallback = std::function<void(const WatchpointEntry& wp, uint32_t addr, uint8_t value, bool is_write)>;
 
-    void set_watchpoint_entries(std::vector<WatchpointEntry> entries) {
+    void set_watchpoint_entries(std::vector<WatchpointEntry> entries) override {
         std::sort(entries.begin(), entries.end(),
                   [](const WatchpointEntry& a, const WatchpointEntry& b) {
                       return a.start < b.start;
@@ -207,11 +207,11 @@ public:
         watchpoint_entries_ = std::move(entries);
     }
 
-    void set_watchpoint_hit_callback(WatchpointHitCallback cb) {
+    void set_watchpoint_hit_callback(WatchpointHitCallback cb) override {
         on_watchpoint_hit_ = std::move(cb);
     }
 
-    const std::vector<WatchpointEntry>& watchpoint_entries() const { return watchpoint_entries_; }
+    const std::vector<WatchpointEntry>& watchpoint_entries() const override { return watchpoint_entries_; }
 
     // Direct watchpoint entry management (for C++ tests)
     void add_watchpoint_entry(WatchpointEntry entry) {
