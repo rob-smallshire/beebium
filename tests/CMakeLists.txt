@@ -1047,6 +1047,21 @@ add_executable(test_coprocessor_clock test_coprocessor_clock.cpp)
 target_link_libraries(test_coprocessor_clock PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_coprocessor_clock)
 
+# Data-race regression for the debugger entry vectors (meaningful under TSan).
+# Links the 65C02 extension so the coprocessor case drives a real target.
+add_executable(test_debugger_entry_race test_debugger_entry_race.cpp)
+target_include_directories(test_debugger_entry_race PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/extensions/acorn-65c02-coprocessor
+)
+target_link_libraries(test_debugger_entry_race PRIVATE
+    beebium_ext_acorn_65c02
+    Catch2::Catch2WithMain
+)
+target_compile_definitions(test_debugger_entry_race PRIVATE
+    BEEBIUM_TUBE_ROM_DIR="${BEEBIUM_TUBE_ROM_DIR}"
+)
+catch_discover_tests(test_debugger_entry_race)
+
 # Tube socket tests
 add_executable(test_tube_socket test_tube_socket.cpp)
 target_link_libraries(test_tube_socket PRIVATE beebium_core Catch2::Catch2WithMain)

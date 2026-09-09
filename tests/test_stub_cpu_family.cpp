@@ -69,6 +69,7 @@ public:
     uint64_t step_instruction() override { cycle_count_ += 2; ++sequence_; return 2; }
     void prepare_for_step() override {}
     void wait_until_idle() override {}
+    void with_execution_stopped(const std::function<void()>& fn) override { fn(); }
 
     uint8_t read(uint32_t addr) override { return peek(addr); }
     uint8_t peek(uint32_t addr) const override {

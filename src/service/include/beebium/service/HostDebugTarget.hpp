@@ -68,6 +68,9 @@ public:
     void prepare_for_step() override { machine_.prepare_for_step(); }
     void wait_until_idle() override { machine_.wait_until_idle(); }
     void finish_step() override { machine_.finish_step(); }
+    void with_execution_stopped(const std::function<void()>& fn) override {
+        machine_.with_emulation_paused(fn);
+    }
 
     // --- Flat memory access ---
     // The interface uses 32-bit addresses; the host 6502 map is 16-bit, so

@@ -99,6 +99,26 @@ public:
     // Wait until run() has exited after a pause (no-op in single-threaded mode).
     void wait_until_idle() override {}
 
+    // The coprocessor executes only on the host emulation thread, which drives it
+    // through TubeSocket::run_coprocessor_until(). To mutate its debug state
+    // safely that thread must be idle, which means pausing the host emulation
+    // loop. The runner has no handle to the host, so the server injects a
+    // quiescer that does so (wired the same way as the cross-processor stop);
+    // in a standalone test it is wired to the test's own Machine. When no
+    // quiescer is set the runner is not being driven by another thread, so
+    // running fn directly is safe.
+    void set_execution_quiescer(
+        std::function<void(const std::function<void()>&)> quiescer) override {
+        execution_quiescer_ = std::move(quiescer);
+    }
+    void with_execution_stopped(const std::function<void()>& fn) override {
+        if (execution_quiescer_) {
+            execution_quiescer_(fn);
+        } else {
+            fn();
+        }
+    }
+
     // --- Sequence counter (increments on mutations, for change detection) ---
 
     uint64_t sequence() const override { return sequence_; }
@@ -186,7 +206,7 @@ public:
                   [](const BreakpointEntry& a, const BreakpointEntry& b) {
                       return a.start < b.start;
                   });
-        breakpoint_entries_ = std::move(entries);
+        with_execution_stopped([&] { breakpoint_entries_ = std::move(entries); });
     }
 
     const std::vector<BreakpointEntry>& breakpoint_entries() const override { return breakpoint_entries_; }
@@ -204,7 +224,7 @@ public:
                   [](const WatchpointEntry& a, const WatchpointEntry& b) {
                       return a.start < b.start;
                   });
-        watchpoint_entries_ = std::move(entries);
+        with_execution_stopped([&] { watchpoint_entries_ = std::move(entries); });
     }
 
     void set_watchpoint_hit_callback(WatchpointHitCallback cb) override {
@@ -215,14 +235,18 @@ public:
 
     // Direct watchpoint entry management (for C++ tests)
     void add_watchpoint_entry(WatchpointEntry entry) {
-        watchpoint_entries_.push_back(std::move(entry));
-        std::sort(watchpoint_entries_.begin(), watchpoint_entries_.end(),
-                  [](const WatchpointEntry& a, const WatchpointEntry& b) {
-                      return a.start < b.start;
-                  });
+        with_execution_stopped([&] {
+            watchpoint_entries_.push_back(std::move(entry));
+            std::sort(watchpoint_entries_.begin(), watchpoint_entries_.end(),
+                      [](const WatchpointEntry& a, const WatchpointEntry& b) {
+                          return a.start < b.start;
+                      });
+        });
     }
 
-    void clear_watchpoint_entries() { watchpoint_entries_.clear(); }
+    void clear_watchpoint_entries() {
+        with_execution_stopped([&] { watchpoint_entries_.clear(); });
+    }
 
     // --- Component access ---
 
@@ -264,6 +288,11 @@ private:
 
     // Sequence counter
     uint64_t sequence_ = 0;
+
+    // Halts the host thread that drives this coprocessor, so its debug entry
+    // vectors can be mutated safely. Injected by the server (or a test); unset
+    // means no other thread drives run_until, so mutation is already safe.
+    std::function<void(const std::function<void()>&)> execution_quiescer_;
 
     // Breakpoint addresses (sorted, checked inline at instruction boundaries)
     std::vector<BreakpointEntry> breakpoint_entries_;

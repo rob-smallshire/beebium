@@ -251,7 +251,40 @@ private:
         const uint32_t bits = descriptor_.address_bits;
         return bits >= 32 ? 0xFFFFFFFFu : ((1u << bits) - 1u);
     }
+    // Run an execution-state or entry-mutating handler under the full lock
+    // order: control_mutex_ held throughout, the machine halted across the
+    // change, and mutex_ held while `body` runs. `body` returns the RPC status.
+    template <typename F>
+    grpc::Status with_execution_change(F&& body) {
+        std::lock_guard<std::mutex> ctrl(control_mutex_);
+        grpc::Status status = grpc::Status::OK;
+        machine_.with_execution_stopped([&] {
+            std::lock_guard<std::mutex> lock(mutex_);
+            status = body();
+        });
+        return status;
+    }
+
     CounterpartStopCallback counterpart_stop_cb_;
+
+    // Two mutexes with a strict lock order: control_mutex_ -> (with_execution_stopped)
+    // -> mutex_.
+    //
+    // control_mutex_ is taken FIRST, and held for the whole handler, by every
+    // RPC that changes execution state or mutates the breakpoint/watchpoint entry
+    // vectors: Run, Stop, Reset, StepInstruction, StepCycle, and Add/Remove/
+    // Enable/Clear for both breakpoints and watchpoints. It serialises those
+    // against one another, so no handler can resume or step the machine in the
+    // window where a mutation has paused it but has not yet taken mutex_.
+    //
+    // mutex_ protects the service-side records and event state. The emulation
+    // thread takes ONLY mutex_ (in the breakpoint/watchpoint hit callbacks),
+    // never control_mutex_, so it can always complete a callback and reach the
+    // paused_ check -- with_execution_stopped, which waits for the emulation
+    // thread to go idle, is entered while holding control_mutex_ but before
+    // taking mutex_, so it never blocks that thread. Read-only handlers take
+    // mutex_ alone.
+    std::mutex control_mutex_;
     std::mutex mutex_;
     std::vector<BreakpointRecord> breakpoints_;
     std::atomic<uint32_t> next_breakpoint_id_{1};
@@ -510,6 +543,9 @@ grpc::Status DebuggerControlServiceImpl::Run(
     const Empty* /*request*/,
     RunResponse* response) {
 
+    // Execution-state change: serialise with entry mutations (see the mutex
+    // ordering note) so a resume cannot slip into a mutation's pause window.
+    std::lock_guard<std::mutex> ctrl(control_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!machine_.is_paused()) {
@@ -540,6 +576,7 @@ grpc::Status DebuggerControlServiceImpl::Stop(
     const Empty* /*request*/,
     StopResponse* response) {
 
+    std::lock_guard<std::mutex> ctrl(control_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);
 
     machine_.pause();
@@ -555,21 +592,22 @@ grpc::Status DebuggerControlServiceImpl::Reset(
     const Empty* /*request*/,
     ResetResponse* response) {
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> ctrl(control_mutex_);
 
-    // Pause the machine and wait for the emulation loop to stop.
-    // The emulation loop's run() checks paused_ every cycle and exits.
-    // After pause(), we must wait for run() to actually return before
-    // modifying machine state, otherwise we'd have a data race.
+    // Reset leaves the machine stopped, so pause first: with_execution_stopped
+    // then keeps it paused (it restores the prior state, which is now "paused").
+    // The halt and its wait-for-idle happen before mutex_ is taken (inside
+    // with_execution_stopped), so the emulation thread's hit callback -- which
+    // takes mutex_ -- can never block the wait and deadlock.
     machine_.pause();
-    machine_.wait_until_idle();
+    machine_.with_execution_stopped([&] {
+        std::lock_guard<std::mutex> lock(mutex_);
+        machine_.reset();
+        // Complete the reset sequence to the first instruction boundary.
+        machine_.step_instruction();
+        halt_reason_.clear();
+    });
 
-    machine_.reset();
-
-    // Complete the reset sequence to the first instruction boundary.
-    machine_.step_instruction();
-
-    halt_reason_.clear();
     response->set_success(true);
     return grpc::Status::OK;
 }
@@ -579,6 +617,10 @@ grpc::Status DebuggerControlServiceImpl::StepInstruction(
     const StepRequest* request,
     StepResponse* response) {
 
+    // Stepping mutates machine state on this thread; serialise with entry
+    // mutations and other execution-state changes via control_mutex_. The
+    // machine is already paused (checked below), so no with_execution_stopped.
+    std::lock_guard<std::mutex> ctrl(control_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!machine_.is_paused()) {
@@ -614,6 +656,10 @@ grpc::Status DebuggerControlServiceImpl::StepCycle(
     const StepRequest* request,
     StepResponse* response) {
 
+    // Stepping mutates machine state on this thread; serialise with entry
+    // mutations and other execution-state changes via control_mutex_. The
+    // machine is already paused (checked below), so no with_execution_stopped.
+    std::lock_guard<std::mutex> ctrl(control_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!machine_.is_paused()) {
@@ -824,8 +870,7 @@ grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
     grpc::ServerContext* /*context*/,
     const AddBreakpointRequest* request,
     AddBreakpointResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t start = request->start_address();
     uint32_t end = request->end_address();
@@ -860,14 +905,14 @@ grpc::Status DebuggerControlServiceImpl::AddBreakpoint(
     response->set_success(true);
     response->set_id(id);
     return grpc::Status::OK;
+  });
 }
 
 grpc::Status DebuggerControlServiceImpl::RemoveBreakpoint(
     grpc::ServerContext* /*context*/,
     const RemoveBreakpointRequest* request,
     RemoveBreakpointResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t id = request->id();
     auto it = std::find_if(breakpoints_.begin(), breakpoints_.end(),
@@ -882,14 +927,14 @@ grpc::Status DebuggerControlServiceImpl::RemoveBreakpoint(
     }
 
     return grpc::Status::OK;
+  });
 }
 
 grpc::Status DebuggerControlServiceImpl::EnableBreakpoint(
     grpc::ServerContext* /*context*/,
     const EnableBreakpointRequest* request,
     EnableBreakpointResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t id = request->id();
     auto it = std::find_if(breakpoints_.begin(), breakpoints_.end(),
@@ -904,6 +949,7 @@ grpc::Status DebuggerControlServiceImpl::EnableBreakpoint(
     }
     response->set_success(true);
     return grpc::Status::OK;
+  });
 }
 
 grpc::Status DebuggerControlServiceImpl::ListBreakpoints(
@@ -947,8 +993,7 @@ grpc::Status DebuggerControlServiceImpl::ClearBreakpoints(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ClearBreakpointsResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t count = static_cast<uint32_t>(breakpoints_.size());
     breakpoints_.clear();
@@ -956,6 +1001,7 @@ grpc::Status DebuggerControlServiceImpl::ClearBreakpoints(
 
     response->set_count_removed(count);
     return grpc::Status::OK;
+  });
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1012,8 +1058,7 @@ grpc::Status DebuggerControlServiceImpl::AddWatchpoint(
     grpc::ServerContext* /*context*/,
     const AddWatchpointRequest* request,
     AddWatchpointResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t start = request->start_address();
     uint32_t end = request->end_address();
@@ -1053,14 +1098,14 @@ grpc::Status DebuggerControlServiceImpl::AddWatchpoint(
     response->set_success(true);
     response->set_id(id);
     return grpc::Status::OK;
+  });
 }
 
 grpc::Status DebuggerControlServiceImpl::RemoveWatchpoint(
     grpc::ServerContext* /*context*/,
     const RemoveWatchpointRequest* request,
     RemoveWatchpointResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t id = request->id();
     auto it = std::find_if(watchpoints_.begin(), watchpoints_.end(),
@@ -1075,14 +1120,14 @@ grpc::Status DebuggerControlServiceImpl::RemoveWatchpoint(
     }
 
     return grpc::Status::OK;
+  });
 }
 
 grpc::Status DebuggerControlServiceImpl::EnableWatchpoint(
     grpc::ServerContext* /*context*/,
     const EnableWatchpointRequest* request,
     EnableWatchpointResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t id = request->id();
     auto it = std::find_if(watchpoints_.begin(), watchpoints_.end(),
@@ -1097,6 +1142,7 @@ grpc::Status DebuggerControlServiceImpl::EnableWatchpoint(
     }
     response->set_success(true);
     return grpc::Status::OK;
+  });
 }
 
 grpc::Status DebuggerControlServiceImpl::ListWatchpoints(
@@ -1143,8 +1189,7 @@ grpc::Status DebuggerControlServiceImpl::ClearWatchpoints(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     ClearWatchpointsResponse* response) {
-
-    std::lock_guard<std::mutex> lock(mutex_);
+  return with_execution_change([&]() -> grpc::Status {
 
     uint32_t count = static_cast<uint32_t>(watchpoints_.size());
     watchpoints_.clear();
@@ -1152,6 +1197,7 @@ grpc::Status DebuggerControlServiceImpl::ClearWatchpoints(
 
     response->set_count_removed(count);
     return grpc::Status::OK;
+  });
 }
 
 //////////////////////////////////////////////////////////////////////////////

@@ -134,6 +134,23 @@ installed in the socket, as it does today for the `ParasiteTickable`.
   `is_paused()` are on the interface because the debugger's cross-processor
   stop logic uses them.
 
+### Debugger entry mutation
+
+- The executing thread iterates the breakpoint and watchpoint entry vectors
+  continuously -- breakpoints at each instruction boundary, watchpoints at
+  each bus access -- so those vectors are mutated only while that thread is
+  idle. `CpuDebugTarget::with_execution_stopped(fn)` provides the guarantee:
+  it halts the CPU's executing thread, runs `fn` (the mutation), and restores
+  the prior run/pause state. The host implements it by pausing its emulation
+  loop.
+- A coprocessor executes only on the host emulation thread (the thread that
+  calls `run_until` from `Machine::step`), so halting it means pausing the
+  host. The coprocessor cannot reach the host itself; the server injects a
+  quiescer (`set_execution_quiescer`) that pauses the host emulation loop,
+  wired exactly as the cross-processor stop is. Hence the invariant: a
+  coprocessor's debug entries are mutated only while the host emulation loop
+  is idle.
+
 ### Origin and reset
 
 - A coprocessor has no time base until its first `run_until(t)`, which

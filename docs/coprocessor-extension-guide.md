@@ -217,6 +217,16 @@ the reference implementation; the 6502 helper in
 `beebium/Cpu6502Descriptor.hpp` shows how a family shares one descriptor
 between the host and coprocessor implementations.
 
+`with_execution_stopped` and `set_execution_quiescer` are also on the
+interface, but you do not implement or call them yourself: inherit
+`CoprocessorRunner`'s implementations (or copy them). Your coprocessor runs
+on the host emulation thread, so the debugger must halt that thread before it
+touches your breakpoint/watchpoint vectors. The server supplies the quiescer
+that halts the host and wires it in for you; an extension author never sets
+it. Do make your `set_*_entries` mutate through `with_execution_stopped`, as
+`CoprocessorRunner` does, so a debugger mutation while the machine runs is
+safe.
+
 Three roles exist today, program counter, stack pointer and flags. If your
 family needs more, segment registers say, add the role to
 `RegisterRole` and the proto with a concrete need in hand; that is the

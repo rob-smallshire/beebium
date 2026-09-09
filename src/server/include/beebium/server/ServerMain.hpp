@@ -2135,6 +2135,15 @@ public:
             std::unique_ptr<beebium::CoprocessorDebuggerAdapter> coprocessor_debugger_adapter;
             if (coprocessor_ext) {
                 if (auto* target = coprocessor_ext->debug_target()) {
+                    // The coprocessor executes on the host emulation thread, so
+                    // halting it to mutate its debug entries means pausing the
+                    // host Machine. Supply that quiescer; the target uses it in
+                    // with_execution_stopped. Wired here the same way as the
+                    // cross-processor stop below.
+                    target->set_execution_quiescer(
+                        [&machine](const std::function<void()>& fn) {
+                            machine.with_emulation_paused(fn);
+                        });
                     coprocessor_debugger_impl =
                         std::make_unique<beebium::service::DebuggerControlServiceImpl>(*target);
                     coprocessor_debugger_adapter =

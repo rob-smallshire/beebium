@@ -624,13 +624,18 @@ public:
     // Side-effect-free read for debugger inspection
     uint8_t peek(uint16_t addr) const { return state_.memory.peek(addr); }
 
-    // Breakpoint entry management (sorted by address, modified only while stopped)
+    // Breakpoint entry management. The emulation loop iterates this vector every
+    // instruction boundary, so the swap must happen with that thread idle:
+    // with_emulation_paused parks it across the swap. It must therefore NOT be
+    // called from the emulation thread itself (it would wait for itself forever);
+    // the breakpoint/watchpoint hit callbacks, which run on that thread, only
+    // read entries and increment hit_count -- they never call these mutators.
     void set_breakpoint_entries(std::vector<BreakpointEntry> entries) {
         std::sort(entries.begin(), entries.end(),
                   [](const BreakpointEntry& a, const BreakpointEntry& b) {
                       return a.start < b.start;
                   });
-        breakpoint_entries_ = std::move(entries);
+        with_emulation_paused([&] { breakpoint_entries_ = std::move(entries); });
     }
 
     void set_breakpoint_hit_callback(BreakpointHitCallback cb) {
@@ -639,14 +644,18 @@ public:
 
     const std::vector<BreakpointEntry>& breakpoint_entries() const { return breakpoint_entries_; }
 
-    // Debugger watchpoint entry management (sorted by start, modified only while stopped)
+    // Debugger watchpoint entry management. As with breakpoints, the swap runs
+    // with the emulation loop paused (it iterates the vector on every bus
+    // access); never call from the emulation thread.
     void set_watchpoint_entries(std::vector<WatchpointEntry> entries) {
         std::sort(entries.begin(), entries.end(),
                   [](const WatchpointEntry& a, const WatchpointEntry& b) {
                       return a.start < b.start;
                   });
-        watchpoint_entries_ = std::move(entries);
-        cpu_binding_.set_watchpoint_entries(&watchpoint_entries_);
+        with_emulation_paused([&] {
+            watchpoint_entries_ = std::move(entries);
+            cpu_binding_.set_watchpoint_entries(&watchpoint_entries_);
+        });
     }
 
     void set_watchpoint_hit_callback(WatchpointHitCallback cb) {
@@ -659,17 +668,21 @@ public:
     // Direct watchpoint entry management (for C++ tests and in-process use).
     // Adds an entry and re-sorts the vector.
     void add_watchpoint_entry(WatchpointEntry entry) {
-        watchpoint_entries_.push_back(std::move(entry));
-        std::sort(watchpoint_entries_.begin(), watchpoint_entries_.end(),
-                  [](const WatchpointEntry& a, const WatchpointEntry& b) {
-                      return a.start < b.start;
-                  });
-        cpu_binding_.set_watchpoint_entries(&watchpoint_entries_);
+        with_emulation_paused([&] {
+            watchpoint_entries_.push_back(std::move(entry));
+            std::sort(watchpoint_entries_.begin(), watchpoint_entries_.end(),
+                      [](const WatchpointEntry& a, const WatchpointEntry& b) {
+                          return a.start < b.start;
+                      });
+            cpu_binding_.set_watchpoint_entries(&watchpoint_entries_);
+        });
     }
 
     void clear_watchpoint_entries() {
-        watchpoint_entries_.clear();
-        cpu_binding_.set_watchpoint_entries(&watchpoint_entries_);
+        with_emulation_paused([&] {
+            watchpoint_entries_.clear();
+            cpu_binding_.set_watchpoint_entries(&watchpoint_entries_);
+        });
     }
 
     // PC histogram for instruction execution profiling

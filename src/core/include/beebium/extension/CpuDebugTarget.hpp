@@ -68,6 +68,21 @@ public:
     virtual uint64_t step_instruction() = 0;
     virtual void prepare_for_step() = 0;
     virtual void wait_until_idle() = 0;
+    // Run fn with this CPU's execution halted and the executing thread idle, then
+    // restore the prior run/pause state. For the host that is pausing the
+    // emulation thread; for a coprocessor, whose only execution happens on the
+    // host thread that drives run_until, it is quiescing that driving thread.
+    // The debugger uses this to mutate the breakpoint/watchpoint entry vectors
+    // (which the executing thread iterates) safely. It must NOT be called from
+    // the executing thread (it would wait for itself forever).
+    virtual void with_execution_stopped(const std::function<void()>& fn) = 0;
+    // The server supplies a quiescer that halts the thread executing this CPU,
+    // for a target whose execution runs on a thread it does not own (a
+    // coprocessor, driven on the host emulation thread). Targets that own their
+    // executing thread -- the host, via its Machine -- ignore it. Default no-op;
+    // an extension author never calls this.
+    virtual void set_execution_quiescer(
+        std::function<void(const std::function<void()>&)> /*quiescer*/) {}
     // Called by the debugger after a single-step batch, the partner of
     // prepare_for_step(). A coprocessor target has nothing to resync and leaves
     // it empty; the host adapter runs the coprocessor to the stopped host time.
