@@ -28,34 +28,41 @@ bool TypeAheadQueue::enqueue(std::string_view text, size_t hold_cycles, size_t g
     {
         std::lock_guard<std::mutex> lock(mutex_);
         queue_.push(QueueEntry{std::string(text), hold_cycles, gap_cycles});
+        queued_strings_.fetch_add(1, std::memory_order_release);
     }
     note_status_change();
     return true;
 }
 
-void TypeAheadQueue::tick() {
+void TypeAheadQueue::tick_active() {
+    if (cancel_requested_.exchange(false, std::memory_order_acquire)) {
+        cancel_current_string();
+    }
+
     switch (state_) {
         case State::Idle: {
-            // Check for pending work
+            // Nothing queued after all: the cancel above was the work, or
+            // clear() emptied the queue since tick() looked.
+            if (queued_strings_.load(std::memory_order_acquire) == 0) {
+                return;
+            }
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                if (queue_.empty()) {
-                    return;
-                }
-                // Pop next string from queue
                 current_text_ = std::move(queue_.front().text);
                 current_hold_cycles_ = queue_.front().hold_cycles;
                 current_gap_cycles_ = queue_.front().gap_cycles;
                 queue_.pop();
+                queued_strings_.fetch_sub(1, std::memory_order_release);
             }
             current_index_ = 0;
             cycle_count_ = 0;
-            note_status_change();
 
             // Start typing first character
             if (current_index_ < current_text_.size()) {
                 advance_to_next_char();
             }
+            publish_current_remaining();
+            note_status_change();
             break;
         }
 
@@ -77,16 +84,16 @@ void TypeAheadQueue::tick() {
                 current_index_++;
                 cycle_count_ = 0;
 
+                if (current_index_ < current_text_.size()) {
+                    advance_to_next_char();
+                    publish_current_remaining();
+                } else {
+                    finish_current_string();
+                }
+
                 // A character has been consumed, and the string may have
                 // finished. Either way a watcher has something to report.
                 note_status_change();
-
-                if (current_index_ < current_text_.size()) {
-                    advance_to_next_char();
-                } else {
-                    // String complete, go back to idle
-                    state_ = State::Idle;
-                }
             }
             break;
         }
@@ -94,66 +101,81 @@ void TypeAheadQueue::tick() {
 }
 
 bool TypeAheadQueue::empty() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return queue_.empty() && state_ == State::Idle;
+    return queued_strings_.load(std::memory_order_acquire) == 0 &&
+           (current_remaining_.load(std::memory_order_acquire) == 0 ||
+            cancel_requested_.load(std::memory_order_acquire));
 }
 
 size_t TypeAheadQueue::pending_characters() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     size_t count = 0;
-
-    // Count characters in queued strings
-    std::queue<QueueEntry> temp = queue_;
-    while (!temp.empty()) {
-        count += temp.front().text.size();
-        temp.pop();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::queue<QueueEntry> temp = queue_;
+        while (!temp.empty()) {
+            count += temp.front().text.size();
+            temp.pop();
+        }
     }
 
-    // Add remaining characters in current string (if any)
-    if (state_ != State::Idle && current_index_ < current_text_.size()) {
-        count += current_text_.size() - current_index_;
+    // Add what remains of the string in progress, unless it is being
+    // cancelled.
+    if (!cancel_requested_.load(std::memory_order_acquire)) {
+        count += current_remaining_.load(std::memory_order_acquire);
     }
-
     return count;
 }
 
 size_t TypeAheadQueue::strings_queued() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    size_t count = queue_.size();
-    // Include current string if we're typing
-    if (state_ != State::Idle) {
+    size_t count = queued_strings_.load(std::memory_order_acquire);
+    if (current_remaining_.load(std::memory_order_acquire) != 0 &&
+        !cancel_requested_.load(std::memory_order_acquire)) {
         count++;
     }
     return count;
 }
 
 size_t TypeAheadQueue::clear() {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // Count characters being cleared
     size_t count = 0;
-    while (!queue_.empty()) {
-        count += queue_.front().text.size();
-        queue_.pop();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        while (!queue_.empty()) {
+            count += queue_.front().text.size();
+            queue_.pop();
+        }
+        queued_strings_.store(0, std::memory_order_release);
     }
 
-    // Add remaining characters in current string
-    if (state_ != State::Idle && current_index_ < current_text_.size()) {
-        count += current_text_.size() - current_index_;
+    // The string in progress is the emulator thread's to abandon. Count it
+    // here; the emulator thread releases the held key on its next tick.
+    if (!cancel_requested_.load(std::memory_order_acquire)) {
+        count += current_remaining_.load(std::memory_order_acquire);
+    }
+    if (current_remaining_.load(std::memory_order_acquire) != 0) {
+        cancel_requested_.store(true, std::memory_order_release);
+    }
 
-        // Release any held keys
+    note_status_change();
+    return count;
+}
+
+void TypeAheadQueue::cancel_current_string() {
+    if (state_ != State::Idle) {
         release_current_key();
     }
+    finish_current_string();
+}
 
-    // Reset state
+void TypeAheadQueue::finish_current_string() {
     state_ = State::Idle;
     current_text_.clear();
     current_index_ = 0;
     cycle_count_ = 0;
+    publish_current_remaining();
+}
 
-    note_status_change();
-    return count;
+void TypeAheadQueue::publish_current_remaining() {
+    current_remaining_.store(current_text_.size() - current_index_,
+                             std::memory_order_release);
 }
 
 void TypeAheadQueue::advance_to_next_char() {
@@ -183,7 +205,7 @@ void TypeAheadQueue::advance_to_next_char() {
                     (static_cast<uint8_t>(current_text_[current_index_ + 3]) & 0x3F);
     } else {
         // Invalid UTF-8 - shouldn't happen if is_typeable passed
-        state_ = State::Idle;
+        finish_current_string();
         return;
     }
 
@@ -201,7 +223,7 @@ void TypeAheadQueue::advance_to_next_char() {
     auto mapping = char_to_key(codepoint);
     if (!mapping) {
         // Shouldn't happen if is_typeable passed
-        state_ = State::Idle;
+        finish_current_string();
         return;
     }
 

@@ -32,9 +32,21 @@ namespace beebium {
 // for uppercase letters and shifted symbols.
 //
 // Thread Safety:
-// The enqueue(), empty(), pending_characters(), and clear() methods are
-// thread-safe and can be called from any thread (e.g., gRPC service thread).
-// The tick() method should only be called from the emulator thread.
+// The enqueue(), empty(), pending_characters(), strings_queued() and clear()
+// methods are thread-safe and can be called from any thread (e.g., gRPC
+// service thread). The tick() method is called only from the emulator thread,
+// on every host cycle.
+//
+// The queue of not-yet-started strings is protected by a mutex. The typing
+// state (the current string, its index and the key being held) belongs to
+// the emulator thread alone and is never touched by other threads; what they
+// need of it is published through atomics. tick() takes the mutex only when
+// there is a string to pop, so an idle queue costs the emulator thread one
+// relaxed atomic load per cycle and no lock.
+//
+// clear() drains the queue and requests cancellation of the string in
+// progress; the emulator thread honours the request on its next tick, which
+// is where any held key is released.
 //
 // Typical usage:
 //   1. gRPC service calls enqueue() to add text
@@ -69,8 +81,17 @@ public:
                  size_t gap_cycles = DEFAULT_GAP_CYCLES);
 
     // Called each machine cycle from the emulator main loop
-    // Updates keyboard state based on timing.
-    void tick();
+    // Updates keyboard state based on timing. The idle check is inline so
+    // that a queue with nothing to do costs the emulator thread two relaxed
+    // atomic loads and no call.
+    void tick() {
+        if (state_ == State::Idle &&
+            queued_strings_.load(std::memory_order_relaxed) == 0 &&
+            !cancel_requested_.load(std::memory_order_relaxed)) {
+            return;
+        }
+        tick_active();
+    }
 
     // Check if queue is empty (all strings typed) (thread-safe)
     bool empty() const;
@@ -82,7 +103,8 @@ public:
     size_t strings_queued() const;
 
     // Clear the queue, cancelling pending input (thread-safe)
-    // Returns number of characters that were pending.
+    // Returns number of characters that were pending. Any key held for the
+    // string in progress is released by the emulator thread on its next tick.
     size_t clear();
 
     // Monotonic counter bumped whenever the typing status changes: a character
@@ -92,6 +114,11 @@ public:
     uint64_t status_sequence() const {
         return status_sequence_.load(std::memory_order_acquire);
     }
+
+    // The mutex guarding the queue of pending strings. Exposed so a test can
+    // hold it while ticking an idle queue and so prove the idle path is
+    // lock-free. Not for use outside tests.
+    std::mutex& queue_mutex_for_test() { return mutex_; }
 
 private:
     // State machine states
@@ -108,17 +135,44 @@ private:
         size_t gap_cycles;
     };
 
-    // Advance to next character or string (called with mutex held)
+    // The part of tick() that runs when there is something to do: a cancel
+    // to honour, a string to start, or a key being held or released.
+    void tick_active();
+
+    // Press the key for the character at current_index_ (emulator thread)
     void advance_to_next_char();
 
-    // Release current key (and SHIFT if held)
+    // Release current key (and SHIFT if held) (emulator thread)
     void release_current_key();
+
+    // Abandon the string in progress, releasing any held key (emulator thread)
+    void cancel_current_string();
+
+    // Return to Idle with no current string (emulator thread)
+    void finish_current_string();
+
+    // Publish how many bytes of the current string remain (emulator thread)
+    void publish_current_remaining();
 
     KeyboardMatrix& keyboard_;
 
     // Queue of strings to type (protected by mutex)
     mutable std::mutex mutex_;
     std::queue<QueueEntry> queue_;
+
+    // Number of entries in queue_, readable without the mutex. Incremented
+    // after a push and decremented after a pop, both under the mutex, so a
+    // non-zero value seen by tick() means a pop under the mutex will succeed;
+    // the mutex, not the atomic, orders the pop after the push.
+    std::atomic<size_t> queued_strings_{0};
+
+    // Set by clear() to ask the emulator thread to abandon the string in
+    // progress; consumed by tick().
+    std::atomic<bool> cancel_requested_{false};
+
+    // Bytes of the current string not yet consumed, zero when idle. Written
+    // by the emulator thread, read by status queries on other threads.
+    std::atomic<size_t> current_remaining_{0};
 
     // Current typing state (only accessed from emulator thread)
     State state_ = State::Idle;

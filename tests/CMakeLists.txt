@@ -984,6 +984,11 @@ target_compile_definitions(test_bitmap_modes PRIVATE
 )
 catch_discover_tests(test_bitmap_modes)
 
+# Type-ahead queue unit tests (state machine, cross-thread status, idle cost)
+add_executable(test_type_ahead_queue test_type_ahead_queue.cpp)
+target_link_libraries(test_type_ahead_queue PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_type_ahead_queue)
+
 # Keyboard typing reliability tests
 add_executable(test_keyboard_typing test_keyboard_typing.cpp)
 target_link_libraries(test_keyboard_typing PRIVATE beebium_core Catch2::Catch2WithMain)
