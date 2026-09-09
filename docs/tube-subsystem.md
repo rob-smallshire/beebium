@@ -171,18 +171,28 @@ coprocessor.
 
 ### The 6502 second processor's boot mode
 
-The 6502 second processor carries a 4 KB EPROM of which the upper 2 KB is
-mapped at `&F800-&FFFF` during boot mode. A flip-flop set at reset enables
-the ROM for reads while writes pass through to the underlying RAM, so the
-boot code copies itself to RAM by reading each byte and writing it back.
-The first access to any Tube register address (`&FEF8-&FEFF`) clears the
-flip-flop, unmapping the ROM for good until the next reset. The Tube
-registers punch through the RAM in both modes. `CoprocessorMemoryMap`
-models exactly this: 64 KB RAM, a 2 KB ROM overlay read-only during boot
-mode, cleared by the first Tube-window access.
+The 6502 second processor carries a 4 KB EPROM (a 2732, IC3) mapped at
+`&F000-&FFFF` during boot mode. A flip-flop set at reset enables the ROM for
+reads while writes pass through to the underlying RAM, so the boot code copies
+itself to RAM by reading each byte and writing it back. The first access to any
+Tube register address (`&FEF8-&FEFF`) clears the flip-flop, unmapping the ROM
+for good until the next reset. The Tube registers punch through the RAM in both
+modes. `CoprocessorMemoryMap` models exactly this: 64 KB RAM, a 4 KB ROM overlay
+read-only during boot mode, cleared by the first Tube-window access.
 
-The shipped firmware is the 2 KB code half of the EPROM. A 4 KB full dump
-whose first 2 KB is all `&FF` is accepted and its upper half used.
+The whole 4 KB device is modelled and shipped, not just the code half. Acorn's
+own client firmware occupies only the upper 2 KB (`&F800-&FFFF`) and leaves the
+lower half unprogrammed (`&FF`), but the lower half is genuine ROM address
+space — John Kortink's ReCo6502 client, for one, executes from it — so a client
+ROM image is the full 4096-byte device contents. There is no half-size or
+padded-dump acceptance: a 2 KB file (the upper-half-only image other emulators
+ship) is a fragment and is rejected.
+
+Boot-mode decode: the model answers ROM only at `&F000-&FFFF`, as MAME's
+`tube_6502` does. The service manual describes the boot latch as disabling CAS
+on every read while set, which would mirror the 2732 across the whole address
+space in boot mode; whether the hardware decodes that broadly is unverified
+pending the schematic's chip-select logic, so the model does not assume it.
 
 ### Pinout
 
@@ -204,7 +214,7 @@ Machine<Hardware>                          (host, owns the clock)
         |-- Coprocessor*       ---------->  CoprocessorRunner
         |                                     |-- CoprocessorClock   (ratio, exact)
         |                                     |-- CoprocessorCpu     (65C02, M6502 library)
-        |                                     |-- CoprocessorMemoryMap (64 KB + boot ROM)
+        |                                     |-- CoprocessorMemoryMap (64 KB + 4 KB boot ROM @ F000-FFFF)
         |                                     `-- TubeCoprocessorBackend& -> the same TubeUla
         `-- host_time, coprocessor_time, MAX_COPROCESSOR_SKEW
 
@@ -349,7 +359,7 @@ exported interfaces; it has no compiled-in knowledge of any coprocessor.
 | `test_boot_tube`, `test_coprocessor_boot` | Both coprocessors boot to their banners and the BASIC prompt; the 65C102 runs exactly twice the host's cycles. |
 | `test_tube_ce2023_trace` | Chuckie Egg 2023 loads. |
 | `test_stub_cpu_family` | A made-up CPU family, including a 24-bit one, is fully served by the debugger with no server code naming it. |
-| `test_extension_rom`, `test_plugin_loader` | Manifest ROM declarations, resolution beside the manifest, the 4 KB dump form, load-time presence checks. |
+| `test_extension_rom`, `test_plugin_loader` | Manifest ROM declarations, resolution beside the manifest, exact-size (4 KB device) acceptance and wrong-size rejection, load-time presence/size checks. |
 | `integration_tests/wfsinit`, `tube-save`, `l3fs` | Scenario suites through the Python client: ADFS and SCSI over the Tube on both coprocessors, DFS save without byte doubling, a Level 3 file server over Econet. Run in CI. |
 
 

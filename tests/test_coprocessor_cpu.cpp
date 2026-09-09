@@ -35,21 +35,21 @@ using namespace beebium;
 // Helper: create a 2 KB ROM with a known reset vector and initial code.
 // Reset vector points to rom_entry (default &F800).
 // First bytes at rom_entry are filled with NOPs.
-static std::array<uint8_t, 2048> make_nop_rom(uint16_t rom_entry = 0xF800) {
-    std::array<uint8_t, 2048> rom{};
+static std::array<uint8_t, 4096> make_nop_rom(uint16_t rom_entry = 0xF800) {
+    std::array<uint8_t, 4096> rom{};
     rom.fill(0xEA);  // NOP
-    // Reset vector at ROM offset 0x7FC-0x7FD (maps to &FFFC-&FFFD)
-    rom[0x7FC] = static_cast<uint8_t>(rom_entry & 0xFF);
-    rom[0x7FD] = static_cast<uint8_t>(rom_entry >> 8);
-    // IRQ/BRK vector at ROM offset 0x7FE-0x7FF (maps to &FFFE-&FFFF)
+    // Reset vector at ROM offset 0xFFC-0xFFD (maps to &FFFC-&FFFD)
+    rom[0xFFC] = static_cast<uint8_t>(rom_entry & 0xFF);
+    rom[0xFFD] = static_cast<uint8_t>(rom_entry >> 8);
+    // IRQ/BRK vector at ROM offset 0xFFE-0xFFF (maps to &FFFE-&FFFF)
     // Point to a location with RTI
-    rom[0x7FE] = 0x00;  // &F900 (ROM offset 0x100)
-    rom[0x7FF] = 0xF9;
-    rom[0x100] = 0x40;  // RTI at &F900
-    // NMI vector at ROM offset 0x7FA-0x7FB (maps to &FFFA-&FFFB)
-    rom[0x7FA] = 0x80;  // &F980 (ROM offset 0x180)
-    rom[0x7FB] = 0xF9;
-    rom[0x180] = 0x40;  // RTI at &F980
+    rom[0xFFE] = 0x00;  // &F900 (ROM offset 0x900)
+    rom[0xFFF] = 0xF9;
+    rom[0x900] = 0x40;  // RTI at &F900
+    // NMI vector at ROM offset 0xFFA-0xFFB (maps to &FFFA-&FFFB)
+    rom[0xFFA] = 0x80;  // &F980 (ROM offset 0x980)
+    rom[0xFFB] = 0xF9;
+    rom[0x980] = 0x40;  // RTI at &F980
     return rom;
 }
 
@@ -189,9 +189,9 @@ TEST_CASE("CoprocessorCpu run executes multiple cycles", "[coprocessor][cpu][exe
 TEST_CASE("CoprocessorCpu executes LDA immediate from ROM", "[coprocessor][cpu][execution]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    // Place LDA #$42 at &F800 (ROM offset 0)
-    rom[0x000] = 0xA9;  // LDA #imm
-    rom[0x001] = 0x42;
+    // Place LDA #$42 at &F800 (ROM offset 0x800)
+    rom[0x800] = 0xA9;  // LDA #imm
+    rom[0x801] = 0x42;
     CoprocessorMemoryMap mem(tube, rom);
 
     CoprocessorCpu cpu(mem, tube);
@@ -207,16 +207,16 @@ TEST_CASE("CoprocessorCpu executes STA/LDA in RAM", "[coprocessor][cpu][executio
     TubeUla tube;
     auto rom = make_nop_rom();
     // Place STA $1000 then LDA $1000 at &F800
-    rom[0x000] = 0xA9;  // LDA #$55
-    rom[0x001] = 0x55;
-    rom[0x002] = 0x8D;  // STA $1000
-    rom[0x003] = 0x00;
-    rom[0x004] = 0x10;
-    rom[0x005] = 0xA9;  // LDA #$00 (clear accumulator)
-    rom[0x006] = 0x00;
-    rom[0x007] = 0xAD;  // LDA $1000
-    rom[0x008] = 0x00;
-    rom[0x009] = 0x10;
+    rom[0x800] = 0xA9;  // LDA #$55
+    rom[0x801] = 0x55;
+    rom[0x802] = 0x8D;  // STA $1000
+    rom[0x803] = 0x00;
+    rom[0x804] = 0x10;
+    rom[0x805] = 0xA9;  // LDA #$00 (clear accumulator)
+    rom[0x806] = 0x00;
+    rom[0x807] = 0xAD;  // LDA $1000
+    rom[0x808] = 0x00;
+    rom[0x809] = 0x10;
     CoprocessorMemoryMap mem(tube, rom);
 
     CoprocessorCpu cpu(mem, tube);
@@ -243,7 +243,7 @@ TEST_CASE("CoprocessorCpu routes PIRQ to CPU IRQ line", "[coprocessor][cpu][irq]
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program: CLI then loop with NOPs
-    rom[0x000] = 0x58;  // CLI (enable interrupts)
+    rom[0x800] = 0x58;  // CLI (enable interrupts)
     // Fill rest with NOP (already 0xEA)
     CoprocessorMemoryMap mem(tube, rom);
 
@@ -272,7 +272,7 @@ TEST_CASE("CoprocessorCpu no IRQ when interrupts disabled", "[coprocessor][cpu][
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program: SEI then NOPs (interrupts disabled)
-    rom[0x000] = 0x78;  // SEI
+    rom[0x800] = 0x78;  // SEI
     CoprocessorMemoryMap mem(tube, rom);
 
     CoprocessorCpu cpu(mem, tube);
@@ -487,7 +487,7 @@ TEST_CASE("CoprocessorCpu PNMI: NMI cannot be masked by SEI", "[coprocessor][cpu
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program: SEI then NOPs
-    rom[0x000] = 0x78;  // SEI
+    rom[0x800] = 0x78;  // SEI
     CoprocessorMemoryMap mem(tube, rom);
 
     CoprocessorCpu cpu(mem, tube);
@@ -537,9 +537,9 @@ TEST_CASE("CoprocessorCpu accessing Tube register terminates boot mode", "[copro
     TubeUla tube;
     auto rom = make_nop_rom();
     // Program at &F800: LDA $FEF8 (read Tube R1 status)
-    rom[0x000] = 0xAD;  // LDA abs
-    rom[0x001] = 0xF8;  // low byte
-    rom[0x002] = 0xFE;  // high byte
+    rom[0x800] = 0xAD;  // LDA abs
+    rom[0x801] = 0xF8;  // low byte
+    rom[0x802] = 0xFE;  // high byte
     CoprocessorMemoryMap mem(tube, rom);
 
     CoprocessorCpu cpu(mem, tube);

@@ -36,11 +36,11 @@ using namespace beebium;
 // A minimal 2 KB ROM that contains only a reset vector pointing to $0400.
 // The ROM content is irrelevant because boot mode is disabled immediately
 // by the first Tube register access; all code runs from RAM.
-static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr) {
-    std::array<uint8_t, 2048> rom{};
-    // Reset vector at offset $07FC (address $FFFC when mapped at $F800)
-    rom[0x07FC] = reset_addr & 0xFF;
-    rom[0x07FD] = (reset_addr >> 8) & 0xFF;
+static std::array<uint8_t, 4096> make_stub_rom(uint16_t reset_addr) {
+    std::array<uint8_t, 4096> rom{};
+    // Reset vector at offset $0FFC (address $FFFC when mapped at $F000)
+    rom[0xFFC] = reset_addr & 0xFF;
+    rom[0xFFD] = (reset_addr >> 8) & 0xFF;
     return rom;
 }
 

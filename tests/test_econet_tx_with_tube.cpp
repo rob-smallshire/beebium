@@ -47,7 +47,7 @@ namespace {
 
 constexpr const char* ANFS_ROM_FILENAME = "acorn-anfs_4_18.rom";
 constexpr const char* TUBE_ROM_FILENAME = "acorn-tube-6502_1_10.rom";
-constexpr size_t TUBE_ROM_SIZE = 2048;
+constexpr size_t TUBE_ROM_SIZE = 4096;
 
 bool anfs_rom_available() {
     return std::filesystem::exists(

@@ -52,7 +52,7 @@ namespace {
 static constexpr const char* TUBE_ROM_FILENAME = "acorn-tube-6502_1_10.rom";
 static constexpr const char* DFS_ROM_FILENAME = "acorn-dfs_2_26.rom";
 static constexpr const char* DISC_FILENAME = "chuckieEgg2023.ssd";
-static constexpr size_t TUBE_ROM_SIZE = 2048;
+static constexpr size_t TUBE_ROM_SIZE = 4096;
 
 // The R1 poll loop address where the coprocessor hangs if the
 // decompressor runs out of data.

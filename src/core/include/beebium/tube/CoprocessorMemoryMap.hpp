@@ -26,14 +26,20 @@
 
 namespace beebium {
 
-// Memory map for the 6502 second processor (cheese wedge).
+// Memory map for the 6502-family Tube second processor (the 6502 and 65C102
+// coprocessors share it; another CPU family brings its own map).
 //
-// 64 KB RAM with a 2 KB boot ROM overlaid at &F800-&FFFF during boot mode.
-// Tube registers at &FEF8-&FEFF punch through both ROM and RAM.
+// 64 KB RAM with a 4 KB boot ROM overlaid at &F000-&FFFF during boot mode.
+// The device ROM is a 2732 (4 KB, IC3 in the 6502 Second Processor); Acorn's
+// own client firmware occupies only the upper 2 KB (&F800-&FFFF) and leaves the
+// lower half unprogrammed (&FF), but the lower half is genuine ROM address
+// space -- John Kortink's ReCo6502 client, for one, executes from it -- so the
+// whole 4 KB is mapped. Tube registers at &FEF8-&FEFF punch through both ROM
+// and RAM.
 //
 // Boot mode:
-//   - Reads from &F800-&FFFF return ROM data (except &FEF8-&FEFF which are Tube).
-//   - Writes to &F800-&FFFF go to underlying RAM (except &FEF8-&FEFF which are Tube).
+//   - Reads from &F000-&FFFF return ROM data (except &FEF8-&FEFF which are Tube).
+//   - Writes to &F000-&FFFF go to underlying RAM (except &FEF8-&FEFF which are Tube).
 //   - Terminated on first access to any Tube register address. One-way latch:
 //     can only be re-entered via reset().
 //
@@ -41,7 +47,15 @@ namespace beebium {
 //   - All addresses are RAM.
 //   - Tube registers at &FEF8-&FEFF suppress RAM access (CAS suppressed in hardware).
 //
-// Reference: 6502 Second Processor Service Manual, Sections 5.1-5.3.
+// Boot-mode decode: we answer ROM only at &F000-&FFFF, as MAME's tube_6502
+// does. The service manual describes the boot latch as disabling CAS on every
+// read while set, which would mirror the 2732 across the whole address space in
+// boot mode; whether the hardware decodes that broadly is UNVERIFIED pending the
+// schematic's chip-select logic, so we do not guess (see
+// docs/tube-coprocessor-contract.md).
+//
+// Reference: 6502 Second Processor Service Manual, Sections 5.1-5.3; IC3 is a
+// 2732 ("4K, top 2K used", manual s5).
 
 // Provides the region-model surface (get_memory_regions/peek_region/
 // read_region/write_region/machine_type) that CoprocessorRunner forwards to the
@@ -54,9 +68,9 @@ public:
     static constexpr std::string_view REGION_RAM = "ram";
     static constexpr std::string_view REGION_ROM = "rom";
     static constexpr std::string_view REGION_TUBE = "tube_registers";
-    // Construct with a reference to the Tube port and a 2 KB ROM image.
-    // The ROM span must be exactly 2048 bytes.
-    CoprocessorMemoryMap(TubeCoprocessorBackend& tube_port, std::span<const uint8_t, 2048> rom)
+    // Construct with a reference to the Tube port and the 4 KB ROM image.
+    // The ROM span must be exactly 4096 bytes (the 2732 device contents).
+    CoprocessorMemoryMap(TubeCoprocessorBackend& tube_port, std::span<const uint8_t, 4096> rom)
         : tube_port_(tube_port)
         , rom_enabled_(true)
     {
@@ -70,8 +84,8 @@ public:
             return tube_port_.coprocessor_read(static_cast<uint8_t>(address & 7));
         }
 
-        if (rom_enabled_ && address >= 0xF800) {
-            return rom_[address & 0x7FF];
+        if (rom_enabled_ && address >= 0xF000) {
+            return rom_[address & 0xFFF];
         }
 
         return ram_[address];
@@ -108,8 +122,8 @@ public:
         if (is_tube_address(address)) {
             return tube_port_.coprocessor_peek(static_cast<uint8_t>(address & 7));
         }
-        if (rom_enabled_ && address >= 0xF800) {
-            return rom_[address & 0x7FF];
+        if (rom_enabled_ && address >= 0xF000) {
+            return rom_[address & 0xFFF];
         }
         return ram_[address];
     }
@@ -122,8 +136,8 @@ public:
         regions.push_back({REGION_RAM, 0x0000, 0x10000,
             RegionFlags::Readable | RegionFlags::Writable | RegionFlags::Populated | RegionFlags::Active});
 
-        // 2 KB boot ROM at 0xF800-0xFFFF
-        regions.push_back({REGION_ROM, 0xF800, 0x0800,
+        // 4 KB boot ROM at 0xF000-0xFFFF
+        regions.push_back({REGION_ROM, 0xF000, 0x1000,
             RegionFlags::Readable | RegionFlags::Populated |
             (rom_enabled_ ? RegionFlags::Active : RegionFlags::None)});
 
@@ -141,10 +155,10 @@ public:
             return ram_[static_cast<uint16_t>(address)];
         }
         if (name == REGION_ROM) {
-            if (address < 0xF800 || address > 0xFFFF) {
+            if (address < 0xF000 || address > 0xFFFF) {
                 throw std::invalid_argument("address out of bounds for rom region");
             }
-            return rom_[address & 0x7FF];
+            return rom_[address & 0xFFF];
         }
         if (name == REGION_TUBE) {
             if (address < 0xFEF8 || address > 0xFEFF) {
@@ -161,10 +175,10 @@ public:
             return ram_[static_cast<uint16_t>(address)];
         }
         if (name == REGION_ROM) {
-            if (address < 0xF800 || address > 0xFFFF) {
+            if (address < 0xF000 || address > 0xFFFF) {
                 throw std::invalid_argument("address out of bounds for rom region");
             }
-            return rom_[address & 0x7FF];
+            return rom_[address & 0xFFF];
         }
         if (name == REGION_TUBE) {
             if (address < 0xFEF8 || address > 0xFEFF) {
@@ -201,7 +215,7 @@ private:
 
     TubeCoprocessorBackend& tube_port_;
     std::array<uint8_t, 65536> ram_;
-    std::array<uint8_t, 2048> rom_;
+    std::array<uint8_t, 4096> rom_;
     bool rom_enabled_;
 };
 

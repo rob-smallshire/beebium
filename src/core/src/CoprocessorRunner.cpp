@@ -16,7 +16,7 @@
 
 namespace beebium {
 
-CoprocessorRunner::CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 2048> rom,
+CoprocessorRunner::CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 4096> rom,
                                ClockRatio ratio)
     : tube_port_(backend)
     , memory_(tube_port_, rom)

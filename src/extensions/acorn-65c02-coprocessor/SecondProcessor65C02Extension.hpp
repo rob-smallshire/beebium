@@ -38,7 +38,8 @@ namespace beebium {
 //
 // One class serves both members of the family: the 3 MHz 65C02 second
 // processor (ratio 3/2) and the 4 MHz 65C102 second processor (ratio 2/1).
-// They are software-identical -- same 2 KB Tube client ROM, same 64 KB RAM --
+// They are structurally identical -- a 4 KB Tube client ROM (each its own
+// build), 64 KB RAM --
 // so only the clock ratio and the display identity differ, and each plugin
 // entry point constructs this class with the right pair. The clock ratio lives
 // with the runner.
@@ -85,7 +86,7 @@ public:
 private:
     // Load the Tube client ROM into `rom`: an explicit `rom` config override,
     // else the "client" ROM declared in the manifest (Extension::load_rom).
-    bool load_client_rom(std::array<uint8_t, 2048>& rom) const;
+    bool load_client_rom(std::array<uint8_t, 4096>& rom) const;
 
     ClockRatio clock_ratio_;
     std::string cpu_label_;

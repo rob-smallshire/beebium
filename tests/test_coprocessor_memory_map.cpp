@@ -13,7 +13,7 @@
 // Tests for the 6502 second processor (cheese wedge) coprocessor memory map.
 //
 // The coprocessor memory map has two modes:
-//   Boot mode: ROM overlays RAM at &F800-&FFFF for reads; writes pass through to RAM.
+//   Boot mode: ROM overlays RAM at &F000-&FFFF for reads; writes pass through to RAM.
 //              Tube registers at &FEF8-&FEFF override both ROM and RAM.
 //   Normal mode: all RAM except Tube registers at &FEF8-&FEFF.
 //
@@ -33,8 +33,8 @@
 using namespace beebium;
 
 // Helper: fill ROM with a recognisable pattern (address low byte XOR 0xFF).
-static std::array<uint8_t, 2048> make_test_rom() {
-    std::array<uint8_t, 2048> rom{};
+static std::array<uint8_t, 4096> make_test_rom() {
+    std::array<uint8_t, 4096> rom{};
     for (size_t i = 0; i < rom.size(); ++i) {
         rom[i] = static_cast<uint8_t>(i ^ 0xFF);
     }
@@ -69,8 +69,8 @@ TEST_CASE("CoprocessorMemoryMap RAM read/write in low memory", "[coprocessor][me
     mem.write(0x1234, 0xAB);
     CHECK(mem.read(0x1234) == 0xAB);
 
-    mem.write(0xF7FF, 0xCD);
-    CHECK(mem.read(0xF7FF) == 0xCD);
+    mem.write(0xEFFF, 0xCD);
+    CHECK(mem.read(0xEFFF) == 0xCD);
 }
 
 TEST_CASE("CoprocessorMemoryMap RAM initialised to zero", "[coprocessor][memory]") {
@@ -81,11 +81,11 @@ TEST_CASE("CoprocessorMemoryMap RAM initialised to zero", "[coprocessor][memory]
 
     CHECK(mem.read(0x0000) == 0x00);
     CHECK(mem.read(0x8000) == 0x00);
-    CHECK(mem.read(0xF7FF) == 0x00);
+    CHECK(mem.read(0xEFFF) == 0x00);
 }
 
 // ===========================================================================
-// Boot mode: ROM overlay at &F800-&FFFF
+// Boot mode: ROM overlay at &F000-&FFFF
 // ===========================================================================
 
 TEST_CASE("CoprocessorMemoryMap boot mode: reads from ROM region return ROM data", "[coprocessor][memory][boot]") {
@@ -95,20 +95,46 @@ TEST_CASE("CoprocessorMemoryMap boot mode: reads from ROM region return ROM data
     CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());
 
-    // &F800 maps to ROM offset 0
-    CHECK(mem.read(0xF800) == rom[0]);
+    // The 4 KB ROM is mapped at &F000-&FFFF: machine address A -> rom[A & 0xFFF].
+    // &F800 maps to ROM offset 0x800
+    CHECK(mem.read(0xF800) == rom[0x800]);
 
-    // &F900 maps to ROM offset 0x100
-    CHECK(mem.read(0xF900) == rom[0x100]);
+    // &F900 maps to ROM offset 0x900
+    CHECK(mem.read(0xF900) == rom[0x900]);
 
-    // &FFFC (reset vector low) maps to ROM offset 0x7FC
-    CHECK(mem.read(0xFFFC) == rom[0x7FC]);
+    // &FFFC (reset vector low) maps to ROM offset 0xFFC
+    CHECK(mem.read(0xFFFC) == rom[0xFFC]);
 
-    // &FFFD (reset vector high) maps to ROM offset 0x7FD
-    CHECK(mem.read(0xFFFD) == rom[0x7FD]);
+    // &FFFD (reset vector high) maps to ROM offset 0xFFD
+    CHECK(mem.read(0xFFFD) == rom[0xFFD]);
 
-    // &FFFF maps to ROM offset 0x7FF
-    CHECK(mem.read(0xFFFF) == rom[0x7FF]);
+    // &FFFF maps to ROM offset 0xFFF
+    CHECK(mem.read(0xFFFF) == rom[0xFFF]);
+}
+
+TEST_CASE("CoprocessorMemoryMap boot mode: lower half (&F000-&F7FF) is ROM", "[coprocessor][memory][boot]") {
+    TubeUla tube;
+    auto rom = make_test_rom();
+
+    CoprocessorMemoryMap mem(tube, rom);
+    REQUIRE(mem.boot_mode());
+
+    // The lower 2 KB of the 2732 is genuine ROM address space (a client like
+    // ReCo6502 executes from it). &F000 maps to ROM offset 0, &F7FF to 0x7FF.
+    CHECK(mem.read(0xF000) == rom[0x000]);
+    CHECK(mem.read(0xF7FF) == rom[0x7FF]);
+
+    // Writes to the lower half still go to RAM (the ROM only shadows reads);
+    // they become visible once boot mode ends.
+    mem.write(0xF000, 0x11);
+    mem.write(0xF7FF, 0x22);
+    CHECK(mem.read(0xF000) == rom[0x000]);  // ROM still shadows the read
+    CHECK(mem.read(0xF7FF) == rom[0x7FF]);
+
+    mem.read(0xFEF8);  // leave boot mode
+    REQUIRE_FALSE(mem.boot_mode());
+    CHECK(mem.read(0xF000) == 0x11);  // now the RAM writes are visible
+    CHECK(mem.read(0xF7FF) == 0x22);
 }
 
 TEST_CASE("CoprocessorMemoryMap boot mode: writes to ROM region go to RAM", "[coprocessor][memory][boot]") {
@@ -122,7 +148,7 @@ TEST_CASE("CoprocessorMemoryMap boot mode: writes to ROM region go to RAM", "[co
     mem.write(0xF800, 0x42);
 
     // Reading should still return ROM data (ROM shadows RAM for reads)
-    CHECK(mem.read(0xF800) == rom[0]);
+    CHECK(mem.read(0xF800) == rom[0x800]);
 
     // After leaving boot mode, the RAM value should be visible
     // (We'll test this in the transition tests below)
@@ -137,7 +163,7 @@ TEST_CASE("CoprocessorMemoryMap boot mode: ROM copy pattern works", "[coprocesso
 
     // Simulate the boot ROM's self-copy: read from ROM, write back to same address.
     // In boot mode, reads come from ROM and writes go to RAM.
-    for (uint16_t addr = 0xF800; addr != 0x0000; ++addr) {  // wraps at 0x10000
+    for (uint16_t addr = 0xF000; addr != 0x0000; ++addr) {  // wraps at 0x10000
         // Skip Tube register range -- accessing those would end boot mode
         if (addr >= 0xFEF8 && addr <= 0xFEFF)
             continue;
@@ -153,10 +179,10 @@ TEST_CASE("CoprocessorMemoryMap boot mode: ROM copy pattern works", "[coprocesso
     REQUIRE_FALSE(mem.boot_mode());
 
     // Now reads should return the copied ROM data from RAM
-    CHECK(mem.read(0xF800) == rom[0]);
-    CHECK(mem.read(0xFFFC) == rom[0x7FC]);
-    CHECK(mem.read(0xFFFD) == rom[0x7FD]);
-    CHECK(mem.read(0xFFFF) == rom[0x7FF]);
+    CHECK(mem.read(0xF800) == rom[0x800]);
+    CHECK(mem.read(0xFFFC) == rom[0xFFC]);
+    CHECK(mem.read(0xFFFD) == rom[0xFFD]);
+    CHECK(mem.read(0xFFFF) == rom[0xFFF]);
 }
 
 // ===========================================================================
@@ -334,7 +360,7 @@ TEST_CASE("CoprocessorMemoryMap reset re-enters boot mode", "[coprocessor][memor
     CHECK(mem.boot_mode());
 
     // ROM should be visible again
-    CHECK(mem.read(0xF800) == rom[0]);
+    CHECK(mem.read(0xF800) == rom[0x800]);
 }
 
 TEST_CASE("CoprocessorMemoryMap reset preserves RAM contents", "[coprocessor][memory]") {
@@ -365,7 +391,7 @@ TEST_CASE("CoprocessorMemoryMap Tube register range is exactly &FEF8-&FEFF", "[c
 
     // &FEF7 should be ROM in boot mode, not a Tube register
     uint8_t val = mem.read(0xFEF7);
-    CHECK(val == rom[0xFEF7 - 0xF800]);
+    CHECK(val == rom[0xFEF7 - 0xF000]);
 
     // Should still be in boot mode (didn't access Tube range)
     CHECK(mem.boot_mode());
@@ -380,8 +406,8 @@ TEST_CASE("CoprocessorMemoryMap boot mode: reset vector readable from ROM", "[co
 
     // Create a ROM with a known reset vector
     auto rom = make_test_rom();
-    rom[0x7FC] = 0x00;  // reset vector low: &F800
-    rom[0x7FD] = 0xF8;  // reset vector high
+    rom[0xFFC] = 0x00;  // reset vector low: &F800
+    rom[0xFFD] = 0xF8;  // reset vector high
 
     CoprocessorMemoryMap mem(tube, rom);
     REQUIRE(mem.boot_mode());

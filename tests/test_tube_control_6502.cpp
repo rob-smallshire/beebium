@@ -33,23 +33,23 @@
 
 using namespace beebium;
 
-static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr) {
-    std::array<uint8_t, 2048> rom{};
-    rom[0x07FC] = reset_addr & 0xFF;
-    rom[0x07FD] = (reset_addr >> 8) & 0xFF;
+static std::array<uint8_t, 4096> make_stub_rom(uint16_t reset_addr) {
+    std::array<uint8_t, 4096> rom{};
+    rom[0xFFC] = reset_addr & 0xFF;
+    rom[0xFFD] = (reset_addr >> 8) & 0xFF;
     return rom;
 }
 
-static std::array<uint8_t, 2048> make_stub_rom(uint16_t reset_addr,
+static std::array<uint8_t, 4096> make_stub_rom(uint16_t reset_addr,
                                                 uint16_t nmi_addr,
                                                 uint16_t irq_addr) {
-    std::array<uint8_t, 2048> rom{};
-    rom[0x07FC] = reset_addr & 0xFF;
-    rom[0x07FD] = (reset_addr >> 8) & 0xFF;
-    rom[0x07FA] = nmi_addr & 0xFF;
-    rom[0x07FB] = (nmi_addr >> 8) & 0xFF;
-    rom[0x07FE] = irq_addr & 0xFF;
-    rom[0x07FF] = (irq_addr >> 8) & 0xFF;
+    std::array<uint8_t, 4096> rom{};
+    rom[0xFFC] = reset_addr & 0xFF;
+    rom[0xFFD] = (reset_addr >> 8) & 0xFF;
+    rom[0xFFA] = nmi_addr & 0xFF;
+    rom[0xFFB] = (nmi_addr >> 8) & 0xFF;
+    rom[0xFFE] = irq_addr & 0xFF;
+    rom[0xFFF] = (irq_addr >> 8) & 0xFF;
     return rom;
 }
 

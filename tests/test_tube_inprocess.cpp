@@ -37,7 +37,7 @@
 using namespace beebium;
 
 static constexpr const char* ROM_FILENAME = "acorn-tube-6502_1_10.rom";
-static constexpr size_t ROM_SIZE = 2048;
+static constexpr size_t ROM_SIZE = 4096;
 
 static std::array<uint8_t, ROM_SIZE> load_rom() {
     auto filepath = std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / ROM_FILENAME;

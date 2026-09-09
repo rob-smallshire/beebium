@@ -35,20 +35,20 @@
 using namespace beebium;
 
 // Helper: create a 2 KB ROM with a known reset vector and NOP fill.
-static std::array<uint8_t, 2048> make_nop_rom(uint16_t entry = 0xF800) {
-    std::array<uint8_t, 2048> rom{};
+static std::array<uint8_t, 4096> make_nop_rom(uint16_t entry = 0xF800) {
+    std::array<uint8_t, 4096> rom{};
     rom.fill(0xEA);  // NOP
-    // Reset vector at ROM offset 0x7FC-0x7FD (maps to &FFFC-&FFFD)
-    rom[0x7FC] = static_cast<uint8_t>(entry & 0xFF);
-    rom[0x7FD] = static_cast<uint8_t>(entry >> 8);
-    // IRQ vector -> &F900 (ROM offset 0x100), with RTI
-    rom[0x7FE] = 0x00;
-    rom[0x7FF] = 0xF9;
-    rom[0x100] = 0x40;  // RTI
-    // NMI vector -> &F980 (ROM offset 0x180), with RTI
-    rom[0x7FA] = 0x80;
-    rom[0x7FB] = 0xF9;
-    rom[0x180] = 0x40;  // RTI
+    // Reset vector at ROM offset 0xFFC-0xFFD (maps to &FFFC-&FFFD)
+    rom[0xFFC] = static_cast<uint8_t>(entry & 0xFF);
+    rom[0xFFD] = static_cast<uint8_t>(entry >> 8);
+    // IRQ vector -> &F900 (ROM offset 0x900), with RTI
+    rom[0xFFE] = 0x00;
+    rom[0xFFF] = 0xF9;
+    rom[0x900] = 0x40;  // RTI
+    // NMI vector -> &F980 (ROM offset 0x980), with RTI
+    rom[0xFFA] = 0x80;
+    rom[0xFFB] = 0xF9;
+    rom[0x980] = 0x40;  // RTI
     return rom;
 }
 

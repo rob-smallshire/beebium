@@ -52,11 +52,12 @@ public:
     using Memory = CoprocessorMemoryMap;
     using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
 
-    // Construct with an external coprocessor backend, a 2 KB ROM image, and the
-    // clock ratio (coprocessor cycles per host cycle; 3/2 for the 3 MHz 65C02
-    // second processor against a 2 MHz host). The caller owns the backend and
-    // must keep it alive for the runner's lifetime.
-    CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 2048> rom,
+    // Construct with an external coprocessor backend, the 4 KB ROM image (the
+    // 2732 device contents, mapped at &F000-&FFFF), and the clock ratio
+    // (coprocessor cycles per host cycle; 3/2 for the 3 MHz 65C02 second
+    // processor against a 2 MHz host). The caller owns the backend and must keep
+    // it alive for the runner's lifetime.
+    CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 4096> rom,
                    ClockRatio ratio = ClockRatio{3, 2});
     ~CoprocessorRunner() = default;
 
@@ -280,8 +281,8 @@ private:
     // Host-time to coprocessor-cycle conversion for the fixed clock ratio.
     CoprocessorClock clock_;
 
-    // ROM image (kept for reset)
-    std::array<uint8_t, 2048> rom_;
+    // ROM image (kept for reset). The full 4 KB 2732 device contents.
+    std::array<uint8_t, 4096> rom_;
 
     // Debugger pause state (plain bool, single-threaded)
     bool paused_ = false;

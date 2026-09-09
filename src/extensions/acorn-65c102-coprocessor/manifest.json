@@ -9,7 +9,7 @@
         {
             "key": "client",
             "filename": "acorn-tube-65c102_1_20.rom",
-            "size": 2048,
+            "size": 4096,
             "description": "Acorn Tube 65C102 client ROM v1.20"
         }
     ],
@@ -17,7 +17,7 @@
         {
             "key": "rom",
             "type": "filepath",
-            "description": "Path to 2KB Tube client ROM image",
+            "description": "Path to the full 4KB Tube client ROM image (the 2732 device contents, F000-FFFF)",
             "required": false
         }
     ]

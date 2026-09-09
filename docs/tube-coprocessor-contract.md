@@ -635,8 +635,8 @@ it hosts a coprocessor it has never heard of.
 ### What it is
 
 Acorn's 65C102 second processor (the Master Turbo module used the same
-part) is a 65C02-family CPU at 4 MHz with 64 KB of RAM and the same 2 KB
-Tube client ROM. From the software's point of view it is the 65C02 second
+part) is a 65C02-family CPU at 4 MHz with 64 KB of RAM and the same 4 KB
+Tube client ROM (its own v1.20 build). From the software's point of view it is the 65C02 second
 processor with a faster clock; the differences are in the oscillator and
 board, which the emulation does not model. Everything except the clock
 ratio and the identity is shared.
@@ -703,7 +703,7 @@ server header to find a file.
     {
         "key": "client",
         "filename": "acorn-tube-6502_1_10.rom",
-        "size": 2048,
+        "size": 4096,
         "description": "Acorn Tube 6502 client ROM v1.10"
     }
 ]
@@ -720,20 +720,24 @@ server header to find a file.
   installs it to `bin/extensions/<name>/roms/`, next to the library and
   manifest, so every artifact, package and the macOS app bundle (which
   copies `extensions/` whole) carries them without further change. Each
-  plugin ships its own firmware: the 65C02 plugin the 6502 Tube client
-  v1.10 (`acorn-tube-6502_1_10.rom`, 2048 bytes, MD5
-  `cd6ba85e22adec70b6d863de4c053db7`), the 65C102 plugin the 65C102 Tube
-  client v1.20 (`acorn-tube-65c102_1_20.rom`, 2048 bytes, MD5
-  `83d73e0e78693bb4b43e7cb18e58d556`), which is a different build with its
-  own banner, "Acorn TUBE 65C102 Co-Processor". No plugin references
-  another plugin's directory. The 65C102 image is the one B2 and B-Em ship
-  and matches the upper half of the full 4 KB EPROM dump in Toby Lobster's
-  ROM library. Another 2 KB image circulates as "65C102 TUBE 1.20" (MD5
-  `f0555114f7a18f727e9ca14effebcc95`) that the library annotates as saved
-  from a RAM copy after self-modification: its startup RTS at &F85E has
-  become TYA and its NMI vector has been rewritten, so booted as a ROM it
-  goes straight to the "*" supervisor and never prints the banner. Only
-  the image from the chip boots.
+  plugin ships its own firmware, the full 4 KB 2732 device image: the 65C02
+  plugin the 6502 Tube client v1.10 (`acorn-tube-6502_1_10.rom`, 4096 bytes,
+  CRC32 `98b5fe42`, MD5 `8c3b9252ac812c892aa21b9252abf94c`), the 65C102 plugin
+  the 65C102 Tube client v1.20 (`acorn-tube-65c102_1_20.rom`, 4096 bytes, CRC32
+  `1462f0f7`, MD5 `f77689f677e625f87f42985532fef8b9`), a different build with
+  its own banner, "Acorn TUBE 65C102 Co-Processor". Both are the full-EPROM
+  dumps whose checksums match MAME's `6502tube_110.rom` and `65c102_boot_120.rom`;
+  in each the lower 2 KB is all `&FF` (Acorn's firmware is the upper 2 KB) and
+  the upper 2 KB is byte-for-byte the 2 KB image previously shipped (MD5
+  `cd6ba85e22adec70b6d863de4c053db7` for the 6502,
+  `83d73e0e78693bb4b43e7cb18e58d556` for the 65C102). No plugin references
+  another plugin's directory. The 65C102 upper half is the image B2 and B-Em
+  ship. A separate 2 KB image circulates as "65C102 TUBE 1.20" (MD5
+  `f0555114f7a18f727e9ca14effebcc95`) that Toby Lobster's library annotates as
+  saved from a RAM copy after self-modification: its startup RTS at &F85E has
+  become TYA and its NMI vector has been rewritten, so booted as a ROM it goes
+  straight to the "*" supervisor and never prints the banner. Only the image
+  from the chip boots.
 
 - **Resolution is the extension API's job.** Add to `Extension` (or
   `ExtensionContext`, developer's choice, say which) a
@@ -743,14 +747,28 @@ server header to find a file.
   size. Both report a clear error naming the expected path when the file
   is missing or the wrong size. An explicit `rom` configuration parameter
   still overrides the packaged file, for users supplying a different
-  client ROM. For the 6502 second processor the declared size is 2048,
-  the mapped upper half of the board's 4 KB EPROM; a 4096-byte full dump
-  whose first 2048 bytes are all &FF is accepted and its upper half used,
-  with a log line saying which form was found, since such dumps circulate.
-  Any other size, or a 4096-byte file whose lower half is not blank, is
-  rejected. `SecondProcessor65C02Extension::load_rom` uses these and
-  drops its include of `beebium/server/RomPaths.hpp`; the plugin no
-  longer needs the server include directory at all.
+  client ROM. The declared size is 4096: the full contents of the board's
+  4 KB 2732, mapped at &F000-&FFFF. The image must be exactly 4096 bytes,
+  with no content rule for either half (the lower half is genuine ROM address
+  space — a ReCo6502 client executes from it; Acorn's dumps leave it &FF).
+  There is NO half-size or padded-dump acceptance: a 2 KB file — the
+  upper-half-only image other emulators ship — is a fragment, and the model
+  does not synthesise the missing half. A `rom=` override of any other size
+  fails at load with a one-sentence message naming the device and the
+  expectation, e.g. "Tube client ROM must be the full 4096-byte 2732 image
+  (F000-FFFF); got 2048 bytes. The 2 kB images shipped by other emulators are
+  the upper half only." `SecondProcessor65C02Extension::load_rom` uses these
+  and drops its include of `beebium/server/RomPaths.hpp`; the plugin no longer
+  needs the server include directory at all.
+
+- **Boot-mode decode is `&F000-&FFFF`, mirroring unverified.** The map answers
+  ROM only at &F000-&FFFF, as MAME's `tube_6502` does. The 6502 Second
+  Processor Service Manual (s5.1-5.3; IC3 is a 2732, "4K, top 2K used")
+  describes the boot latch as disabling CAS on every read while set, which
+  would mirror the 2732 across the whole address space in boot mode. Whether
+  the hardware decodes that broadly is UNVERIFIED pending the schematic's
+  chip-select logic, so the model implements MAME's narrow decode and does not
+  guess at mirroring.
 
 - **Load-time check.** When a plugin with declared ROMs is loaded, the
   loader (or the extension's `init()`, developer's choice, say which)
@@ -779,9 +797,11 @@ server header to find a file.
   entry with its filename and size.
 - `rom_filepath`/`load_rom`: resolves beside the manifest; the explicit
   `rom` parameter overrides; a missing file and a wrong-size file each
-  produce the specified error; a 4096-byte image with a blank lower half
-  loads to the same 2048 bytes as the canonical file, and one with a
-  non-blank lower half is rejected.
+  produce the specified error; the exact 4096-byte device image is accepted
+  whatever either half holds, and a 2048-byte (upper-half-only) file is
+  rejected with the device-naming message. A synthetic 4 KB image whose reset
+  vector points into the lower half (&F000-&F7FF) executes from there through
+  the real extension, proving the lower half is mapped ROM.
 - Load-time check: a plugin directory whose declared ROM is absent fails
   to load with a message naming the plugin and the path (use
   `test-scratch-ram` or a temporary manifest copy).

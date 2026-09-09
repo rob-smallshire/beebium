@@ -52,7 +52,7 @@
 using namespace beebium;
 
 static constexpr const char* ROM_FILENAME = "acorn-tube-6502_1_10.rom";
-static constexpr size_t ROM_SIZE = 2048;
+static constexpr size_t ROM_SIZE = 4096;
 
 // Load the ROM file into a fixed-size array.
 static std::array<uint8_t, ROM_SIZE> load_rom() {
@@ -80,7 +80,7 @@ TEST_CASE("Coprocessor boot: reset vector points to F800", "[coprocessor][boot][
     auto rom = load_rom();
 
     // Verify ROM reset vector
-    uint16_t reset_vector = rom[0x7FC] | (rom[0x7FD] << 8);
+    uint16_t reset_vector = rom[0xFFC] | (rom[0xFFD] << 8);
     CHECK(reset_vector == 0xF800);
 }
 
@@ -130,7 +130,7 @@ TEST_CASE("Coprocessor boot: ROM copied to RAM", "[coprocessor][boot][rom]") {
     // from banner display to CmdPrompt).
     for (uint16_t addr = 0xF800; addr <= 0xFDFF; ++addr) {
         if (addr == 0xF85E || addr == 0xF85F) continue;
-        uint16_t rom_offset = addr - 0xF800;
+        uint16_t rom_offset = addr - 0xF000;
         INFO("Address: 0x" << std::hex << addr);
         CHECK(mem.ram(addr) == rom[rom_offset]);
     }
@@ -138,7 +138,7 @@ TEST_CASE("Coprocessor boot: ROM copied to RAM", "[coprocessor][boot][rom]") {
     // Check ROM copied to RAM at &FE00-&FEEF (indexed copy loop,
     // avoids Tube registers at &FEF0+)
     for (uint16_t addr = 0xFE00; addr <= 0xFEEF; ++addr) {
-        uint16_t rom_offset = addr - 0xF800;
+        uint16_t rom_offset = addr - 0xF000;
         INFO("Address: 0x" << std::hex << addr);
         CHECK(mem.ram(addr) == rom[rom_offset]);
     }
@@ -146,7 +146,7 @@ TEST_CASE("Coprocessor boot: ROM copied to RAM", "[coprocessor][boot][rom]") {
     // Check ROM copied to RAM at &FF00-&FFFF (first copy loop)
     // Use uint32_t to avoid uint16_t overflow when addr wraps past 0xFFFF.
     for (uint32_t addr = 0xFF00; addr <= 0xFFFF; ++addr) {
-        uint16_t rom_offset = static_cast<uint16_t>(addr) - 0xF800;
+        uint16_t rom_offset = static_cast<uint16_t>(addr) - 0xF000;
         INFO("Address: 0x" << std::hex << addr);
         CHECK(mem.ram(static_cast<uint16_t>(addr)) == rom[rom_offset]);
     }
@@ -164,7 +164,7 @@ TEST_CASE("Coprocessor boot: stub copied to page 1", "[coprocessor][boot][rom]")
 
     // 17 bytes (indices 0-16) copied from ROM &F859 to RAM &0100
     for (int i = 0; i <= 0x10; ++i) {
-        uint16_t rom_offset = 0xF859 - 0xF800 + i;
+        uint16_t rom_offset = 0xF859 - 0xF000 + i;
         INFO("Offset: 0x" << std::hex << i);
         CHECK(mem.ram(0x0100 + i) == rom[rom_offset]);
     }

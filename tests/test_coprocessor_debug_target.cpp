@@ -30,13 +30,13 @@ using namespace beebium;
 
 namespace {
 
-std::array<uint8_t, 2048> make_nop_rom(uint16_t entry = 0xF800) {
-    std::array<uint8_t, 2048> rom{};
+std::array<uint8_t, 4096> make_nop_rom(uint16_t entry = 0xF800) {
+    std::array<uint8_t, 4096> rom{};
     rom.fill(0xEA);  // NOP
-    rom[0x7FC] = static_cast<uint8_t>(entry & 0xFF);
-    rom[0x7FD] = static_cast<uint8_t>(entry >> 8);
-    rom[0x7FE] = 0x00; rom[0x7FF] = 0xF9; rom[0x100] = 0x40;  // IRQ -> RTI
-    rom[0x7FA] = 0x80; rom[0x7FB] = 0xF9; rom[0x180] = 0x40;  // NMI -> RTI
+    rom[0xFFC] = static_cast<uint8_t>(entry & 0xFF);
+    rom[0xFFD] = static_cast<uint8_t>(entry >> 8);
+    rom[0xFFE] = 0x00; rom[0xFFF] = 0xF9; rom[0x900] = 0x40;  // IRQ -> RTI
+    rom[0xFFA] = 0x80; rom[0xFFB] = 0xF9; rom[0x980] = 0x40;  // NMI -> RTI
     return rom;
 }
 

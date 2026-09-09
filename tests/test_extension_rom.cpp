@@ -114,41 +114,37 @@ TEST_CASE("Extension::load_rom rejects a wrong-size image", "[extension][rom]") 
     std::filesystem::remove_all(dir);
 }
 
-TEST_CASE("read_rom_image accepts a 4 KB dump with a blank lower half and uses the upper half",
-          "[extension][rom]") {
+TEST_CASE("read_rom_image requires exactly the expected size", "[extension][rom]") {
     auto dir = make_temp_dir();
 
-    // Canonical 2048-byte image.
-    std::vector<std::uint8_t> canonical(2048);
-    for (size_t i = 0; i < canonical.size(); ++i)
-        canonical[i] = static_cast<std::uint8_t>((i * 7 + 3) & 0xFF);
-    write_file(dir / "roms" / "canonical.rom", canonical);
+    // A ROM image is the device's contents: exactly the declared size, whatever
+    // it holds. There is no padded-dump or half-size acceptance -- a file of any
+    // other size is a different image, and synthesising the rest would be a
+    // guess. A double-size file is rejected just like any other wrong size.
+    std::vector<std::uint8_t> exact(2048);
+    for (size_t i = 0; i < exact.size(); ++i)
+        exact[i] = static_cast<std::uint8_t>((i * 7 + 3) & 0xFF);
+    write_file(dir / "roms" / "exact.rom", exact);
 
-    // 4096-byte dump: lower half all 0xFF, upper half the canonical image.
     std::vector<std::uint8_t> doubled(4096, 0xFF);
-    std::copy(canonical.begin(), canonical.end(), doubled.begin() + 2048);
+    std::copy(exact.begin(), exact.end(), doubled.begin() + 2048);
     write_file(dir / "roms" / "doubled.rom", doubled);
 
-    std::array<std::uint8_t, 2048> from_canonical{};
-    std::array<std::uint8_t, 2048> from_doubled{};
-    read_rom_image(dir / "roms" / "canonical.rom", std::span<std::uint8_t>(from_canonical));
-    read_rom_image(dir / "roms" / "doubled.rom", std::span<std::uint8_t>(from_doubled));
-
-    // The double-size dump loads to exactly the same 2048 bytes as the canonical.
-    CHECK(from_doubled == from_canonical);
-    CHECK(std::equal(from_doubled.begin(), from_doubled.end(), canonical.begin()));
-    std::filesystem::remove_all(dir);
-}
-
-TEST_CASE("read_rom_image rejects a 4 KB dump whose lower half is not blank",
-          "[extension][rom]") {
-    auto dir = make_temp_dir();
-    std::vector<std::uint8_t> doubled(4096, 0xFF);
-    doubled[100] = 0x00;  // a non-0xFF byte in the lower half
-    write_file(dir / "roms" / "bad.rom", doubled);
-
     std::array<std::uint8_t, 2048> dest{};
-    CHECK_THROWS(read_rom_image(dir / "roms" / "bad.rom", std::span<std::uint8_t>(dest)));
+    read_rom_image(dir / "roms" / "exact.rom", std::span<std::uint8_t>(dest));
+    CHECK(std::equal(dest.begin(), dest.end(), exact.begin()));
+
+    // The 4 KB file (even with a blank lower half) no longer loads into a 2 KB
+    // buffer; it names the mismatch.
+    try {
+        std::array<std::uint8_t, 2048> dest2{};
+        read_rom_image(dir / "roms" / "doubled.rom", std::span<std::uint8_t>(dest2));
+        FAIL("expected read_rom_image to reject the 4 KB file");
+    } catch (const std::exception& e) {
+        std::string msg = e.what();
+        CHECK(msg.find("4096") != std::string::npos);
+        CHECK(msg.find("exactly 2048") != std::string::npos);
+    }
     std::filesystem::remove_all(dir);
 }
 
@@ -161,8 +157,11 @@ TEST_CASE("validate_rom_image accepts valid forms and rejects the rest",
     write_file(dir / "roms" / "doubled.rom", doubled);
     write_file(dir / "roms" / "wrong.rom", std::vector<std::uint8_t>(3000, 0x00));
 
+    // Only the exact declared size is valid. A double-size file (even one with a
+    // blank lower half) is rejected like any other wrong size -- the image is
+    // the device's contents, not a padded fragment.
     CHECK_NOTHROW(validate_rom_image(dir / "roms" / "exact.rom", 2048));
-    CHECK_NOTHROW(validate_rom_image(dir / "roms" / "doubled.rom", 2048));
+    CHECK_THROWS(validate_rom_image(dir / "roms" / "doubled.rom", 2048));
     CHECK_THROWS(validate_rom_image(dir / "roms" / "wrong.rom", 2048));
     CHECK_THROWS(validate_rom_image(dir / "roms" / "absent.rom", 2048));
     std::filesystem::remove_all(dir);

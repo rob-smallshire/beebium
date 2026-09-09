@@ -49,7 +49,7 @@ constexpr const char* TUBE_ROM_FILENAME = "acorn-tube-6502_1_10.rom";
 constexpr const char* DNFS_ROM_FILENAME = "acorn-dnfs_3_02.rom";
 constexpr const char* DFS_ROM_FILENAME = "acorn-dfs_2_26.rom";
 constexpr const char* CE2023_DISC_FILENAME = "chuckieEgg2023.ssd";
-constexpr size_t TUBE_ROM_SIZE = 2048;
+constexpr size_t TUBE_ROM_SIZE = 4096;
 
 std::array<uint8_t, TUBE_ROM_SIZE> load_tube_rom() {
     auto filepath = std::filesystem::path(BEEBIUM_TUBE_ROM_DIR) / TUBE_ROM_FILENAME;

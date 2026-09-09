@@ -1062,6 +1062,18 @@ target_compile_definitions(test_debugger_entry_race PRIVATE
 )
 catch_discover_tests(test_debugger_entry_race)
 
+# The 4 KB Tube client ROM: a synthetic client image executing from the lower
+# half, driven through the real 65C02 coprocessor extension.
+add_executable(test_4k_client_rom test_4k_client_rom.cpp)
+target_include_directories(test_4k_client_rom PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/extensions/acorn-65c02-coprocessor
+)
+target_link_libraries(test_4k_client_rom PRIVATE
+    beebium_ext_acorn_65c02
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_4k_client_rom)
+
 # Tier 2 quiesce witnesses: the extension-framework bus quiescer and the Econet
 # enable/disable lifetime model (meaningful under TSan). Needs only core + the
 # extension API (pulled in transitively by beebium_core).

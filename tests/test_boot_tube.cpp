@@ -68,7 +68,7 @@ namespace {
 static constexpr const char* TUBE_ROM_FILENAME = "acorn-tube-6502_1_10.rom";
 static constexpr const char* TUBE_65C102_ROM_FILENAME = "acorn-tube-65c102_1_20.rom";
 static constexpr const char* DNFS_ROM_FILENAME = "acorn-dnfs_3_02.rom";
-static constexpr size_t TUBE_ROM_SIZE = 2048;
+static constexpr size_t TUBE_ROM_SIZE = 4096;
 
 bool tube_rom_available() {
     return std::filesystem::exists(

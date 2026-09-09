@@ -316,3 +316,37 @@ TEST_CASE("PluginLoader load_extension fails naming the plugin and path when a "
         CHECK(msg.find("absent.rom") != std::string::npos);
     }
 }
+
+TEST_CASE("PluginLoader load_extension fails when a declared ROM is the wrong size",
+          "[extension][plugin][rom]") {
+    // The size check, like the presence check, runs before dlopen. A manifest
+    // declaring a 4096-byte ROM (the 2732 device size) with a present but
+    // wrong-size file beside it must fail the load naming the sizes -- there is
+    // no half-size or padded acceptance.
+    auto dir = std::filesystem::temp_directory_path()
+             / "beebium-wrong-size-rom-plugin";
+    std::filesystem::create_directories(dir / "roms");
+    {
+        std::ofstream f(dir / "roms" / "fw.rom", std::ios::binary);
+        std::vector<char> half(2048, '\xFF');  // half the declared size
+        f.write(half.data(), static_cast<std::streamsize>(half.size()));
+    }
+
+    beebium::ExtensionManifest m;
+    m.name = "wrong-size-firmware";
+    m.library_stem = "wrong-size-firmware";
+    m.manifest_dirpath = dir;
+    m.roms.push_back(beebium::RomImage{"client", "fw.rom", 4096, ""});
+
+    beebium::PluginLoader loader;
+    try {
+        loader.load_extension(m, {}, {});
+        FAIL("expected load_extension to throw for a wrong-size declared ROM");
+    } catch (const std::exception& e) {
+        std::string msg = e.what();
+        INFO("message: " << msg);
+        CHECK(msg.find("2048") != std::string::npos);
+        CHECK(msg.find("4096") != std::string::npos);
+    }
+    std::filesystem::remove_all(dir);
+}
