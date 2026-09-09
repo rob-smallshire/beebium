@@ -232,6 +232,7 @@ WD1770 controller with:
 - `tube-subsystem.md` - The Tube as built: hardware reference, the coprocessor contract in summary, execution, debugger, plugins and firmware
 - `tube-coprocessor-contract.md` - The normative coprocessor contract and the step-by-step record of the architecture programme
 - `coprocessor-extension-guide.md` - How to add a new coprocessor (Z80, 6809, NS32016, 80186...) as a plugin
+- `emulation-thread-ownership.md` - Who owns emulated state and how a service or extension reaches it safely from a gRPC thread: the pause/quiesce primitive, the busy scope, and the TSan witnesses that enforce it
 - `keyboard.md` - Keyboard matrix and input handling
 - `frontend-modifier-keys.md` - How a front-end must translate host modifier keys (SHIFT/CTRL) to avoid stuck-modifier desync; platform-independent rules plus macOS specifics, for future front-ends
 - `frontend-local-server-gating.md` - How a front-end discovers whether the server shares its filesystem (SystemInfo.host_fingerprint), and which path-exchanging features must be gated on it; platform-independent rules plus macOS specifics, for future front-ends
