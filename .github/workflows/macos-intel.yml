@@ -12,6 +12,15 @@
 #
 # For reliable Intel coverage, register an Intel Mac as a self-hosted runner and
 # change `runs-on` below to its label (e.g. [self-hosted, macOS, X64]).
+#
+# EXPECTED RED (as of grpc 1.83.1): Homebrew ships NO x86_64 macOS bottle for
+# grpc -- only arm64 macOS + Linux -- so this from-bottle formula build fails
+# with "grpc: no bottle available!" on every Intel macOS runner, regardless of
+# OS version. There is no runner move that fixes it, and we deliberately do NOT
+# build grpc from source here (slow, and not what a real user's `brew install`
+# does). This job is non-gating and never in the release needs-chain, so its red
+# does not block releases; Intel users are served by the vcpkg bundle/tarball/
+# wheel path instead. Re-enable expectations if Homebrew restores Intel bottles.
 
 name: macOS Intel formula
 
