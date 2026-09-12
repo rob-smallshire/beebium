@@ -1,172 +1,170 @@
 # macOS App Packaging
 
-How the Beebium macOS app (`clients/macos/Beebium`) bundles the headless
-emulator servers and their native dependencies into a self-contained
-`.app`, and what remains to be done for public distribution.
+How the Beebium macOS app (`clients/macos/Beebium`) embeds the headless
+emulator servers, ROMs, presets and extensions into a self-contained `.app`.
 
 ## Background
 
-Beebium's architecture is multi-process: the Swift/Metal frontend launches
-a headless C++ server executable (`beebium-model-b`, `-plus`, `-romram`)
-and talks to it over gRPC. For a distributable app, those server
-executables — and everything they load — must travel inside the `.app`.
+Beebium's architecture is multi-process: the Swift/Metal frontend launches a
+headless C++ server executable (`beebium-model-b`, `-plus`, `-plus-128k`,
+`-romram`) and talks to it over gRPC. For a distributable app, those server
+executables — and everything they load — travel inside the `.app`.
 
-The servers are not trivially relocatable. They link:
-
-- **Internal shared libraries** built by this repo: `libbeebium_extension_api.dylib`
-  and `libbeebium_extension_ui_proto.dylib` (the latter is deliberately a
-  shared library so plugins can share its protobuf descriptor pool — see
-  `docs/` notes on the extension UI service).
-- **Homebrew libraries**: gRPC, protobuf, abseil, OpenSSL, c-ares, re2 and
-  their transitive dependencies (~100 dylibs).
-- **Plugins** loaded at runtime via `dlopen` from `<exe-dir>/extensions/`:
-  the transport and peripheral extensions (piconet, acorn-scsi, acorn-rtc,
-  scsi-hard-disc, test-scratch-ram). Built-in extensions (AUN, the 65C02
-  coprocessor) are statically linked and need no plugin files.
-
-As built, the servers and plugins reference the internal libraries via an
-`@rpath` that points at the absolute development build tree
-(`<repo>/build/lib`), and the Homebrew libraries via absolute
-`/opt/homebrew/...` paths. Neither exists on an end user's machine, so an
-app that merely copies the executables only runs where it was built.
+The embedded payload is the **static server bundle**: the same relocatable tree
+that ships in the release tarball and the PyPI server wheels, copied verbatim.
+The servers are built against a vcpkg **static** gRPC/protobuf/abseil stack, so
+they carry no external dynamic dependencies: their only non-system references are
+to each other and to two internal ABI dylibs, all resolved by
+`@loader_path`/`@rpath` inside the tree. The same bytes run as the app's server,
+the tarball, and the wheel.
 
 ## Bundle layout
 
+The static tree is copied verbatim under `Contents/Resources/servers/`, so the
+app carries the tarball's `bin/ lib/ share/beebium/` layout unchanged:
+
 ```
 Beebium.app/Contents/
-├── MacOS/Beebium                     # the Swift app
-├── Frameworks/                       # (Swift app's own dylibs only, if any)
+├── MacOS/Beebium                      # the Swift app
 └── Resources/
-    ├── roms/                         # bundled ROMs
-    ├── presets/                      # bundled machine presets + thumbnails
-    └── servers/                      # <-- the headless server payload
-        ├── beebium-model-b
-        ├── beebium-model-b-plus
-        ├── beebium-model-b-romram
-        ├── lib*.dylib                # internal + Homebrew deps, @rpath-ified
-        └── extensions/
-            └── <name>/
-                ├── <name>.dylib      # the plugin
-                └── manifest.json     # plugin manifest
+    └── servers/                       # <-- the static server bundle, verbatim
+        ├── bin/
+        │   ├── beebium-model-b            (+ -plus, -plus-128k, -romram)
+        │   └── extensions/
+        │       └── <name>/
+        │           ├── <name>.dylib      # the dlopened plugin
+        │           └── manifest.json     # plugin manifest
+        ├── lib/
+        │   ├── libbeebium_extension_api.dylib
+        │   └── libbeebium_extension_ui_proto.dylib
+        └── share/beebium/
+            ├── roms/                      # bundled ROMs
+            └── presets/                   # machine presets + thumbnails
 ```
+
+The server executables live in `bin/`. Each server resolves its plugins from
+`<exe-dir>/extensions/` (i.e. `bin/extensions/`), its internal ABI dylibs via an
+`@rpath` into `../lib`, and its ROMs and presets from `../share/beebium/` — all
+relative to its own on-disk location, so the whole tree relocates intact into the
+bundle with no path rewriting.
 
 ### Why `Resources/servers/`, not `Frameworks/`
 
-The obvious home for embedded code is `Contents/Frameworks/`, but
-`codesign` validates that directory as **code-only**: the plugin tree's
-`manifest.json` files trip it with *"code object is not signed at all / In
-subcomponent: .../extensions/<name>/manifest.json"* and the build fails at
-the final app-signing step.
+`Contents/Frameworks/` is validated by `codesign` as **code-only**: the plugin
+tree's `manifest.json` files (and the bundled ROMs/presets) trip it with *"code
+object is not signed at all"* and the app-signing step fails. The payload is a
+mix of executables, dylibs, and resource files, so it lives under `Resources/`,
+where `codesign` seals it as ordinary bundle resources (nested Mach-O included).
 
-The server payload is a mix of executables, dylibs, and resource files, so
-it lives under `Resources/` instead, where `codesign` seals it as ordinary
-bundle resources (nested Mach-O included). The server resolves its plugins
-relative to its own location (`<exe-dir>/extensions/`), so keeping the
-executables, their dylibs, and `extensions/` together in one directory is
-all that's required. The Swift side finds this directory via
-`Bundle.main.resourcePath + "/servers"` (`PresetManager.serversDirpath`).
+## The embed build phase
 
-## Making the payload self-contained
+The build phase **"Embed Static Server Bundle"** in
+`clients/macos/Beebium/project.yml` runs when `BEEBIUM_SERVERS_BUILD_DIR` points
+at an **installed static tree** (the directory containing `bin/beebium-model-b`).
+It:
 
-The build phase **"Embed Server Executables, Presets, and ROMs"** in
-`clients/macos/Beebium/project.yml` copies the executables, presets, ROMs,
-and the `extensions/` tree into the bundle, then runs
-`clients/macos/Beebium/scripts/bundle_dependencies.py` over
-`Resources/servers/`.
+1. copies `bin/`, `lib/` and `share/` verbatim into
+   `Contents/Resources/servers/` (clearing any previous payload first);
+2. verifies the copied payload — no absolute-path leaks (only `/usr/lib` and
+   `/System` are permitted; any `/opt/homebrew`, `/Users/` or `/usr/local`
+   reference fails the build), and every Mach-O carries a valid signature.
 
-`bundle_dependencies.py` walks the dependency graph of every server
-executable and every plugin and, for each non-system dependency:
+There is **no dependency-graph rewriting**: the static binaries are already
+self-contained and ad-hoc signed when the bundle is produced, so the embed is a
+copy plus verification.
 
-1. Copies the real dylib into `Resources/servers/` (next to the executables).
-2. Rewrites every reference to it as `@rpath/<name>` (`install_name_tool
-   -change`), and sets each copied dylib's own id to `@rpath/<name>`.
-3. Gives each binary an `@rpath` that resolves to `Resources/servers/`:
-   `@loader_path` for the executables and the flat dylibs, `@loader_path/../..`
-   for plugins nested under `extensions/<name>/`.
-4. Deletes the absolute build-tree and Homebrew `LC_RPATH` entries, so the
-   bundle is the *only* resolution source (this is also what guarantees
-   portability).
-5. Re-signs each modified Mach-O **ad-hoc** (`codesign --force --sign -`).
-   This is mandatory on Apple Silicon: dyld refuses to load a Mach-O whose
-   signature no longer matches after `install_name_tool` edits it.
+If `BEEBIUM_SERVERS_BUILD_DIR` is unset or does not point at a static tree, the
+embed is **skipped**, and the app launches servers from the runtime development
+fallback instead (see below). This is the normal state for day-to-day
+development.
 
-System libraries (`/usr/lib/`, `/System/`) are left untouched — they exist
-on every macOS install.
+### How the Swift side resolves the payload
 
-The dependency resolver mirrors dyld's behaviour of searching the `@rpath`
-list of every binary in the load chain (not just the immediate referrer):
-Homebrew's gRPC `upb` libraries, for instance, reference siblings via
-`@rpath` but carry no rpath of their own, relying on the top-level
-executable's `/opt/homebrew/lib`. The script seeds a global search-path
-fallback from every root's absolute rpaths to cover this.
+`PresetManager` (`clients/macos/Beebium/Beebium/Presets/PresetManager.swift`) is
+the only place that resolves server/ROM/preset paths:
 
-## Building a self-contained app
+- `serversDirpath()` returns `Bundle.main.resourcePath + "/servers/bin"` when the
+  bundle carries an embedded payload (probed by the presence of
+  `servers/bin/beebium-model-b`); server executables are then
+  `servers/bin/beebium-<model>`.
+- `bundledRomDirpath()` → `servers/share/beebium/roms` (passed to the server as
+  `--rom-dir` at launch).
+- `bundledPresetsDirpath()` → `servers/share/beebium/presets`.
+- Extensions need no Swift path: the server discovers them at
+  `<exe-dir>/extensions/`.
 
-The embedding only runs when `BEEBIUM_SERVERS_BUILD_DIR` points at a built
-server tree (the directory containing the server executables, their
-`presets/`, and `extensions/`):
+## Building a distributable (embedded) app
+
+Produce a static server tree, then build the app pointed at it:
 
 ```bash
-# 1. Build the servers + plugins
-cmake --build build --target beebium-servers -j
+# 1. Configure a vcpkg-static build (arm64 shown; see macos-bundle.yml for the
+#    canonical flags and the x86_64 variant) and install it to a staging prefix.
+cmake -B build-static \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx-static \
+  -DVCPKG_HOST_TRIPLET=arm64-osx-static
+cmake --build build-static --target beebium-servers
+cmake --install build-static --prefix /tmp/beebium-servers-staging
 
-# 2. Build the app with embedding enabled
+# 2. Build the app with the embed phase pointed at that tree.
 cd clients/macos/Beebium
-xcodegen generate   # if project.yml changed
-xcodebuild build -scheme Beebium -destination 'platform=macOS' \
-  BEEBIUM_SERVERS_BUILD_DIR="$PWD/../../../build/src/server"
+xcodegen generate                       # if project.yml changed
+BEEBIUM_SERVERS_BUILD_DIR=/tmp/beebium-servers-staging \
+  xcodebuild build -scheme Beebium -configuration Release -destination 'platform=macOS'
 ```
 
-Without `BEEBIUM_SERVERS_BUILD_DIR`, the embed phase is skipped and the
-app falls back to launching servers from the development build tree (or
-from `$BEEBIUM_SERVERS_DIRPATH`); convenient for day-to-day development.
+Equivalently, the tree can come from a release bundle tarball
+(`beebium-server-<version>-macos-<arch>.tar.gz`), extracted — that is exactly the
+`bundle-macos-<arch>` artifact CI hands the app build.
+
+### Day-to-day development (no embedding)
+
+`scripts/build-macos-app.sh` builds the servers and the app **without** embedding.
+The app then launches servers from the runtime development fallback in
+`serversDirpath()`:
+
+1. `BEEBIUM_SERVERS_DIRPATH` if set (the directory containing the executables);
+2. otherwise `~/Code/beebium/build/src/server` (the CMake build tree).
+
+Because the fallback runs the live build tree, the server can never go stale. For
+a non-default build directory, export
+`BEEBIUM_SERVERS_DIRPATH="$BUILD_DIR/src/server"` before launching.
 
 ### Verifying self-containment
 
 ```bash
-APP=~/Library/Developer/Xcode/DerivedData/Beebium-*/Build/Products/Debug/Beebium.app
+APP=~/Library/Developer/Xcode/DerivedData/Beebium-*/Build/Products/Release/Beebium.app
 SRV="$APP/Contents/Resources/servers"
 
 # No dependency should point outside the bundle (only /usr/lib, /System OK):
-find "$SRV" -type f | while read -r f; do
+find "$SRV/bin" "$SRV/lib" -type f | while read -r f; do
   file "$f" | grep -q Mach-O && otool -L "$f" | tail -n +2 \
     | grep -E '/opt/homebrew|/Users/|/usr/local' && echo "LEAK: $f"
 done
 
-# The signature must verify:
+# The signature must verify (ad-hoc at this stage):
 codesign --verify --deep --strict "$APP"
+
+# Plugin discovery through the bundled tree:
+"$SRV/bin/beebium-model-b" list-extensions
 ```
 
-## Remaining work for distribution
+## Distribution status
 
 The bundle above is self-contained and runs on a clean machine, but it is
-only **ad-hoc signed**. Shipping it to other users requires:
-
-1. **Developer ID signing.** Re-sign every nested dylib, every server
-   executable, the plugins, and the app with a *Developer ID Application*
-   certificate (not ad-hoc). The `bundle_dependencies.py` ad-hoc signing
-   step would be replaced (or followed) by signing with the real identity,
-   leaf-first.
-2. **Hardened Runtime + entitlements.** Notarization requires the Hardened
-   Runtime. Because the servers `dlopen` plugins and load our own dylibs,
-   evaluate whether `com.apple.security.cct.allow-dyld-environment-variables`
-   / disable-library-validation entitlements are needed, or — preferably —
-   sign all nested code with the *same* Team ID so Library Validation is
-   satisfied without weakening it. (Ad-hoc nested code under a
-   Developer-ID-signed, library-validated app will be **rejected** at load
-   time — this is the main reason the current bundle is dev-only.)
-3. **Notarization + stapling.** Submit the signed app (zipped) to Apple's
-   notary service (`notarytool`), then `stapler staple` the ticket.
-4. **Distribution medium.** Package as a signed/notarized DMG or zip.
-
-These steps are out of scope for the current build, which targets a working
-self-contained development bundle. They should be added as a separate,
-opt-in build configuration (e.g. a Release scheme with signing identity and
-a notarization script) when distribution begins.
+**ad-hoc signed** — dev-machine-only. Shipping it to other users requires
+Developer ID signing with the Hardened Runtime, notarization and stapling, and
+packaging as signed DMGs (plus a Homebrew cask). Those steps, and the automated
+release wiring for them, are specified in
+[docs/discussion/macos-gui-distribution.md](discussion/macos-gui-distribution.md).
 
 ## Related
 
-- `docs/deployment.md` — ROM discovery and FHS install layout for the
+- `docs/packaging.md` — how the server packages (Linux/macOS/Windows) and the
+  clients are built and released.
+- `docs/deployment.md` — ROM/preset discovery and the FHS install layout for the
   server executables outside the macOS app.
-- `clients/macos/Beebium/scripts/bundle_dependencies.py` — the bundling
-  implementation.
