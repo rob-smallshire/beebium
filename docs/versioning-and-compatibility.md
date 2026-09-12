@@ -134,9 +134,11 @@ both client packages.
 - Server populates the fingerprint; Python and TypeScript clients assert it at
   connect. Validated end to end against a running server (matched connects;
   spoofed mismatch is rejected).
+- The release-tag flow: `bump-my-version` → tag → `release.yml` builds, verifies,
+  publishes the packages to PyPI, publishes the GitHub Release, and syncs the
+  Homebrew tap and Scoop bucket — all from the tag push, nothing manual. See
+  [Packaging and Distribution](packaging.md#releasing-tag-to-published-channels).
 
 **Remaining / possible future work:**
-- A release-tag flow (e.g. `bump-my-version` → tag → CI builds and publishes the
-  packages — see [Packaging and Distribution](packaging.md)).
 - Per-extension protocol fingerprints, if extension wire contracts ever need to
   be negotiated independently of the core.

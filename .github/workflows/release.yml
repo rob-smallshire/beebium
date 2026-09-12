@@ -7,18 +7,27 @@
 #   1. builds the self-contained Linux .deb + .tar.gz (both arches),
 #   2. builds, tests and audits the macOS Homebrew formula (both arches),
 #   3. builds the self-contained Windows .zip (x64),
-#   4. creates a DRAFT GitHub Release with the Linux and Windows artifacts,
+#   4. assembles a DRAFT GitHub Release with the Linux and Windows artifacts,
 #   5. publishes the Python client to PyPI (publish-python.yml) as soon as its
 #      own gates pass, in parallel with the server builds -- it needs nothing
 #      they produce. Client and servers are cut from the same tag because they
-#      share the ref, not because one waits for the other.
+#      share the ref, not because one waits for the other,
+#   6. builds, verifies and publishes the beebium-server platform wheels to PyPI,
+#   7. once EVERY gate above is green (bundles + smokes, the draft assembly, both
+#      PyPI publishes and all wheel-verify legs), flips the draft to PUBLISHED
+#      (publish-release), then chains straight into sync-channels.yml to pin the
+#      Homebrew tap and Scoop bucket to this version.
 #
-# The release is left as a DRAFT on purpose: nothing is published until you
-# review it and click publish. The macOS server is delivered via the Homebrew
-# tap, updated with `packaging/homebrew/sync-tap.sh <version> <tap-checkout>`;
-# the Windows server is delivered via the Scoop bucket, whose manifest
-# (packaging/scoop/beebium-server.json) is pinned to the released .zip's URL and
-# hash. Both tap and bucket are updated after the release is published.
+# The tail is fully automatic: a tag push alone propagates to every channel, and
+# nothing manual remains. The draft is still the assembly point -- it just gets
+# published by the workflow instead of by a human click, and only when the whole
+# release is proven good, so a failure anywhere leaves the release a draft and
+# the channels untouched (recoverable by publishing it and dispatching
+# sync-channels.yml by hand).
+#
+# The chain to sync-channels is EXPLICIT (a workflow_call), not a reliance on the
+# `release: published` event: that event does not fire for a release created by a
+# workflow's GITHUB_TOKEN. See the header of sync-channels.yml for the proof.
 
 name: Release
 
@@ -453,3 +462,48 @@ jobs:
             The macOS/Windows commands require the Homebrew tap and Scoop bucket to
             be synced to this version. The Python and TypeScript clients ship
             separately (PyPI and npm).
+
+  # Flip the assembled draft to published -- but only once the ENTIRE release is
+  # proven good. `release` assembled the draft (with the publish-boundary gate);
+  # publish-server-wheels covers the server bundle builds and both wheel-verify
+  # legs it needs; pypi covers the client publish gate. Gating on all three keeps
+  # a release private until every artifact and both PyPI publishes are green, so a
+  # failure anywhere leaves it a draft (recoverable by publishing + dispatching
+  # sync-channels.yml by hand). Uses the workflow GITHUB_TOKEN; contents: write.
+  publish-release:
+    name: publish the GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release, publish-server-wheels, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - name: Publish the draft and emit the bare version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "${TAG}" --repo "${REPO}" --draft=false --latest
+          version="${TAG#v}"
+          echo "Published ${TAG} (version ${version})"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+  # Pin the Homebrew tap and Scoop bucket to this version, in the same run. This
+  # is an EXPLICIT chain, not a reliance on the `release: published` event, which
+  # does not fire for a GITHUB_TOKEN-published release (see sync-channels.yml).
+  # secrets: inherit passes the deploy-key secrets (HOMEBREW_TAP_DEPLOY_KEY /
+  # SCOOP_BUCKET_DEPLOY_KEY) through to the called workflow -- a reusable workflow
+  # receives no secrets otherwise.
+  sync-channels:
+    name: sync downstream channels
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish-release
+    uses: ./.github/workflows/sync-channels.yml
+    with:
+      version: ${{ needs.publish-release.outputs.version }}
+    secrets: inherit

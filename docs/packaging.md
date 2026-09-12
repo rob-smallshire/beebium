@@ -27,14 +27,21 @@ clients). A user installs the server one way and `pip install beebium` /
 ## Releasing: tag to published channels
 
 Cutting a release is `uvx bump-my-version bump <part>` (edits every embedded
-version, commits, tags `v<version>`) then `git push --follow-tags`. Pushing the
-tag fires `release.yml`, which builds and verifies every package, publishes the
-Python client and server wheels to PyPI, and creates a **draft** GitHub Release
-with the Linux and Windows assets attached.
+version, commits, tags `v<version>`) then `git push --follow-tags`. **That is the
+only manual step.** Pushing the tag fires `release.yml`, which runs the whole
+tail automatically:
 
-**Publishing that GitHub Release is the single act that propagates to the macOS
-and Windows package managers.** `sync-channels.yml` triggers on
-`release: published` and:
+1. builds and verifies every server package (Linux `.deb`/`.tar.gz`/`.rpm`, the
+   macOS formula and bundles, the Windows `.zip`);
+2. assembles a **draft** GitHub Release with the assets attached (the draft is
+   the assembly point, behind the publish-boundary gate);
+3. publishes the Python client and the beebium-server platform wheels to PyPI;
+4. once **every** gate above is green, `publish-release` flips the draft to
+   published (`gh release edit --draft=false`, workflow `GITHUB_TOKEN`);
+5. `sync-channels.yml` runs in the same workflow (a `workflow_call` chain from
+   `release.yml`) and pins both package managers to the version.
+
+`sync-channels.yml`:
 
 1. checks out the release **tag** (so the sync scripts and the canonical
    formula/manifest are the ones that shipped with that release);
@@ -46,23 +53,34 @@ and Windows package managers.** `sync-channels.yml` triggers on
 3. commits and pushes each to its own repo.
 
 The workflow writes to those two repos over SSH using **deploy keys** (secrets
-`HOMEBREW_TAP_DEPLOY_KEY` / `SCOOP_BUCKET_DEPLOY_KEY`, one per target repo), not
-the workflow `GITHUB_TOKEN`. Each job is **idempotent**: if the target already
-pins the version it is a green no-op, so re-publishing a release changes nothing.
-Runs are serialised (`concurrency: sync-channels`).
+`HOMEBREW_TAP_DEPLOY_KEY` / `SCOOP_BUCKET_DEPLOY_KEY`, one per target repo),
+passed through the `workflow_call` with `secrets: inherit`, not the workflow
+`GITHUB_TOKEN`. Each job is **idempotent**: if the target already pins the
+version it is a green no-op. Runs are serialised (`concurrency: sync-channels`).
+
+**Why the chain is explicit.** `release.yml` calls `sync-channels.yml` directly
+rather than letting the `release: published` event trigger it, because that event
+does **not** fire for a release published by a workflow's `GITHUB_TOKEN` (GitHub's
+anti-recursion rule keys off the release's creator, not its publisher — verified
+live). `sync-channels.yml` keeps a `release: published` trigger as belt-and-braces
+for **hand-made or PAT-created** releases, which the rule does not suppress.
+
+**Failure mode.** Because publishing is gated on the entire release being green,
+a failure anywhere leaves the release a **draft** and the channels untouched —
+recoverable by publishing the draft and re-running the sync.
 
 The old laptop steps — running `sync-tap.sh` / `sync-bucket.sh` by hand against
 local tap/bucket checkouts after each release — are gone.
 
-To re-sync a version by hand (e.g. after fixing a channel repo), use the
-workflow's `workflow_dispatch` with a bare `version` input (e.g. `0.1.3`). The
-GitHub Release for that version must already be **published** — dispatch fails
-early with a clear error if it is still a draft, because the Scoop asset URL 404s
-for drafts.
+To re-sync a version by hand (e.g. after fixing a channel repo), use
+`sync-channels.yml`'s `workflow_dispatch` with a bare `version` input (e.g.
+`0.1.3`). The GitHub Release for that version must already be **published** —
+dispatch fails early with a clear error if it is still a draft, because the Scoop
+asset URL 404s for drafts.
 
-Once the release is published and both channels are synced, `release-smoke.yml`
-(manual, `version` input) installs the version end-to-end from the public
-download URLs and package managers on clean runners.
+Once released and synced, `release-smoke.yml` (manual, `version` input) installs
+the version end-to-end from the public download URLs and package managers on
+clean runners.
 
 ## Repositories and where things live
 

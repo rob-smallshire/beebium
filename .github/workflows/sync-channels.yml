@@ -14,9 +14,23 @@
 # Idempotent: if the target already pins <version> the job is a green no-op, so
 # re-running it (or re-publishing a release) changes nothing.
 #
-# Manual re-sync: workflow_dispatch with a bare `version` (e.g. 0.1.3). The
-# release for that version must already be PUBLISHED -- the Scoop manifest
-# points at the release .zip asset, whose URL 404s while the release is a draft.
+# Three ways in:
+#   - workflow_call (the normal path): release.yml publishes the draft with the
+#     workflow GITHUB_TOKEN and then chains straight to this workflow. This
+#     explicit chaining is REQUIRED, not a convenience: the `release: published`
+#     event below does NOT fire for a release that was created by a workflow's
+#     GITHUB_TOKEN. GitHub's anti-recursion rule keys off the release's CREATOR,
+#     not its publisher -- proven live, both directions: publishing a
+#     GITHUB_TOKEN-created draft produced the event in the events API but zero
+#     workflow runs, while a PAT-created release triggered this workflow within
+#     seconds. So do NOT "simplify" the chaining in release.yml away in favour of
+#     relying on the trigger below.
+#   - release: published (belt-and-braces): fires for hand-made or PAT-created
+#     releases, which the GITHUB_TOKEN rule does not suppress.
+#   - workflow_dispatch (manual re-sync): a bare `version` (e.g. 0.1.3); the
+#     release for that version must already be PUBLISHED -- the Scoop manifest
+#     points at the release .zip asset, whose URL 404s while the release is a
+#     draft, so we check and fail early with a clear message.
 
 name: Sync channels
 
@@ -27,6 +41,12 @@ on:
     inputs:
       version:
         description: "Released version to sync to the tap and bucket, bare (e.g. 0.1.3). The GitHub Release must already be published."
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: "Released version to sync, bare (e.g. 0.1.3). Passed by release.yml after it publishes the release."
         required: true
         type: string
 
@@ -41,14 +61,18 @@ concurrency:
 jobs:
   # Resolve the version once and, on manual dispatch, refuse early unless the
   # release is published -- a clearer failure than the Scoop script's later 404.
-  # A published, non-prerelease release is required; drafts and prereleases are
-  # ignored (release events only fire this for real publishes anyway, but the
-  # guard makes the intent explicit).
+  #
+  # The guard admits two of the three event sources directly: workflow_call and
+  # workflow_dispatch both supply `inputs.version` (non-empty), while a release
+  # event supplies none and must be a published, non-prerelease release. Note
+  # `github.event_name` inside a called workflow is the CALLER's triggering event
+  # (a tag `push`), not "workflow_call", so we key off `inputs.version` rather
+  # than the event name to tell the call path apart from a release event.
   resolve:
     name: resolve version
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      inputs.version != '' ||
       (github.event.release.draft == false && github.event.release.prerelease == false)
     outputs:
       version: ${{ steps.v.outputs.version }}
@@ -59,13 +83,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           TAG_NAME: ${{ github.event.release.tag_name }}
-          DISPATCH_VERSION: ${{ inputs.version }}
+          INPUT_VERSION: ${{ inputs.version }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if [ "${EVENT}" = "workflow_dispatch" ]; then
-            version="${DISPATCH_VERSION}"
-          else
+          # workflow_call and workflow_dispatch set inputs.version; a release
+          # event does not, so fall back to the release tag there.
+          version="${INPUT_VERSION}"
+          if [ -z "${version}" ]; then
             version="${TAG_NAME}"
           fi
           version="${version#v}"
@@ -76,7 +101,8 @@ jobs:
           echo "Resolved version: ${version}"
 
           # On manual dispatch, prove the release is published before we clone
-          # anything -- the Scoop asset URL 404s for a draft.
+          # anything -- the Scoop asset URL 404s for a draft. (The call path has
+          # just published it; a release event is published by definition.)
           if [ "${EVENT}" = "workflow_dispatch" ]; then
             if ! draft="$(gh release view "v${version}" --repo "${REPO}" --json isDraft --jq .isDraft 2>/dev/null)"; then
               echo "::error::no GitHub Release v${version} found (or it is not visible); publish it before syncing"
