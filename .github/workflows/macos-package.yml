@@ -4,8 +4,12 @@
 # this is cheap (~1 min per runner) -- it runs on PRs that touch the formula or
 # the build system, on demand, and as a reusable job in the release flow.
 #
-# Covers both architectures: macos-14 is arm64 (Apple Silicon), macos-13 is
-# x86_64 (Intel).
+# Runs on arm64 (the macos-15 runner, Apple Silicon). It must track a macOS
+# version that Homebrew still ships grpc/protobuf/abseil BOTTLES for: this is a
+# from-bottle install, not a source build of the deps, so an unbottled runner
+# fails with "grpc: no bottle available!". Homebrew dropped macOS 14 from grpc's
+# bottle window (bottles now cover arm64 sequoia/tahoe/... only), which is why
+# this moved off macos-14. Bump it again when Homebrew retires the current OS.
 
 name: macOS package
 
@@ -37,7 +41,7 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
     steps:
       - uses: actions/checkout@v7
         with:
