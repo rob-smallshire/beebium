@@ -60,6 +60,14 @@ jobs:
   macos-bundle:
     uses: ./.github/workflows/macos-bundle.yml
 
+  # The macOS GUI app + per-arch DMGs, embedding the bundle from macos-bundle.
+  # Ad-hoc signed at this phase (Developer ID signing + notarization is D3).
+  macos-app:
+    needs: macos-bundle
+    uses: ./.github/workflows/macos-app.yml
+    with:
+      version: ${{ github.ref_name }}
+
   windows:
     uses: ./.github/workflows/windows-package.yml
 
@@ -337,7 +345,7 @@ jobs:
 
   release:
     name: draft GitHub Release
-    needs: [linux, macos-formula, macos-bundle, windows]
+    needs: [linux, macos-formula, macos-bundle, macos-app, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -345,6 +353,13 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: bundle-*
+          path: _artifacts
+          merge-multiple: true
+
+      # The macOS GUI DMGs (one per arch) join the release asset set.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dmg-*
           path: _artifacts
           merge-multiple: true
 
@@ -374,7 +389,9 @@ jobs:
             "beebium-server_${V}_amd64.deb" \
             "beebium-server_${V}_arm64.deb" \
             "beebium-server-${V}-1.x86_64.rpm" \
-            "beebium-server-${V}-1.aarch64.rpm" | sort)"
+            "beebium-server-${V}-1.aarch64.rpm" \
+            "Beebium-${V}-macos-arm64.dmg" \
+            "Beebium-${V}-macos-x86_64.dmg" | sort)"
           actual="$(ls -1 | sort)"
           if [ "${expected}" != "${actual}" ]; then
             echo "::error::published asset set mismatch"
@@ -449,6 +466,16 @@ jobs:
             Or download the `.tar.gz` for your architecture, extract it
             **anywhere**, and add the extracted `beebium-server-*/bin` directory
             to your `PATH` (no Homebrew needed).
+
+            #### macOS app (GUI)
+            `Beebium-<version>-macos-<arch>.dmg` is the Swift/Metal frontend with
+            the servers, ROMs, presets and extensions bundled in. Download the DMG
+            for your architecture, open it, and drag **Beebium.app** to
+            Applications.
+            > **Note:** these DMGs are **ad-hoc signed, not notarized yet**, so
+            > Gatekeeper will refuse the first launch. Until signing lands,
+            > right-click the app and choose **Open** (or clear the quarantine
+            > with `xattr -dr com.apple.quarantine /Applications/Beebium.app`).
 
             ### Windows
             ```

@@ -1,0 +1,228 @@
+# Build the macOS GUI app with the static server bundle embedded, and package it
+# as a per-architecture drag-to-Applications DMG.
+#
+# The app embeds the SAME static server tree shipped in the release tarball (see
+# docs/macos-app-packaging.md): this workflow acquires that tree, builds the app
+# with the "Embed Static Server Bundle" phase pointed at it, asserts the payload
+# is self-contained and signed, assembles a DMG, and smoke-tests the DMG.
+#
+# At this phase the app is AD-HOC signed (no Developer ID / notarization yet), so
+# the DMG is unsigned and Gatekeeper will refuse it on another Mac without the
+# usual override. Developer ID signing, notarization and stapling are Phase D3
+# (see docs/discussion/macos-gui-distribution.md).
+#
+# Two ways in:
+#   - workflow_call: release.yml passes the release version; the static tree is
+#     the bundle-macos-<arch> ARTIFACT built by the macos-bundle job in the same
+#     run.
+#   - workflow_dispatch: given a bare `version` of an already-PUBLISHED release,
+#     the static tree is that release's macos-<arch> tarball asset. Use this to
+#     exercise the app+DMG path without cutting a release.
+
+name: macOS app
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version (the tag, with or without a leading v)."
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published release version to build the app+DMG against, bare (e.g. 0.1.9). The GitHub Release must be published."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: app + DMG (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mirror macos-bundle.yml's runners: arm64 on macos-14, x86_64 on the
+        # native Intel runner. The server floors (11.0 / 12.0) are already baked
+        # into the prebuilt bundle; the app carries its own deployment target.
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-15-intel
+    steps:
+      # Check out the source that matches the bundle: the release tag. For a
+      # workflow_call from release.yml the caller is already on the tag, so the
+      # default checkout ref is correct; for a manual dispatch, check out
+      # v<version> explicitly.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+
+      - name: Resolve the bare version
+        id: v
+        env:
+          RAW: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${RAW#v}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+
+      - name: Select Xcode 16
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16'
+
+      # Acquire the static server bundle tarball. In a release run it is the
+      # same-run artifact; on manual dispatch it is the published release asset.
+      - name: Download the bundle artifact (release run)
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/download-artifact@v8
+        with:
+          name: bundle-macos-${{ matrix.arch }}
+          path: _bundle
+
+      - name: Download the bundle from the published release (dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "v${VERSION}" --repo "${{ github.repository }}" \
+            --pattern "beebium-server-${VERSION}-macos-${{ matrix.arch }}.tar.gz" \
+            --dir _bundle
+
+      - name: Unpack the static server tree
+        run: |
+          set -euo pipefail
+          tarball="_bundle/beebium-server-${VERSION}-macos-${{ matrix.arch }}.tar.gz"
+          tar -xzf "${tarball}" -C _bundle
+          tree="${GITHUB_WORKSPACE}/_bundle/beebium-server-${VERSION}-macos-${{ matrix.arch }}"
+          test -f "${tree}/bin/beebium-model-b" || { echo "::error::static tree missing bin/beebium-model-b"; exit 1; }
+          echo "SERVERS_TREE=${tree}" >> "${GITHUB_ENV}"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: clients/macos/Beebium
+        run: xcodegen generate
+
+      # Build Release with the embed phase pointed at the static tree, ad-hoc
+      # signed (CODE_SIGN_IDENTITY=-) so codesign --verify has something to check.
+      # The embed phase itself asserts no absolute-path leaks and that every
+      # embedded Mach-O is signed.
+      - name: Build the app (Release, ad-hoc signed)
+        working-directory: clients/macos/Beebium
+        env:
+          BEEBIUM_SERVERS_BUILD_DIR: ${{ env.SERVERS_TREE }}
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -scheme Beebium \
+            -destination 'platform=macOS,arch=${{ matrix.arch }}' \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES
+
+      - name: Assert self-containment and signature
+        run: |
+          set -euo pipefail
+          app="clients/macos/Beebium/build/Build/Products/Release/Beebium.app"
+          srv="${app}/Contents/Resources/servers"
+          test -d "${srv}/bin" && test -d "${srv}/lib" && test -d "${srv}/share/beebium" \
+            || { echo "::error::embedded payload is not the bin/lib/share tree"; exit 1; }
+          leaks=0
+          while IFS= read -r f; do
+            file "$f" | grep -q Mach-O || continue
+            if otool -L "$f" | tail -n +2 | grep -Eq '/opt/homebrew|/Users/|/usr/local'; then
+              echo "::error::absolute-path leak: $f"
+              otool -L "$f" | tail -n +2 | grep -E '/opt/homebrew|/Users/|/usr/local'
+              leaks=1
+            fi
+          done < <(find "${srv}/bin" "${srv}/lib" -type f)
+          [ "$leaks" = 0 ] || { echo "::error::embedded payload leaks absolute paths"; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "${app}"
+          echo "APP_PATH=${GITHUB_WORKSPACE}/${app}" >> "${GITHUB_ENV}"
+
+      - name: Assemble the DMG
+        run: |
+          set -euo pipefail
+          staging="$(mktemp -d)/dmg"
+          mkdir -p "${staging}"
+          cp -R "${APP_PATH}" "${staging}/Beebium.app"
+          ln -s /Applications "${staging}/Applications"
+          dmg="Beebium-${VERSION}-macos-${{ matrix.arch }}.dmg"
+          hdiutil create -volname "Beebium ${VERSION}" -srcfolder "${staging}" \
+            -ov -format UDZO "${dmg}"
+          echo "DMG_PATH=${GITHUB_WORKSPACE}/${dmg}" >> "${GITHUB_ENV}"
+          ls -lh "${dmg}"
+
+      # Mount the DMG, copy the app out, and prove it is intact and runnable:
+      # signature verifies, and one embedded server boots (ROM discovery via the
+      # share fallback + gRPC bring-up). A full GUI launch is best-effort: a
+      # hosted runner may lack a usable window-server/Metal session, so a failure
+      # to bring the UI up is reported as a note, not a hard failure.
+      - name: Smoke the DMG
+        run: |
+          set -euo pipefail
+          mnt="$(mktemp -d)"
+          hdiutil attach "${DMG_PATH}" -mountpoint "${mnt}" -nobrowse -readonly
+          out="$(mktemp -d)"
+          cp -R "${mnt}/Beebium.app" "${out}/Beebium.app"
+          hdiutil detach "${mnt}"
+          app="${out}/Beebium.app"
+          srv="${app}/Contents/Resources/servers"
+
+          echo "== codesign --verify --deep --strict (copied out of the DMG) =="
+          codesign --verify --deep --strict "${app}"
+
+          echo "== boot one embedded server (ROM share fallback + gRPC) =="
+          boot_log="$(mktemp)"
+          "${srv}/bin/beebium-model-b" start \
+            --mos acorn-mos_1_20.rom \
+            --sideways 15:rom:bbc-basic_2.rom \
+            --port 0 >"${boot_log}" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 40); do
+            grep -q "Listening on port" "${boot_log}" && break
+            kill -0 "${pid}" 2>/dev/null || break
+            sleep 0.5
+          done
+          kill "${pid}" 2>/dev/null || true
+          wait "${pid}" 2>/dev/null || true
+          grep -q "Listening on port" "${boot_log}" \
+            || { echo "::error::embedded server did not reach 'Listening on port'"; cat "${boot_log}"; exit 1; }
+          grep "Listening on port" "${boot_log}"
+
+          echo "== best-effort GUI app launch =="
+          app_log="$(mktemp)"
+          "${app}/Contents/MacOS/Beebium" >"${app_log}" 2>&1 &
+          apid=$!
+          started=""
+          for _ in $(seq 1 20); do
+            grep -q "system preset file" "${app_log}" 2>/dev/null && started=1 && break
+            kill -0 "${apid}" 2>/dev/null || break
+            sleep 1
+          done
+          kill "${apid}" 2>/dev/null || true
+          wait "${apid}" 2>/dev/null || true
+          if [ -n "${started}" ]; then
+            echo "app process launched and ran preset discovery from the bundle"
+            grep -E "system preset|Discovered:" "${app_log}" | head -12 || true
+          else
+            echo "::notice::headless GUI launch did not confirm preset discovery (a hosted runner may lack a window-server/Metal session); codesign + embedded-server boot passed, which is the D2 bar."
+            tail -20 "${app_log}" || true
+          fi
+
+      - name: Upload the DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: dmg-macos-${{ matrix.arch }}
+          path: Beebium-*-macos-${{ matrix.arch }}.dmg
+          if-no-files-found: error
