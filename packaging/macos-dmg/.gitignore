@@ -1,0 +1,6 @@
+# Generated background candidates and built disk images are not committed; the
+# chosen background is committed explicitly once picked.
+backgrounds/
+*.dmg
+*.tiff
+bg-*.png
