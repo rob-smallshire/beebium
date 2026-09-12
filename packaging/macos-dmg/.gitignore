@@ -4,3 +4,6 @@ backgrounds/
 *.dmg
 *.tiff
 bg-*.png
+
+# ...but the chosen, shipping background IS committed.
+!background.tiff

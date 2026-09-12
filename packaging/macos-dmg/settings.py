@@ -36,8 +36,11 @@ symlinks = {"Applications": "/Applications"}
 # --- Window and icons -------------------------------------------------------
 # 660x420 pt content, icon size 128. Coordinates are points with the origin at
 # the top-left, y increasing downward. The app sits in the left third and the
-# Applications symlink in the right third, both on the same baseline, leaving
-# the centre for the background's arrow and each icon's label strip below it.
+# Applications symlink in the right third, on a high baseline (y=100) so the
+# icons sit on the sky of the desaturated artwork and leave the geometric solids
+# revealed below. The background's arrow shares this baseline; keep the two in
+# step (see gen-backgrounds.py SLOT_Y). Labels render just below the icons
+# (~y=170).
 background = defines["background"]
 icon_size = 128
 text_size = 13
@@ -51,6 +54,6 @@ label_pos = "bottom"
 show_icon_preview = False
 
 icon_locations = {
-    appname: (176, 188),
-    "Applications": (484, 188),
+    appname: (176, 100),
+    "Applications": (484, 100),
 }

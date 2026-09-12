@@ -22,14 +22,14 @@
 #   a  full-bleed, heavily dimmed + desaturated watermark of the Shape
 #   b  a small Shape displaced to a quiet top band, well clear of both slots
 #   c  no Shape at all: a subtle gradient sampled from the artwork's palette
-# Each shares the same affordances: an arrow from the app slot to the
-# Applications slot, and a light strip under each slot so the icon labels stay
-# legible.
+# Each shares the same affordance: an arrow from the app slot to the
+# Applications slot. There are no strips under the labels -- Finder's own label
+# treatment carries them on the light ground (verified in light and dark).
 #
 # Every candidate is authored at 2x (1320x840) and 1x (660x420) and combined
 # into a multi-resolution TIFF with `tiffutil -cathidpicheck`, so the Finder
 # window is crisp on Retina. Layout constants mirror settings.py: 660x420 pt,
-# 128 pt icons, slots at x=176 and x=484, baseline y=188.
+# 128 pt icons, slots at x=176 and x=484, baseline y=100.
 #
 # Usage:
 #   uv run packaging/macos-dmg/gen-backgrounds.py [--art <png>] [--out <dir>]
@@ -44,7 +44,11 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 SCALE = 2
 W, H = 660 * SCALE, 420 * SCALE           # 1320 x 840, the 2x canvas
-APP_X, APPS_X, SLOT_Y = 176 * SCALE, 484 * SCALE, 188 * SCALE
+# Slots sit high (y=100 of 420 pt), so the icons land on the sky of the
+# desaturated artwork and leave the geometric solids revealed below. The arrow
+# (baked into the background) shares this baseline; keep it in step with
+# settings.py's icon_locations.
+APP_X, APPS_X, SLOT_Y = 176 * SCALE, 484 * SCALE, 100 * SCALE
 ICON_HALF = 64 * SCALE                     # half of a 128 pt icon
 
 
@@ -81,43 +85,89 @@ def cover_resize(img, size):
     return resized.crop((left, top, left + tw, top + th))
 
 
-def draw_label_strips(base):
-    """A soft, light rounded strip under each slot so labels read on any ground."""
-    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(overlay)
-    label_top = SLOT_Y + ICON_HALF + 10 * SCALE
-    label_bot = label_top + 34 * SCALE
-    for cx in (APP_X, APPS_X):
-        half_w = 78 * SCALE
-        d.rounded_rectangle(
-            [cx - half_w, label_top, cx + half_w, label_bot],
-            radius=10 * SCALE,
-            fill=(255, 255, 255, 150),
-        )
-    overlay = overlay.filter(ImageFilter.GaussianBlur(2 * SCALE))
-    return Image.alpha_composite(base.convert("RGBA"), overlay)
+# Bow height (sagitta, px at 2x) of the arc that carries the arrow. The arc is
+# defined to pass through both icon bottom edges; a larger sagitta lifts the
+# visible middle segment and steepens the tangents that aim into the icons.
+ARROW_SAGITTA = 150
 
 
-def draw_arrow(base, tint=(70, 82, 96)):
-    """A simple arrow from the app slot toward the Applications slot."""
+def draw_arrow(base, tint=(120, 122, 128), alpha=180):
+    """A 'pick it up and move it across' arrow: a segment of ONE arc through
+    both icon bottom edges.
+
+    The underlying path is a circular arc, bowing upward, constrained to pass
+    through the MIDPOINTS OF THE BOTTOM EDGES of the two icons
+    (APP_X/APPS_X, SLOT_Y+ICON_HALF) -- not their centres. Geometrically an arc
+    through the centres is "correct", but the eye judges a drag against the base
+    of the object where it sits, so the centre arc reads as missing the icons;
+    dropping the chord to the icon bottoms makes it read as passing through them.
+    Only the middle segment is drawn -- trimmed to the same generous clearance
+    (half-icon + 40 pt from each box) -- so the stroke floats in the gap while
+    its ends, and the tangent-aligned arrowhead, visibly continue along the arc
+    into each icon. Subdued translucent neutral grey with a rounded stroke and a
+    clean arrowhead, in the macOS visual language; the app icon stays the focus.
+    """
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(overlay)
-    x0 = APP_X + ICON_HALF + 26 * SCALE
-    x1 = APPS_X - ICON_HALF - 26 * SCALE
-    y = SLOT_Y
-    shaft = 5 * SCALE
-    d.line([(x0, y), (x1 - 14 * SCALE, y)], fill=tint + (210,), width=shaft)
-    head = 15 * SCALE
-    d.polygon(
-        [(x1, y), (x1 - head, y - head), (x1 - head, y + head)],
-        fill=tint + (230,),
-    )
+    color = tint + (alpha,)
+
+    # Circular arc through the two icon bottom-edge midpoints (chord at
+    # y=SLOT_Y+ICON_HALF from APP_X to APPS_X), bowing up by ARROW_SAGITTA. The
+    # centre of the circle sits below the chord.
+    chord_y = SLOT_Y + ICON_HALF
+    mid_x = (APP_X + APPS_X) / 2.0
+    half_chord = (APPS_X - APP_X) / 2.0
+    sag = float(ARROW_SAGITTA)
+    radius = (half_chord * half_chord + sag * sag) / (2.0 * sag)
+    circ_y = chord_y - sag + radius
+
+    def arc_y(x):
+        return circ_y - (radius * radius - (x - mid_x) ** 2) ** 0.5
+
+    def arc_slope(x):                                  # d(arc_y)/dx
+        return (x - mid_x) / (radius * radius - (x - mid_x) ** 2) ** 0.5
+
+    stroke = 7 * SCALE
+    head_len = 22 * SCALE
+    head_half = 14 * SCALE
+
+    # Visible segment: from just outside the Beebium clearance to just before the
+    # Applications clearance (the arrowhead completes the reach beyond the tip).
+    x0 = APP_X + ICON_HALF + 40 * SCALE
+    x_tip = APPS_X - ICON_HALF - 40 * SCALE
+    steps = 64
+    pts = [(x0 + (x_tip - x0) * i / steps, arc_y(x0 + (x_tip - x0) * i / steps))
+           for i in range(steps + 1)]
+    d.line(pts, fill=color, width=stroke, joint="curve")
+
+    # Rounded start end (the tip end is finished by the arrowhead).
+    r = stroke / 2.0
+    sx, sy = pts[0]
+    d.ellipse([sx - r, sy - r, sx + r, sy + r], fill=color)
+
+    # Arrowhead tangent to the arc at the trim point, so its line extrapolates
+    # along the arc into the Applications icon.
+    tx, ty = pts[-1]
+    m = arc_slope(x_tip)
+    inv = 1.0 / (1.0 + m * m) ** 0.5
+    ux, uy = inv, m * inv                              # unit tangent (+x)
+    nx, ny = -uy, ux                                   # unit normal
+    apex = (tx + ux * head_len, ty + uy * head_len)
+    left = (tx + nx * head_half, ty + ny * head_half)
+    right = (tx - nx * head_half, ty - ny * head_half)
+    d.polygon([apex, left, right], fill=tint + (min(255, alpha + 20),))
+
     return Image.alpha_composite(base.convert("RGBA"), overlay)
 
 
 def finish(base, out_dir, name):
-    """Compose label strips + arrow, write 1x/2x PNGs and a multi-rep TIFF."""
-    img2x = draw_arrow(draw_label_strips(base)).convert("RGB")
+    """Compose the arrow, write 1x/2x PNGs and a multi-rep TIFF.
+
+    No boxes or strips under the labels: Finder draws the icon labels with its
+    own contrast treatment, and the desaturated ground carries them. Legibility
+    in light AND dark Finder is a property of the wash, tuned in the candidates.
+    """
+    img2x = draw_arrow(base).convert("RGB")
     p2x = out_dir / f"bg-{name}-2x.png"
     p1x = out_dir / f"bg-{name}-1x.png"
     img2x.save(p2x)
