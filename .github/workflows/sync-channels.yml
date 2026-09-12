@@ -1,0 +1,210 @@
+# Propagate a published release to the downstream package channels.
+#
+# Publishing the GitHub Release for v<version> is the single act that puts the
+# macOS server on the Homebrew tap (rob-smallshire/homebrew-beebium) and the
+# Windows server in the Scoop bucket (rob-smallshire/scoop-beebium). This
+# replaces the old laptop steps (packaging/homebrew/sync-tap.sh and
+# packaging/scoop/sync-bucket.sh, run by hand after each release).
+#
+# Each job checks out the RELEASE TAG (not master), so the sync scripts and the
+# canonical formula/manifest templates are exactly the ones that shipped with
+# that release. It writes to its target repo over SSH using a deploy key
+# (secrets HOMEBREW_TAP_DEPLOY_KEY / SCOOP_BUCKET_DEPLOY_KEY).
+#
+# Idempotent: if the target already pins <version> the job is a green no-op, so
+# re-running it (or re-publishing a release) changes nothing.
+#
+# Manual re-sync: workflow_dispatch with a bare `version` (e.g. 0.1.3). The
+# release for that version must already be PUBLISHED -- the Scoop manifest
+# points at the release .zip asset, whose URL 404s while the release is a draft.
+
+name: Sync channels
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Released version to sync to the tap and bucket, bare (e.g. 0.1.3). The GitHub Release must already be published."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialise sync runs so two publishes cannot race on the tap/bucket git repos.
+concurrency:
+  group: sync-channels
+  cancel-in-progress: false
+
+jobs:
+  # Resolve the version once and, on manual dispatch, refuse early unless the
+  # release is published -- a clearer failure than the Scoop script's later 404.
+  # A published, non-prerelease release is required; drafts and prereleases are
+  # ignored (release events only fire this for real publishes anyway, but the
+  # guard makes the intent explicit).
+  resolve:
+    name: resolve version
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.release.draft == false && github.event.release.prerelease == false)
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - name: Determine and validate the version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            version="${DISPATCH_VERSION}"
+          else
+            version="${TAG_NAME}"
+          fi
+          version="${version#v}"
+          if [ -z "${version}" ]; then
+            echo "::error::empty version"
+            exit 1
+          fi
+          echo "Resolved version: ${version}"
+
+          # On manual dispatch, prove the release is published before we clone
+          # anything -- the Scoop asset URL 404s for a draft.
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            if ! draft="$(gh release view "v${version}" --repo "${REPO}" --json isDraft --jq .isDraft 2>/dev/null)"; then
+              echo "::error::no GitHub Release v${version} found (or it is not visible); publish it before syncing"
+              exit 1
+            fi
+            if [ "${draft}" = "true" ]; then
+              echo "::error::GitHub Release v${version} is a draft; publish it before syncing (the Scoop asset URL 404s for drafts)"
+              exit 1
+            fi
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+  sync-homebrew:
+    name: sync Homebrew tap
+    needs: resolve
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      TAP_REPO: git@github.com:rob-smallshire/homebrew-beebium.git
+      DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+    steps:
+      # Check out the tag: the sync script and the canonical formula must be the
+      # ones that shipped with this release, not master's.
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.resolve.outputs.version }}
+
+      - name: Sync the formula into the tap
+        run: |
+          set -euo pipefail
+
+          # Deploy key + pinned host key (no StrictHostKeyChecking=no).
+          mkdir -p "${HOME}/.ssh"
+          install -m 600 /dev/null "${HOME}/.ssh/deploy_key"
+          printf '%s\n' "${DEPLOY_KEY}" > "${HOME}/.ssh/deploy_key"
+          ssh-keyscan -t rsa,ecdsa,ed25519 github.com > "${HOME}/.ssh/known_hosts" 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
+
+          git clone --depth 1 "${TAP_REPO}" _tap
+          formula_filepath="_tap/Formula/beebium-server.rb"
+
+          # Idempotence: if the tap already pins this version, do nothing.
+          if grep -q "/v${VERSION}\.tar\.gz" "${formula_filepath}"; then
+            echo "already at ${VERSION}, nothing to do"
+            exit 0
+          fi
+
+          bash packaging/homebrew/sync-tap.sh "${VERSION}" _tap
+
+          # Publish-boundary check: the written formula pins this version and a
+          # real (non-placeholder) sha256.
+          if ! grep -q "/v${VERSION}\.tar\.gz" "${formula_filepath}"; then
+            echo "::error::formula does not pin v${VERSION} after sync"
+            exit 1
+          fi
+          sha="$(sed -n -E 's/^  sha256 "([0-9a-f]{64})".*/\1/p' "${formula_filepath}" | head -1)"
+          if [ -z "${sha}" ] || [ "${sha}" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
+            echo "::error::formula sha256 is missing or still the placeholder after sync"
+            exit 1
+          fi
+          echo "Formula pinned to v${VERSION}, sha256 ${sha}"
+
+          git -C _tap config user.name "Beebium CI"
+          git -C _tap config user.email "robert@smallshire.org.uk"
+          git -C _tap add Formula/beebium-server.rb
+          git -C _tap commit -m "beebium-server ${VERSION}"
+          git -C _tap push
+
+  sync-scoop:
+    name: sync Scoop bucket
+    needs: resolve
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      BUCKET_REPO: git@github.com:rob-smallshire/scoop-beebium.git
+      DEPLOY_KEY: ${{ secrets.SCOOP_BUCKET_DEPLOY_KEY }}
+    steps:
+      # Check out the tag: the sync script and the canonical manifest must be the
+      # ones that shipped with this release, not master's.
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.resolve.outputs.version }}
+
+      - name: Sync the manifest into the bucket
+        run: |
+          set -euo pipefail
+
+          # Deploy key + pinned host key (no StrictHostKeyChecking=no).
+          mkdir -p "${HOME}/.ssh"
+          install -m 600 /dev/null "${HOME}/.ssh/deploy_key"
+          printf '%s\n' "${DEPLOY_KEY}" > "${HOME}/.ssh/deploy_key"
+          ssh-keyscan -t rsa,ecdsa,ed25519 github.com > "${HOME}/.ssh/known_hosts" 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
+
+          git clone --depth 1 "${BUCKET_REPO}" _bucket
+          manifest_filepath="_bucket/bucket/beebium-server.json"
+
+          # Idempotence: if the bucket already pins this version, do nothing.
+          current="$(jq -r '.version' "${manifest_filepath}")"
+          if [ "${current}" = "${VERSION}" ]; then
+            echo "already at ${VERSION}, nothing to do"
+            exit 0
+          fi
+
+          bash packaging/scoop/sync-bucket.sh "${VERSION}" _bucket
+
+          # Publish-boundary check: the written manifest pins this version, the
+          # asset URL carries it, and the hash is real (non-placeholder).
+          written="$(jq -r '.version' "${manifest_filepath}")"
+          if [ "${written}" != "${VERSION}" ]; then
+            echo "::error::manifest version is '${written}' after sync, expected ${VERSION}"
+            exit 1
+          fi
+          url="$(jq -r '.architecture["64bit"].url' "${manifest_filepath}")"
+          case "${url}" in
+            *"/v${VERSION}/"*) ;;
+            *) echo "::error::manifest 64bit url does not carry v${VERSION}: ${url}"; exit 1 ;;
+          esac
+          hash="$(jq -r '.architecture["64bit"].hash' "${manifest_filepath}")"
+          if [ -z "${hash}" ] || [ "${hash}" = "null" ] || [ "${hash}" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
+            echo "::error::manifest 64bit hash is missing or still the placeholder after sync"
+            exit 1
+          fi
+          echo "Manifest pinned to ${VERSION}, hash ${hash}"
+
+          git -C _bucket config user.name "Beebium CI"
+          git -C _bucket config user.email "robert@smallshire.org.uk"
+          git -C _bucket add bucket/beebium-server.json
+          git -C _bucket commit -m "beebium-server ${VERSION}"
+          git -C _bucket push

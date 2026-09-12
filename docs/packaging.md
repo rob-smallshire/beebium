@@ -14,7 +14,7 @@ the macOS `.app`, see [macOS App Packaging](macos-app-packaging.md).
 | Component | Channel | Status |
 |-----------|---------|--------|
 | Server (headless core) | Self-contained `.deb` (apt) + `.tar.gz` (everything else) | **Done** (Linux, both arches) |
-| Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap publish is manual |
+| Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap pinned to each release automatically on publish |
 | Server (Windows) | Self-contained `.zip` (built + smoke-tested in CI, attached to the release) + Scoop bucket + WinGet | **Done** (`.zip` in CI/release); Scoop bucket + WinGet pending |
 | Python client | PyPI (`beebium`) | Planned |
 | TypeScript client | npm (`@beebium/client`) | Planned |
@@ -23,6 +23,46 @@ The server and the clients are deliberately distributed through **different**
 channels (system package manager for the server, language ecosystems for the
 clients). A user installs the server one way and `pip install beebium` /
 `npm install @beebium/client` separately; that is expected and fine.
+
+## Releasing: tag to published channels
+
+Cutting a release is `uvx bump-my-version bump <part>` (edits every embedded
+version, commits, tags `v<version>`) then `git push --follow-tags`. Pushing the
+tag fires `release.yml`, which builds and verifies every package, publishes the
+Python client and server wheels to PyPI, and creates a **draft** GitHub Release
+with the Linux and Windows assets attached.
+
+**Publishing that GitHub Release is the single act that propagates to the macOS
+and Windows package managers.** `sync-channels.yml` triggers on
+`release: published` and:
+
+1. checks out the release **tag** (so the sync scripts and the canonical
+   formula/manifest are the ones that shipped with that release);
+2. pins the Homebrew tap (`rob-smallshire/homebrew-beebium`,
+   `packaging/homebrew/sync-tap.sh`) to the release source tarball + its
+   `sha256`, and pins the Scoop bucket (`rob-smallshire/scoop-beebium`,
+   `packaging/scoop/sync-bucket.sh`) to the published Windows `.zip` asset +
+   its hash;
+3. commits and pushes each to its own repo.
+
+The workflow writes to those two repos over SSH using **deploy keys** (secrets
+`HOMEBREW_TAP_DEPLOY_KEY` / `SCOOP_BUCKET_DEPLOY_KEY`, one per target repo), not
+the workflow `GITHUB_TOKEN`. Each job is **idempotent**: if the target already
+pins the version it is a green no-op, so re-publishing a release changes nothing.
+Runs are serialised (`concurrency: sync-channels`).
+
+The old laptop steps — running `sync-tap.sh` / `sync-bucket.sh` by hand against
+local tap/bucket checkouts after each release — are gone.
+
+To re-sync a version by hand (e.g. after fixing a channel repo), use the
+workflow's `workflow_dispatch` with a bare `version` input (e.g. `0.1.3`). The
+GitHub Release for that version must already be **published** — dispatch fails
+early with a clear error if it is still a draft, because the Scoop asset URL 404s
+for drafts.
+
+Once the release is published and both channels are synced, `release-smoke.yml`
+(manual, `version` input) installs the version end-to-end from the public
+download URLs and package managers on clean runners.
 
 ## Repositories and where things live
 
@@ -60,6 +100,7 @@ beebium/
     ├── macos-intel.yml            # best-effort Intel formula check (non-gating)
     ├── windows-package.yml        # build + smoke the Windows .zip
     ├── release.yml                # tag -> all packages + verified draft Release
+    ├── sync-channels.yml          # publish -> pin the tap + bucket to the release
     └── release-smoke.yml          # post-publish end-to-end install from public channels
 ```
 
@@ -83,10 +124,12 @@ README. Locally it lives under the Homebrew prefix, not beside this repo:
 are connected by `packaging/homebrew/sync-tap.sh <version> <tap-checkout>`, which
 fetches the release source tarball, computes its `sha256`, and writes the pinned
 formula into the tap's `Formula/`. **Edit the canonical copy in the monorepo**,
-validate it (`packaging/homebrew/test-formula.sh`), then run `sync-tap.sh` to push
-the change to the tap — never hand-edit the tap's formula. (The `head` spec in the
-canonical formula means `brew install --HEAD beebium-server` builds from the
-monorepo's `master` directly, independent of any pinned release.)
+validate it (`packaging/homebrew/test-formula.sh`) — the tap is then pinned to
+each release automatically by `sync-channels.yml` (see
+[Releasing](#releasing-tag-to-published-channels)), never by hand-editing the
+tap's formula. (The `head` spec in the canonical formula means
+`brew install --HEAD beebium-server` builds from the monorepo's `master`
+directly, independent of any pinned release.)
 
 ## The self-contained static bundle (Linux)
 
@@ -241,10 +284,13 @@ mechanism the Linux `/usr/bin` symlinks rely on.
   an extension-discovery check. Run locally or in CI; both run identical steps.
 - `packaging/homebrew/sync-tap.sh <version> <tap-checkout>` — fetches the
   released source tarball, computes its `sha256`, and writes the pinned formula
-  into the tap's `Formula/` for the maintainer to commit and push.
+  into the tap's `Formula/`. It is run by `sync-channels.yml` at release time,
+  against a fresh clone of the tap; the workflow commits and pushes the result.
 
-Publishing the tap is deliberately manual: author + validate here, then push the
-formula to `rob-smallshire/homebrew-beebium` to go live.
+Publishing the GitHub Release pins the tap automatically (see
+[Releasing](#releasing-tag-to-published-channels)); the old hand-run of
+`sync-tap.sh` on a laptop is gone. Author + validate the canonical formula here,
+then let the release drive it live.
 
 ### Current state and remaining macOS work
 
@@ -357,6 +403,11 @@ enterprise deployment (Intune/SCCM/Group Policy) is needed.
 - `packaging/scoop/beebium-server.json` — the canonical Scoop manifest (bin shims
   for the four servers, `checkver`/`autoupdate`; `url`/`hash` are placeholders
   pinned at release time, like the Homebrew `sha256`).
+- `packaging/scoop/sync-bucket.sh <version> <bucket-checkout>` — downloads the
+  published release `.zip` asset, computes its `sha256`, and writes the pinned
+  manifest into the bucket's `bucket/`. Run by `sync-channels.yml` on release
+  publish (see [Releasing](#releasing-tag-to-published-channels)); the release
+  must be published, not a draft, or the asset URL 404s.
 
 ### Remaining (Windows)
 
