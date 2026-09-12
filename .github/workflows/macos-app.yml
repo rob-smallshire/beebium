@@ -54,14 +54,16 @@ jobs:
           - arch: x86_64
             runner: macos-15-intel
     steps:
-      # Check out the source that matches the bundle: the release tag. For a
-      # workflow_call from release.yml the caller is already on the tag, so the
-      # default checkout ref is correct; for a manual dispatch, check out
-      # v<version> explicitly.
+      # Check out the ref this workflow runs on -- NOT v<version>. For a
+      # workflow_call from release.yml that is the release tag (which carries the
+      # app source being released). For a manual dispatch it is the branch the
+      # dispatch ran on (e.g. master), so the app is built from current source
+      # while the server bundle comes from an existing release's tarball -- the
+      # point of the dispatch is to prove the current app+DMG path without
+      # cutting a release. (Checking out v<version> would build stale app source:
+      # a release tagged before this workflow landed has the old embed phase.)
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
 
       - name: Resolve the bare version
         id: v
