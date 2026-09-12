@@ -177,15 +177,19 @@ class PresetManager: ObservableObject {
             return envPath
         }
 
-        // 2. App bundle (for distribution). The embedded servers, their
-        // plugin tree, and their bundled native dependencies live under
-        // Resources/servers -- not Frameworks, which codesign validates as
-        // code-only and would reject the plugins' manifest.json files. See
-        // the "Embed Server Executables" build phase in project.yml.
+        // 2. App bundle (for distribution). The embedded payload is the static
+        // server bundle tree copied verbatim under Resources/servers -- the same
+        // bin/ lib/ share/beebium/ layout as the release tarball. The
+        // executables (and their sibling extensions/ tree, which the server
+        // resolves relative to its own location) live in servers/bin. The tree
+        // is under Resources rather than Frameworks because it carries non-code
+        // files (manifest.json, ROMs, presets) that codesign rejects in
+        // Frameworks, which it validates as code-only. See the "Embed Server
+        // Executables" build phase in project.yml.
         if let resourcePath = Bundle.main.resourcePath {
-            let serversPath = "\(resourcePath)/servers"
-            if FileManager.default.fileExists(atPath: "\(serversPath)/beebium-model-b") {
-                return serversPath
+            let binPath = "\(resourcePath)/servers/bin"
+            if FileManager.default.fileExists(atPath: "\(binPath)/beebium-model-b") {
+                return binPath
             }
         }
 
@@ -198,20 +202,23 @@ class PresetManager: ObservableObject {
     /// Returns nil if no bundled ROMs are found.
     private func bundledRomDirpath() -> String? {
         guard let resourcePath = Bundle.main.resourcePath else { return nil }
-        let romPath = "\(resourcePath)/roms"
+        // ROMs ship inside the static server bundle tree, under
+        // servers/share/beebium/roms (the same location the server binary finds
+        // them relative to its own executable).
+        let romPath = "\(resourcePath)/servers/share/beebium/roms"
         return FileManager.default.fileExists(atPath: romPath) ? romPath : nil
     }
 
     /// Get the bundled presets directory path, if presets are bundled in the app.
     /// Returns nil if no bundled presets are found.
     ///
-    /// Presets live alongside the embedded servers
-    /// (Resources/servers/presets/) so the server binary's own
-    /// PresetPaths::get_system_presets_dirpath() can resolve them by
-    /// ID for --from. The Swift side reads from the same directory.
+    /// Presets ship inside the static server bundle tree, under
+    /// servers/share/beebium/presets/ -- the same location the server binary's
+    /// own PresetPaths::get_system_presets_dirpath() resolves relative to its
+    /// executable, so `--from <id>` works. The Swift side reads the same directory.
     private func bundledPresetsDirpath() -> String? {
         guard let resourcePath = Bundle.main.resourcePath else { return nil }
-        let presetsPath = "\(resourcePath)/servers/presets"
+        let presetsPath = "\(resourcePath)/servers/share/beebium/presets"
         return FileManager.default.fileExists(atPath: presetsPath) ? presetsPath : nil
     }
 

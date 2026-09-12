@@ -69,84 +69,76 @@ targets:
       - sdk: MetalKit.framework
       - sdk: AVFAudio.framework
     postBuildScripts:
-      - name: "Embed Server Executables, Presets, and ROMs"
+      - name: "Embed Static Server Bundle"
+        basedOnDependencyAnalysis: false
         script: |
-          # Embed the headless server executables, their plugin tree, and
-          # their native dependencies under Contents/Resources/servers/ (if
-          # BEEBIUM_SERVERS_BUILD_DIR is set). They live in Resources rather
-          # than Frameworks because the plugin tree carries non-code files
-          # (manifest.json) that codesign rejects in Frameworks, which it
-          # validates as code-only. The Swift side resolves this directory
-          # via Bundle.main.resourcePath (PresetManager.serversDirpath).
-          # Default to the repo's CMake build tree so a plain build (from Xcode
-          # or `xcodebuild` without the variable exported) still embeds a freshly
-          # built server instead of silently keeping a stale one. Override
-          # BEEBIUM_SERVERS_BUILD_DIR to bundle a release/static build.
-          SERVERS_DIR="${BEEBIUM_SERVERS_BUILD_DIR:-${SRCROOT}/../../../build/src/server}"
-          if [ -d "$SERVERS_DIR" ] && [ -f "$SERVERS_DIR/beebium-model-b" ]; then
-            echo "Embedding servers from: $SERVERS_DIR"
-            SERVERS_DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/servers"
-            # Rebuild from scratch each time so stale bundled dylibs from a
-            # previous build don't accumulate.
-            rm -rf "$SERVERS_DEST"
-            mkdir -p "$SERVERS_DEST"
-            for server in beebium-model-b beebium-model-b-plus beebium-model-b-plus-128k beebium-model-b-romram; do
-              if [ -f "$SERVERS_DIR/$server" ]; then
-                cp "$SERVERS_DIR/$server" "$SERVERS_DEST/"
-                echo "  Copied $server"
-              fi
-            done
-
-            # Copy presets and thumbnails alongside the embedded servers
-            # (Resources/servers/presets/), matching what the server
-            # binary expects: PresetPaths::get_system_presets_dirpath()
-            # looks for a sibling 'presets/' directory next to the
-            # executable. Placing them in Resources/presets/ instead -
-            # which we did before - made create-preset's --from fail to
-            # resolve any system preset by ID.
-            if [ -d "$SERVERS_DIR/presets" ]; then
-              mkdir -p "${SERVERS_DEST}/presets"
-              cp "$SERVERS_DIR/presets/"*.preset.beebium "${SERVERS_DEST}/presets/" 2>/dev/null || true
-              cp "$SERVERS_DIR/presets/"*.thumbnail.png "${SERVERS_DEST}/presets/" 2>/dev/null || true
-              echo "  Copied presets and thumbnails to ${SERVERS_DEST}/presets"
-            fi
-
-            # Copy the extension plugin tree next to the embedded servers.
-            # The server resolves plugins from <exe-dir>/extensions/. Without
-            # this, only built-in transports (AUN) load from the packaged
-            # app; plugin transports like Piconet would be silently absent.
-            if [ -d "$SERVERS_DIR/extensions" ]; then
-              cp -R "$SERVERS_DIR/extensions" "$SERVERS_DEST/extensions"
-              echo "  Copied extension plugin tree"
-            fi
-
-            # Make the embedded servers and plugins self-contained: bundle
-            # their internal shared libraries and Homebrew dependencies
-            # (gRPC/protobuf/abseil) alongside them, rewrite install names to
-            # @rpath, and re-sign. Without this the app only runs on the
-            # build machine (deps reference the dev tree + /opt/homebrew).
-            # See docs/macos-app-packaging.md.
-            echo "  Bundling native dependencies into the app..."
-            /usr/bin/env python3 "${SRCROOT}/scripts/bundle_dependencies.py" \
-              "$SERVERS_DEST"
-          else
-            echo "warning: no server executables found at $SERVERS_DIR" >&2
-            echo "warning: the app bundle will keep whatever server it already has (possibly stale, or none)." >&2
-            echo "warning: build the servers first --" >&2
-            echo "warning:   cmake --build build --target beebium-servers" >&2
-            echo "warning: or run scripts/build-macos-app.sh, or set BEEBIUM_SERVERS_BUILD_DIR." >&2
+          # Embed the static server bundle -- the same relocatable tree shipped
+          # in the release tarball (bin/ lib/ share/beebium/) -- verbatim under
+          # Contents/Resources/servers/, when BEEBIUM_SERVERS_BUILD_DIR points at
+          # an installed static tree (the directory containing bin/beebium-model-b).
+          # Locally that tree comes from `cmake --install` of a vcpkg-static build,
+          # or from the bundle-macos-<arch> release tarball; in CI it is the
+          # bundle-macos-<arch> artifact.
+          #
+          # The payload lives under Resources rather than Frameworks because it
+          # carries non-code files (manifest.json, ROMs, presets) that codesign
+          # rejects in Frameworks, which it validates as code-only. The Swift side
+          # resolves the executables via Bundle.main.resourcePath + servers/bin
+          # (PresetManager.serversDirpath); the server finds its own plugins at
+          # <exe-dir>/extensions, its ABI dylibs via RPATH into ../lib, and its
+          # ROMs/presets under ../share/beebium.
+          #
+          # The static binaries are already self-contained (no /opt/homebrew, no
+          # build-tree paths; @loader_path-relative internal libs; ad-hoc signed
+          # at bundle time), so there is no dependency-graph rewriting to do -- the
+          # step is a verbatim copy plus verification. Without BEEBIUM_SERVERS_BUILD_DIR
+          # the embed is skipped and the app launches servers from the runtime dev
+          # fallback (BEEBIUM_SERVERS_DIRPATH, else the CMake build tree) -- see
+          # PresetManager.serversDirpath and docs/macos-app-packaging.md.
+          SERVERS_DIR="${BEEBIUM_SERVERS_BUILD_DIR:-}"
+          if [ -z "$SERVERS_DIR" ] || [ ! -f "$SERVERS_DIR/bin/beebium-model-b" ]; then
+            echo "note: BEEBIUM_SERVERS_BUILD_DIR is unset or does not point at an installed static tree (no bin/beebium-model-b)."
+            echo "note: skipping server embedding; the app will launch servers from the runtime dev fallback."
+            echo "note: to embed a distributable payload, install a vcpkg-static build to a staging prefix and set BEEBIUM_SERVERS_BUILD_DIR to it (see docs/macos-app-packaging.md)."
+            exit 0
           fi
 
-          # Copy ROMs (if BEEBIUM_ROMS_DIR is set, otherwise try repo default relative to SRCROOT)
-          ROMS_DIR="${BEEBIUM_ROMS_DIR:-${SRCROOT}/../../../roms}"
-          if [ -d "$ROMS_DIR" ]; then
-            echo "Embedding ROMs from: $ROMS_DIR"
-            mkdir -p "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/roms"
-            cp "$ROMS_DIR/"*.rom "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/roms/" 2>/dev/null || true
-            echo "  Copied ROMs"
-          else
-            echo "ROMs directory not found at $ROMS_DIR, skipping ROM embedding"
+          echo "Embedding static server bundle from: $SERVERS_DIR"
+          SERVERS_DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/servers"
+          # Rebuild from scratch each time so a previous build's payload does not
+          # accumulate stale files.
+          rm -rf "$SERVERS_DEST"
+          mkdir -p "$SERVERS_DEST"
+          # Copy the tree verbatim: executables + plugin tree (bin/, bin/extensions/),
+          # ABI dylibs (lib/), ROMs and presets (share/beebium/).
+          cp -R "$SERVERS_DIR/bin" "$SERVERS_DEST/bin"
+          cp -R "$SERVERS_DIR/lib" "$SERVERS_DEST/lib"
+          cp -R "$SERVERS_DIR/share" "$SERVERS_DEST/share"
+          echo "  Copied bin/ lib/ share/"
+
+          # Verify the copied payload: no absolute-path leaks (only /usr/lib and
+          # /System are allowed), and every Mach-O carries a valid signature. A
+          # leak or a broken signature here would ship a bundle that only runs on
+          # the build machine, or that dyld/Gatekeeper rejects. Xcode runs this
+          # phase under /bin/sh, so record failures via a marker file rather than
+          # a variable set inside a pipeline subshell (POSIX sh, no bashisms).
+          fail_marker="$(mktemp)"
+          find "$SERVERS_DEST/bin" "$SERVERS_DEST/lib" -type f | while IFS= read -r f; do
+            file "$f" | grep -q "Mach-O" || continue
+            if otool -L "$f" | tail -n +2 | grep -qE '/opt/homebrew|/Users/|/usr/local'; then
+              echo "error: absolute-path leak in embedded payload: $f" >&2
+              otool -L "$f" | tail -n +2 | grep -E '/opt/homebrew|/Users/|/usr/local' >&2
+              echo x >> "$fail_marker"
+            fi
+            codesign -v "$f" 2>/dev/null || { echo "error: invalid signature in embedded payload: $f" >&2; echo x >> "$fail_marker"; }
+          done
+          if [ -s "$fail_marker" ]; then
+            rm -f "$fail_marker"
+            echo "error: embedded server payload failed verification" >&2
+            exit 1
           fi
+          rm -f "$fail_marker"
+          echo "  Verified: no absolute-path leaks, all Mach-Os signed"
 
   BeebiumTests:
     type: bundle.unit-test
