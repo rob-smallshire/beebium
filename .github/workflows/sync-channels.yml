@@ -169,12 +169,17 @@ jobs:
           # --- Cask: the signed+notarized GUI app DMGs (beebium-gui) ---
           # sync-gui-cask.sh is a clean no-op when the release carries no DMGs
           # (releases cut before the signed-DMG build, or an old dispatch target),
-          # so this never breaks the formula sync above.
+          # so this never breaks the formula sync above. The checkout is the
+          # release TAG, so a release cut BEFORE the cask feature has no sync
+          # script at all -- skip the cask entirely in that case.
           cask_filepath="_tap/Casks/beebium-gui.rb"
-          if [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
+          cask_sync_script="packaging/homebrew/sync-gui-cask.sh"
+          if [ ! -f "${cask_sync_script}" ]; then
+            echo "no ${cask_sync_script} at v${VERSION} (release predates the beebium-gui cask); skipping cask"
+          elif [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
             echo "cask already at ${VERSION}, nothing to do"
           else
-            bash packaging/homebrew/sync-gui-cask.sh "${VERSION}" _tap
+            bash "${cask_sync_script}" "${VERSION}" _tap
             if [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
               # Publish-boundary: both per-arch hashes present and non-placeholder.
               arm_sha="$(sed -n -E 's/.*arm:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
