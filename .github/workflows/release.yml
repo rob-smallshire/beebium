@@ -469,13 +469,10 @@ jobs:
 
             #### macOS app (GUI)
             `Beebium-<version>-macos-<arch>.dmg` is the Swift/Metal frontend with
-            the servers, ROMs, presets and extensions bundled in. Download the DMG
-            for your architecture, open it, and drag **Beebium.app** to
-            Applications.
-            > **Note:** these DMGs are **ad-hoc signed, not notarized yet**, so
-            > Gatekeeper will refuse the first launch. Until signing lands,
-            > right-click the app and choose **Open** (or clear the quarantine
-            > with `xattr -dr com.apple.quarantine /Applications/Beebium.app`).
+            the servers, ROMs, presets and extensions bundled in. It is **signed
+            with a Developer ID and notarized by Apple**, so it opens on first
+            launch with no Gatekeeper detour. Download the DMG for your
+            architecture, open it, and drag **Beebium.app** to Applications.
 
             ### Windows
             ```
