@@ -49,3 +49,18 @@ jobs:
 
       - name: Build, install, test and audit the formula
         run: packaging/homebrew/test-formula.sh
+
+      # Validate the canonical beebium-gui CASK here (sync-channels.yml runs on
+      # ubuntu, where cask audits are not meaningful). Stage it in a throwaway
+      # tap -- `brew audit --cask <path>` is disabled -- and run style + audit.
+      - name: Style and audit the beebium-gui cask
+        run: |
+          set -euo pipefail
+          tap="$(brew --repository)/Library/Taps/beebium/homebrew-caskcheck"
+          brew tap-new beebium/caskcheck --no-git >/dev/null
+          mkdir -p "${tap}/Casks"
+          cp packaging/homebrew/beebium-gui.rb "${tap}/Casks/beebium-gui.rb"
+          brew style "${tap}/Casks/beebium-gui.rb"
+          brew audit --cask beebium/caskcheck/beebium-gui
+          rm -rf "${tap}"
+          echo "beebium-gui cask: style + audit clean"

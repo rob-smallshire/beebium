@@ -16,6 +16,7 @@ the macOS `.app`, see [macOS App Packaging](macos-app-packaging.md).
 | Server (headless core) | Self-contained `.deb` (apt) + `.tar.gz` (everything else) | **Done** (Linux, both arches) |
 | Server (macOS) | Homebrew tap `rob-smallshire/homebrew-beebium`, formula `beebium-server` | **Done** (arm64 CI-gated; Intel best-effort); tap pinned to each release automatically on publish |
 | Server (Windows) | Self-contained `.zip` (built + smoke-tested in CI, attached to the release) + Scoop bucket + WinGet | **Done** (`.zip` in CI/release); Scoop bucket + WinGet pending |
+| App (macOS GUI) | Signed + notarized per-arch DMG (release asset) + Homebrew cask `beebium-gui` | **Done** (cask + DMG); Developer ID signed/notarized, cask synced automatically on publish; needs macOS 13+ |
 | Python client | PyPI (`beebium`) | Planned |
 | TypeScript client | npm (`@beebium/client`) | Planned |
 
@@ -45,12 +46,15 @@ tail automatically:
 
 1. checks out the release **tag** (so the sync scripts and the canonical
    formula/manifest are the ones that shipped with that release);
-2. pins the Homebrew tap (`rob-smallshire/homebrew-beebium`,
-   `packaging/homebrew/sync-tap.sh`) to the release source tarball + its
-   `sha256`, and pins the Scoop bucket (`rob-smallshire/scoop-beebium`,
-   `packaging/scoop/sync-bucket.sh`) to the published Windows `.zip` asset +
-   its hash;
-3. commits and pushes each to its own repo.
+2. pins the Homebrew tap (`rob-smallshire/homebrew-beebium`): the
+   `beebium-server` **formula** (`packaging/homebrew/sync-tap.sh`) to the release
+   source tarball + its `sha256`, and the `beebium-gui` **cask**
+   (`packaging/homebrew/sync-gui-cask.sh`) to the two published DMG assets + their
+   per-arch hashes — the cask is a clean no-op when a release carries no DMGs;
+3. pins the Scoop bucket (`rob-smallshire/scoop-beebium`,
+   `packaging/scoop/sync-bucket.sh`) to the published Windows `.zip` asset + hash;
+4. commits (formula and cask separately, `beebium-server <v>` / `beebium-gui <v>`)
+   and pushes each repo.
 
 The workflow writes to those two repos over SSH using **deploy keys** (secrets
 `HOMEBREW_TAP_DEPLOY_KEY` / `SCOOP_BUCKET_DEPLOY_KEY`, one per target repo),
@@ -219,17 +223,17 @@ homebrew-beebium/
 ├── Formula/
 │   └── beebium-server.rb     # headless backend (CLI, build-from-source)
 └── Casks/
-    └── beebium-gui.rb        # macOS GUI app (.app bundle, future, out of scope now)
+    └── beebium-gui.rb        # macOS GUI app (signed + notarized DMG)
 ```
 
 The packages are installed independently:
 
 ```
 brew install rob-smallshire/beebium/beebium-server   # backend only
-brew install --cask rob-smallshire/beebium/beebium-gui   # frontend only (future)
+brew install --cask rob-smallshire/beebium/beebium-gui   # macOS GUI app
 ```
 
-**Naming decision:** the backend is `beebium-server` and the macOS GUI will be
+**Naming decision:** the backend is `beebium-server` and the macOS GUI is
 `beebium-gui`; the bare `beebium` token is left unclaimed. The names are
 deliberately symmetric and descriptive so neither component squats the project's
 bare name — consistent with Beebium's headless-core identity, where the GUI is

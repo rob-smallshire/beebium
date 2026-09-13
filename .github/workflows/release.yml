@@ -468,10 +468,14 @@ jobs:
             to your `PATH` (no Homebrew needed).
 
             #### macOS app (GUI)
-            `Beebium-<version>-macos-<arch>.dmg` is the Swift/Metal frontend with
-            the servers, ROMs, presets and extensions bundled in. It is **signed
-            with a Developer ID and notarized by Apple**, so it opens on first
-            launch with no Gatekeeper detour. Download the DMG for your
+            The Swift/Metal frontend with the servers, ROMs, presets and
+            extensions bundled in. It is **signed with a Developer ID and
+            notarized by Apple**, so it opens on first launch with no Gatekeeper
+            detour. Needs macOS 13 (Ventura) or newer.
+            ```
+            brew install --cask rob-smallshire/beebium/beebium-gui
+            ```
+            Or download `Beebium-<version>-macos-<arch>.dmg` for your
             architecture, open it, and drag **Beebium.app** to Applications.
 
             ### Windows

@@ -131,7 +131,7 @@ jobs:
         with:
           ref: v${{ needs.resolve.outputs.version }}
 
-      - name: Sync the formula into the tap
+      - name: Sync the formula and cask into the tap
         run: |
           set -euo pipefail
 
@@ -143,33 +143,57 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
 
           git clone --depth 1 "${TAP_REPO}" _tap
-          formula_filepath="_tap/Formula/beebium-server.rb"
-
-          # Idempotence: if the tap already pins this version, do nothing.
-          if grep -q "/v${VERSION}\.tar\.gz" "${formula_filepath}"; then
-            echo "already at ${VERSION}, nothing to do"
-            exit 0
-          fi
-
-          bash packaging/homebrew/sync-tap.sh "${VERSION}" _tap
-
-          # Publish-boundary check: the written formula pins this version and a
-          # real (non-placeholder) sha256.
-          if ! grep -q "/v${VERSION}\.tar\.gz" "${formula_filepath}"; then
-            echo "::error::formula does not pin v${VERSION} after sync"
-            exit 1
-          fi
-          sha="$(sed -n -E 's/^  sha256 "([0-9a-f]{64})".*/\1/p' "${formula_filepath}" | head -1)"
-          if [ -z "${sha}" ] || [ "${sha}" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
-            echo "::error::formula sha256 is missing or still the placeholder after sync"
-            exit 1
-          fi
-          echo "Formula pinned to v${VERSION}, sha256 ${sha}"
-
           git -C _tap config user.name "Beebium CI"
           git -C _tap config user.email "robert@smallshire.org.uk"
-          git -C _tap add Formula/beebium-server.rb
-          git -C _tap commit -m "beebium-server ${VERSION}"
+
+          zeros="0000000000000000000000000000000000000000000000000000000000000000"
+
+          # --- Formula: the source-built headless servers (beebium-server) ---
+          formula_filepath="_tap/Formula/beebium-server.rb"
+          if grep -q "/v${VERSION}\.tar\.gz" "${formula_filepath}"; then
+            echo "formula already at ${VERSION}, nothing to do"
+          else
+            bash packaging/homebrew/sync-tap.sh "${VERSION}" _tap
+            if ! grep -q "/v${VERSION}\.tar\.gz" "${formula_filepath}"; then
+              echo "::error::formula does not pin v${VERSION} after sync"; exit 1
+            fi
+            sha="$(sed -n -E 's/^  sha256 "([0-9a-f]{64})".*/\1/p' "${formula_filepath}" | head -1)"
+            if [ -z "${sha}" ] || [ "${sha}" = "${zeros}" ]; then
+              echo "::error::formula sha256 is missing or still the placeholder after sync"; exit 1
+            fi
+            echo "Formula pinned to v${VERSION}, sha256 ${sha}"
+            git -C _tap add Formula/beebium-server.rb
+            git -C _tap commit -m "beebium-server ${VERSION}"
+          fi
+
+          # --- Cask: the signed+notarized GUI app DMGs (beebium-gui) ---
+          # sync-gui-cask.sh is a clean no-op when the release carries no DMGs
+          # (releases cut before the signed-DMG build, or an old dispatch target),
+          # so this never breaks the formula sync above.
+          cask_filepath="_tap/Casks/beebium-gui.rb"
+          if [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
+            echo "cask already at ${VERSION}, nothing to do"
+          else
+            bash packaging/homebrew/sync-gui-cask.sh "${VERSION}" _tap
+            if [ -f "${cask_filepath}" ] && grep -q "version \"${VERSION}\"" "${cask_filepath}"; then
+              # Publish-boundary: both per-arch hashes present and non-placeholder.
+              arm_sha="$(sed -n -E 's/.*arm:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
+              intel_sha="$(sed -n -E 's/.*intel:[[:space:]]*"([0-9a-f]{64})".*/\1/p' "${cask_filepath}" | head -1)"
+              for s in "${arm_sha}" "${intel_sha}"; do
+                case "${s}" in
+                  ""|"${zeros}"|1111111111111111111111111111111111111111111111111111111111111111)
+                    echo "::error::cask hash missing or still a placeholder after sync"; exit 1 ;;
+                esac
+              done
+              echo "Cask pinned to ${VERSION} (arm ${arm_sha}, intel ${intel_sha})"
+              git -C _tap add Casks/beebium-gui.rb
+              git -C _tap commit -m "beebium-gui ${VERSION}"
+            else
+              echo "no DMG assets for v${VERSION}; cask not synced (expected for releases without the macOS app)"
+            fi
+          fi
+
+          # One push for whatever commits (0, 1 or 2) were made.
           git -C _tap push
 
   sync-scoop:
