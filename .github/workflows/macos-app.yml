@@ -260,22 +260,41 @@ jobs:
           set -euo pipefail
           zip="${RUNNER_TEMP}/Beebium-app.zip"
           ditto -c -k --keepParent "${APP_PATH}" "${zip}"
-          set +e
-          out="$(xcrun notarytool submit "${zip}" \
-            --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" \
-            --wait --output-format json)"
-          rc=$?
-          set -e
-          echo "${out}"
-          id="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
-          status="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')"
+
+          # notarytool submit --wait occasionally loses its connection to Apple
+          # mid-poll (a transient NSURLError -1005), so bound each attempt with
+          # --timeout and retry. A terminal Invalid/Rejected is a real failure:
+          # print the notary log and stop. JSON is parsed only when present, so a
+          # non-JSON network-error body is treated as retryable, not a crash.
+          id=""; status=""
+          for attempt in 1 2 3; do
+            echo "== notarize app (attempt ${attempt}/3) =="
+            set +e
+            out="$(xcrun notarytool submit "${zip}" \
+              --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" \
+              --wait --timeout 25m --output-format json 2>&1)"
+            set -e
+            id=""; status=""
+            case "${out}" in
+              *'"id"'*)
+                id="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
+                status="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')" ;;
+            esac
+            echo "attempt ${attempt}: id=${id} status=${status:-<none>}"
+            [ "${status}" = "Accepted" ] && break
+            case "${status}" in
+              Invalid|Rejected)
+                echo "::error::app notarization ${status} (id ${id})"
+                [ -n "${id}" ] && xcrun notarytool log "${id}" --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" || true
+                exit 1 ;;
+              *)
+                echo "::warning::transient notarization result on attempt ${attempt}; output tail:"
+                printf '%s\n' "${out}" | tail -5
+                sleep 30 ;;
+            esac
+          done
+          [ "${status}" = "Accepted" ] || { echo "::error::app notarization did not reach Accepted after retries (last id ${id}, status ${status:-<none>})"; exit 1; }
           echo "APP_NOTARIZE_ID=${id}" >> "${GITHUB_ENV}"
-          echo "app notarization: id=${id} status=${status}"
-          if [ "${status}" != "Accepted" ] || [ "${rc}" -ne 0 ]; then
-            echo "::error::app notarization not Accepted (id ${id}, status ${status})"
-            xcrun notarytool log "${id}" --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" || true
-            exit 1
-          fi
           xcrun stapler staple "${APP_PATH}"
           xcrun stapler validate "${APP_PATH}"
 
@@ -307,22 +326,37 @@ jobs:
           codesign --force --timestamp \
             --keychain "${SIGN_KEYCHAIN}" --sign "${SIGN_IDENTITY}" "${DMG_PATH}"
           codesign --verify --strict --verbose=2 "${DMG_PATH}"
-          set +e
-          out="$(xcrun notarytool submit "${DMG_PATH}" \
-            --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" \
-            --wait --output-format json)"
-          rc=$?
-          set -e
-          echo "${out}"
-          id="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
-          status="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')"
+
+          # Same bounded-retry notarization as the app (transient -1005 tolerant).
+          id=""; status=""
+          for attempt in 1 2 3; do
+            echo "== notarize DMG (attempt ${attempt}/3) =="
+            set +e
+            out="$(xcrun notarytool submit "${DMG_PATH}" \
+              --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" \
+              --wait --timeout 25m --output-format json 2>&1)"
+            set -e
+            id=""; status=""
+            case "${out}" in
+              *'"id"'*)
+                id="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
+                status="$(printf '%s' "${out}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("status",""))')" ;;
+            esac
+            echo "attempt ${attempt}: id=${id} status=${status:-<none>}"
+            [ "${status}" = "Accepted" ] && break
+            case "${status}" in
+              Invalid|Rejected)
+                echo "::error::DMG notarization ${status} (id ${id})"
+                [ -n "${id}" ] && xcrun notarytool log "${id}" --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" || true
+                exit 1 ;;
+              *)
+                echo "::warning::transient notarization result on attempt ${attempt}; output tail:"
+                printf '%s\n' "${out}" | tail -5
+                sleep 30 ;;
+            esac
+          done
+          [ "${status}" = "Accepted" ] || { echo "::error::DMG notarization did not reach Accepted after retries (last id ${id}, status ${status:-<none>})"; exit 1; }
           echo "DMG_NOTARIZE_ID=${id}" >> "${GITHUB_ENV}"
-          echo "DMG notarization: id=${id} status=${status}"
-          if [ "${status}" != "Accepted" ] || [ "${rc}" -ne 0 ]; then
-            echo "::error::DMG notarization not Accepted (id ${id}, status ${status})"
-            xcrun notarytool log "${id}" --key "${ASC_KEY_PATH}" --key-id "${ASC_KEY_ID}" --issuer "${ASC_ISSUER}" || true
-            exit 1
-          fi
           xcrun stapler staple "${DMG_PATH}"
 
       # Gatekeeper acceptance gates: the app runs, the DMG opens, and both carry a
