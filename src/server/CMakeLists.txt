@@ -16,6 +16,19 @@ file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 # create-preset code path that users create their own presets with. Extra
 # create-preset arguments (e.g. --fdc, --sideways) are forwarded via ARGN.
 function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
+    # Optional THUMBNAIL_DELAY <seconds> is split out of the create-preset
+    # passthrough args and forwarded to capture-screenshot as --duration. Presets
+    # whose interesting screen takes longer to settle than the 2.0s default (the
+    # Tube coprocessors' parasite boot to the "Acorn TUBE ..." banner) pass it;
+    # everything else omits it and keeps the byte-identical default capture. A
+    # generic emulated-time budget -- no text matching -- so a future slow-boot
+    # preset gets it for free.
+    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY" "" ${ARGN})
+    set(capture_duration_args "")
+    if(DEFINED PRESET_THUMBNAIL_DELAY)
+        set(capture_duration_args --duration ${PRESET_THUMBNAIL_DELAY})
+    endif()
+
     # Generate into the config-independent PRESETS_OUTPUT_DIR that install()
     # reads. (Writing to $<TARGET_FILE_DIR:...>/presets instead put the presets
     # in a per-config Release/presets on multi-config generators, where the
@@ -28,12 +41,13 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
         COMMAND ${EXECUTABLE} create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
-            ${ARGN}
+            ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
         COMMAND ${EXECUTABLE} capture-screenshot
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
             --rom-dir "${BEEBIUM_ROM_DIR}"
+            ${capture_duration_args}
         COMMENT "Generating preset ${PRESET_ID} and its thumbnail"
         VERBATIM
     )
@@ -186,9 +200,11 @@ add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
 # Tube host code). The 3 MHz / 4 MHz speeds are inherent to the variants.
 add_system_preset(beebium-model-b "model-b-disc-65c02-copro"
     "BBC Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
+    THUMBNAIL_DELAY 6
     --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k-65c102-copro"
     "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
+    THUMBNAIL_DELAY 6
     --tube-65c102)
 
 # Install rules
