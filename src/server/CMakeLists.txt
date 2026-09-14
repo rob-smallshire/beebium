@@ -285,16 +285,16 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
 if(TARGET beebium_ext_acorn_65c02_plugin)
     add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
         "model-b-disc-65c02-copro"
-        "Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
-        DESCRIPTION "Model B disc + 65C02 second processor (3 MHz)"
+        "Model B (Disc) + 65C02 Copro (3 MHz)" "1984"
+        DESCRIPTION "Model B disc + 65C02 copro (3 MHz)"
         THUMBNAIL_DELAY 6
         --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
 endif()
 if(TARGET beebium_ext_acorn_65c102_plugin)
     add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c102_plugin
         "model-b-plus-128k-65c102-copro"
-        "Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
-        DESCRIPTION "128K B+ + 65C102 co-processor (4 MHz)"
+        "Model B+ 128K + 65C102 Copro (4 MHz)" "1986"
+        DESCRIPTION "128K B+ + 65C102 copro (4 MHz)"
         THUMBNAIL_DELAY 6
         --tube-65c102)
 endif()
