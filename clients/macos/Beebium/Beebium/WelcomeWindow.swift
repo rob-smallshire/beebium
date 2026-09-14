@@ -205,7 +205,8 @@ struct PresetCard: View {
                 Color.black
                 Image(nsImage: nsImage)
                     .resizable()
-                    .interpolation(.none)
+                    .interpolation(.high)
+                    .antialiased(true)
                     .aspectRatio(contentMode: .fit)
             }
         } else {
