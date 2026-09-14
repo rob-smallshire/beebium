@@ -34,6 +34,7 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
             --rom-dir "${BEEBIUM_ROM_DIR}"
+            --crop auto
         COMMENT "Generating preset ${PRESET_ID} and its thumbnail"
         VERBATIM
     )
@@ -92,6 +93,7 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
             --rom-dir "${BEEBIUM_ROM_DIR}"
+            --crop auto
             ${capture_duration_args}
         ${copy_commands}
         DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET}
