@@ -180,6 +180,17 @@ add_system_preset(beebium-model-b-plus "model-b-plus" "BBC Model B+ 64K" "1985-0
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
     "BBC Model B+ 128K" "1985-06")
 
+# Tube coprocessor presets, so users can try the second processors (the machine
+# config UI has no Tube axis yet). Each is its disc-capable sibling plus a Tube
+# coprocessor extension; both boot to the Tube banner (the DFS ROM carries the
+# Tube host code). The 3 MHz / 4 MHz speeds are inherent to the variants.
+add_system_preset(beebium-model-b "model-b-disc-65c02-copro"
+    "BBC Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
+    --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
+add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k-65c102-copro"
+    "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
+    --tube-65c102)
+
 # Install rules
 install(TARGETS
         beebium-model-b
