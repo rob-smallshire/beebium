@@ -23,7 +23,7 @@ Requires macOS 13 (Ventura) or newer.
 
 ## Headless emulator servers
 
-For developers and advanced users: drive Beebium from the **Python** or **TypeScript** client, from **CI**, or from your own **gRPC** client. Each package puts the four servers (Model B, B+, B+ 128K, ROM/RAM) on your `PATH`, with the ROMs and extensions bundled.
+For developers and advanced users: drive Beebium from the **Python** or **TypeScript** client, from **CI**, from your own **gRPC** client — or from the **macOS application** above, which can connect over the network to a server running on another machine (it discovers them automatically via mDNS/Bonjour). Each package puts the four servers (Model B, B+, B+ 128K, ROM/RAM) on your `PATH`, with the ROMs and extensions bundled.
 
 ### Python — any platform
 
