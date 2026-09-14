@@ -47,6 +47,7 @@
 #include "beebium/server/PresetLoader.hpp"
 #include "beebium/server/PresetPaths.hpp"
 #include "beebium/server/RomPaths.hpp"
+#include "beebium/server/ScreenshotCrop.hpp"
 #include "beebium/PlatformUtils.hpp"
 
 #include <nlohmann/json.hpp>
@@ -4080,6 +4081,10 @@ public:
                   << "  --duration <seconds>     Emulation duration before capture (default: from\n"
                   << "                           preset thumbnail_capture_delay_seconds, or 2.0)\n"
                   << "  --border <pixels>        Black border width around the image (default: 20)\n"
+                  << "  --crop <mode>            none (default) or auto. auto crops to the\n"
+                  << "                           screen content (e.g. a boot banner top-left in a\n"
+                  << "                           mostly black frame) and enlarges it to the same\n"
+                  << "                           image size, keeping the frame's aspect ratio.\n"
                   << "\n"
                   << "All 'start' subcommand options are also accepted.\n";
     }
@@ -4095,6 +4100,17 @@ public:
         std::string output_filepath;
         std::optional<double> cli_duration;
         int border_pixels = 20;
+        bool crop_auto = false;  // --crop none (default) | auto
+
+        // Accept the mode of a --crop flag in either form (`--crop auto` or
+        // `--crop=auto`); returns false and reports a USAGE error for an unknown
+        // value, naming the accepted ones.
+        auto parse_crop_mode = [](std::string_view mode, bool& out) -> bool {
+            if (mode == "none") { out = false; return true; }
+            if (mode == "auto") { out = true; return true; }
+            std::cerr << "Error: --crop must be 'none' or 'auto'\n";
+            return false;
+        };
 
         std::vector<char*> filtered_argv;
         for (int i = 0; i < argc; ++i) {
@@ -4129,6 +4145,17 @@ public:
                         return ExitCode::USAGE;
                     }
                     ++i;
+                    continue;
+                } else if (arg == "--crop" && i + 1 < argc) {
+                    if (!parse_crop_mode(argv[i + 1], crop_auto)) {
+                        return ExitCode::USAGE;
+                    }
+                    ++i;
+                    continue;
+                } else if (arg.rfind("--crop=", 0) == 0) {
+                    if (!parse_crop_mode(arg.substr(7), crop_auto)) {
+                        return ExitCode::USAGE;
+                    }
                     continue;
                 } else if (arg == "--help" || arg == "-h") {
                     help(argv[0]);
@@ -4258,6 +4285,18 @@ public:
             uint32_t output_width = display_width + 2 * border;
             uint32_t output_height = display_height + 2 * border;
 
+            // The source rectangle within the logical frame to scale to the
+            // display. --crop none uses the whole frame, so the nearest-neighbour
+            // mapping below is byte-for-byte the original behaviour; --crop auto
+            // finds the content and enlarges it (see ScreenshotCrop.hpp), scaled
+            // to the SAME display size and border so a thumbnail set stays
+            // uniform.
+            CropRect src_rect{0, 0, frame_width, frame_height};
+            if (crop_auto) {
+                src_rect = compute_auto_crop(frame_copy.data(), frame_width,
+                                             frame_height, stride_pixels);
+            }
+
             // Zero-initialised = black with alpha 0, then we set alpha for all pixels
             std::vector<uint8_t> rgba(output_width * output_height * 4, 0);
 
@@ -4268,12 +4307,16 @@ public:
 
             // Write display content into the bordered region
             for (uint32_t y = 0; y < display_height; ++y) {
-                uint32_t src_y = y * frame_height / display_height;
-                if (src_y >= frame_height) src_y = frame_height - 1;
+                uint32_t src_y = src_rect.y + y * src_rect.height / display_height;
+                if (src_y >= src_rect.y + src_rect.height) {
+                    src_y = src_rect.y + src_rect.height - 1;
+                }
 
                 for (uint32_t x = 0; x < display_width; ++x) {
-                    uint32_t src_x = x * frame_width / display_width;
-                    if (src_x >= frame_width) src_x = frame_width - 1;
+                    uint32_t src_x = src_rect.x + x * src_rect.width / display_width;
+                    if (src_x >= src_rect.x + src_rect.width) {
+                        src_x = src_rect.x + src_rect.width - 1;
+                    }
 
                     uint32_t bgra = frame_copy[src_y * stride_pixels + src_x];
 

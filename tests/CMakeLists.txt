@@ -1700,6 +1700,17 @@ if(BEEBIUM_BUILD_SERVICE)
     catch_discover_tests(test_grpc_system)
 
     # Server main helper function tests
+    # Screenshot auto-crop geometry (pure header, no machine).
+    add_executable(test_screenshot_crop test_screenshot_crop.cpp)
+    target_include_directories(test_screenshot_crop PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_screenshot_crop PRIVATE
+        beebium_core
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_screenshot_crop)
+
     add_executable(test_server_main test_server_main.cpp)
     target_include_directories(test_server_main PRIVATE
         ${CMAKE_SOURCE_DIR}/src/server/include
@@ -1776,6 +1787,7 @@ if(BEEBIUM_BUILD_SERVICE)
     target_link_libraries(test_preset_subcommands PRIVATE
         beebium_core
         nlohmann_json::nlohmann_json
+        stb_image
         Catch2::Catch2WithMain
     )
     target_compile_definitions(test_preset_subcommands PRIVATE

@@ -545,6 +545,32 @@ beebium-model-b export-preset <id> --output <filepath>
 
 Copies the preset file to the specified location. Works with both system and user presets.
 
+### capture-screenshot
+
+Run the emulator headlessly for a short time and write the framebuffer to a PNG
+(used to generate preset thumbnails). Accepts all `start` options (`--preset`,
+`--fdc`, `--sideways`, `--tube-65c02`, ...), so it runs any coprocessor the
+configuration installs, exactly as `start` would.
+
+```bash
+beebium-model-b capture-screenshot --output <filepath> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--output <filepath>` | Output PNG filepath (required) |
+| `--duration <seconds>` | Emulation time before capture (default: the preset's `thumbnail_capture_delay_seconds`, else 2.0) |
+| `--border <pixels>` | Black border around the image (default: 20) |
+| `--crop <mode>` | `none` (default) or `auto` |
+
+`--crop auto` crops to the screen's content -- a boot banner typically sits
+top-left in a mostly black frame -- and enlarges it to the same image size and
+border a `--crop none` thumbnail would have, so a thumbnail set stays uniform in
+aspect and pixel size while the banner is legible. The crop keeps the frame's
+aspect ratio and, where one fits, snaps to an integer upscale so glyph strokes
+stay even. `--crop none` (and omitting `--crop`) leaves the output exactly as
+before. An unknown mode is a usage error.
+
 ### help
 
 Show help for a subcommand.

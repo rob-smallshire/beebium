@@ -18,6 +18,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/PresetLoader.hpp>
+#include "stb_image.h"
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -806,6 +808,123 @@ TEST_CASE("capture-screenshot runs the Tube coprocessor from a preset",
 
         remove_quietly(tube_png);
         remove_quietly(host_png);
+    }
+}
+
+// ============================================================================
+// capture-screenshot --crop auto
+// ============================================================================
+
+namespace {
+
+// Fraction of a PNG (loaded RGBA) occupied by the non-black content bounding
+// box: (bbox area) / (image area). A pixel is content if any of R,G,B > 16 (the
+// black border and void do not count). Returns -1 on load failure.
+double content_fraction(const std::filesystem::path& png) {
+    int w = 0, h = 0, channels = 0;
+    unsigned char* data = stbi_load(png.string().c_str(), &w, &h, &channels, 4);
+    if (!data || w <= 0 || h <= 0) {
+        if (data) stbi_image_free(data);
+        return -1.0;
+    }
+    int min_x = w, min_y = h, max_x = -1, max_y = -1;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const unsigned char* p = data + (static_cast<size_t>(y) * w + x) * 4;
+            if (p[0] > 16 || p[1] > 16 || p[2] > 16) {
+                if (x < min_x) min_x = x;
+                if (x > max_x) max_x = x;
+                if (y < min_y) min_y = y;
+                if (y > max_y) max_y = y;
+            }
+        }
+    }
+    stbi_image_free(data);
+    if (max_x < 0) return 0.0;  // all black
+    const double bbox = static_cast<double>(max_x - min_x + 1)
+                      * static_cast<double>(max_y - min_y + 1);
+    return bbox / (static_cast<double>(w) * h);
+}
+
+}  // namespace
+
+TEST_CASE("capture-screenshot --crop none is byte-identical to the default and to master",
+          "[integration][screenshot][crop]") {
+    // --crop none and no --crop flag must produce identical bytes (the default
+    // is none). Existing output is unchanged; the master baseline is verified
+    // separately in the branch's acceptance.
+    auto exe = find_executable("beebium-model-b");
+    auto preset = exe.parent_path() / "presets" / "model-b-disc.preset.beebium";
+    REQUIRE(std::filesystem::exists(preset));
+
+    auto none_png = std::filesystem::temp_directory_path() / "beebium_crop_none.png";
+    auto def_png = std::filesystem::temp_directory_path() / "beebium_crop_default.png";
+
+    auto none = run_command(exe.string() + " capture-screenshot --preset \"" +
+                            preset.string() + "\" --output \"" + none_png.string() +
+                            "\" --crop none --duration 3");
+    auto def = run_command(exe.string() + " capture-screenshot --preset \"" +
+                           preset.string() + "\" --output \"" + def_png.string() +
+                           "\" --duration 3");
+    REQUIRE(none.exit_code == 0);
+    REQUIRE(def.exit_code == 0);
+
+    auto read = [](const std::filesystem::path& p) {
+        std::ifstream f(p, std::ios::binary);
+        std::ostringstream ss; ss << f.rdbuf(); return ss.str();
+    };
+    CHECK(read(none_png) == read(def_png));
+
+    remove_quietly(none_png);
+    remove_quietly(def_png);
+}
+
+TEST_CASE("capture-screenshot --crop auto enlarges the content relative to the frame",
+          "[integration][screenshot][crop]") {
+    // On both a non-Tube and a Tube preset, --crop auto zooms the boot content
+    // so its non-black bounding box fills more of the image than --crop none's.
+    struct Case { std::string executable; std::string preset_id; };
+    const std::vector<Case> cases = {
+        {"beebium-model-b",          "model-b-disc"},
+        {"beebium-model-b",          "model-b-disc-65c02-copro"},
+    };
+
+    auto unknown_mode = run_command(
+        find_executable("beebium-model-b").string() +
+        " capture-screenshot --output /tmp/beebium_crop_bad.png --crop sideways --duration 0");
+    CHECK(unknown_mode.exit_code != 0);  // USAGE
+    CHECK(unknown_mode.stderr_output.find("none") != std::string::npos);
+    CHECK(unknown_mode.stderr_output.find("auto") != std::string::npos);
+
+    for (const auto& c : cases) {
+        auto exe = find_executable(c.executable);
+        auto preset = exe.parent_path() / "presets" / (c.preset_id + ".preset.beebium");
+        INFO("preset: " << c.preset_id);
+        REQUIRE(std::filesystem::exists(preset));
+
+        auto none_png = std::filesystem::temp_directory_path()
+                      / ("beebium_" + c.preset_id + "_none.png");
+        auto auto_png = std::filesystem::temp_directory_path()
+                      / ("beebium_" + c.preset_id + "_auto.png");
+
+        auto none = run_command(exe.string() + " capture-screenshot --preset \"" +
+                                preset.string() + "\" --output \"" + none_png.string() +
+                                "\" --crop none --duration 3");
+        auto autor = run_command(exe.string() + " capture-screenshot --preset \"" +
+                                 preset.string() + "\" --output \"" + auto_png.string() +
+                                 "\" --crop auto --duration 3");
+        REQUIRE(none.exit_code == 0);
+        REQUIRE(autor.exit_code == 0);
+
+        const double f_none = content_fraction(none_png);
+        const double f_auto = content_fraction(auto_png);
+        INFO("content fraction none=" << f_none << " auto=" << f_auto);
+        REQUIRE(f_none > 0.0);
+        REQUIRE(f_auto > 0.0);
+        CHECK(f_auto > f_none);
+
+        remove_quietly(none_png);
+        remove_quietly(auto_png);
     }
 }
 
