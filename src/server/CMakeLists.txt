@@ -219,6 +219,9 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
         "${BEEBIUM_ROM_DIR}/acorn-mos_2_0.rom"
         "${BEEBIUM_ROM_DIR}/bbc-basic_2.rom"
         "${BEEBIUM_ROM_DIR}/acorn-dfs_2_26.rom"
+        # ANFS: the shipped Econet presets reference it, so a developer running
+        # start --preset from the build tree needs it beside the binary too.
+        "${BEEBIUM_ROM_DIR}/acorn-anfs_4_18.rom"
         "${ROM_OUTPUT_DIR}/"
     COMMENT "Copying host ROMs to build directory"
 )
@@ -236,6 +239,21 @@ add_system_preset(beebium-model-b-romram "model-b-romram-disc"
 add_system_preset(beebium-model-b-plus "model-b-plus" "BBC Model B+ 64K" "1985-06")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
     "BBC Model B+ 128K" "1985-06")
+
+# Econet presets, so users can try networking out of the box: model-b-disc
+# plus a network filing system (ANFS 4.18) and a station number, one per
+# transport. ANFS sits in slot 14 and DFS in slot 13 (not slot 14 as the plain
+# disc preset uses): the MOS polls filing-system ROMs from the top socket down,
+# so the higher-slotted ANFS becomes the default filing system while DFS stays
+# fitted (*DISC / SHIFT+BREAK still work). Slot 15 is left to its aliased BASIC
+# socket (IC101) so the machine still boots to BASIC. DNFS 3.02 is deliberately
+# NOT used here -- it is 8271-only and silently fatal with the 1770 controller.
+add_system_preset(beebium-model-b "model-b-disc-aun-80"
+    "BBC Model B (Disc, AUN Econet Station 80)" "1985"
+    --fdc acorn-1770
+    --sideways 13:rom:acorn-dfs_2_26.rom
+    --sideways 14:rom:acorn-anfs_4_18.rom
+    --station 80 --aun)
 
 # Tube coprocessor presets, so users can try the second processors (the machine
 # config UI has no Tube axis yet). Each is its disc-capable sibling plus a Tube
@@ -257,6 +275,23 @@ if(TARGET beebium_ext_acorn_65c102_plugin)
         "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
         THUMBNAIL_DELAY 6
         --tube-65c102)
+endif()
+
+# Econet-over-Piconet preset. Piconet is a plugin, so this uses add_plugin_preset
+# (depends on the plugin so it is deployed before create-preset resolves
+# --piconet). No device_path is baked in: the extension discovers the connected
+# Piconet at boot, and on a host with none attached it boots cleanly with no
+# network (create-preset generation and the thumbnail capture never need the
+# device). Slot layout matches the AUN preset: ANFS(14) outranks DFS(13) so
+# ANFS is the default filing system, BASIC stays in slot 15.
+if(TARGET beebium_ext_piconet_plugin)
+    add_plugin_preset(beebium-model-b beebium_ext_piconet_plugin
+        "model-b-disc-eco-81"
+        "BBC Model B (Disc, Piconet Econet Station 81)" "1985"
+        --fdc acorn-1770
+        --sideways 13:rom:acorn-dfs_2_26.rom
+        --sideways 14:rom:acorn-anfs_4_18.rom
+        --station 81 --piconet)
 endif()
 
 # Install rules
