@@ -539,6 +539,12 @@ target_link_libraries(test_piconet_probe PRIVATE beebium_piconet_core Catch2::Ca
 target_include_directories(test_piconet_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 catch_discover_tests(test_piconet_probe)
 
+# Piconet device discovery (VID filter + one/zero/many decision). Server-free:
+# the port enumerator and prober are injected.
+add_executable(test_piconet_discovery test_piconet_discovery.cpp)
+target_link_libraries(test_piconet_discovery PRIVATE beebium_piconet_core Catch2::Catch2WithMain)
+catch_discover_tests(test_piconet_discovery)
+
 # Piconet integration: full FourWayHandshake -> PiconetBackend -> FakePiconetDevice stack.
 add_executable(test_piconet_integration
     test_piconet_integration.cpp

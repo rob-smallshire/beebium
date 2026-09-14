@@ -13,6 +13,7 @@ set(PICONET_SERIAL_SRCS)
 # the same #include paths it always did.
 add_library(beebium_piconet_core STATIC
     src/Base64.cpp
+    src/Discovery.cpp
     src/Events.cpp
     src/PiconetBackend.cpp
     src/Probe.cpp

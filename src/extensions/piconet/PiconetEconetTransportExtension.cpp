@@ -15,7 +15,10 @@
 #ifdef BEEBIUM_BUILD_SERVICE
 #include "PiconetDispatcher.hpp"
 #endif
+#include "beebium/econet/piconet/Discovery.hpp"
 #include "beebium/econet/piconet/PiconetConfig.hpp"
+#include "beebium/econet/piconet/Probe.hpp"
+#include "beebium/serial/EnumeratePorts.hpp"
 
 #ifdef _WIN32
 #include "beebium/econet/piconet/Win32SerialPort.hpp"
@@ -23,8 +26,10 @@
 #include "beebium/econet/piconet/PosixSerialPort.hpp"
 #endif
 
+#include <chrono>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace beebium {
 
@@ -64,14 +69,37 @@ PiconetEconetTransportExtension::rpc_dispatchers() {
 
 std::unique_ptr<NetworkBackend>
 PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
-    auto device_path = config_value("device_path");
-    if (!device_path || device_path->empty()) {
-        std::cerr << "Piconet extension: missing required parameter 'device_path'\n";
-        open_error_message_ = "missing 'device_path' parameter";
+    // device_path is optional. An explicit path is honoured exactly; an
+    // absent path (or the sentinel "auto") triggers discovery: enumerate
+    // serial ports, keep the Raspberry Pi Pico's USB vendor id, and probe
+    // each with a STATUS handshake (see Discovery.hpp / Probe.hpp).
+    auto configured = config_value("device_path");
+    std::string explicit_path(configured ? *configured : std::string_view{});
+
+    auto discovery = piconet::discover_piconet_device(
+        explicit_path,
+        [] { return serial::enumerate_serial_ports(); },
+        [](const std::string& candidate) {
+            auto candidate_serial = make_platform_serial(candidate);
+            if (!candidate_serial->is_open()) {
+                return false;
+            }
+            return piconet::probe_status(*candidate_serial,
+                                         std::chrono::milliseconds(500))
+                .has_value();
+        });
+
+    if (!discovery.ok) {
+        // No usable device. Returning nullptr lets install_econet install a
+        // disconnected backend so the machine still boots ("no network") --
+        // exactly what a preset booted on a Piconet-less host needs.
+        std::cerr << "Piconet extension: " << discovery.message << "\n";
+        open_error_message_ = discovery.message;
         return nullptr;
     }
+    std::cout << "Piconet extension: " << discovery.message << "\n";
 
-    std::string path(*device_path);
+    std::string path(discovery.device_path);
     auto serial = make_platform_serial(path);
     if (!serial->is_open()) {
         // Log the failure but still construct a PiconetBackend in a

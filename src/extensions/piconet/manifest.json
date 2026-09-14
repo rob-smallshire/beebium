@@ -9,8 +9,8 @@
         {
             "key": "device_path",
             "type": "filepath",
-            "description": "Serial device path (e.g. /dev/tty.usbmodem101)",
-            "required": true
+            "description": "Serial device path (e.g. /dev/tty.usbmodem101). Omit or set to 'auto' to discover a connected Piconet by its USB vendor id and a STATUS probe.",
+            "required": false
         }
     ]
 }
