@@ -3530,6 +3530,8 @@ public:
                   << "\n"
                   << "Options:\n"
                   << "  --name <name>     Display name for the preset (required)\n"
+                  << "  --description <text>  Short one-line description shown in the picker\n"
+                  << "                        (falls back to the machine description if omitted)\n"
                   << "  --from <id>       Source preset to copy configuration from\n"
                   << "  --output <path>   Write to specified path instead of user directory\n"
                   << "  --release-date <date>     Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
@@ -3558,6 +3560,7 @@ public:
 
         // Parse subcommand options
         std::string preset_name;
+        std::string preset_description;
         std::string from_id;
         std::string output_filepath;
         std::string release_date;
@@ -3593,6 +3596,8 @@ public:
                 return ExitCode::OK;
             } else if (arg == "--name" && i + 1 < argc) {
                 preset_name = argv[++i];
+            } else if (arg == "--description" && i + 1 < argc) {
+                preset_description = argv[++i];
             } else if (arg == "--from" && i + 1 < argc) {
                 from_id = argv[++i];
             } else if (arg == "--output" && i + 1 < argc) {
@@ -3696,6 +3701,9 @@ public:
         // Explicit flags layer on top of any --from baseline.
         if (!release_date.empty()) {
             preset["release_date"] = release_date;
+        }
+        if (!preset_description.empty()) {
+            preset["description"] = preset_description;
         }
         if (!fdc_id.empty()) {
             preset["storage"]["fdc_socket"]["id"] = fdc_id;

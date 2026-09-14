@@ -16,6 +16,14 @@ file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 # create-preset code path that users create their own presets with. Extra
 # create-preset arguments (e.g. --fdc, --sideways) are forwarded via ARGN.
 function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
+    # DESCRIPTION is a one-value keyword forwarded as create-preset's
+    # --description (the concise one-liner the picker card shows); the rest of
+    # ARGN goes to create-preset unchanged.
+    cmake_parse_arguments(PRESET "" "DESCRIPTION" "" ${ARGN})
+    set(description_args "")
+    if(DEFINED PRESET_DESCRIPTION)
+        set(description_args --description "${PRESET_DESCRIPTION}")
+    endif()
     # Generate into the config-independent PRESETS_OUTPUT_DIR that install()
     # reads. (Writing to $<TARGET_FILE_DIR:...>/presets instead put the presets
     # in a per-config Release/presets on multi-config generators, where the
@@ -28,7 +36,8 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
         COMMAND ${EXECUTABLE} create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
-            ${ARGN}
+            ${description_args}
+            ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
         COMMAND ${EXECUTABLE} capture-screenshot
             --preset "${preset_filepath}"
@@ -66,10 +75,14 @@ endfunction()
 # capture-screenshot as --duration (the parasite's "Acorn TUBE ..." banner
 # settles after the 2.0s default); the rest of ARGN goes to create-preset.
 function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
-    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY" "" ${ARGN})
+    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY;DESCRIPTION" "" ${ARGN})
     set(capture_duration_args "")
     if(DEFINED PRESET_THUMBNAIL_DELAY)
         set(capture_duration_args --duration ${PRESET_THUMBNAIL_DELAY})
+    endif()
+    set(description_args "")
+    if(DEFINED PRESET_DESCRIPTION)
+        set(description_args --description "${PRESET_DESCRIPTION}")
     endif()
     set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.preset.beebium")
     set(thumbnail_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.thumbnail.png")
@@ -87,6 +100,7 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
         COMMAND ${EXECUTABLE} create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
+            ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
         COMMAND ${EXECUTABLE} capture-screenshot
@@ -230,15 +244,20 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
 # two presets: a bare cassette machine and a disc-equipped variant. A filing
 # system is provisioned explicitly via --sideways; no machine auto-loads DFS
 # except the Model B+, whose disc controller and DFS are integral hardware.
-add_system_preset(beebium-model-b "model-b" "BBC Model B" "1981-12")
+add_system_preset(beebium-model-b "model-b" "BBC Model B" "1981-12"
+    DESCRIPTION "32K Model B, cassette only")
 add_system_preset(beebium-model-b "model-b-disc" "BBC Model B (Disc)" "1982"
+    DESCRIPTION "32K Model B, 1770 DFS"
     --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
 add_system_preset(beebium-model-b-romram "model-b-romram-disc"
     "BBC Model B with ROM/RAM Board (Disc)" "1984"
+    DESCRIPTION "Model B, ROM/RAM board, 1770 DFS"
     --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
-add_system_preset(beebium-model-b-plus "model-b-plus" "BBC Model B+ 64K" "1985-06")
+add_system_preset(beebium-model-b-plus "model-b-plus" "BBC Model B+ 64K" "1985-06"
+    DESCRIPTION "64K Model B+, integral DFS")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
-    "BBC Model B+ 128K" "1985-06")
+    "BBC Model B+ 128K" "1985-06"
+    DESCRIPTION "128K Model B+, sideways RAM")
 
 # Econet presets, so users can try networking out of the box: model-b-disc
 # plus a network filing system (ANFS 4.18) and a station number, one per
@@ -249,7 +268,8 @@ add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
 # socket (IC101) so the machine still boots to BASIC. DNFS 3.02 is deliberately
 # NOT used here -- it is 8271-only and silently fatal with the 1770 controller.
 add_system_preset(beebium-model-b "model-b-disc-aun-80"
-    "BBC Model B (Disc, AUN Econet Station 80)" "1985"
+    "Station 80 (AUN, Model B)" "1985"
+    DESCRIPTION "Econet over AUN (UDP), ANFS + DFS"
     --fdc acorn-1770
     --sideways 13:rom:acorn-dfs_2_26.rom
     --sideways 14:rom:acorn-anfs_4_18.rom
@@ -266,6 +286,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
     add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
         "model-b-disc-65c02-copro"
         "BBC Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
+        DESCRIPTION "Model B disc + 65C02 second processor (3 MHz)"
         THUMBNAIL_DELAY 6
         --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
 endif()
@@ -273,6 +294,7 @@ if(TARGET beebium_ext_acorn_65c102_plugin)
     add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c102_plugin
         "model-b-plus-128k-65c102-copro"
         "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
+        DESCRIPTION "128K B+ + 65C102 co-processor (4 MHz)"
         THUMBNAIL_DELAY 6
         --tube-65c102)
 endif()
@@ -287,7 +309,8 @@ endif()
 if(TARGET beebium_ext_piconet_plugin)
     add_plugin_preset(beebium-model-b beebium_ext_piconet_plugin
         "model-b-disc-eco-81"
-        "BBC Model B (Disc, Piconet Econet Station 81)" "1985"
+        "Station 81 (Piconet, Model B)" "1985"
+        DESCRIPTION "Econet via Piconet USB, ANFS + DFS"
         --fdc acorn-1770
         --sideways 13:rom:acorn-dfs_2_26.rom
         --sideways 14:rom:acorn-anfs_4_18.rom
