@@ -1516,6 +1516,77 @@ bool handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
     return g_running.load();
 }
 
+// What one call to step_emulation did, for the caller's pacing/stats.
+struct StepResult {
+    bool parked = false;   // parked on a debugger pause this iteration
+    bool ran = false;      // a cycle chunk actually executed
+    std::chrono::steady_clock::duration run_duration{};  // time in machine.run()
+};
+
+// One iteration of the emulation thread's per-cycle work, shared by EVERY
+// subcommand that runs the machine (the serving loop and the screenshot
+// capture loop). This is the single place the machine is advanced, so no
+// subcommand can acquire a divergent run behaviour (see
+// docs/emulation-thread-ownership.md).
+//
+// It parks while the debugger has paused (ticking the drives as on_wake), then
+// -- unless shutting down or a quiescer slipped in -- ticks the drives, updates
+// the Econet speed gate and runs one cycle chunk under the busy scope. The
+// caller owns pacing, stats and shutdown.
+//
+//   on_parked : invoked immediately after a debugger-pause park returns, before
+//               the budget is taken (the serving loop rebases the pacing clock
+//               here, which must happen before wait_for_tick). Pass a no-op
+//               (`[]{}`) when there is nothing to do (the screenshot loop).
+//   budget    : returns the cycle count for this chunk. The serving loop's
+//               budget waits for the next pacing tick inside it -- a sleep that
+//               must stay outside the busy scope and out of the run() timing --
+//               and the screenshot loop's simply returns a fixed chunk.
+template<typename MachineType, typename OnParked, typename Budget>
+StepResult step_emulation(MachineType& machine, double speed_multiplier,
+                          OnParked&& on_parked, Budget&& budget) {
+    using Memory = typename MachineType::Memory;
+    StepResult result;
+
+    // A pending safe eject completes on this thread; ticking it as on_wake keeps
+    // it progressing even while the machine is parked (a standing-still drive is
+    // exactly when a disc may leave).
+    result.parked = machine.wait_if_paused([&] { tick_disc_drives(machine); });
+    if (result.parked) {
+        on_parked();
+    }
+    if (machine.shutdown_requested()) {
+        return result;
+    }
+
+    // Decide the cycle budget before entering the busy scope: a pacing
+    // wait_for_tick() sleeps here and must not hold the emulation-busy guard.
+    const uint64_t cycles = budget();
+
+    // Everything below touches state the emulation thread owns. The busy scope
+    // makes a quiescing caller wait for all of it, not just run(); if a pause
+    // landed in the gap since wait_if_paused returned, the scope is inactive and
+    // we skip the work so the caller re-parks rather than racing the quiescer.
+    typename MachineType::EmulationBusyScope busy(machine);
+    if (!busy.active()) {
+        return result;
+    }
+
+    tick_disc_drives(machine);
+
+    // Keep the Econet socket informed of the current speed so a transport that
+    // requires real time (Piconet) is gated whenever speed != 1x.
+    if constexpr (HasEconetSocket<Memory>) {
+        machine.memory().econet_socket.set_emulation_speed(speed_multiplier);
+    }
+
+    auto run_start = std::chrono::steady_clock::now();
+    machine.run(cycles);
+    result.run_duration = std::chrono::steady_clock::now() - run_start;
+    result.ran = true;
+    return result;
+}
+
 // Run the main emulation loop with pacing.
 // This function blocks until g_running becomes false (signal handler sets it).
 // Sets up shutdown callbacks for clean signal handling.
@@ -1594,63 +1665,35 @@ void run_emulation_loop(MachineType& machine,
     // Reset VSYNC edge counter for frequency measurement
     machine.memory().system_via_peripheral.consume_vsync_rising_edges();
     while (g_running) {
-        // Block if debugger has paused execution. If we actually blocked, the
-        // wall time spent paused (a debugger reset, a run_until_or_timeout step
-        // sequence, etc.) must not be charged to the pacing clock as owed
-        // emulation -- otherwise it runs fast to "catch up" after every debug
-        // operation. Re-anchor the pacing clock to the machine's current cycle
-        // count on resume: a hard reset zeroes that counter, so the baseline
-        // must follow it or the deficit accounting underflows and paces the
-        // machine down to a crawl.
-        if (machine.wait_if_paused([&] { tick_disc_drives(machine); }) && use_pacing) {
-            pacing_clock.rebase(machine.cycle_count());
-        }
+        // Advance the machine one chunk through the shared stepper. Pacing is
+        // this loop's own concern:
+        //  - on_parked rebases the pacing clock when the debugger pause released
+        //    (the wall time spent paused must not be charged as owed emulation,
+        //    or the machine races to "catch up"; a hard reset zeroes the cycle
+        //    count, so the baseline must follow it or the deficit underflows and
+        //    paces the machine down to a crawl). It runs before wait_for_tick.
+        //  - the budget waits for the next pacing tick (a sleep kept out of the
+        //    busy scope and the run() timing) and returns that tick's cycles.
+        StepResult step = step_emulation(
+            machine,
+            use_pacing ? pacing_clock.speed_multiplier() : 1.0,
+            [&] {
+                if (use_pacing) pacing_clock.rebase(machine.cycle_count());
+            },
+            [&]() -> uint64_t {
+                if (!use_pacing) return cycles_per_frame;
+                pacing_clock.wait_for_tick();
+                return pacing_clock.cycles_for_next_tick();
+            });
 
-        // Check if shutdown was requested during wait
+        // Check if shutdown was requested during the wait/park.
         if (machine.shutdown_requested()) {
             break;
         }
 
-        // Decide this iteration's cycle budget before entering the busy scope.
-        // wait_for_tick() sleeps until the next pacing tick and must stay
-        // OUTSIDE the scope: holding the emulation-busy guard across the sleep
-        // would make a quiescing caller wait out a whole tick.
-        uint64_t cycles = cycles_per_frame;
-        if (use_pacing) {
-            pacing_clock.wait_for_tick();
-            cycles = pacing_clock.cycles_for_next_tick();
-        }
-
-        // Everything below touches state the emulation thread owns -- disc
-        // drives, the Econet socket, the CPU and memory via run(). Enter the
-        // busy scope so a quiescing caller (a service or extension mutating that
-        // state) waits for all of it, not just run(). If a pause landed in the
-        // gap since wait_if_paused returned, the scope is inactive: skip the
-        // work and loop back to re-park rather than race the quiescer.
-        {
-            typename MachineType::EmulationBusyScope busy(machine);
-            if (!busy.active()) {
-                continue;
-            }
-
-            // A pending safe eject completes here, on the thread that owns the
-            // drives, once the motor has been off long enough.
-            tick_disc_drives(machine);
-
-            // Keep the Econet socket informed of the current speed so a
-            // transport that requires real time (Piconet) is gated whenever
-            // speed != 1x. Cheap (an atomic compare); only bumps the status
-            // sequence on a change.
-            if constexpr (HasEconetSocket<Memory>) {
-                machine.memory().econet_socket.set_emulation_speed(
-                    pacing_clock.speed_multiplier());
-            }
-
-            auto run_start = std::chrono::steady_clock::now();
-            machine.run(cycles);
-            auto run_segment = std::chrono::steady_clock::now() - run_start;
-            publish_run_duration += run_segment;
-            log_run_duration += run_segment;
+        if (step.ran) {
+            publish_run_duration += step.run_duration;
+            log_run_duration += step.run_duration;
             if (use_pacing) {
                 pacing_clock.report_cycles(machine.cycle_count());
             }
@@ -1724,6 +1767,353 @@ void run_emulation_loop(MachineType& machine,
 }
 
 // ============================================================================
+// Machine assembly (shared by every subcommand)
+// ============================================================================
+
+// A fully assembled, ready-to-run machine and everything whose lifetime it
+// depends on. Produced by assemble_machine() and consumed by both `start`
+// (which serves it over gRPC) and `capture-screenshot` (which runs it headless
+// to a PNG). It is the ONLY place a MachineType is constructed for running, so
+// the two subcommands cannot diverge in how the machine is built.
+//
+// Member order fixes destruction order (reverse). The machine is destroyed
+// last; the registries and context, which hold references into the machine's
+// memory, are torn down first. In particular the transport registry must die
+// before the EconetSocket backend it references -- a transport's mDNS
+// collaborators call back into that backend -- so it is declared after the
+// machine. Moving it above the machine would be a use-after-free.
+template<typename MachineType>
+struct AssembledMachine {
+    MachineType machine;
+    beebium::EconetTransportRegistry transport_registry;
+    beebium::ExtensionRegistry extension_registry;
+    // Holds raw pointers into machine memory; only meaningful for the life of
+    // the machine, hence declared after it. Emplaced during assembly.
+    std::optional<beebium::ExtensionContext> extension_context;
+    // The coprocessor extension resolved from the registry, or null. Non-owning
+    // (extension_registry owns it).
+    beebium::CoprocessorExtension* coprocessor = nullptr;
+
+    AssembledMachine() = default;
+    AssembledMachine(const AssembledMachine&) = delete;
+    AssembledMachine& operator=(const AssembledMachine&) = delete;
+};
+
+// Result of assemble_machine: the machine on success, or an exit code to
+// return when assembly failed (assembled == nullptr).
+template<typename MachineType>
+struct AssemblyOutcome {
+    std::unique_ptr<AssembledMachine<MachineType>> assembled;
+    int exit_code = ExitCode::OK;
+};
+
+// Build the machine from `config`: ROMs, disc controller, Econet (with its
+// transport registry), disc images, output enablement, startup options,
+// extension registration + resolve_and_init, the server-supplied quiescer
+// wiring (bus quiescer for every dispatcher, execution quiescer for the
+// coprocessor debug target -- see docs/emulation-thread-ownership.md), and
+// reset. gRPC services, counterpart-stop wiring and pacing belong to serving,
+// not assembly, and are done by the caller.
+//
+// `with_audio` enables audio output in addition to video (video is always on);
+// the screenshot path passes false. Machine assembly runs on the calling
+// thread before the emulation loop starts.
+template<typename MachineType>
+AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
+                                              bool with_audio) {
+    using Memory = typename MachineType::Memory;
+
+    std::cout << "Initializing " << Memory::MACHINE_DISPLAY_NAME << "...\n";
+
+    auto am = std::make_unique<AssembledMachine<MachineType>>();
+    auto& machine = am->machine;
+
+    // Load ROMs
+    load_roms(machine, config);
+
+    // Install disc controller
+    if (auto exit_code = install_disc_controller(machine, config)) {
+        return {nullptr, *exit_code};
+    }
+
+    // Resolve the machine identity UUID up front so transport extensions can
+    // pick it up via inst.config["machine_uuid"] before their create_backend
+    // runs. The MachineIdentity proper is constructed later (serving), but the
+    // UUID -- the only value extensions need -- is fixed once generated.
+    if (config.machine_uuid.empty()) {
+        config.machine_uuid = generate_uuid_v4();
+    }
+
+    beebium::PluginLoader plugin_loader;
+    if (config.default_extension_dirpath) {
+        std::cout << "Extension directory: " << *config.default_extension_dirpath << "\n";
+    }
+    for (const auto& p : config.extension_dirpaths) {
+        std::cout << "Extension directory: " << p << "\n";
+    }
+
+    // Build the Econet transport registry from any econet-transport extension
+    // instances, before install_econet so the transport is ready when the
+    // machine first reads the ADLC. Transport-extension instances are removed
+    // from config.extension_instances; the later peripheral load loop only sees
+    // peripherals.
+    {
+        std::vector<typename ServerConfig<MachineType>::ExtensionInstance> remaining;
+        remaining.reserve(config.extension_instances.size());
+        for (auto& inst : config.extension_instances) {
+            const beebium::ExtensionManifest* manifest =
+                config.extension_resolver.find_by_name(inst.name);
+
+            if (!manifest || manifest->extension_kind != "econet-transport") {
+                remaining.push_back(std::move(inst));
+                continue;
+            }
+
+            if (inst.config.find("id") == inst.config.end()) {
+                inst.config["id"] = generate_uuid_v4();
+            }
+            inst.config["machine_uuid"] = config.machine_uuid;
+            normalise_list_params(inst.config, inst.list_config, manifest->parameters);
+            std::cout << "Loading transport: " << manifest->name
+                      << " (id=" << inst.config["id"] << ")\n";
+            for (const auto& [k, v] : inst.config) {
+                if (k != "id" && k != "machine_uuid") {
+                    std::cout << "  " << k << "=" << v << "\n";
+                }
+            }
+            for (const auto& [k, vs] : inst.list_config) {
+                for (const auto& v : vs) {
+                    std::cout << "  " << k << "=" << v << "\n";
+                }
+            }
+
+            std::unique_ptr<beebium::Extension> loaded;
+            if (!manifest->library_stem.empty()) {
+                loaded = plugin_loader.load_extension(
+                    *manifest, std::move(inst.config), std::move(inst.list_config));
+            } else {
+                const auto* builtin_entry = beebium::builtin_extensions::find(inst.name);
+                if (!builtin_entry) {
+                    std::cerr << "Error: Transport extension '" << inst.name
+                              << "' has no library and no built-in factory.\n";
+                    return {nullptr, 1};
+                }
+                loaded = builtin_entry->factory();
+                loaded->set_manifest(*manifest);
+                loaded->set_config(std::move(inst.config));
+                loaded->set_list_config(std::move(inst.list_config));
+            }
+
+            auto* transport = dynamic_cast<beebium::EconetTransportExtension*>(loaded.get());
+            if (!transport) {
+                std::cerr << "Error: extension '" << manifest->name
+                          << "' has extension_kind=econet-transport but is "
+                             "not an EconetTransportExtension instance.\n";
+                return {nullptr, 1};
+            }
+            (void)loaded.release();
+            am->transport_registry.add(
+                std::unique_ptr<beebium::EconetTransportExtension>(transport));
+        }
+        config.extension_instances = std::move(remaining);
+    }
+
+    // Install Econet hardware
+    if (auto exit_code = install_econet(machine, config, am->transport_registry)) {
+        return {nullptr, *exit_code};
+    }
+
+    // Load disc images
+    if (auto exit_code = load_disc_images(machine, config)) {
+        return {nullptr, *exit_code};
+    }
+
+    // Enable output. Video is always on; audio only when the caller wants it
+    // (the screenshot path does not).
+    machine.state().memory.enable_video_output();
+    if (with_audio) {
+        machine.state().memory.enable_audio_output();
+    }
+
+    // Apply startup options before reset
+    apply_startup_options(machine, config);
+
+    // Reset machine
+    machine.reset();
+
+    // Set up peripheral extension registry.
+    beebium::ExtensionRegistry& extension_registry = am->extension_registry;
+    if constexpr (beebium::HasOneMHzBus<Memory>) {
+        extension_registry.register_extension_point("1mhz-bus");
+    }
+    if constexpr (beebium::HasUserPort<Memory>) {
+        extension_registry.register_extension_point("user-port");
+    }
+    if constexpr (beebium::HasTubeSocket<Memory>) {
+        extension_registry.register_extension_point("tube");
+    }
+    if constexpr (beebium::HasSerialPort<Memory>) {
+        extension_registry.register_extension_point("serial-port");
+    }
+
+    // Load peripheral extensions (from --<cli-name> flags). Sort so providers
+    // are loaded before consumers (RTLD_GLOBAL takes effect before children
+    // resolve parent symbols); stable_partition preserves command-line order.
+    std::stable_partition(
+        config.extension_instances.begin(),
+        config.extension_instances.end(),
+        [&config](const auto& inst) {
+            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            return m && !m->provides.empty();
+        });
+
+    for (auto& inst : config.extension_instances) {
+        if (inst.config.find("id") == inst.config.end()) {
+            inst.config["id"] = generate_uuid_v4();
+        }
+
+        const beebium::ExtensionManifest* manifest =
+            config.extension_resolver.find_by_name(inst.name);
+        if (!manifest) {
+            std::cerr << "Error: Extension '" << inst.name << "' not found";
+            for (const auto& p : config.extension_dirpaths) {
+                std::cerr << " in " << p;
+            }
+            if (config.default_extension_dirpath && config.extension_dirpaths.empty()) {
+                std::cerr << " in " << *config.default_extension_dirpath;
+            }
+            std::cerr << "\n";
+            return {nullptr, ExitCode::CONFIG};
+        }
+        normalise_list_params(inst.config, inst.list_config, manifest->parameters);
+
+        std::cout << "Loading extension: " << inst.name;
+        if (inst.config.count("id")) {
+            std::cout << " (id=" << inst.config["id"] << ")";
+        }
+        std::cout << "\n";
+        for (const auto& [key, value] : inst.config) {
+            if (key != "id") {
+                std::cout << "  " << key << "=" << value << "\n";
+            }
+        }
+        for (const auto& [key, values] : inst.list_config) {
+            for (const auto& v : values) {
+                std::cout << "  " << key << "=" << v << "\n";
+            }
+        }
+
+        std::unique_ptr<beebium::Extension> loaded;
+        if (!manifest->library_stem.empty()) {
+            loaded = plugin_loader.load_extension(
+                *manifest, std::move(inst.config), std::move(inst.list_config));
+        } else {
+            const auto* builtin_entry = beebium::builtin_extensions::find(inst.name);
+            if (!builtin_entry) {
+                std::cerr << "Error: Extension '" << inst.name
+                          << "' has no library and no built-in factory.\n";
+                return {nullptr, ExitCode::CONFIG};
+            }
+            loaded = builtin_entry->factory();
+            loaded->set_manifest(*manifest);
+            loaded->set_config(std::move(inst.config));
+            loaded->set_list_config(std::move(inst.list_config));
+        }
+
+        if (manifest->extension_kind == "peripheral") {
+            auto* peripheral = dynamic_cast<beebium::PeripheralExtension*>(loaded.get());
+            if (!peripheral) {
+                std::cerr << "Error: Extension '" << inst.name
+                          << "' has extension_kind=peripheral but is not a "
+                             "PeripheralExtension instance.\n";
+                return {nullptr, ExitCode::CONFIG};
+            }
+            (void)loaded.release();
+            extension_registry.register_extension(
+                std::unique_ptr<beebium::PeripheralExtension>(peripheral));
+        } else {
+            std::cerr << "Error: Extension '" << inst.name
+                      << "' has unsupported extension_kind '"
+                      << manifest->extension_kind << "'.\n";
+            return {nullptr, ExitCode::CONFIG};
+        }
+    }
+
+    // Initialise extensions (dependency resolution + topological sort). This is
+    // what installs a coprocessor into the Tube socket.
+    std::cout << "Initialising extensions...\n";
+    am->extension_context.emplace(
+        beebium::HasOneMHzBus<Memory> ? &machine.state().memory.one_mhz_bus() : nullptr,
+        beebium::HasUserPort<Memory> ? &machine.state().memory.user_port() : nullptr,
+        beebium::HasTubeSocket<Memory> ? &machine.state().memory.tube_socket : nullptr,
+        &machine.state().memory.indicators,
+        beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr);
+    extension_registry.resolve_and_init(*am->extension_context);
+
+    // Wire the bus quiescer into every extension dispatcher so a gRPC-thread
+    // handler halts the emulation thread across a device mutation. The server
+    // supplies it (forwarding to Machine::with_emulation_paused); a dispatcher
+    // author never sets it.
+    for (auto* ext : extension_registry.extensions()) {
+        for (auto* dispatcher : ext->rpc_dispatchers()) {
+            dispatcher->set_bus_quiescer(
+                [&machine](const std::function<void()>& fn) {
+                    machine.with_emulation_paused(fn);
+                });
+        }
+    }
+
+    // All registrations are complete -- close the registration window and start
+    // the indicators consumer thread.
+    machine.state().memory.indicators.start();
+
+    // Log initialisation order
+    for (auto* ext : extension_registry.extensions()) {
+        std::cout << "  " << ext->name();
+        if (!ext->id().empty()) {
+            std::cout << " [" << ext->id() << "]";
+        }
+        if (!ext->provides().empty()) {
+            std::cout << " provides:";
+            for (auto p : ext->provides()) std::cout << " " << p;
+        }
+        if (!ext->attaches_to().empty()) {
+            std::cout << " on:";
+            for (auto a : ext->attaches_to()) std::cout << " " << a;
+        }
+        std::cout << "\n";
+    }
+
+    // Find the coprocessor extension, if any, through the abstract interface.
+    // There is one Tube socket, so at most one coprocessor may attach.
+    for (auto* ext : extension_registry.extensions()) {
+        if (auto* cop = dynamic_cast<beebium::CoprocessorExtension*>(ext)) {
+            if (am->coprocessor) {
+                std::cerr << "Error: more than one coprocessor attached to the "
+                             "Tube; the Tube has a single socket.\n";
+                return {nullptr, 1};
+            }
+            am->coprocessor = cop;
+        }
+    }
+
+    // Wire the coprocessor debug target's execution quiescer: halting the
+    // coprocessor (which runs on the host emulation thread) to mutate its debug
+    // entries means pausing the host machine. The debugger SERVICE built over
+    // this target is a serving concern and belongs to the caller.
+    if (am->coprocessor) {
+        if (auto* target = am->coprocessor->debug_target()) {
+            target->set_execution_quiescer(
+                [&machine](const std::function<void()>& fn) {
+                    machine.with_emulation_paused(fn);
+                });
+        }
+    }
+
+    return {std::move(am), ExitCode::OK};
+}
+
+// ============================================================================
 // Concrete subcommand implementations
 // ============================================================================
 
@@ -1784,329 +2174,24 @@ public:
                 RomPaths::set_rom_directory(config.rom_dirpath);
             }
 
-            // Create and initialize machine
-            std::cout << "Initializing " << Memory::MACHINE_DISPLAY_NAME << "...\n";
-            MachineType machine;
+            // Assemble the machine. This is the single shared assembly every
+            // subcommand uses, so `start` and `capture-screenshot` cannot diverge
+            // in how the machine is built (see assemble_machine).
+            auto assembly = assemble_machine<MachineType>(config, /*with_audio=*/true);
+            if (!assembly.assembled) {
+                return assembly.exit_code;
+            }
+            auto& am = *assembly.assembled;
+            auto& machine = am.machine;
+            auto& extension_registry = am.extension_registry;
+            auto& transport_registry = am.transport_registry;
+            beebium::CoprocessorExtension* coprocessor_ext = am.coprocessor;
 
-            // Set up the shutdown handler (SIGINT/SIGTERM on POSIX, console
-            // events on Windows). Installed here, with the machine in hand, so
-            // that a machine paused before the emulation loop starts -- by
-            // --wait=api, say -- can still be told to stop. Removed when this
-            // scope ends, which is after everything declared below it has been
-            // destroyed and while the machine is still alive.
+            // Signal handling needs the machine in hand so a machine paused
+            // before the emulation loop starts (--wait=api) can still be told to
+            // stop. Installed after assembly and torn down while the machine
+            // (owned by `assembly`, declared above the services below) is alive.
             ScopedShutdownHandler<MachineType> shutdown_handler(machine);
-
-            // Load ROMs
-            load_roms(machine, config);
-
-            // Install disc controller
-            if (auto exit_code = install_disc_controller(machine, config)) {
-                return *exit_code;
-            }
-
-            // Resolve the machine identity UUID up front so transport
-            // extensions can pick it up via inst.config["machine_uuid"]
-            // before their create_backend runs. The MachineIdentity
-            // proper is constructed later, but the UUID (the only
-            // value extensions need today) is fixed once it's been
-            // generated.
-            if (config.machine_uuid.empty()) {
-                config.machine_uuid = generate_uuid_v4();
-            }
-
-            // Plugin manifests were scanned during parse_start_arguments and
-            // stored on config.extension_resolver, applying the search-path
-            // override semantics. Echo the directories that contributed.
-            beebium::PluginLoader plugin_loader;
-            if (config.default_extension_dirpath) {
-                std::cout << "Extension directory: " << *config.default_extension_dirpath << "\n";
-            }
-            for (const auto& p : config.extension_dirpaths) {
-                std::cout << "Extension directory: " << p << "\n";
-            }
-
-            // Build the Econet transport registry from any econet-transport
-            // extension instances. Done before install_econet so the
-            // transport is ready when the machine first reads the ADLC.
-            // Transport-extension instances are removed from
-            // config.extension_instances; the later peripheral-extension
-            // load loop only sees peripherals.
-            // Declared after `machine` deliberately, and the order is
-            // load-bearing. A transport extension may own collaborators that
-            // hold a reference to the backend living inside the machine's
-            // EconetSocket -- AunDiscoverySubscriber does, and invokes
-            // callbacks from the mDNS browser thread. Reverse destruction
-            // order tears the registry down first, so those collaborators stop
-            // before the backend they reference dies. Moving this declaration
-            // above `machine` would be a use-after-free.
-            beebium::EconetTransportRegistry transport_registry;
-            {
-                std::vector<typename ServerConfig<MachineType>::ExtensionInstance> remaining;
-                remaining.reserve(config.extension_instances.size());
-                for (auto& inst : config.extension_instances) {
-                    // Locate the manifest via the resolver so
-                    // user-supplied extension dirs override built-ins
-                    // and earlier dirs.
-                    const beebium::ExtensionManifest* manifest =
-                        config.extension_resolver.find_by_name(inst.name);
-
-                    if (!manifest || manifest->extension_kind != "econet-transport") {
-                        remaining.push_back(std::move(inst));
-                        continue;
-                    }
-
-                    if (inst.config.find("id") == inst.config.end()) {
-                        inst.config["id"] = generate_uuid_v4();
-                    }
-                    // Inject the machine identity UUID under a
-                    // framework-reserved key. The AUN extension reads
-                    // this and surfaces it as the impl-identity TXT
-                    // record on its mDNS announcement so a discovering
-                    // peer can correlate the AUN announcement with the
-                    // matching _beebium._tcp gRPC announcement (which
-                    // already publishes the same UUID under "uuid").
-                    inst.config["machine_uuid"] = config.machine_uuid;
-                    // Normalise scalar-form list params from presets into list_config
-                    // so the extension only sees one source of truth.
-                    normalise_list_params(inst.config, inst.list_config, manifest->parameters);
-                    std::cout << "Loading transport: " << manifest->name
-                              << " (id=" << inst.config["id"] << ")\n";
-                    for (const auto& [k, v] : inst.config) {
-                        if (k != "id" && k != "machine_uuid") {
-                            std::cout << "  " << k << "=" << v << "\n";
-                        }
-                    }
-                    for (const auto& [k, vs] : inst.list_config) {
-                        for (const auto& v : vs) {
-                            std::cout << "  " << k << "=" << v << "\n";
-                        }
-                    }
-
-                    std::unique_ptr<beebium::Extension> loaded;
-                    if (!manifest->library_stem.empty()) {
-                        loaded = plugin_loader.load_extension(
-                            *manifest, std::move(inst.config), std::move(inst.list_config));
-                    } else {
-                        const auto* builtin_entry =
-                            beebium::builtin_extensions::find(inst.name);
-                        if (!builtin_entry) {
-                            std::cerr << "Error: Transport extension '" << inst.name
-                                      << "' has no library and no built-in factory.\n";
-                            return 1;
-                        }
-                        loaded = builtin_entry->factory();
-                        loaded->set_manifest(*manifest);
-                        loaded->set_config(std::move(inst.config));
-                        loaded->set_list_config(std::move(inst.list_config));
-                    }
-
-                    auto* transport = dynamic_cast<beebium::EconetTransportExtension*>(
-                        loaded.get());
-                    if (!transport) {
-                        std::cerr << "Error: extension '" << manifest->name
-                                  << "' has extension_kind=econet-transport but is "
-                                     "not an EconetTransportExtension instance.\n";
-                        return 1;
-                    }
-                    (void)loaded.release();
-                    transport_registry.add(
-                        std::unique_ptr<beebium::EconetTransportExtension>(transport));
-                }
-                config.extension_instances = std::move(remaining);
-            }
-
-            // Install Econet hardware
-            if (auto exit_code = install_econet(machine, config, transport_registry)) {
-                return *exit_code;
-            }
-
-            // Load disc images
-            if (auto exit_code = load_disc_images(machine, config)) {
-                return *exit_code;
-            }
-
-            // Enable video output
-            machine.state().memory.enable_video_output();
-
-            // Enable audio output
-            machine.state().memory.enable_audio_output();
-
-            // Apply startup options before reset
-            apply_startup_options(machine, config);
-
-            // Reset machine
-            machine.reset();
-
-            // Set up peripheral extension registry. plugin_loader and
-            // plugin_manifests already exist from the earlier scan that
-            // populated the transport registry.
-            beebium::ExtensionRegistry extension_registry;
-            if constexpr (beebium::HasOneMHzBus<Memory>) {
-                extension_registry.register_extension_point("1mhz-bus");
-            }
-            if constexpr (beebium::HasUserPort<Memory>) {
-                extension_registry.register_extension_point("user-port");
-            }
-            if constexpr (beebium::HasTubeSocket<Memory>) {
-                extension_registry.register_extension_point("tube");
-            }
-            if constexpr (beebium::HasSerialPort<Memory>) {
-                extension_registry.register_extension_point("serial-port");
-            }
-
-            // Note: extensions are loaded below from --<cli-name> flags
-            // via the plugin path. test-scratch-ram used to be
-            // unconditionally auto-registered here as a built-in; it is
-            // now a plugin and users opt in via --test-scratch-ram on
-            // the CLI (or via a preset that lists it).
-
-            // Load extensions (from --<cli-name> flags). plugin_loader and
-            // plugin_manifests were already populated above (so the
-            // transport registry could be built before machine.reset()).
-            // Sort extension instances so providers (those with "provides" in
-            // their manifest) are loaded before consumers. This ensures
-            // RTLD_GLOBAL takes effect before child plugins try to resolve
-            // parent symbols. Uses stable_partition to preserve command-line
-            // order within each group.
-            std::stable_partition(
-                config.extension_instances.begin(),
-                config.extension_instances.end(),
-                [&config](const auto& inst) {
-                    const auto* m = config.extension_resolver.find_by_name(inst.name);
-                    return m && !m->provides.empty();
-                });
-
-            for (auto& inst : config.extension_instances) {
-                // Assign instance ID if not provided
-                if (inst.config.find("id") == inst.config.end()) {
-                    inst.config["id"] = generate_uuid_v4();
-                }
-
-                // Resolve manifest via the resolver so user-supplied
-                // extension dirs override built-ins and earlier dirs.
-                const beebium::ExtensionManifest* manifest =
-                    config.extension_resolver.find_by_name(inst.name);
-                if (!manifest) {
-                    {
-                        std::cerr << "Error: Extension '" << inst.name << "' not found";
-                        for (const auto& p : config.extension_dirpaths) {
-                            std::cerr << " in " << p;
-                        }
-                        if (config.default_extension_dirpath
-                            && config.extension_dirpaths.empty()) {
-                            std::cerr << " in " << *config.default_extension_dirpath;
-                        }
-                        std::cerr << "\n";
-                        return ExitCode::CONFIG;
-                    }
-                }
-                normalise_list_params(inst.config, inst.list_config, manifest->parameters);
-
-                std::cout << "Loading extension: " << inst.name;
-                if (inst.config.count("id")) {
-                    std::cout << " (id=" << inst.config["id"] << ")";
-                }
-                std::cout << "\n";
-                for (const auto& [key, value] : inst.config) {
-                    if (key != "id") {
-                        std::cout << "  " << key << "=" << value << "\n";
-                    }
-                }
-                for (const auto& [key, values] : inst.list_config) {
-                    for (const auto& v : values) {
-                        std::cout << "  " << key << "=" << v << "\n";
-                    }
-                }
-
-                // Construct the extension instance. A plugin manifest
-                // (library_stem set) overrides any same-named built-in;
-                // otherwise fall back to the built-in factory.
-                std::unique_ptr<beebium::Extension> loaded;
-                if (!manifest->library_stem.empty()) {
-                    loaded = plugin_loader.load_extension(
-                        *manifest, std::move(inst.config), std::move(inst.list_config));
-                } else {
-                    const auto* builtin_entry =
-                        beebium::builtin_extensions::find(inst.name);
-                    if (!builtin_entry) {
-                        std::cerr << "Error: Extension '" << inst.name
-                                  << "' has no library and no built-in factory.\n";
-                        return ExitCode::CONFIG;
-                    }
-                    loaded = builtin_entry->factory();
-                    loaded->set_manifest(*manifest);
-                    loaded->set_config(std::move(inst.config));
-                    loaded->set_list_config(std::move(inst.list_config));
-                }
-
-                // Dispatch by extension_kind. Phase 1/2 supports peripherals
-                // only; econet-transport dispatch lands in phase 2 follow-up.
-                if (manifest->extension_kind == "peripheral") {
-                    auto* peripheral = dynamic_cast<beebium::PeripheralExtension*>(loaded.get());
-                    if (!peripheral) {
-                        std::cerr << "Error: Extension '" << inst.name
-                                  << "' has extension_kind=peripheral but is not a "
-                                     "PeripheralExtension instance.\n";
-                        return ExitCode::CONFIG;
-                    }
-                    (void)loaded.release();
-                    extension_registry.register_extension(
-                        std::unique_ptr<beebium::PeripheralExtension>(peripheral));
-                } else {
-                    std::cerr << "Error: Extension '" << inst.name
-                              << "' has unsupported extension_kind '"
-                              << manifest->extension_kind << "'.\n";
-                    return ExitCode::CONFIG;
-                }
-            }
-
-            // Initialise extensions (dependency resolution + topological sort)
-            std::cout << "Initialising extensions...\n";
-            beebium::ExtensionContext extension_context(
-                beebium::HasOneMHzBus<Memory> ? &machine.state().memory.one_mhz_bus() : nullptr,
-                beebium::HasUserPort<Memory> ? &machine.state().memory.user_port() : nullptr,
-                beebium::HasTubeSocket<Memory> ? &machine.state().memory.tube_socket : nullptr,
-                &machine.state().memory.indicators,
-                beebium::HasSerialPort<Memory> ? &machine.state().memory.serial_port() : nullptr);
-            extension_registry.resolve_and_init(extension_context);
-
-            // Wire the bus quiescer into every extension dispatcher. A
-            // dispatcher handler runs on a gRPC worker thread; when it mutates
-            // device state the emulation thread touches every cycle it must
-            // halt that thread across the mutation. The server supplies the
-            // quiescer (forwarding to Machine::with_emulation_paused), exactly
-            // as it injects the coprocessor debug target's execution quiescer
-            // below; a dispatcher author never sets it.
-            for (auto* ext : extension_registry.extensions()) {
-                for (auto* dispatcher : ext->rpc_dispatchers()) {
-                    dispatcher->set_bus_quiescer(
-                        [&machine](const std::function<void()>& fn) {
-                            machine.with_emulation_paused(fn);
-                        });
-                }
-            }
-
-            // All registrations are complete -- close the registration window
-            // and start the indicators consumer thread. From this point on,
-            // any further register_indicator() call will throw.
-            machine.state().memory.indicators.start();
-
-            // Log initialisation order
-            for (auto* ext : extension_registry.extensions()) {
-                std::cout << "  " << ext->name();
-                if (!ext->id().empty()) {
-                    std::cout << " [" << ext->id() << "]";
-                }
-                if (!ext->provides().empty()) {
-                    std::cout << " provides:";
-                    for (auto p : ext->provides()) std::cout << " " << p;
-                }
-                if (!ext->attaches_to().empty()) {
-                    std::cout << " on:";
-                    for (auto a : ext->attaches_to()) std::cout << " " << a;
-                }
-                std::cout << "\n";
-            }
 
             // Create core discovery services for frontends to enumerate
             // extensions. PeripheralExtensionService lists peripheral
@@ -2138,22 +2223,6 @@ public:
             extension_services.push_back(&extension_ui_service);
             extension_services.push_back(&extension_rpc_service);
 
-            // Find the coprocessor extension, if any, through the abstract
-            // CoprocessorExtension interface -- the server keeps no concrete
-            // coprocessor type. There is one Tube socket, so at most one
-            // coprocessor may attach; more than one is a configuration error.
-            beebium::CoprocessorExtension* coprocessor_ext = nullptr;
-            for (auto* ext : extension_registry.extensions()) {
-                if (auto* cop = dynamic_cast<beebium::CoprocessorExtension*>(ext)) {
-                    if (coprocessor_ext) {
-                        std::cerr << "Error: more than one coprocessor attached to the "
-                                     "Tube; the Tube has a single socket.\n";
-                        return 1;
-                    }
-                    coprocessor_ext = cop;
-                }
-            }
-
             // The coprocessor debugger is the one genuine core gRPC service
             // contributed by an extension: the same DebuggerControl proto as the
             // host debugger, consumed by the typed debugger clients. The server,
@@ -2161,21 +2230,14 @@ public:
             // CpuDebugTarget and wraps it in the adapter, so no extension hosts a
             // gRPC service. The target describes its own CPU, so any family is
             // served through the one service. Both must outlive the server, hence
-            // these enclosing-scope owners.
+            // these enclosing-scope owners. (assemble_machine already found the
+            // coprocessor and set its execution quiescer; here the server only
+            // builds the gRPC service over it.)
             std::unique_ptr<beebium::service::DebuggerControlServiceImpl>
                 coprocessor_debugger_impl;
             std::unique_ptr<beebium::CoprocessorDebuggerAdapter> coprocessor_debugger_adapter;
             if (coprocessor_ext) {
                 if (auto* target = coprocessor_ext->debug_target()) {
-                    // The coprocessor executes on the host emulation thread, so
-                    // halting it to mutate its debug entries means pausing the
-                    // host Machine. Supply that quiescer; the target uses it in
-                    // with_execution_stopped. Wired here the same way as the
-                    // cross-processor stop below.
-                    target->set_execution_quiescer(
-                        [&machine](const std::function<void()>& fn) {
-                            machine.with_emulation_paused(fn);
-                        });
                     coprocessor_debugger_impl =
                         std::make_unique<beebium::service::DebuggerControlServiceImpl>(*target);
                     coprocessor_debugger_adapter =
@@ -4113,29 +4175,17 @@ public:
                 RomPaths::set_rom_directory(config.rom_dirpath);
             }
 
-            MachineType machine;
-            load_roms(machine, config);
-
-            if (auto exit_code = install_disc_controller(machine, config)) {
-                return *exit_code;
+            // Assemble the machine through the one shared assembly, exactly as
+            // `start` does. This installs any --tube-* coprocessor and every
+            // other extension the config carries -- the old screenshot path
+            // built its own extension-less machine, so a Tube preset rendered
+            // the host-only banner. Screenshots need video but not audio.
+            auto assembly = assemble_machine<MachineType>(config, /*with_audio=*/false);
+            if (!assembly.assembled) {
+                return assembly.exit_code;
             }
-            // Screenshot capture uses no extensions; pass an empty
-            // transport registry. install_econet sees no transports and
-            // installs a disconnected stub backend (matching the
-            // "Econet hardware fitted but no network" case).
-            beebium::EconetTransportRegistry transport_registry;
-            if (auto exit_code = install_econet(machine, config, transport_registry)) {
-                return *exit_code;
-            }
-            if (auto exit_code = load_disc_images(machine, config)) {
-                return *exit_code;
-            }
-
-            // Enable video output only (no audio needed for screenshots)
-            machine.state().memory.enable_video_output();
-
-            apply_startup_options(machine, config);
-            machine.reset();
+            auto& am = *assembly.assembled;
+            auto& machine = am.machine;
 
             // Create local framebuffer and renderer (no gRPC server needed)
             FrameBuffer frame_buffer;
@@ -4152,11 +4202,22 @@ public:
 
             constexpr uint64_t cycles_per_step = 40000;
 
+            // Advance the machine one chunk through the SAME stepper the serving
+            // loop uses -- disc-drive ticks, Econet speed gate and run() -- so
+            // the screenshot capture cannot diverge from a running server. No
+            // pacing (a screenshot renders as fast as it can), never parked, so
+            // the on-parked hook is a no-op and the budget is a fixed chunk.
+            auto step_chunk = [&] {
+                step_emulation(machine, /*speed_multiplier=*/1.0,
+                               /*on_parked=*/[] {},
+                               [&]() -> uint64_t { return cycles_per_step; });
+            };
+
             if (duration_seconds == 0.0) {
                 // Duration 0: capture first complete frame
                 uint64_t initial_version = frame_buffer.version();
                 while (frame_buffer.version() == initial_version) {
-                    machine.run(cycles_per_step);
+                    step_chunk();
                     drain_video();
                 }
             } else {
@@ -4164,11 +4225,16 @@ public:
                     duration_seconds * timing::CYCLES_PER_SECOND);
                 uint64_t cycles_run = 0;
                 while (cycles_run < total_cycles) {
-                    machine.run(cycles_per_step);
+                    step_chunk();
                     drain_video();
                     cycles_run += cycles_per_step;
                 }
             }
+
+            // The capture is complete; shut the extensions down cleanly (e.g.
+            // remove a coprocessor from the Tube socket) while the machine is
+            // still alive, as `start` does after its serving loop.
+            am.extension_registry.shutdown();
 
             if (frame_buffer.version() == 0) {
                 std::cerr << "Error: no frames produced during emulation\n";

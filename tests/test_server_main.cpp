@@ -15,7 +15,13 @@
 
 #include <beebium/server/ServerMain.hpp>
 #include <beebium/Machines.hpp>
+#include <beebium/TeletextGrid.hpp>
+#include <beebium/TeletextText.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <fstream>
+#include <sstream>
+#include <string>
 
 using namespace beebium::server;
 using MachineType = beebium::ModelB;
@@ -746,3 +752,66 @@ TEST_CASE("SIGTERM: terminates a paused server process within 2 seconds",
     REQUIRE(WEXITSTATUS(status) == 0);
 }
 #endif
+
+// ============================================================================
+// One machine assembly, one run mechanism (release-blocking regression: the
+// capture-screenshot subcommand used to build its own extension-less machine,
+// so a Tube preset rendered the host banner). assemble_machine is the single
+// assembly and step_emulation the single stepper that every subcommand uses.
+// ============================================================================
+
+TEST_CASE("assemble_machine boots a host with no coprocessor when none is configured",
+          "[server_main][assemble]") {
+    // Mirror the subcommand: point ROM resolution at the test ROM dir before
+    // assembling (assemble_machine loads ROMs but does not set the directory).
+    RomPaths::set_rom_directory(BEEBIUM_ROM_DIR);
+
+    ServerConfig<MachineType> config;  // no extension instances
+
+    auto outcome = assemble_machine<MachineType>(config, /*with_audio=*/false);
+    REQUIRE(outcome.assembled);
+    auto& am = *outcome.assembled;
+
+    // No --tube-* extension was requested, so no coprocessor is installed.
+    CHECK(am.coprocessor == nullptr);
+
+    // The assembled machine boots the host banner when driven through the SAME
+    // stepper the serving and screenshot loops use. Read MODE 7 the way the
+    // server's GetScreenText does, via the teletext grid.
+    beebium::TeletextGrid grid;
+    am.machine.state().memory.saa5050.set_teletext_grid(&grid);
+
+    // ~4 emulated seconds (2 MHz), well past the boot banner.
+    for (int i = 0; i < 200; ++i) {
+        step_emulation(am.machine, /*speed_multiplier=*/1.0, /*on_parked=*/[] {},
+                       []() -> uint64_t { return 40000; });
+    }
+
+    const std::string banner = beebium::teletext_text(grid);
+    INFO("banner:\n" << banner);
+    CHECK(banner.find("BBC") != std::string::npos);    // host boot banner
+    CHECK(banner.find("TUBE") == std::string::npos);   // no coprocessor banner
+
+    am.extension_registry.shutdown();
+}
+
+TEST_CASE("ServerMain constructs a MachineType in exactly one place",
+          "[server_main][assemble][guard]") {
+    // The whole point of assemble_machine is that a MachineType is built for
+    // running in ONE place -- its AssembledMachine member -- so a subcommand
+    // cannot acquire a divergent assembly. Guard that by construction count:
+    // the only `MachineType machine;` in the header is that struct member.
+    std::ifstream f(BEEBIUM_SERVERMAIN_HPP);
+    REQUIRE(f);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    const std::string src = ss.str();
+
+    size_t count = 0;
+    for (size_t pos = 0; (pos = src.find("MachineType machine;", pos)) != std::string::npos;
+         pos += 1) {
+        ++count;
+    }
+    INFO("occurrences of 'MachineType machine;' in ServerMain.hpp: " << count);
+    CHECK(count == 1);
+}

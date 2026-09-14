@@ -732,6 +732,84 @@ TEST_CASE("shipped system presets load, validate, and boot",
 }
 
 // ============================================================================
+// capture-screenshot runs the coprocessor (one machine assembly for every
+// subcommand). Release-blocking regression: capture-screenshot used to build
+// its own extension-less machine, so a Tube preset rendered the host banner --
+// its thumbnail was byte-identical to the non-coprocessor twin. Now it goes
+// through the same assemble_machine as `start`, so the coprocessor boots and
+// the rendered screen differs from the host twin.
+// ============================================================================
+
+TEST_CASE("capture-screenshot runs the Tube coprocessor from a preset",
+          "[integration][preset][screenshot][tube]") {
+    struct TubeCase {
+        std::string executable;
+        std::string tube_preset;   // coprocessor preset id
+        std::string host_preset;   // its non-coprocessor twin
+        std::string extension;     // extension name expected in stdout
+    };
+    const std::vector<TubeCase> cases = {
+        {"beebium-model-b",          "model-b-disc-65c02-copro",
+         "model-b-disc",             "acorn-65c02-coprocessor"},
+        {"beebium-model-b-plus-128k", "model-b-plus-128k-65c102-copro",
+         "model-b-plus-128k",        "acorn-65c102-coprocessor"},
+    };
+
+    auto read_file = [](const std::filesystem::path& p) {
+        std::ifstream f(p, std::ios::binary);
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        return ss.str();
+    };
+
+    for (const auto& c : cases) {
+        auto executable = find_executable(c.executable);
+        auto presets_dir = executable.parent_path() / "presets";
+        auto tube_preset = presets_dir / (c.tube_preset + ".preset.beebium");
+        auto host_preset = presets_dir / (c.host_preset + ".preset.beebium");
+        INFO("tube preset: " << c.tube_preset);
+        REQUIRE(std::filesystem::exists(tube_preset));
+        REQUIRE(std::filesystem::exists(host_preset));
+
+        auto tube_png = std::filesystem::temp_directory_path()
+                      / ("beebium_" + c.tube_preset + ".png");
+        auto host_png = std::filesystem::temp_directory_path()
+                      / ("beebium_" + c.host_preset + "_twin.png");
+
+        // Capture both at the same duration, past the boot banner, so the only
+        // difference between the two renders is the coprocessor.
+        auto tube_result = run_command(
+            executable.string() + " capture-screenshot --preset \"" +
+            tube_preset.string() + "\" --output \"" + tube_png.string() +
+            "\" --duration 3");
+        INFO("tube stderr: " << tube_result.stderr_output);
+        REQUIRE(tube_result.exit_code == 0);
+
+        // The screenshot path assembled and initialised the coprocessor.
+        REQUIRE(tube_result.stdout_output.find(c.extension) != std::string::npos);
+        REQUIRE(tube_result.stdout_output.find("coprocessor") != std::string::npos);
+
+        auto host_result = run_command(
+            executable.string() + " capture-screenshot --preset \"" +
+            host_preset.string() + "\" --output \"" + host_png.string() +
+            "\" --duration 3");
+        INFO("host stderr: " << host_result.stderr_output);
+        REQUIRE(host_result.exit_code == 0);
+
+        // The coprocessor changes the rendered screen: the two PNGs must differ.
+        // (Before the fix they were byte-identical.)
+        const std::string tube_bytes = read_file(tube_png);
+        const std::string host_bytes = read_file(host_png);
+        REQUIRE_FALSE(tube_bytes.empty());
+        REQUIRE_FALSE(host_bytes.empty());
+        CHECK(tube_bytes != host_bytes);
+
+        remove_quietly(tube_png);
+        remove_quietly(host_png);
+    }
+}
+
+// ============================================================================
 // describe-rom parses sideways ROM headers
 // ============================================================================
 

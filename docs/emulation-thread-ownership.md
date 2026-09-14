@@ -13,13 +13,28 @@ so, and a per-cycle lock is never the answer.
 
 ## What runs on the emulation thread
 
-One thread runs the machine. Its loop is `run_emulation_loop` in
-`src/server/include/beebium/server/ServerMain.hpp`. Each iteration it:
+One thread runs the machine. The per-iteration work lives in one place --
+`step_emulation` in `src/server/include/beebium/server/ServerMain.hpp` -- which
+every subcommand that runs the machine calls. Each iteration it:
 
 1. parks in `machine.wait_if_paused(on_wake)` while the machine is paused;
-2. waits for the next pacing tick (a sleep, outside the busy scope below);
+2. takes the caller's cycle budget (the serving loop waits for the next pacing
+   tick here, a sleep kept outside the busy scope below);
 3. under a `Machine::EmulationBusyScope`, does the per-iteration work: ticks the
    disc drives, updates the Econet socket's speed, and calls `machine.run(N)`.
+
+**One assembly, one stepper.** The machine is built in exactly one place,
+`assemble_machine` (ROMs, disc, Econet, extensions + `resolve_and_init`, the
+quiescer wiring, reset), and advanced in exactly one place, `step_emulation`.
+The server's `start` loop and the headless `capture-screenshot` loop both
+consume the assembly and drive the stepper -- they differ only in serving
+concerns (gRPC, pacing, stats) and assembly options (screenshot enables video
+but not audio), never in how the machine is built or run. This is deliberate:
+`capture-screenshot` once had its own extension-less assembly and its own
+`run()` loop, so a Tube preset silently dropped the coprocessor and rendered the
+host banner. A subcommand that needs to run the machine must go through the
+assembly and the stepper; a `test_server_main` guard pins that the header
+constructs a `MachineType` in exactly one place.
 
 `machine.run()` steps the CPU, which drives every peripheral and, through
 `Machine::step` -> `TubeSocket::run_coprocessor_until`, the coprocessor too. So

@@ -42,6 +42,14 @@ beebium-model-b start --tube-65c02 rom=/path/to/client.rom   # alternative clien
 
 The Tube socket accepts one coprocessor; giving both flags is refused.
 
+A coprocessor is not special to `start`: it is an extension, and every
+subcommand that runs the machine builds it through the one shared
+`assemble_machine` and drives it through the one shared `step_emulation` (see
+`docs/emulation-thread-ownership.md`). So `capture-screenshot` on a Tube preset
+runs the coprocessor and captures its banner, exactly as `start` would boot it
+-- there is no second, extension-less machine assembly for any subcommand to
+diverge into.
+
 
 ## Hardware Reference
 

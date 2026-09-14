@@ -1717,6 +1717,7 @@ if(BEEBIUM_BUILD_SERVICE)
     target_compile_definitions(test_server_main PRIVATE
         BEEBIUM_VERSION="${PROJECT_VERSION}"
         BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+        BEEBIUM_SERVERMAIN_HPP="${CMAKE_SOURCE_DIR}/src/server/include/beebium/server/ServerMain.hpp"
     )
     catch_discover_tests(test_server_main)
 
