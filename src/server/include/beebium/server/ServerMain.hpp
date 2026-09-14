@@ -47,6 +47,7 @@
 #include "beebium/server/PresetLoader.hpp"
 #include "beebium/server/PresetPaths.hpp"
 #include "beebium/server/RomPaths.hpp"
+#include "beebium/server/ImageResample.hpp"
 #include "beebium/server/ScreenshotCrop.hpp"
 #include "beebium/PlatformUtils.hpp"
 
@@ -4168,7 +4169,8 @@ public:
                   << "  --crop <mode>            none (default) or auto. auto crops to the\n"
                   << "                           screen content (e.g. a boot banner top-left in a\n"
                   << "                           mostly black frame) and enlarges it to the same\n"
-                  << "                           image size, keeping the frame's aspect ratio.\n"
+                  << "                           image size, keeping the frame's aspect ratio and\n"
+                  << "                           resampling with a filter (not pixel-replicated).\n"
                   << "\n"
                   << "All 'start' subcommand options are also accepted.\n";
     }
@@ -4369,18 +4371,6 @@ public:
             uint32_t output_width = display_width + 2 * border;
             uint32_t output_height = display_height + 2 * border;
 
-            // The source rectangle within the logical frame to scale to the
-            // display. --crop none uses the whole frame, so the nearest-neighbour
-            // mapping below is byte-for-byte the original behaviour; --crop auto
-            // finds the content and enlarges it (see ScreenshotCrop.hpp), scaled
-            // to the SAME display size and border so a thumbnail set stays
-            // uniform.
-            CropRect src_rect{0, 0, frame_width, frame_height};
-            if (crop_auto) {
-                src_rect = compute_auto_crop(frame_copy.data(), frame_width,
-                                             frame_height, stride_pixels);
-            }
-
             // Zero-initialised = black with alpha 0, then we set alpha for all pixels
             std::vector<uint8_t> rgba(output_width * output_height * 4, 0);
 
@@ -4389,27 +4379,43 @@ public:
                 rgba[i] = 0xFF;
             }
 
-            // Write display content into the bordered region
-            for (uint32_t y = 0; y < display_height; ++y) {
-                uint32_t src_y = src_rect.y + y * src_rect.height / display_height;
-                if (src_y >= src_rect.y + src_rect.height) {
-                    src_y = src_rect.y + src_rect.height - 1;
-                }
+            // Write one display-sized content pixel (BGRA32) into the bordered
+            // region.
+            auto put_pixel = [&](uint32_t x, uint32_t y, uint32_t bgra) {
+                size_t dst_idx = ((y + border) * output_width + (x + border)) * 4;
+                rgba[dst_idx + 0] = static_cast<uint8_t>((bgra >> 16) & 0xFF);  // R
+                rgba[dst_idx + 1] = static_cast<uint8_t>((bgra >> 8) & 0xFF);   // G
+                rgba[dst_idx + 2] = static_cast<uint8_t>(bgra & 0xFF);           // B
+                rgba[dst_idx + 3] = static_cast<uint8_t>((bgra >> 24) & 0xFF);   // A
+            };
 
-                for (uint32_t x = 0; x < display_width; ++x) {
-                    uint32_t src_x = src_rect.x + x * src_rect.width / display_width;
-                    if (src_x >= src_rect.x + src_rect.width) {
-                        src_x = src_rect.x + src_rect.width - 1;
+            if (crop_auto) {
+                // Find the content and resample that logical sub-rectangle up to
+                // the SAME display size and border a full thumbnail has, with a
+                // filtered (Lanczos-3) per-axis scale -- so the banner is enlarged
+                // legibly, not pixel-replicated, and a thumbnail set stays uniform
+                // in aspect and pixel size. See ScreenshotCrop.hpp / ImageResample.hpp.
+                CropRect src_rect = compute_auto_crop(frame_copy.data(), frame_width,
+                                                      frame_height, stride_pixels);
+                std::vector<uint32_t> content = resample_bgra_lanczos3(
+                    frame_copy.data(), stride_pixels, src_rect.x, src_rect.y,
+                    src_rect.width, src_rect.height, display_width, display_height);
+                for (uint32_t y = 0; y < display_height; ++y) {
+                    for (uint32_t x = 0; x < display_width; ++x) {
+                        put_pixel(x, y, content[static_cast<size_t>(y) * display_width + x]);
                     }
-
-                    uint32_t bgra = frame_copy[src_y * stride_pixels + src_x];
-
-                    // BGRA32 to RGBA bytes, offset by border
-                    size_t dst_idx = ((y + border) * output_width + (x + border)) * 4;
-                    rgba[dst_idx + 0] = static_cast<uint8_t>((bgra >> 16) & 0xFF);  // R
-                    rgba[dst_idx + 1] = static_cast<uint8_t>((bgra >> 8) & 0xFF);   // G
-                    rgba[dst_idx + 2] = static_cast<uint8_t>(bgra & 0xFF);           // B
-                    rgba[dst_idx + 3] = static_cast<uint8_t>((bgra >> 24) & 0xFF);   // A
+                }
+            } else {
+                // --crop none: the whole logical frame scaled nearest-neighbour to
+                // the display -- byte-for-byte the original behaviour.
+                for (uint32_t y = 0; y < display_height; ++y) {
+                    uint32_t src_y = y * frame_height / display_height;
+                    if (src_y >= frame_height) src_y = frame_height - 1;
+                    for (uint32_t x = 0; x < display_width; ++x) {
+                        uint32_t src_x = x * frame_width / display_width;
+                        if (src_x >= frame_width) src_x = frame_width - 1;
+                        put_pixel(x, y, frame_copy[src_y * stride_pixels + src_x]);
+                    }
                 }
             }
 

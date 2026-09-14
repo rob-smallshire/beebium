@@ -1726,6 +1726,17 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_screenshot_crop)
 
+    # Separable Lanczos-3 image resampler (pure header, no machine).
+    add_executable(test_image_resample test_image_resample.cpp)
+    target_include_directories(test_image_resample PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_image_resample PRIVATE
+        beebium_core
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_image_resample)
+
     add_executable(test_server_main test_server_main.cpp)
     target_include_directories(test_server_main PRIVATE
         ${CMAKE_SOURCE_DIR}/src/server/include

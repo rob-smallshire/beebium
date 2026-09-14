@@ -51,13 +51,6 @@ CropRect crop(const Frame& f) {
     return compute_auto_crop(f.pixels.data(), f.w, f.h, f.w);
 }
 
-// The crop is a single uniform integer zoom of the frame: width and height are
-// each a whole multiple of the crop's, by the SAME factor >= 2.
-bool integer_zoom(const CropRect& r, uint32_t w, uint32_t h) {
-    return r.width > 0 && r.height > 0 && w % r.width == 0 && h % r.height == 0 &&
-           w / r.width == h / r.height && w / r.width >= 2;
-}
-
 // Does `outer` fully contain `inner`?
 bool contains(const CropRect& outer, const CropRect& inner) {
     return inner.x >= outer.x && inner.y >= outer.y &&
@@ -106,31 +99,31 @@ TEST_CASE("content_bounding_box ignores near-black noise and empty frames",
     CHECK(*box == CropRect{10, 10, 1, 1});
 }
 
-TEST_CASE("compute_auto_crop: ordinary case pads, expands and snaps to an integer zoom",
+TEST_CASE("compute_auto_crop: ordinary case pads and expands to the frame aspect",
           "[screenshot][crop]") {
     // 100x100 square-pixel frame. Content 20x20 at (40,40).
     // pad 100/40=2, 100/25=4 -> padded (38,36,24,28); aspect-expand to 28x28
-    // about centre (50,50) -> (36,36,28,28); snap outward to the tightest common
-    // divisor of 100x100 that still covers: z=2 -> 50x50 centred -> (25,25,50,50).
+    // about centre (50,50) -> (36,36,28,28). That expanded box is the crop; it
+    // is resampled (not pixel-replicated) to the display, so no integer snap.
     Frame f = make_frame(100, 100);
     fill(f, {40, 40, 20, 20});
     CropRect r = crop(f);
-    CHECK(r == CropRect{25, 25, 50, 50});
-    // Exactly a 2x integer zoom of the frame.
-    CHECK(integer_zoom(r, 100, 100));
+    CHECK(r == CropRect{36, 36, 28, 28});
+    CHECK(aspect_matches(r, 100, 100));
     CHECK(contains(r, CropRect{40, 40, 20, 20}));
 }
 
-TEST_CASE("compute_auto_crop: rectangular square-pixel frame keeps aspect and integer zoom",
+TEST_CASE("compute_auto_crop: rectangular frame expands to the frame aspect",
           "[screenshot][crop]") {
-    // 640x512 frame (fx == fy == 1 against a 640x512 display).
+    // 640x512 frame. Content (100,100,40,50) -> padded (84,80,72,90) ->
+    // aspect-expanded about centre to (64,80,113,90).
     Frame f = make_frame(640, 512);
     fill(f, {100, 100, 40, 50});
     CropRect r = crop(f);
+    CHECK(r == CropRect{64, 80, 113, 90});
     CHECK(within(r, 640, 512));
     CHECK(contains(r, CropRect{100, 100, 40, 50}));
     CHECK(aspect_matches(r, 640, 512));
-    CHECK(integer_zoom(r, 640, 512));  // one integer zoom on both axes
 }
 
 TEST_CASE("compute_auto_crop: all-black frame returns the whole frame",
@@ -185,48 +178,18 @@ TEST_CASE("compute_auto_crop: content at each edge stays within the frame and co
     }
 }
 
-TEST_CASE("compute_auto_crop: snaps outward to an integer zoom when one fits",
-          "[screenshot][crop][snap]") {
-    // Small content whose expanded box (~20x20) is not itself an integer divisor
-    // of the frame, but the tightest common divisor that covers (z=5 -> 20x20)
-    // fits.
-    Frame f = make_frame(100, 100);
-    fill(f, {44, 44, 12, 12});
-    CropRect r = crop(f);
-    CHECK(integer_zoom(r, 100, 100));  // exact integer zoom, factor >= 2
-    CHECK(contains(r, CropRect{44, 44, 12, 12}));
-}
-
-TEST_CASE("compute_auto_crop: falls back to the non-integer box when no integer zoom fits",
-          "[screenshot][crop][fallback]") {
-    // Wide content forces the aspect-expanded box near the frame width; no common
-    // divisor of 100x100 with factor >= 2 (crop = frame/z) is large enough to
-    // cover it, so the result is the expanded box itself, at a non-integer zoom.
-    Frame f = make_frame(100, 100);
-    fill(f, {8, 46, 84, 8});
-    CropRect r = crop(f);
-    CHECK(within(r, 100, 100));
-    CHECK(contains(r, CropRect{8, 46, 84, 8}));
-    CHECK(aspect_matches(r, 100, 100));
-    // Non-integer zoom: the frame width is not a whole multiple of the crop.
-    CHECK(100 % r.width != 0);
-    // And it is genuinely a crop, not the whole frame.
-    CHECK(r.width < 100);
-}
-
 TEST_CASE("compute_auto_crop: MODE 1-shaped frame (non-square pixels) keeps the frame aspect",
           "[screenshot][crop][nonsquare]") {
     // MODE 1 logical frame is 320x256; it scales to a 640x256 display, so pixels
     // are non-square (fx = 2, fy = 1). The crop must carry the FRAME's 320:256
-    // aspect and one integer zoom, NOT the display's 640:256 -- otherwise the
-    // thumbnail is stretched relative to the uncropped image.
+    // aspect, NOT the display's 640:256 -- the subcommand's per-axis resample
+    // then restores the on-screen shape.
     Frame f = make_frame(320, 256);
     fill(f, {140, 110, 40, 36});
     CropRect r = crop(f);
     CHECK(within(r, 320, 256));
     CHECK(contains(r, CropRect{140, 110, 40, 36}));
     CHECK(aspect_matches(r, 320, 256));   // frame aspect, within rounding
-    CHECK(integer_zoom(r, 320, 256));     // 320/cw == 256/ch, one factor >= 2
 }
 
 TEST_CASE("compute_auto_crop: MODE 2-shaped frame (non-square pixels) keeps the frame aspect",
@@ -239,5 +202,4 @@ TEST_CASE("compute_auto_crop: MODE 2-shaped frame (non-square pixels) keeps the 
     CHECK(within(r, 160, 256));
     CHECK(contains(r, CropRect{70, 110, 20, 36}));
     CHECK(aspect_matches(r, 160, 256));
-    CHECK(integer_zoom(r, 160, 256));
 }

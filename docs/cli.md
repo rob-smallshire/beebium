@@ -567,9 +567,10 @@ beebium-model-b capture-screenshot --output <filepath> [options]
 top-left in a mostly black frame -- and enlarges it to the same image size and
 border a `--crop none` thumbnail would have, so a thumbnail set stays uniform in
 aspect and pixel size while the banner is legible. The crop keeps the frame's
-aspect ratio and, where one fits, snaps to an integer upscale so glyph strokes
-stay even. `--crop none` (and omitting `--crop`) leaves the output exactly as
-before. An unknown mode is a usage error.
+aspect ratio and is resampled to the output with a filtered (Lanczos-3) per-axis
+scale -- not pixel-replicated -- so the enlargement is smooth rather than blocky.
+`--crop none` (and omitting `--crop`) leaves the output exactly as before,
+scaled nearest-neighbour. An unknown mode is a usage error.
 
 ### help
 

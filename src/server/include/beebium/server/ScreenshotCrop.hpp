@@ -17,11 +17,11 @@
 // A boot-banner thumbnail sits top-left in a mostly black frame, so most of the
 // image is void. `--crop auto` finds the content, pads it, expands it to the
 // frame's aspect ratio, and (see compute_auto_crop) hands back a sub-rectangle
-// of the LOGICAL frame -- the framebuffer as copy_frame produces it, before the
-// nearest-neighbour scale to display dimensions. The subcommand then scales that
-// rectangle to the same display size a full thumbnail would have, so the banner
-// is enlarged rather than the image shrunk, and a thumbnail set stays uniform in
-// aspect and pixel size.
+// of the LOGICAL frame -- the framebuffer as copy_frame produces it. The
+// subcommand then resamples that rectangle up to the same display size a full
+// thumbnail would have (see ImageResample.hpp), so the banner is enlarged rather
+// than the image shrunk, and a thumbnail set stays uniform in aspect and pixel
+// size.
 //
 // Everything here is a pure function of the pixels and dimensions: no machine,
 // no framebuffer object, unit-testable in isolation.
@@ -113,16 +113,10 @@ inline CropRect grow_centred(CropRect box, uint32_t want_w, uint32_t want_h,
 // Compute the auto-crop rectangle on the logical frame. See the file header.
 //
 // The returned rectangle is a sub-rectangle of the logical frame carrying the
-// frame's own aspect ratio, so scaling it to the display (which is a per-axis
+// frame's own aspect ratio, so resampling it to the display (which is a per-axis
 // scale of the frame) keeps the display's pixel aspect. The subcommand owns the
-// scale to display dimensions; the geometry here is expressed purely in frame
-// pixels and needs no display dimensions.
-//
-// Output-size policy lives here, in one place: where an integer zoom of the
-// uncropped rendering fits, the crop is snapped OUTWARD (enlarged, still centred
-// and clamped) to reach it, so nearest-neighbour upscaling keeps glyph strokes
-// as even as the uncropped image has them; only if no integer zoom fits does it
-// fall back to the non-integer expanded box.
+// resample to display dimensions (ImageResample.hpp); the geometry here is
+// expressed purely in frame pixels and needs no display dimensions.
 inline CropRect compute_auto_crop(
         const uint32_t* pixels, uint32_t width, uint32_t height,
         std::size_t stride_pixels, uint8_t threshold = kContentThreshold) {
@@ -171,46 +165,9 @@ inline CropRect compute_auto_crop(
         return full;
     }
 
-    // Snap OUTWARD to an integer zoom where one fits. Logical pixels are NOT
-    // square: the display is a per-axis scale of the frame with factors
-    // fx = display_width/width and fy = display_height/height (in practice
-    // display_width is fixed at 640 while display_height tracks the frame, so fx
-    // varies by mode and fy is 1). A crop of cw = width/z, ch = height/z renders
-    // to the display with factors fx*z and fy*z -- the SAME pixel aspect as the
-    // uncropped image, zoomed by one integer z on both axes, so glyph strokes
-    // stay as even as they were. Expressing the snap in display dimensions would
-    // instead give the crop the display's aspect in logical pixels and stretch
-    // any non-square mode.
-    //
-    // Restricting z to the common integer divisors of width and height (z >= 2)
-    // keeps cw and ch whole and the frame's aspect exact -- no rounding, and a
-    // single uniform zoom on both axes. Among those, pick the largest z (the
-    // smallest, tightest crop, i.e. the least outward enlargement) whose crop
-    // still covers the expanded box.
-    //
-    // z = 1 is excluded on purpose: it is the whole frame, i.e. no zoom at all.
-    // If no z >= 2 covers the box we fall back to the non-integer `expanded` box
-    // rather than hand back the uncropped frame.
-    {
-        CropRect best{};
-        bool have_best = false;
-        const uint32_t z_max = width < height ? width : height;
-        for (uint32_t z = 2; z <= z_max; ++z) {
-            if (width % z != 0 || height % z != 0) continue;
-            const uint32_t cw = width / z;
-            const uint32_t ch = height / z;
-            if (cw < expanded.width || ch < expanded.height) continue;  // must cover
-            // Larger z -> smaller crop -> tighter (more outward snap). Keep the
-            // tightest that still covers.
-            if (!have_best || cw < best.width) {
-                best = detail::grow_centred(expanded, cw, ch, width, height);
-                have_best = true;
-            }
-        }
-        if (have_best) return best;
-    }
-
-    return expanded;  // documented fallback: no integer (>= 2x) zoom fits
+    // The expanded frame-aspect box is the crop. It is resampled (not pixel-
+    // replicated) to the display, so a non-integer scale is fine -- no snap.
+    return expanded;
 }
 
 }  // namespace beebium::server
