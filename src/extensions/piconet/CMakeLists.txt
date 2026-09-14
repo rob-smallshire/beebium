@@ -15,6 +15,7 @@ add_library(beebium_piconet_core STATIC
     src/Base64.cpp
     src/Events.cpp
     src/PiconetBackend.cpp
+    src/Probe.cpp
     ${PICONET_SERIAL_SRCS}
     src/TxResult.cpp
 )

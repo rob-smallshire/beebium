@@ -530,6 +530,15 @@ target_link_libraries(test_piconet_fake_device PRIVATE beebium_piconet_core Catc
 target_include_directories(test_piconet_fake_device PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 catch_discover_tests(test_piconet_fake_device)
 
+# Piconet identification probe (STATUS handshake), driven against SerialPort
+# doubles including FakePiconetDevice. Server-free.
+add_executable(test_piconet_probe
+    test_piconet_probe.cpp
+    piconet/FakePiconetDevice.cpp)
+target_link_libraries(test_piconet_probe PRIVATE beebium_piconet_core Catch2::Catch2WithMain)
+target_include_directories(test_piconet_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+catch_discover_tests(test_piconet_probe)
+
 # Piconet integration: full FourWayHandshake -> PiconetBackend -> FakePiconetDevice stack.
 add_executable(test_piconet_integration
     test_piconet_integration.cpp
