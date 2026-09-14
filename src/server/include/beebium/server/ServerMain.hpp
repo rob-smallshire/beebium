@@ -1325,9 +1325,23 @@ std::optional<int> install_econet(MachineType& machine,
                 auto& transport = *transport_registry.extensions().front();
                 auto backend = transport.create_backend(station);
                 if (backend) {
-                    std::cout << "Econet station " << config.station_number
-                              << " via transport extension '"
-                              << transport.name() << "'\n";
+                    // A transport may hand back a backend that is present but
+                    // not yet connected (e.g. Piconet discovery found no
+                    // device -- it still returns a disconnected backend so
+                    // the UI can Retry it live). Report the state truthfully:
+                    // "via transport" only when actually connected, otherwise
+                    // the same "configured but unavailable -- no network"
+                    // narrative the null-backend path below emits.
+                    const bool connected = backend->is_connected();
+                    if (connected) {
+                        std::cout << "Econet station " << config.station_number
+                                  << " via transport extension '"
+                                  << transport.name() << "'\n";
+                    } else {
+                        std::cout << "Econet station " << config.station_number
+                                  << " (transport '" << transport.name()
+                                  << "' configured but unavailable -- no network)\n";
+                    }
                     machine.state().memory.econet_socket.enable(
                         station, std::move(backend),
                         true,  // FourWayHandshake active

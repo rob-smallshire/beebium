@@ -67,8 +67,7 @@ PiconetEconetTransportExtension::rpc_dispatchers() {
 #endif
 }
 
-std::unique_ptr<NetworkBackend>
-PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
+piconet::DiscoveryResult PiconetEconetTransportExtension::run_discovery() {
     // device_path is optional. An explicit path is honoured exactly; an
     // absent path (or the sentinel "auto") triggers discovery: enumerate
     // serial ports, keep the Raspberry Pi Pico's USB vendor id, and probe
@@ -76,7 +75,7 @@ PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
     auto configured = config_value("device_path");
     std::string explicit_path(configured ? *configured : std::string_view{});
 
-    auto discovery = piconet::discover_piconet_device(
+    return piconet::discover_piconet_device(
         explicit_path,
         [] { return serial::enumerate_serial_ports(); },
         [](const std::string& candidate) {
@@ -88,16 +87,34 @@ PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
                                          std::chrono::milliseconds(500))
                 .has_value();
         });
+}
+
+std::unique_ptr<NetworkBackend>
+PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
+    auto discovery = run_discovery();
 
     if (!discovery.ok) {
-        // No usable device. Returning nullptr lets install_econet install a
-        // disconnected backend so the machine still boots ("no network") --
-        // exactly what a preset booted on a Piconet-less host needs.
+        // No usable device. Log the verbose diagnostic verbatim to the
+        // CLI/boot log, keep the concise version for the GUI Indicator, and
+        // still return a DISCONNECTED backend: the machine boots with no
+        // network (ADLC reports no clock, exactly as before) AND the UI has
+        // a live backend to run Retry against. serial=nullptr keeps
+        // open_error_message_ empty so the Indicator shows discovery_status_
+        // rather than an OS errno. The SerialFactory is wired so Retry's
+        // request_reopen can bring the device up in place.
         std::cerr << "Piconet extension: " << discovery.message << "\n";
-        open_error_message_ = discovery.message;
-        return nullptr;
+        open_error_message_.clear();
+        discovery_status_ = discovery.ui_message;
+        auto backend = std::make_unique<PiconetBackend>(
+            piconet::PiconetConfig{std::string{}, station},
+            /*serial=*/nullptr,
+            &make_platform_serial,
+            [this]{ ui_.mark_dirty(); });
+        backend_ = backend.get();
+        return backend;
     }
     std::cout << "Piconet extension: " << discovery.message << "\n";
+    discovery_status_.clear();
 
     std::string path(discovery.device_path);
     auto serial = make_platform_serial(path);
@@ -129,6 +146,28 @@ PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
     backend_ = backend.get();  // non-owning; ownership goes to EconetSocket
     open_error_message_.clear();
     return backend;
+}
+
+void PiconetEconetTransportExtension::retry_discovery() {
+    // No backend means create_backend was never called (no Econet fitted);
+    // nothing to retry against.
+    if (!backend_) {
+        return;
+    }
+
+    auto discovery = run_discovery();
+    if (discovery.ok) {
+        // Bring the device up live in place: request_reopen hands the open
+        // and reader-restart to the emulation thread (ownership-safe), and
+        // Listen leaves the station connected in this one action.
+        std::cout << "Piconet extension: " << discovery.message << "\n";
+        discovery_status_.clear();
+        backend_->request_reopen(discovery.device_path, piconet::Mode::Listen);
+    } else {
+        // Still nothing usable; refresh the concise status (verbose to log).
+        std::cerr << "Piconet extension: " << discovery.message << "\n";
+        discovery_status_ = discovery.ui_message;
+    }
 }
 
 }  // namespace beebium

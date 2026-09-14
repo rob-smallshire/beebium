@@ -182,7 +182,8 @@ TEST_CASE("PiconetUi build_view (live backend) produces ModalEditor + Indicator 
     REQUIRE(indicator.id() == "connected");
     REQUIRE(indicator.control_case() == beebium::Control::kIndicator);
     REQUIRE(indicator.indicator().state() == beebium::Indicator_State_OK);
-    REQUIRE(indicator.indicator().text() == "Adapter responsive");
+    // Serial open: the indicator names the connected device.
+    REQUIRE(indicator.indicator().text() == "Piconet at " + fixture.slave_path());
 
     const auto& button = root.group().controls(2);
     REQUIRE(button.id() == "enable_action");
@@ -193,7 +194,7 @@ TEST_CASE("PiconetUi build_view (live backend) produces ModalEditor + Indicator 
     REQUIRE(button.button().label() == "Disable");
 }
 
-TEST_CASE("PiconetUi build_view (closed-state backend) hides Button and surfaces OS error",
+TEST_CASE("PiconetUi build_view (closed-state backend) offers Retry and surfaces OS error",
           "[piconet][ui]") {
     // Construct an extension with a device path that won't open at the
     // POSIX layer. create_backend now returns a closed-state backend
@@ -217,10 +218,16 @@ TEST_CASE("PiconetUi build_view (closed-state backend) hides Button and surfaces
 
     const auto& root = view.root();
     REQUIRE(root.control_case() == beebium::Control::kGroup);
-    // Two controls only -- ModalEditor + Indicator. Enable button
-    // suppressed because the serial port is closed (gating on
-    // is_serial_open in PiconetUi::build_view).
-    REQUIRE(root.group().controls_size() == 2);
+    // Three controls -- ModalEditor + Indicator + Retry. The Enable button
+    // is suppressed because the serial port is closed; in its place the
+    // Retry button appears so the user can re-run discovery / reopen.
+    REQUIRE(root.group().controls_size() == 3);
+
+    const auto& retry = root.group().controls(2);
+    REQUIRE(retry.id() == "retry_action");
+    REQUIRE(retry.control_case() == beebium::Control::kButton);
+    REQUIRE(retry.button().enabled());
+    REQUIRE(retry.button().label() == "Retry");
 
     const auto& device = root.group().controls(0);
     REQUIRE(device.id() == "device_path");
@@ -366,8 +373,12 @@ TEST_CASE("PiconetBackend hot-unplug closes serial and updates the UI",
     REQUIRE(indicator.indicator().state() == beebium::Indicator_State_ERROR);
     REQUIRE(indicator.indicator().text() == "Adapter offline");
 
-    // The Enable button is suppressed -- nothing to drive any more.
-    REQUIRE(view.root().group().controls_size() == 2);
+    // Three controls: the Enable button is gone (nothing to drive) and the
+    // Retry button takes its place so the user can reconnect after replugging.
+    REQUIRE(view.root().group().controls_size() == 3);
+    const auto& retry = view.root().group().controls(2);
+    REQUIRE(retry.id() == "retry_action");
+    REQUIRE(retry.button().label() == "Retry");
 }
 
 TEST_CASE("PiconetUi ModalEditor editable gate follows the mode + serial state",

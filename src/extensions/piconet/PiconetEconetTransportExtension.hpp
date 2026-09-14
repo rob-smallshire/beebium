@@ -23,10 +23,12 @@
 
 #include "PiconetUi.hpp"
 #include "beebium/econet/PiconetBackend.hpp"
+#include "beebium/econet/piconet/Discovery.hpp"
 #include "beebium/extension/EconetTransportExtension.hpp"
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace beebium {
@@ -41,10 +43,13 @@ public:
     PiconetEconetTransportExtension();
     ~PiconetEconetTransportExtension() override;
 
-    // Construct a PiconetBackend from the current config. Returns
-    // nullptr if device_path is missing or the serial open fails;
-    // ServerMain treats that as "transport configured but unavailable"
-    // and installs a disconnected stub instead.
+    // Construct a PiconetBackend from the current config. ALWAYS returns a
+    // backend: with an explicit device_path (or a successful discovery) it
+    // wraps the opened device; otherwise it returns a DISCONNECTED
+    // PiconetBackend (no serial) so the machine still boots with no network
+    // AND the UI has a live backend to run Retry against. install_econet
+    // reports the connected/unavailable state truthfully from
+    // backend->is_connected().
     //
     // The constructed backend is also stashed as a non-owning pointer
     // so PiconetUi can read its state. The owning unique_ptr is handed
@@ -52,6 +57,20 @@ public:
     // pattern and shares its lifetime caveat (becomes dangling at
     // machine shutdown, which only happens at process exit).
     std::unique_ptr<NetworkBackend> create_backend(std::uint8_t station) override;
+
+    // Re-run discovery on demand (the UI "Retry" action) and, on success,
+    // bring the existing backend live at the discovered device without
+    // restarting the machine -- via the backend's ownership-safe
+    // request_reopen (the open/reader-restart happens on the emulation
+    // thread). On failure the concise discovery status is refreshed. Safe
+    // to call from the gRPC/dispatch thread.
+    void retry_discovery();
+
+    // Concise, GUI-facing discovery status (e.g. "No Piconet found (1
+    // serial port checked). Attach a Piconet and retry."). Empty once a
+    // device is connected or an explicit device_path is configured. The
+    // verbose diagnostic still goes to the CLI/boot log verbatim.
+    const std::string& discovery_status() const { return discovery_status_; }
 
     // Piconet bridges to a real, physical Econet line with real stations
     // running in wall time, so its protocol timing only interleaves correctly
@@ -80,8 +99,14 @@ public:
     std::vector<ExtensionRpcDispatcher*> rpc_dispatchers() override;
 
 private:
+    // Build the enumerator + prober seams and run discovery against the
+    // current device_path config. Shared by create_backend (boot) and
+    // retry_discovery (UI action) so both audiences see identical logic.
+    piconet::DiscoveryResult run_discovery();
+
     PiconetBackend* backend_ = nullptr;  // non-owning; lives in EconetSocket
     std::string open_error_message_;
+    std::string discovery_status_;  // concise GUI status; see discovery_status()
     PiconetUi ui_{*this};
 #ifdef BEEBIUM_BUILD_SERVICE
     std::unique_ptr<PiconetDispatcher> dispatcher_;  // lazily constructed

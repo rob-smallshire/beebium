@@ -31,6 +31,7 @@ namespace {
 constexpr const char* CONTROL_DEVICE_PATH   = "device_path";
 constexpr const char* CONTROL_CONNECTED     = "connected";
 constexpr const char* CONTROL_ENABLE_ACTION = "enable_action";
+constexpr const char* CONTROL_RETRY_ACTION  = "retry_action";
 
 // Sub-control id inside CONTROL_DEVICE_PATH's editor tree. Addressed via
 // EditorCommit.field_id on the server side; the frontend reads the same
@@ -133,18 +134,25 @@ void PiconetUi::build_view(View* out) const {
         indicator->set_state(serial_open ? Indicator_State_OK
                                          : Indicator_State_ERROR);
         if (serial_open) {
-            indicator->set_text("Adapter responsive");
+            // Adapter physically present and its serial port open. Name the
+            // device so the user can confirm which one was selected --
+            // especially after a discovery Retry chose it for them.
+            indicator->set_text(snap.device_path.empty()
+                                    ? std::string("Adapter responsive")
+                                    : "Piconet at " + snap.device_path);
         } else if (backend && !snap.open_error_message.empty()) {
             // Backend exists but its serial is not open. The error
-            // text comes from the backend itself: populated by the
-            // ctor when the initial open failed (wrong path at
-            // startup), or by process_pending_reopen() when the
-            // user-initiated reopen failed.
+            // text comes from the backend itself: populated by
+            // process_pending_reopen() when a user-initiated reopen (a
+            // manual path change) failed to open the device.
             indicator->set_text("Cannot open device: " +
                                 snap.open_error_message);
+        } else if (!ext_.discovery_status().empty()) {
+            // Discovery ran and found no usable device. Show the concise,
+            // GUI-appropriate status (no device_path advice -- that's for
+            // the CLI). The verbose diagnostic went to the boot/CLI log.
+            indicator->set_text(ext_.discovery_status());
         } else if (!ext_.open_error_message().empty()) {
-            // No backend at all -- only the missing-config branch in
-            // create_backend reaches here today.
             indicator->set_text("Cannot open device: " +
                                 ext_.open_error_message());
         } else {
@@ -170,6 +178,16 @@ void PiconetUi::build_view(View* out) const {
         auto* button = control->mutable_button();
         button->set_label(snap.listening ? "Disable" : "Enable");
         button->set_enabled(true);
+    } else if (backend) {
+        // No serial open: offer Retry, which re-runs discovery and, on
+        // success, brings the device up live (Listen) without restarting
+        // the machine. Covers both the discovery-found-nothing-at-boot case
+        // and a mid-session hot-unplug where the user has since replugged.
+        auto* control = group->add_controls();
+        control->set_id(CONTROL_RETRY_ACTION);
+        auto* button = control->mutable_button();
+        button->set_label("Retry");
+        button->set_enabled(true);
     }
 }
 
@@ -185,6 +203,17 @@ void PiconetUi::handle_event(const DispatchRequest& request) {
                                         : piconet::Mode::Listen);
             mark_dirty();
         }
+        return;
+    }
+
+    if (request.control_id() == CONTROL_RETRY_ACTION) {
+        // Re-run discovery and, on success, bring the device up live in
+        // place (see PiconetEconetTransportExtension::retry_discovery). The
+        // probe runs synchronously on this dispatch thread -- bounded by the
+        // per-candidate STATUS timeout and the candidate cap -- so the
+        // client observes the honest before/after, not a transient state.
+        ext_.retry_discovery();
+        mark_dirty();
         return;
     }
 
