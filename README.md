@@ -21,174 +21,119 @@ Moreover, this architecture also facilitates native GUIs with first-class host p
 
 ### Key Features
 
-- **Cycle-accurate 6502 emulation** - NMOS and CMOS variants supported
-- **Headless core** - Deterministic, UI-free emulation server
-- **Process separation** - Core and frontends communicate via gRPC
-- **Platform-native frontends** - Native UI using Cocoa, WinUI, etc. (no SDL/cross-platform libraries)
-- **Pluggable peripherals** - Consistent interface for emulated hardware
+- **Cycle-accurate 6502 emulation** — NMOS and CMOS variants supported
+- **Four machine variants** — Model B, B+, B+ 128K, and Model B with a ROM/RAM board
+- **Floppy disc support** — SSD and DSD (DFS), ADFS (`.adf`/`.adl`/`.adm`/`.ads`) and HFE flux-level images, all with read/write
+- **Pluggable peripherals** — each a loadable extension:
+  - *Coprocessors* — Acorn 65C02 (3 MHz) and 65C102 (4 MHz) second processors
+  - *Serial* — IP232, RFC 2217 (client and server), host serial port, and loopback adapters
+  - *Econet transports* — AUN over UDP, and Piconet bridging to real Econet hardware
+  - *Storage* — Acorn SCSI host adapter and SCSI hard-disc targets
+  - *Real-time clock* — Acorn user-port RTC module
+- **Headless core** — deterministic, UI-free emulation server
+- **Process separation** — core and frontends communicate via gRPC
+- **Platform-native frontends** — native UI using Cocoa and Metal on macOS
 
-### Current Status
+## Get Beebium
 
-Beebium is under active development. Current capabilities:
+The complete emulator — the app, the servers, the ROMs, presets and extensions — is published on the [releases page](https://github.com/rob-smallshire/beebium/releases/latest).
 
-- Boots MOS 1.20 to BASIC prompt ("BBC Computer 32K")
-- All display modes working (MODE 0-7)
-- Full 6522 VIA emulation with timers and interrupts
-- WD1770 disc controller with SSD/DSD image support (`--floppy 0:game.ssd`)
-- SN76489 sound chip emulation
-- Keyboard input via gRPC
-- Audio output via gRPC
-- macOS frontend with Metal rendering
+### The macOS app
+
+The full BBC Micro emulator in a single download. Grab the DMG for your Mac from the [latest release](https://github.com/rob-smallshire/beebium/releases/latest), open it, and drag **Beebium** into your Applications folder — there are separate builds for Apple Silicon (`macos-arm64`) and Intel (`macos-x86_64`). Or install it with Homebrew:
+
+```bash
+brew install --cask rob-smallshire/beebium/beebium-gui
+```
+
+Requires macOS 13 (Ventura) or newer.
+
+*There is no Windows or Linux app yet. On those platforms, run Beebium through the headless servers below.*
+
+### Headless servers, for developers
+
+Drive Beebium from the **Python** or **TypeScript** client, from **CI**, or from your own **gRPC** client — or point the macOS app above at a server running on another machine (it discovers them on your LAN automatically via mDNS/Bonjour). Each package puts the four servers (Model B, B+, B+ 128K, ROM/RAM) on your `PATH`, with the ROMs and extensions bundled.
+
+- **Any platform (Python)** — `pip install beebium beebium-server` (`beebium` is the client library; `beebium-server` ships the servers)
+- **Linux** — self-contained `.deb` (Debian / Ubuntu / Raspberry Pi OS) and `.rpm` (Fedora / RHEL / openSUSE) for `amd64` and `arm64`, or a `.tar.gz` for any distro
+- **macOS** — `brew install rob-smallshire/beebium/beebium-server`, or a self-contained tarball
+- **Windows** — `scoop bucket add beebium https://github.com/rob-smallshire/scoop-beebium` then `scoop install beebium-server`, or a self-contained zip
+
+Direct download links for every package are on the [releases page](https://github.com/rob-smallshire/beebium/releases/latest).
 
 ## Architecture
 
-```
-beebium-model-b / beebium-model-b-plus (C++)
-    |
-    +-- gRPC + shared memory
-    |
-    +-- macOS Frontend (Swift/Metal)
-    +-- Python Client (pytest integration)
-    +-- Debugger (planned)
-```
+![Beebium architecture: clients drive headless emulator servers over gRPC](docs/images/architecture.svg)
 
-The core maintains double-buffered framebuffers and publishes frames via shared memory. Frontends may drop frames; the core never blocks waiting for acknowledgement.
+A single headless core serves every frontend over gRPC — a well-defined protocol boundary rather than a UI wired into the emulator. Frames flow through a lock-free queue, so a client may drop frames while the emulation loop runs on without ever blocking.
 
-## Requirements
+## Usage
 
-- CMake 3.16+
-- C++20 compiler (Clang 14+, GCC 11+)
-- gRPC and Protobuf
-- Catch2 v3.x (fetched automatically)
+If you installed the **macOS app**, just launch it and choose a machine — everything it needs is inside the bundle.
 
-### macOS Frontend
-
-- Xcode 15+
-- Swift 5.9+
-- grpc-swift package
-
-### Python Client
-
-- Python 3.12+
-- grpcio, protobuf
-
-## Building
-
-### Core and Server
+To drive Beebium programmatically — for testing, automation, or CI — use the Python client. Install it, with the optional server wheel, from PyPI:
 
 ```bash
-mkdir build && cd build
-cmake ..
-make
+pip install beebium beebium-server
 ```
 
-### Running Tests
+With `beebium-server` present, `launch()` needs no arguments: it finds the server and its ROMs in that wheel.
+
+```python
+from beebium.client import Beebium
+
+with Beebium.launch() as bbc:
+    bbc.expect("BASIC")             # wait for the BASIC prompt
+    bbc.keyboard.type("PRINT 2+2")
+    bbc.keyboard.press_return()
+    print(bbc.expect("4"))          # -> 4
+```
+
+The client can type on the keyboard, read the screen in any display mode, peek and poke memory, drive the debugger, and mount discs. See the [Python client README](https://github.com/rob-smallshire/beebium/tree/master/clients/beebium-python-client) for the full API, the pytest `bbc` fixture, and more examples. A [TypeScript client](https://github.com/rob-smallshire/beebium/tree/master/clients/beebium-typescript-client) (`npm install @beebium/client`) offers the same control from Node.
+
+## Building from source
+
+You need this only to **contribute to Beebium** or to run an unreleased version — users should install from the channels under [Get Beebium](#get-beebium).
+
+### Prerequisites
+
+- CMake 3.16+ and a C++20 compiler (Clang 14+, GCC 11+)
+- gRPC and Protobuf — via Homebrew on macOS (`brew install cmake grpc protobuf`), your distro's `-dev` packages on Linux, or vcpkg on Windows
+- Catch2 v3.x is fetched automatically
+- For the Python client: Python 3.12+
+
+### Server and core
 
 ```bash
-cd build
-ctest --output-on-failure
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
-Some integration tests light up only when an optional tool is on the `PATH`;
-they **skip cleanly** otherwise:
-
-- [`beebasm`](https://github.com/stardot/beebasm) — assembles real 6502 programs
-  onto auto-booting disc images so guest software can be driven end to end (see
-  [Testing with real 6502 code](docs/testing-from-disc.md), the
-  `beebasm → bootable disc → autoboot` pattern).
-- `pySerial` (fetched automatically via [`uv`](https://docs.astral.sh/uv/)) —
-  drives the RFC 2217 serial endpoints as a real external client.
-- [`tcpser`](https://github.com/go4retro/tcpser) — exercises the IP232 serial
-  bridge against a real modem server.
-
-### macOS Frontend
-
-The macOS app **embeds the headless server executables in its bundle**, so the
-servers must be built before (or together with) the app. The convenience script
-does both, and optionally launches the result:
+The four server executables land in `build/src/server/` (`beebium-model-b`, `-model-b-plus`, `-model-b-plus-128k`, `-model-b-romram`); the `beebium-servers` target builds them all. Run the test suite with:
 
 ```bash
-scripts/build-macos-app.sh          # build servers (CMake) + app (Xcode)
-scripts/build-macos-app.sh --run    # ... and launch it
+ctest --test-dir build --output-on-failure
 ```
 
-The same thing is available through the normal CMake build interface, as the
-`macos-app` and `macos-run` targets (macOS only; they delegate to the script and
-embed servers from the configured build tree):
+Some integration tests run only when an optional tool (`beebasm`, `pySerial`, `tcpser`) is on the `PATH`, and skip cleanly otherwise — see [Testing with real 6502 code](docs/testing-from-disc.md).
+
+### macOS app
+
+The app **embeds the server executables in its bundle**, so the servers are built first. The CMake `macos-app` target does both:
 
 ```bash
 cmake --build build --target macos-app    # build servers + app
 cmake --build build --target macos-run    # ... and launch it
 ```
 
-`cmake --build <dir>` resolves `<dir>` against your **current** directory, so use
-the path to your build tree — a bare `build` only works when a `build/` sits
-right there. From inside the build tree (e.g. `build/src/server`) point it at the
-root explicitly:
+To work in Xcode directly, or for self-contained distribution builds, see [docs/building.md](docs/building.md) and [docs/macos-app-packaging.md](docs/macos-app-packaging.md).
 
-```bash
-cmake --build /path/to/beebium/build --target macos-app   # absolute, from anywhere
-cd build && make macos-app                                # from the build-tree root
-```
+### Python client
 
-Note `make macos-app` only works from the **top** of the build tree (`build/`),
-not a subdirectory — CMake emits custom targets into the top-level Makefile only.
-
-To work in Xcode directly, build the servers once, then open the project:
-
-```bash
-cmake --build build --target beebium-servers   # the four server executables
-cd clients/macos/Beebium
-xcodegen generate                              # regenerate after adding/removing files
-open Beebium.xcodeproj                         # then build & run from Xcode
-```
-
-The Xcode build embeds servers from `$BEEBIUM_SERVERS_BUILD_DIR`, which
-**defaults to `build/src/server`** when unset — so a normal build always bundles
-a freshly built server. Point it elsewhere to bundle a different build:
-
-```bash
-BEEBIUM_SERVERS_BUILD_DIR=$PWD/build-release/src/server \
-  xcodebuild build -scheme Beebium -configuration Release
-```
-
-If no servers are found there, the build prints a warning and keeps whatever is
-already bundled (it won't fail the build, but the app can't launch a machine
-until you build them). For self-contained distribution builds, see
-[docs/macos-app-packaging.md](docs/macos-app-packaging.md).
-
-### Python Client
+For development, install the client editable against your checkout:
 
 ```bash
 pip install -e clients/beebium-python-client
-```
-
-## Usage
-
-1. Start the emulator server:
-   ```bash
-   ./build/src/server/beebium-model-b
-   ```
-
-   To load a disc image:
-   ```bash
-   ./build/src/server/beebium-model-b --floppy 0:game.ssd
-   ```
-
-2. Launch the macOS frontend and connect to `localhost:48875`
-
-### Python Client
-
-The Python client (`clients/beebium-python-client`) enables programmatic control of the emulator for testing and automation. Useful for integration testing BBC Micro software in CI pipelines.
-
-```python
-from beebium import Beebium
-from beebium.screen import read_mode7_screen, linearise, lined
-
-with Beebium.connect() as bbc:
-    bbc.debugger.stop()
-    bbc.keyboard.type("PRINT 2+2\r")
-    print(linearise(read_mode7_screen(bbc), lined))  # scroll-corrected MODE 7 text
 ```
 
 ## Project Structure
@@ -201,8 +146,9 @@ beebium/
 │   ├── service/        # gRPC service implementations
 │   └── server/         # Standalone server executable
 ├── clients/
-│   ├── macos/          # Native macOS frontend (Swift)
-│   └── python/         # Python client library
+│   ├── macos/                      # Native macOS frontend (Swift)
+│   ├── beebium-python-client/      # Python client library
+│   └── beebium-typescript-client/  # TypeScript client library
 ├── tests/              # Catch2 test suite
 ├── docs/               # Documentation
 └── scripts/            # Development scripts
@@ -212,11 +158,12 @@ beebium/
 
 Component and subsystem documentation lives in [`docs/`](docs/). Some entry points:
 
-- [Deployment and Resource Discovery](docs/deployment.md) — installed layout and how a server finds ROMs and presets at runtime
-- [Packaging and Distribution](docs/packaging.md) — the self-contained static `.deb`/`.tar.gz` server bundles, supported platforms (incl. arm64 / Raspberry Pi and Arch), how they are built and validated, and what is done vs still to do
-- [Versioning and Protocol Compatibility](docs/versioning-and-compatibility.md) — monorepo single-version releases with `bump-my-version`, and the protocol fingerprint handshake that keeps clients and servers compatible
-- [gRPC Server Interface](docs/grpc-server.md) — the service API
-- [Building](docs/building.md) — build prerequisites and options
+- [Building from source](docs/building.md) — prerequisites, per-platform and cross-architecture builds, targets
+- [Deployment and resource discovery](docs/deployment.md) — installed layout; how a server finds ROMs and presets
+- [Packaging and distribution](docs/packaging.md) — the self-contained server bundles and how they are built
+- [gRPC server interface](docs/grpc-server.md) — the service API
+- [Adding a coprocessor](docs/coprocessor-extension-guide.md) — writing a new second-processor extension
+- [Versioning and compatibility](docs/versioning-and-compatibility.md) — release versioning and the protocol handshake
 
 ## Development
 

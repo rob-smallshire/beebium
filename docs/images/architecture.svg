@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" role="img" aria-label="Beebium architecture: native, Python, TypeScript and other gRPC clients talk over gRPC to a headless emulator server process; each server contains the gRPC service layer, the cycle-accurate emulation core, and dlopen-loaded extension plugins; servers advertise themselves over mDNS.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0969da"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6e7781"/>
+    </marker>
+  </defs>
+
+  <!-- Self-contained panel so the figure is legible on light and dark grounds -->
+  <rect x="0.5" y="0.5" width="899" height="469" rx="8" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- ======================= Clients (left column) ======================= -->
+  <text x="150" y="44" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#6e7781" text-anchor="middle" letter-spacing="0.08em">CLIENTS</text>
+
+  <!-- macOS app -->
+  <rect x="40" y="60" width="220" height="68" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="150" y="82" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">Beebium.app (macOS)</text>
+  <text x="150" y="100" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#57606a" text-anchor="middle">Swift + Metal UI</text>
+  <text x="150" y="115" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#57606a" text-anchor="middle">bundles &amp; launches servers</text>
+
+  <!-- Python client -->
+  <rect x="40" y="144" width="220" height="68" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="150" y="171" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">beebium (PyPI)</text>
+  <text x="150" y="191" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#57606a" text-anchor="middle">Python client · pytest fixtures</text>
+
+  <!-- TypeScript client -->
+  <rect x="40" y="228" width="220" height="68" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="150" y="255" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">@beebium/client</text>
+  <text x="150" y="275" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#57606a" text-anchor="middle">TypeScript client</text>
+
+  <!-- Any gRPC client -->
+  <rect x="40" y="312" width="220" height="68" rx="6" fill="#f6f8fa" stroke="#d0d7de" stroke-dasharray="4 3"/>
+  <text x="150" y="339" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">Any gRPC client</text>
+  <text x="150" y="359" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" fill="#57606a" text-anchor="middle">your language, your tooling</text>
+
+  <!-- ======================= gRPC bus ======================= -->
+  <line x1="260" y1="94"  x2="404" y2="94"  stroke="#0969da" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="260" y1="178" x2="404" y2="178" stroke="#0969da" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="260" y1="262" x2="404" y2="262" stroke="#0969da" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="260" y1="346" x2="404" y2="346" stroke="#0969da" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="410" y1="94" x2="410" y2="346" stroke="#0969da" stroke-width="2"/>
+  <line x1="410" y1="150" x2="552" y2="150" stroke="#0969da" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="482" y="136" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#0969da" text-anchor="middle">gRPC</text>
+  <text x="482" y="168" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">protobuf over TCP</text>
+  <text x="482" y="183" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">local or across the LAN</text>
+
+  <!-- ======================= Server (right) ======================= -->
+  <text x="710" y="44" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" font-weight="600" fill="#6e7781" text-anchor="middle" letter-spacing="0.08em">HEADLESS EMULATOR SERVER</text>
+
+  <rect x="560" y="60" width="300" height="352" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="710" y="84" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">beebium-model-b</text>
+  <text x="710" y="102" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">one process per machine: B · B+ · B+ 128K · ROM/RAM</text>
+
+  <!-- Service layer -->
+  <rect x="580" y="118" width="260" height="62" rx="5" fill="#ddf4ff" stroke="#54aeff"/>
+  <text x="710" y="141" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" font-weight="600" fill="#0a3069" text-anchor="middle">gRPC service layer</text>
+  <text x="710" y="158" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#0a3069" text-anchor="middle">Video · Audio · Keyboard · Disc</text>
+  <text x="710" y="172" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#0a3069" text-anchor="middle">Debugger · System · Econet · …</text>
+
+  <line x1="710" y1="180" x2="710" y2="198" stroke="#6e7781" stroke-width="1.5" marker-end="url(#arrow-gray)" marker-start="url(#arrow-gray)"/>
+
+  <!-- Emulation core -->
+  <rect x="580" y="200" width="260" height="78" rx="5" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="710" y="224" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" font-weight="600" fill="#1f2328" text-anchor="middle">Emulation core</text>
+  <text x="710" y="242" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">cycle-accurate 6502 · CRTC + Video ULA</text>
+  <text x="710" y="256" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">SN76489 sound · 1770 disc · Tube</text>
+  <text x="710" y="270" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">keyboard · Econet</text>
+
+  <line x1="710" y1="278" x2="710" y2="296" stroke="#6e7781" stroke-width="1.5" marker-end="url(#arrow-gray)" marker-start="url(#arrow-gray)"/>
+
+  <!-- Extensions -->
+  <rect x="580" y="298" width="260" height="96" rx="5" fill="#f6f8fa" stroke="#d0d7de" stroke-dasharray="4 3"/>
+  <text x="710" y="321" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" font-weight="600" fill="#1f2328" text-anchor="middle">Extension plugins (dlopen)</text>
+  <text x="710" y="339" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">65C02 / 65C102 coprocessors</text>
+  <text x="710" y="353" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">serial adapters · Econet transports</text>
+  <text x="710" y="367" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">(AUN · Piconet) · SCSI hard discs · RTC</text>
+  <text x="710" y="385" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-style="italic" fill="#6e7781" text-anchor="middle">ROMs · presets · discs alongside</text>
+
+  <!-- ======================= mDNS discovery ======================= -->
+  <line x1="560" y1="432" x2="156" y2="432" stroke="#6e7781" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-gray)"/>
+  <line x1="560" y1="432" x2="560" y2="412" stroke="#6e7781" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="150" y1="432" x2="150" y2="386" stroke="#6e7781" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="358" y="424" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#57606a" text-anchor="middle">servers advertise &amp; are discovered via mDNS (Bonjour · Avahi · DNS-SD)</text>
+</svg>
