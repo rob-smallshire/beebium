@@ -169,7 +169,10 @@ struct PresetCard: View {
                     .frame(width: 160, height: 120)
                     .clipped()
 
-                // Label area — fixed height so all cards are uniform
+                // Label area — fixed height so all cards are uniform.
+                // Tall enough for a two-line name plus a two-line
+                // description; top-aligned so shorter cards leave the
+                // spare room below rather than floating their text.
                 VStack(spacing: 2) {
                     Text(preset.name)
                         .font(.callout)
@@ -182,7 +185,7 @@ struct PresetCard: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                 }
-                .frame(width: 144, height: 48)
+                .frame(width: 144, height: 64, alignment: .top)
                 .padding(.vertical, 6)
                 .padding(.horizontal, 8)
             }
