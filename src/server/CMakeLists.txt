@@ -16,19 +16,6 @@ file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 # create-preset code path that users create their own presets with. Extra
 # create-preset arguments (e.g. --fdc, --sideways) are forwarded via ARGN.
 function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
-    # Optional THUMBNAIL_DELAY <seconds> is split out of the create-preset
-    # passthrough args and forwarded to capture-screenshot as --duration. Presets
-    # whose interesting screen takes longer to settle than the 2.0s default (the
-    # Tube coprocessors' parasite boot to the "Acorn TUBE ..." banner) pass it;
-    # everything else omits it and keeps the byte-identical default capture. A
-    # generic emulated-time budget -- no text matching -- so a future slow-boot
-    # preset gets it for free.
-    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY" "" ${ARGN})
-    set(capture_duration_args "")
-    if(DEFINED PRESET_THUMBNAIL_DELAY)
-        set(capture_duration_args --duration ${PRESET_THUMBNAIL_DELAY})
-    endif()
-
     # Generate into the config-independent PRESETS_OUTPUT_DIR that install()
     # reads. (Writing to $<TARGET_FILE_DIR:...>/presets instead put the presets
     # in a per-config Release/presets on multi-config generators, where the
@@ -41,13 +28,12 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
         COMMAND ${EXECUTABLE} create-preset
             --name "${PRESET_NAME}"
             --release-date "${RELEASE_DATE}"
-            ${PRESET_UNPARSED_ARGUMENTS}
+            ${ARGN}
             --output "${preset_filepath}"
         COMMAND ${EXECUTABLE} capture-screenshot
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
             --rom-dir "${BEEBIUM_ROM_DIR}"
-            ${capture_duration_args}
         COMMENT "Generating preset ${PRESET_ID} and its thumbnail"
         VERBATIM
     )
@@ -65,6 +51,61 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
                 "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets/"
             VERBATIM
         )
+    endif()
+endfunction()
+
+# A system preset that references a dlopened PLUGIN extension (a Tube
+# coprocessor). Unlike add_system_preset, generation cannot hang off the
+# server's POST_BUILD: the plugin deploys into <server>/extensions via its OWN
+# POST_BUILD and its target depends on the server (it deploys into the server's
+# directory), so a fresh build would run create-preset BEFORE the plugin exists
+# ("Unknown argument: --tube-65c02"). Generate via a custom target that DEPENDS
+# on the plugin -- which transitively builds the server first and deploys the
+# plugin -- so the extension resolves. THUMBNAIL_DELAY is forwarded to
+# capture-screenshot as --duration (the parasite's "Acorn TUBE ..." banner
+# settles after the 2.0s default); the rest of ARGN goes to create-preset.
+function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
+    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY" "" ${ARGN})
+    set(capture_duration_args "")
+    if(DEFINED PRESET_THUMBNAIL_DELAY)
+        set(capture_duration_args --duration ${PRESET_THUMBNAIL_DELAY})
+    endif()
+    set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.preset.beebium")
+    set(thumbnail_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.thumbnail.png")
+    set(copy_commands "")
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(copy_commands
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets"
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "${preset_filepath}" "${thumbnail_filepath}"
+                "$<TARGET_FILE_DIR:${EXECUTABLE}>/presets/")
+    endif()
+    add_custom_command(
+        OUTPUT "${preset_filepath}" "${thumbnail_filepath}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PRESETS_OUTPUT_DIR}"
+        COMMAND ${EXECUTABLE} create-preset
+            --name "${PRESET_NAME}"
+            --release-date "${RELEASE_DATE}"
+            ${PRESET_UNPARSED_ARGUMENTS}
+            --output "${preset_filepath}"
+        COMMAND ${EXECUTABLE} capture-screenshot
+            --preset "${preset_filepath}"
+            --output "${thumbnail_filepath}"
+            --rom-dir "${BEEBIUM_ROM_DIR}"
+            ${capture_duration_args}
+        ${copy_commands}
+        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET}
+        COMMENT "Generating plugin preset ${PRESET_ID} and its thumbnail"
+        VERBATIM
+    )
+    add_custom_target(preset_${PRESET_ID} ALL
+        DEPENDS "${preset_filepath}" "${thumbnail_filepath}")
+    # Unlike add_system_preset (whose POST_BUILD runs when beebium-servers builds
+    # the executable), this preset is its own target, so wire it into the
+    # beebium-servers aggregate that CI and the release build actually build --
+    # otherwise `cmake --build --target beebium-servers` never generates it.
+    if(TARGET beebium-servers)
+        add_dependencies(beebium-servers preset_${PRESET_ID})
     endif()
 endfunction()
 
@@ -196,16 +237,25 @@ add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
 
 # Tube coprocessor presets, so users can try the second processors (the machine
 # config UI has no Tube axis yet). Each is its disc-capable sibling plus a Tube
-# coprocessor extension; both boot to the Tube banner (the DFS ROM carries the
-# Tube host code). The 3 MHz / 4 MHz speeds are inherent to the variants.
-add_system_preset(beebium-model-b "model-b-disc-65c02-copro"
-    "BBC Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
-    THUMBNAIL_DELAY 6
-    --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
-add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k-65c102-copro"
-    "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
-    THUMBNAIL_DELAY 6
-    --tube-65c102)
+# coprocessor plugin; both boot to the Tube banner (the DFS ROM carries the Tube
+# host code). The 3 MHz / 4 MHz speeds are inherent to the variants. Generated
+# with add_plugin_preset (depends on the coprocessor plugin so it is deployed
+# before create-preset resolves --tube-*). The plugin targets exist only when the
+# servers are built (src/extensions is configured before src/server).
+if(TARGET beebium_ext_acorn_65c02_plugin)
+    add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
+        "model-b-disc-65c02-copro"
+        "BBC Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
+        THUMBNAIL_DELAY 6
+        --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
+endif()
+if(TARGET beebium_ext_acorn_65c102_plugin)
+    add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c102_plugin
+        "model-b-plus-128k-65c102-copro"
+        "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
+        THUMBNAIL_DELAY 6
+        --tube-65c102)
+endif()
 
 # Install rules
 install(TARGETS
