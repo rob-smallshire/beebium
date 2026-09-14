@@ -204,7 +204,7 @@ PiconetBackend::~PiconetBackend() {
         reader_thread_.join();
     }
     // Drop any reopen request the emulation thread never got to.
-    delete pending_reopen_path_.exchange(nullptr, std::memory_order_acq_rel);
+    delete pending_reopen_.exchange(nullptr, std::memory_order_acq_rel);
 }
 
 void PiconetBackend::reader_loop() {
@@ -524,15 +524,16 @@ void PiconetBackend::set_mode(piconet::Mode mode) {
     }
 }
 
-void PiconetBackend::request_reopen(std::string new_path) {
+void PiconetBackend::request_reopen(std::string new_path,
+                                    piconet::Mode target_mode) {
     if (!serial_factory_) {
         // Backend was constructed without a factory (typically a test
         // that doesn't exercise reopen). Silently drop -- the UI layer
         // gates the edit affordance, so production never lands here.
         return;
     }
-    auto* next = new std::string(std::move(new_path));
-    auto* old = pending_reopen_path_.exchange(next, std::memory_order_acq_rel);
+    auto* next = new PendingReopen{std::move(new_path), target_mode};
+    auto* old = pending_reopen_.exchange(next, std::memory_order_acq_rel);
     delete old;  // Coalesce: a stale request the emulation thread hasn't
                  // consumed is superseded by the newer one.
 }
@@ -547,24 +548,25 @@ void PiconetBackend::process_pending_reopen() {
 
     {
         std::lock_guard<std::mutex> lock(ui_mutex_);
-        config_.device_path = *pending;
+        config_.device_path = pending->path;
     }
-    auto fresh = serial_factory_(*pending);
+    auto fresh = serial_factory_(pending->path);
     if (!fresh || !fresh->is_open()) {
         install_failed_serial(std::move(fresh));
     } else {
-        install_open_serial(std::move(fresh));
+        install_open_serial(std::move(fresh), pending->target_mode);
     }
     notify_state_changed();
 }
 
-std::optional<std::string> PiconetBackend::take_pending_reopen() {
-    std::string* pending =
-        pending_reopen_path_.exchange(nullptr, std::memory_order_acq_rel);
+std::optional<PiconetBackend::PendingReopen>
+PiconetBackend::take_pending_reopen() {
+    PendingReopen* pending =
+        pending_reopen_.exchange(nullptr, std::memory_order_acq_rel);
     if (!pending) {
         return std::nullopt;
     }
-    std::string out = std::move(*pending);
+    PendingReopen out = std::move(*pending);
     delete pending;
     return out;
 }
@@ -597,20 +599,19 @@ void PiconetBackend::install_failed_serial(
 }
 
 void PiconetBackend::install_open_serial(
-    std::unique_ptr<piconet::SerialPort> fresh) {
+    std::unique_ptr<piconet::SerialPort> fresh, piconet::Mode target_mode) {
     {
         std::lock_guard<std::mutex> lock(ui_mutex_);
         open_error_message_.clear();
         serial_ = std::move(fresh);
     }
 
-    // Reopen always lands in Stop. The user is re-pointing the
-    // adapter while it is disabled; Enable is a deliberate next step
-    // taken via the action button once the Indicator has flipped
-    // green.
+    // A manual device-path re-point lands in Stop: the user is re-pointing
+    // a disabled adapter and Enable is a deliberate next step. A discovery
+    // Retry passes Listen so the station comes up live in the one action.
     write_to_serial(*serial_, piconet::format_set_station(config_.initial_station));
-    write_to_serial(*serial_, piconet::format_set_mode(piconet::Mode::Stop));
-    current_mode_.store(piconet::Mode::Stop, std::memory_order_release);
+    write_to_serial(*serial_, piconet::format_set_mode(target_mode));
+    current_mode_.store(target_mode, std::memory_order_release);
 
     // shutdown_ is not touched by tear_down_active_serial (that
     // sequence drives the reader out via read-error, not via the

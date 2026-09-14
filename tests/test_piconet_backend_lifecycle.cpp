@@ -191,6 +191,40 @@ TEST_CASE("PiconetBackend::request_reopen swaps serial and sends SET_STATION + S
     CHECK(replacement->write_as_string(1) == "SET_MODE STOP\r");
 }
 
+TEST_CASE("PiconetBackend::request_reopen with Listen brings a disconnected backend live",
+          "[piconet][backend][lifecycle][reopen]") {
+    // Models the discovery Retry path: a backend constructed disconnected
+    // (serial=nullptr, as create_backend now does when discovery finds
+    // nothing) is brought fully live -- serial open AND Listen -- by a
+    // single reopen carrying the target mode. is_connected() then answers
+    // true without a separate Enable step.
+    MockPiconetSerial* replacement = nullptr;
+    auto factory = [&](const std::string& /*path*/)
+        -> std::unique_ptr<SerialPort> {
+        auto mock = std::make_unique<MockPiconetSerial>();
+        replacement = mock.get();
+        return mock;
+    };
+
+    PiconetBackend backend(PiconetConfig{/*device_path=*/"", /*station=*/81},
+                           /*serial=*/nullptr, factory);
+    REQUIRE_FALSE(backend.is_serial_open());
+    REQUIRE_FALSE(backend.is_connected());
+
+    backend.request_reopen("/dev/discovered", piconet::Mode::Listen);
+    (void)backend.receive_frame();  // reopen runs at the top of the tick
+
+    CHECK(backend.config().device_path == "/dev/discovered");
+    CHECK(backend.is_serial_open());
+    CHECK(backend.mode() == piconet::Mode::Listen);
+    CHECK(backend.is_connected());
+
+    REQUIRE(replacement != nullptr);
+    REQUIRE(replacement->write_count() == 2);
+    CHECK(replacement->write_as_string(0) == "SET_STATION 81\r");
+    CHECK(replacement->write_as_string(1) == "SET_MODE LISTEN\r");
+}
+
 TEST_CASE("PiconetBackend::request_reopen records open_error_message on factory-returned closed port",
           "[piconet][backend][lifecycle][reopen]") {
     auto factory = [](const std::string& /*path*/)

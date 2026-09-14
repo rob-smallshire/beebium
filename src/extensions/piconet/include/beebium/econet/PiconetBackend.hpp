@@ -175,9 +175,15 @@ public:
     // thread at the start of the next receive_frame() tick, keeping the
     // emulation thread as the sole writer of serial_. Successive calls
     // before the emulation thread has picked up the pending request
-    // coalesce to the most recent path. No-op when the backend was
+    // coalesce to the most recent request. No-op when the backend was
     // constructed without a SerialFactory.
-    void request_reopen(std::string new_path);
+    //
+    // target_mode is the firmware mode to leave the freshly-opened device
+    // in. The manual device-path editor re-points a disabled adapter, so it
+    // uses the default (Stop) and the user then Enables; discovery Retry
+    // wants the station live immediately, so it passes Listen.
+    void request_reopen(std::string new_path,
+                        piconet::Mode target_mode = piconet::Mode::Stop);
 
 private:
     void reader_loop();
@@ -189,9 +195,16 @@ private:
     // on_async_state_change_ so the UI re-renders.
     void process_pending_reopen();
 
-    // Returns the pending reopen path (and clears the slot) if one is
+    // A queued reopen request: the device path plus the firmware mode to
+    // leave it in once opened.
+    struct PendingReopen {
+        std::string path;
+        piconet::Mode target_mode = piconet::Mode::Stop;
+    };
+
+    // Returns the pending reopen request (and clears the slot) if one is
     // queued, otherwise nullopt.
-    std::optional<std::string> take_pending_reopen();
+    std::optional<PendingReopen> take_pending_reopen();
 
     // Closes the current SerialPort and joins the reader thread. The
     // close unblocks the reader's timed read; the reader's own
@@ -206,9 +219,10 @@ private:
     void install_failed_serial(std::unique_ptr<piconet::SerialPort> fresh);
 
     // Stores `fresh` as the new serial_, clears open_error_message_,
-    // sends SET_STATION + SET_MODE STOP to the device, resets
+    // sends SET_STATION + SET_MODE <target_mode> to the device, resets
     // shutdown_, and starts a fresh reader thread.
-    void install_open_serial(std::unique_ptr<piconet::SerialPort> fresh);
+    void install_open_serial(std::unique_ptr<piconet::SerialPort> fresh,
+                             piconet::Mode target_mode);
 
     // Bump the backend-status sequence and fire the async-state-change
     // callback, both gated on !shutdown_ so the destructor's
@@ -236,11 +250,11 @@ private:
     std::thread reader_thread_;
 
     // Cross-thread slot used by request_reopen() to post a new device
-    // path to the emulation thread. Heap-allocated std::string because
-    // there is no std::atomic<std::string>. Ownership: whichever thread
-    // exchanges the pointer out of the slot (or the destructor) is
+    // path (and its target mode) to the emulation thread. Heap-allocated
+    // because there is no std::atomic for the struct. Ownership: whichever
+    // thread exchanges the pointer out of the slot (or the destructor) is
     // responsible for deleting it.
-    std::atomic<std::string*> pending_reopen_path_{nullptr};
+    std::atomic<PendingReopen*> pending_reopen_{nullptr};
 
     // Populated by process_pending_reopen() when the new SerialPort
     // fails to open. Cleared on successful reopen.
