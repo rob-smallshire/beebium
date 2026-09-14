@@ -244,19 +244,19 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
 # two presets: a bare cassette machine and a disc-equipped variant. A filing
 # system is provisioned explicitly via --sideways; no machine auto-loads DFS
 # except the Model B+, whose disc controller and DFS are integral hardware.
-add_system_preset(beebium-model-b "model-b" "BBC Model B" "1981-12"
-    DESCRIPTION "32K Model B, cassette only")
-add_system_preset(beebium-model-b "model-b-disc" "BBC Model B (Disc)" "1982"
+add_system_preset(beebium-model-b "model-b" "Model B" "1981-12"
+    DESCRIPTION "32K Model B, no disc")
+add_system_preset(beebium-model-b "model-b-disc" "Model B (Disc)" "1982"
     DESCRIPTION "32K Model B, 1770 DFS"
     --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
 add_system_preset(beebium-model-b-romram "model-b-romram-disc"
-    "BBC Model B with ROM/RAM Board (Disc)" "1984"
+    "Model B with ROM/RAM Board (Disc)" "1984"
     DESCRIPTION "Model B, ROM/RAM board, 1770 DFS"
     --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
-add_system_preset(beebium-model-b-plus "model-b-plus" "BBC Model B+ 64K" "1985-06"
+add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
     DESCRIPTION "64K Model B+, integral DFS")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
-    "BBC Model B+ 128K" "1985-06"
+    "Model B+ 128K" "1985-06"
     DESCRIPTION "128K Model B+, sideways RAM")
 
 # Econet presets, so users can try networking out of the box: model-b-disc
@@ -285,7 +285,7 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
 if(TARGET beebium_ext_acorn_65c02_plugin)
     add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
         "model-b-disc-65c02-copro"
-        "BBC Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
+        "Model B (Disc) + 65C02 Second Processor (3 MHz)" "1984"
         DESCRIPTION "Model B disc + 65C02 second processor (3 MHz)"
         THUMBNAIL_DELAY 6
         --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
@@ -293,7 +293,7 @@ endif()
 if(TARGET beebium_ext_acorn_65c102_plugin)
     add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c102_plugin
         "model-b-plus-128k-65c102-copro"
-        "BBC Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
+        "Model B+ 128K + 65C102 Co-processor (4 MHz)" "1986"
         DESCRIPTION "128K B+ + 65C102 co-processor (4 MHz)"
         THUMBNAIL_DELAY 6
         --tube-65c102)
