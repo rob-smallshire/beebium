@@ -32,6 +32,11 @@ on:
         description: "Release version (the tag, with or without a leading v)."
         required: true
         type: string
+      require_signing:
+        description: "Fail (never fall back to ad-hoc) if the Developer ID cert secrets are absent. release.yml passes true so a release can never ship an unsigned, undistributable DMG."
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       version:
@@ -162,13 +167,20 @@ jobs:
       - name: Detect signing secrets
         env:
           CERT: ${{ secrets.MACOS_SIGNING_CERT_P12 }}
+          REQUIRE_SIGNING: ${{ inputs.require_signing }}
         run: |
           if [ -n "${CERT}" ]; then
             echo "HAS_SIGNING=true" >> "${GITHUB_ENV}"
             echo "Developer ID signing + notarization ENABLED"
+          elif [ "${REQUIRE_SIGNING}" = "true" ]; then
+            # Hard gate for release context: the fork-safe ad-hoc fallback must
+            # NEVER silently ship in a release. An unsigned DMG is undistributable
+            # (Gatekeeper refuses it), so refuse to build one when signing is required.
+            echo "::error::require_signing is set but no Developer ID cert secret is present. Refusing to build an ad-hoc (undistributable) app. Check that the caller passes 'secrets: inherit' and that the cert secrets exist."
+            exit 1
           else
             echo "HAS_SIGNING=false" >> "${GITHUB_ENV}"
-            echo "::notice::no Developer ID cert secret -- ad-hoc path (Gatekeeper will refuse the DMG on another Mac). Expected on forks/PRs."
+            echo "::notice::no Developer ID cert secret -- building AD-HOC. This build is NOT distributable (Gatekeeper will refuse the DMG on another Mac); it is for fork/PR CI only, never a release."
           fi
 
       # Ephemeral keychain: created with a random password, added to the search

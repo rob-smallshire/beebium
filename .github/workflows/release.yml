@@ -61,12 +61,52 @@ jobs:
     uses: ./.github/workflows/macos-bundle.yml
 
   # The macOS GUI app + per-arch DMGs, embedding the bundle from macos-bundle.
-  # Ad-hoc signed at this phase (Developer ID signing + notarization is D3).
+  # secrets: inherit passes the Developer ID cert + notary secrets into the
+  # called workflow, and require_signing makes it FAIL (never fall back to the
+  # undistributable ad-hoc path) if they are somehow absent -- an unsigned DMG
+  # must never reach a release again.
   macos-app:
     needs: macos-bundle
     uses: ./.github/workflows/macos-app.yml
     with:
       version: ${{ github.ref_name }}
+      require_signing: true
+    secrets: inherit
+
+  # Publish-boundary gate for the DMGs, on macOS (codesign/stapler/spctl are not
+  # on the ubuntu release job): validate the EXACT dmg-* artifacts about to be
+  # attached, so an ad-hoc/unsigned/unstapled DMG can never reach the draft --
+  # the failure mode that shipped v0.1.10. `release` needs this.
+  verify-dmgs:
+    name: verify DMG signatures
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: macos-app
+    runs-on: macos-15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dmg-*
+          path: _dmgs
+          merge-multiple: true
+      - name: Assert each DMG is Developer ID signed, notarized and stapled
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=(_dmgs/Beebium-*.dmg)
+          if [ "${#dmgs[@]}" -ne 2 ]; then
+            echo "::error::expected 2 DMGs, found ${#dmgs[@]}: ${dmgs[*]:-none}"; exit 1
+          fi
+          for dmg in "${dmgs[@]}"; do
+            echo "== ${dmg} =="
+            team="$(codesign -dvv "${dmg}" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+            if [ -z "${team}" ] || [ "${team}" = "not set" ]; then
+              echo "::error::${dmg} is not Developer ID signed (TeamIdentifier='${team:-<none>}')"; exit 1
+            fi
+            echo "TeamIdentifier=${team}"
+            xcrun stapler validate "${dmg}"
+            spctl -a -t open --context context:primary-signature -vv "${dmg}"
+          done
+          echo "All DMGs are Developer ID signed, notarized and stapled."
 
   windows:
     uses: ./.github/workflows/windows-package.yml
@@ -345,7 +385,7 @@ jobs:
 
   release:
     name: draft GitHub Release
-    needs: [linux, macos-formula, macos-bundle, macos-app, windows]
+    needs: [linux, macos-formula, macos-bundle, macos-app, verify-dmgs, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
