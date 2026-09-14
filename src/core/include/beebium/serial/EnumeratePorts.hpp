@@ -29,6 +29,8 @@
 // empty result rather than an error. Entries are sorted lexicographically
 // and deduplicated.
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,6 +39,50 @@ namespace beebium::serial {
 // Enumerate host serial ports. Best-effort; returns an empty vector on
 // platforms or configurations where enumeration isn't possible.
 std::vector<std::string> enumerate_ports();
+
+// One enumerated serial port together with whatever USB identity the OS
+// can associate with it. The USB fields are best-effort: a non-USB port
+// (or a platform that cannot report the identity) leaves the ids empty and
+// the strings blank. Consumers that need to positively select a device
+// (e.g. filtering to the Raspberry Pi Pico's VID 0x2E8A before probing for
+// a Piconet) match on usb_vendor_id / usb_product_id where present.
+struct SerialPortInfo {
+    std::string path;                            // OS device path (macOS callout, Linux /dev, Windows COMn)
+    std::optional<std::uint16_t> usb_vendor_id;  // USB idVendor, if the port is a USB device
+    std::optional<std::uint16_t> usb_product_id; // USB idProduct, if known
+    std::string serial_number;                   // USB iSerial string, if any
+    std::string product;                         // USB iProduct string, if any
+    std::string manufacturer;                    // USB iManufacturer string, if any
+};
+
+// Enumerate host serial ports with their USB identity. Best-effort: returns
+// an empty vector where enumeration isn't possible, and populates the USB
+// fields only where the OS exposes them. Entries are sorted by path and
+// deduplicated.
+//
+//   * macOS:   IOKit IOSerialBSDClient services; the callout (/dev/cu.*)
+//              path plus idVendor/idProduct and the USB string descriptors
+//              found by searching the parent USB device.
+//   * Linux:   /sys/class/tty/<name> whose device resolves under a USB
+//              interface; idVendor/idProduct/serial/product/manufacturer
+//              read from the owning USB device directory.
+//   * Windows: SetupAPI COM-port devices; VID/PID parsed from the hardware
+//              id, plus the friendly name.
+std::vector<SerialPortInfo> enumerate_serial_ports();
+
+#ifndef _WIN32
+#ifdef __linux__
+// Test seam (Linux): enumerate from an arbitrary /sys/class/tty-shaped
+// directory tree rather than the real one, so the sysfs walk can be
+// exercised with a fixture. Each entry <sysfs_class_tty_dir>/<name> is a
+// symlink (or directory) with a "device" entry; USB identity is read from
+// the nearest ancestor directory that has an "idVendor" file. The returned
+// path is "<dev_dir>/<name>".
+std::vector<SerialPortInfo> enumerate_serial_ports_from_sysfs(
+    const std::string& sysfs_class_tty_dir,
+    const std::string& dev_dir);
+#endif
+#endif
 
 #ifndef _WIN32
 // Test seam: enumerate ports from arbitrary directories rather than the

@@ -79,3 +79,13 @@ target_link_libraries(beebium_core PUBLIC beebium_extension_api)
 # one way -- the core's bitmap strategy calls into the library; the library
 # knows nothing of the emulator.
 target_link_libraries(beebium_core PUBLIC screentext)
+
+# USB serial-port identity enumeration needs platform SDKs: IOKit +
+# CoreFoundation on macOS (IOSerialBSDClient registry walk), setupapi on
+# Windows (SetupDi* COM-port device query). POSIX-Linux uses sysfs (no lib).
+if(APPLE)
+    target_link_libraries(beebium_core PUBLIC
+        "-framework IOKit" "-framework CoreFoundation")
+elseif(WIN32)
+    target_link_libraries(beebium_core PUBLIC setupapi)
+endif()

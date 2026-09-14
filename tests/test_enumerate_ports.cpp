@@ -207,4 +207,114 @@ TEST_CASE("enumerate_ports_from_dirs deduplicates identical paths",
     REQUIRE(result.size() == 1);
 }
 
+// --- USB-identity enumeration (enumerate_serial_ports) ---
+
+TEST_CASE("enumerate_serial_ports runs and yields well-formed entries",
+          "[serial][enumerate]") {
+    // Hardware-agnostic smoke test: whatever is (or isn't) plugged in, the
+    // enumerator must not crash and every entry must carry a non-empty path.
+    auto ports = beebium::serial::enumerate_serial_ports();
+    for (const auto& port : ports) {
+        CHECK_FALSE(port.path.empty());
+    }
+    // Paths are sorted and unique.
+    for (std::size_t i = 1; i < ports.size(); ++i) {
+        CHECK(ports[i - 1].path < ports[i].path);
+    }
+}
+
+#ifdef __linux__
+namespace {
+
+// Write a sysfs-style attribute file (value + trailing newline, as the
+// kernel presents them).
+void write_attr(const fs::path& filepath, const std::string& value) {
+    std::ofstream out(filepath);
+    out << value << "\n";
+}
+
+}  // namespace
+
+TEST_CASE("enumerate_serial_ports_from_sysfs reads USB identity via the "
+          "interface's parent device",
+          "[serial][enumerate]") {
+    TmpDir tmp;
+    auto sys_tty = tmp.subdir("sys/class/tty");
+
+    // Real topology: the tty's "device" is the USB interface (1-1:1.0),
+    // whose PARENT (1-1) is the USB device carrying idVendor/idProduct and
+    // the string descriptors.
+    auto usb_device = tmp.subdir("sys/devices/usb1/1-1");
+    auto usb_iface = tmp.subdir("sys/devices/usb1/1-1/1-1:1.0");
+    write_attr(usb_device / "idVendor", "2e8a");
+    write_attr(usb_device / "idProduct", "000a");
+    write_attr(usb_device / "serial", "E660C0D1F3");
+    write_attr(usb_device / "product", "Pico");
+    write_attr(usb_device / "manufacturer", "Raspberry Pi");
+
+    auto tty = tmp.subdir("sys/class/tty/ttyACM0");
+    fs::create_directory_symlink(usb_iface, tty / "device");
+
+    auto ports = beebium::serial::enumerate_serial_ports_from_sysfs(
+        sys_tty.string(), "/dev");
+
+    REQUIRE(ports.size() == 1);
+    CHECK(ports[0].path == "/dev/ttyACM0");
+    REQUIRE(ports[0].usb_vendor_id.has_value());
+    CHECK(*ports[0].usb_vendor_id == 0x2e8a);
+    REQUIRE(ports[0].usb_product_id.has_value());
+    CHECK(*ports[0].usb_product_id == 0x000a);
+    CHECK(ports[0].serial_number == "E660C0D1F3");
+    CHECK(ports[0].product == "Pico");
+    CHECK(ports[0].manufacturer == "Raspberry Pi");
+}
+
+TEST_CASE("enumerate_serial_ports_from_sysfs ignores non-serial ttys",
+          "[serial][enumerate]") {
+    TmpDir tmp;
+    auto sys_tty = tmp.subdir("sys/class/tty");
+    // A console tty with no matching prefix must be skipped even if it has
+    // a device link.
+    auto console = tmp.subdir("sys/class/tty/tty0");
+    auto platform_dev = tmp.subdir("sys/devices/platform/serial8250");
+    fs::create_directory_symlink(platform_dev, console / "device");
+
+    auto ports = beebium::serial::enumerate_serial_ports_from_sysfs(
+        sys_tty.string(), "/dev");
+    CHECK(ports.empty());
+}
+
+TEST_CASE("enumerate_serial_ports_from_sysfs tolerates a serial tty with no "
+          "USB ancestor",
+          "[serial][enumerate]") {
+    TmpDir tmp;
+    auto sys_tty = tmp.subdir("sys/class/tty");
+    auto tty = tmp.subdir("sys/class/tty/ttyUSB0");
+    auto non_usb = tmp.subdir("sys/devices/platform/some-uart");
+    fs::create_directory_symlink(non_usb, tty / "device");
+
+    auto ports = beebium::serial::enumerate_serial_ports_from_sysfs(
+        sys_tty.string(), "/dev");
+    // Still enumerated (a caller filtering by VID simply won't match it),
+    // but with no USB identity.
+    REQUIRE(ports.size() == 1);
+    CHECK(ports[0].path == "/dev/ttyUSB0");
+    CHECK_FALSE(ports[0].usb_vendor_id.has_value());
+}
+#endif  // __linux__
+
+// A hidden, hardware-dependent probe of the real enumerator. Selected
+// explicitly with the [.piconet-live] tag; skipped in the normal run.
+TEST_CASE("enumerate_serial_ports sees a live Raspberry Pi Pico VID",
+          "[.piconet-live]") {
+    auto ports = beebium::serial::enumerate_serial_ports();
+    bool saw_pico = false;
+    for (const auto& port : ports) {
+        if (port.usb_vendor_id && *port.usb_vendor_id == 0x2E8A) {
+            saw_pico = true;
+        }
+    }
+    CHECK(saw_pico);
+}
+
 #endif  // !_WIN32
