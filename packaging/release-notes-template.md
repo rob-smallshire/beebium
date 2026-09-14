@@ -1,6 +1,6 @@
 ## Get Beebium
 
-The full BBC Micro emulator, ready to run. The app, the emulator servers, the ROMs, presets and extensions are all in one download — signed and notarized, so it opens on first launch with no Gatekeeper detour.
+The full BBC Micro emulator, ready to run. The app, the emulator servers, the ROMs, presets and extensions are all in one download.
 
 ### macOS
 
