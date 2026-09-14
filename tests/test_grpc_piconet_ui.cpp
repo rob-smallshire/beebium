@@ -429,8 +429,11 @@ TEST_CASE("Piconet recovery: closed-state startup -> EditorCommit -> adapter res
     (void)fixture.backend().receive_frame();
     REQUIRE(fixture.wait_for_serial_open(true));
 
-    // Drain the stream until we see Indicator OK / "Adapter
-    // responsive" -- the user-visible signal that the reopen succeeded.
+    // Drain the stream until we see Indicator OK naming the reopened
+    // device ("Piconet at <path>") -- the user-visible signal that the
+    // reopen succeeded.
+    const std::string expected_indicator =
+        "Piconet at " + replacement_fake.slave_path();
     auto deadline = std::chrono::steady_clock::now() + 1s;
     beebium::View latest = initial;
     bool saw_responsive = false;
@@ -439,7 +442,7 @@ TEST_CASE("Piconet recovery: closed-state startup -> EditorCommit -> adapter res
         const auto* indicator = find_control(latest, "connected");
         if (indicator &&
             indicator->indicator().state() == beebium::Indicator_State_OK &&
-            indicator->indicator().text() == "Adapter responsive") {
+            indicator->indicator().text() == expected_indicator) {
             saw_responsive = true;
             break;
         }
