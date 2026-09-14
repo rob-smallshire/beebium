@@ -325,6 +325,94 @@ TEST_CASE("create-preset: captures a serial extension that round-trips through t
     REQUIRE(loaded.config->extensions[0].config.at("tx_buffer") == "256");
 }
 
+TEST_CASE("create-preset: --station + --aun round-trips to an econet transport",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "aun.preset.beebium";
+
+    // An econet-transport extension flag is recorded in the preset's canonical
+    // econet.transport section (not the generic extensions array).
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"AUN Box\" --output \"" +
+        output_filepath.string() + "\" --station 80 --aun");
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(std::filesystem::exists(output_filepath));
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    REQUIRE(loaded.config->econet.has_value());
+    CHECK(loaded.config->econet->station == 80);
+    REQUIRE(loaded.config->econet->transport.has_value());
+    CHECK(loaded.config->econet->transport->name == "aun");
+    // AUN defaults are baked in as typed parameters.
+    CHECK(loaded.config->econet->transport->parameters.at("port") == "32768");
+    CHECK(loaded.config->econet->transport->parameters.at("net") == "0");
+    // The transport must NOT also leak into the generic extensions array.
+    CHECK(loaded.config->extensions.empty());
+}
+
+TEST_CASE("create-preset: --station + --piconet omits a discovered device_path",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "piconet.preset.beebium";
+
+    // No device_path: the transport records name only, so the extension
+    // discovers the device at boot.
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Piconet Box\" --output \"" +
+        output_filepath.string() + "\" --station 81 --piconet");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    REQUIRE(loaded.config->econet.has_value());
+    CHECK(loaded.config->econet->station == 81);
+    REQUIRE(loaded.config->econet->transport.has_value());
+    CHECK(loaded.config->econet->transport->name == "piconet");
+    CHECK(loaded.config->econet->transport->parameters.empty());
+}
+
+TEST_CASE("create-preset: --station without a transport fits Econet with no "
+          "network",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "station-only.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Station Only\" --output \"" +
+        output_filepath.string() + "\" --station 42");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    REQUIRE(loaded.config->econet.has_value());
+    CHECK(loaded.config->econet->station == 42);
+    CHECK_FALSE(loaded.config->econet->transport.has_value());
+}
+
+TEST_CASE("create-preset: a transport without --station is rejected",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "no-station.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"No Station\" --output \"" +
+        output_filepath.string() + "\" --aun");
+    CHECK(result.exit_code == 64);  // ExitCode::USAGE
+    CHECK_FALSE(std::filesystem::exists(output_filepath));
+}
+
+TEST_CASE("create-preset: --station out of range is rejected",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "bad-station.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Bad Station\" --output \"" +
+        output_filepath.string() + "\" --station 300 --aun");
+    CHECK(result.exit_code == 64);  // ExitCode::USAGE
+}
+
 TEST_CASE("create-preset --help: returns OK", "[integration][preset][create-preset]") {
     auto result = run_command(EXECUTABLE + " create-preset --help");
 

@@ -3520,6 +3520,9 @@ public:
                   << "  --release-date <date>     Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
                   << "  --fdc <id>                Disc controller for the FDC socket (e.g. acorn-1770)\n"
                   << "  --sideways SLOT:TYPE[:IMAGE]  Sideways slot (repeatable); same grammar as 'start'\n"
+                  << "  --station <1-254>         Econet station number (fits Econet). An econet-\n"
+                  << "                            transport extension flag (e.g. --aun, --piconet)\n"
+                  << "                            is recorded as the station's transport.\n"
                   << "  --<extension> [k=v:k=v]   Add an extension instance (repeatable); same\n"
                   << "                            grammar as 'start' (e.g. --rpc-serial tx_buffer=256,\n"
                   << "                            --host-serial mode=device:path=/dev/ttyUSB0:baud=9600).\n"
@@ -3546,6 +3549,14 @@ public:
         std::string fdc_id;
         std::vector<std::string> sideways_args;
         std::vector<typename ServerConfig<MachineType>::ExtensionInstance> preset_extensions;
+        // Econet: station number and (at most one) transport. A captured
+        // extension whose manifest kind is "econet-transport" is routed here,
+        // into the preset's canonical econet.transport section, rather than
+        // into the generic extensions array -- so a preset created with
+        // --station/--aun round-trips through PresetLoader to the same config.
+        int station_number = -1;
+        std::optional<typename ServerConfig<MachineType>::ExtensionInstance>
+            econet_transport;
 
         // Resolve extensions so create-preset accepts the same --<name> [k=v:...]
         // flags as `start`, capturing each into the preset's extensions array.
@@ -3577,6 +3588,17 @@ public:
                 fdc_id = argv[++i];
             } else if (arg == "--sideways" && i + 1 < argc) {
                 sideways_args.push_back(argv[++i]);
+            } else if (arg == "--station" && i + 1 < argc) {
+                try {
+                    station_number = std::stoi(argv[++i]);
+                } catch (...) {
+                    std::cerr << "Error: --station must be an integer 1-254\n";
+                    return ExitCode::USAGE;
+                }
+                if (station_number < 1 || station_number > 254) {
+                    std::cerr << "Error: --station must be 1-254\n";
+                    return ExitCode::USAGE;
+                }
             } else if (auto mit = cli_name_to_manifest.find(to_lower(arg));
                        mit != cli_name_to_manifest.end()) {
                 // An extension flag (e.g. --rpc-serial, --host-serial). Consume an
@@ -3596,7 +3618,20 @@ public:
                 inst.name = std::string(manifest->name);
                 inst.config = std::move(parse_result.config);
                 inst.list_config = std::move(parse_result.list_config);
-                preset_extensions.push_back(std::move(inst));
+                // An econet-transport extension belongs in the preset's econet
+                // section, not the generic extensions array. BBC machines fit
+                // at most one transport, matching `start`.
+                if (manifest->extension_kind == "econet-transport") {
+                    if (econet_transport) {
+                        std::cerr << "Error: at most one Econet transport may be "
+                                     "given (already have '"
+                                  << econet_transport->name << "')\n";
+                        return ExitCode::USAGE;
+                    }
+                    econet_transport = std::move(inst);
+                } else {
+                    preset_extensions.push_back(std::move(inst));
+                }
             } else {
                 std::cerr << "Unknown argument: " << arg << "\n";
                 help(argv[0]);
@@ -3675,6 +3710,55 @@ public:
                 slots.push_back(slot);
             }
             preset["sideways_bank"]["slots"] = slots;
+        }
+
+        // Econet: station and optional transport, emitted into the canonical
+        // "econet" section PresetLoader parses ({station, transport:{name,
+        // parameters}}). A transport with no station is an error (a transport
+        // with nowhere to attach is meaningless, and PresetLoader requires a
+        // station in the econet section); a station with no transport is fine
+        // -- Econet is fitted but has no network, exactly as `start` treats a
+        // bare --station.
+        if (econet_transport && station_number < 1) {
+            std::cerr << "Error: Econet transport '" << econet_transport->name
+                      << "' requires --station <1-254>\n";
+            return ExitCode::USAGE;
+        }
+        if (station_number >= 1) {
+            preset["econet"]["station"] = station_number;
+            if (econet_transport) {
+                auto to_value = [](const std::string& type,
+                                   const std::string& v) -> nlohmann::ordered_json {
+                    if (type == "integer") {
+                        try { return nlohmann::ordered_json(std::stoll(v)); } catch (...) {}
+                    } else if (type == "boolean") {
+                        return nlohmann::ordered_json(v == "true");
+                    }
+                    return nlohmann::ordered_json(v);
+                };
+                auto param_type = [&](const std::string& ext_name,
+                                      const std::string& key) {
+                    if (const auto* m =
+                            resolver_cfg.extension_resolver.find_by_name(ext_name)) {
+                        for (const auto& p : m->parameters) {
+                            if (p.key == key) return p.type;
+                        }
+                    }
+                    return std::string("string");
+                };
+                nlohmann::ordered_json transport;
+                transport["name"] = econet_transport->name;
+                nlohmann::ordered_json params = nlohmann::ordered_json::object();
+                for (const auto& [key, value] : econet_transport->config) {
+                    if (value.empty()) continue;  // skip unset optionals (e.g. discovered device_path)
+                    params[key] = to_value(param_type(econet_transport->name, key), value);
+                }
+                for (const auto& [key, values] : econet_transport->list_config) {
+                    params[key] = values;
+                }
+                if (!params.empty()) transport["parameters"] = params;
+                preset["econet"]["transport"] = std::move(transport);
+            }
         }
 
         // Extensions captured from --<name> flags, emitted into the same
