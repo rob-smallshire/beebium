@@ -161,3 +161,69 @@ TEST_CASE("discovery refuses to guess when several Piconets are confirmed",
     CHECK_THAT(result.message, ContainsSubstring("/dev/cu.usbmodem101"));
     CHECK_THAT(result.message, ContainsSubstring("/dev/cu.usbmodem201"));
 }
+
+// The verbose `message` (CLI/boot log) and the concise `ui_message` (GUI
+// status) are two audiences. The verbose one keeps the device_path advice;
+// the concise one omits it (CLI-only) and reports the port count.
+
+TEST_CASE("discovery splits verbose and concise messages when none found",
+          "[piconet][discovery]") {
+    std::vector<SerialPortInfo> ports{
+        non_usb_port("/dev/cu.Bluetooth-Incoming-Port"),
+        other_usb_port("/dev/cu.usbserial-FTDI", 0x0403),
+    };
+    auto result = discover_piconet_device(
+        "", [&] { return ports; }, confirming({}));
+
+    CHECK_FALSE(result.ok);
+    CHECK(result.ports_checked == 2);
+    // Verbose (log): keeps the CLI device_path guidance and the VID.
+    CHECK_THAT(result.message, ContainsSubstring("device_path"));
+    CHECK_THAT(result.message, ContainsSubstring("0x2E8A"));
+    // Concise (GUI): matches the user-approved wording, counts the ports,
+    // pluralises correctly, and does NOT mention device_path.
+    CHECK(result.ui_message ==
+          "No Piconet found (2 serial ports checked). Attach a Piconet and retry.");
+    CHECK_THAT(result.ui_message, !ContainsSubstring("device_path"));
+}
+
+TEST_CASE("discovery concise message singularises one port",
+          "[piconet][discovery]") {
+    std::vector<SerialPortInfo> ports{
+        non_usb_port("/dev/cu.Bluetooth-Incoming-Port"),
+    };
+    auto result = discover_piconet_device(
+        "", [&] { return ports; }, confirming({}));
+    CHECK(result.ui_message ==
+          "No Piconet found (1 serial port checked). Attach a Piconet and retry.");
+}
+
+TEST_CASE("discovery concise message for the ambiguous case omits device_path",
+          "[piconet][discovery]") {
+    std::vector<SerialPortInfo> ports{
+        pico_port("/dev/cu.usbmodem101"),
+        pico_port("/dev/cu.usbmodem201"),
+    };
+    auto result = discover_piconet_device(
+        "", [&] { return ports; },
+        confirming({"/dev/cu.usbmodem101", "/dev/cu.usbmodem201"}));
+    CHECK_THAT(result.ui_message, ContainsSubstring("Multiple Piconets found"));
+    CHECK_THAT(result.ui_message, ContainsSubstring("retry"));
+    CHECK_THAT(result.ui_message, !ContainsSubstring("device_path"));
+}
+
+TEST_CASE("discovery caps how many candidates it probes",
+          "[piconet][discovery]") {
+    // A pathological host presenting many Pico-VID ports must not make one
+    // discovery pass probe an unbounded number of them.
+    std::vector<SerialPortInfo> ports;
+    for (int i = 0; i < 32; ++i) {
+        ports.push_back(pico_port("/dev/cu.usbmodem" + std::to_string(i)));
+    }
+    int probes = 0;
+    auto result = discover_piconet_device(
+        "", [&] { return ports; },
+        [&](const std::string&) { ++probes; return false; });
+    CHECK_FALSE(result.ok);
+    CHECK(probes <= 8);  // MAX_PROBE_CANDIDATES
+}

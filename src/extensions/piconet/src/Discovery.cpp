@@ -30,6 +30,18 @@ std::string join_paths(const std::vector<std::string>& paths) {
     return out;
 }
 
+// Pluralise "serial port" for a count.
+std::string ports_phrase(std::size_t count) {
+    return std::to_string(count) +
+           (count == 1 ? " serial port" : " serial ports");
+}
+
+// Defensive cap on how many VID-matching ports we probe, so a host that
+// somehow presents a long list of Pico-VID devices can never make one
+// discovery pass take unboundedly long (each probe blocks up to its
+// timeout). Real hosts have one or two.
+constexpr std::size_t MAX_PROBE_CANDIDATES = 8;
+
 }  // namespace
 
 DiscoveryResult discover_piconet_device(const std::string& explicit_path,
@@ -37,8 +49,12 @@ DiscoveryResult discover_piconet_device(const std::string& explicit_path,
                                         const PortProber& probe) {
     // An explicit path pins the device: honour it exactly, no discovery.
     if (!explicit_path.empty() && explicit_path != AUTO_DEVICE_PATH) {
-        return {true, explicit_path,
-                "Using configured device_path " + explicit_path};
+        DiscoveryResult result;
+        result.ok = true;
+        result.device_path = explicit_path;
+        result.message = "Using configured device_path " + explicit_path;
+        result.ui_message = "Device: " + explicit_path;
+        return result;
     }
 
     const auto ports = enumerate();
@@ -50,6 +66,7 @@ DiscoveryResult discover_piconet_device(const std::string& explicit_path,
     for (const auto& port : ports) {
         if (port.usb_vendor_id && *port.usb_vendor_id == USB_VENDOR_ID) {
             vid_candidates.push_back(port.path);
+            if (vid_candidates.size() >= MAX_PROBE_CANDIDATES) break;
         }
     }
 
@@ -61,33 +78,46 @@ DiscoveryResult discover_piconet_device(const std::string& explicit_path,
         }
     }
 
+    DiscoveryResult result;
+    result.ports_checked = ports.size();
+
     if (confirmed.size() == 1) {
-        return {true, confirmed.front(),
-                "Discovered Piconet at " + confirmed.front()};
+        result.ok = true;
+        result.device_path = confirmed.front();
+        result.message = "Discovered Piconet at " + confirmed.front();
+        result.ui_message = "Piconet at " + confirmed.front();
+        return result;
     }
 
     if (confirmed.empty()) {
-        std::string message;
         if (vid_candidates.empty()) {
-            message = "No Piconet found: no serial port with the Raspberry Pi "
-                      "Pico USB vendor id (0x2E8A) is present among " +
-                      std::to_string(ports.size()) +
-                      " enumerated serial port(s). Attach the Piconet, or pass "
-                      "device_path=<path> to select a device explicitly.";
+            result.message =
+                "No Piconet found: no serial port with the Raspberry Pi "
+                "Pico USB vendor id (0x2E8A) is present among " +
+                ports_phrase(ports.size()) +
+                ". Attach the Piconet, or pass device_path=<path> to select a "
+                "device explicitly.";
         } else {
-            message = "No Piconet found: " +
-                      std::to_string(vid_candidates.size()) +
-                      " candidate port(s) with USB vendor 0x2E8A (" +
-                      join_paths(vid_candidates) +
-                      ") did not answer a Piconet STATUS probe. Pass "
-                      "device_path=<path> to select a device explicitly.";
+            result.message =
+                "No Piconet found: " + std::to_string(vid_candidates.size()) +
+                " candidate port(s) with USB vendor 0x2E8A (" +
+                join_paths(vid_candidates) +
+                ") did not answer a Piconet STATUS probe. Pass "
+                "device_path=<path> to select a device explicitly.";
         }
-        return {false, {}, std::move(message)};
+        // Concise, GUI-friendly: no device_path advice (CLI-only), and the
+        // count reflects how many host serial ports were considered.
+        result.ui_message = "No Piconet found (" + ports_phrase(ports.size()) +
+                            " checked). Attach a Piconet and retry.";
+        return result;
     }
 
-    return {false, {},
-            "Multiple Piconet devices found (" + join_paths(confirmed) +
-                "). Pass device_path=<path> to choose one."};
+    result.message = "Multiple Piconet devices found (" + join_paths(confirmed) +
+                     "). Pass device_path=<path> to choose one.";
+    result.ui_message = "Multiple Piconets found (" +
+                        std::to_string(confirmed.size()) +
+                        "). Leave one attached and retry.";
+    return result;
 }
 
 }  // namespace beebium::piconet

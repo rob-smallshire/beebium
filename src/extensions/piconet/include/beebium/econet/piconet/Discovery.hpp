@@ -40,7 +40,9 @@ inline constexpr const char* AUTO_DEVICE_PATH = "auto";
 struct DiscoveryResult {
     bool ok = false;          // true iff device_path is usable
     std::string device_path;  // the resolved path when ok
-    std::string message;      // human-readable detail (success or error), always set
+    std::string message;      // verbose detail for the CLI/boot log, always set
+    std::string ui_message;   // concise detail for a GUI status surface, always set
+    std::size_t ports_checked = 0;  // serial ports enumerated (0 for an explicit path)
 };
 
 // Enumerate host serial ports (with USB identity). Injected for testing.
