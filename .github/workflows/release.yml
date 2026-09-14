@@ -435,61 +435,23 @@ jobs:
 
           echo "Publishable artifacts verified: correct set, relocatable tarballs, arch-correct debs and rpms, amd64 server runs."
 
-      - name: Create draft release with Linux artifacts
+      # Render the release body from the committed template, substituting the
+      # version into every direct asset link. The same template renders by hand
+      # for an existing release: sed 's/@@V@@/<version>/g' packaging/release-notes-template.md
+      - name: Render the release body
+        run: |
+          set -euo pipefail
+          V="$(grep -E '^current_version' .bumpversion.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          sed "s/@@V@@/${V}/g" packaging/release-notes-template.md > "${GITHUB_WORKSPACE}/RELEASE_BODY.md"
+          echo "----- rendered release body (v${V}) -----"
+          cat "${GITHUB_WORKSPACE}/RELEASE_BODY.md"
+
+      - name: Create draft release with all artifacts
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           files: _artifacts/*
-          body: |
-            Headless BBC Micro emulator servers (Model B, B+, B+ 128K, ROM/RAM),
-            drivable from the Python/TypeScript clients or directly. Each install
-            puts the four servers on `PATH` and bundles the ROMs and extensions;
-            list them with `beebium-model-b list-extensions`.
-
-            ### Linux
-            Self-contained for `amd64` and `arm64` (no gRPC/protobuf to install).
-            - **Debian / Ubuntu / Raspberry Pi OS** -- download the `.deb` for your
-              architecture and `sudo apt install ./<file>.deb`.
-            - **Fedora / RHEL / openSUSE** -- download the `.rpm` for your
-              architecture (`x86_64` / `aarch64`) and `sudo dnf install ./<file>.rpm`.
-            - **Other distros** -- download the `.tar.gz`, extract it **anywhere**,
-              and add the extracted `beebium-server-*/bin` directory to your
-              `PATH` (no root needed).
-
-            ### macOS
-            Self-contained for Apple Silicon (`arm64`) and Intel (`x86_64`),
-            ad-hoc codesigned so they run without a build toolchain.
-            ```
-            brew tap rob-smallshire/beebium
-            brew install beebium-server
-            ```
-            Or download the `.tar.gz` for your architecture, extract it
-            **anywhere**, and add the extracted `beebium-server-*/bin` directory
-            to your `PATH` (no Homebrew needed).
-
-            #### macOS app (GUI)
-            The Swift/Metal frontend with the servers, ROMs, presets and
-            extensions bundled in. It is **signed with a Developer ID and
-            notarized by Apple**, so it opens on first launch with no Gatekeeper
-            detour. Needs macOS 13 (Ventura) or newer.
-            ```
-            brew install --cask rob-smallshire/beebium/beebium-gui
-            ```
-            Or download `Beebium-<version>-macos-<arch>.dmg` for your
-            architecture, open it, and drag **Beebium.app** to Applications.
-
-            ### Windows
-            ```
-            scoop bucket add beebium https://github.com/rob-smallshire/scoop-beebium
-            scoop install beebium-server
-            ```
-            Or download the `.zip` and extract it; self-contained apart from the
-            Microsoft Visual C++ Redistributable.
-
-            ---
-            The macOS/Windows commands require the Homebrew tap and Scoop bucket to
-            be synced to this version. The Python and TypeScript clients ship
-            separately (PyPI and npm).
+          body_path: ${{ github.workspace }}/RELEASE_BODY.md
 
   # Flip the assembled draft to published -- but only once the ENTIRE release is
   # proven good. `release` assembled the draft (with the publish-boundary gate);
