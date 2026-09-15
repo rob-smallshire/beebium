@@ -58,10 +58,14 @@ struct MainWindowRouter: View {
                         // Enforce at most one Welcome window by identity: if a
                         // live Welcome is already registered, this one is a
                         // duplicate (e.g. macOS restored one and SwiftUI made
-                        // another) -- bring the winner forward and close this
-                        // one on the next runloop turn (closing mid-setup can
-                        // glitch), matching the deep-link precedent.
+                        // another). Hide it SYNCHRONOUSLY the instant it is
+                        // identified so it never visibly paints -- orderOut only
+                        // orders the window out, no teardown, so it avoids the
+                        // mid-setup glitch that closing does -- then bring the
+                        // winner forward and close the loser on the next runloop
+                        // turn (deferring the close, per the deep-link precedent).
                         if !WelcomeWindowRegistry.shared.register(window) {
+                            window.orderOut(nil)
                             DispatchQueue.main.async {
                                 WelcomeWindowRegistry.shared.focusExisting()
                                 window.close()
