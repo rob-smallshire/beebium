@@ -174,6 +174,13 @@ working copy). An explicit path with a directory component, or an absolute
 path, is treated as the user's own image: opened in place, read/write, with no
 copy-on-write.
 
+Note: mDNS **advertisement** (`--advertise`) is a runtime/environment concern,
+not machine configuration, so it is a `start` flag and never part of a preset
+-- a CI boot of a server preset must not advertise, while the GUI launcher (and
+CLI users) pass `--advertise` when they actually want the machine on the
+network. So even a file-server preset carries no "advertise" setting; the
+launcher enables it.
+
 ## Environment Variables
 
 | Variable | Description |
