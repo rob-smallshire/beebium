@@ -388,6 +388,35 @@ TEST_CASE("create-preset: --machine-name round-trips through the loader",
     CHECK(*loaded.config->machine_name == "L3FS");
 }
 
+TEST_CASE("create-preset: --auto-boot round-trips through the loader",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "autoboot.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Server\" --auto-boot "
+        "--output \"" + output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    REQUIRE(loaded.config->auto_boot.has_value());
+    CHECK(*loaded.config->auto_boot == true);
+}
+
+TEST_CASE("create-preset: without --auto-boot the preset omits it",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "noboot.preset.beebium";
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Plain\" --output \"" +
+        output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    CHECK_FALSE(loaded.config->auto_boot.has_value());
+}
+
 TEST_CASE("create-preset: --station without a transport fits Econet with no "
           "network",
           "[integration][preset][create-preset]") {

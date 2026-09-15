@@ -65,6 +65,7 @@ struct PresetExtensionConfig {
 struct PresetConfig {
     std::string name;
     std::optional<std::string> machine_name;      // Machine label the preset launches with
+    std::optional<bool> auto_boot;                // Startup keyboard link: boot on power-up (runs !BOOT)
     std::optional<std::string> model;             // For validation against executable
     std::optional<PresetStorageConfig> storage;
     std::optional<PresetEconetConfig> econet;
@@ -395,6 +396,13 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     // --machine-name overrides it (applied in apply_preset).
     if (json.contains("machine_name") && json["machine_name"].is_string()) {
         config.machine_name = json["machine_name"].get<std::string>();
+    }
+
+    // Auto-boot (optional): whether the machine boots on power-up (reversed
+    // SHIFT-BREAK link) so the disc's !BOOT runs unattended. A CLI --auto-boot
+    // overrides it (applied in apply_preset).
+    if (json.contains("auto_boot") && json["auto_boot"].is_boolean()) {
+        config.auto_boot = json["auto_boot"].get<bool>();
     }
 
     // Model (optional, for validation)

@@ -669,6 +669,13 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
         config.machine_name = *preset.machine_name;
     }
 
+    // Auto-boot: preset supplies a default keyboard-link state; a CLI
+    // --auto-boot (which sets auto_boot_set) takes precedence.
+    if (preset.auto_boot && !config.auto_boot_set) {
+        config.auto_boot = *preset.auto_boot;
+        config.auto_boot_set = true;
+    }
+
     if (preset.storage) {
         const auto& storage = *preset.storage;
 
@@ -3562,6 +3569,8 @@ public:
                   << "                        (falls back to the machine description if omitted)\n"
                   << "  --machine-name <name> Machine name/label the preset launches with\n"
                   << "                        (e.g. a server's role); CLI --machine-name overrides\n"
+                  << "  --auto-boot           Boot on power-up (reversed SHIFT-BREAK link), so the\n"
+                  << "                        disc's !BOOT runs unattended; CLI --auto-boot overrides\n"
                   << "  --from <id>       Source preset to copy configuration from\n"
                   << "  --output <path>   Write to specified path instead of user directory\n"
                   << "  --release-date <date>     Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
@@ -3592,6 +3601,7 @@ public:
         std::string preset_name;
         std::string preset_description;
         std::string preset_machine_name;
+        bool preset_auto_boot = false;
         std::string from_id;
         std::string output_filepath;
         std::string release_date;
@@ -3631,6 +3641,8 @@ public:
                 preset_description = argv[++i];
             } else if (arg == "--machine-name" && i + 1 < argc) {
                 preset_machine_name = argv[++i];
+            } else if (arg == "--auto-boot") {
+                preset_auto_boot = true;
             } else if (arg == "--from" && i + 1 < argc) {
                 from_id = argv[++i];
             } else if (arg == "--output" && i + 1 < argc) {
@@ -3740,6 +3752,9 @@ public:
         }
         if (!preset_machine_name.empty()) {
             preset["machine_name"] = preset_machine_name;
+        }
+        if (preset_auto_boot) {
+            preset["auto_boot"] = true;
         }
         if (!fdc_id.empty()) {
             preset["storage"]["fdc_socket"]["id"] = fdc_id;
