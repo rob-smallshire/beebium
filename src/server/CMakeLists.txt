@@ -23,7 +23,8 @@ set(DISCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/discs")
 set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
 
 # Each bundled master ships as <id>.tar.xz carrying <id>.dat + <id>.dsc.
-set(BUNDLED_DISC_IDS l3fs-v1_26)
+# l3fs-v1_26b is the auto-starting revision (see packaging/discs/build-l3fs-image.sh).
+set(BUNDLED_DISC_IDS l3fs-v1_26b)
 set(_bundled_disc_outputs "")
 foreach(_disc_id ${BUNDLED_DISC_IDS})
     set(_tarball "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.tar.xz")
@@ -388,22 +389,27 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         "model-b-l3fs-aun"
         "Station 254 (L3 File Server, Model B)" "1985"
         DESCRIPTION "Level 3 File Server: ADFS + ANFS, SCSI disc, 65C02 copro"
-        THUMBNAIL_DELAY 8
+        # The image auto-starts the file server on boot (its !BOOT chains a
+        # soft-key StartFS), so --auto-boot lets a cold boot reach a SERVING
+        # server unattended; the thumbnail then captures "Starting - Ready".
+        # THUMBNAIL_DELAY covers the parasite's SCSI bitmap read + FS start.
+        THUMBNAIL_DELAY 30
         --machine-name "L3FS"
+        --auto-boot
         --fdc acorn-1770
         --sideways 9:rom:acorn-anfs_4_18.rom
         --sideways 10:rom:acorn-adfs_1_30.rom
         --station 254 --aun
         --acorn-rtc layout=7bit-year-in-r7
         --acorn-scsi
-        --scsi-hdd scsi-id=0:image=l3fs-v1_26.dat
+        --scsi-hdd scsi-id=0:image=l3fs-v1_26b.dat
         --tube-65c02
         EXTRA_DEPENDS
             beebium_ext_acorn_scsi_plugin
             beebium_ext_scsi_hard_disc_plugin
             beebium_ext_acorn_rtc_plugin
-            "${DISCS_OUTPUT_DIR}/l3fs-v1_26.dat"
-            "${DISCS_OUTPUT_DIR}/l3fs-v1_26.dsc")
+            "${DISCS_OUTPUT_DIR}/l3fs-v1_26b.dat"
+            "${DISCS_OUTPUT_DIR}/l3fs-v1_26b.dsc")
 endif()
 
 # Install rules
