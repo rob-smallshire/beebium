@@ -101,6 +101,26 @@ TEST_CASE("AunBackend: duplicate port binding fails gracefully", "[econet][aun][
     (void)second;
 }
 
+TEST_CASE("AunBackend: bind_error is empty on success, names the port on failure",
+          "[econet][aun][backend]") {
+    // A working backend reports no error.
+    AunBackend ok(0, 1, 0);
+    REQUIRE(ok.is_connected());
+    CHECK(ok.bind_error().empty());
+
+    // Occupy that port, then try to bind it again. SO_REUSEADDR makes a
+    // duplicate bind platform-dependent, so assert the error-reporting
+    // contract only when the second bind actually fails (it does on
+    // macOS/BSD -- the turnkey collision case). When it fails, the reason
+    // must name the specific port so the UI can surface it.
+    const uint16_t held = ok.local_port();
+    AunBackend clash(0, 2, held);
+    if (!clash.is_connected()) {
+        CHECK_FALSE(clash.bind_error().empty());
+        CHECK(clash.bind_error().find(std::to_string(held)) != std::string::npos);
+    }
+}
+
 // =============================================================================
 // Peer Management
 // =============================================================================

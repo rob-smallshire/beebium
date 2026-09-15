@@ -25,6 +25,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -118,6 +119,12 @@ public:
     // The local UDP port this backend is bound to.
     uint16_t local_port() const;
 
+    // Why the socket failed to come up, if it did. Empty when connected.
+    // Names the specific cause (port + OS reason, e.g. "could not bind UDP
+    // port 32768 (Address already in use)") so a caller can surface it
+    // instead of a generic "unavailable". Set once at construction.
+    const std::string& bind_error() const { return bind_error_; }
+
     // The local network number for this station.
     uint8_t local_net() const;
 
@@ -143,6 +150,7 @@ private:
 #endif
 
     socket_type socket_fd_ = invalid_socket;
+    std::string bind_error_;  // non-empty iff the socket failed to come up
     uint16_t local_port_;
     uint8_t local_net_;
     uint8_t local_stn_;

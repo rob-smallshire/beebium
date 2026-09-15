@@ -214,6 +214,36 @@ TEST_CASE("AunUi build_view (no backend) reports backend-unavailable",
     REQUIRE(find_control(view.root(), "udp_port") == nullptr);
 }
 
+TEST_CASE("AunUi build_view (bind failure) reports the specific port and cause",
+          "[aun][ui]") {
+    // Occupy an OS-chosen UDP port, then ask the extension to bind that exact
+    // port -> a bind conflict. Where the duplicate bind fails (macOS/BSD),
+    // the "unavailable" line must NAME the port (not a generic message), so
+    // the sidebar leads straight to the cause. Skipped where SO_REUSEADDR
+    // lets the duplicate bind succeed (create_backend then returns a backend).
+    beebium::AunBackend holder(0, 1, 0);
+    REQUIRE(holder.is_connected());
+    const std::uint16_t held = holder.local_port();
+
+    beebium::AunEconetTransportExtension ext;
+    ext.set_config({{"port", std::to_string(held)}});
+    auto backend = ext.create_backend(/*station=*/1);
+    if (backend != nullptr) {
+        SUCCEED("duplicate bind allowed on this platform; nothing to assert");
+        return;
+    }
+
+    beebium::View view;
+    ext.ui()->build_view(&view);
+
+    const auto* peers = find_control(view.root(), "peers_group");
+    REQUIRE(peers != nullptr);
+    REQUIRE(peers->group().controls_size() == 1);
+    const auto& text = peers->group().controls(0).label().text();
+    CHECK(text != "AUN backend unavailable");
+    CHECK(text.find(std::to_string(held)) != std::string::npos);
+}
+
 TEST_CASE("AunUi build_view emits Connect button + UDP port when backend live",
           "[aun][ui]") {
     AunUiFixture fixture;

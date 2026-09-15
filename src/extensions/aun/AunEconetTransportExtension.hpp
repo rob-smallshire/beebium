@@ -90,6 +90,14 @@ public:
     AunBackend* backend() { return backend_; }
     const AunBackend* backend() const { return backend_; }
 
+    // When there is no working backend, the specific reason -- captured from
+    // the failed AunBackend construction, naming the port and the OS cause
+    // (e.g. "could not bind UDP port 32768 (Address already in use)"). Empty
+    // when a backend is present or when no bind was attempted (port=none).
+    // AunUi shows this verbatim in place of a generic "unavailable" line so
+    // the network sidebar names the actual fault. See create_backend.
+    const std::string& unavailable_reason() const { return unavailable_reason_; }
+
     // ExtensionUi hook: returns a stable pointer to the per-extension
     // AunUi. The framework reads its View tree and dispatches validated
     // events into its handle_event.
@@ -116,6 +124,7 @@ public:
 
 private:
     AunBackend* backend_ = nullptr;  // non-owning; lives in EconetSocket
+    std::string unavailable_reason_;  // why there is no backend (bind failure)
     std::unique_ptr<AunDispatcher> dispatcher_;  // lazily constructed
     // Owned by the extension so its lifetime ends with the extension.
     // The backend lives inside EconetSocket and outlives us: ServerMain

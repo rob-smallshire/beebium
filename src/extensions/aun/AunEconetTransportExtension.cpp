@@ -181,10 +181,15 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
 
     auto backend = std::make_unique<AunBackend>(local_net, station, *port);
     if (!backend->is_connected()) {
+        // Keep the specific reason (port + OS cause) so AunUi can show it in
+        // the sidebar instead of a bare "unavailable"; full detail is already
+        // on stderr from AunBackend.
+        unavailable_reason_ = backend->bind_error();
         std::cerr << "AUN extension: failed to bind UDP socket on port "
                   << *port << " -- network disabled\n";
         return nullptr;
     }
+    unavailable_reason_.clear();  // a working backend clears any prior reason
 
     auto map_entries = config_list("map");
     auto peers = parse_map(map_entries ? *map_entries : std::span<const std::string>{});

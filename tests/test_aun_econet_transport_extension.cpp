@@ -199,3 +199,26 @@ TEST_CASE("AunEconetTransportExtension::create_backend: honours net config",
     REQUIRE(aun != nullptr);
     CHECK(aun->local_net() == 5);
 }
+
+TEST_CASE("AunEconetTransportExtension::create_backend: bind failure records a "
+          "reason that names the port",
+          "[econet][aun][extension]") {
+    // Occupy an OS-chosen UDP port, then ask the extension to bind that exact
+    // port. Where a duplicate bind fails (macOS/BSD -- the turnkey collision
+    // case), create_backend returns nullptr AND records a specific reason
+    // naming the port, so AunUi can show it instead of a bare "unavailable".
+    // (SO_REUSEADDR makes a duplicate bind platform-dependent, so the
+    // assertions run only when the bind actually failed.)
+    AunBackend holder(0, 1, 0);
+    REQUIRE(holder.is_connected());
+    const std::uint16_t held = holder.local_port();
+
+    AunEconetTransportExtension ext;
+    ext.set_config({{"port", std::to_string(held)}});
+    auto backend = ext.create_backend(/*station=*/32);
+    if (backend == nullptr) {
+        CHECK_FALSE(ext.unavailable_reason().empty());
+        CHECK(ext.unavailable_reason().find(std::to_string(held))
+              != std::string::npos);
+    }
+}

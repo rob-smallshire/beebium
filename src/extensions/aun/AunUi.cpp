@@ -123,7 +123,13 @@ void AunUi::build_view(View* out) const {
     if (!backend) {
         auto* no_peers = peers_group->add_controls();
         no_peers->set_id(CONTROL_NO_PEERS);
-        no_peers->mutable_label()->set_text("AUN backend unavailable");
+        // Name the specific fault when we have one (e.g. a bind conflict on a
+        // fixed port), so the sidebar leads straight to the cause rather than
+        // a generic "unavailable". Falls back to the generic line when the
+        // transport is simply off (port=none) or the reason is unknown.
+        const std::string& reason = ext_.unavailable_reason();
+        no_peers->mutable_label()->set_text(
+            reason.empty() ? "AUN backend unavailable" : ("AUN: " + reason));
         return;
     }
 

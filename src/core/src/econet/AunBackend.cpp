@@ -148,6 +148,12 @@ AunBackend::AunBackend(uint8_t local_net, uint8_t local_stn, uint16_t local_port
     bind_addr.sin_port = htons(local_port);
 
     if (::bind(socket_fd_, reinterpret_cast<const sockaddr*>(&bind_addr), sizeof(bind_addr)) < 0) {
+        // Keep the specific cause so callers can surface it (the transport UI
+        // shows this verbatim instead of a generic "unavailable"). The OS
+        // reason names the real problem -- typically "Address already in use"
+        // when another station already holds this UDP port on the host.
+        bind_error_ = "could not bind UDP port " + std::to_string(local_port)
+                    + " (" + socket_error_string() + ")";
         std::cerr << "AunBackend: bind() to port " << local_port
                   << " failed: " << socket_error_string() << "\n";
         close_socket();
