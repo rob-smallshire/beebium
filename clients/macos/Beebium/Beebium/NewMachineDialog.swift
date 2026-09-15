@@ -253,24 +253,7 @@ struct NewMachineDialog: View {
     @ViewBuilder
     private var errorSection: some View {
         if let error = launchError {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
-                    .imageScale(.large)
-                Text(error)
-                    .font(.callout)
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                Spacer(minLength: 0)
-            }
-            .padding(10)
-            .background(Color.red.opacity(0.08))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.red.opacity(0.25), lineWidth: 1)
-            )
-            .cornerRadius(6)
+            ServerErrorView(message: error) { launchError = nil }
         }
     }
 

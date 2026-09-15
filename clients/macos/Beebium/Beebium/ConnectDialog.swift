@@ -283,23 +283,9 @@ struct ConnectWindowContent: View {
 
     @ViewBuilder
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.yellow)
-            Text(message)
-                .font(.callout)
-            Spacer()
-            Button {
-                errorMessage = nil
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
+        ServerErrorView(message: message, tint: .yellow) {
+            errorMessage = nil
         }
-        .padding(10)
-        .background(Color.yellow.opacity(0.1))
-        .cornerRadius(6)
     }
 
     // MARK: - Helpers

@@ -79,10 +79,8 @@ struct WelcomeWindowContent: View {
 
                 // Error display
                 if let error = launchError {
-                    Text(error)
-                        .foregroundColor(.red)
-                        .font(.caption)
-                        .padding(.horizontal)
+                    ServerErrorView(message: error) { launchError = nil }
+                        .padding(.horizontal, 24)
                 }
             }
 
