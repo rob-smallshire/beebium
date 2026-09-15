@@ -137,6 +137,19 @@ public:
     // diagnostics. Re-queried live, so it reflects the current interface set.
     static std::vector<uint32_t> local_host_ipv4_addresses();
 
+    // Liveness probe for a SAME-HOST (loopback) peer: is UDP port `port`
+    // (host byte order) currently bound by some process on 127.0.0.1? Opens a
+    // transient UDP socket, plain-binds 127.0.0.1:port with NO SO_REUSEADDR,
+    // and reports whether that bind conflicts:
+    //   true  = EADDRINUSE -> the port is held (the peer is alive)
+    //   false = bind succeeded -> the port is free (the peer has quit)
+    // The probe socket is closed immediately and never touches the real AUN
+    // socket. Used to reap a same-host peer whose mDNS advertisement was
+    // withdrawn by a NIC change (loopback stays reachable) versus one whose
+    // server actually exited. Any unexpected error is treated as "in use"
+    // (conservative: don't reap on an ambiguous result).
+    static bool is_loopback_port_bound(uint16_t port);
+
     // How many frames have been dropped because the socket's send buffer was
     // full. Non-zero means a congested link is silently losing guest traffic.
     uint64_t send_would_block_count() const { return send_would_block_count_; }

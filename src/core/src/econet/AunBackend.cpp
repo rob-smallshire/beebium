@@ -595,6 +595,31 @@ std::vector<uint32_t> AunBackend::local_host_ipv4_addresses() {
     return local_ipv4_addresses();
 }
 
+bool AunBackend::is_loopback_port_bound(uint16_t port) {
+#ifdef _WIN32
+    ensure_winsock_initialized();
+#endif
+    socket_type probe = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (probe == invalid_socket) {
+        return true;  // Can't probe -> assume in use (don't reap).
+    }
+    // Deliberately NO SO_REUSEADDR: we want a bind to CONFLICT with the peer's
+    // live wildcard (*:port) bind so EADDRINUSE means "still held".
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(port);
+    int rc = ::bind(probe, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
+#ifdef _WIN32
+    ::closesocket(probe);
+#else
+    ::close(probe);
+#endif
+    // rc==0 -> port free -> peer gone (not in use). rc!=0 (EADDRINUSE, or any
+    // other error) -> treat as still held (conservative: don't reap).
+    return rc != 0;
+}
+
 void AunBackend::set_connected(bool connected) {
     bool prev = connected_.exchange(connected, std::memory_order_relaxed);
     if (prev != connected) {

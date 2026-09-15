@@ -29,12 +29,15 @@
 
 #include <beebium/discovery/Browser.hpp>
 
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 
 namespace beebium {
 
@@ -99,17 +102,45 @@ public:
     // Test-only counterpart to inject_added.
     void inject_removed(const std::string& instance_name);
 
+    // Run one same-host liveness sweep synchronously: for every same-host
+    // (loopback) peer, bind-probe its port and reap the ones whose server has
+    // exited. The production timer thread calls this every few seconds; tests
+    // call it directly so they don't depend on the thread's cadence. Safe to
+    // call whether or not start() has run.
+    void sweep_once();
+
 private:
     AunBackend& backend_;
     std::uint8_t local_stn_;
     std::unique_ptr<discovery::Browser> browser_;
     std::string service_type_ = "_aun._udp";
 
-    // Maps DNS-SD instance name -> (net, stn) it was registered as,
-    // so on_removed can find which peer to drop. The browser only
+    // Interval between same-host liveness sweeps on the production thread.
+    static constexpr std::chrono::milliseconds kSweepInterval{2500};
+
+    // What a discovered peer maps to. same_host peers (advertised on one of
+    // this host's own IPs, so add_peer rerouted them to 127.0.0.1) have their
+    // lifetime governed by the bind-probe sweep, NOT by mDNS removal -- a NIC
+    // change withdraws the advertisement but loopback stays reachable. port is
+    // the loopback UDP port (host byte order) the sweep probes.
+    struct PeerRef {
+        std::uint8_t net;
+        std::uint8_t stn;
+        bool same_host;
+        std::uint16_t port;
+    };
+
+    // Maps DNS-SD instance name -> the peer it was registered as, so
+    // on_removed / the sweep can find which peer to drop. The browser only
     // delivers the instance name on remove, not the TXT records.
     mutable std::mutex name_map_mutex_;
-    std::map<std::string, std::pair<std::uint8_t, std::uint8_t>> name_to_peer_;
+    std::map<std::string, PeerRef> name_to_peer_;
+
+    // Same-host liveness sweep thread (started by start(), joined by stop()).
+    std::thread sweep_thread_;
+    std::mutex sweep_mutex_;
+    std::condition_variable sweep_cv_;
+    bool sweep_stop_ = false;
 
     // Snapshot read out under name_map_mutex_; invoked outside the
     // lock so re-entrant callers can call back into the subscriber.
@@ -119,6 +150,7 @@ private:
     void handle_added(const discovery::DiscoveredService& svc);
     void handle_removed(const std::string& instance_name);
     void notify_peers_changed();
+    void sweep_loop();  // body of sweep_thread_
 };
 
 }  // namespace beebium

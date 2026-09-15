@@ -133,6 +133,20 @@ uint32_t some_nonloopback_local_ipv4() {
 }
 }  // namespace
 
+TEST_CASE("AunBackend: is_loopback_port_bound tracks a live wildcard bind",
+          "[econet][aun][backend]") {
+    // The liveness probe must read a port as IN USE while a real AUN socket
+    // holds it (bound *:P with SO_REUSEADDR) -- a plain 127.0.0.1:P bind
+    // conflicts with the wildcard bind -> EADDRINUSE -- and FREE once closed.
+    auto peer = std::make_unique<AunBackend>(0, 254, 0);
+    REQUIRE(peer->is_connected());
+    const uint16_t port = peer->local_port();
+
+    CHECK(AunBackend::is_loopback_port_bound(port));   // held -> alive
+    peer.reset();                                      // close the socket
+    CHECK_FALSE(AunBackend::is_loopback_port_bound(port));  // free -> gone
+}
+
 TEST_CASE("AunBackend: add_peer routes a same-host peer over loopback",
           "[econet][aun][backend]") {
     // A peer advertised on one of THIS host's own interface addresses is the

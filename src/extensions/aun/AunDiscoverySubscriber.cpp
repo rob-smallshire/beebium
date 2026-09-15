@@ -15,7 +15,9 @@
 #include <beebium/econet/AunBackend.hpp>
 
 #include <charconv>
+#include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace beebium {
 
@@ -55,12 +57,32 @@ bool AunDiscoverySubscriber::start() {
     cbs.on_removed = [this](const std::string& name) {
         handle_removed(name);
     };
-    return browser_->start(service_type_, std::move(cbs));
+    if (!browser_->start(service_type_, std::move(cbs))) return false;
+
+    // Start the same-host liveness sweep thread. Same-host peers are kept
+    // across mDNS withdrawals (NIC changes) and reaped only when their server
+    // actually exits -- the sweep is what detects that.
+    {
+        std::lock_guard lock(sweep_mutex_);
+        sweep_stop_ = false;
+    }
+    if (!sweep_thread_.joinable()) {
+        sweep_thread_ = std::thread([this] { sweep_loop(); });
+    }
+    return true;
 }
 
 void AunDiscoverySubscriber::stop() {
     if (!browser_) return;
     browser_->stop();
+
+    {
+        std::lock_guard lock(sweep_mutex_);
+        sweep_stop_ = true;
+    }
+    sweep_cv_.notify_all();
+    if (sweep_thread_.joinable()) sweep_thread_.join();
+
     std::lock_guard lock(name_map_mutex_);
     name_to_peer_.clear();
 }
@@ -124,12 +146,27 @@ void AunDiscoverySubscriber::handle_added(
     bool operator_pinned =
         backend_.is_operator_configured(net, stn);
 
+    // Same-host? The peer advertised one of THIS host's own IPs, so add_peer
+    // will reroute it to loopback. Such a peer's lifetime is governed by the
+    // liveness sweep, not by mDNS removal (a NIC change withdraws its
+    // advertisement while loopback stays reachable).
+    bool same_host = false;
+    for (std::uint32_t addr : AunBackend::local_host_ipv4_addresses()) {
+        if (addr == svc.ipv4_addr_net_byte_order) {
+            same_host = true;
+            break;
+        }
+    }
+
     backend_.add_peer(net, stn, svc.ipv4_addr_net_byte_order, svc.port,
                       PeerSource::Discovered);
 
     {
         std::lock_guard lock(name_map_mutex_);
-        name_to_peer_[svc.instance_name] = {net, stn};
+        // Reconciles in place on a re-add (same instance name -> same key),
+        // so a Wi-Fi-return re-advertisement updates the entry rather than
+        // creating a duplicate.
+        name_to_peer_[svc.instance_name] = PeerRef{net, stn, same_host, svc.port};
     }
 
     if (!operator_pinned) {
@@ -138,22 +175,88 @@ void AunDiscoverySubscriber::handle_added(
 }
 
 void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
-    std::pair<std::uint8_t, std::uint8_t> peer{};
+    PeerRef ref{};
     {
         std::lock_guard lock(name_map_mutex_);
         auto it = name_to_peer_.find(instance_name);
         if (it == name_to_peer_.end()) return;
-        peer = it->second;
+        ref = it->second;
+        // SAME-HOST peer: KEEP it. mDNS withdrew the advertisement (typically
+        // a Wi-Fi/Ethernet toggle), but the peer is still reachable over
+        // loopback. Its removal is the liveness sweep's job, which reaps it
+        // only when its server has actually exited. Leave the name mapping so
+        // the sweep can still find it.
+        if (ref.same_host) return;
         name_to_peer_.erase(it);
     }
 
     // Don't yank an operator-configured entry just because the
     // discovered shadow went away -- that would surprise an operator
     // who set the peer manually after the discovery added it.
-    if (backend_.is_operator_configured(peer.first, peer.second)) return;
+    if (backend_.is_operator_configured(ref.net, ref.stn)) return;
 
-    backend_.remove_peer(peer.first, peer.second);
+    backend_.remove_peer(ref.net, ref.stn);
     notify_peers_changed();
+}
+
+void AunDiscoverySubscriber::sweep_once() {
+    // Snapshot the same-host peers under the lock; probe (a blocking syscall)
+    // and mutate the backend OUTSIDE it.
+    struct Candidate {
+        std::string name;
+        std::uint8_t net;
+        std::uint8_t stn;
+        std::uint16_t port;
+    };
+    std::vector<Candidate> candidates;
+    {
+        std::lock_guard lock(name_map_mutex_);
+        for (const auto& [name, ref] : name_to_peer_) {
+            if (ref.same_host) {
+                candidates.push_back({name, ref.net, ref.stn, ref.port});
+            }
+        }
+    }
+
+    bool changed = false;
+    for (const auto& c : candidates) {
+        if (AunBackend::is_loopback_port_bound(c.port)) {
+            // Still held -> peer alive -> keep (survives a NIC toggle).
+            // EDGE: if the peer quit and an UNRELATED process then grabbed its
+            // ephemeral port, the probe still reads "in use" and we keep a
+            // phantom entry. Harmless: AUN unicast to a non-AUN listener is
+            // ignored, and the phantom is corrected when the real peer
+            // re-advertises (add_peer updates the entry in place). Not worth
+            // over-engineering (e.g. a protocol ping) to close.
+            continue;
+        }
+        // Port is free -> the same-host peer's server has exited. Reap it.
+        // (Take peer_table_ via remove_peer BEFORE re-taking name_map_, matching
+        //  handle_added's lock order; the two locks are never held together.)
+        if (!backend_.is_operator_configured(c.net, c.stn)) {
+            backend_.remove_peer(c.net, c.stn);
+            changed = true;
+        }
+        std::lock_guard lock(name_map_mutex_);
+        name_to_peer_.erase(c.name);
+    }
+
+    if (changed) notify_peers_changed();
+}
+
+void AunDiscoverySubscriber::sweep_loop() {
+    std::unique_lock lock(sweep_mutex_);
+    while (!sweep_stop_) {
+        // Wait the interval; wake early on stop. wait_for returns true only if
+        // the predicate (stop requested) holds -> exit; false on timeout -> sweep.
+        if (sweep_cv_.wait_for(lock, kSweepInterval,
+                               [this] { return sweep_stop_; })) {
+            break;
+        }
+        lock.unlock();
+        sweep_once();
+        lock.lock();
+    }
 }
 
 void AunDiscoverySubscriber::notify_peers_changed() {

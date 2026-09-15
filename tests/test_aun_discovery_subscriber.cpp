@@ -38,6 +38,11 @@ namespace {
 
 uint32_t loopback_ip() { return htonl(INADDR_LOOPBACK); }
 
+// A guaranteed-NOT-local address (RFC 5737 TEST-NET-3, 203.0.113.1) so a
+// service reads as a REMOTE peer -- exercising the ordinary mDNS-driven
+// removal path, which same-host peers deliberately bypass.
+uint32_t nonlocal_ip() { return htonl(0xCB007101u); }
+
 // Fake Browser that does nothing -- used so the subscriber's
 // constructor doesn't allocate a real platform browser. Tests drive
 // the subscriber via its inject_* helpers instead.
@@ -164,7 +169,9 @@ TEST_CASE("AunDiscoverySubscriber: removed event drops the discovered peer",
     AunDiscoverySubscriber subscriber(backend, 1,
                                       std::make_unique<FakeBrowser>());
 
-    subscriber.inject_added(make_service("Beebium 0.254", 0, 254, 32768));
+    // A REMOTE peer (non-local IP): mDNS removal drops it, as ever.
+    subscriber.inject_added(
+        make_service("Beebium 0.254", 0, 254, 32768, nonlocal_ip()));
     REQUIRE(backend.peer_count() == 1);
 
     subscriber.inject_removed("Beebium 0.254");
@@ -227,7 +234,9 @@ TEST_CASE("AunDiscoverySubscriber: on_peers_changed fires on add and remove",
     int call_count = 0;
     subscriber.set_on_peers_changed([&] { ++call_count; });
 
-    subscriber.inject_added(make_service("Beebium 0.254", 0, 254, 32768));
+    // Remote peer, so the removal actually drops it and fires the callback.
+    subscriber.inject_added(
+        make_service("Beebium 0.254", 0, 254, 32768, nonlocal_ip()));
     CHECK(call_count == 1);
 
     subscriber.inject_removed("Beebium 0.254");
@@ -262,4 +271,77 @@ TEST_CASE("AunDiscoverySubscriber: on_peers_changed not invoked for self",
     // Our own announcement: same (net, stn) as backend.
     subscriber.inject_added(make_service("Beebium 0.1", 0, 1, 32768));
     CHECK(call_count == 0);
+}
+
+// =============================================================================
+// Same-host (loopback) peer lifetime: governed by the bind-probe liveness
+// sweep, not by mDNS removal. Survives a NIC toggle (mDNS withdrawal while the
+// peer is still up on loopback); reaped only when the peer's server exits.
+// =============================================================================
+
+TEST_CASE("AunDiscoverySubscriber: same-host peer survives mDNS removal (NIC toggle)",
+          "[aun][discovery][subscriber][samehost]") {
+    // Stand up a real same-host "peer server" so its loopback port is bound.
+    auto peer = std::make_unique<AunBackend>(0, 254, 0);
+    REQUIRE(peer->is_connected());
+    const uint16_t peer_port = peer->local_port();
+
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    // Discovered on loopback (same-host) -> add_peer reroutes to 127.0.0.1.
+    subscriber.inject_added(
+        make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
+    REQUIRE(backend.peer_count() == 1);
+
+    // mDNS withdraws the advertisement (Wi-Fi/Ethernet toggle). The peer is
+    // still up on loopback, so it must be KEPT, not dropped.
+    subscriber.inject_removed("Beebium 0.254");
+    CHECK(backend.peer_count() == 1);
+
+    // A liveness sweep while the peer is still bound leaves it in place.
+    subscriber.sweep_once();
+    CHECK(backend.peer_count() == 1);
+}
+
+TEST_CASE("AunDiscoverySubscriber: same-host peer reaped when its server exits",
+          "[aun][discovery][subscriber][samehost]") {
+    auto peer = std::make_unique<AunBackend>(0, 254, 0);
+    REQUIRE(peer->is_connected());
+    const uint16_t peer_port = peer->local_port();
+
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+    subscriber.inject_added(
+        make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
+    REQUIRE(backend.peer_count() == 1);
+
+    // Peer's server exits -> its loopback port frees. The sweep must reap it.
+    peer.reset();
+    subscriber.sweep_once();
+    CHECK(backend.peer_count() == 0);
+}
+
+TEST_CASE("AunDiscoverySubscriber: same-host re-add after removal reconciles in place",
+          "[aun][discovery][subscriber][samehost]") {
+    auto peer = std::make_unique<AunBackend>(0, 254, 0);
+    REQUIRE(peer->is_connected());
+    const uint16_t peer_port = peer->local_port();
+
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(
+        make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
+    subscriber.inject_removed("Beebium 0.254");        // kept (same-host)
+    CHECK(backend.peer_count() == 1);
+
+    // Wi-Fi returns -> mDNS re-adds the same instance. Must update in place,
+    // not create a duplicate peer row.
+    subscriber.inject_added(
+        make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
+    CHECK(backend.peer_count() == 1);
 }
