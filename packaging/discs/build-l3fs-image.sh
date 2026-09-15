@@ -71,7 +71,27 @@ printf 'CHAIN"StartFS"\r' | "${OAKDISC[@]}" put "$DAT:\$.!BOOT" -
     --emplace Library \
     --emplace Library1
 
-# 6. Pin the AFS datestamps to the fixed epoch (see DETERMINISM above).
+# 5b. Populate the two user directories with a few short, period-flavoured
+#     text files so the file server isn't a set of empty homes. Sources live
+#     under l3fs-parts/ as ordinary LF text (reviewable); convert LF -> CR on
+#     the way in, the Acorn text convention that *TYPE expects (cf. !BOOT
+#     above). Load/exec stay the 0xFFFF "not meaningful" sentinel (put's
+#     stdin default). Each file carries its own note that it is fictitious.
+for spec in \
+    "ChrisC.NOTES:ChrisC-NOTES.txt" \
+    "ChrisC.REPLY:ChrisC-REPLY.txt" \
+    "HermannH.THINGS:HermannH-THINGS.txt" \
+    "HermannH.MEMO:HermannH-MEMO.txt"; do
+    dest="${spec%%:*}"
+    src="${spec##*:}"
+    tr '\n' '\r' < "$PARTS/$src" | "${OAKDISC[@]}" put "$DAT:afs:\$.$dest" -
+    # Public read so any logged-in station can *TYPE them, not just the owner
+    # or Syst -- the memo exchange spans both users' directories.
+    "${OAKDISC[@]}" chmod "$DAT:afs:\$.$dest" WR/R
+done
+
+# 6. Pin the AFS datestamps to the fixed epoch (see DETERMINISM above). This
+#    runs AFTER 5b so the user files are pinned too (put stamps them 'now').
 "${OAKDISC[@]}" set-datestamp "$DAT:afs:\$" "$EPOCH" -r
 
 # 7. Package: normalise the .dat/.dsc mtimes so the tarball is byte-identical

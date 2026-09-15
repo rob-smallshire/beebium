@@ -1,0 +1,22 @@
+PROCESSOR NOTES
+---------------
+
+6502 still looks like the right
+choice for the present machine.
+
+Need a much faster processor
+eventually.
+
+Perhaps we should design one
+ourselves?
+
+Keep it simple.
+Make memory fast.
+Don't waste silicon on things
+the compiler can do.
+
+Ask Steve.
+
+------------------------------
+(Fictitious. Written for
+Beebium; not a real document.)
