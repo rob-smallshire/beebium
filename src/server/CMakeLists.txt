@@ -12,6 +12,36 @@ set(SERVER_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(PRESETS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/presets")
 file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 
+# Bundled SCSI hard-disc masters. Shipped read-only under share/beebium/discs;
+# the server copies a master to a per-user working copy on first use (see
+# DiscPaths) so a shipped image is never mutated. Committed compressed
+# (discs/bundled/*.tar.xz, ~55 KB for the 99%-sparse L3FS image) and
+# decompressed here into the build tree so DiscPaths' walk-up finds them and
+# `start`/capture work from a dev build. CMAKE_BINARY_DIR/discs is the
+# config-independent location DiscPaths locates by walking up from the exe.
+set(DISCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/discs")
+set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
+
+# Each bundled master ships as <id>.tar.xz carrying <id>.dat + <id>.dsc.
+set(BUNDLED_DISC_IDS l3fs-v1_26)
+set(_bundled_disc_outputs "")
+foreach(_disc_id ${BUNDLED_DISC_IDS})
+    set(_tarball "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.tar.xz")
+    set(_dat "${DISCS_OUTPUT_DIR}/${_disc_id}.dat")
+    set(_dsc "${DISCS_OUTPUT_DIR}/${_disc_id}.dsc")
+    add_custom_command(
+        OUTPUT "${_dat}" "${_dsc}"
+        COMMAND ${CMAKE_COMMAND}
+            -DTARBALL=${_tarball}
+            -DOUTDIR=${DISCS_OUTPUT_DIR}
+            -P ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
+        DEPENDS "${_tarball}" ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
+        COMMENT "Decompressing bundled disc master ${_disc_id}"
+        VERBATIM)
+    list(APPEND _bundled_disc_outputs "${_dat}" "${_dsc}")
+endforeach()
+add_custom_target(bundled_discs ALL DEPENDS ${_bundled_disc_outputs})
+
 # Generate a system preset and its thumbnail at build time, using the same
 # create-preset code path that users create their own presets with. Extra
 # create-preset arguments (e.g. --fdc, --sideways) are forwarded via ARGN.
@@ -39,7 +69,15 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
-        COMMAND ${EXECUTABLE} capture-screenshot
+        # Capture boots the preset. Force SCRATCH disc mode (an ephemeral,
+        # always-refreshed working copy) and point the master dir at the build
+        # tree, so a preset carrying a bundled disc boots from a pristine image
+        # every build (deterministic thumbnail) and never reads or writes the
+        # user's working copies. Harmless for disc-less presets.
+        COMMAND ${CMAKE_COMMAND} -E env
+            "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
+            "BEEBIUM_DISC_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/disc-scratch/${PRESET_ID}"
+            $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
             --rom-dir "${BEEBIUM_ROM_DIR}"
@@ -75,7 +113,10 @@ endfunction()
 # capture-screenshot as --duration (the parasite's "Acorn TUBE ..." banner
 # settles after the 2.0s default); the rest of ARGN goes to create-preset.
 function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
-    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY;DESCRIPTION" "" ${ARGN})
+    # EXTRA_DEPENDS: additional targets/files this preset needs before create-
+    # preset/capture run -- further coprocessor/peripheral plugins beyond the
+    # primary PLUGIN_TARGET, and any bundled-disc outputs the boot resolves.
+    cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY;DESCRIPTION" "EXTRA_DEPENDS" ${ARGN})
     set(capture_duration_args "")
     if(DEFINED PRESET_THUMBNAIL_DELAY)
         set(capture_duration_args --duration ${PRESET_THUMBNAIL_DELAY})
@@ -103,14 +144,20 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             ${description_args}
             ${PRESET_UNPARSED_ARGUMENTS}
             --output "${preset_filepath}"
-        COMMAND ${EXECUTABLE} capture-screenshot
+        # SCRATCH disc mode + build-tree master dir (see add_system_preset):
+        # a bundled disc boots from a pristine, ephemeral copy every build and
+        # never touches user working copies. Harmless for disc-less presets.
+        COMMAND ${CMAKE_COMMAND} -E env
+            "BEEBIUM_DISC_DIR=${DISCS_OUTPUT_DIR}"
+            "BEEBIUM_DISC_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/disc-scratch/${PRESET_ID}"
+            $<TARGET_FILE:${EXECUTABLE}> capture-screenshot
             --preset "${preset_filepath}"
             --output "${thumbnail_filepath}"
             --rom-dir "${BEEBIUM_ROM_DIR}"
             --crop auto
             ${capture_duration_args}
         ${copy_commands}
-        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET}
+        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS}
         COMMENT "Generating plugin preset ${PRESET_ID} and its thumbnail"
         VERBATIM
     )
@@ -221,6 +268,10 @@ if(BEEBIUM_BUILD_SERVICE)
         beebium_ext_rfc2217_server_plugin
     )
 endif()
+# Bundled disc masters are decompressed into the build tree; include them so a
+# single `cmake --build --target beebium-servers` produces a complete dev tree
+# (and any disc-bearing preset's capture finds its master).
+list(APPEND BEEBIUM_SERVERS_DEPS bundled_discs)
 add_custom_target(beebium-servers DEPENDS ${BEEBIUM_SERVERS_DEPS})
 
 # Copy ROMs to build output directory for development
@@ -334,4 +385,15 @@ install(DIRECTORY ${PRESETS_OUTPUT_DIR}/
     FILES_MATCHING
         PATTERN "*.preset.beebium"
         PATTERN "*.thumbnail.png"
+)
+# Bundled disc masters ship READ-ONLY: they are immutable masters the server
+# copies to a per-user working copy on first use (see DiscPaths), never opened
+# writable. FILE_PERMISSIONS drops owner-write so even a system install cannot
+# scribble the shipped image.
+install(DIRECTORY ${DISCS_OUTPUT_DIR}/
+    DESTINATION share/beebium/discs
+    FILE_PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
+    FILES_MATCHING
+        PATTERN "*.dat"
+        PATTERN "*.dsc"
 )

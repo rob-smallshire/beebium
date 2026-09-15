@@ -45,6 +45,7 @@
 #include "beebium/tube/TubeConcepts.hpp"
 #include "beebium/service/Server.hpp"
 #include "beebium/server/PresetLoader.hpp"
+#include "beebium/server/DiscPaths.hpp"
 #include "beebium/server/PresetPaths.hpp"
 #include "beebium/server/RomPaths.hpp"
 #include "beebium/server/ImageResample.hpp"
@@ -2002,6 +2003,27 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             return {nullptr, ExitCode::CONFIG};
         }
         normalise_list_params(inst.config, inst.list_config, manifest->parameters);
+
+        // Resolve a bundled disc-image reference (a bare, version-named
+        // filename) to a per-user working copy via copy-on-first-use, so the
+        // shipped read-only master is never opened writable. Explicit user
+        // paths (absolute or with a directory component) pass through
+        // unchanged. Only the scsi-hard-disc extension bears a disc image.
+        // See DiscPaths.
+        if (manifest->name == "scsi-hard-disc") {
+            auto image_it = inst.config.find("image");
+            if (image_it != inst.config.end() && !image_it->second.empty()) {
+                try {
+                    image_it->second =
+                        beebium::server::DiscPaths::resolve_disc_image(
+                            image_it->second).string();
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: cannot resolve disc image for '"
+                              << inst.name << "': " << e.what() << "\n";
+                    return {nullptr, ExitCode::CONFIG};
+                }
+            }
+        }
 
         std::cout << "Loading extension: " << inst.name;
         if (inst.config.count("id")) {

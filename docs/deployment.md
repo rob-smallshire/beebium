@@ -138,11 +138,49 @@ The CMake install rules handle:
 - Executables to `bin/`
 - ROM files (`.rom`) to `share/beebium/roms/`
 
+## Bundled Discs and Copy-on-Write
+
+Some presets ship a hard-disc image -- for example the Level 3 File Server
+preset carries a SCSI image. These **master** images live read-only alongside
+the ROMs and presets:
+
+- Build tree: `<build>/discs/`
+- Installed: `<prefix>/share/beebium/discs/`
+
+Masters are committed compressed (`discs/bundled/<id>.tar.xz`, tiny because the
+images are almost entirely empty) and decompressed at build time. They are
+**immutable**: the emulated filing system writes to disc, so the server never
+opens a master; instead, on first use of a bundled image it copies the master
+to a **per-user working copy** and opens that. This keeps a shipped image (or a
+signed/sealed macOS app bundle) from ever being modified.
+
+Working copies live in the per-user Beebium state directory, a sibling of the
+user presets directory (all Beebium per-user state co-locates, so a future move
+to an XDG data location would move it all together):
+
+- macOS: `~/Library/Application Support/Beebium/discs/`
+- Windows: `%APPDATA%\Beebium\discs\`
+- Linux: `$XDG_CONFIG_HOME/beebium/discs/` (or `~/.config/beebium/discs/`)
+
+**Reset a disc to its shipped state**: delete its working copy; the next boot
+re-copies the pristine master.
+
+**Versioning**: masters are version-named (e.g. `l3fs-v1_26.dat`). A revised
+image ships under a NEW name -- a master is never mutated in place, so nobody
+can accidentally ship a same-named image with different contents.
+
+A preset references a bundled image by its bare filename (resolved to the
+working copy). An explicit path with a directory component, or an absolute
+path, is treated as the user's own image: opened in place, read/write, with no
+copy-on-write.
+
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
+| `BEEBIUM_DISC_DIR` | Path to the bundled disc **master** directory (overrides auto-detection) |
+| `BEEBIUM_DISC_WORK_DIR` | Working-copy directory. When set, selects an ephemeral "scratch" mode that always re-copies the master fresh (used by the build to keep thumbnail capture deterministic and stateless); when unset, working copies persist in the per-user discs directory |
 
 Example:
 ```bash

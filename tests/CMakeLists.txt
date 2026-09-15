@@ -94,6 +94,17 @@ target_link_libraries(test_cli_arg_parsers PRIVATE
 )
 catch_discover_tests(test_cli_arg_parsers)
 
+# DiscPaths copy-on-write resolution for bundled SCSI hard-disc masters.
+add_executable(test_disc_paths test_disc_paths.cpp)
+target_include_directories(test_disc_paths PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/server/include
+)
+target_link_libraries(test_disc_paths PRIVATE
+    beebium_core
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_disc_paths)
+
 # Sideways slot topology + --sideways validation against each machine variant.
 add_executable(test_sideways_validation test_sideways_validation.cpp)
 target_include_directories(test_sideways_validation PRIVATE
