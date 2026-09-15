@@ -18,10 +18,11 @@
 
 #include "beebium/server/DiscPaths.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <string>
-#include <unistd.h>
 
 using beebium::server::DiscPaths;
 using beebium::server::DiscWorkMode;
@@ -30,11 +31,19 @@ namespace {
 
 namespace fs = std::filesystem;
 
+// A process-unique random tag, so parallel test processes don't collide in
+// the shared temp directory. std::random_device is portable (no POSIX
+// getpid()), which keeps this test buildable on MSVC as well as POSIX.
+inline std::string unique_tag() {
+    std::random_device rd;
+    return std::to_string((static_cast<std::uint64_t>(rd()) << 32) ^ rd());
+}
+
 struct TmpTree {
     fs::path root;
     TmpTree() {
         root = fs::temp_directory_path() /
-               ("beebium_disc_paths_" + std::to_string(::getpid()) + "_" +
+               ("beebium_disc_paths_" + unique_tag() + "_" +
                 std::to_string(reinterpret_cast<std::uintptr_t>(this)));
         std::error_code ec;
         fs::remove_all(root, ec);
