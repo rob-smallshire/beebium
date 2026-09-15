@@ -23,6 +23,11 @@ import AppKit
 /// the user never has to retype a diagnostic into a bug report.
 struct ServerErrorView: View {
     let message: String
+    /// Optional heading naming what failed (e.g. the preset being launched).
+    /// Shown in bold above the diagnostic and included in the copied text so a
+    /// pasted bug report is self-contained. Call sites without a machine
+    /// context (a plain connect error) omit it rather than inventing a name.
+    var title: String? = nil
     /// Tint for the icon and container. Red for an error, yellow for a warning.
     var tint: Color = .red
     /// When non-nil, a dismiss button is shown that invokes this.
@@ -42,20 +47,32 @@ struct ServerErrorView: View {
                 .foregroundColor(tint)
                 .imageScale(.large)
 
-            ScrollView(.vertical) {
-                Text(message)
-                    .font(.callout)
-                    .foregroundColor(.primary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GeometryReader { geo in
-                        Color.clear.preference(key: ErrorTextHeightKey.self,
-                                               value: geo.size.height)
-                    })
+            VStack(alignment: .leading, spacing: 4) {
+                if let title {
+                    Text(title)
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                ScrollView(.vertical) {
+                    Text(message)
+                        .font(.callout)
+                        .foregroundColor(.primary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(GeometryReader { geo in
+                            Color.clear.preference(key: ErrorTextHeightKey.self,
+                                                   value: geo.size.height)
+                        })
+                }
+                .frame(height: min(textHeight, maxTextHeight))
+                .onPreferenceChange(ErrorTextHeightKey.self) { textHeight = $0 }
             }
-            .frame(height: min(textHeight, maxTextHeight))
-            .onPreferenceChange(ErrorTextHeightKey.self) { textHeight = $0 }
 
             VStack(spacing: 6) {
                 copyButton
@@ -78,11 +95,21 @@ struct ServerErrorView: View {
         .cornerRadius(6)
     }
 
+    /// Text placed on the clipboard: the heading (when present) followed by the
+    /// verbatim diagnostic, so a pasted bug report names both the machine and
+    /// the reason.
+    private var copyableText: String {
+        if let title {
+            return title + "\n" + message
+        }
+        return message
+    }
+
     private var copyButton: some View {
         Button {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
-            pasteboard.setString(message, forType: .string)
+            pasteboard.setString(copyableText, forType: .string)
             withAnimation { didCopy = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 withAnimation { didCopy = false }

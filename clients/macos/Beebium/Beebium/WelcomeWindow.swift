@@ -20,6 +20,7 @@ struct WelcomeWindowContent: View {
     @ObservedObject private var connectWindowState = ConnectWindowState.shared
     @Environment(\.openWindow) private var openWindow
     @State private var launchError: String?
+    @State private var launchErrorPresetName: String?
     @State private var isLaunching = false
     @State private var gridHeight: CGFloat = 376
 
@@ -79,8 +80,14 @@ struct WelcomeWindowContent: View {
 
                 // Error display
                 if let error = launchError {
-                    ServerErrorView(message: error) { launchError = nil }
-                        .padding(.horizontal, 24)
+                    ServerErrorView(
+                        message: error,
+                        title: launchErrorPresetName.map { "Couldn't start \"\($0)\"" }
+                    ) {
+                        launchError = nil
+                        launchErrorPresetName = nil
+                    }
+                    .padding(.horizontal, 24)
                 }
             }
 
@@ -120,6 +127,7 @@ struct WelcomeWindowContent: View {
     private func launchPreset(_ preset: MachinePreset) async {
         isLaunching = true
         launchError = nil
+        launchErrorPresetName = nil
 
         let manager = PresetManager.shared
         let result = await manager.launchCore(preset)
@@ -140,6 +148,7 @@ struct WelcomeWindowContent: View {
 
         case .failure(let error):
             launchError = error.localizedDescription
+            launchErrorPresetName = preset.name
             isLaunching = false
         }
     }
