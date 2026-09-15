@@ -38,9 +38,6 @@ final class IndicatorClient: ObservableObject, Disconnectable {
     /// Error message if connection or streaming failed
     @Published private(set) var errorMessage: String?
 
-    /// Callback for initial Caps Lock sync (called when first LED update received)
-    var onInitialCapsLockSync: (() -> Void)?
-
     /// True once the indicator stream has delivered its first
     /// caps-lock-led value. Observable so SwiftUI views can use it as
     /// the canonical "BBC LED state is now known" gate -- secondary
@@ -138,18 +135,15 @@ final class IndicatorClient: ObservableObject, Disconnectable {
             values[name] = value
         }
 
-        // Trigger the once-per-session initial Caps Lock sync on the first
-        // caps-lock-led update of any value. The first update means the MOS
-        // has actively driven the lock LED -- i.e. it has booted far enough to
-        // own the caps-lock state. The actual logical state is then read from
-        // the keyboard latch (KeyboardClient.getLockState), not this filtered
-        // brightness, so any value is a valid "ready" signal -- including the
-        // intermediate buckets seen at high emulation speed, which the old
-        // 0/255 gate would have waited for forever.
+        // Mark that the MOS has actively driven the lock LED -- i.e. the
+        // machine has booted far enough to own the caps-lock state. Secondary
+        // re-syncs (NSWindow.didBecomeKey, the at-connect reconnect sync) gate
+        // on this so they never run against stale startup defaults. The initial
+        // reconcile itself is no longer driven from here: it is deferred to the
+        // first key the user sends (see KeyboardClient), so nothing is injected
+        // into the matrix during the reset keyboard scan.
         if !hasTriggeredInitialSync, update.values["caps-lock-led"] != nil {
             hasTriggeredInitialSync = true
-            print("[KBD][capsLock.initial] first caps-lock-led update -> firing onInitialCapsLockSync")
-            onInitialCapsLockSync?()
         }
     }
 

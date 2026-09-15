@@ -103,6 +103,20 @@ struct ContentView: View {
     /// Initial sidebar visibility (e.g. from a beebium://…&sidebar=closed launch);
     /// nil leaves the default. Applied once in onAppear.
     let initialShowSidebar: Bool?
+    /// Delay from run()/BREAK-release to the one-shot initial Caps Lock sync.
+    /// Biased late so it lands after the MOS finishes its own caps-lock
+    /// initialisation (and well after the reset FS-select scan), so the sync is
+    /// the last word and sticks. Overridable via BEEBIUM_CAPS_SYNC_DELAY_MS for
+    /// empirical tuning. See the run() call site for the rationale.
+    static var initialCapsSyncDelayNanos: UInt64 {
+        let defaultMs: UInt64 = 1500
+        if let raw = ProcessInfo.processInfo.environment["BEEBIUM_CAPS_SYNC_DELAY_MS"],
+           let ms = UInt64(raw) {
+            return ms * 1_000_000
+        }
+        return defaultMs * 1_000_000
+    }
+
     /// Whether this window needs to call Run() after connection (for cores launched with --wait=api).
     /// Initialised from initialNeedsRun in onAppear; reset to false after Run() succeeds.
     @State private var needsRun: Bool = false
@@ -399,19 +413,16 @@ struct ContentView: View {
             // Wire up audio mixer state to audio client
             audioMixerState.audioClient = audioClient
 
-            // Initial Caps Lock sync. This callback fires once per session
-            // when the indicator stream delivers its first caps-lock-led
-            // value -- the moment when {channel up, keyboard service
-            // connected, BBC LED state actually known} are all true. Treat
-            // it as the canonical "perform initial sync now" event. Other
-            // triggers in this view (NSWindow.didBecomeKey, the at-connect
-            // sync below) gate on indicatorClient.hasTriggeredInitialSync
-            // so they never run before this one.
-            indicatorClient.onInitialCapsLockSync = { [weak keyboardClient] in
-                guard let keyboardClient = keyboardClient else { return }
-                let macCapsLockIsOn = NSEvent.modifierFlags.contains(.capsLock)
-                keyboardClient.syncCapsLockState(macCapsLockIsOn: macCapsLockIsOn)
-            }
+            // The initial Caps Lock sync for a freshly launched machine is
+            // fired once on a timer, measured from the run()/BREAK-release
+            // moment below -- not here and not off the indicator stream. Firing
+            // it early used to inject a synthesised Caps Lock press during the
+            // machine's reset keyboard scan, which the MOS reads as a filing-
+            // system selection and net-boots instead of booting the local disc.
+            // The delay also lands after the MOS finishes its own caps-lock
+            // initialisation, so the sync is the last word and sticks. Live
+            // host Caps Lock changes and the reconnect / didBecomeKey re-syncs
+            // below remain immediate.
 
             // Wire the speed control to the system client for its RPCs.
             speedModel.bind(to: systemClient)
@@ -541,6 +552,19 @@ struct ContentView: View {
                     Task {
                         do {
                             try await debuggerClient.run()
+                            // Fire the one-shot initial Caps Lock sync a short
+                            // while AFTER BREAK is released, so it lands past
+                            // both the reset keyboard/FS-select scan and the
+                            // MOS's own caps-lock initialisation -- injecting a
+                            // caps press any earlier is read as a filing-system
+                            // select (net boot) or is clobbered by MOS. Timed
+                            // from run() (the actual reset-execution moment),
+                            // not from connect/window-open. Wall-clock, so a
+                            // machine run well below 1x could want a larger
+                            // margin; the value is chosen comfortably safe at 1x.
+                            try? await Task.sleep(nanoseconds: Self.initialCapsSyncDelayNanos)
+                            let macCapsLockIsOn = NSEvent.modifierFlags.contains(.capsLock)
+                            keyboardClient.syncCapsLockState(macCapsLockIsOn: macCapsLockIsOn)
                         } catch {
                             NSLog("[ContentView] Failed to start emulation: \(error)")
                         }
@@ -554,12 +578,11 @@ struct ContentView: View {
 
                 // Re-sync Caps Lock if and only if the indicator stream
                 // has already delivered LED state in this session (i.e.
-                // this is a reconnect, not first startup). On first
-                // startup the LED state has not arrived yet, so sync
-                // would no-op silently against the .off default; the
-                // canonical initial sync via
-                // indicatorClient.onInitialCapsLockSync will fire
-                // shortly afterwards with real data.
+                // this is a reconnect to an already-running machine, not a
+                // fresh launch). On a fresh launch the LED state has not
+                // arrived yet, so this is skipped; the initial sync is the
+                // timer fired from run() above. On a reconnect the machine is
+                // already past boot, so syncing here is safe and immediate.
                 if indicatorClient.hasTriggeredInitialSync {
                     let macCapsLockIsOn = NSEvent.modifierFlags.contains(.capsLock)
                     keyboardClient.syncCapsLockState(
