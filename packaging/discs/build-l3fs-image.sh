@@ -65,7 +65,8 @@ printf 'CHAIN"StartFS"\r' | "${OAKDISC[@]}" put "$DAT:\$.!BOOT" -
 # 5. The AFS (Level 3) data partition: users + the shipped Library trees.
 "${OAKDISC[@]}" afs init "$DAT" \
     --disc-name L3DATA \
-    --user RJS:2MB \
+    --user ChrisC:2MB \
+    --user HermannH:2MB \
     --omit-user Welcome \
     --emplace Library \
     --emplace Library1
