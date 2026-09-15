@@ -220,7 +220,7 @@ void AunDiscoverySubscriber::sweep_once() {
 
     bool changed = false;
     for (const auto& c : candidates) {
-        if (AunBackend::is_loopback_port_bound(c.port)) {
+        if (AunBackend::is_udp_port_in_use(c.port)) {
             // Still held -> peer alive -> keep (survives a NIC toggle).
             // EDGE: if the peer quit and an UNRELATED process then grabbed its
             // ephemeral port, the probe still reads "in use" and we keep a

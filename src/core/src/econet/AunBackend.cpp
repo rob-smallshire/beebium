@@ -595,7 +595,7 @@ std::vector<uint32_t> AunBackend::local_host_ipv4_addresses() {
     return local_ipv4_addresses();
 }
 
-bool AunBackend::is_loopback_port_bound(uint16_t port) {
+bool AunBackend::is_udp_port_in_use(uint16_t port) {
 #ifdef _WIN32
     ensure_winsock_initialized();
 #endif
@@ -603,11 +603,14 @@ bool AunBackend::is_loopback_port_bound(uint16_t port) {
     if (probe == invalid_socket) {
         return true;  // Can't probe -> assume in use (don't reap).
     }
-    // Deliberately NO SO_REUSEADDR: we want a bind to CONFLICT with the peer's
-    // live wildcard (*:port) bind so EADDRINUSE means "still held".
+    // Deliberately NO SO_REUSEADDR and bind the WILDCARD (INADDR_ANY), matching
+    // the real AUN socket's bind address, so this conflicts with the peer's
+    // live *:port bind on all three platforms (a specific 127.0.0.1 probe would
+    // wrongly succeed against a live wildcard socket on Windows). EADDRINUSE
+    // then means "still held".
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
     int rc = ::bind(probe, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
 #ifdef _WIN32

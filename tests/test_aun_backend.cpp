@@ -133,18 +133,21 @@ uint32_t some_nonloopback_local_ipv4() {
 }
 }  // namespace
 
-TEST_CASE("AunBackend: is_loopback_port_bound tracks a live wildcard bind",
+TEST_CASE("AunBackend: is_udp_port_in_use tracks a live wildcard bind",
           "[econet][aun][backend]") {
     // The liveness probe must read a port as IN USE while a real AUN socket
-    // holds it (bound *:P with SO_REUSEADDR) -- a plain 127.0.0.1:P bind
-    // conflicts with the wildcard bind -> EADDRINUSE -- and FREE once closed.
+    // holds it (bound *:P with SO_REUSEADDR) and FREE once closed. The probe
+    // binds the WILDCARD with no reuse flags, so it conflicts with the peer's
+    // *:P bind on macOS, Linux AND Windows (a specific 127.0.0.1 probe would
+    // wrongly succeed against a live wildcard socket on Windows). Probing a
+    // REAL AunBackend here makes Windows CI the portability gate.
     auto peer = std::make_unique<AunBackend>(0, 254, 0);
     REQUIRE(peer->is_connected());
     const uint16_t port = peer->local_port();
 
-    CHECK(AunBackend::is_loopback_port_bound(port));   // held -> alive
-    peer.reset();                                      // close the socket
-    CHECK_FALSE(AunBackend::is_loopback_port_bound(port));  // free -> gone
+    CHECK(AunBackend::is_udp_port_in_use(port));   // held -> alive
+    peer.reset();                                  // close the socket
+    CHECK_FALSE(AunBackend::is_udp_port_in_use(port));  // free -> gone
 }
 
 TEST_CASE("AunBackend: add_peer routes a same-host peer over loopback",

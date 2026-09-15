@@ -137,18 +137,24 @@ public:
     // diagnostics. Re-queried live, so it reflects the current interface set.
     static std::vector<uint32_t> local_host_ipv4_addresses();
 
-    // Liveness probe for a SAME-HOST (loopback) peer: is UDP port `port`
-    // (host byte order) currently bound by some process on 127.0.0.1? Opens a
-    // transient UDP socket, plain-binds 127.0.0.1:port with NO SO_REUSEADDR,
-    // and reports whether that bind conflicts:
-    //   true  = EADDRINUSE -> the port is held (the peer is alive)
+    // Liveness probe: is UDP `port` (host byte order) currently held by any
+    // socket on this host? Opens a transient UDP socket and plain-binds
+    // INADDR_ANY:port with NO SO_REUSEADDR/SO_REUSEPORT, reporting whether that
+    // bind conflicts:
+    //   true  = EADDRINUSE -> the port is held (a peer is alive)
     //   false = bind succeeded -> the port is free (the peer has quit)
-    // The probe socket is closed immediately and never touches the real AUN
-    // socket. Used to reap a same-host peer whose mDNS advertisement was
-    // withdrawn by a NIC change (loopback stays reachable) versus one whose
-    // server actually exited. Any unexpected error is treated as "in use"
-    // (conservative: don't reap on an ambiguous result).
-    static bool is_loopback_port_bound(uint16_t port);
+    // It binds the WILDCARD (not 127.0.0.1) deliberately: the real AUN socket
+    // is wildcard-bound (INADDR_ANY), so a wildcard probe collides with it on
+    // macOS, Linux AND Windows. A specific-address probe (127.0.0.1) would
+    // wrongly SUCCEED against a live wildcard socket on Windows (specific and
+    // wildcard binds coexist there), falsely reporting the port free. The plain
+    // probe (no reuse flags) is what forces the conflict even against an
+    // SO_REUSEADDR owner. The probe socket is closed immediately and never
+    // touches the real AUN socket. Any unexpected error is treated as "in use"
+    // (conservative: don't reap on an ambiguous result). Used by the same-host
+    // liveness sweep to reap a peer whose server exited versus one whose mDNS
+    // advertisement merely lapsed on a NIC change.
+    static bool is_udp_port_in_use(uint16_t port);
 
     // How many frames have been dropped because the socket's send buffer was
     // full. Non-zero means a congested link is silently losing guest traffic.
