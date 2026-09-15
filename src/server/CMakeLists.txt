@@ -285,9 +285,15 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
         "${BEEBIUM_ROM_DIR}/acorn-mos_2_0.rom"
         "${BEEBIUM_ROM_DIR}/bbc-basic_2.rom"
         "${BEEBIUM_ROM_DIR}/acorn-dfs_2_26.rom"
-        # ANFS: the shipped Econet presets reference it, so a developer running
-        # start --preset from the build tree needs it beside the binary too.
+        # Every sideways ROM any shipped preset references (see the add_*_preset
+        # --sideways NN:rom:... lines above) must be copied here, or a dev-tree /
+        # BEEBIUM_SERVERS_DIRPATH launch of that preset fails with "ROM file not
+        # found" (installed bundles ship all *.rom, so this bites the build tree
+        # only). Currently: DFS 2.26, ANFS 4.18, ADFS 1.30. (Tube coprocessor
+        # ROMs are NOT here -- they ship inside each coprocessor plugin's roms/
+        # directory and load via the extension, not the ROM directory.)
         "${BEEBIUM_ROM_DIR}/acorn-anfs_4_18.rom"
+        "${BEEBIUM_ROM_DIR}/acorn-adfs_1_30.rom"
         "${ROM_OUTPUT_DIR}/"
     COMMENT "Copying host ROMs to build directory"
 )
