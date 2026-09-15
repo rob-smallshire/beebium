@@ -368,6 +368,44 @@ if(TARGET beebium_ext_piconet_plugin)
         --station 81 --piconet)
 endif()
 
+# Acorn Level 3 File Server preset. A full server machine: a 65C02 second
+# processor (3 MHz) runs the L3FS software off a bundled SCSI hard disc, with
+# ADFS as the DEFAULT filing system (ANFS in slot 9, ADFS in the higher-priority
+# slot 10) so the machine boots into ADFS to load the server, ANFS present for
+# the Econet side, station 254 (the conventional file-server station) over AUN
+# so clients find it via _aun._udp discovery, and the RTC in its L3-v1.26 layout
+# for date/time. The disc image is referenced by its bare, version-named
+# filename and copied to a per-user working copy on first use (see DiscPaths);
+# the shipped master is never modified. Needs the SCSI adapter + hard-disc + RTC
+# plugins deployed and the disc master decompressed before create-preset/capture
+# run, hence EXTRA_DEPENDS. Advertising (--advertise) is a launch-time flag, not
+# preset config, so the launcher enables mDNS advertisement, not the preset.
+if(TARGET beebium_ext_acorn_65c02_plugin
+   AND TARGET beebium_ext_acorn_scsi_plugin
+   AND TARGET beebium_ext_scsi_hard_disc_plugin
+   AND TARGET beebium_ext_acorn_rtc_plugin)
+    add_plugin_preset(beebium-model-b beebium_ext_acorn_65c02_plugin
+        "model-b-l3fs-aun"
+        "Station 254 (L3 File Server, Model B)" "1985"
+        DESCRIPTION "Level 3 File Server: ADFS + ANFS, SCSI disc, 65C02 copro"
+        THUMBNAIL_DELAY 8
+        --machine-name "L3FS"
+        --fdc acorn-1770
+        --sideways 9:rom:acorn-anfs_4_18.rom
+        --sideways 10:rom:acorn-adfs_1_30.rom
+        --station 254 --aun
+        --acorn-rtc layout=7bit-year-in-r7
+        --acorn-scsi
+        --scsi-hdd scsi-id=0:image=l3fs-v1_26.dat
+        --tube-65c02
+        EXTRA_DEPENDS
+            beebium_ext_acorn_scsi_plugin
+            beebium_ext_scsi_hard_disc_plugin
+            beebium_ext_acorn_rtc_plugin
+            "${DISCS_OUTPUT_DIR}/l3fs-v1_26.dat"
+            "${DISCS_OUTPUT_DIR}/l3fs-v1_26.dsc")
+endif()
+
 # Install rules
 install(TARGETS
         beebium-model-b

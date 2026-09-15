@@ -64,6 +64,7 @@ struct PresetExtensionConfig {
 
 struct PresetConfig {
     std::string name;
+    std::optional<std::string> machine_name;      // Machine label the preset launches with
     std::optional<std::string> model;             // For validation against executable
     std::optional<PresetStorageConfig> storage;
     std::optional<PresetEconetConfig> econet;
@@ -388,6 +389,12 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         config.name = json["name"].get<std::string>();
     } else {
         config.name = filepath.stem().string();  // Use filename as fallback
+    }
+
+    // Machine name (optional): the label the launched machine carries. A CLI
+    // --machine-name overrides it (applied in apply_preset).
+    if (json.contains("machine_name") && json["machine_name"].is_string()) {
+        config.machine_name = json["machine_name"].get<std::string>();
     }
 
     // Model (optional, for validation)

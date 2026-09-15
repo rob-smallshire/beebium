@@ -663,6 +663,12 @@ void print_info(const char* program_name) {
 // Preset values provide defaults that can be overridden by CLI arguments.
 template<typename MachineType>
 void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset) {
+    // Machine name: preset supplies a default; a CLI --machine-name (already in
+    // config.machine_name) takes precedence.
+    if (preset.machine_name && config.machine_name.empty()) {
+        config.machine_name = *preset.machine_name;
+    }
+
     if (preset.storage) {
         const auto& storage = *preset.storage;
 
@@ -3554,6 +3560,8 @@ public:
                   << "  --name <name>     Display name for the preset (required)\n"
                   << "  --description <text>  Short one-line description shown in the picker\n"
                   << "                        (falls back to the machine description if omitted)\n"
+                  << "  --machine-name <name> Machine name/label the preset launches with\n"
+                  << "                        (e.g. a server's role); CLI --machine-name overrides\n"
                   << "  --from <id>       Source preset to copy configuration from\n"
                   << "  --output <path>   Write to specified path instead of user directory\n"
                   << "  --release-date <date>     Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
@@ -3583,6 +3591,7 @@ public:
         // Parse subcommand options
         std::string preset_name;
         std::string preset_description;
+        std::string preset_machine_name;
         std::string from_id;
         std::string output_filepath;
         std::string release_date;
@@ -3620,6 +3629,8 @@ public:
                 preset_name = argv[++i];
             } else if (arg == "--description" && i + 1 < argc) {
                 preset_description = argv[++i];
+            } else if (arg == "--machine-name" && i + 1 < argc) {
+                preset_machine_name = argv[++i];
             } else if (arg == "--from" && i + 1 < argc) {
                 from_id = argv[++i];
             } else if (arg == "--output" && i + 1 < argc) {
@@ -3726,6 +3737,9 @@ public:
         }
         if (!preset_description.empty()) {
             preset["description"] = preset_description;
+        }
+        if (!preset_machine_name.empty()) {
+            preset["machine_name"] = preset_machine_name;
         }
         if (!fdc_id.empty()) {
             preset["storage"]["fdc_socket"]["id"] = fdc_id;

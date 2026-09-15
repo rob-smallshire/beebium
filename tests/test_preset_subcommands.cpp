@@ -372,6 +372,22 @@ TEST_CASE("create-preset: --station + --piconet omits a discovered device_path",
     CHECK(loaded.config->econet->transport->parameters.empty());
 }
 
+TEST_CASE("create-preset: --machine-name round-trips through the loader",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "named.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Server\" --machine-name \"L3FS\" "
+        "--output \"" + output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    REQUIRE(loaded.config->machine_name.has_value());
+    CHECK(*loaded.config->machine_name == "L3FS");
+}
+
 TEST_CASE("create-preset: --station without a transport fits Econet with no "
           "network",
           "[integration][preset][create-preset]") {
