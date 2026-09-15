@@ -213,7 +213,6 @@ struct BeebiumApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             FileCommands()
-            HelpCommands()
             CommandGroup(after: .toolbar) {
                 Button(showStatusBar == true ? "Hide Status Bar" : "Show Status Bar") {
                     showStatusBar?.toggle()

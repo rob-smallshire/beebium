@@ -47,8 +47,26 @@ struct MainWindowRouter: View {
                         window.titlebarAppearsTransparent = true
                         window.titleVisibility = .hidden
                         window.title = WelcomeWindow.title
+                        // A main window never usefully restores -- a machine
+                        // window's target is transient (it would come back as a
+                        // stray Welcome), and the Welcome screen is cheap to
+                        // recreate. Opting out of restoration is the structural
+                        // fix for the duplicate-Welcome-on-relaunch bug.
+                        window.isRestorable = false
                         window.setContentSize(NSSize(width: 800, height: 640))
                         window.center()
+                        // Enforce at most one Welcome window by identity: if a
+                        // live Welcome is already registered, this one is a
+                        // duplicate (e.g. macOS restored one and SwiftUI made
+                        // another) -- bring the winner forward and close this
+                        // one on the next runloop turn (closing mid-setup can
+                        // glitch), matching the deep-link precedent.
+                        if !WelcomeWindowRegistry.shared.register(window) {
+                            DispatchQueue.main.async {
+                                WelcomeWindowRegistry.shared.focusExisting()
+                                window.close()
+                            }
+                        }
                     }))
             }
         }
@@ -395,12 +413,13 @@ struct ContentView: View {
                 isImmersive = false
             }
         }
-        .focusedValue(\.openNewWindow) { openWindow(id: "main") }
         .onAppear {
             // Capture openWindow into shared AppActions for FileCommands
-            AppActions.shared.openNewMachine = { [openWindow] in openWindow(id: "new-machine") }
             AppActions.shared.openConnect = { [openWindow] in openWindow(id: "connect") }
-            AppActions.shared.openWelcome = { [openWindow] in
+            AppActions.shared.showWelcome = { [openWindow] in
+                // Focus the existing Welcome window if one is open; only open a
+                // new one when none exists, so there is never a second Welcome.
+                if WelcomeWindowRegistry.shared.focusExisting() { return }
                 ConnectWindowState.shared.pendingTarget = nil
                 ConnectWindowState.shared.pendingNeedsRun = false
                 ConnectWindowState.shared.pendingProvenanceUUID = nil
@@ -473,6 +492,12 @@ struct ContentView: View {
             // several windows apart, permanently invisible.
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
+            // A machine window never usefully restores (its target is transient
+            // and it would come back as a stray Welcome), so opt out. If this
+            // window was reused from the Welcome screen, drop it from the
+            // Welcome slot so the registry does not treat a machine as Welcome.
+            window.isRestorable = false
+            WelcomeWindowRegistry.shared.unregister(window)
             // The name is in the title, so that is where a user reaches to
             // change it. A right-click, because every left-click on a title
             // bar already means something; see TitleClickMonitor.

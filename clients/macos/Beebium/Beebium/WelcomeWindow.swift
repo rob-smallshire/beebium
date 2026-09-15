@@ -110,9 +110,9 @@ struct WelcomeWindowContent: View {
         }
         .task {
             // Capture openWindow into shared AppActions for FileCommands
-            AppActions.shared.openNewMachine = { [openWindow] in openWindow(id: "new-machine") }
             AppActions.shared.openConnect = { [openWindow] in openWindow(id: "connect") }
-            AppActions.shared.openWelcome = { [openWindow] in
+            AppActions.shared.showWelcome = { [openWindow] in
+                if WelcomeWindowRegistry.shared.focusExisting() { return }
                 ConnectWindowState.shared.pendingTarget = nil
                 ConnectWindowState.shared.pendingNeedsRun = false
                 ConnectWindowState.shared.pendingProvenanceUUID = nil

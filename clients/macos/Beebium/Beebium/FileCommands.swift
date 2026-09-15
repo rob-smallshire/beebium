@@ -20,23 +20,20 @@ struct FileCommands: Commands {
     /// the title bar's name field rather than opening a dialog of its own.
     @FocusedValue(\.renameMachine) private var renameMachine
     @ObservedObject private var appActions = AppActions.shared
-    @FocusedValue(\.openNewWindow) private var openNewWindow
 
     @ObservedObject private var presetManager = PresetManager.shared
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
+            // Cmd-N opens the Welcome window (the preset picker). It focuses the
+            // existing Welcome window if one is open rather than spawning a
+            // second. The custom machine builder is reached from the Welcome
+            // window's own "New Machine..." button.
             Button("New...") {
-                appActions.openNewMachine?()
+                appActions.showWelcome?()
             }
             .keyboardShortcut("n", modifiers: .command)
-            .disabled(appActions.openNewMachine == nil)
-
-            Button("New Window") {
-                openNewWindow?()
-            }
-            .keyboardShortcut("n", modifiers: [.command, .shift])
-            .disabled(openNewWindow == nil)
+            .disabled(appActions.showWelcome == nil)
         }
 
         CommandGroup(after: .newItem) {
@@ -136,16 +133,3 @@ struct FileCommands: Commands {
     }
 }
 
-struct HelpCommands: Commands {
-    @ObservedObject private var appActions = AppActions.shared
-
-    var body: some Commands {
-        CommandGroup(before: .help) {
-            Button("Welcome to Beebium") {
-                appActions.openWelcome?()
-            }
-            .disabled(appActions.openWelcome == nil)
-            Divider()
-        }
-    }
-}
