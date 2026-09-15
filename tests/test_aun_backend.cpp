@@ -121,6 +121,86 @@ TEST_CASE("AunBackend: bind_error is empty on success, names the port on failure
     }
 }
 
+// Pick a real non-loopback local IPv4 (network byte order), or 0 if the host
+// has none -- lets the multi-homed tests use the same enumeration add_peer
+// does, without any POSIX call of their own (portable to MSVC).
+namespace {
+uint32_t some_nonloopback_local_ipv4() {
+    for (uint32_t a : AunBackend::local_host_ipv4_addresses()) {
+        if (a != htonl(INADDR_LOOPBACK)) return a;
+    }
+    return 0;
+}
+}  // namespace
+
+TEST_CASE("AunBackend: add_peer routes a same-host peer over loopback",
+          "[econet][aun][backend]") {
+    // A peer advertised on one of THIS host's own interface addresses is the
+    // same machine; add_peer must rewrite it to 127.0.0.1 so a multi-homed
+    // egress-source-IP mismatch cannot drop its packets.
+    const uint32_t local = some_nonloopback_local_ipv4();
+    if (local == 0) {
+        SUCCEED("host has no non-loopback IPv4; rewrite branch not exercisable");
+        return;
+    }
+    AunBackend backend(0, 1, 0);
+    REQUIRE(backend.is_connected());
+    backend.add_peer(0, 254, local, 32768, PeerSource::Discovered);
+
+    auto peers = backend.list_peers();
+    REQUIRE(peers.size() == 1);
+    CHECK(peers[0].ip_addr == htonl(INADDR_LOOPBACK));  // rewritten to loopback
+    CHECK(peers[0].port == 32768);                       // port preserved
+
+    // Re-discovery (e.g. mDNS re-advertising a local IP after a NIC change)
+    // must re-converge to loopback, not latch a LAN IP -- add_peer re-queries
+    // the local address set on every call.
+    backend.add_peer(0, 254, local, 32768, PeerSource::Discovered);
+    auto peers2 = backend.list_peers();
+    REQUIRE(peers2.size() == 1);
+    CHECK(peers2[0].ip_addr == htonl(INADDR_LOOPBACK));
+}
+
+TEST_CASE("AunBackend: same-host peers discovered on a LAN address still deliver",
+          "[econet][aun][backend]") {
+    // The multi-homed coup: two same-host stations that discovered each other
+    // at a LAN (non-loopback local) address must still exchange frames,
+    // because add_peer rewrote both to loopback -- whose source and
+    // destination are symmetric no matter how many interfaces exist.
+    const uint32_t local = some_nonloopback_local_ipv4();
+    if (local == 0) {
+        SUCCEED("host has no non-loopback IPv4; nothing to exercise");
+        return;
+    }
+    AunBackend a(0, 1, 0);
+    AunBackend b(0, 254, 0);
+    if (!a.is_connected() || !b.is_connected()) {
+        SKIP("Could not bind loopback sockets");
+    }
+    // Peer each other by the LAN address, exactly as mDNS discovery would;
+    // the rewrite sends both over loopback so delivery does not depend on any
+    // physical interface being up.
+    a.add_peer(0, 254, local, b.local_port(), PeerSource::Discovered);
+    b.add_peer(0, 1, local, a.local_port(), PeerSource::Discovered);
+
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.port = 0x99;
+    frame.dest_net = 0;
+    frame.dest_stn = 254;
+    frame.src_net = 0;
+    frame.src_stn = 1;
+    frame.data = {0x2A};
+
+    a.send_frame(frame);
+    brief_pause();
+    auto received = receive_with_timeout(b);
+    REQUIRE(received.has_value());
+    REQUIRE(received->data.size() == 1);
+    CHECK(received->data[0] == 0x2A);
+    CHECK(received->src_stn == 1);
+}
+
 // =============================================================================
 // Peer Management
 // =============================================================================

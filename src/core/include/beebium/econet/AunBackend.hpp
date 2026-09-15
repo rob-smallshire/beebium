@@ -131,6 +131,12 @@ public:
     // Enumerate all configured peers.
     std::vector<PeerInfo> list_peers() const;
 
+    // Every IPv4 address of the local host (network byte order), across all
+    // interfaces (Wi-Fi, Ethernet, bridges, loopback). add_peer uses this to
+    // recognise a same-host peer and route it over loopback; also useful for
+    // diagnostics. Re-queried live, so it reflects the current interface set.
+    static std::vector<uint32_t> local_host_ipv4_addresses();
+
     // How many frames have been dropped because the socket's send buffer was
     // full. Non-zero means a congested link is silently losing guest traffic.
     uint64_t send_would_block_count() const { return send_would_block_count_; }

@@ -18,20 +18,26 @@
 #define NOMINMAX
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <iphlpapi.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "iphlpapi.lib")
 #else
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <unistd.h>
 #endif
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <span>
+#include <string>
+#include <vector>
 
 namespace beebium {
 
@@ -81,6 +87,65 @@ bool send_would_block() {
 #else
     return errno == EWOULDBLOCK || errno == EAGAIN || errno == ENOBUFS;
 #endif
+}
+
+// Every local IPv4 address of this host, in network byte order, across all
+// interfaces (Wi-Fi, Ethernet, bridges, loopback...). Used to recognise a
+// peer that lives on THIS machine. Portable: getifaddrs on POSIX,
+// GetAdaptersAddresses on Windows -- no POSIX-only leakage into the MSVC build.
+std::vector<uint32_t> local_ipv4_addresses() {
+    std::vector<uint32_t> addrs;
+#ifdef _WIN32
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
+                  GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG size = 0;
+    if (GetAdaptersAddresses(AF_INET, flags, nullptr, nullptr, &size) !=
+            ERROR_BUFFER_OVERFLOW) {
+        return addrs;
+    }
+    std::vector<unsigned char> buffer(size);
+    auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+    if (GetAdaptersAddresses(AF_INET, flags, nullptr, adapters, &size) != NO_ERROR) {
+        return addrs;
+    }
+    for (auto* a = adapters; a != nullptr; a = a->Next) {
+        for (auto* u = a->FirstUnicastAddress; u != nullptr; u = u->Next) {
+            if (u->Address.lpSockaddr->sa_family == AF_INET) {
+                addrs.push_back(reinterpret_cast<sockaddr_in*>(
+                    u->Address.lpSockaddr)->sin_addr.s_addr);
+            }
+        }
+    }
+#else
+    struct ifaddrs* interfaces = nullptr;
+    if (::getifaddrs(&interfaces) == 0) {
+        for (auto* ifa = interfaces; ifa != nullptr; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr != nullptr && ifa->ifa_addr->sa_family == AF_INET) {
+                addrs.push_back(reinterpret_cast<sockaddr_in*>(
+                    ifa->ifa_addr)->sin_addr.s_addr);
+            }
+        }
+        ::freeifaddrs(interfaces);
+    }
+#endif
+    return addrs;
+}
+
+// True if ip (network byte order) is an address of this host -- i.e. the peer
+// is the same machine, whichever interface it advertised.
+bool is_local_ipv4(uint32_t ip_net_order) {
+    if (ip_net_order == htonl(INADDR_LOOPBACK)) return true;
+    auto locals = local_ipv4_addresses();
+    return std::find(locals.begin(), locals.end(), ip_net_order) != locals.end();
+}
+
+// Format a network-byte-order IPv4 + port as "a.b.c.d:port" (trace only).
+std::string format_endpoint(uint32_t ip_net_order, uint16_t port) {
+    in_addr addr{};
+    addr.s_addr = ip_net_order;
+    char text[INET_ADDRSTRLEN] = {0};
+    inet_ntop(AF_INET, &addr, text, sizeof(text));
+    return std::string(text) + ":" + std::to_string(port);
 }
 
 }  // anonymous namespace
@@ -357,6 +422,16 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
     }
 
     if (!sender_known) {
+        if (trace_) {
+            // The prime multi-homed symptom: a frame arrives from a source IP
+            // that is not in reverse_map_ (the OS picked a different egress
+            // interface than the peer advertised), so we cannot attribute it
+            // to a station and drop it. This is the only place that fault is
+            // visible, so name the source explicitly.
+            std::cerr << "AUN RX: dropped -- unknown sender "
+                      << format_endpoint(sender_ip, sender_port)
+                      << " (not in peer table; source-IP mismatch?)\n";
+        }
         return std::nullopt;  // Unknown peer -- discard.
     }
 
@@ -410,6 +485,33 @@ bool AunBackend::is_connected() const {
 
 void AunBackend::add_peer(uint8_t net, uint8_t stn, uint32_t ip_addr,
                           uint16_t port, PeerSource source) {
+    // Same-host peer -> route over loopback. On a multi-homed host (e.g. Wi-Fi
+    // + Ethernet on one subnet) the OS may choose an egress source IP that
+    // differs from the peer's advertised address, so an inbound packet's
+    // source (ip,port) would miss reverse_map_ and be dropped. If the peer's
+    // advertised IP belongs to THIS host, both stations are the same machine:
+    // rewrite to 127.0.0.1, whose source and destination are symmetric on any
+    // number of interfaces, so both directions' reverse_map_ entries match.
+    //
+    // The local-address set is re-queried on EVERY call (never cached), so if
+    // a NIC change makes mDNS re-advertise a different interface IP and this
+    // runs again, it re-detects "local" and re-converges to loopback rather
+    // than latching a transient LAN IP. An already-established loopback link
+    // is unaffected by NIC changes (the socket bound INADDR_ANY once and the
+    // map already holds 127.0.0.1).
+    //
+    // KNOWN LIMITATION: same-host AUN BROADCAST does not traverse loopback;
+    // the file-server handshake (*I AM and its reply) is unicast, so it works.
+    if (ip_addr != 0 && is_local_ipv4(ip_addr)) {
+        if (trace_) {
+            std::cerr << "AUN peer " << static_cast<int>(net) << "."
+                      << static_cast<int>(stn) << " advertised "
+                      << format_endpoint(ip_addr, port)
+                      << " is same-host -> routing over 127.0.0.1\n";
+        }
+        ip_addr = htonl(INADDR_LOOPBACK);
+    }
+
     auto fwd_key = make_forward_key(net, stn);
     std::lock_guard lock(peer_table_mutex_);
 
@@ -487,6 +589,10 @@ std::vector<PeerInfo> AunBackend::list_peers() const {
         });
     }
     return result;
+}
+
+std::vector<uint32_t> AunBackend::local_host_ipv4_addresses() {
+    return local_ipv4_addresses();
 }
 
 void AunBackend::set_connected(bool connected) {
