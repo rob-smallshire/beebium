@@ -331,7 +331,11 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
     --fdc acorn-1770
     --sideways 13:rom:acorn-dfs_2_26.rom
     --sideways 14:rom:acorn-anfs_4_18.rom
-    --station 80 --aun)
+    # port=0: bind an OS-ephemeral UDP port rather than the fixed 32768, so
+    # this station and a file-server station (both AUN) can run on ONE host
+    # without a bind conflict. Each advertises its real bound port over
+    # _aun._udp and discovers the peer via mDNS -- no fixed port, no map=.
+    --station 80 --aun port=0)
 
 # Tube coprocessor presets, so users can try the second processors (the machine
 # config UI has no Tube axis yet). Each is its disc-capable sibling plus a Tube
@@ -405,7 +409,10 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         --fdc acorn-1770
         --sideways 9:rom:acorn-anfs_4_18.rom
         --sideways 10:rom:acorn-adfs_1_30.rom
-        --station 254 --aun
+        # port=0: OS-ephemeral UDP port (not fixed 32768) so this server and a
+        # client station (both AUN) coexist on one host with no bind conflict;
+        # the real bound port is advertised over _aun._udp for mDNS discovery.
+        --station 254 --aun port=0
         --acorn-rtc layout=7bit-year-in-r7
         --acorn-scsi
         --scsi-hdd scsi-id=0:image=l3fs-v1_26b.dat
