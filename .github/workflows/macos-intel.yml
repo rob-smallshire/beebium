@@ -40,14 +40,6 @@ on:
 permissions:
   contents: read
 
-# The Intel runner is scarce; a new PR sync (or a manual re-dispatch) auto-cancels
-# the superseded best-effort check rather than queueing behind it. Keyed on
-# workflow+ref, so PR merge-refs and the scheduled/master run stay independent and
-# two scheduled runs never stack. Standalone and non-gating -- never a release.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   formula:
     name: formula (x86_64, best-effort)

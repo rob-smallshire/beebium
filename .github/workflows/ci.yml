@@ -18,17 +18,6 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
-# A new push to a branch (or a new PR sync) auto-cancels the superseded run, so
-# rapid pushes don't stack up and starve the scarce Windows/macOS runners (which
-# once queued 8 CI runs behind a release). Keyed on workflow+ref: branch pushes,
-# PR merge-refs and the scheduled/master run each get their own group, so two
-# scheduled runs never stack and a push to master cancels a running scheduled
-# build (fine -- it only warms caches). ci.yml never runs on tags, so this can
-# never touch a release run.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   # Cheap fail-fast gate. Verify the protocol-fingerprint constants match the
   # proto contract before committing runners to the expensive build matrix: a
