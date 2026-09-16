@@ -15,6 +15,7 @@
 		03B945147D637860AEC9B652 /* aun.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32A705682AF714B2B54471F /* aun.grpc.swift */; };
 		03F8C1AF54A149B3750029EE /* audio.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */; };
 		03FCAEA23F2FF31EC7E07D29 /* KeyboardMappings in Resources */ = {isa = PBXBuildFile; fileRef = C9A1A70DB6662E96A6210970 /* KeyboardMappings */; };
+		05D71668C0E59AA851697A16 /* DriveStatusLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750FA727EAFD38FAE34EA7C7 /* DriveStatusLine.swift */; };
 		06B9C1E897D9DB39E8392078 /* SidebarModeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7386122C0E5009AE250FECD /* SidebarModeContent.swift */; };
 		07C91006D788A614860664BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4635C74CA6E1654868006CA6 /* Assets.xcassets */; };
 		089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66676E0A17481C9E2BE66969 /* HostFingerprint.swift */; };
@@ -275,6 +276,7 @@
 		6FBA42BF406ACEC8EC19CA2F /* MachineRenamePopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineRenamePopover.swift; sourceTree = "<group>"; };
 		7319BB6A760A9042161B98EB /* MachineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineManager.swift; sourceTree = "<group>"; };
 		74AEA0430FDD370E37C07678 /* VideoSettingsLoadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsLoadTests.swift; sourceTree = "<group>"; };
+		750FA727EAFD38FAE34EA7C7 /* DriveStatusLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveStatusLine.swift; sourceTree = "<group>"; };
 		757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralsClient.swift; sourceTree = "<group>"; };
 		76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetTransportsClient.swift; sourceTree = "<group>"; };
@@ -556,6 +558,7 @@
 				1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */,
 				639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */,
 				D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */,
+				750FA727EAFD38FAE34EA7C7 /* DriveStatusLine.swift */,
 				CA006204A482FCD8B77F7549 /* EconetClient.swift */,
 				7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */,
 				899F340E434ACDCAA75F913F /* EditableChoiceField.swift */,
@@ -862,6 +865,7 @@
 				DD38D6EB9C3CC2182169F801 /* Disconnectable.swift in Sources */,
 				AEFDACA93EC7747DF05C2447 /* DiscoveryClient.swift in Sources */,
 				674B7623816974BB8C3E2255 /* DisplayStyle.swift in Sources */,
+				05D71668C0E59AA851697A16 /* DriveStatusLine.swift in Sources */,
 				23F3E03B298F6AB8A9B9924E /* EconetClient.swift in Sources */,
 				317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */,
 				B18E97257A891E2AC24129ED /* EditableChoiceField.swift in Sources */,

@@ -12,27 +12,36 @@
 
 import Foundation
 
-/// A brief message that shows for a moment and then clears itself.
+/// A drive's current status message, of one of two deliberately distinct kinds.
 ///
-/// For a passing failure a control needs to report -- a rejected drop, a
-/// refused action -- without leaving it stuck on screen. Set it and forget it:
-/// it dismisses on its own after a while, or on demand. The `brief` line is
-/// what a row shows; the `detail` (the same by default) is for a tooltip, so
-/// a shortened message can still carry the fuller reason behind it.
+/// A `notice` is a short, self-explanatory precondition ("Eject disc first"):
+/// it needs no elaboration, so it shows briefly and clears itself. A `failure`
+/// carries the server's full verbatim reason and must not be lost or truncated:
+/// it is persistent (no timer), the UI opens its detail immediately and leaves
+/// an inline marker as the re-entry point, and it goes away only when the user
+/// clears it, a new outcome replaces it, or the drive is ejected.
 ///
-/// Both floppy drive views -- the live sidebar and the preset editor -- report
-/// the same kinds of failure the same way, so the behaviour lives here once
-/// rather than in each.
+/// Both floppy drive views -- the live sidebar and the New Machine dialog --
+/// report failures the same way, so the behaviour lives here once.
 @MainActor
 final class TransientMessage: ObservableObject {
-    struct Content: Equatable {
-        let brief: String
-        let detail: String
+    enum Kind: Equatable {
+        /// Self-clearing; the inline line shows `text`. No detail, no popover.
+        case notice(String)
+        /// Persistent; the inline marker shows `brief` (a short, class-agnostic
+        /// label like "Insert failed"), and `detail` is the server's full
+        /// message shown in the popover -- never inline, so it cannot truncate.
+        case failure(brief: String, detail: String)
     }
 
-    @Published private(set) var content: Content?
+    @Published private(set) var kind: Kind?
 
-    /// Seconds a message lingers before clearing itself.
+    /// Bumped on each `showFailure`, so a view can open the detail popover once
+    /// per failure ("popover-first") without reopening it every time the marker
+    /// re-appears -- which would fight a user who closed it but kept the marker.
+    @Published private(set) var failureToken = 0
+
+    /// Seconds a `notice` lingers before clearing itself. Failures ignore it.
     private let lifetime: Double
     private var dismissal: Task<Void, Never>?
 
@@ -40,35 +49,39 @@ final class TransientMessage: ObservableObject {
         self.lifetime = lifetime
     }
 
-    var brief: String? { content?.brief }
-    var detail: String? { content?.detail }
+    /// The text of a self-clearing notice, or nil when none is showing.
+    var noticeText: String? {
+        if case .notice(let text) = kind { return text }
+        return nil
+    }
 
-    /// Show `brief` now; it clears itself after `lifetime`. `detail` is the
-    /// fuller text behind it, defaulting to `brief`.
-    func show(_ brief: String, detail: String? = nil) {
-        content = Content(brief: brief, detail: detail ?? brief)
+    /// The current persistent failure's (brief, detail), or nil when none.
+    var failure: (brief: String, detail: String)? {
+        if case .failure(let brief, let detail) = kind { return (brief, detail) }
+        return nil
+    }
+
+    /// Show a short, self-explanatory notice; it clears itself after `lifetime`.
+    /// For preconditions, not server failures (those use `showFailure`).
+    func show(_ brief: String) {
+        kind = .notice(brief)
         scheduleDismissal()
+    }
+
+    /// Show a persistent failure carrying the server's full message. It does not
+    /// time out; it is replaced by the next `show`/`showFailure`, or removed by
+    /// `clear`. `brief` is the inline marker label; `detail` is the popover text.
+    func showFailure(_ brief: String, detail: String) {
+        dismissal?.cancel()
+        dismissal = nil
+        kind = .failure(brief: brief, detail: detail)
+        failureToken &+= 1
     }
 
     func clear() {
         dismissal?.cancel()
         dismissal = nil
-        content = nil
-    }
-
-    /// Hold the current message on screen indefinitely -- e.g. while the reader
-    /// has its full text open in a popover -- so it cannot vanish under them.
-    /// Leaves the content in place; `resumeAutoClear` restarts the countdown.
-    func pauseAutoClear() {
-        dismissal?.cancel()
-        dismissal = nil
-    }
-
-    /// Resume the self-clearing countdown after a `pauseAutoClear`, giving the
-    /// message a fresh `lifetime` from now. A no-op if nothing is showing.
-    func resumeAutoClear() {
-        guard content != nil else { return }
-        scheduleDismissal()
+        kind = nil
     }
 
     private func scheduleDismissal() {
@@ -77,7 +90,7 @@ final class TransientMessage: ObservableObject {
             guard let lifetime = self?.lifetime else { return }
             try? await Task.sleep(nanoseconds: UInt64(lifetime * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            await MainActor.run { self?.content = nil }
+            await MainActor.run { self?.kind = nil }
         }
     }
 }

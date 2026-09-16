@@ -54,26 +54,8 @@ struct FloppyDriveConfigView: View {
                 loadedContent
             }
 
-            if let message = dropRefusal?.message ?? driveError.brief {
-                HStack(spacing: 4) {
-                    Image(systemName: dropRefusal != nil
-                          ? "nosign" : "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                    // One line; the server's fuller reason is in the popover.
-                    Text(message)
-                        .font(.caption)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .foregroundColor(.red)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .help((dropRefusal?.message ?? driveError.detail) ?? message)
-                // Clicking a real failure opens the server's full message,
-                // selectable and copyable; a live drop refusal stays a plain
-                // line. Shared with StorageModeView.
-                .serverErrorPopover(detail: (dropRefusal?.message ?? driveError.detail) ?? message,
-                                    canOpen: dropRefusal == nil,
-                                    transient: driveError)
+            if dropRefusal != nil || driveError.kind != nil {
+                DriveStatusLine(refusalMessage: dropRefusal?.message, message: driveError)
             }
 
             // Actions row - matches StorageModeView layout
@@ -204,12 +186,12 @@ struct FloppyDriveConfigView: View {
             let info = await PresetManager.shared.describeDiscImage(
                 path: url.path, executablePath: executablePath)
             if let info, !info.recognised {
-                // Report the server's own reason (it leads with its class); the
-                // row middle-truncates it and the popover shows it in full. No
-                // client-side guess at the class -- the fallback is only a last
-                // resort for the unexpected case of an unrecognised image with
-                // no reason given.
-                driveError.show(info.reason ?? "Unrecognised disc image")
+                // Fixed, honest marker; the server's own reason (from
+                // describe-disc-image, leading with its class) is the popover
+                // detail in full. The fallback is only a last resort for the
+                // unexpected case of an unrecognised image with no reason.
+                driveError.showFailure("Can't use this disc",
+                                       detail: info.reason ?? "Unrecognised disc image")
             } else {
                 // Recognised, or the executable could not be run to say
                 // otherwise -- accept and let the launch be the backstop.

@@ -13,55 +13,61 @@
 import XCTest
 @testable import Beebium
 
-/// Semantics that only show up in timing, which the interactive UI can't
-/// exercise cheaply: pausing must genuinely hold the message (not clear it),
-/// resuming must give it a fresh lifetime, and a superseded message's cancelled
-/// timer must not wipe the message that replaced it.
+/// The two message kinds behave oppositely in time, which is the whole point:
+/// a self-explanatory notice must clear itself, while a failure carrying the
+/// server's words must persist until the user (or a new outcome) removes it.
 @MainActor
 final class TransientMessageTests: XCTestCase {
-    // A short lifetime keeps the timing tests fast; the waits below are
-    // generously past it to stay robust on a loaded CI machine.
+    // A short lifetime keeps the timing tests fast; waits are generously past it
+    // to stay robust on a loaded CI machine.
     private let lifetime = 0.2
     private var pastLifetimeNanos: UInt64 { UInt64(lifetime * 3 * 1_000_000_000) }
-    private var withinLifetimeNanos: UInt64 { UInt64(lifetime * 0.3 * 1_000_000_000) }
 
-    func testShowClearsItselfAfterLifetime() async throws {
+    func testNoticeClearsItselfAfterLifetime() async throws {
         let message = TransientMessage(lifetime: lifetime)
-        message.show("A")
-        XCTAssertEqual(message.brief, "A")
+        message.show("Eject disc first")
+        XCTAssertEqual(message.noticeText, "Eject disc first")
         try await Task.sleep(nanoseconds: pastLifetimeNanos)
-        XCTAssertNil(message.content, "a shown message should clear itself after its lifetime")
+        XCTAssertNil(message.kind, "a self-explanatory notice should clear itself")
     }
 
-    func testPauseHoldsMessagePastLifetime() async throws {
+    func testFailureDoesNotTimeOut() async throws {
         let message = TransientMessage(lifetime: lifetime)
-        message.show("A")
-        message.pauseAutoClear()
+        message.showFailure("Insert failed", detail: "Cannot open disc image: /x")
         try await Task.sleep(nanoseconds: pastLifetimeNanos)
-        // If cancelling the timer fell through to the clear (the classic
-        // try?-swallows-CancellationError bug), pausing would have cleared the
-        // message immediately and this would be nil.
-        XCTAssertEqual(message.brief, "A", "pause must hold the message, not clear it")
+        // A failure carries the server's words; losing it on a timer is exactly
+        // the bug this design removes.
+        let failure = try XCTUnwrap(message.failure, "a failure must persist past the notice lifetime")
+        XCTAssertEqual(failure.brief, "Insert failed")
+        XCTAssertEqual(failure.detail, "Cannot open disc image: /x")
     }
 
-    func testResumeClearsAfterFreshLifetime() async throws {
+    func testClearRemovesFailure() {
         let message = TransientMessage(lifetime: lifetime)
-        message.show("A")
-        message.pauseAutoClear()
-        message.resumeAutoClear()
-        try await Task.sleep(nanoseconds: pastLifetimeNanos)
-        XCTAssertNil(message.content, "resume must let the message clear after a fresh lifetime")
+        message.showFailure("Insert failed", detail: "Empty disc image: /x")
+        XCTAssertNotNil(message.failure)
+        message.clear()
+        XCTAssertNil(message.kind, "Clear must remove the failure marker")
     }
 
-    func testRapidShowKeepsLatest() async throws {
+    func testNewOutcomeReplacesPreviousFailure() {
         let message = TransientMessage(lifetime: lifetime)
-        message.show("A")
-        message.show("B")
-        // Long enough that a wrongly-immediate wake of A's cancelled timer would
-        // have wiped B, but well within the lifetime so B's own timer hasn't
-        // fired yet.
-        try await Task.sleep(nanoseconds: withinLifetimeNanos)
-        XCTAssertEqual(message.brief, "B",
-                       "a superseded message's cancelled timer must not wipe the new one")
+        message.showFailure("Insert failed", detail: "Empty disc image: /a")
+        let firstToken = message.failureToken
+        message.showFailure("Insert failed", detail: "Unrecognised disc image format: /b")
+        let failure = message.failure
+        XCTAssertEqual(failure?.detail, "Unrecognised disc image format: /b",
+                       "a fresh failure on the same drive must replace the old one")
+        XCTAssertGreaterThan(message.failureToken, firstToken,
+                             "each failure bumps the token so the UI can open its popover once")
+    }
+
+    func testNoticeReplacesFailure() {
+        // A subsequent short notice (e.g. a precondition) supersedes a failure.
+        let message = TransientMessage(lifetime: lifetime)
+        message.showFailure("Insert failed", detail: "Cannot open disc image: /x")
+        message.show("Eject disc first")
+        XCTAssertNil(message.failure)
+        XCTAssertEqual(message.noticeText, "Eject disc first")
     }
 }

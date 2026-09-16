@@ -285,8 +285,8 @@ private struct DriveRowView: View {
             // drive's state would otherwise occupy -- the empty prompt or the
             // disc name -- rather than adding a line below it and pushing the
             // rest of the sidebar down. Only ever one of them is shown.
-            if let message = statusMessage {
-                statusLine(message)
+            if dropRefusal != nil || driveError.kind != nil {
+                DriveStatusLine(refusalMessage: dropRefusal?.message, message: driveError)
             } else if isEjecting {
                 ejectingContent
             } else if isLoaded {
@@ -331,42 +331,6 @@ private struct DriveRowView: View {
             accept: { url in insertDisc(url: url) },
             report: { message in driveError.show(message) }
         ))
-    }
-
-    /// The refusal for a drag in flight wins over an older failure: it is
-    /// about what the user is doing right now.
-    private var statusMessage: String? {
-        dropRefusal?.message ?? driveError.brief
-    }
-
-    /// The fuller text behind the brief one, shown on hover. A drop refusal
-    /// says all it needs to; a failed action keeps the server's exact words.
-    private var statusDetail: String? {
-        dropRefusal?.message ?? driveError.detail
-    }
-
-    private func statusLine(_ message: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: dropRefusal != nil
-                  ? "nosign" : "exclamationmark.triangle.fill")
-                .font(.caption2)
-            // One line, so it occupies exactly the space the empty prompt or
-            // disc name would; the brief text fits, and the server's full
-            // reason is a hover away rather than something that grows the row.
-            Text(message)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .foregroundColor(.red)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .help(statusDetail ?? message)
-        // Clicking a lingering failure -- not a live drop refusal -- opens the
-        // server's full message where it can be read, selected and copied for a
-        // bug report, rather than dismissing the one-line brief.
-        .serverErrorPopover(detail: statusDetail ?? message,
-                            canOpen: dropRefusal == nil,
-                            transient: driveError)
     }
 
     // MARK: - Content Views
@@ -559,13 +523,12 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Insert failed: \(error.localizedDescription)")
-                    // Report the server's own message, which already leads with
-                    // its class ("Cannot open disc image", "Unrecognised disc
-                    // image format", "Empty disc image"): the row middle-
-                    // truncates it and the popover shows it in full. No
-                    // client-side guess at the class, so every failure -- now
-                    // and future -- is reported honestly.
-                    driveError.show(error.localizedDescription)
+                    // The inline marker is a fixed, honest "Insert failed"; the
+                    // server's own message (which leads with its class -- "Cannot
+                    // open disc image", "Unrecognised disc image format", "Empty
+                    // disc image") is the popover detail, verbatim and in full.
+                    driveError.showFailure("Insert failed",
+                                           detail: error.localizedDescription)
                 }
             }
         }
@@ -582,7 +545,8 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Eject failed: \(error.localizedDescription)")
-                    driveError.show(error.localizedDescription)
+                    driveError.showFailure("Eject failed",
+                                           detail: error.localizedDescription)
                 }
             }
         }
@@ -597,7 +561,8 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Force eject failed: \(error.localizedDescription)")
-                    driveError.show(error.localizedDescription)
+                    driveError.showFailure("Eject failed",
+                                           detail: error.localizedDescription)
                 }
             }
         }
@@ -612,7 +577,8 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Cancel eject failed: \(error.localizedDescription)")
-                    driveError.show(error.localizedDescription)
+                    driveError.showFailure("Couldn't cancel eject",
+                                           detail: error.localizedDescription)
                 }
             }
         }
