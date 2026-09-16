@@ -82,7 +82,9 @@ final class DiscClient: ObservableObject, Disconnectable {
 
         var request = Beebium_InsertDiscRequest()
         request.drive = UInt32(drive)
-        request.url = url.absoluteString
+        // Resolve a Finder alias to its target here: a dropped alias bypasses
+        // NSOpenPanel's own resolution, and the server can't read one.
+        request.url = url.resolvingDiscImageReference().absoluteString
 
         do {
             let response = try await client.insertDisc(request).response.get()

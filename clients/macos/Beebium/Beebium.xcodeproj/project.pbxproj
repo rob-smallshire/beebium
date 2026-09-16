@@ -122,6 +122,7 @@
 		AC8547463BFF17B483A076FA /* ScreenSelectionGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */; };
 		AE3969E0CE7F7D5F7C57513A /* StorageSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */; };
 		AEFDACA93EC7747DF05C2447 /* DiscoveryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */; };
+		AFE73F855C924CA7EC10D01C /* URL+DiscImageReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */; };
 		B0E52098A904B8D9EB8C8870 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 3C410D45C0D56B52B7405B54 /* Shaders.metal */; };
 		B18E97257A891E2AC24129ED /* EditableChoiceField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899F340E434ACDCAA75F913F /* EditableChoiceField.swift */; };
 		B26B3EEFA493E960103D6527 /* system.proto in Resources */ = {isa = PBXBuildFile; fileRef = 3D27B82F5650277464200982 /* system.proto */; };
@@ -153,6 +154,7 @@
 		D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */; };
 		D9718E6F6B0170B2E3BDDD45 /* extension_ui.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */; };
 		DA2A617393E4BA1C28E528F7 /* ModalEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91EE41147FA34459F83B3130 /* ModalEditorView.swift */; };
+		DA8B66BA897FDC6A944A0603 /* DiscImageReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6378C40652987D58945A27B7 /* DiscImageReferenceTests.swift */; };
 		DD38D6EB9C3CC2182169F801 /* Disconnectable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */; };
 		DD7F6150B025820774A44746 /* KeyboardMTKView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B98CF59648104556C3677412 /* KeyboardMTKView.swift */; };
 		DE83DD7DC63111D2D1AC48CF /* ColorExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C346B94C85DFDC5E4D867DA /* ColorExtensions.swift */; };
@@ -264,6 +266,7 @@
 		607580C54AA31C57AD9627C8 /* VideoSettingsCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsCacheTests.swift; sourceTree = "<group>"; };
 		60AB5DB41408CC531369DC47 /* SerialClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SerialClient.swift; sourceTree = "<group>"; };
 		62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMappingResolveTests.swift; sourceTree = "<group>"; };
+		6378C40652987D58945A27B7 /* DiscImageReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageReferenceTests.swift; sourceTree = "<group>"; };
 		639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Disconnectable.swift; sourceTree = "<group>"; };
 		642BEA30A8664289314B2D9E /* video.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = video.pb.swift; sourceTree = "<group>"; };
 		6595E1ACFB74733DA1DDB653 /* Beebium.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Beebium.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -328,6 +331,7 @@
 		A44DA8D133CDD247497229CA /* disc.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = disc.grpc.swift; sourceTree = "<group>"; };
 		A7386122C0E5009AE250FECD /* SidebarModeContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarModeContent.swift; sourceTree = "<group>"; };
 		AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.grpc.swift; sourceTree = "<group>"; };
+		B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+DiscImageReference.swift"; sourceTree = "<group>"; };
 		B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentConnections.swift; sourceTree = "<group>"; };
 		B6C4FBFCE12BD6DED30E2E24 /* GeneralSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsPane.swift; sourceTree = "<group>"; };
 		B79C08E01A7BA46EE2246BF7 /* SidewaysSchemaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSchemaTests.swift; sourceTree = "<group>"; };
@@ -614,6 +618,7 @@
 				0A03414ECE92D9AA04944FBB /* TextInputField.swift */,
 				DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */,
 				22EE051165760A831AA7396F /* TransientMessage.swift */,
+				B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */,
 				08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */,
 				2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */,
 				8BE2CECB7FD5D0AF509AAE1C /* Configuration */,
@@ -652,6 +657,7 @@
 				E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */,
 				814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */,
 				2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */,
+				6378C40652987D58945A27B7 /* DiscImageReferenceTests.swift */,
 				F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */,
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
@@ -810,6 +816,7 @@
 				01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */,
 				F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */,
 				8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */,
+				DA8B66BA897FDC6A944A0603 /* DiscImageReferenceTests.swift in Sources */,
 				95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */,
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
@@ -940,6 +947,7 @@
 				F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */,
 				F911B573D5974E32CD568A35 /* TitleClickMonitor.swift in Sources */,
 				2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */,
+				AFE73F855C924CA7EC10D01C /* URL+DiscImageReference.swift in Sources */,
 				F4E79C3B365AB2D13A5B5984 /* VideoClient.swift in Sources */,
 				116FC39CBA4CBBA8B1F63FD1 /* VideoSettings.swift in Sources */,
 				150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */,

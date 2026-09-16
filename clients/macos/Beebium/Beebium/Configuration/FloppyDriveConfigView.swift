@@ -173,7 +173,11 @@ struct FloppyDriveConfigView: View {
     /// found yet the image is accepted unchecked -- the machine still
     /// validates it on launch, and refusing to configure a machine because
     /// presets have not finished loading would be worse.
-    private func validate(_ url: URL) {
+    private func validate(_ rawURL: URL) {
+        // Resolve a Finder alias to its target before describing or storing it,
+        // so the preset references the real file (the describe path sends a raw
+        // path and would otherwise inspect the alias file itself).
+        let url = rawURL.resolvingDiscImageReference()
         // A validation is not a live drag, so any lingering hover refusal is
         // stale; drop it so it cannot mask this outcome.
         dropRefusal = nil
