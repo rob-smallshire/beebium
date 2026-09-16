@@ -133,3 +133,45 @@ private struct ErrorTextHeightKey: PreferenceKey {
         value = max(value, nextValue())
     }
 }
+
+extension View {
+    /// Make a transient, one-line error message clickable: tapping opens a
+    /// popover showing the full server message via `ServerErrorView`
+    /// (selectable, with a Copy button), and the message's auto-clear is paused
+    /// while the popover is open so it cannot vanish under the reader. Close
+    /// (and click-away) dismisses.
+    ///
+    /// `canOpen` is false for a live drop refusal -- passing hover feedback with
+    /// nothing more to show -- leaving it a plain, non-interactive line.
+    ///
+    /// Shared by both floppy drive views (the live sidebar and the preset
+    /// editor) so the affordance and its pause behaviour live in one place.
+    func serverErrorPopover(detail: String, canOpen: Bool,
+                            transient: TransientMessage) -> some View {
+        modifier(ServerErrorPopoverModifier(detail: detail, canOpen: canOpen,
+                                            transient: transient))
+    }
+}
+
+private struct ServerErrorPopoverModifier: ViewModifier {
+    let detail: String
+    let canOpen: Bool
+    let transient: TransientMessage
+    @State private var isOpen = false
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture { if canOpen { isOpen = true } }
+            .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+                ServerErrorView(message: detail) { isOpen = false }
+                    .frame(width: 360)
+                    .padding(12)
+            }
+            // Hold the message while its full text is open, so it cannot clear
+            // itself under the reader; resume the countdown once it closes.
+            .onChange(of: isOpen) { open in
+                if open { transient.pauseAutoClear() } else { transient.resumeAutoClear() }
+            }
+    }
+}

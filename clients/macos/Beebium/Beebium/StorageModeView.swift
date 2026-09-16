@@ -246,10 +246,6 @@ private struct DriveRowView: View {
     /// change and look like nothing was tried -- but it is a passing status,
     /// so it dismisses on its own.
     @StateObject private var driveError = TransientMessage()
-    /// Whether the full-message popover is open over the error line. While it
-    /// is, the transient message's auto-clear is paused so it cannot vanish
-    /// under the reader.
-    @State private var showErrorPopover = false
     /// True once a pending eject has been waiting long enough that the drive
     /// is evidently busy. The server waits indefinitely rather than pulling
     /// the disc out of a spinning drive, so this is where the user is offered
@@ -365,24 +361,12 @@ private struct DriveRowView: View {
         .foregroundColor(.red)
         .frame(maxWidth: .infinity, alignment: .leading)
         .help(statusDetail ?? message)
-        .contentShape(Rectangle())
         // Clicking a lingering failure -- not a live drop refusal -- opens the
-        // server's full message where it can be read, selected and copied for
-        // a bug report, rather than dismissing the one-line brief. A live drop
-        // refusal is passing hover feedback with nothing more to show.
-        .onTapGesture { if dropRefusal == nil { showErrorPopover = true } }
-        .popover(isPresented: $showErrorPopover, arrowEdge: .bottom) {
-            ServerErrorView(message: statusDetail ?? message) {
-                showErrorPopover = false
-            }
-            .frame(width: 360)
-            .padding(12)
-        }
-        // Hold the message while its full text is open, so it cannot clear
-        // itself under the reader; resume the countdown once the popover closes.
-        .onChange(of: showErrorPopover) { isOpen in
-            if isOpen { driveError.pauseAutoClear() } else { driveError.resumeAutoClear() }
-        }
+        // server's full message where it can be read, selected and copied for a
+        // bug report, rather than dismissing the one-line brief.
+        .serverErrorPopover(detail: statusDetail ?? message,
+                            canOpen: dropRefusal == nil,
+                            transient: driveError)
     }
 
     // MARK: - Content Views
