@@ -12,6 +12,23 @@
 
 import SwiftUI
 
+/// The "should the failure popover open now?" decision, factored out of the
+/// SwiftUI view so it can be unit-tested directly. Popover-first means it opens
+/// once per failure: on a real failure whose token differs from the one already
+/// presented -- which covers the first failure, a replacement failure, and a
+/// re-created view (presentedToken back to 0) with an existing failure -- but
+/// not a re-layout after the user closed the popover but kept the marker (same
+/// token), and never when there is no failure (a notice, a refusal, or nothing).
+enum FailurePopoverDecision {
+    static func decide(hasFailure: Bool, failureToken: Int,
+                       presentedToken: Int) -> (present: Bool, presentedToken: Int) {
+        guard hasFailure, failureToken != presentedToken else {
+            return (false, presentedToken)
+        }
+        return (true, failureToken)
+    }
+}
+
 /// The one status line a floppy drive row shows when something needs saying:
 /// a live drop refusal, a self-clearing notice, or a persistent failure. Shared
 /// by the live sidebar (StorageModeView) and the New Machine dialog
@@ -45,9 +62,12 @@ struct DriveStatusLine: View {
     }
 
     private func presentIfNewFailure() {
-        guard message.failure != nil, message.failureToken != presentedToken else { return }
-        presentedToken = message.failureToken
-        showDetail = true
+        let decision = FailurePopoverDecision.decide(
+            hasFailure: message.failure != nil,
+            failureToken: message.failureToken,
+            presentedToken: presentedToken)
+        presentedToken = decision.presentedToken
+        if decision.present { showDetail = true }
     }
 
     @ViewBuilder
