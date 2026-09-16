@@ -14,9 +14,15 @@ Rather than using fixed offsets derived from CRTC timing registers, Beebium uses
 - Scanlines before display enable become the top border
 
 **Horizontal positioning:**
-- Count blanking batches from HSYNC until display enable goes high
-- When display enable goes high, reset X to 0 and record left border width
-- Blanking batches after display enable ends contribute to right border
+- Accumulate blanking width in 16MHz pixel clocks from HSYNC until display enable
+  goes high (each batch spans 8 clocks at the 2MHz character clock, 16 at 1MHz)
+- When display enable goes high, reset X to 0 and record the left border width
+- Blanking after display enable ends contributes to the right border
+
+All four borders and the line total are measured in 16MHz pixel clocks, the same
+uniform grid as `display_width`. This is why a 1MHz mode's borders are twice a
+2MHz mode's for the same blanking interval, and why the right border is computed
+against the physical `display_width` rather than the logical pixel width.
 
 **Files:**
 - `src/core/include/beebium/FrameRenderer.hpp`
@@ -32,7 +38,7 @@ if (display && !was_displaying_) {
 
 // Capture left border when display first goes high on a line
 if (display && !was_displaying_line_) {
-    left_border_ = blanking_count_ * 8;  // Convert batches to pixels
+    left_border_ = blanking_clocks_;  // Already summed in 16MHz clocks
     x_ = 0;
     was_displaying_line_ = true;
 }
@@ -40,12 +46,13 @@ if (display && !was_displaying_line_) {
 
 ### Border Tracking
 
-The FrameRenderer tracks all four borders by counting pixel batches:
+The FrameRenderer tracks all four borders, the horizontal pair in 16MHz pixel
+clocks:
 
 | Border | Calculation |
 |--------|-------------|
-| `left_border` | Blanking batches × 8 pixels before display enable on each line |
-| `right_border` | Total line pixels − left border − displayed width |
+| `left_border` | Sum of blanking batches' clocks before display enable on each line |
+| `right_border` | Total line clocks − left border − physical `display_width` |
 | `top_border` | Scanlines from VSYNC to first display enable |
 | `bottom_border` | Total frame scanlines − top border − displayed height |
 

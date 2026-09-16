@@ -944,6 +944,11 @@ add_executable(test_frame_renderer_regions test_frame_renderer_regions.cpp)
 target_link_libraries(test_frame_renderer_regions PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_frame_renderer_regions)
 
+# FrameRenderer physical display width and border tests
+add_executable(test_frame_renderer_display_width test_frame_renderer_display_width.cpp)
+target_link_libraries(test_frame_renderer_display_width PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_frame_renderer_display_width)
+
 # SAA5050 teletext chip tests
 add_executable(test_saa5050 test_saa5050.cpp)
 target_link_libraries(test_saa5050 PRIVATE beebium_core Catch2::Catch2WithMain)

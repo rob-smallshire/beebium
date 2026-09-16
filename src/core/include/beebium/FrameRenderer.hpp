@@ -165,7 +165,7 @@ public:
             // Capture line width before reset
             max_line_pixels_ = std::max(max_line_pixels_, line_pixel_count_);
             line_pixel_count_ = 0;
-            blanking_count_ = 0;
+            blanking_clocks_ = 0;
             ++frame_scanline_count_;  // Count all scanlines including blanking
 
             ++y_;
@@ -178,8 +178,11 @@ public:
         }
         in_hsync_ = hsync;
 
-        // Count ALL batches for total line width (before early return)
-        line_pixel_count_ += 8;
+        // Count ALL batches for total line width, in 16MHz pixel clocks (before
+        // early return). A 1MHz-clock batch spans 16 clocks, a 2MHz one 8, so
+        // the total line width and the borders live in a single uniform grid
+        // regardless of the mode's character clock.
+        line_pixel_count_ += batch.display_clocks();
 
         // Reset Y when first displayed scanline is reached (display enable rising edge)
         // This positions content correctly regardless of CRTC VSYNC timing variations.
@@ -203,13 +206,13 @@ public:
 
         // Count blanking batches and return early (don't write pixels during blanking)
         if (!display) {
-            ++blanking_count_;
+            blanking_clocks_ += batch.display_clocks();  // Left border in 16MHz clocks
             return;
         }
 
         // Capture left border when display first goes high on a line
         if (display && !was_displaying_line_) {
-            left_border_ = blanking_count_ * 8;  // Convert batches to pixels
+            left_border_ = blanking_clocks_;  // Already in 16MHz pixel clocks
             x_ = 0;
             was_displaying_line_ = true;
         }
@@ -260,6 +263,13 @@ public:
             scanline_pixel_widths_[write_y] = std::max(
                 scanline_pixel_widths_[write_y],
                 static_cast<uint16_t>(x_));
+            // The physical width of the scanline in 16MHz clocks: the sum of the
+            // display batches' clocks. Accumulated rather than derived from the
+            // logical width times one factor, so a scanline where the CRTC is
+            // reprogrammed mid-line (Elite's single MODE 4->5 transition line
+            // carries batches of both depths) still measures its true width --
+            // every character is 16 clocks at 1MHz whatever its pixel depth.
+            scanline_display_widths_[write_y] += static_cast<uint16_t>(batch.display_clocks());
             scanline_char_scanlines_[write_y] = batch.char_scanlines();
             scanline_is_teletext_[write_y] =
                 batch.type() == PixelBatchType::Teletext ? 1 : 0;
@@ -292,10 +302,11 @@ public:
         frame_scanline_count_ = 0;
         max_frame_scanlines_ = 0;
         prev_max_frame_scanlines_ = 0;
-        blanking_count_ = 0;
+        blanking_clocks_ = 0;
         scanline_pixel_widths_.fill(0);
         scanline_char_scanlines_.fill(0);
         scanline_is_teletext_.fill(0);
+        scanline_display_widths_.fill(0);
     }
 
     // Get tracked frame dimensions (for debugging/testing)
@@ -323,10 +334,28 @@ private:
         meta.frame_number = frame_buffer_->version() + 1;
         meta.interlaced = in_interlace_mode_;
 
-        // BBC Micro always displays at 640 pixels wide (physical CRT width)
-        // regardless of logical resolution. Client scales width→display_width.
-        // Scale factors: MODE 0=1x, MODE 1=2x, MODE 2=4x, MODE 4=2x, MODE 5=4x
-        meta.display_width = 640;
+        // display_width is the frame's physical width in 16MHz pixel clocks;
+        // the client stretches every band's logical pixel_width to it. Computed
+        // per band below from the regions (a band's extent is pixel_width times
+        // its 16MHz-clocks-per-logical-pixel factor) and reduced to the maximum.
+        // Standard full-width modes come out at 640 (80 chars at 2MHz, or 40 at
+        // 1MHz); a 32-column custom mode like Elite's at 512.
+        //
+        // Every band in any real frame shares one physical width, because the
+        // width comes from CRTC R1 (one register) times the character clock, and
+        // no known software switches the Video ULA clock mid-frame while leaving
+        // R1 unchanged. Such a frame -- a 2MHz band and a 1MHz band at the same
+        // R1 are physically 320 vs 640 clocks wide -- cannot be represented by a
+        // single display_width, and the client could not render it per band
+        // either; it is reduced to the widest band here and documented as a limit.
+        uint32_t display_width_clocks = 0;
+        for (size_t sy = 0;
+             sy < frame_height && sy < scanline_display_widths_.size(); ++sy) {
+            display_width_clocks = std::max(
+                display_width_clocks,
+                static_cast<uint32_t>(scanline_display_widths_[sy]));
+        }
+        meta.display_width = display_width_clocks > 0 ? display_width_clocks : 640;
         meta.display_height = static_cast<uint32_t>(frame_height);
 
         // Calculate borders from tracked values.
@@ -335,17 +364,21 @@ private:
         // batches.  When the queue is full the producer silently drops batches,
         // including those carrying HSYNC flags.  Without HSYNC resets,
         // line_pixel_count_ accumulates across many lines, inflating
-        // max_line_pixels_ to millions.  The maximum plausible single-line width
-        // for any BBC Micro mode is (R0+1) * 2_batches * 8_pixels = 4096.
+        // max_line_pixels_ to millions.  The maximum plausible single-line width,
+        // now in 16MHz pixel clocks, is (R0+1) * 16_clocks = 4096 (R0 is 8 bits).
         static constexpr size_t MAX_PLAUSIBLE_LINE_PIXELS = 4096;
 
         meta.left_border = static_cast<uint32_t>(left_border_);
         meta.top_border = static_cast<uint32_t>(top_border_);
 
-        // right_border = total_line_width - left_border - displayed_width
+        // right_border = total_line_width - left_border - displayed_width, all in
+        // 16MHz pixel clocks. The active width is the physical display_width, not
+        // the logical frame_width, so the three terms share one unit (a 1MHz mode
+        // draws 320 logical pixels across 640 clocks of active line).
+        const size_t active_clocks = meta.display_width;
         if (max_line_pixels_ <= MAX_PLAUSIBLE_LINE_PIXELS &&
-            max_line_pixels_ > left_border_ + frame_width) {
-            meta.right_border = static_cast<uint32_t>(max_line_pixels_ - left_border_ - frame_width);
+            max_line_pixels_ > left_border_ + active_clocks) {
+            meta.right_border = static_cast<uint32_t>(max_line_pixels_ - left_border_ - active_clocks);
         }
 
         // bottom_border = total_scanlines - top_border - displayed_height
@@ -413,6 +446,8 @@ private:
                   scanline_char_scanlines_.begin() + tracked, uint8_t{0});
         std::fill(scanline_is_teletext_.begin(),
                   scanline_is_teletext_.begin() + tracked, uint8_t{0});
+        std::fill(scanline_display_widths_.begin(),
+                  scanline_display_widths_.begin() + tracked, uint16_t{0});
 
         frame_buffer_->set_metadata(meta);
 
@@ -474,7 +509,7 @@ private:
     size_t prev_max_frame_scanlines_ = 0;   // Previous frame's max (for rolling max)
 
     // Blanking tracking for left border calculation
-    size_t blanking_count_ = 0;        // Blanking batches since HSYNC
+    size_t blanking_clocks_ = 0;       // Blanking width in 16MHz clocks since HSYNC
 
     // Per-scanline pixel width tracking for split-screen region detection
     std::array<uint16_t, video_constants::FRAME_HEIGHT> scanline_pixel_widths_{};
@@ -484,6 +519,11 @@ private:
     // scanlines sharing one character geometry as well as one pixel width.
     std::array<uint8_t, video_constants::FRAME_HEIGHT> scanline_char_scanlines_{};
     std::array<uint8_t, video_constants::FRAME_HEIGHT> scanline_is_teletext_{};
+
+    // Per-scanline physical width in 16MHz clocks (the sum of the display
+    // batches' clocks), reduced to the frame's display_width by taking the
+    // widest scanline.
+    std::array<uint16_t, video_constants::FRAME_HEIGHT> scanline_display_widths_{};
 };
 
 } // namespace beebium

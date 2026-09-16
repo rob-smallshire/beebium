@@ -75,6 +75,7 @@ public:
         if (crtc_output.odd_field) flags |= VIDEO_FLAG_ODD_FIELD;
         batch.set_flags(flags);
         batch.set_char_scanlines(char_scanlines());
+        batch.set_display_clocks(display_clocks());
 
         // Push to output queue
         hardware_.video_output->push(batch);
@@ -166,6 +167,10 @@ private:
         if (crtc_output.odd_field) flags |= VIDEO_FLAG_ODD_FIELD;
         batch.set_flags(flags);
         batch.set_char_scanlines(char_scanlines());
+        // Teletext runs the 6845 at 1MHz but emits two half-character batches
+        // per character period, so each half spans 8 of the 16 clocks -- the
+        // same 8 as a 2MHz bitmap batch, which is why MODE 7 stays 640 wide.
+        batch.set_display_clocks(8);
 
         hardware_.video_output->push(batch);
 
@@ -174,6 +179,7 @@ private:
         hardware_.saa5050.emit_pixels(batch2, bbc_colors::PALETTE);
         batch2.set_flags(flags);
         batch2.set_char_scanlines(char_scanlines());
+        batch2.set_display_clocks(8);
         hardware_.video_output->push(batch2);
 
         if (crtc_output.display) {
@@ -198,6 +204,14 @@ private:
     // pitch cannot be inferred from the pixels afterwards.
     uint8_t char_scanlines() const {
         return static_cast<uint8_t>(hardware_.crtc.max_scanline() + 1);
+    }
+
+    // The 16MHz pixel clocks a bitmap batch spans: 8 when the Video ULA clocks
+    // the 6845 at 2MHz (Modes 0-2), 16 when at 1MHz (Modes 3-6). Ridden on every
+    // batch so the frame renderer can size custom-width modes and borders in a
+    // single uniform 16MHz grid regardless of the character clock in effect.
+    uint8_t display_clocks() const {
+        return hardware_.video_ula.fast_clock() ? 8 : 16;
     }
 
     // Character data exists only for scanlines 0-7 within each character cell.

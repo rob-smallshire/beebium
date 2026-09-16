@@ -288,7 +288,11 @@ The SAA5050 requires specific timing signals derived from CRTC output:
 
 ### Overview
 
-The BBC Micro displays all screen modes at the same physical CRT size, but different modes have different logical resolutions:
+The BBC Micro displays all *full-width* screen modes at the same physical CRT
+size, but different modes have different logical resolutions. The display width
+below is the physical width in 16MHz pixel clocks; the standard modes all reach
+640 because they draw a full 40us active line (80 chars at 2MHz or 40 at 1MHz),
+but a mode with a custom CRTC R1 does not (see "Physical Display Width"):
 
 | Mode | Logical Width | Display Width | Horizontal Scale |
 |------|--------------|---------------|------------------|
@@ -299,9 +303,45 @@ The BBC Micro displays all screen modes at the same physical CRT size, but diffe
 | MODE 4 | 320 | 640 | 2× |
 | MODE 5 | 160 | 640 | 4× |
 | MODE 6 | 640 | 640 | 1× |
-| MODE 7 | 480* | 480 | 1× |
+| MODE 7 | 480* | 640 | — |
 
-*Mode 7 uses the SAA5050 teletext generator with 6→8 pixel expansion, producing 480 output pixels.
+*Mode 7 uses the SAA5050 teletext generator with 6→8 pixel expansion, and emits
+two half-character batches per 1MHz character period, so its 40 columns fill the
+same 640-clock line as the bitmap modes.
+
+### Physical Display Width
+
+`display_width` is the frame's physical width measured in 16MHz pixel clocks --
+the width the client stretches every band's logical pixels up to. It is *not*
+always 640. Each character period is 8 clocks at the 2MHz character clock (Modes
+0-2) and 16 at the 1MHz clock (Modes 3-6), so a scanline's physical width is the
+number of displayed characters times that clock count. Equivalently, per band,
+
+```
+display_width = logical_pixel_width × (16MHz clocks per character ÷ logical pixels per character)
+```
+
+which gives the familiar per-mode factors (MODE 0/3: ×1, MODE 1/4/6: ×2, MODE
+2/5: ×4). A full-width mode therefore reaches 640, but a custom CRTC R1 does not:
+
+- **Elite** programs R1=32, so its screen is 32 × 16 = **512** clocks wide (its
+  MODE 4 upper band is 256 logical, its MODE 5 dashboard 128, both physically
+  512). It was previously stretched to 640 -- ~25% too wide.
+- **Boffin** programs R1=92 in MODE 1, so its game screen is 92 × 8 = **736**
+  clocks wide (368 logical). It was previously squashed to 640.
+
+The renderer measures this directly as the widest scanline's physical width (the
+sum of that scanline's display batches' clocks), which stays correct even on the
+single scanline where the CRTC is reprogrammed mid-line and carries batches of
+two different pixel depths.
+
+**One limitation.** A frame is represented by a single physical width. Every
+band in any real frame shares one width, because the width comes from CRTC R1
+(one register) times the character clock, and no known software switches the
+Video ULA clock mid-frame while leaving R1 unchanged. Such a frame -- a 2MHz
+band and a 1MHz band at the same R1 would be physically 320 vs 640 clocks wide
+-- is reduced to the widest band and is not rendered per band (the client scales
+every band to the one `display_width`).
 
 ### Design Philosophy
 
@@ -352,8 +392,11 @@ struct FrameDisplayRegion {
 struct FrameMetadata {
     // ... existing fields ...
 
-    // Target display resolution for client scaling
-    uint32_t display_width = 640;   // Target width (always 640)
+    // Target display resolution for client scaling. display_width is the
+    // frame's physical width in 16MHz pixel clocks (see "Physical Display
+    // Width" below): 640 for a full-width mode, but 512 for Elite's
+    // 32-column screen and 736 for Boffin's 92-column one.
+    uint32_t display_width = 640;   // Physical width in 16MHz clocks
     uint32_t display_height = ...;  // Set by FrameRenderer to frame_height
     bool interlaced = false;        // True for MODE 7 and custom interlace
 
@@ -614,12 +657,16 @@ The ~2.4% difference between MODE 7 (1.23) and bitmap modes (1.20) is physically
 Games can reprogram the CRTC for custom display modes:
 
 - **Revs**: 208 scanlines for letterbox effect (416 effective, aspect 1.48)
-- **Boffin**: 720 pixels wide (aspect 1.35 with 512 effective height)
-- **Elite**: Split-screen mode with MODE 4 upper (320 px) and MODE 5 lower (160 px), using VIA timer to switch video mode at the dashboard boundary
+- **Boffin**: R1=92 in MODE 1 -> 368 logical pixels, **736** clocks wide (exactly
+  b2's visible raster width); aspect 736 × 0.96 / 288 ≈ 2.45
+- **Elite**: Split-screen with a MODE 4 upper band and MODE 5 dashboard, both at
+  R1=32 so **512** clocks wide, using a VIA timer to switch video mode at the
+  dashboard boundary
 
-The line-doubling approach correctly handles these custom modes:
-- Fewer scanlines → taller aspect ratio (letterbox)
-- More pixels → wider aspect ratio
+The geometry falls out of the actual CRTC timing, in both axes:
+- Fewer scanlines → taller aspect ratio (letterbox), via line-doubling
+- Custom R1 → the physical `display_width` widens or narrows (Boffin 736, Elite
+  512), rather than every mode being forced to 640
 - No forced 4:3—the actual CRTC timing determines geometry
 - Split-screen modes → per-region horizontal scaling in the client shader
 
@@ -631,7 +678,7 @@ The server sends frame metadata that clients use for correct display:
 message Frame {
     uint32 width = 3;           // Logical pixel width (max across all regions)
     uint32 height = 4;          // Scanline count
-    uint32 display_width = 11;  // Target width (640 for horizontal scaling)
+    uint32 display_width = 11;  // Physical width in 16MHz clocks (640 full-width, 512 Elite, 736 Boffin)
     uint32 display_height = 12; // Target height (same as height)
     FieldOrder field_order = 6; // PROGRESSIVE or EVEN_FIRST/ODD_FIRST
     repeated DisplayRegion regions = 13;  // Per-region pixel widths
@@ -641,7 +688,9 @@ message Frame {
 **Client interpretation:**
 1. If `field_order == PROGRESSIVE`: Apply line-doubling (×2 effective height)
 2. If `field_order != PROGRESSIVE`: Use height as-is (already interlaced)
-3. Apply PAR (0.96) to width
+3. Stretch each band's logical `pixel_width` to `display_width`, then apply PAR
+   (0.96) to `display_width` -- this is the physical width in 16MHz clocks, so it
+   already carries the horizontal geometry (640 full-width, 512 Elite, 736 Boffin)
 4. Calculate aspect ratio for letterbox/pillarbox fitting
 5. Use `regions` for per-band horizontal scaling (split-screen modes)
 

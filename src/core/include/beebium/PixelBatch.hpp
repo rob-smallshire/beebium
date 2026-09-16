@@ -145,6 +145,29 @@ struct PixelBatch {
                                     ((pixels.pixels[5].bits.x & 0x0F) << 4));
     }
 
+    // The number of 16MHz pixel clocks this batch occupies on the line, in
+    // pixels[6].x (low nibble) and pixels[7].x (high nibble). This is the
+    // physical width of the batch independent of how many logical pixels it
+    // carries: 8 for a 2MHz character clock (Modes 0-2, and each teletext
+    // half-character), 16 for a 1MHz character clock (Modes 3-6). Carried per
+    // batch because the Video ULA clock select can change mid-frame, and it is
+    // the physical width in effect for these pixels rather than for the frame.
+    // The frame renderer needs it to size custom-width modes and borders in a
+    // single uniform 16MHz grid; the value 16 needs five bits, hence two
+    // nibbles as char_scanlines does.
+    void set_display_clocks(uint8_t clocks) {
+        pixels.pixels[6].bits.x = clocks & 0x0F;
+        pixels.pixels[7].bits.x = (clocks >> 4) & 0x0F;
+    }
+
+    // Defaults to 8 (a 2MHz-clock batch) when unset, so a batch built without
+    // this datum keeps the original one-batch-is-eight-pixels behaviour.
+    uint8_t display_clocks() const {
+        uint8_t v = static_cast<uint8_t>((pixels.pixels[6].bits.x & 0x0F) |
+                                         ((pixels.pixels[7].bits.x & 0x0F) << 4));
+        return v != 0 ? v : 8;
+    }
+
     // Fill all 8 pixels with a single color (for blanking, borders, etc.)
     void fill(VideoDataPixel color) {
         for (int i = 0; i < 8; ++i) {
