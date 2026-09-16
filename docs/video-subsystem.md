@@ -343,6 +343,14 @@ band and a 1MHz band at the same R1 would be physically 320 vs 640 clocks wide
 -- is reduced to the widest band and is not rendered per band (the client scales
 every band to the one `display_width`).
 
+A related, even smaller case is the single scanline on which the CRTC is
+reprogrammed mid-line (e.g. Elite's MODE 4 -> MODE 5 transition line, which
+carries batches of two pixel depths). The frame's `display_width` stays correct
+because that scanline's physical width is measured as the sum of its batches'
+clocks, but the client stretches that one line's mixed-depth logical texels
+uniformly across `display_width`, so it is slightly off within that single line.
+It is one scanline at a mode boundary and imperceptible, so it is left as is.
+
 ### Design Philosophy
 
 Rather than pre-scaling pixels in the core (which would require interpolation decisions), Beebium outputs **logical pixels** and provides **display dimension metadata**. This approach:
