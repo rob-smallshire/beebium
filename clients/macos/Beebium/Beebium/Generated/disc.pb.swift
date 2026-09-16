@@ -66,6 +66,90 @@ enum Beebium_DiscDriveState: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Why a disc operation failed, so a client can react to the kind of failure
+/// (and choose a fitting inline label) without parsing the human-readable
+/// `error` text. The `error` string is unchanged and remains the message to
+/// show; this only classifies it.
+enum Beebium_DiscErrorKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+
+  /// No error, or a failure that fits no category below.
+  case unspecified // = 0
+
+  /// The image file could not be opened (missing, permissions).
+  case cannotOpen // = 1
+
+  /// The image file is zero bytes.
+  case empty // = 2
+
+  /// The file opened but could not be read to the end.
+  case readError // = 3
+
+  /// No handler recognised the image format.
+  case unrecognised // = 4
+
+  /// The format was recognised but loading it failed.
+  case loadFailed // = 5
+
+  /// The machine has no disc controller fitted.
+  case noController // = 6
+
+  /// The drive number is out of range.
+  case invalidDrive // = 7
+
+  /// The target drive already holds a disc.
+  case driveOccupied // = 8
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .unspecified
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .cannotOpen
+    case 2: self = .empty
+    case 3: self = .readError
+    case 4: self = .unrecognised
+    case 5: self = .loadFailed
+    case 6: self = .noController
+    case 7: self = .invalidDrive
+    case 8: self = .driveOccupied
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .cannotOpen: return 1
+    case .empty: return 2
+    case .readError: return 3
+    case .unrecognised: return 4
+    case .loadFailed: return 5
+    case .noController: return 6
+    case .invalidDrive: return 7
+    case .driveOccupied: return 8
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_DiscErrorKind] = [
+    .unspecified,
+    .cannotOpen,
+    .empty,
+    .readError,
+    .unrecognised,
+    .loadFailed,
+    .noController,
+    .invalidDrive,
+    .driveOccupied,
+  ]
+
+}
+
 enum Beebium_DiscEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
   typealias RawValue = Int
   case discEventUnknown // = 0
@@ -177,6 +261,9 @@ struct Beebium_InsertDiscResponse: Sendable {
   /// Clears the value of `disc`. Subsequent reads from it will return its default value.
   mutating func clearDisc() {self._disc = nil}
 
+  /// Failure classification if !success
+  var kind: Beebium_DiscErrorKind = .unspecified
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -214,6 +301,9 @@ struct Beebium_EjectDiscResponse: Sendable {
   /// Error if !accepted (e.g., "drive empty")
   var error: String = String()
 
+  /// Failure classification if !accepted
+  var kind: Beebium_DiscErrorKind = .unspecified
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -242,6 +332,9 @@ struct Beebium_CancelEjectResponse: Sendable {
 
   /// Error if !cancelled (e.g., "no eject pending")
   var error: String = String()
+
+  /// Failure classification if !cancelled
+  var kind: Beebium_DiscErrorKind = .unspecified
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -531,6 +624,10 @@ extension Beebium_DiscDriveState: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DISC_DRIVE_STATE_EMPTY\0\u{1}DISC_DRIVE_STATE_LOADED\0\u{1}DISC_DRIVE_STATE_EJECTING\0")
 }
 
+extension Beebium_DiscErrorKind: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DISC_ERROR_KIND_UNSPECIFIED\0\u{1}DISC_ERROR_KIND_CANNOT_OPEN\0\u{1}DISC_ERROR_KIND_EMPTY\0\u{1}DISC_ERROR_KIND_READ_ERROR\0\u{1}DISC_ERROR_KIND_UNRECOGNISED\0\u{1}DISC_ERROR_KIND_LOAD_FAILED\0\u{1}DISC_ERROR_KIND_NO_CONTROLLER\0\u{1}DISC_ERROR_KIND_INVALID_DRIVE\0\u{1}DISC_ERROR_KIND_DRIVE_OCCUPIED\0")
+}
+
 extension Beebium_DiscEventType: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DISC_EVENT_UNKNOWN\0\u{1}DISC_EVENT_INSERTED\0\u{1}DISC_EVENT_EJECTED\0\u{1}DISC_EVENT_FORCE_EJECTED\0\u{1}DISC_EVENT_EJECT_REQUESTED\0\u{1}DISC_EVENT_EJECT_CANCELLED\0\u{1}DISC_EVENT_MOTOR_ON\0\u{1}DISC_EVENT_MOTOR_OFF\0")
 }
@@ -577,7 +674,7 @@ extension Beebium_InsertDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
 extension Beebium_InsertDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".InsertDiscResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}disc\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}disc\0\u{1}kind\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -588,6 +685,7 @@ extension Beebium_InsertDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
       case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._disc) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
       default: break
       }
     }
@@ -607,6 +705,9 @@ extension Beebium_InsertDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
     try { if let v = self._disc {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     } }()
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -614,6 +715,7 @@ extension Beebium_InsertDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
     if lhs._disc != rhs._disc {return false}
+    if lhs.kind != rhs.kind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -661,7 +763,7 @@ extension Beebium_EjectDiscRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
 extension Beebium_EjectDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".EjectDiscResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0\u{1}kind\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -671,6 +773,7 @@ extension Beebium_EjectDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
       default: break
       }
     }
@@ -683,12 +786,16 @@ extension Beebium_EjectDiscResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if !self.error.isEmpty {
       try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
     }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_EjectDiscResponse, rhs: Beebium_EjectDiscResponse) -> Bool {
     if lhs.accepted != rhs.accepted {return false}
     if lhs.error != rhs.error {return false}
+    if lhs.kind != rhs.kind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -726,7 +833,7 @@ extension Beebium_CancelEjectRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 extension Beebium_CancelEjectResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".CancelEjectResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cancelled\0\u{1}error\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cancelled\0\u{1}error\0\u{1}kind\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -736,6 +843,7 @@ extension Beebium_CancelEjectResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.cancelled) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
       default: break
       }
     }
@@ -748,12 +856,16 @@ extension Beebium_CancelEjectResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if !self.error.isEmpty {
       try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
     }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_CancelEjectResponse, rhs: Beebium_CancelEjectResponse) -> Bool {
     if lhs.cancelled != rhs.cancelled {return false}
     if lhs.error != rhs.error {return false}
+    if lhs.kind != rhs.kind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

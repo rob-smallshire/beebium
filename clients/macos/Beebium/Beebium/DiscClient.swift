@@ -16,14 +16,26 @@ import GRPC
 /// Error type for disc operations
 enum DiscError: LocalizedError {
     case notConnected
-    case operationFailed(String)
+    case operationFailed(String, kind: Beebium_DiscErrorKind)
 
     var errorDescription: String? {
         switch self {
         case .notConnected:
             return "Not connected to server"
-        case .operationFailed(let message):
+        case .operationFailed(let message, _):
             return message
+        }
+    }
+
+    /// The server's failure classification, used to choose the short inline
+    /// marker label. Unclassified (including a client-side not-connected) leaves
+    /// the caller's own generic label in place.
+    var kind: Beebium_DiscErrorKind {
+        switch self {
+        case .notConnected:
+            return .unspecified
+        case .operationFailed(_, let kind):
+            return kind
         }
     }
 }
@@ -91,10 +103,10 @@ final class DiscClient: ObservableObject, Disconnectable {
             if response.success {
                 return .success(response.disc)
             } else {
-                return .failure(.operationFailed(response.error))
+                return .failure(.operationFailed(response.error, kind: response.kind))
             }
         } catch {
-            return .failure(.operationFailed(error.localizedDescription))
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
         }
     }
 
@@ -123,10 +135,10 @@ final class DiscClient: ObservableObject, Disconnectable {
             if response.accepted {
                 return .success(())
             } else {
-                return .failure(.operationFailed(response.error))
+                return .failure(.operationFailed(response.error, kind: response.kind))
             }
         } catch {
-            return .failure(.operationFailed(error.localizedDescription))
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
         }
     }
 
@@ -146,10 +158,10 @@ final class DiscClient: ObservableObject, Disconnectable {
             if response.cancelled {
                 return .success(())
             } else {
-                return .failure(.operationFailed(response.error))
+                return .failure(.operationFailed(response.error, kind: response.kind))
             }
         } catch {
-            return .failure(.operationFailed(error.localizedDescription))
+            return .failure(.operationFailed(error.localizedDescription, kind: .unspecified))
         }
     }
 

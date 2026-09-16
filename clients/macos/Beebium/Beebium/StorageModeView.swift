@@ -523,11 +523,11 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Insert failed: \(error.localizedDescription)")
-                    // The inline marker is a fixed, honest "Insert failed"; the
-                    // server's own message (which leads with its class -- "Cannot
-                    // open disc image", "Unrecognised disc image format", "Empty
-                    // disc image") is the popover detail, verbatim and in full.
-                    driveError.showFailure("Insert failed",
+                    // The inline marker is a short label chosen from the server's
+                    // failure kind ("Cannot open", "Empty disc image", ...),
+                    // falling back to "Insert failed" for an unclassified kind.
+                    // The popover shows the server's verbatim message in full.
+                    driveError.showFailure(error.kind.markerLabel ?? "Insert failed",
                                            detail: error.localizedDescription)
                 }
             }
@@ -545,7 +545,7 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Eject failed: \(error.localizedDescription)")
-                    driveError.showFailure("Eject failed",
+                    driveError.showFailure(error.kind.markerLabel ?? "Eject failed",
                                            detail: error.localizedDescription)
                 }
             }
@@ -561,7 +561,7 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Force eject failed: \(error.localizedDescription)")
-                    driveError.showFailure("Eject failed",
+                    driveError.showFailure(error.kind.markerLabel ?? "Eject failed",
                                            detail: error.localizedDescription)
                 }
             }
@@ -577,7 +577,7 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Cancel eject failed: \(error.localizedDescription)")
-                    driveError.showFailure("Couldn't cancel eject",
+                    driveError.showFailure(error.kind.markerLabel ?? "Couldn't cancel eject",
                                            detail: error.localizedDescription)
                 }
             }

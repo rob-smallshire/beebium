@@ -190,11 +190,11 @@ struct FloppyDriveConfigView: View {
             let info = await PresetManager.shared.describeDiscImage(
                 path: url.path, executablePath: executablePath)
             if let info, !info.recognised {
-                // Fixed, honest marker; the server's own reason (from
-                // describe-disc-image, leading with its class) is the popover
-                // detail in full. The fallback is only a last resort for the
-                // unexpected case of an unrecognised image with no reason.
-                driveError.showFailure("Can't use this disc",
+                // Marker label chosen from the same failure classification the
+                // runtime path uses (describe-disc-image reports it), falling
+                // back to a generic when unclassified. The popover shows the
+                // server's own reason in full.
+                driveError.showFailure(info.errorKind.markerLabel ?? "Can't use this disc",
                                        detail: info.reason ?? "Unrecognised disc image")
             } else {
                 // Recognised, or the executable could not be run to say

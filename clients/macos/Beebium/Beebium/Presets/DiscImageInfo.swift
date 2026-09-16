@@ -24,6 +24,10 @@ struct DiscImageInfo: Codable {
     let sides: Int?
     let writeProtected: Bool?
     let reason: String?
+    /// The failure classification token ("cannot_open", "empty", ...), present
+    /// only when the image was not recognised. Same classification as the
+    /// runtime insert path, so the inline marker label is chosen the same way.
+    let kind: String?
 
     enum CodingKeys: String, CodingKey {
         case recognised
@@ -31,5 +35,11 @@ struct DiscImageInfo: Codable {
         case sides
         case writeProtected = "write_protected"
         case reason
+        case kind
+    }
+
+    /// The failure kind as the shared enum, mapped from `kind`'s token.
+    var errorKind: Beebium_DiscErrorKind {
+        Beebium_DiscErrorKind(describeToken: kind ?? "none")
     }
 }

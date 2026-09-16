@@ -89,6 +89,7 @@
 		75BBA7064C85D6CDB3797111 /* StatusBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9849250F602C15283E458A /* StatusBarView.swift */; };
 		79DB2DF04399A3F0579DA079 /* SidewaysClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */; };
 		7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */; };
+		7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */; };
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
 		8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */; };
 		8248344928EA9782B944178F /* SidebarMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992C39260909EB85C84D2C20 /* SidebarMode.swift */; };
@@ -354,6 +355,7 @@
 		D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelShape.swift; sourceTree = "<group>"; };
 		D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryClient.swift; sourceTree = "<group>"; };
 		D6020BCD62F9F79F3019AB3D /* econet_transport.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet_transport.pb.swift; sourceTree = "<group>"; };
+		D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscErrorKindLabelTests.swift; sourceTree = "<group>"; };
 		D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteCoordinatorTests.swift; sourceTree = "<group>"; };
 		D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorySectionView.swift; sourceTree = "<group>"; };
 		D969BBA00E4077B69BBCACAF /* econet.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet.pb.swift; sourceTree = "<group>"; };
@@ -654,6 +656,7 @@
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
+				D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */,
 				E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */,
 				814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */,
 				2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */,
@@ -813,6 +816,7 @@
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
+				7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */,
 				01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */,
 				F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */,
 				8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */,

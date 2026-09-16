@@ -12,6 +12,40 @@
 
 import SwiftUI
 
+extension Beebium_DiscErrorKind {
+    /// The short, honest inline marker label for this failure kind, or nil for
+    /// an unclassified failure -- in which case the caller keeps its own
+    /// context-appropriate generic ("Insert failed", "Eject failed", ...), so a
+    /// future server kind we don't yet map still reads honestly. The popover
+    /// always shows the server's verbatim message regardless.
+    var markerLabel: String? {
+        switch self {
+        case .cannotOpen: return "Cannot open"
+        case .empty: return "Empty disc image"
+        case .readError: return "Read error"
+        case .unrecognised: return "Unrecognised format"
+        case .loadFailed: return "Couldn't load disc"
+        case .noController: return "No disc controller"
+        case .invalidDrive: return "Invalid drive"
+        case .driveOccupied: return "Drive occupied"
+        case .unspecified, .UNRECOGNIZED: return nil
+        }
+    }
+
+    /// Map the lower_snake token the `describe-disc-image` CLI emits (the
+    /// pre-launch path) to the same enum, so both paths share one classification.
+    init(describeToken token: String) {
+        switch token {
+        case "cannot_open": self = .cannotOpen
+        case "empty": self = .empty
+        case "read_error": self = .readError
+        case "unrecognised": self = .unrecognised
+        case "load_failed": self = .loadFailed
+        default: self = .unspecified  // "none" and any unknown token
+        }
+    }
+}
+
 /// The "should the failure popover open now?" decision, factored out of the
 /// SwiftUI view so it can be unit-tested directly. Popover-first means it opens
 /// once per failure: on a real failure whose token differs from the one already
