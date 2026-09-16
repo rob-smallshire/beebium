@@ -53,10 +53,18 @@ beebium-model-b (or -model-b-plus, -model-b-plus-128k, -model-b-romram)
 | AudioService | audio.proto | Audio sample streaming |
 | KeyboardService | keyboard.proto | Key press/release, type-ahead |
 | DiscService | disc.proto | Disc image mounting, drive status |
-| DebuggerService | debugger.proto | Breakpoints, memory access, machine state |
-| SystemService | system.proto | Pause/resume/reset, machine control |
 | IndicatorService | indicator.proto | LED status (caps lock, disc activity) |
-| SidewaysService | sideways.proto | Sideways ROM management |
+| SidewaysService | sideways.proto | Sideways ROM/RAM slot management |
+| SystemService | system.proto | Pause/resume/reset, machine control, SystemInfo/host fingerprint, WatchServerStatus |
+| DebuggerControl | debugger.proto | Breakpoints, memory access, host CPU state |
+| CoprocessorDebuggerControl | debugger.proto | Family-agnostic debugger for a Tube coprocessor |
+| DeviceInspection | debugger.proto | Reads device state safely under quiesce |
+| TubeService | tube.proto | Tube / second-processor control |
+| SerialService | serial.proto | MC6850 ACIA / serial-ULA host-serial bridge |
+| EconetService | econet.proto | Econet/AUN status, WatchEconetStatus |
+| EconetTransportService | econet_transport.proto | Econet transport (AUN/Piconet) configuration and discovery |
+| PeripheralExtensionService | peripheral_extension.proto | Peripheral/extension discovery and configuration |
+| ExtensionRpc | extension_rpc.proto | Shared channel for plugin-hosted typed RPCs and UI Dispatch |
 
 ### Video Pipeline
 
@@ -298,7 +306,7 @@ Complete transcripts of BBC Micro documentation:
 - WD1770 disc controller with SSD/DSD support
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
-- gRPC service layer (8 services)
+- gRPC service layer (16 services)
 - macOS frontend with Metal rendering
 - Service advertisement AND browse/discovery over mDNS on all platforms: macOS (Bonjour), Linux (Avahi, dlopen'd), Windows (dual-provider: Apple Bonjour dnssd.dll when installed, else native DnsService*, selected at runtime). Full bidirectional AUN peer discovery everywhere
 - Python test client
