@@ -92,7 +92,7 @@ struct DriveStatusLine: View {
                 message.clear()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.red)
             }
             .buttonStyle(.plain)
             .help("Dismiss this error")
