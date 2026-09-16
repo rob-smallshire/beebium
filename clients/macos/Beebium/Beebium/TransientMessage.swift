@@ -47,6 +47,31 @@ final class TransientMessage: ObservableObject {
     /// fuller text behind it, defaulting to `brief`.
     func show(_ brief: String, detail: String? = nil) {
         content = Content(brief: brief, detail: detail ?? brief)
+        scheduleDismissal()
+    }
+
+    func clear() {
+        dismissal?.cancel()
+        dismissal = nil
+        content = nil
+    }
+
+    /// Hold the current message on screen indefinitely -- e.g. while the reader
+    /// has its full text open in a popover -- so it cannot vanish under them.
+    /// Leaves the content in place; `resumeAutoClear` restarts the countdown.
+    func pauseAutoClear() {
+        dismissal?.cancel()
+        dismissal = nil
+    }
+
+    /// Resume the self-clearing countdown after a `pauseAutoClear`, giving the
+    /// message a fresh `lifetime` from now. A no-op if nothing is showing.
+    func resumeAutoClear() {
+        guard content != nil else { return }
+        scheduleDismissal()
+    }
+
+    private func scheduleDismissal() {
         dismissal?.cancel()
         dismissal = Task { [weak self] in
             guard let lifetime = self?.lifetime else { return }
@@ -54,11 +79,5 @@ final class TransientMessage: ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run { self?.content = nil }
         }
-    }
-
-    func clear() {
-        dismissal?.cancel()
-        dismissal = nil
-        content = nil
     }
 }

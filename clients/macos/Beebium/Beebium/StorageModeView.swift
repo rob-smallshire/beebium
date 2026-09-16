@@ -246,6 +246,10 @@ private struct DriveRowView: View {
     /// change and look like nothing was tried -- but it is a passing status,
     /// so it dismisses on its own.
     @StateObject private var driveError = TransientMessage()
+    /// Whether the full-message popover is open over the error line. While it
+    /// is, the transient message's auto-clear is paused so it cannot vanish
+    /// under the reader.
+    @State private var showErrorPopover = false
     /// True once a pending eject has been waiting long enough that the drive
     /// is evidently busy. The server waits indefinitely rather than pulling
     /// the disc out of a spinning drive, so this is where the user is offered
@@ -362,9 +366,23 @@ private struct DriveRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .help(statusDetail ?? message)
         .contentShape(Rectangle())
-        // A lingering failure -- not a live refusal -- can be dismissed by
-        // clicking it, for anyone who would rather not wait it out.
-        .onTapGesture { if dropRefusal == nil { driveError.clear() } }
+        // Clicking a lingering failure -- not a live drop refusal -- opens the
+        // server's full message where it can be read, selected and copied for
+        // a bug report, rather than dismissing the one-line brief. A live drop
+        // refusal is passing hover feedback with nothing more to show.
+        .onTapGesture { if dropRefusal == nil { showErrorPopover = true } }
+        .popover(isPresented: $showErrorPopover, arrowEdge: .bottom) {
+            ServerErrorView(message: statusDetail ?? message) {
+                showErrorPopover = false
+            }
+            .frame(width: 360)
+            .padding(12)
+        }
+        // Hold the message while its full text is open, so it cannot clear
+        // itself under the reader; resume the countdown once the popover closes.
+        .onChange(of: showErrorPopover) { isOpen in
+            if isOpen { driveError.pauseAutoClear() } else { driveError.resumeAutoClear() }
+        }
     }
 
     // MARK: - Content Views
@@ -545,6 +563,10 @@ private struct DriveRowView: View {
             return
         }
 
+        // An insert is not a live drag, so any lingering hover refusal is stale;
+        // drop it so it cannot mask this insert's own outcome (the Open dialog
+        // path in particular never clears it otherwise).
+        dropRefusal = nil
         driveError.clear()
         isProcessing = true
         Task {
@@ -553,11 +575,13 @@ private struct DriveRowView: View {
                 isProcessing = false
                 if case .failure(let error) = result {
                     NSLog("[StorageModeView] Insert failed: \(error.localizedDescription)")
-                    // The reachable failure from a drop onto an empty local
-                    // drive is an unrecognised image; the server's exact
-                    // words -- size, extension, path -- stay in the tooltip.
-                    driveError.show("Unrecognised format \(url.lastPathComponent)",
-                                    detail: error.localizedDescription)
+                    // Report the server's own message, which already leads with
+                    // its class ("Cannot open disc image", "Unrecognised disc
+                    // image format", "Empty disc image"): the row middle-
+                    // truncates it and the popover shows it in full. No
+                    // client-side guess at the class, so every failure -- now
+                    // and future -- is reported honestly.
+                    driveError.show(error.localizedDescription)
                 }
             }
         }
