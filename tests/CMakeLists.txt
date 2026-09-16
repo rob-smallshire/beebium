@@ -105,6 +105,17 @@ target_link_libraries(test_disc_paths PRIVATE
 )
 catch_discover_tests(test_disc_paths)
 
+# DiscUrl file:// <-> path conversion, including percent-encode/decode round-trip.
+add_executable(test_disc_url test_disc_url.cpp)
+target_include_directories(test_disc_url PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/core/include
+)
+target_link_libraries(test_disc_url PRIVATE
+    beebium_core
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_disc_url)
+
 # Sideways slot topology + --sideways validation against each machine variant.
 add_executable(test_sideways_validation test_sideways_validation.cpp)
 target_include_directories(test_sideways_validation PRIVATE

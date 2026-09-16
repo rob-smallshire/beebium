@@ -75,6 +75,63 @@ private:
 
 // Implementation
 
+namespace detail {
+
+inline int hex_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// Decode %XX escapes in a URL path component back to raw bytes. A '%' that is
+// not followed by two hex digits is emitted verbatim and decoding continues, so
+// malformed input never throws. Multi-byte UTF-8 (each byte separately encoded,
+// e.g. %C3%A9) is decoded byte-by-byte and thus reconstructed exactly.
+inline std::string percent_decode(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '%' && i + 2 < s.size()) {
+            int hi = hex_value(s[i + 1]);
+            int lo = hex_value(s[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(s[i]);
+    }
+    return out;
+}
+
+// Percent-encode a filesystem path for use in a file: URL. Unreserved
+// characters (RFC 3986) are kept, as are '/' (path separator) and ':' (the
+// Windows drive-letter colon, which parse() relies on seeing literally). Every
+// other byte -- space, '#', '?', '%', and all non-ASCII UTF-8 bytes -- becomes
+// %XX, so the result is a valid URL that parse() decodes back to the original.
+inline std::string percent_encode(std::string_view s) {
+    static const char hex[] = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        const bool keep = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                          (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+                          c == '.' || c == '~' || c == '/' || c == ':';
+        if (keep) {
+            out.push_back(static_cast<char>(c));
+        } else {
+            out.push_back('%');
+            out.push_back(hex[c >> 4]);
+            out.push_back(hex[c & 0x0F]);
+        }
+    }
+    return out;
+}
+
+} // namespace detail
+
 inline std::optional<DiscUrl> DiscUrl::parse(std::string_view url) {
     // Check for file: scheme
     constexpr std::string_view file_prefix = "file://";
@@ -96,7 +153,13 @@ inline std::optional<DiscUrl> DiscUrl::parse(std::string_view url) {
                 remainder = remainder.substr(1);
             }
 #endif
-            std::filesystem::path path(remainder);
+            // Percent-decode is the LAST step, after the structural '/' and the
+            // Windows drive-letter checks above have run on the still-encoded
+            // string (those delimiters are never encoded). NOTE: on Windows the
+            // narrow path constructor reads these bytes as the active ANSI
+            // codepage, not UTF-8, so non-ASCII filenames there are a
+            // pre-existing limitation this change neither fixes nor worsens.
+            std::filesystem::path path(detail::percent_decode(remainder));
             return DiscUrl(DiscUrlScheme::File, std::string(url), path);
         }
 
@@ -108,7 +171,8 @@ inline std::optional<DiscUrl> DiscUrl::parse(std::string_view url) {
 
             // Only accept localhost or empty authority
             if (authority == "localhost" || authority.empty()) {
-                std::filesystem::path path(path_part);
+                // Decoded last, as above (see the file:///path branch note).
+                std::filesystem::path path(detail::percent_decode(path_part));
                 return DiscUrl(DiscUrlScheme::File, std::string(url), path);
             }
             // Non-localhost authority not supported
@@ -128,9 +192,9 @@ inline DiscUrl DiscUrl::from_filepath(const std::filesystem::path& filepath) {
 #ifdef _WIN32
     // On Windows, construct proper file:///C:/path/to/file URL
     // Use generic_string() to get forward slashes
-    std::string url = "file:///" + abs_path.generic_string();
+    std::string url = "file:///" + detail::percent_encode(abs_path.generic_string());
 #else
-    std::string url = "file://" + abs_path.string();
+    std::string url = "file://" + detail::percent_encode(abs_path.string());
 #endif
     return DiscUrl(DiscUrlScheme::File, std::move(url), abs_path);
 }
