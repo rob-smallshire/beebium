@@ -116,6 +116,21 @@ target_link_libraries(test_disc_url PRIVATE
 )
 catch_discover_tests(test_disc_url)
 
+# DiscFormatRegistry error branches (Cannot open / Empty / Unrecognised) and the
+# DiscUrl decode path, each pinned to its exact message class.
+add_executable(test_disc_format_registry_errors test_disc_format_registry_errors.cpp)
+target_include_directories(test_disc_format_registry_errors PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/core/include
+)
+target_compile_definitions(test_disc_format_registry_errors PRIVATE
+    BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+)
+target_link_libraries(test_disc_format_registry_errors PRIVATE
+    beebium_core
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_disc_format_registry_errors)
+
 # Sideways slot topology + --sideways validation against each machine variant.
 add_executable(test_sideways_validation test_sideways_validation.cpp)
 target_include_directories(test_sideways_validation PRIVATE
