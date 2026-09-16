@@ -4700,6 +4700,9 @@ public:
         } else {
             out["format"] = "";
             out["reason"] = result.error;
+            // Machine-readable classification of the failure, so a front end can
+            // choose a fitting label without parsing the reason text.
+            out["kind"] = std::string(disc_load_error_kind_name(result.kind));
         }
         std::cout << out.dump(2) << "\n";
         return ExitCode::OK;

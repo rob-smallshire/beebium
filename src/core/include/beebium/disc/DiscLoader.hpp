@@ -46,7 +46,8 @@ inline DiscFormatRegistry& default_format_registry() {
 inline DiscLoadResult load_disc_from_url(const std::string& url) {
     auto parsed = DiscUrl::parse(url);
     if (!parsed) {
-        return {nullptr, "Invalid or unsupported URL: " + url};
+        return {nullptr, "Invalid or unsupported URL: " + url,
+                DiscLoadErrorKind::CannotOpen};
     }
 
     switch (parsed->scheme()) {
@@ -57,7 +58,8 @@ inline DiscLoadResult load_disc_from_url(const std::string& url) {
 
         case DiscUrlScheme::Unknown:
         default:
-            return {nullptr, "Unsupported URL scheme: " + url};
+            return {nullptr, "Unsupported URL scheme: " + url,
+                    DiscLoadErrorKind::CannotOpen};
     }
 }
 

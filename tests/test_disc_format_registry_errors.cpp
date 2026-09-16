@@ -89,6 +89,7 @@ TEST_CASE("load_from_filepath: missing path reports Cannot open", "[disc][regist
     auto result = default_format_registry().load_from_filepath(missing);
     REQUIRE_FALSE(result.success());
     CHECK(contains(result.error, "Cannot open disc image"));
+    CHECK(result.kind == DiscLoadErrorKind::CannotOpen);
 }
 
 TEST_CASE("load_from_filepath: empty file reports Empty disc image", "[disc][registry][errors]") {
@@ -98,6 +99,7 @@ TEST_CASE("load_from_filepath: empty file reports Empty disc image", "[disc][reg
     auto result = default_format_registry().load_from_filepath(empty);
     REQUIRE_FALSE(result.success());
     CHECK(contains(result.error, "Empty disc image"));
+    CHECK(result.kind == DiscLoadErrorKind::Empty);
 }
 
 TEST_CASE("load_from_filepath: non-disc bytes report Unrecognised with size and ext",
@@ -114,6 +116,7 @@ TEST_CASE("load_from_filepath: non-disc bytes report Unrecognised with size and 
     CHECK(contains(result.error, "Unrecognised disc image format"));
     CHECK(contains(result.error, "size=3000"));
     CHECK(contains(result.error, "ext=.ssd"));
+    CHECK(result.kind == DiscLoadErrorKind::Unrecognised);
 }
 
 TEST_CASE("load_from_filepath: a genuine SSD loads (positive control)",
@@ -121,6 +124,7 @@ TEST_CASE("load_from_filepath: a genuine SSD loads (positive control)",
     auto result = default_format_registry().load_from_filepath(genuine_ssd());
     REQUIRE(result.success());
     CHECK(result.error.empty());
+    CHECK(result.kind == DiscLoadErrorKind::None);
 }
 
 TEST_CASE("load_disc_from_url: a genuine SSD at a spaced path loads via DiscUrl",
@@ -139,4 +143,5 @@ TEST_CASE("load_disc_from_url: a genuine SSD at a spaced path loads via DiscUrl"
     auto result = load_disc_from_url(url);
     REQUIRE(result.success());
     CHECK(result.error.empty());
+    CHECK(result.kind == DiscLoadErrorKind::None);
 }

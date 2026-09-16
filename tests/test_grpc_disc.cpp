@@ -25,6 +25,7 @@
 #include "disc.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -32,6 +33,16 @@
 #include <vector>
 
 namespace {
+
+// A unique temporary file path with the given extension (portable; no getpid).
+std::filesystem::path unique_tmp_path(const std::string& extension) {
+    static std::atomic<unsigned> counter{0};
+    auto name = "beebium_disc_test_" + std::to_string(counter.fetch_add(1)) +
+                "_" + std::to_string(
+                    std::chrono::steady_clock::now().time_since_epoch().count()) +
+                extension;
+    return std::filesystem::temp_directory_path() / name;
+}
 
 // Helper to load ROM file
 std::vector<uint8_t> load_rom(const std::string& filepath) {
@@ -228,6 +239,7 @@ TEST_CASE("DiscService InsertDisc rejects invalid drive number", "[grpc][disc]")
     REQUIRE(status.ok());
     CHECK_FALSE(response.success());
     CHECK(response.error().find("Invalid drive number") != std::string::npos);
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_INVALID_DRIVE);
 }
 
 TEST_CASE("DiscService InsertDisc fails for non-existent file", "[grpc][disc]") {
@@ -244,6 +256,7 @@ TEST_CASE("DiscService InsertDisc fails for non-existent file", "[grpc][disc]") 
     REQUIRE(status.ok());
     CHECK_FALSE(response.success());
     CHECK_FALSE(response.error().empty());
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_CANNOT_OPEN);
 }
 
 TEST_CASE("DiscService InsertDisc fails on Model B", "[grpc][disc]") {
@@ -260,6 +273,78 @@ TEST_CASE("DiscService InsertDisc fails on Model B", "[grpc][disc]") {
     REQUIRE(status.ok());
     CHECK_FALSE(response.success());
     CHECK(response.error().find("no disc controller") != std::string::npos);
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_NO_CONTROLLER);
+}
+
+TEST_CASE("DiscService InsertDisc classifies an empty image as EMPTY", "[grpc][disc]") {
+    DiscTestFixtureBPlus fixture;
+    auto tmp = unique_tmp_path(".ssd");
+    { std::ofstream out(tmp, std::ios::binary); }  // zero bytes
+
+    grpc::ClientContext context;
+    beebium::InsertDiscRequest request;
+    request.set_drive(0);
+    request.set_url(tmp.string());
+    beebium::InsertDiscResponse response;
+    auto status = fixture.stub().InsertDisc(&context, request, &response);
+
+    std::error_code ec; std::filesystem::remove(tmp, ec);
+    REQUIRE(status.ok());
+    CHECK_FALSE(response.success());
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_EMPTY);
+}
+
+TEST_CASE("DiscService InsertDisc classifies non-disc bytes as UNRECOGNISED", "[grpc][disc]") {
+    DiscTestFixtureBPlus fixture;
+    auto tmp = unique_tmp_path(".ssd");
+    {
+        std::ofstream out(tmp, std::ios::binary);
+        // 3000 bytes: not a 256-byte multiple, so no handler detects it.
+        std::vector<char> bytes(3000, static_cast<char>(0xEE));
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    }
+
+    grpc::ClientContext context;
+    beebium::InsertDiscRequest request;
+    request.set_drive(0);
+    request.set_url(tmp.string());
+    beebium::InsertDiscResponse response;
+    auto status = fixture.stub().InsertDisc(&context, request, &response);
+
+    std::error_code ec; std::filesystem::remove(tmp, ec);
+    REQUIRE(status.ok());
+    CHECK_FALSE(response.success());
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_UNRECOGNISED);
+}
+
+TEST_CASE("DiscService InsertDisc classifies an occupied drive as DRIVE_OCCUPIED", "[grpc][disc]") {
+    auto disc_path = get_test_disc_path();
+    if (!std::filesystem::exists(disc_path)) {
+        SKIP("Test disc image not available");
+    }
+    DiscTestFixtureBPlus fixture;
+
+    {
+        grpc::ClientContext context;
+        beebium::InsertDiscRequest request;
+        request.set_drive(0);
+        request.set_url(disc_path.string());
+        beebium::InsertDiscResponse response;
+        auto status = fixture.stub().InsertDisc(&context, request, &response);
+        REQUIRE(status.ok());
+        REQUIRE(response.success());
+    }
+
+    grpc::ClientContext context;
+    beebium::InsertDiscRequest request;
+    request.set_drive(0);
+    request.set_url(disc_path.string());
+    beebium::InsertDiscResponse response;
+    auto status = fixture.stub().InsertDisc(&context, request, &response);
+
+    REQUIRE(status.ok());
+    CHECK_FALSE(response.success());
+    CHECK(response.kind() == beebium::DISC_ERROR_KIND_DRIVE_OCCUPIED);
 }
 
 TEST_CASE("DiscService EjectDisc immediate eject works", "[grpc][disc]") {

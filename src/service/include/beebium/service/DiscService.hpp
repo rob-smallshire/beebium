@@ -34,6 +34,22 @@ using beebium::HasDiscControllerSocket;
 using beebium::HasOptionalDiscController;
 using beebium::disc_controller_present;
 
+// Map a loader-level failure classification (from DiscLoadResult) to its wire
+// enum value. Service-level failures -- no controller, bad drive number, an
+// occupied drive -- are classified directly at their branch and do not pass
+// through here.
+inline beebium::DiscErrorKind to_wire_error_kind(beebium::DiscLoadErrorKind kind) {
+    switch (kind) {
+        case beebium::DiscLoadErrorKind::None:         return beebium::DISC_ERROR_KIND_UNSPECIFIED;
+        case beebium::DiscLoadErrorKind::CannotOpen:   return beebium::DISC_ERROR_KIND_CANNOT_OPEN;
+        case beebium::DiscLoadErrorKind::Empty:        return beebium::DISC_ERROR_KIND_EMPTY;
+        case beebium::DiscLoadErrorKind::ReadError:    return beebium::DISC_ERROR_KIND_READ_ERROR;
+        case beebium::DiscLoadErrorKind::Unrecognised: return beebium::DISC_ERROR_KIND_UNRECOGNISED;
+        case beebium::DiscLoadErrorKind::LoadFailed:   return beebium::DISC_ERROR_KIND_LOAD_FAILED;
+    }
+    return beebium::DISC_ERROR_KIND_UNSPECIFIED;
+}
+
 // gRPC service implementation for DiscService
 template<typename MachineType>
 class DiscServiceImpl final : public DiscService::Service {
@@ -72,12 +88,14 @@ public:
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_success(false);
             response->set_error("Machine has no disc controller");
+            response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
             return grpc::Status::OK;
         } else {
             // Check if controller is present (Model B+ always, Model B via socket)
             if (!disc_controller_present(machine_.state().memory)) {
                 response->set_success(false);
                 response->set_error("Machine has no disc controller");
+                response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
                 return grpc::Status::OK;
             }
 
@@ -85,6 +103,7 @@ public:
             if (drive_num > 1) {
                 response->set_success(false);
                 response->set_error("Invalid drive number (must be 0 or 1)");
+                response->set_kind(beebium::DISC_ERROR_KIND_INVALID_DRIVE);
                 return grpc::Status::OK;
             }
 
@@ -103,6 +122,7 @@ public:
                 response->set_success(false);
                 response->set_error("Drive " + std::to_string(drive_num) +
                                     " already holds a disc; eject it first");
+                response->set_kind(beebium::DISC_ERROR_KIND_DRIVE_OCCUPIED);
                 return grpc::Status::OK;
             }
 
@@ -111,6 +131,7 @@ public:
             if (!result) {
                 response->set_success(false);
                 response->set_error(result.error);
+                response->set_kind(to_wire_error_kind(result.kind));
                 return grpc::Status::OK;
             }
 
@@ -146,12 +167,14 @@ public:
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_accepted(false);
             response->set_error("Machine has no disc controller");
+            response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
             return grpc::Status::OK;
         } else {
             uint32_t drive_num = request->drive();
             if (drive_num > 1) {
                 response->set_accepted(false);
                 response->set_error("Invalid drive number (must be 0 or 1)");
+                response->set_kind(beebium::DISC_ERROR_KIND_INVALID_DRIVE);
                 return grpc::Status::OK;
             }
 
@@ -208,12 +231,14 @@ public:
         if constexpr (!HasDiscDrives<typename MachineType::Memory>) {
             response->set_cancelled(false);
             response->set_error("Machine has no disc controller");
+            response->set_kind(beebium::DISC_ERROR_KIND_NO_CONTROLLER);
             return grpc::Status::OK;
         } else {
             uint32_t drive_num = request->drive();
             if (drive_num > 1) {
                 response->set_cancelled(false);
                 response->set_error("Invalid drive number (must be 0 or 1)");
+                response->set_kind(beebium::DISC_ERROR_KIND_INVALID_DRIVE);
                 return grpc::Status::OK;
             }
 

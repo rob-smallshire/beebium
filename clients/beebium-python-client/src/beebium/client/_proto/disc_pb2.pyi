@@ -59,6 +59,60 @@ DISC_DRIVE_STATE_EJECTING: DiscDriveState.ValueType  # 2
 """Eject pending, waiting for quiescence"""
 Global___DiscDriveState: _TypeAlias = DiscDriveState  # noqa: Y015
 
+class _DiscErrorKind:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _DiscErrorKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_DiscErrorKind.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    DISC_ERROR_KIND_UNSPECIFIED: _DiscErrorKind.ValueType  # 0
+    """No error, or a failure that fits no category below."""
+    DISC_ERROR_KIND_CANNOT_OPEN: _DiscErrorKind.ValueType  # 1
+    """The image file could not be opened (missing, permissions)."""
+    DISC_ERROR_KIND_EMPTY: _DiscErrorKind.ValueType  # 2
+    """The image file is zero bytes."""
+    DISC_ERROR_KIND_READ_ERROR: _DiscErrorKind.ValueType  # 3
+    """The file opened but could not be read to the end."""
+    DISC_ERROR_KIND_UNRECOGNISED: _DiscErrorKind.ValueType  # 4
+    """No handler recognised the image format."""
+    DISC_ERROR_KIND_LOAD_FAILED: _DiscErrorKind.ValueType  # 5
+    """The format was recognised but loading it failed."""
+    DISC_ERROR_KIND_NO_CONTROLLER: _DiscErrorKind.ValueType  # 6
+    """The machine has no disc controller fitted."""
+    DISC_ERROR_KIND_INVALID_DRIVE: _DiscErrorKind.ValueType  # 7
+    """The drive number is out of range."""
+    DISC_ERROR_KIND_DRIVE_OCCUPIED: _DiscErrorKind.ValueType  # 8
+    """The target drive already holds a disc."""
+
+class DiscErrorKind(_DiscErrorKind, metaclass=_DiscErrorKindEnumTypeWrapper):
+    """--- Error Classification ---
+
+    Why a disc operation failed, so a client can react to the kind of failure
+    (and choose a fitting inline label) without parsing the human-readable
+    `error` text. The `error` string is unchanged and remains the message to
+    show; this only classifies it.
+    """
+
+DISC_ERROR_KIND_UNSPECIFIED: DiscErrorKind.ValueType  # 0
+"""No error, or a failure that fits no category below."""
+DISC_ERROR_KIND_CANNOT_OPEN: DiscErrorKind.ValueType  # 1
+"""The image file could not be opened (missing, permissions)."""
+DISC_ERROR_KIND_EMPTY: DiscErrorKind.ValueType  # 2
+"""The image file is zero bytes."""
+DISC_ERROR_KIND_READ_ERROR: DiscErrorKind.ValueType  # 3
+"""The file opened but could not be read to the end."""
+DISC_ERROR_KIND_UNRECOGNISED: DiscErrorKind.ValueType  # 4
+"""No handler recognised the image format."""
+DISC_ERROR_KIND_LOAD_FAILED: DiscErrorKind.ValueType  # 5
+"""The format was recognised but loading it failed."""
+DISC_ERROR_KIND_NO_CONTROLLER: DiscErrorKind.ValueType  # 6
+"""The machine has no disc controller fitted."""
+DISC_ERROR_KIND_INVALID_DRIVE: DiscErrorKind.ValueType  # 7
+"""The drive number is out of range."""
+DISC_ERROR_KIND_DRIVE_OCCUPIED: DiscErrorKind.ValueType  # 8
+"""The target drive already holds a disc."""
+Global___DiscErrorKind: _TypeAlias = DiscErrorKind  # noqa: Y015
+
 class _DiscEventType:
     ValueType = _typing.NewType("ValueType", _builtins.int)
     V: _TypeAlias = ValueType  # noqa: Y015
@@ -137,9 +191,12 @@ class InsertDiscResponse(_message.Message):
     SUCCESS_FIELD_NUMBER: _builtins.int
     ERROR_FIELD_NUMBER: _builtins.int
     DISC_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
     success: _builtins.bool
     error: _builtins.str
     """Error message if !success"""
+    kind: Global___DiscErrorKind.ValueType
+    """Failure classification if !success"""
     @_builtins.property
     def disc(self) -> Global___DiscMetadata:
         """Metadata of inserted disc (if success)"""
@@ -150,10 +207,11 @@ class InsertDiscResponse(_message.Message):
         success: _builtins.bool = ...,
         error: _builtins.str = ...,
         disc: Global___DiscMetadata | None = ...,
+        kind: Global___DiscErrorKind.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["disc", b"disc"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["disc", b"disc", "error", b"error", "success", b"success"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["disc", b"disc", "error", b"error", "kind", b"kind", "success", b"success"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -195,19 +253,23 @@ class EjectDiscResponse(_message.Message):
 
     ACCEPTED_FIELD_NUMBER: _builtins.int
     ERROR_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
     accepted: _builtins.bool
     """Request accepted (transitions to Ejecting)"""
     error: _builtins.str
     """Error if !accepted (e.g., "drive empty")"""
+    kind: Global___DiscErrorKind.ValueType
+    """Failure classification if !accepted"""
     def __init__(
         self,
         *,
         accepted: _builtins.bool = ...,
         error: _builtins.str = ...,
+        kind: Global___DiscErrorKind.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["accepted", b"accepted", "error", b"error"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["accepted", b"accepted", "error", b"error", "kind", b"kind"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -241,19 +303,23 @@ class CancelEjectResponse(_message.Message):
 
     CANCELLED_FIELD_NUMBER: _builtins.int
     ERROR_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
     cancelled: _builtins.bool
     """True if a pending eject was abandoned"""
     error: _builtins.str
     """Error if !cancelled (e.g., "no eject pending")"""
+    kind: Global___DiscErrorKind.ValueType
+    """Failure classification if !cancelled"""
     def __init__(
         self,
         *,
         cancelled: _builtins.bool = ...,
         error: _builtins.str = ...,
+        kind: Global___DiscErrorKind.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["cancelled", b"cancelled", "error", b"error"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cancelled", b"cancelled", "error", b"error", "kind", b"kind"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

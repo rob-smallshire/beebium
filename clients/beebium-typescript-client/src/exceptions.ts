@@ -2,6 +2,10 @@
  * Error hierarchy for the Beebium TypeScript client.
  */
 
+// Type-only import: erased at compile time, so it introduces no runtime cycle
+// with disc.ts (which imports DiscError from here).
+import type { DiscErrorKind } from "./disc.js";
+
 /** Base error for all Beebium client errors. */
 export class BeebiumError extends Error {
     constructor(message: string) {
@@ -79,11 +83,20 @@ export class TimeoutError extends BeebiumError {
     }
 }
 
-/** An error related to disc operations. */
+/**
+ * An error related to disc operations.
+ *
+ * `kind` classifies the failure (a {@link DiscErrorKind}) so callers can branch
+ * without parsing the message. It is undefined for disc operations that do not
+ * report a classification.
+ */
 export class DiscError extends BeebiumError {
-    constructor(message: string) {
+    readonly kind?: DiscErrorKind;
+
+    constructor(message: string, kind?: DiscErrorKind) {
         super(message);
         this.name = "DiscError";
+        this.kind = kind;
     }
 }
 

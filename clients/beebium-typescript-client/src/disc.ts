@@ -24,6 +24,7 @@ import type {
 import {
     DiscDriveState as ProtoDiscDriveState,
     DiscEventType as ProtoDiscEventType,
+    DiscErrorKind as ProtoDiscErrorKind,
 } from "./generated/disc.js";
 import { promisify } from "./call-utils.js";
 import { toAsyncIterable, BackgroundStreamHandle } from "./stream-utils.js";
@@ -43,6 +44,23 @@ export enum DiscEventType {
     EJECT_CANCELLED = "eject_cancelled",
     MOTOR_ON = "motor_on",
     MOTOR_OFF = "motor_off",
+}
+
+/**
+ * Why a disc operation failed. Carried on {@link DiscError.kind} alongside the
+ * human-readable message, so callers can branch on the kind of failure without
+ * parsing the text. UNSPECIFIED covers success and any unclassified failure.
+ */
+export enum DiscErrorKind {
+    UNSPECIFIED = "unspecified",
+    CANNOT_OPEN = "cannot_open",
+    EMPTY = "empty",
+    READ_ERROR = "read_error",
+    UNRECOGNISED = "unrecognised",
+    LOAD_FAILED = "load_failed",
+    NO_CONTROLLER = "no_controller",
+    INVALID_DRIVE = "invalid_drive",
+    DRIVE_OCCUPIED = "drive_occupied",
 }
 
 export interface DiscMetadata {
@@ -116,6 +134,30 @@ function toDiscEventType(proto: ProtoDiscEventType): DiscEventType {
             return DiscEventType.MOTOR_OFF;
         default:
             return DiscEventType.INSERTED;
+    }
+}
+
+function toDiscErrorKind(proto: ProtoDiscErrorKind): DiscErrorKind {
+    switch (proto) {
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_CANNOT_OPEN:
+            return DiscErrorKind.CANNOT_OPEN;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_EMPTY:
+            return DiscErrorKind.EMPTY;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_READ_ERROR:
+            return DiscErrorKind.READ_ERROR;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_UNRECOGNISED:
+            return DiscErrorKind.UNRECOGNISED;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_LOAD_FAILED:
+            return DiscErrorKind.LOAD_FAILED;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_NO_CONTROLLER:
+            return DiscErrorKind.NO_CONTROLLER;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_INVALID_DRIVE:
+            return DiscErrorKind.INVALID_DRIVE;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_DRIVE_OCCUPIED:
+            return DiscErrorKind.DRIVE_OCCUPIED;
+        case ProtoDiscErrorKind.DISC_ERROR_KIND_UNSPECIFIED:
+        default:
+            return DiscErrorKind.UNSPECIFIED;
     }
 }
 
@@ -241,7 +283,10 @@ export class Drive {
             { drive: this.driveNum, url, writeProtectOverride: writeProtect },
         );
         if (!response.success) {
-            throw new DiscError(`Insert failed on drive ${this.driveNum}: ${response.error}`);
+            throw new DiscError(
+                `Insert failed on drive ${this.driveNum}: ${response.error}`,
+                toDiscErrorKind(response.kind),
+            );
         }
         const metadata = toDiscMetadata(response.disc);
         if (!metadata) {
@@ -281,7 +326,10 @@ export class Drive {
             request,
         );
         if (!response.accepted) {
-            throw new DiscError(`Eject failed on drive ${this.driveNum}: ${response.error}`);
+            throw new DiscError(
+                `Eject failed on drive ${this.driveNum}: ${response.error}`,
+                toDiscErrorKind(response.kind),
+            );
         }
     }
 
@@ -300,6 +348,7 @@ export class Drive {
         if (!response.cancelled) {
             throw new DiscError(
                 `Cancel eject failed on drive ${this.driveNum}: ${response.error}`,
+                toDiscErrorKind(response.kind),
             );
         }
     }

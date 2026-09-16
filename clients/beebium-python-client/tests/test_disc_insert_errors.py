@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 
 from beebium.client import Beebium
-from beebium.client.disc import DiscError
+from beebium.client.disc import DiscError, DiscErrorKind
 from beebium.client.exceptions import ServerNotFoundError
 
 
@@ -124,6 +124,7 @@ def test_non_disc_file_reports_unrecognised_with_size(
     message = str(excinfo.value)
     assert "Unrecognised disc image format" in message
     assert "size=" in message
+    assert excinfo.value.kind == DiscErrorKind.UNRECOGNISED
 
 
 def test_missing_path_reports_cannot_open(
@@ -136,6 +137,7 @@ def test_missing_path_reports_cannot_open(
         bbc_disc.disc.drive(0).insert(missing)
 
     assert "Cannot open disc image" in str(excinfo.value)
+    assert excinfo.value.kind == DiscErrorKind.CANNOT_OPEN
 
 
 def test_empty_disc_reports_empty(
@@ -149,3 +151,4 @@ def test_empty_disc_reports_empty(
         bbc_disc.disc.drive(0).insert(empty)
 
     assert "Empty disc image" in str(excinfo.value)
+    assert excinfo.value.kind == DiscErrorKind.EMPTY

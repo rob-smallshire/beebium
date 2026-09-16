@@ -79,9 +79,16 @@ class ScreenExpectTimeout(TimeoutError):
 
 
 class DiscError(BeebiumError):
-    """A disc operation failed."""
+    """A disc operation failed.
 
-    pass
+    ``kind`` classifies the failure (a :class:`~beebium.client.disc.DiscErrorKind`)
+    so callers can branch without parsing the message. It is None for disc
+    operations that do not report a classification.
+    """
+
+    def __init__(self, message: str, *, kind: object | None = None) -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 class EconetError(BeebiumError):

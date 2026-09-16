@@ -31,10 +31,41 @@ struct FormatDetectionResult {
     std::string format_name;    // Human-readable format name (e.g. "SSD 80-track")
 };
 
+// Classification of a disc-load failure, so a caller -- and, through the disc
+// service, a front end -- can react to the kind of failure without parsing the
+// human-readable message. The message itself still travels in
+// DiscLoadResult::error and is unchanged by this classification.
+//
+// This covers only the failures the loader itself produces. Service-level
+// failures (no controller, bad drive number, drive already occupied) are
+// classified by DiscService, not here.
+enum class DiscLoadErrorKind {
+    None = 0,       // Success -- no error.
+    CannotOpen,     // The image file could not be opened (missing, permissions).
+    Empty,          // The image file is zero bytes.
+    ReadError,      // The file opened but could not be read to the end.
+    Unrecognised,   // No registered handler recognised the format.
+    LoadFailed,     // A handler recognised the format but failed to load it.
+};
+
+// Stable lower-case token for a load-error kind, for JSON/CLI output.
+inline std::string_view disc_load_error_kind_name(DiscLoadErrorKind kind) {
+    switch (kind) {
+        case DiscLoadErrorKind::None:         return "none";
+        case DiscLoadErrorKind::CannotOpen:   return "cannot_open";
+        case DiscLoadErrorKind::Empty:        return "empty";
+        case DiscLoadErrorKind::ReadError:    return "read_error";
+        case DiscLoadErrorKind::Unrecognised: return "unrecognised";
+        case DiscLoadErrorKind::LoadFailed:   return "load_failed";
+    }
+    return "none";
+}
+
 // Result of loading a disc image.
 struct DiscLoadResult {
     std::unique_ptr<Disc> disc;
     std::string error;          // Non-empty on failure.
+    DiscLoadErrorKind kind = DiscLoadErrorKind::None;  // Failure classification.
     bool success() const { return disc != nullptr; }
     explicit operator bool() const { return success(); }
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { Disc, Drive, DriveState } from "../src/disc.js";
+import { Disc, Drive, DriveState, DiscErrorKind } from "../src/disc.js";
 import { DiscError } from "../src/exceptions.js";
 
 // Proto enum values matching the generated code
@@ -7,6 +7,18 @@ const ProtoDiscDriveState = {
     DISC_DRIVE_STATE_EMPTY: 0,
     DISC_DRIVE_STATE_LOADED: 1,
     DISC_DRIVE_STATE_EJECTING: 2,
+};
+
+const ProtoDiscErrorKind = {
+    DISC_ERROR_KIND_UNSPECIFIED: 0,
+    DISC_ERROR_KIND_CANNOT_OPEN: 1,
+    DISC_ERROR_KIND_EMPTY: 2,
+    DISC_ERROR_KIND_READ_ERROR: 3,
+    DISC_ERROR_KIND_UNRECOGNISED: 4,
+    DISC_ERROR_KIND_LOAD_FAILED: 5,
+    DISC_ERROR_KIND_NO_CONTROLLER: 6,
+    DISC_ERROR_KIND_INVALID_DRIVE: 7,
+    DISC_ERROR_KIND_DRIVE_OCCUPIED: 8,
 };
 
 function createMockStub(methods: Record<string, (req: any) => any>) {
@@ -327,6 +339,50 @@ describe("Drive", () => {
             const disc = new Disc(stub as any);
             const d = disc.drive(0);
             await expect(d.eject()).rejects.toThrow(DiscError);
+        });
+    });
+
+    describe("error classification", () => {
+        it("maps the wire kind onto DiscError.kind for a failed insert", async () => {
+            const stub = makeDiscStub({
+                insertDisc: () => ({
+                    success: false,
+                    error: "Unrecognised disc image format (size=3000, ext=.ssd): x",
+                    kind: ProtoDiscErrorKind.DISC_ERROR_KIND_UNRECOGNISED,
+                }),
+            });
+            const disc = new Disc(stub as any);
+            try {
+                await disc.drive(0).insert("/tmp/x.ssd");
+                expect.unreachable("insert should have thrown");
+            } catch (err) {
+                expect(err).toBeInstanceOf(DiscError);
+                expect((err as DiscError).kind).toBe(DiscErrorKind.UNRECOGNISED);
+            }
+        });
+
+        it("maps an occupied drive on insert", async () => {
+            const stub = makeDiscStub({
+                insertDisc: () => ({
+                    success: false,
+                    error: "Drive 0 already holds a disc; eject it first",
+                    kind: ProtoDiscErrorKind.DISC_ERROR_KIND_DRIVE_OCCUPIED,
+                }),
+            });
+            const disc = new Disc(stub as any);
+            await expect(disc.drive(0).insert("/tmp/x.ssd")).rejects.toMatchObject({
+                kind: DiscErrorKind.DRIVE_OCCUPIED,
+            });
+        });
+
+        it("classifies an unset wire kind as UNSPECIFIED", async () => {
+            const stub = makeDiscStub({
+                insertDisc: () => ({ success: false, error: "some failure" }),
+            });
+            const disc = new Disc(stub as any);
+            await expect(disc.drive(0).insert("/tmp/x.ssd")).rejects.toMatchObject({
+                kind: DiscErrorKind.UNSPECIFIED,
+            });
         });
     });
 });

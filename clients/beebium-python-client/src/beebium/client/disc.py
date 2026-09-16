@@ -46,6 +46,44 @@ class DiscEventType(Enum):
     MOTOR_OFF = "motor_off"
 
 
+class DiscErrorKind(Enum):
+    """Why a disc operation failed.
+
+    Travels on :class:`~beebium.client.exceptions.DiscError` alongside the
+    human-readable message, so callers can branch on the kind of failure
+    without parsing the text. UNSPECIFIED covers success and any failure the
+    server did not classify.
+    """
+
+    UNSPECIFIED = "unspecified"
+    CANNOT_OPEN = "cannot_open"
+    EMPTY = "empty"
+    READ_ERROR = "read_error"
+    UNRECOGNISED = "unrecognised"
+    LOAD_FAILED = "load_failed"
+    NO_CONTROLLER = "no_controller"
+    INVALID_DRIVE = "invalid_drive"
+    DRIVE_OCCUPIED = "drive_occupied"
+
+
+_DISC_ERROR_KIND_FROM_PROTO = {
+    disc_pb2.DISC_ERROR_KIND_UNSPECIFIED: DiscErrorKind.UNSPECIFIED,
+    disc_pb2.DISC_ERROR_KIND_CANNOT_OPEN: DiscErrorKind.CANNOT_OPEN,
+    disc_pb2.DISC_ERROR_KIND_EMPTY: DiscErrorKind.EMPTY,
+    disc_pb2.DISC_ERROR_KIND_READ_ERROR: DiscErrorKind.READ_ERROR,
+    disc_pb2.DISC_ERROR_KIND_UNRECOGNISED: DiscErrorKind.UNRECOGNISED,
+    disc_pb2.DISC_ERROR_KIND_LOAD_FAILED: DiscErrorKind.LOAD_FAILED,
+    disc_pb2.DISC_ERROR_KIND_NO_CONTROLLER: DiscErrorKind.NO_CONTROLLER,
+    disc_pb2.DISC_ERROR_KIND_INVALID_DRIVE: DiscErrorKind.INVALID_DRIVE,
+    disc_pb2.DISC_ERROR_KIND_DRIVE_OCCUPIED: DiscErrorKind.DRIVE_OCCUPIED,
+}
+
+
+def _disc_error_kind(value: int) -> DiscErrorKind:
+    """Map a wire DiscErrorKind value to the client enum (unknown -> UNSPECIFIED)."""
+    return _DISC_ERROR_KIND_FROM_PROTO.get(value, DiscErrorKind.UNSPECIFIED)
+
+
 @dataclass(frozen=True)
 class DiscMetadata:
     """Information about a disc image."""
@@ -294,7 +332,8 @@ class Drive:
         )
         response = self._disc._stub.InsertDisc(request)
         if not response.success:
-            raise DiscError(f"Failed to insert disc: {response.error}")
+            raise DiscError(f"Failed to insert disc: {response.error}",
+                            kind=_disc_error_kind(response.kind))
         return _proto_metadata_to_disc_metadata(response.disc)
 
     def eject(
@@ -326,7 +365,8 @@ class Drive:
         )
         response = self._disc._stub.EjectDisc(request)
         if not response.accepted:
-            raise DiscError(f"Failed to eject disc: {response.error}")
+            raise DiscError(f"Failed to eject disc: {response.error}",
+                            kind=_disc_error_kind(response.kind))
 
     def cancel_eject(self) -> None:
         """Abandon a pending safe eject, leaving the disc in the drive.
@@ -337,7 +377,8 @@ class Drive:
         request = disc_pb2.CancelEjectRequest(drive=self._drive_num)
         response = self._disc._stub.CancelEject(request)
         if not response.cancelled:
-            raise DiscError(f"Failed to cancel eject: {response.error}")
+            raise DiscError(f"Failed to cancel eject: {response.error}",
+                            kind=_disc_error_kind(response.kind))
 
     def wait_for_eject(self, timeout: float = 15.0) -> bool:
         """Block until the disc has been ejected.

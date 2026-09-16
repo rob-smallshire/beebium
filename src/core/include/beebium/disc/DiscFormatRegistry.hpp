@@ -44,19 +44,22 @@ public:
         // Read entire file into memory
         std::ifstream file(filepath, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
-            return {nullptr, "Cannot open disc image: " + filepath.string()};
+            return {nullptr, "Cannot open disc image: " + filepath.string(),
+                    DiscLoadErrorKind::CannotOpen};
         }
 
         auto file_size = file.tellg();
         if (file_size <= 0) {
-            return {nullptr, "Empty disc image: " + filepath.string()};
+            return {nullptr, "Empty disc image: " + filepath.string(),
+                    DiscLoadErrorKind::Empty};
         }
 
         std::vector<uint8_t> data(static_cast<size_t>(file_size));
         file.seekg(0);
         file.read(reinterpret_cast<char*>(data.data()), file_size);
         if (!file.good()) {
-            return {nullptr, "Error reading disc image: " + filepath.string()};
+            return {nullptr, "Error reading disc image: " + filepath.string(),
+                    DiscLoadErrorKind::ReadError};
         }
 
         // Extract lowercase extension
@@ -72,7 +75,8 @@ public:
                                    std::string_view extension,
                                    const std::filesystem::path& source_filepath) const {
         if (handlers_.empty()) {
-            return {nullptr, "No disc format handlers registered"};
+            return {nullptr, "No disc format handlers registered",
+                    DiscLoadErrorKind::LoadFailed};
         }
 
         // Detect format from all handlers
@@ -92,7 +96,8 @@ public:
         if (detections.empty()) {
             return {nullptr, "Unrecognised disc image format (size=" +
                     std::to_string(data.size()) + ", ext=" +
-                    std::string(extension) + "): " + source_filepath.string()};
+                    std::string(extension) + "): " + source_filepath.string(),
+                    DiscLoadErrorKind::Unrecognised};
         }
 
         // Sort by confidence (descending)
@@ -111,7 +116,8 @@ public:
             last_error = std::move(result.error);
         }
 
-        return {nullptr, "Failed to load disc image: " + last_error};
+        return {nullptr, "Failed to load disc image: " + last_error,
+                DiscLoadErrorKind::LoadFailed};
     }
 
     // Access registered handlers.
