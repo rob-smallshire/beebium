@@ -139,8 +139,6 @@ export interface TubeUlaState {
     coprocessorStatus: TubeCoprocessorStatus;
     /** Interrupt outputs */
     interrupts: TubeInterrupts;
-    /** Bus stretching state */
-    hostStretched: boolean;
     /** Per-register transfer counters */
     counters: TubeTransferCounters;
 }
@@ -239,9 +237,6 @@ export function formatTubeUlaState(s: TubeUlaState): string {
         `  ${formatStatus("Coprocessor status", s.coprocessorStatus)}`,
         `  Interrupts: ${formatInterrupts(s.interrupts)}`,
     ];
-    if (s.hostStretched) {
-        lines.push("  Host: STRETCHED");
-    }
     lines.push(`  ${formatCounters(s.counters)}`);
     return lines.join("\n");
 }
@@ -371,7 +366,6 @@ function toTubeUlaState(proto: ProtoTubeState): TubeUlaState {
         hostStatus: toHostStatus(proto.hostStatus),
         coprocessorStatus: toCoprocessorStatus(proto.coprocessorStatus),
         interrupts: toInterrupts(proto.interrupts),
-        hostStretched: proto.hostStretched,
         counters: toTransferCounters(proto.counters),
     };
 }

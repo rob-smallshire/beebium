@@ -281,7 +281,6 @@ describe("TubeUlaInspection", () => {
                         pnmiLevel: true,
                         pnmiEdge: false,
                     },
-                    hostStretched: true,
                     counters: {
                         r1H2pWrites: 100,
                         r1H2pReads: 99,
@@ -343,9 +342,6 @@ describe("TubeUlaInspection", () => {
             expect(state.interrupts.pirq).toBe(false);
             expect(state.interrupts.pnmiLevel).toBe(true);
 
-            // Stretched
-            expect(state.hostStretched).toBe(true);
-
             // Counters
             expect(state.counters.r1H2pWrites).toBe(100);
             expect(state.counters.r1P2hReads).toBe(297);
@@ -367,7 +363,6 @@ describe("TubeUlaInspection", () => {
                     hostStatus: undefined,
                     coprocessorStatus: undefined,
                     interrupts: undefined,
-                    hostStretched: false,
                     counters: undefined,
                 }),
             });
