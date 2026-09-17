@@ -1452,12 +1452,6 @@ struct Beebium_TubeState: @unchecked Sendable {
   /// Clears the value of `interrupts`. Subsequent reads from it will return its default value.
   mutating func clearInterrupts() {_uniqueStorage()._interrupts = nil}
 
-  /// Bus stretching state.
-  var hostStretched: Bool {
-    get {return _storage._hostStretched}
-    set {_uniqueStorage()._hostStretched = newValue}
-  }
-
   /// Whether the Tube socket is populated (has a second processor attached).
   var enabled: Bool {
     get {return _storage._enabled}
@@ -4113,7 +4107,7 @@ extension Beebium_GetTubeStateRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".TubeState"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}control_flags\0\u{3}r1_h2p\0\u{3}r1_p2h\0\u{3}r2_h2p\0\u{3}r2_p2h\0\u{3}r3_h2p\0\u{3}r3_p2h\0\u{3}r4_h2p\0\u{3}r4_p2h\0\u{3}host_status\0\u{3}coprocessor_status\0\u{1}interrupts\0\u{3}host_stretched\0\u{1}enabled\0\u{1}counters\0\u{1}trace\0\u{3}trace_total_count\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}control_flags\0\u{3}r1_h2p\0\u{3}r1_p2h\0\u{3}r2_h2p\0\u{3}r2_p2h\0\u{3}r3_h2p\0\u{3}r3_p2h\0\u{3}r4_h2p\0\u{3}r4_p2h\0\u{3}host_status\0\u{3}coprocessor_status\0\u{1}interrupts\0\u{2}\u{2}enabled\0\u{1}counters\0\u{1}trace\0\u{3}trace_total_count\0\u{c}\u{d}\u{1}")
 
   fileprivate class _StorageClass {
     var _controlFlags: Beebium_TubeControlFlags? = nil
@@ -4128,7 +4122,6 @@ extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     var _hostStatus: Beebium_TubeHostStatus? = nil
     var _coprocessorStatus: Beebium_TubeCoprocessorStatus? = nil
     var _interrupts: Beebium_TubeInterrupts? = nil
-    var _hostStretched: Bool = false
     var _enabled: Bool = false
     var _counters: Beebium_TubeTransferCounters? = nil
     var _trace: [Beebium_TubeTraceEntry] = []
@@ -4155,7 +4148,6 @@ extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       _hostStatus = source._hostStatus
       _coprocessorStatus = source._coprocessorStatus
       _interrupts = source._interrupts
-      _hostStretched = source._hostStretched
       _enabled = source._enabled
       _counters = source._counters
       _trace = source._trace
@@ -4190,7 +4182,6 @@ extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         case 10: try { try decoder.decodeSingularMessageField(value: &_storage._hostStatus) }()
         case 11: try { try decoder.decodeSingularMessageField(value: &_storage._coprocessorStatus) }()
         case 12: try { try decoder.decodeSingularMessageField(value: &_storage._interrupts) }()
-        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._hostStretched) }()
         case 14: try { try decoder.decodeSingularBoolField(value: &_storage._enabled) }()
         case 15: try { try decoder.decodeSingularMessageField(value: &_storage._counters) }()
         case 16: try { try decoder.decodeRepeatedMessageField(value: &_storage._trace) }()
@@ -4243,9 +4234,6 @@ extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       try { if let v = _storage._interrupts {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
       } }()
-      if _storage._hostStretched != false {
-        try visitor.visitSingularBoolField(value: _storage._hostStretched, fieldNumber: 13)
-      }
       if _storage._enabled != false {
         try visitor.visitSingularBoolField(value: _storage._enabled, fieldNumber: 14)
       }
@@ -4279,7 +4267,6 @@ extension Beebium_TubeState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         if _storage._hostStatus != rhs_storage._hostStatus {return false}
         if _storage._coprocessorStatus != rhs_storage._coprocessorStatus {return false}
         if _storage._interrupts != rhs_storage._interrupts {return false}
-        if _storage._hostStretched != rhs_storage._hostStretched {return false}
         if _storage._enabled != rhs_storage._enabled {return false}
         if _storage._counters != rhs_storage._counters {return false}
         if _storage._trace != rhs_storage._trace {return false}
