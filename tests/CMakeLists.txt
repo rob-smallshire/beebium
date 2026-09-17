@@ -1099,6 +1099,11 @@ add_executable(test_tube_ula_vectors test_tube_ula_vectors.cpp)
 target_link_libraries(test_tube_ula_vectors PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_tube_ula_vectors)
 
+# Golden R3 FIFO transcript from hoglet's Ferranti Tube ULA log (issue #71)
+add_executable(test_tube_ula_r3_transcript test_tube_ula_r3_transcript.cpp)
+target_link_libraries(test_tube_ula_r3_transcript PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_tube_ula_r3_transcript)
+
 # Coprocessor clock tests (host-time to coprocessor-cycle rational conversion)
 add_executable(test_coprocessor_clock test_coprocessor_clock.cpp)
 target_link_libraries(test_coprocessor_clock PRIVATE beebium_core Catch2::Catch2WithMain)
