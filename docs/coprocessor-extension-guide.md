@@ -35,7 +35,7 @@ Answer these before writing code; each maps onto one part of the contract.
 
 | Question | Where the answer goes |
 |---|---|
-| What is the clock, as a ratio to the host's 2 MHz? | `ClockRatio{numerator, denominator}`, e.g. 3/2, 2/1, 3/1 for 6 MHz, 5/1 for 10 MHz. Exact rationals only. |
+| What is the board timing? | For a 6502-family board, a `BoardTiming` (`beebium/tube/Coprocessor.hpp`): `ticks_per_host_cycle` (an exact rational of crystal ticks to the host's 2 MHz -- 6/1 for a 12 MHz wedge, 2/1 for the 4 MHz 65C102), `read_cycle_ticks`/`write_cycle_ticks` (the write is stretched on the wedge), `refresh_period_ticks` (0 for none), and `refresh_hold_cycles`. A board with `{ratio, 1, 1, 0, 1}` is a plain CPU-cycle clock at that ratio with no board effects. See "Board timing" in `docs/tube-subsystem.md`. |
 | What bridging hardware? | Reuse `TubeUla`, or implement `TubeHostBackend` and `TubeCoprocessorBackend`. |
 | What does the CPU's memory map look like, and where do the Tube registers appear in it? | Your memory map class. On the 6502 family the registers are at `&FEF8-&FEFF`; on a Z80 they are I/O ports; on the ARM and 32016 they are memory-mapped elsewhere. |
 | What firmware, how big, and how is it mapped at boot? | The manifest's `roms` entry and your memory map's boot overlay. |
@@ -46,13 +46,13 @@ Answer these before writing code; each maps onto one part of the contract.
 
 Derive from `CoprocessorExtension` and implement its three accessors plus
 `init` and `shutdown`. Parameterise the class on what varies within a
-family rather than subclassing, as the 65C02 does with its clock ratio and
+family rather than subclassing, as the 65C02 does with its board timing and
 label.
 
 ```cpp
 class MyCoprocessorExtension : public CoprocessorExtension {
 public:
-    explicit MyCoprocessorExtension(ClockRatio ratio) : ratio_(ratio) {}
+    explicit MyCoprocessorExtension(BoardTiming timing) : timing_(timing) {}
 
     std::span<const std::string_view> attaches_to() const override {
         static constexpr std::string_view deps[] = {"tube"};
@@ -108,8 +108,10 @@ Rules the server relies on:
 ## 3. The coprocessor: `Coprocessor`
 
 Implement `run_until`, `pause`, `resume`, `is_paused`, `reset` and
-`clock_ratio`. Use `CoprocessorClock` for the arithmetic; do not write your
-own.
+`board_timing`. Use `CoprocessorClock` for the arithmetic; do not write your
+own. The `CoprocessorRunner` shipped for the 6502 family already applies
+`BoardTiming` (crystal-tick cycle costs and DRAM refresh; issue #70) -- reuse
+it if your board is 6502-family. A minimal runner with a plain cycle clock:
 
 ```cpp
 void MyRunner::run_until(uint64_t host_cycle) {

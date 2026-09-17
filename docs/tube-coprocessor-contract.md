@@ -100,6 +100,22 @@ struct ClockRatio {
 The extension owns the coprocessor object and keeps it alive while it is
 installed in the socket, as it does today for the `ParasiteTickable`.
 
+**Update (issue #70, 2026-09-17):** `clock_ratio()` is replaced by
+`virtual BoardTiming board_timing() const = 0`. A 6502 Second Processor board
+is slower than its nominal clock for two board reasons -- a DRAM refresh cycle
+stolen at the opcode fetch periodically, and (on the 3 MHz wedge) a one-tick
+stretch on every write cycle -- so the coprocessor's clock is counted in the
+board's crystal ticks, not CPU cycles. `BoardTiming`
+(`beebium/tube/Coprocessor.hpp`) carries `ticks_per_host_cycle` (still an exact
+`ClockRatio`: 6/1 wedge, 2/1 65C102), the tick cost of a read and a write cycle,
+and the refresh period and hold. `CoprocessorRunner` converts host cycles to
+ticks with `CoprocessorClock` as before, then spends the tick budget cycle by
+cycle, holding the CPU for a refresh at the next `M6502_IsAboutToExecute`.
+`cycle_count()` stays "CPU cycles executed". A board with `{ratio, 1, 1, 0, 1}`
+reproduces the old plain-ratio behaviour. The skew bound is unchanged (the
+budget stays within one cycle's cost of due time). See
+`docs/discussion/tube-coprocessor-board-timing.md`.
+
 ### Time
 
 - `host_cycle` is the host's cumulative cycle count, `state_.cycle_count`.

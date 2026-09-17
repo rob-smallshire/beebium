@@ -20,7 +20,7 @@ Beebium models this as two clock domains meeting only at the Tube ULA,
 executed by one thread. The host `Machine` owns the clock. A coprocessor is
 supplied by a peripheral extension plugin and is driven in host time through
 a small contract: the host tells it how far to run, it converts host cycles
-to its own with an exact rational ratio, and it runs. The host runs it in
+to the board's crystal ticks with an exact rational ratio, and it runs. The host runs it in
 batches of up to eight host cycles, and exactly to the host's own cycle
 before any host access to a Tube register, so every register access on both
 sides happens in host-time order. Nothing about a coprocessor's CPU family is
@@ -31,8 +31,8 @@ coprocessor supplies.
 Two coprocessors ship: `tube-65c02`, the Acorn 6502 Second Processor (65C02
 at 3 MHz, 64 KB, Tube client v1.10), and `tube-65c102`, the 65C102
 Co-processor from the Master Turbo (65C02-family at 4 MHz, 64 KB, client
-v1.20). They are one class constructed with different clock ratios and
-firmware.
+v1.20). They are one class constructed with different board timing (see Board
+timing, below) and firmware.
 
 ```
 beebium-model-b start --tube-65c02  ...      # 6502 Second Processor, 3 MHz
@@ -240,7 +240,7 @@ Machine<Hardware>                          (host, owns the clock)
   +-- TubeSocket                            (&FEE0-&FEFF, HIRQ into the IRQ aggregator)
         |-- TubeHostBackend*   ---------->  TubeUla   (owned by the extension)
         |-- Coprocessor*       ---------->  CoprocessorRunner
-        |                                     |-- CoprocessorClock   (ratio, exact)
+        |                                     |-- CoprocessorClock   (ticks, exact)
         |                                     |-- CoprocessorCpu     (65C02, M6502 library)
         |                                     |-- CoprocessorMemoryMap (64 KB + 4 KB boot ROM @ F000-FFFF)
         |                                     `-- TubeCoprocessorBackend& -> the same TubeUla
@@ -259,8 +259,8 @@ ServerMain
 | `TubeCoprocessorBackend` | `beebium/tube/TubeCoprocessorBackend.hpp` | The coprocessor-facing bridge interface: `coprocessor_read/peek/write`, `pirq`, `pnmi_level`, `reset`. |
 | `TubeInspection` | `beebium/tube/TubeInspection.hpp` | Read-only diagnostics a bridge may offer: control flags, both sides' peeks, interrupt lines, transfer counters, the protocol trace. `GetTubeState` reads it. Also holds the flag constants and the counter and trace types. |
 | `TubeUla` | `beebium/tube/TubeUla.hpp` | The Ferranti ULA model: implements all three interfaces above. Verified against the period test vectors. |
-| `Coprocessor` | `beebium/tube/Coprocessor.hpp` | The execution contract: `run_until(host_cycle)`, `pause`, `resume`, `is_paused`, `reset`, `clock_ratio`. |
-| `CoprocessorClock` | `beebium/tube/CoprocessorClock.hpp` | Exact conversion of host cycles to coprocessor cycles for a `ClockRatio`, carrying the remainder, with no origin until the first call. |
+| `Coprocessor` | `beebium/tube/Coprocessor.hpp` | The execution contract: `run_until(host_cycle)`, `pause`, `resume`, `is_paused`, `reset`, `board_timing`. |
+| `CoprocessorClock` | `beebium/tube/CoprocessorClock.hpp` | Exact conversion of host cycles to coprocessor crystal ticks for a `ClockRatio` (BoardTiming.ticks_per_host_cycle), carrying the remainder, with no origin until the first call. |
 | `CoprocessorRunner` | `beebium/tube/CoprocessorRunner.hpp` | The 6502-family coprocessor: implements `Coprocessor` and `CpuDebugTarget`; owns the CPU, memory map and clock; breakpoints and watchpoints. |
 | `CoprocessorCpu`, `CoprocessorMemoryMap` | `beebium/tube/` | The 65C02 core wrapper (cycle-stepped `M6502`, with page-cross dummy reads routed through `peek` so they cannot consume Tube data) and the memory map. |
 | `CoprocessorExtension` | `beebium/extension/CoprocessorExtension.hpp` | The extension contract: `coprocessor()`, `tube_backend()`, `debug_target()`. |
@@ -270,14 +270,41 @@ ServerMain
 ### Time
 
 The unit of time in the contract is the host cycle, the host's cumulative
-2 MHz count. A coprocessor owns its clock ratio, coprocessor cycles per host
-cycle as an exact rational (3/2 for the 65C02, 2/1 for the 65C102), and
-converts with `CoprocessorClock`: the cycles due at host time `t` since the
-origin are exactly `floor((t - t0) * num / den)`, with the remainder carried
-so nothing drifts. The origin is set by the first `run_until`, which
-`TubeSocket::install_coprocessor` calls at once, so a coprocessor starts at
-the host time it is installed and never runs a catch-up burst. `reset()`
-discards the origin.
+2 MHz count. A 6502-family coprocessor owns a `BoardTiming` and converts host
+cycles to the board's crystal ticks with `CoprocessorClock`: the ticks due at
+host time `t` since the origin are exactly `floor((t - t0) * num / den)`, with
+the remainder carried so nothing drifts. The origin is set by the first
+`run_until`, which `TubeSocket::install_coprocessor` calls at once, so a
+coprocessor starts at the host time it is installed and never runs a catch-up
+burst. `reset()` discards the origin.
+
+### Board timing
+
+The board's clock is counted in crystal ticks, not CPU cycles, because two
+board effects make a CPU cycle no longer one fixed length (issue #70; see
+`docs/discussion/tube-coprocessor-board-timing.md`):
+
+- **DRAM refresh** steals one cycle at the next opcode fetch (SYNC) every
+  `refresh_period_ticks`, so the runner holds the CPU for one cycle, executing
+  nothing, and reloads the timer. On the 3 MHz wedge that is one cycle in about
+  44 (a 2.27% overhead); on the 65C102 one in 64.
+- **The write-cycle stretch** (3 MHz wedge only): a write cycle holds PHI1 high
+  for one extra 12 MHz period for RAM timing, so a write cycle is 5 crystal
+  ticks where a read is 4. The runner charges the cycle's tick cost by its R/W
+  after the fact.
+
+`BoardTiming` (`beebium/tube/Coprocessor.hpp`) carries the numbers a plugin
+declares: `ticks_per_host_cycle` (the exact rational: 6/1 on the wedge, 2/1 on
+the 65C102), `read_cycle_ticks` / `write_cycle_ticks` (4/5 wedge; 1/1 65C102),
+`refresh_period_ticks` (176 wedge; 64 65C102; 0 = no refresh), and
+`refresh_hold_cycles` (1). Together these give the measured effective rates --
+about 2.92 MHz for a load-heavy loop and 2.70 MHz for a store-heavy one on the
+wedge, 3.94 MHz on the 65C102 -- rather than the exact 3.000 / 4.000 MHz a bare
+ratio would give. `cycle_count()` stays "CPU cycles executed": a refresh hold
+executes none. Known simplifications: the 256K Turbo board's refresh is
+unmeasured, so its `refresh_period_ticks` is 0 (unmodelled); and the Tube
+collision stall (host and parasite selecting the Tube in the same cycle) is not
+modelled, being far below measurability for compute-bound code.
 
 ### The skew contract
 
