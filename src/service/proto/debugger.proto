@@ -564,8 +564,9 @@ message TubeState {
     // Interrupt outputs.
     TubeInterrupts interrupts = 12;
 
-    // Bus stretching state.
-    bool host_stretched = 13;
+    // 13 was host_stretched, removed with the bus-stretch model (issue #71):
+    // the Tube ULA has no way to stall the host.
+    reserved 13;
 
     // Whether the Tube socket is populated (has a second processor attached).
     bool enabled = 14;

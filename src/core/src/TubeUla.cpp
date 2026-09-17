@@ -79,9 +79,6 @@ void TubeUla::soft_reset()
     prev_pnmi_ = false;
     pnmi_edge_ = false;
 
-    // Bus stretch state.
-    host_stretched_ = false;
-
     update_interrupts();
 }
 
@@ -286,14 +283,8 @@ void TubeUla::host_write(uint8_t offset, uint8_t value)
     }
 
     case 1: {
-        // R1 data: write to H-to-P latch. Bus stretching via deferred write.
-        if (r1_h2p_.full) {
-            host_stretched_ = true;
-            pending_offset_ = offset & 7;
-            pending_value_ = value;
-            update_interrupts();
-            return;
-        }
+        // R1 data: write to H-to-P latch. A full latch is overwritten (measured
+        // Ferranti behaviour, HP1); the ULA has no way to stall the host.
         r1_h2p_.data = value;
         r1_h2p_.available = true;
         r1_h2p_.full = true;
@@ -318,22 +309,19 @@ void TubeUla::host_write(uint8_t offset, uint8_t value)
         break;
 
     case 5: {
-        // R3 data: write to H-to-P register. Bus stretching via deferred write.
-        if (r3_h2p_.count >= 2) {
-            host_stretched_ = true;
-            pending_offset_ = offset & 7;
-            pending_value_ = value;
-            update_interrupts();
-            return;
+        // R3 data: write to H-to-P FIFO (depth 2, independent of the V flag).
+        // A full FIFO ignores the write (measured Ferranti behaviour, HP3); the
+        // ULA has no way to stall the host.
+        if (r3_h2p_.count < 2) {
+            r3_h2p_.data[r3_h2p_.tail] = value;
+            r3_h2p_.tail ^= 1;
+            ++r3_h2p_.count;
+            uint8_t threshold = (control_flags_ & FLAG_V) ? 2 : 1;
+            if (r3_h2p_.count >= threshold)
+                r3_h2p_.pending = true;
+            ++counters_.r3_h2p_writes;
+            trace_event(0x30, value);  // R3 H2P host-write
         }
-        r3_h2p_.data[r3_h2p_.tail] = value;
-        r3_h2p_.tail ^= 1;
-        ++r3_h2p_.count;
-        uint8_t threshold = (control_flags_ & FLAG_V) ? 2 : 1;
-        if (r3_h2p_.count >= threshold)
-            r3_h2p_.pending = true;
-        ++counters_.r3_h2p_writes;
-        trace_event(0x30, value);  // R3 H2P host-write
         break;
     }
 
@@ -341,14 +329,8 @@ void TubeUla::host_write(uint8_t offset, uint8_t value)
         break;
 
     case 7: {
-        // R4 data: write to H-to-P latch. Bus stretching via deferred write.
-        if (r4_h2p_.full) {
-            host_stretched_ = true;
-            pending_offset_ = offset & 7;
-            pending_value_ = value;
-            update_interrupts();
-            return;
-        }
+        // R4 data: write to H-to-P latch. A full latch is overwritten (measured
+        // Ferranti behaviour, HP4); the ULA has no way to stall the host.
         r4_h2p_.data = value;
         r4_h2p_.available = true;
         r4_h2p_.full = true;
@@ -647,36 +629,6 @@ void TubeUla::update_interrupts()
         pnmi_edge_ = false;
     prev_pnmi_ = new_pnmi;
     pnmi_level_ = new_pnmi;
-}
-
-// ---------------------------------------------------------------------------
-// Bus stretch deferred-write mechanism
-// ---------------------------------------------------------------------------
-
-bool TubeUla::try_complete_stretch()
-{
-    if (!host_stretched_) return true;
-
-    // Write stretches only. R3/R4/R1 reads do not stretch in this model;
-    // the ULA returns stale/latched data immediately, matching hardware.
-    switch (pending_offset_) {
-    case 1:
-        if (r1_h2p_.full) return false;
-        break;
-    case 5:
-        if (r3_h2p_.count >= 2) return false;
-        break;
-    case 7:
-        if (r4_h2p_.full) return false;
-        break;
-    default:
-        break;
-    }
-
-    // Condition cleared -- replay the deferred write.
-    host_stretched_ = false;  // Prevent re-entry
-    host_write(pending_offset_, pending_value_);
-    return true;
 }
 
 }  // namespace beebium

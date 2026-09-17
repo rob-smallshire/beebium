@@ -204,8 +204,6 @@ inline void fill_tube_state_from_inspection(const TubeInspection& ula, TubeState
         response->set_trace_total_count(ula.trace_count());
     }
 
-    // Bus stretching.
-    response->set_host_stretched(ula.stretched());
     response->set_enabled(true);
 }
 

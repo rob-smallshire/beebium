@@ -153,21 +153,6 @@ public:
         active_backend()->host_write(static_cast<uint8_t>(offset), value);
     }
 
-    // --- Bus stretching ---
-
-    // Complete any write that was deferred by bus_stretch_cancel.
-    // Called by Machine::run() after resume. See TubeHostBackend for details.
-    void complete_pending_write() {
-        active_backend()->complete_pending_write();
-    }
-
-    // Returns true if the last host access could not complete because
-    // the target register was full (write) or empty (read). Only
-    // meaningful in in-process mode (TubeUla).
-    bool stretched() const {
-        return active_backend()->stretched();
-    }
-
     // --- IrqSource interface (satisfies IrqSource concept) ---
     //
     // Named irq_pending() to satisfy the generic IrqSource concept used by
@@ -277,18 +262,6 @@ public:
         std::function<void(uint64_t host_time, uint8_t offset, bool is_write)>;
     void set_register_access_observer(RegisterAccessObserver observer) {
         register_access_observer_ = std::move(observer);
-    }
-
-    // Check if the host is Tube bus-stretched.
-    bool tube_stretched() const {
-        return active_backend()->stretched();
-    }
-
-    // Attempt to complete a pending stretch operation.
-    // Returns true if the stretch cleared (or was not active).
-    // Routed through the backend virtual so nothing here casts to TubeUla.
-    bool try_complete_tube_stretch() {
-        return active_backend()->try_complete_stretch();
     }
 
     // --- Accessors ---

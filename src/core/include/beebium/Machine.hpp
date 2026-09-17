@@ -204,27 +204,6 @@ public:
         // contract permits.
         state_.memory.tube_socket.host_cycle(state_.cycle_count);
 
-        // Handle Tube bus stretch (host CPU halted, coprocessor + peripherals continue).
-        // When the host writes to a full Tube register, the Tube ULA holds the host
-        // CPU's clock until the coprocessor drains the register. During stretch, the
-        // host is halted waiting for the coprocessor, so run it to this cycle every
-        // cycle (no batching here) -- otherwise the register would not drain and the
-        // stretch would last longer than the hardware's.
-        if (tube_stretch_active_) {
-            state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
-            if (state_.memory.tube_socket.try_complete_tube_stretch()) {
-                tube_stretch_active_ = false;
-                // Fall through to normal step -- the deferred write has been
-                // replayed, host CPU can now proceed with the next cycle.
-            } else {
-                // Host still stretched. Tick peripherals but not host CPU.
-                tick_stretch_cycle();
-                ++state_.cycle_count;
-                ++sequence_;
-                return;
-            }
-        }
-
         // Handle 1MHz bus stretch cycles.
         // During stretch, CPU is halted. VIAs have already been pre-ticked
         // by CpuBinding before the memory access, so we only tick video here.
@@ -368,11 +347,6 @@ public:
             }
         }
 
-        // Check if the host's memory access triggered Tube bus stretching.
-        if (state_.memory.tube_socket.tube_stretched()) {
-            tube_stretch_active_ = true;
-        }
-
         ++state_.cycle_count;
         ++sequence_;
     }
@@ -384,11 +358,6 @@ public:
             RunGuard(std::atomic<bool>& f) : flag(f) { flag.store(true, std::memory_order_release); }
             ~RunGuard() { flag.store(false, std::memory_order_release); }
         } guard{in_run_};
-
-        // Complete any Tube write that was deferred by bus_stretch_cancel
-        // during a previous run (e.g., debugger pause interrupted a bus-stretched
-        // write). This must happen before the step loop so the write is not lost.
-        state_.memory.tube_socket.complete_pending_write();
 
         const uint64_t target = state_.cycle_count + cycles;
         while (state_.cycle_count < target && !paused_.load()) {
@@ -810,7 +779,6 @@ private:
     // by CpuBinding so we can continue ticking the others during stretch.
     uint8_t stretch_cycles_remaining_ = 0;
     uint8_t stretch_via_pre_tick_mask_ = 0;
-    bool tube_stretch_active_ = false;
 
     SystemClockType make_system_clock() {
         return make_clock(

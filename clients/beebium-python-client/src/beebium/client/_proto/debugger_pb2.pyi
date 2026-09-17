@@ -1732,13 +1732,10 @@ class TubeState(_message.Message):
     HOST_STATUS_FIELD_NUMBER: _builtins.int
     COPROCESSOR_STATUS_FIELD_NUMBER: _builtins.int
     INTERRUPTS_FIELD_NUMBER: _builtins.int
-    HOST_STRETCHED_FIELD_NUMBER: _builtins.int
     ENABLED_FIELD_NUMBER: _builtins.int
     COUNTERS_FIELD_NUMBER: _builtins.int
     TRACE_FIELD_NUMBER: _builtins.int
     TRACE_TOTAL_COUNT_FIELD_NUMBER: _builtins.int
-    host_stretched: _builtins.bool
-    """Bus stretching state."""
     enabled: _builtins.bool
     """Whether the Tube socket is populated (has a second processor attached)."""
     trace_total_count: _builtins.int
@@ -1813,7 +1810,6 @@ class TubeState(_message.Message):
         host_status: Global___TubeHostStatus | None = ...,
         coprocessor_status: Global___TubeCoprocessorStatus | None = ...,
         interrupts: Global___TubeInterrupts | None = ...,
-        host_stretched: _builtins.bool = ...,
         enabled: _builtins.bool = ...,
         counters: Global___TubeTransferCounters | None = ...,
         trace: _abc.Iterable[Global___TubeTraceEntry] | None = ...,
@@ -1821,7 +1817,7 @@ class TubeState(_message.Message):
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "enabled", b"enabled", "host_status", b"host_status", "host_stretched", b"host_stretched", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace", b"trace", "trace_total_count", b"trace_total_count"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["control_flags", b"control_flags", "coprocessor_status", b"coprocessor_status", "counters", b"counters", "enabled", b"enabled", "host_status", b"host_status", "interrupts", b"interrupts", "r1_h2p", b"r1_h2p", "r1_p2h", b"r1_p2h", "r2_h2p", b"r2_h2p", "r2_p2h", b"r2_p2h", "r3_h2p", b"r3_h2p", "r3_p2h", b"r3_p2h", "r4_h2p", b"r4_h2p", "r4_p2h", b"r4_p2h", "trace", b"trace", "trace_total_count", b"trace_total_count"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

@@ -454,9 +454,9 @@ private:
         if (level(HRST) == 0 || level(HCS) != 0)
             return;
         if (level(HRW) == 0) {
+            // The Tube ULA has no way to stall the host: every write completes
+            // in its own cycle (issue #71). There is nothing to wait for here.
             ula_.host_write(ha(), hd_driven());
-            if (ula_.stretched())
-                FAIL("host write to register " << int(ha()) << " was bus-stretched");
         }
     }
 

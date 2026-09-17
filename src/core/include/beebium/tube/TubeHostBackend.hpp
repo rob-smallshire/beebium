@@ -45,29 +45,6 @@ public:
     // Host IRQ output (HIRQ). Active when Q=1 and R4 P-to-H has data.
     virtual bool hirq() const = 0;
 
-    // Returns true if the last host_write (or host_read) could not complete
-    // because the target register was full (write) or empty (read).
-    //
-    // On real hardware the Tube ULA holds the host CPU's clock until the
-    // condition clears (the coprocessor drains or fills the register). In the
-    // in-process TubeUla model this is reported as a flag; the caller is
-    // responsible for stepping the coprocessor until stretched() returns false.
-    //
-    // The in-process TubeUla model reports bus stretch as a flag; the caller
-    // is responsible for stepping the coprocessor until stretched() returns false.
-    virtual bool stretched() const { return false; }
-
-    // Complete any write that was deferred during a bus-stretched pause.
-    //
-    // Called by Machine::run() after resume, before the step loop.
-    // Default: no-op.
-    virtual void complete_pending_write() {}
-
-    // Attempt to complete a pending bus stretch. Returns true if the stretch
-    // cleared (or was never active). Called from Machine::step() while a Tube
-    // stretch is active. Default: nothing to complete, so true.
-    virtual bool try_complete_stretch() { return true; }
-
     // Read-only diagnostic surface, or nullptr if this backend offers none.
     // DeviceInspectionService::GetTubeState fills from it when present, so the
     // Tube state it reports is identical whether the backend is the socket's

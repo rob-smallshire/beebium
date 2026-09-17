@@ -23,32 +23,22 @@
 // The tables below are that log, line for line. After every step this test
 // asserts the four status flags the program prints (hdav = host R3 status bit 7,
 // hsav = host R3 status bit 6, pnmi = coprocessor R3 status bit 7, psav =
-// coprocessor R3 status bit 6) and, for host writes, that the write did NOT
-// stall the host (stretched() stays false).
+// coprocessor R3 status bit 6) and the non-empty data byte. The store-or-drop
+// contract for a full register (docs/discussion/tube-ula-full-register-writes.md)
+// is verified by the transcript itself: on the third write of the "W W W"
+// pattern the R3 H-to-P FIFO already holds two bytes, so the write is ignored;
+// the two earlier bytes read back and the register is then empty, and the 0x66
+// never appears. (Before issue #71 was fixed this write raised a bus stretch;
+// that model has been removed, so there is no stretched() flag to probe -- the
+// dropped-write behaviour is now read straight from the FIFO.)
 //
-// EXPECTED TO FAIL until issue #71 is fixed (this is the test-first red): on the
-// third write of the "W W W" pattern the R3 H-to-P FIFO already holds two bytes.
-// The real ULA ignores the write and it completes; Beebium today raises a bus
-// stretch (host_write case 5), which in the full machine deadlocks the host
-// against the waiting coprocessor. Here it shows up as stretched()==true after
-// that write. Only the two HP3 sections write from the host side, so only they
-// expose the stall.
-//
-// The flag columns and the non-empty data bytes already match the model, so
-// those assertions pass today; that validates the transcript and isolates the
-// stall as the one red. Two reads are deliberately NOT checked for their value,
-// per the design decision in docs/discussion/tube-ula-full-register-writes.md:
+// Two reads are deliberately NOT checked for their value, per section 3 of the
+// design note:
 //   - the byte read immediately after a Tube reset is undefined (reset-time
 //     garbage on the real part); and
 //   - a read of an empty R3 returns a fixed 0xE4 (parasite) / 0x96 (host) on the
 //     Ferranti part, but Beebium returns the other side's bus latch, and that
-//     simplification is being KEPT (section 3 of the design note). Both are
-//     masked here -- their flags are still asserted.
-//
-// NOTE: the accepted fix removes TubeUla::stretched() and try_complete_stretch()
-// altogether (design note section 2). When it lands, the stretched() probe below
-// must be replaced by the store-or-drop contract from the note's table; the flag
-// and data assertions and the masking stay as they are.
+//     simplification is KEPT. Both are masked here -- their flags are asserted.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -91,7 +81,6 @@ struct Section {
 struct Driven {
     std::vector<uint8_t> actual_read;   // per-step read value (0 for writes)
     std::vector<uint8_t> hdav, hsav, pnmi, psav;
-    int first_stalled_write = -1;       // data of the first host write that stalled
 };
 
 bool bit7(uint8_t status) { return (status & TubeUla::DATA_AVAILABLE) != 0; }
@@ -109,8 +98,6 @@ Driven drive(const Section& section) {
         switch (step.op) {
         case Op::HostWrite:
             tube.host_write(R3_DATA, step.data);
-            if (tube.stretched() && d.first_stalled_write < 0)
-                d.first_stalled_write = step.data;
             break;
         case Op::ParasiteWrite:
             tube.coprocessor_write(R3_DATA, step.data);
@@ -252,12 +239,6 @@ void check_section(const Section& section) {
             CHECK(static_cast<int>(d.actual_read[i]) == static_cast<int>(steps[i].data));
         }
     }
-
-    // The stall defect (#71): no host write may leave the bus stretched. The
-    // third write of the W W W pattern (0x66) overfills a full R3; the real ULA
-    // ignores it, Beebium stretches. -1 means no write stalled.
-    INFO(section.name << ": first host write that stalled the bus (data byte, -1 = none)");
-    CHECK(d.first_stalled_write == -1);
 }
 
 }  // namespace
@@ -278,26 +259,23 @@ TEST_CASE("Tube R3 transcript: HP3 two-byte mode (Ferranti golden)", "[tube][r3]
     check_section(hp3_two_byte());
 }
 
-// The minimal, unambiguous reproduction of issue #71: a third host write into a
-// full R3 H-to-P register must complete without stalling the host, and the byte
-// must be dropped (the FIFO drains to its two earlier bytes and is then empty).
-TEST_CASE("Issue #71: a host write to a full R3 must not stall the host", "[tube][r3][issue71]") {
+// The minimal, unambiguous statement of the issue #71 fix: a third host write
+// into a full R3 H-to-P register is ignored (not stored, and it does not stall
+// the host); the FIFO holds its two earlier bytes and is then empty.
+TEST_CASE("Issue #71: a host write to a full R3 is dropped, not stalled", "[tube][r3][issue71]") {
     TubeUla tube;
     tube.reset();  // one-byte mode (V clear); FIFO depth is two either way
 
     tube.host_write(R3_DATA, 0x44);
-    REQUIRE_FALSE(tube.stretched());
     tube.host_write(R3_DATA, 0x55);
-    REQUIRE_FALSE(tube.stretched());
+    tube.host_write(R3_DATA, 0x66);  // full: ignored
 
-    // Third write: the H-to-P FIFO already holds two bytes. The real Ferranti
-    // ULA ignores the write and it completes; Beebium today raises a bus stretch.
-    tube.host_write(R3_DATA, 0x66);
-    CHECK_FALSE(tube.stretched());  // RED until #71 is fixed
-
-    // The two earlier bytes are still readable in order...
+    // The two earlier bytes read back in order; 0x66 was dropped.
     CHECK(static_cast<int>(tube.coprocessor_read(R3_DATA)) == 0x44);
     CHECK(static_cast<int>(tube.coprocessor_read(R3_DATA)) == 0x55);
-    // ...and 0x66 was dropped, so the FIFO is now empty: the host sees space.
+
+    // The FIFO is now empty: the host sees H-to-P space and the coprocessor sees
+    // no H-to-P data (so the dropped 0x66 was never queued behind the two bytes).
     CHECK((tube.host_peek(R3_STATUS) & TubeUla::SPACE_AVAILABLE) != 0);
+    CHECK((tube.coprocessor_peek(R3_STATUS) & TubeUla::DATA_AVAILABLE) == 0);
 }

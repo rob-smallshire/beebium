@@ -152,35 +152,50 @@ def bbc_tube(
 class TestTubeR3TranscriptScenario:
     """Reproduce issue #71 with hoglet's actual R3 test disc over the Tube."""
 
-    def test_program_gets_past_the_hp3_one_byte_stall(
+    def test_program_runs_to_completion_without_deadlock(
         self, bbc_tube: Beebium, r3_disc_filepath: Path
     ) -> None:
-        """The R3 test program must run past the HP3 one-byte section.
+        """The R3 test program must run all four sections and return to BASIC.
 
-        RED until #71 is fixed: the third host write of the "W W W" pattern
-        stalls the host, the coprocessor never gets its reply, and the program
-        deadlocks in section 2, so a "Two Byte Mode" banner (sections 3 and 4)
-        never appears. The emulated-time budget bounds the stalled run so the
-        test times out cleanly instead of hanging.
+        Before issue #71 was fixed the third host write of the "W W W" pattern
+        stalled the host, the coprocessor never got its reply, and the program
+        deadlocked in the HP3 one-byte section (the screen froze at "host write
+        data=55"). With the stall removed the program completes and BASIC
+        regains control.
+
+        That control is checked with a sentinel: after CHAINing the program the
+        test runs a bounded emulated-time budget (so a regression that
+        re-introduces the deadlock times out cleanly rather than hanging), then
+        types a PRINT of a unique token. The token only reaches the screen if
+        BASIC is back at the prompt -- i.e. the host is not stalled. A deadlocked
+        host cannot process the keypress, so the token never appears.
         """
         bbc_tube.disc.drive(0).insert(r3_disc_filepath)
         bbc_tube.keyboard.type('CHAIN "R3TEST"\r')
 
-        got_past_hang = _step_until_or_timeout(
+        # Give the whole program time to run (it completes well within this on a
+        # working build; a deadlocked build simply burns the bounded budget).
+        _step_until_or_timeout(
+            bbc_tube, lambda: False, emulated_seconds=60.0, chunk_seconds=1.0
+        )
+
+        # If the host is alive, BASIC is at the prompt and runs this.
+        bbc_tube.keyboard.type('PRINT "TUBE71DONE"\r')
+        completed = _step_until_or_timeout(
             bbc_tube,
-            lambda: screen_contains(bbc_tube, "Two Byte Mode"),
-            emulated_seconds=60.0,
+            lambda: screen_contains(bbc_tube, "TUBE71DONE"),
+            emulated_seconds=10.0,
             chunk_seconds=0.5,
         )
 
-        if not got_past_hang:
+        if not completed:
             rows = read_mode7_screen(bbc_tube)
-            print("\nScreen at the hang (issue #71 -- expect it to end at 'host write data=55'):")
+            print("\nScreen (issue #71 -- a deadlocked build freezes at 'host write data=55'):")
             for i, row in enumerate(rows):
                 print(f"Row {i:2d}: [{row}]")
             dump_diagnostics(bbc_tube)
 
-        assert got_past_hang, (
-            "Program did not reach a 'Two Byte Mode' section: the host stalled on "
-            "a write to a full Tube R3 register (issue #71). See the screen dump above."
+        assert completed, (
+            "BASIC did not regain control after CHAIN \"R3TEST\": the host stalled "
+            "on a write to a full Tube R3 register (issue #71). See the screen dump."
         )

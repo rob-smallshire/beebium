@@ -12,10 +12,10 @@
 
 // R2 transfer tests using the real 65C02 CPU.
 //
-// R2 is a single-byte latch in each direction with no bus stretching and no
-// interrupt support.  Unlike R1/R3/R4, host_write to R2 does NOT spin until
-// the coprocessor consumes the previous byte -- it unconditionally overwrites
-// the latch.  The host must therefore poll R2 status (or spin on the shared
+// R2 is a single-byte latch in each direction with no interrupt support. No
+// Tube register stalls the host (issue #71); a host_write to a full R2 latch
+// unconditionally overwrites it, so a byte the coprocessor has not yet read is
+// lost.  The host must therefore poll R2 status (or spin on the shared
 // ready flag) to avoid data loss.
 //
 // Host-to-Coprocessor: host waits for r2_h2p.ready == 0 (coprocessor consumed
@@ -193,7 +193,7 @@ TEST_CASE("6502 R2 H2P: 200 bytes interleaved", "[tube][6502][r2]") {
     plant_r2_reader(memory, NUM_BYTES);
     setup_cpu(memory, cpu);
 
-    // R2 has no bus stretching -- the host must wait for the coprocessor to
+    // No register stalls the host: the host must wait for the coprocessor to
     // consume each byte before writing the next, otherwise it overwrites
     // the latch and data is lost.
     int host_written = 0;
@@ -293,8 +293,8 @@ TEST_CASE("6502 R2 P2H: 200 bytes interleaved", "[tube][6502][r2]") {
 
     std::array<uint8_t, NUM_BYTES> received{};
 
-    // R2 P-to-H has no bus stretching -- the host must wait for data
-    // to become available before reading, otherwise it reads stale data.
+    // No register stalls the host: the host must wait for data to become
+    // available before reading, otherwise it reads stale data.
     int host_read_idx = 0;
     for (int i = 0; i < 10000000 && cpu.cpu().opcode_pc.w != 0x0412; ++i) {
         cpu.tick();

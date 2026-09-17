@@ -98,9 +98,6 @@ public:
     // Total trace events recorded this session (may exceed TRACE_SIZE; the
     // ring keeps only the most recent TRACE_SIZE).
     virtual size_t trace_count() const = 0;
-
-    // True while the host CPU is stalled waiting for a register to drain.
-    virtual bool stretched() const = 0;
 };
 
 }  // namespace beebium

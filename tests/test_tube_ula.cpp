@@ -64,9 +64,8 @@ TEST_CASE("R1 host-to-coprocessor latch", "[tube][fifo][r1]") {
         REQUIRE((host_stat & TubeUla::SPACE_AVAILABLE) != 0);  // host can write again
     }
 
-    // Bus stretching (host_write to full latch) is tested via threaded
-    // tests -- TubeUla::host_write now spin-waits until the coprocessor
-    // drains the register. See "TubeUla concurrent R1 FIFO transfer".
+    // A host write to a full latch overwrites it and never stalls; see the
+    // "Writes to a full register" cases below.
 }
 
 TEST_CASE("R1 coprocessor-to-host 24-byte FIFO", "[tube][fifo][r1]") {
@@ -1066,30 +1065,82 @@ TEST_CASE("R1 FIFO boundary conditions", "[tube][fifo][boundary]") {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Bus stretching
+// Writes to a full register
 //
-// TubeUla::host_write spin-waits on full registers (releasing/reacquiring
-// the mutex) until the coprocessor thread drains them. Single-threaded tests
-// for the old deferred-write pattern have been removed. Threaded bus
-// stretching is exercised by the concurrent R1/R3 transfer tests below.
+// The Tube ULA has no way to stall the host (issue #71; see
+// docs/discussion/tube-ula-full-register-writes.md). Every write completes in
+// its own cycle and, when the target register is full, is either ignored or
+// overwrites, per hoglet's measured Ferranti table:
+//
+//   HP1 overwrite | PH1 (24-deep) ignore | HP2/PH2 overwrite
+//   HP3 ignore    | PH3 ignore           | HP4/PH4 overwrite
+//
+// One case per row and direction. R1 data = offset 1, R2 = 3, R3 = 5, R4 = 7.
 //////////////////////////////////////////////////////////////////////////////
 
-// Removed: "Host write bus stretching on R1" (spin-wait, needs thread)
-// Removed: "Host write bus stretching on R3" (spin-wait, needs thread)
-// Removed: "Host write bus stretching on R4" (spin-wait, needs thread)
-// Removed: "Bus stretching cleared by reset" (no deferred-write state)
-// Removed: "Bus stretching: reading unrelated register" (no deferred-write)
-
-// R2 does NOT bus-stretch -- it overwrites the latch. This is testable
-// single-threaded.
-TEST_CASE("R2 has no bus stretching", "[tube][stretch][r2]") {
+TEST_CASE("R1 H-to-P (HP1): a full latch overwrites", "[tube][full-write][r1]") {
     TubeUla tube;
+    tube.host_write(1, 0xAA);        // latch now full
+    tube.host_write(1, 0xBB);        // full: overwrites (not stalled, not dropped)
+    REQUIRE(tube.coprocessor_read(1) == 0xBB);
+}
 
-    SECTION("Second host write overwrites without blocking") {
-        tube.host_write(3, 0xAA);
-        tube.host_write(3, 0xBB);  // overwrites, does not block
-        REQUIRE(tube.coprocessor_read(3) == 0xBB);
-    }
+TEST_CASE("R1 P-to-H (PH1): a full 24-byte FIFO ignores", "[tube][full-write][r1]") {
+    TubeUla tube;
+    for (int i = 0; i < 24; ++i)
+        tube.coprocessor_write(1, static_cast<uint8_t>(0x40 + i));  // fill
+    tube.coprocessor_write(1, 0xFF);  // full: ignored
+    for (int i = 0; i < 24; ++i)
+        REQUIRE(tube.host_read(1) == static_cast<uint8_t>(0x40 + i));  // 0xFF absent
+}
+
+TEST_CASE("R2 H-to-P (HP2): a full latch overwrites", "[tube][full-write][r2]") {
+    TubeUla tube;
+    tube.host_write(3, 0xAA);
+    tube.host_write(3, 0xBB);        // overwrites without blocking
+    REQUIRE(tube.coprocessor_read(3) == 0xBB);
+}
+
+TEST_CASE("R2 P-to-H (PH2): a full latch overwrites", "[tube][full-write][r2]") {
+    TubeUla tube;
+    tube.coprocessor_write(3, 0xAA);
+    tube.coprocessor_write(3, 0xBB);
+    REQUIRE(tube.host_read(3) == 0xBB);
+}
+
+TEST_CASE("R3 H-to-P (HP3): a full 2-byte FIFO ignores", "[tube][full-write][r3]") {
+    TubeUla tube;                     // one-byte mode; depth is two regardless
+    tube.host_write(5, 0x11);
+    tube.host_write(5, 0x22);         // FIFO now full
+    tube.host_write(5, 0x33);         // full: ignored
+    REQUIRE(tube.coprocessor_read(5) == 0x11);
+    REQUIRE(tube.coprocessor_read(5) == 0x22);  // 0x33 never queued
+    REQUIRE((tube.coprocessor_peek(4) & TubeUla::DATA_AVAILABLE) == 0);  // empty
+}
+
+TEST_CASE("R3 P-to-H (PH3): a full 2-byte FIFO ignores", "[tube][full-write][r3]") {
+    TubeUla tube;
+    tube.host_read(5);                // drain the reset dummy byte first
+    tube.coprocessor_write(5, 0x11);
+    tube.coprocessor_write(5, 0x22);  // FIFO now full
+    tube.coprocessor_write(5, 0x33);  // full: ignored
+    REQUIRE(tube.host_read(5) == 0x11);
+    REQUIRE(tube.host_read(5) == 0x22);  // 0x33 never queued
+    REQUIRE((tube.host_read(4) & TubeUla::DATA_AVAILABLE) == 0);  // empty
+}
+
+TEST_CASE("R4 H-to-P (HP4): a full latch overwrites", "[tube][full-write][r4]") {
+    TubeUla tube;
+    tube.host_write(7, 0xAA);
+    tube.host_write(7, 0xBB);        // full: overwrites (not stalled, not dropped)
+    REQUIRE(tube.coprocessor_read(7) == 0xBB);
+}
+
+TEST_CASE("R4 P-to-H (PH4): a full latch overwrites", "[tube][full-write][r4]") {
+    TubeUla tube;
+    tube.coprocessor_write(7, 0xAA);
+    tube.coprocessor_write(7, 0xBB);
+    REQUIRE(tube.host_read(7) == 0xBB);
 }
 
 TEST_CASE("Register access mirroring", "[tube][addressing]") {

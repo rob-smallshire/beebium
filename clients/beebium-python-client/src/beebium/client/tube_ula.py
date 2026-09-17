@@ -205,7 +205,6 @@ class TubeUlaState:
     coprocessor_status: TubeCoprocessorStatus = field(default_factory=TubeCoprocessorStatus)
     interrupts: TubeInterrupts = field(default_factory=TubeInterrupts)
 
-    host_stretched: bool = False
     counters: TubeTransferCounters = field(default_factory=TubeTransferCounters)
 
     def __str__(self) -> str:
@@ -225,8 +224,6 @@ class TubeUlaState:
             f"  Coprocessor status: {self.coprocessor_status}",
             f"  Interrupts: {self.interrupts}",
         ]
-        if self.host_stretched:
-            lines.append("  Host: STRETCHED")
         lines.append(f"  {self.counters}")
         return "\n".join(lines)
 
@@ -323,7 +320,6 @@ def _from_proto(pb: debugger_pb2.TubeState) -> TubeUlaState:
             pnmi_level=pb.interrupts.pnmi_level,
             pnmi_edge=pb.interrupts.pnmi_edge,
         ),
-        host_stretched=pb.host_stretched,
         counters=TubeTransferCounters(
             r1_h2p_writes=pb.counters.r1_h2p_writes,
             r1_h2p_reads=pb.counters.r1_h2p_reads,

@@ -217,8 +217,8 @@ TEST_CASE("Econet TX completes with Tube (server scenario)",
     auto* backend = backend_ptr.get();
     machine.state().memory.econet_socket.enable(101, std::move(backend_ptr), true);
 
-    // Boot with Tube takes longer (30M cycles for Tube init)
-    // TX test also needs more cycles because Tube stretch slows things down
+    // Boot with a Tube coprocessor takes longer (30M cycles for Tube init),
+    // and the TX test runs a generous cycle budget on top.
     auto r = run_econet_tx_test(machine, backend, 30'000'000, 10'000'000);
 
     INFO("Screen:\n" << r.screen);
