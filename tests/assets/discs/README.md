@@ -30,3 +30,20 @@ test_tube_speed.py.
 Not third-party: the BASIC source is `tube_speed70.bas` in this directory, and
 the disc is `oaknut-basic tokenise` of it written to a DFS SSD with
 `oaknut-disc`. Regenerate with those tools if the program changes.
+
+## TakBasicAsm.ssd
+
+acheton1984's "Tak on 6502" benchmark disc, the end-to-end fidelity check for
+the second processor's speed (issue #70). Author acheton1984; MIT licence
+(github.com/acheton1984/ReTestingTheTak/LICENCE); version 1.0, 2025-03-20;
+source https://raw.githubusercontent.com/acheton1984/ReTestingTheTak/main/discs/TakBasicAsm.ssd
+(204800 bytes, SHA-256
+`3feaab6c4a893d1e4edb61a9e10395c584502ee27f23f0b56fe762cc4289485b`). The disc's
+own attribution notes some code is adapted from Acorn User June 1986 p179 and
+November 1986 p197.
+
+Needs a 6502 second processor (`--tube-65c02`). Catalogue: `$.!BOOT`,
+`$.!ReadMe`, `$.TAK`, `$.TAKAsm`, `$.TAKfp`, `$.TAKscv`, `$.TAKstr` (plus their
+A./S. source variants). Used by test_tak_benchmark.py: CHAIN "TAKAsm" prints
+`TAK(18,12,6)=7 Time=NNN` in centiseconds; hardware is 264 (2.64 s on a BBC B
+OS 1.20 + 6502 Second Processor).
