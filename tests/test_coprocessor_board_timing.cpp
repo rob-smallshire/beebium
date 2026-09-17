@@ -32,10 +32,12 @@
 
 #include <beebium/tube/CoprocessorRunner.hpp>
 #include <beebium/tube/TubeUla.hpp>
+#include <beebium/Types.hpp>
 
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <vector>
 
 using namespace beebium;
 
@@ -186,4 +188,67 @@ TEST_CASE("Board timing: refresh holds account exactly for the stolen cycles",
     CHECK(d.executed + d.holds == kHostCyclesPerSecond * 6 / 4);  // 3,000,000
     // About one hold per 44 executed read cycles (176 ticks / 4).
     CHECK(near(d.holds, static_cast<double>(d.executed) / 44.0, 2000));
+}
+
+// The debugger single-step and the host-time run share one execution path, so a
+// debugger step keeps the board timing (issue #70 review). Stepping without any
+// host time drives the tick budget negative, and a refresh hold at a fetch is
+// charged just as run_until charges it, executing no CPU cycle.
+TEST_CASE("Board timing: a debugger step across a due refresh charges the hold",
+          "[coprocessor][board-timing][issue70]") {
+    TubeUla tube;
+    auto rom = make_zp_loop_rom(LDA_ZP);
+    CoprocessorRunner runner(tube, rom, kWedge);
+    runner.run_until(0);  // origin; no ticks are due, so step() runs the budget negative
+
+    bool saw_hold = false;
+    for (int i = 0; i < 400 && !saw_hold; ++i) {
+        const uint64_t cyc0 = runner.cycle_count();
+        const uint64_t holds0 = runner.refresh_hold_count();
+        const int64_t budget0 = runner.tick_budget();
+        runner.step();
+        if (runner.refresh_hold_count() == holds0 + 1) {
+            saw_hold = true;
+            CHECK(runner.cycle_count() == cyc0);  // the hold executed no CPU cycle
+            // ...and charged exactly one held cycle's ticks (4 on the wedge).
+            CHECK(budget0 - runner.tick_budget()
+                  == static_cast<int64_t>(kWedge.refresh_hold_cycles) * kWedge.read_cycle_ticks);
+        }
+    }
+    CHECK(saw_hold);
+    CHECK(runner.tick_budget() < 0);  // stepping with no host time ran the budget negative
+}
+
+// step_instruction() now loops the shared step(), so breakpoints and watchpoints
+// fire under it (the old direct cpu_.step_instruction() bypassed both).
+TEST_CASE("Board timing: breakpoints and watchpoints fire under step_instruction",
+          "[coprocessor][board-timing][issue70]") {
+    SECTION("a watchpoint on the store address fires") {
+        TubeUla tube;
+        auto rom = make_zp_loop_rom(STA_ZP);  // each instruction writes &70
+        CoprocessorRunner runner(tube, rom, kWedge);
+        runner.run_until(0);
+
+        int writes = 0;
+        runner.set_watchpoint_hit_callback(
+            [&](const WatchpointEntry&, uint32_t, uint8_t, bool is_write) { if (is_write) ++writes; });
+        runner.add_watchpoint_entry(WatchpointEntry{1, 0x70, 0x71, WatchType::WATCH_WRITE});
+
+        for (int i = 0; i < 40 && writes == 0; ++i) runner.step_instruction();
+        CHECK(writes > 0);
+    }
+
+    SECTION("a breakpoint in the loop fires") {
+        TubeUla tube;
+        auto rom = make_zp_loop_rom(LDA_ZP);
+        CoprocessorRunner runner(tube, rom, kWedge);
+        runner.run_until(0);
+
+        int hits = 0;
+        runner.set_breakpoint_hit_callback([&](const BreakpointEntry&, uint16_t) { ++hits; });
+        runner.set_breakpoint_entries({BreakpointEntry{1, 0xF802, 0xF803}});  // the second instruction
+
+        for (int i = 0; i < 40 && hits == 0; ++i) runner.step_instruction();
+        CHECK(hits > 0);
+    }
 }

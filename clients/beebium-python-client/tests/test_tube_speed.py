@@ -57,8 +57,8 @@ SPEED_DISC_FILENAME = "tube_speed70.ssd"
 # measured hardware figures (stardot t=25167): the wedge stretches writes (STA
 # slower than LDA), the 65C102 board does not (both equal).
 CASES = [
-    pytest.param("tube-65c02", 2.922, 2.703, id="6502-second-processor-3MHz"),
-    pytest.param("tube-65c102", 3.939, 3.939, id="65C102-coprocessor-4MHz"),
+    pytest.param("tube-65c02", 2.922, 2.703, 0.925, id="6502-second-processor-3MHz"),
+    pytest.param("tube-65c102", 3.939, 3.939, 1.000, id="65C102-coprocessor-4MHz"),
 ]
 
 # 1% band. The model (which includes the refresh SYNC wait) lands at about
@@ -157,10 +157,13 @@ def bbc_copro(
 class TestTubeSpeed:
     """Reproduce issue #70: the coprocessor's effective clock is too fast."""
 
-    @pytest.mark.parametrize("coprocessor_flag, expected_lda, expected_sta", CASES, indirect=["coprocessor_flag"])
+    @pytest.mark.parametrize(
+        "coprocessor_flag, expected_lda, expected_sta, expected_ratio",
+        CASES, indirect=["coprocessor_flag"])
     def test_effective_mhz_matches_hardware(
         self, bbc_copro: Beebium, speed_disc_filepath: Path,
         coprocessor_flag: str, expected_lda: float, expected_sta: float,
+        expected_ratio: float,
     ) -> None:
         """The LDA and STA loops must read the hardware's effective MHz.
 
@@ -197,4 +200,17 @@ class TestTubeSpeed:
         assert abs(sta - expected_sta) <= expected_sta * TOLERANCE, (
             f"STA loop effective clock {sta} MHz is not within {TOLERANCE:.1%} of "
             f"{expected_sta} MHz (issue #70: refresh + write stretch not modelled)"
+        )
+
+        # The store/load rate ratio cancels loop overhead and TIME granularity;
+        # it is the quantity that discriminates the write stretch. On the wedge a
+        # store cycle is 5 ticks where a load cycle is 4 (tom_seddon measured
+        # 2.703/2.922 = 0.925); the 65C102 does not stretch writes, so ~1.000.
+        # Before the fix both loops ran at the same rate, so the ratio was 1.000
+        # on the wedge too.
+        ratio = sta / lda
+        print(f"{coprocessor_flag}: STA/LDA ratio {ratio:.4f} (expect ~{expected_ratio})")
+        assert abs(ratio - expected_ratio) <= 0.005, (
+            f"STA/LDA rate ratio {ratio:.4f} is not within 0.005 of {expected_ratio} "
+            f"(issue #70: the write-cycle stretch)"
         )

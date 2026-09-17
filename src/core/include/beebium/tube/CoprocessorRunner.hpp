@@ -204,10 +204,11 @@ public:
 
     // --- Single-cycle step ---
 
-    // One executed coprocessor CPU cycle (the debugger's cycle step). The live
-    // breakpoint/watchpoint checks happen inside step(). This does NOT apply the
-    // board-timing tick budget or refresh holds -- those are host-time-driven
-    // and live in run_until(); a debugger cycle step is a raw CPU cycle.
+    // One coprocessor step (the debugger's cycle step): a due refresh hold at an
+    // opcode fetch, otherwise one executed CPU cycle. Both charge the board's
+    // tick budget, exactly as run_until() does, so there is one execution path
+    // with one set of timing semantics; a debugger step may drive the budget
+    // negative, and run_until() then waits for host time to catch up.
     void tick() { step(); }
 
     void step() override;
@@ -285,6 +286,16 @@ private:
     // Watchpoint check, performed after a tick (every bus access). Returns true
     // if a watchpoint fired.
     bool check_watchpoints();
+
+    // The two halves of the one execution path (issue #70). refresh_hold_if_due()
+    // performs a DRAM refresh hold if one is pending at an opcode fetch (charges
+    // the hold's ticks, executes nothing, reloads the timer) and returns whether
+    // it did. execute_one_cycle() runs one CPU cycle (breakpoint check, tick,
+    // charge read/write ticks, advance the refresh timer, watchpoint check) and
+    // returns false if a breakpoint paused before the cycle. run_until() gates
+    // both on the tick budget; step() calls them ungated.
+    bool refresh_hold_if_due();
+    bool execute_one_cycle();
 
     TubeCoprocessorBackend& tube_port_;                     // reference to active port
     CoprocessorMemoryMap memory_;

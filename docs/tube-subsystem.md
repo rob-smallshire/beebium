@@ -287,7 +287,8 @@ board effects make a CPU cycle no longer one fixed length (issue #70; see
 - **DRAM refresh** steals one cycle at the next opcode fetch (SYNC) every
   `refresh_period_ticks`, so the runner holds the CPU for one cycle, executing
   nothing, and reloads the timer. On the 3 MHz wedge that is one cycle in about
-  44 (a 2.27% overhead); on the 65C102 one in 64.
+  44 -- about 2.2%, a little under 1/44 because the timer reloads only after the
+  wait for SYNC; on the 65C102 one in 64.
 - **The write-cycle stretch** (3 MHz wedge only): a write cycle holds PHI1 high
   for one extra 12 MHz period for RAM timing, so a write cycle is 5 crystal
   ticks where a read is 4. The runner charges the cycle's tick cost by its R/W

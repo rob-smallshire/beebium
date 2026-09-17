@@ -40,6 +40,44 @@ void CoprocessorRunner::reset() {
     refresh_pending_ = false;
 }
 
+// A pending DRAM refresh lands on the next opcode fetch (SYNC): consume one
+// held cycle's worth of ticks, execute nothing, clear the request and reload
+// the timer (the stall-then-reload on the RAS edge). Returns whether it fired.
+// Charges the tick budget unconditionally; the caller decides affordability.
+bool CoprocessorRunner::refresh_hold_if_due() {
+    if (timing_.refresh_period_ticks == 0 || !refresh_pending_ ||
+        !M6502_IsAboutToExecute(&cpu_.cpu())) {
+        return false;
+    }
+    tick_budget_ -=
+        static_cast<int64_t>(timing_.refresh_hold_cycles) * timing_.read_cycle_ticks;
+    refresh_pending_ = false;
+    refresh_timer_ = 0;
+    ++refresh_hold_count_;
+    return true;
+}
+
+// Execute one CPU cycle: breakpoint check (stop before executing if it pauses),
+// tick, charge read_cycle_ticks or write_cycle_ticks by the cycle's R/W, advance
+// the refresh timer, watchpoint check. Returns false if a breakpoint paused
+// before the cycle ran. Charges the tick budget unconditionally.
+bool CoprocessorRunner::execute_one_cycle() {
+    if (check_breakpoints()) return false;
+    cpu_.tick();
+    const uint32_t cost =
+        cpu_.cpu().read ? timing_.read_cycle_ticks : timing_.write_cycle_ticks;
+    tick_budget_ -= static_cast<int64_t>(cost);
+    // The refresh timer counts executing ticks and stalls once it fires, until
+    // the hold clears it, so the interval is the period plus the wait for SYNC.
+    if (timing_.refresh_period_ticks != 0 && !refresh_pending_) {
+        refresh_timer_ += cost;
+        if (refresh_timer_ >= timing_.refresh_period_ticks) refresh_pending_ = true;
+    }
+    check_watchpoints();
+    ++sequence_;
+    return true;
+}
+
 void CoprocessorRunner::run_until(uint64_t host_cycle) {
     // Advance the clock's record of host time and learn how many crystal ticks
     // have become due. Do this even while paused: the paused interval's ticks
@@ -48,44 +86,22 @@ void CoprocessorRunner::run_until(uint64_t host_cycle) {
     if (paused_) return;
     tick_budget_ += static_cast<int64_t>(due_ticks);
 
-    // Spend the tick budget cycle by cycle. A coprocessor cycle is no longer one
-    // fixed length: a read costs read_cycle_ticks, a write write_cycle_ticks, and
-    // a DRAM refresh holds the CPU for one cycle at the next opcode fetch once the
-    // refresh timer reaches its period. See the design note (issue #70).
-    const bool has_refresh = timing_.refresh_period_ticks != 0;
+    // Spend the tick budget cycle by cycle, gating each action on affordability.
+    // A coprocessor cycle is no longer one fixed length (issue #70): reads and
+    // writes cost different ticks, and a refresh hold executes nothing.
     while (true) {
-        // A pending refresh lands on the next opcode fetch (SYNC): consume one
-        // held cycle's worth of ticks, execute nothing, and reload the timer.
-        if (has_refresh && refresh_pending_ && M6502_IsAboutToExecute(&cpu_.cpu())) {
+        if (timing_.refresh_period_ticks != 0 && refresh_pending_ &&
+            M6502_IsAboutToExecute(&cpu_.cpu())) {
             const int64_t hold =
                 static_cast<int64_t>(timing_.refresh_hold_cycles) * timing_.read_cycle_ticks;
             if (tick_budget_ < hold) break;
-            tick_budget_ -= hold;
-            refresh_pending_ = false;
-            refresh_timer_ = 0;  // stall-then-reload on the RAS edge
-            ++refresh_hold_count_;
+            refresh_hold_if_due();
             continue;
         }
-
         // Only execute a cycle we can afford at least a read for; a write then
         // overspends by one tick, carried as a deficit into the next run_until.
         if (tick_budget_ < static_cast<int64_t>(timing_.read_cycle_ticks)) break;
-
-        if (check_breakpoints()) break;  // paused at the breakpoint PC; don't execute it
-        cpu_.tick();
-        const uint32_t cost =
-            cpu_.cpu().read ? timing_.read_cycle_ticks : timing_.write_cycle_ticks;
-        tick_budget_ -= static_cast<int64_t>(cost);
-
-        // The refresh timer counts executing ticks and stalls once it fires,
-        // until the hold clears it, so the interval is period + the wait for SYNC.
-        if (has_refresh && !refresh_pending_) {
-            refresh_timer_ += cost;
-            if (refresh_timer_ >= timing_.refresh_period_ticks) refresh_pending_ = true;
-        }
-
-        check_watchpoints();
-        ++sequence_;
+        if (!execute_one_cycle()) break;  // paused at the breakpoint PC
     }
 }
 
@@ -135,19 +151,26 @@ void CoprocessorRunner::run(uint64_t cycles) {
 }
 
 uint64_t CoprocessorRunner::step_instruction() {
-    return cpu_.step_instruction();
+    // Loop the single step until the CPU is about to execute again after at least
+    // one executed cycle, going through the same breakpoint/watchpoint and refresh
+    // charging as run_until (the old direct cpu_.step_instruction() bypassed all
+    // of them). A leading refresh hold executes no cycle, so it is charged but not
+    // counted; the return is CPU cycles executed. A breakpoint that pauses stops it.
+    const uint64_t start = cpu_.cycle_count();
+    do {
+        step();
+        if (paused_) break;
+    } while (cpu_.cycle_count() == start || !M6502_IsAboutToExecute(&cpu_.cpu()));
+    return cpu_.cycle_count() - start;
 }
 
 void CoprocessorRunner::step() {
-    // step() is the LIVE execution path: the coprocessor is ticked single-threaded
-    // from Machine::step() via TubeSocket::tick_coprocessor() -> tick() -> step().
-    // run() is never called outside tests, so the breakpoint and watchpoint
-    // checks must happen here -- otherwise coprocessor breakpoints never fire during
-    // normal execution.
-    if (check_breakpoints()) return;  // paused at the breakpoint PC; don't execute it
-    cpu_.tick();
-    check_watchpoints();
-    ++sequence_;
+    // The debugger's single cycle step, on the same execution path as run_until:
+    // a due refresh hold at an opcode fetch, otherwise one executed CPU cycle.
+    // Both charge the tick budget (which may go negative here; run_until then
+    // waits for host time to catch up), so a debugger-stepped coprocessor keeps
+    // the board's timing rather than being a second, faster path.
+    if (!refresh_hold_if_due()) execute_one_cycle();
 }
 
 void CoprocessorRunner::pause() {
