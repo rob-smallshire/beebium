@@ -1109,6 +1109,11 @@ add_executable(test_coprocessor_clock test_coprocessor_clock.cpp)
 target_link_libraries(test_coprocessor_clock PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_coprocessor_clock)
 
+# Coprocessor board timing: DRAM refresh + write-cycle stretch (issue #70)
+add_executable(test_coprocessor_board_timing test_coprocessor_board_timing.cpp)
+target_link_libraries(test_coprocessor_board_timing PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_coprocessor_board_timing)
+
 # Data-race regression for the debugger entry vectors (meaningful under TSan).
 # Links the 65C02 extension so the coprocessor case drives a real target.
 add_executable(test_debugger_entry_race test_debugger_entry_race.cpp)
