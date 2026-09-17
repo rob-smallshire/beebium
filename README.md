@@ -186,6 +186,7 @@ Beebium is licensed under the [GNU General Public License v3.0](COPYING.txt).
 - **Chris Evans** (@scarybeasts) - Hardware-validated VIA timing data measured on real BBC Master hardware, and CRTC 6845 edge case tests from [beebjit](https://github.com/scarybeasts/beebjit)
 - **Nicola Salmoria and MAME contributors** - Hardware-verified SN76489/SN76496 sound chip behaviors documented in [MAME](https://github.com/mamedev/mame), including LFSR tap positions, noise reset behavior, and chip variant differences
 - **David Banks** (hoglet) - The Tube ULA register 3 FIFO test program from his [Tube ULA Re-Implementation](https://stardot.org.uk/forums/viewtopic.php?t=28080) thread, with measurements of a real Ferranti Tube ULA that Beebium's Tube register behaviour is validated against
+- **James** (acheton1984) - The [Tak benchmark reconstruction](https://github.com/acheton1984/ReTestingTheTak), timed on real BBC Micro and second-processor hardware, which showed Beebium's 6502 Second Processor running fast and now anchors its timing tests; and careful, generous testing of Beebium releases
 - The BBC Micro community at [Stardot](https://stardot.org.uk/)
 
 ## Third-Party Libraries
