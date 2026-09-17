@@ -27,6 +27,8 @@ Requirements:
 
 from __future__ import annotations
 
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -100,6 +102,18 @@ class TestStandardModeDisplayWidth:
         )
 
 
+# Tube scenario tests are skipped on Windows CI: booting a second processor
+# on the slow Windows runners is timing-sensitive and either boots normally
+# or never gets going. Issue #76 tracks diagnosing that; the guard matches
+# test_tube_elite.py, which boots the same disc. Local Windows runs are
+# unaffected (the guard needs CI=true).
+_skip_windows_ci = pytest.mark.skipif(
+    sys.platform == "win32" and os.environ.get("CI") == "true",
+    reason="Tube boot too timing-sensitive for Windows CI runners (issue #76)",
+)
+
+
+@_skip_windows_ci
 class TestEliteDisplayWidth:
     """Elite's 32-column split screen reports 512, not the old hardcoded 640."""
 
