@@ -143,15 +143,35 @@ coprocessor, and the coprocessor discards its time base so that the next
 `run_until` establishes a fresh origin (a hard host reset zeroes the host
 cycle count).
 
-### Bus stretching
+### Writes to a full register
 
-When the host writes to a full R1, R3 or R4 host-to-coprocessor register
-the hardware stretches the host clock until the coprocessor drains it.
-Register 2 is exempt. Reads never stretch: an empty read returns the bus
-latch. Beebium models a write stretch by deferring the write: the ULA
-records it, `Machine::step()` halts the host CPU while ticking the
-peripherals and the coprocessor every cycle, and `try_complete_stretch()`
-replays the write once the register has drained.
+The Tube ULA has no way to stall the host: the host connector carries no
+ready, wait or clock line from the ULA, and a cycle-exact re-implementation
+(hoglet's ReTuLaReMake), a real Ferranti part, and b2/B-Em/MAME all complete
+every write in its own cycle. A write to a register that is already full is
+either ignored or overwrites, per hoglet's measurements
+(see `docs/discussion/tube-ula-full-register-writes.md`):
+
+| Register | Depth | Write when full |
+|----------|-------|-----------------|
+| HP1 (host->coprocessor, R1) | 1 | overwrites |
+| PH1 (coprocessor->host, R1) | 24 | ignored |
+| HP2 / PH2 | 1 / 1 | overwrites / overwrites |
+| HP3 (R3) | 2 | ignored |
+| PH3 (R3) | 2 | ignored |
+| HP4 / PH4 | 1 / 1 | overwrites / overwrites |
+
+R3's FIFO depth is always two; the V flag changes only the status flags, not
+the depth. Reads never block either: a read of an empty register returns the
+opposite side's data bus latch.
+
+Two known simplifications and differences: the empty-read value is the bus
+latch, where a real Ferranti part returns fixed-looking values (0xE4 from the
+coprocessor side, 0x96/0x94 from the host side, and more complex cases in the
+later measurements) -- a follow-up may model these. And Beebium models the
+Ferranti ULA; an AMI part (Master Turbo) shows its own deviations (one PH3 line
+in the R3 test, an unexpected HP1 value, PH1's hdav staying set after the last
+byte is read), recorded here as differences, not selected by any switch.
 
 ### Software protocol and transfer types
 
@@ -235,7 +255,7 @@ ServerMain
 | Component | Header | Role |
 |---|---|---|
 | `TubeSocket` | `beebium/tube/TubeSocket.hpp` | The connector on the host board. Memory-mapped device at `&FEE0`, IRQ source, holder of the installed backend and coprocessor, keeper of host time and the skew bound. |
-| `TubeHostBackend` | `beebium/tube/TubeHostBackend.hpp` | The host-facing bridge interface: `host_read/peek/write`, `hirq`, `stretched`, `try_complete_stretch`, `inspection`, `reset`. An extension installs its bridge as this. |
+| `TubeHostBackend` | `beebium/tube/TubeHostBackend.hpp` | The host-facing bridge interface: `host_read/peek/write`, `hirq`, `inspection`, `reset`. An extension installs its bridge as this. |
 | `TubeCoprocessorBackend` | `beebium/tube/TubeCoprocessorBackend.hpp` | The coprocessor-facing bridge interface: `coprocessor_read/peek/write`, `pirq`, `pnmi_level`, `reset`. |
 | `TubeInspection` | `beebium/tube/TubeInspection.hpp` | Read-only diagnostics a bridge may offer: control flags, both sides' peeks, interrupt lines, transfer counters, the protocol trace. `GetTubeState` reads it. Also holds the flag constants and the counter and trace types. |
 | `TubeUla` | `beebium/tube/TubeUla.hpp` | The Ferranti ULA model: implements all three interfaces above. Verified against the period test vectors. |
@@ -284,10 +304,9 @@ latency leaves it well over half of that.
 coprocessor to `H` only when it has fallen `MAX_COPROCESSOR_SKEW` behind, so
 the coprocessor executes in batches. `TubeSocket::read()` and `write()` run
 it to `H` before touching the ULA, which is what makes accesses exact.
-During a Tube bus stretch the host is halted waiting for the coprocessor,
-so the stretch path runs it every cycle. The coprocessor's clock therefore
-runs continuously whatever the host bus is doing: during Tube stretches,
-during 1MHz bus stretches, and on normal cycles alike.
+The coprocessor's clock runs continuously whatever the host bus is doing:
+during 1MHz bus stretches and on normal cycles alike. (The ULA never stalls
+the host, so there is no Tube stretch path to keep in step.)
 
 Whenever the host stops, at the end of a `run()` chunk, on a breakpoint or
 watchpoint hit, or after a debugger single step (`CpuDebugTarget::finish_step`),
@@ -352,8 +371,7 @@ exported interfaces; it has no compiled-in knowledge of any coprocessor.
 - The ULA's status semantics, bus latch behaviour, sticky R3 flags and
   reset dummy byte are pinned by the period test vectors.
 - The coprocessor never freezes while the host is stretched by a 1MHz
-  device, and a host cycle that completes a Tube stretch advances the
-  coprocessor once; both were defects of the earlier per-cycle model.
+  device; that was a defect of the earlier per-cycle model.
 
 
 ## Tests

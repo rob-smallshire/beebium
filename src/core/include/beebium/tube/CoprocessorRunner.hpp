@@ -95,7 +95,7 @@ public:
     void pause() override;
     void resume() override;
     bool is_paused() const override { return paused_; }
-    void prepare_for_step() override {} // No bus stretching on coprocessor side
+    void prepare_for_step() override {} // Nothing to resync: the coprocessor is never bus-stretched
 
     // Wait until run() has exited after a pause (no-op in single-threaded mode).
     void wait_until_idle() override {}

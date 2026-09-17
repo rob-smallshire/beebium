@@ -275,6 +275,15 @@ still pass. If a test outcome changes, that is a defect in the migration
 or a latent dependency on the frozen-parasite behaviour, and either way it
 is to be understood before merge, not accepted.
 
+**Update (issue #71):** the Tube bus-stretch path has since been removed
+entirely -- the ULA has no way to stall the host, so a write to a full
+register store-or-drops and completes in its own cycle (see
+`docs/discussion/tube-ula-full-register-writes.md`). `Machine::step()` now has
+two paths, the 1MHz bus-stretch cycle and the normal cycle; there is no
+Tube-stretch path and nothing that advances the coprocessor twice for one host
+cycle. The single `run_coprocessor_until` call at the top of `step()` is
+unchanged.
+
 ### `CoprocessorClock` helper
 
 So that every extension does not reimplement the rational arithmetic, core
@@ -933,8 +942,8 @@ whole batch without returning.
   `H` before performing the access, so every host register access is
   exact. Because `host_cycle(H)` runs before the host CPU's tick in the
   same `step()`, the stored `H` is the cycle of the access.
-- During a Tube bus stretch the host is halted waiting for the
-  coprocessor, so the stretch path syncs on every cycle, as today.
+- (Issue #71 removed the Tube bus-stretch path: the ULA cannot stall the
+  host, so there is no stretch cycle to keep in step.)
 - Whenever the host stops, on a breakpoint or watchpoint hit and at the
   end of every `run()` chunk, `Machine` syncs the coprocessor to `H` so
   that a stopped machine presents both processors at the same time to the
