@@ -224,7 +224,7 @@ public:
     // runs the coprocessor to H only once it has fallen a full
     // MAX_COPROCESSOR_SKEW behind -- so the coprocessor runs in batches of up
     // to that many host cycles rather than every cycle (the Step 3 strategy).
-    // Register accesses (read/write above), the Tube-stretch path and every
+    // Register accesses (read/write above) and every
     // host stop sync exactly via run_coprocessor_until(). A host time earlier
     // than the last (a hard reset zeroes cycle_count) syncs immediately so the
     // coprocessor's rebased clock re-establishes its origin here.
