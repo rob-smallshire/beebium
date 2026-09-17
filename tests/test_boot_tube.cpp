@@ -191,7 +191,7 @@ TEST_CASE("Model B with 65C102 4 MHz second processor boots and runs at 2x host"
     auto tube_rom = load_tube_65c102_rom();
     TubeUla* tube = machine.state().memory.tube_socket.tube_ula();
     REQUIRE(tube != nullptr);
-    CoprocessorRunner coprocessor(*tube, tube_rom, ClockRatio{2, 1});
+    CoprocessorRunner coprocessor(*tube, tube_rom, BoardTiming{ClockRatio{2, 1}, 1, 1, 0, 1});
     coprocessor.reset();
     machine.state().memory.tube_socket.install_coprocessor(&coprocessor);
 

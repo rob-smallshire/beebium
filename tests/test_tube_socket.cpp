@@ -40,7 +40,7 @@ public:
     void resume() override { paused = false; }
     bool is_paused() const override { return paused; }
     void reset() override { ++reset_count; }
-    ClockRatio clock_ratio() const override { return ClockRatio{3, 2}; }
+    BoardTiming board_timing() const override { return BoardTiming{ClockRatio{3, 2}, 1, 1, 0, 1}; }
 };
 
 }  // namespace

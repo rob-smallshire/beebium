@@ -59,7 +59,7 @@ public:
     void resume() override {}
     bool is_paused() const override { return false; }
     void reset() override {}
-    ClockRatio clock_ratio() const override { return ClockRatio{1, 1}; }
+    BoardTiming board_timing() const override { return BoardTiming{ClockRatio{1, 1}, 1, 1, 0, 1}; }
 };
 
 class StubBackend : public TubeHostBackend {

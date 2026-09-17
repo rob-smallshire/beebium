@@ -98,7 +98,7 @@ public:
     void resume() override { inner_.resume(); }
     bool is_paused() const override { return inner_.is_paused(); }
     void reset() override { have_prev_ = false; inner_.reset(); }
-    ClockRatio clock_ratio() const override { return inner_.clock_ratio(); }
+    BoardTiming board_timing() const override { return inner_.board_timing(); }
 
     uint64_t access_count() const { return access_count_; }
     uint64_t access_exactness_violations() const { return access_exactness_violations_; }
@@ -143,7 +143,7 @@ public:
     void resume() override {}
     bool is_paused() const override { return false; }
     void reset() override {}
-    ClockRatio clock_ratio() const override { return ClockRatio{3, 2}; }
+    BoardTiming board_timing() const override { return BoardTiming{ClockRatio{3, 2}, 1, 1, 0, 1}; }
 };
 
 // A stub coprocessor whose only behaviour is a callback on each run_until,
@@ -156,7 +156,7 @@ public:
     void resume() override {}
     bool is_paused() const override { return false; }
     void reset() override {}
-    ClockRatio clock_ratio() const override { return ClockRatio{1, 1}; }
+    BoardTiming board_timing() const override { return BoardTiming{ClockRatio{1, 1}, 1, 1, 0, 1}; }
 };
 
 // A coprocessor that counts the cycles it is actually driven for, at a fixed
@@ -170,7 +170,7 @@ public:
     void resume() override {}
     bool is_paused() const override { return false; }
     void reset() override { clock_.rebase(); cycles_ = 0; }
-    ClockRatio clock_ratio() const override { return clock_.ratio(); }
+    BoardTiming board_timing() const override { return BoardTiming{clock_.ratio(), 1, 1, 0, 1}; }
     uint64_t cycles() const { return cycles_; }
 private:
     CoprocessorClock clock_;

@@ -16,11 +16,33 @@
 
 namespace beebium {
 
-// Exact clock ratio: coprocessor cycles per host cycle, as a rational.
-// The 65C02 second processor runs at 3 MHz against a 2 MHz host, so 3/2.
+// Exact clock ratio: units per host cycle, as a rational. For a board whose
+// clock is counted in crystal ticks (see BoardTiming) this is ticks per host
+// cycle -- 12 MHz against a 2 MHz host is 6/1 for the 3 MHz second processor.
 struct ClockRatio {
-    uint32_t numerator;    // coprocessor cycles
+    uint32_t numerator;    // coprocessor ticks (or cycles)
     uint32_t denominator;  // per this many host cycles
+};
+
+// Per-board timing for a 6502-family coprocessor, in crystal ticks (issue #70,
+// docs/discussion/tube-coprocessor-board-timing.md). The board's clock is
+// counted in crystal periods, not CPU cycles, because two effects make a CPU
+// cycle no longer one fixed length: a write cycle is stretched by one tick, and
+// a DRAM refresh steals one cycle at the next opcode fetch periodically.
+//
+//   3 MHz 6502 Second Processor (cheese wedge):  {6,1}, 4, 5, 176, 1
+//   4 MHz 65C102 Co-processor (internal):        {2,1}, 1, 1,  64, 1
+//   256K Turbo:                                  refresh_period_ticks = 0
+//                                                (its refresh is unmeasured)
+//
+// A board with unit ticks and no refresh -- {ratio, 1, 1, 0, 1} -- is exactly a
+// plain CPU-cycle clock at that ratio, with no board effects.
+struct BoardTiming {
+    ClockRatio ticks_per_host_cycle;  // crystal ticks per 2 MHz host cycle
+    uint32_t read_cycle_ticks;        // ticks a read cycle costs
+    uint32_t write_cycle_ticks;       // ticks a write cycle costs (>= read)
+    uint32_t refresh_period_ticks;    // ticks between refreshes; 0 = no refresh
+    uint32_t refresh_hold_cycles;     // cycles the CPU is held for a refresh
 };
 
 // A Tube coprocessor: everything on the far side of the Tube cable, driven
@@ -30,7 +52,7 @@ struct ClockRatio {
 // The host and the coprocessor are independent clock domains that meet only
 // at the Tube ULA registers and its interrupt outputs. The socket drives the
 // coprocessor in host time; the coprocessor converts host time to its own
-// cycles via its ClockRatio (see CoprocessorClock).
+// clock (crystal ticks) via its BoardTiming (see CoprocessorClock).
 class Coprocessor {
 public:
     virtual ~Coprocessor() = default;
@@ -61,8 +83,8 @@ public:
     // count, so host time legitimately goes backwards across a reset.
     virtual void reset() = 0;
 
-    // Exact clock ratio, coprocessor cycles per host cycle.
-    virtual ClockRatio clock_ratio() const = 0;
+    // Per-board timing (crystal ticks per host cycle, cycle costs, refresh).
+    virtual BoardTiming board_timing() const = 0;
 };
 
 }  // namespace beebium

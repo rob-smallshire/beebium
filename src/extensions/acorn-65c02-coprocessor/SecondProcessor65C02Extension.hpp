@@ -50,11 +50,13 @@ namespace beebium {
 
 class SecondProcessor65C02Extension : public CoprocessorExtension {
 public:
-    // clock_ratio: coprocessor/host cycle ratio (3/2 for the 65C02, 2/1 for the
-    // 65C102). cpu_label: short identity for the startup log line.
-    explicit SecondProcessor65C02Extension(ClockRatio clock_ratio = ClockRatio{3, 2},
-                                           std::string cpu_label = "65C02 (3 MHz)")
-        : clock_ratio_(clock_ratio), cpu_label_(std::move(cpu_label)) {}
+    // board_timing: per-board crystal-tick timing (issue #70). The default is
+    // the 3 MHz cheese-wedge second processor; the 65C102 plugin passes its own.
+    // cpu_label: short identity for the startup log line.
+    explicit SecondProcessor65C02Extension(
+            BoardTiming board_timing = BoardTiming{ClockRatio{6, 1}, 4, 5, 176, 1},
+            std::string cpu_label = "65C02 (3 MHz)")
+        : board_timing_(board_timing), cpu_label_(std::move(cpu_label)) {}
     ~SecondProcessor65C02Extension() override { shutdown(); }
 
     // --- PeripheralExtension interface ---
@@ -88,7 +90,7 @@ private:
     // else the "client" ROM declared in the manifest (Extension::load_rom).
     bool load_client_rom(std::array<uint8_t, 4096>& rom) const;
 
-    ClockRatio clock_ratio_;
+    BoardTiming board_timing_;
     std::string cpu_label_;
     std::unique_ptr<TubeUla> tube_ula_;
     std::unique_ptr<CoprocessorRunner> runner_;

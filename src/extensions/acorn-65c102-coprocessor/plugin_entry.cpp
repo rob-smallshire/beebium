@@ -23,8 +23,10 @@
 extern "C" {
 BEEBIUM_PLUGIN_EXPORT
 beebium::Extension* beebium_create_extension(const beebium::ExtensionManifest& manifest) {
+    // 65C102 internal co-processor: 4 MHz (2 ticks per 2 MHz host cycle, one
+    // tick per cycle), DRAM refresh one in 64, and no write-cycle stretch.
     auto* ext = new beebium::SecondProcessor65C02Extension(
-        beebium::ClockRatio{2, 1}, "65C102 (4 MHz)");
+        beebium::BoardTiming{beebium::ClockRatio{2, 1}, 1, 1, 64, 1}, "65C102 (4 MHz)");
     ext->set_manifest(manifest);
     return ext;
 }

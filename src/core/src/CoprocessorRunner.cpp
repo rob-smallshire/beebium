@@ -17,11 +17,12 @@
 namespace beebium {
 
 CoprocessorRunner::CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 4096> rom,
-                               ClockRatio ratio)
+                               BoardTiming timing)
     : tube_port_(backend)
     , memory_(tube_port_, rom)
     , cpu_(memory_, tube_port_)
-    , clock_(ratio)
+    , timing_(timing)
+    , clock_(timing.ticks_per_host_cycle)
 {
     std::copy(rom.begin(), rom.end(), rom_.begin());
 }
@@ -32,16 +33,59 @@ void CoprocessorRunner::reset() {
     // count, so the next run_until() must establish a fresh origin rather than
     // treat the reset as host time running backwards.
     clock_.rebase();
+    // The refresh request flip-flop is cleared by NRST via IC6, and the tick
+    // budget starts empty (docs/discussion/tube-coprocessor-board-timing.md).
+    tick_budget_ = 0;
+    refresh_timer_ = 0;
+    refresh_pending_ = false;
 }
 
 void CoprocessorRunner::run_until(uint64_t host_cycle) {
-    // Advance the clock's record of host time and learn how many coprocessor
-    // cycles have become due. Do this even while paused: the paused interval's
-    // cycles are lost, not deferred, so a resumed coprocessor does not catch up.
-    const uint64_t due = clock_.cycles_due(host_cycle);
+    // Advance the clock's record of host time and learn how many crystal ticks
+    // have become due. Do this even while paused: the paused interval's ticks
+    // are lost, not deferred, so a resumed coprocessor does not catch up.
+    const uint64_t due_ticks = clock_.cycles_due(host_cycle);
     if (paused_) return;
-    for (uint64_t i = 0; i < due; ++i) {
-        step();
+    tick_budget_ += static_cast<int64_t>(due_ticks);
+
+    // Spend the tick budget cycle by cycle. A coprocessor cycle is no longer one
+    // fixed length: a read costs read_cycle_ticks, a write write_cycle_ticks, and
+    // a DRAM refresh holds the CPU for one cycle at the next opcode fetch once the
+    // refresh timer reaches its period. See the design note (issue #70).
+    const bool has_refresh = timing_.refresh_period_ticks != 0;
+    while (true) {
+        // A pending refresh lands on the next opcode fetch (SYNC): consume one
+        // held cycle's worth of ticks, execute nothing, and reload the timer.
+        if (has_refresh && refresh_pending_ && M6502_IsAboutToExecute(&cpu_.cpu())) {
+            const int64_t hold =
+                static_cast<int64_t>(timing_.refresh_hold_cycles) * timing_.read_cycle_ticks;
+            if (tick_budget_ < hold) break;
+            tick_budget_ -= hold;
+            refresh_pending_ = false;
+            refresh_timer_ = 0;  // stall-then-reload on the RAS edge
+            ++refresh_hold_count_;
+            continue;
+        }
+
+        // Only execute a cycle we can afford at least a read for; a write then
+        // overspends by one tick, carried as a deficit into the next run_until.
+        if (tick_budget_ < static_cast<int64_t>(timing_.read_cycle_ticks)) break;
+
+        if (check_breakpoints()) break;  // paused at the breakpoint PC; don't execute it
+        cpu_.tick();
+        const uint32_t cost =
+            cpu_.cpu().read ? timing_.read_cycle_ticks : timing_.write_cycle_ticks;
+        tick_budget_ -= static_cast<int64_t>(cost);
+
+        // The refresh timer counts executing ticks and stalls once it fires,
+        // until the hold clears it, so the interval is period + the wait for SYNC.
+        if (has_refresh && !refresh_pending_) {
+            refresh_timer_ += cost;
+            if (refresh_timer_ >= timing_.refresh_period_ticks) refresh_pending_ = true;
+        }
+
+        check_watchpoints();
+        ++sequence_;
     }
 }
 

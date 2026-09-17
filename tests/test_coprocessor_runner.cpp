@@ -177,7 +177,7 @@ TEST_CASE("CoprocessorRunner run_until matches the old 3:2 accumulator per-call 
     // each step() is exactly one tick.
     TubeUla tube;
     auto rom = make_nop_rom();
-    CoprocessorRunner runner(tube, rom, ClockRatio{3, 2});
+    CoprocessorRunner runner(tube, rom, BoardTiming{ClockRatio{3, 2}, 1, 1, 0, 1});
     runner.run_until(0);   // establish the origin at host time 0
 
     const uint64_t N = 32;
@@ -216,7 +216,7 @@ TEST_CASE("CoprocessorRunner run_until while paused advances time but runs no cy
           "[coprocessor][runner][coprocessor][debug]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    CoprocessorRunner runner(tube, rom, ClockRatio{3, 2});
+    CoprocessorRunner runner(tube, rom, BoardTiming{ClockRatio{3, 2}, 1, 1, 0, 1});
     runner.reset();
 
     runner.run_until(0);   // establish origin at host time 0
@@ -242,7 +242,7 @@ TEST_CASE("CoprocessorRunner reset rebases the clock: a smaller host time is acc
           "[coprocessor][runner][coprocessor]") {
     TubeUla tube;
     auto rom = make_nop_rom();
-    CoprocessorRunner runner(tube, rom, ClockRatio{3, 2});
+    CoprocessorRunner runner(tube, rom, BoardTiming{ClockRatio{3, 2}, 1, 1, 0, 1});
     runner.reset();
 
     // Run well into a session.

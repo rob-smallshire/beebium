@@ -53,12 +53,13 @@ public:
     using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
 
     // Construct with an external coprocessor backend, the 4 KB ROM image (the
-    // 2732 device contents, mapped at &F000-&FFFF), and the clock ratio
-    // (coprocessor cycles per host cycle; 3/2 for the 3 MHz 65C02 second
-    // processor against a 2 MHz host). The caller owns the backend and must keep
-    // it alive for the runner's lifetime.
+    // 2732 device contents, mapped at &F000-&FFFF), and the board timing (see
+    // BoardTiming). The default is a plain 3:2 clock with no board effects
+    // (unit ticks, no refresh) -- the pre-issue-70 behaviour, for callers that
+    // do not model a specific board; the plugins pass their real BoardTiming.
+    // The caller owns the backend and must keep it alive for the runner's life.
     CoprocessorRunner(TubeCoprocessorBackend& backend, std::span<const uint8_t, 4096> rom,
-                   ClockRatio ratio = ClockRatio{3, 2});
+                   BoardTiming timing = BoardTiming{ClockRatio{3, 2}, 1, 1, 0, 1});
     ~CoprocessorRunner() = default;
 
     // Non-copyable (owns M6502 with internal pointers)
@@ -77,8 +78,8 @@ public:
     // nothing; those cycles are lost, not deferred.
     void run_until(uint64_t host_cycle) override;
 
-    // Coprocessor::clock_ratio() -- the coprocessor/host cycle ratio.
-    ClockRatio clock_ratio() const override { return clock_.ratio(); }
+    // Coprocessor::board_timing() -- the board's crystal-tick timing.
+    BoardTiming board_timing() const override { return timing_; }
 
     // Execute for the given number of cycles, or until shutdown.
     // Checks pause state periodically.
@@ -87,8 +88,17 @@ public:
     // Execute one complete instruction. Returns the number of cycles taken.
     uint64_t step_instruction() override;
 
-    // Cycle counter.
+    // Cycle counter (CPU cycles executed; a refresh hold executes none).
     uint64_t cycle_count() const override { return cpu_.cycle_count(); }
+
+    // DRAM refresh holds performed so far (issue #70); for tests and diagnostics.
+    uint64_t refresh_hold_count() const { return refresh_hold_count_; }
+
+    // Unspent host ticks after the last run_until (issue #70). Bounded by one
+    // cycle's cost: the loop stops when it cannot afford a read, and a write
+    // overshoots by at most one tick, so the coprocessor never runs ahead of due
+    // time by more than a cycle. For tests and diagnostics.
+    int64_t tick_budget() const { return tick_budget_; }
 
     // --- Debugger pause/resume ---
 
@@ -194,8 +204,10 @@ public:
 
     // --- Single-cycle step ---
 
-    // One coprocessor cycle. run_until() drives this per due cycle; the live
-    // breakpoint/watchpoint checks happen inside step().
+    // One executed coprocessor CPU cycle (the debugger's cycle step). The live
+    // breakpoint/watchpoint checks happen inside step(). This does NOT apply the
+    // board-timing tick budget or refresh holds -- those are host-time-driven
+    // and live in run_until(); a debugger cycle step is a raw CPU cycle.
     void tick() { step(); }
 
     void step() override;
@@ -278,8 +290,19 @@ private:
     CoprocessorMemoryMap memory_;
     CoprocessorCpu cpu_;
 
-    // Host-time to coprocessor-cycle conversion for the fixed clock ratio.
+    // Board timing (crystal-tick cycle costs, refresh) and the host-time to
+    // crystal-tick conversion for the board's ticks-per-host-cycle ratio.
+    BoardTiming timing_;
     CoprocessorClock clock_;
+
+    // Board-timing execution state, all in crystal ticks (issue #70). run_until()
+    // adds due ticks to the budget and spends read/write ticks per executed cycle;
+    // a DRAM refresh holds the CPU for one cycle at the next opcode fetch once the
+    // timer reaches the period. Reset by reset(). cycle_count() stays CPU cycles.
+    int64_t tick_budget_ = 0;      // unspent host ticks; may briefly go negative
+    uint64_t refresh_timer_ = 0;   // ticks since the last refresh (0 = no refresh board)
+    bool refresh_pending_ = false; // a refresh is waiting for the next SYNC
+    uint64_t refresh_hold_count_ = 0;  // refresh holds performed (diagnostic)
 
     // ROM image (kept for reset). The full 4 KB 2732 device contents.
     std::array<uint8_t, 4096> rom_;

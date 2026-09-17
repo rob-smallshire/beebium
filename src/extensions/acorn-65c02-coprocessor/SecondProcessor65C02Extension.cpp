@@ -32,10 +32,10 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
             "SecondProcessor65C02Extension: failed to load Tube client ROM");
     }
 
-    // Create components. The clock ratio (3/2 for the 65C02, 2/1 for the
-    // 65C102) lives with the runner as its CoprocessorClock, not with the socket.
+    // Create components. The board timing (crystal-tick ratio, cycle costs and
+    // DRAM refresh; issue #70) lives with the runner, not with the socket.
     tube_ula_ = std::make_unique<TubeUla>();
-    runner_ = std::make_unique<CoprocessorRunner>(*tube_ula_, rom, clock_ratio_);
+    runner_ = std::make_unique<CoprocessorRunner>(*tube_ula_, rom, board_timing_);
     runner_->reset();
 
     // Install the TubeUla as the host-side backend.
