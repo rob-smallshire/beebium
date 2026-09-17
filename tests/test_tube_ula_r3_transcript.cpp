@@ -28,9 +28,7 @@
 // is verified by the transcript itself: on the third write of the "W W W"
 // pattern the R3 H-to-P FIFO already holds two bytes, so the write is ignored;
 // the two earlier bytes read back and the register is then empty, and the 0x66
-// never appears. (Before issue #71 was fixed this write raised a bus stretch;
-// that model has been removed, so there is no stretched() flag to probe -- the
-// dropped-write behaviour is now read straight from the FIFO.)
+// never appears.
 //
 // Two reads are deliberately NOT checked for their value, per section 3 of the
 // design note:

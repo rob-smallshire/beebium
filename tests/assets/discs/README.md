@@ -12,3 +12,7 @@ Needs a 6502 second processor (`--tube-65c02`). Catalogue:
 `$.R3TEST` (`CHAIN "R3TEST"`, hoglet's R3 FIFO test) and `$.ULA` (his
 follow-up R1/R2/R4 FIFO test). Used by the scenario test that reproduces
 issue #71 (a host write to a full Tube R3 register stalls the host).
+
+hoglet published this program on that thread as a test case for emulator and
+Tube ULA implementers, inviting others to run it against their implementations;
+it is included here in that spirit. (Redistribution remains the author's call.)

@@ -10,36 +10,24 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Scenario reproduction of issue #71 on the real 6502 second processor.
+"""Scenario guard for issue #71 on the real 6502 second processor.
 
 hoglet's tube_r3_tests program (CHAIN "R3TEST" on tube_r3_tests.ssd) drives the
-Tube ULA register 3 FIFO from both sides in four sections: PH3 and HP3, each in
-one-byte and two-byte mode. On a genuine Ferranti Tube ULA a host write to a
-full R3 register is ignored and completes; Beebium instead stalls the host CPU
-on a bus stretch (issue #71). Because the coprocessor is waiting for the host to
-finish that write, neither side proceeds and the program deadlocks.
+Tube ULA register 3 FIFO from both sides in four sections -- PH3 and HP3, each
+in one-byte and two-byte mode -- and returns to BASIC. A host write to a full R3
+register is ignored and completes, so the program runs to the end.
 
-The program runs the sections in order:
-
-    1. PH3 one-byte  (Type 0)  -- host reads only; completes
-    2. HP3 one-byte  (Type 1)  -- host writes; HANGS on the third write of the
-                                  "W W W" pattern (host writes 44, 55, then 66)
-    3. PH3 two-byte  (Type 2)  -- never reached today
-    4. HP3 two-byte  (Type 3)  -- never reached today
-
-So today the program stops in section 2, exactly as acheton1984 reported, with
-the screen showing the HP3 one-byte banner and ending at "host write data=55".
-It never prints a "Two Byte Mode" banner.
-
-This test is EXPECTED TO FAIL until #71 is fixed: it CHAINs the program and
-waits (with a bounded emulated-time budget, so a stalled run cannot hang CI) for
-a "Two Byte Mode" banner that only appears once the machine gets past the HP3
-one-byte stall. On failure it prints the screen at the hang, for the record.
+The interesting case is section 2 (HP3 one-byte): the "W W W" pattern writes a
+third byte into an already-full R3. On the real ULA that write is dropped and
+the host carries on. Beebium once modelled it as a bus stretch, which halted the
+host against the waiting coprocessor and deadlocked the pair (issue #71, fixed by
+removing the stall). This test guards that regression: it runs hoglet's disc and
+checks the program reaches the BASIC prompt and that BASIC still processes input.
 
 The exact register-level transcript (all four sections, line for line) is pinned
 by the deterministic C++ golden test tests/test_tube_ula_r3_transcript.cpp; this
-scenario test proves the integrated host + coprocessor no longer deadlocks on the
-reporter's actual disc.
+scenario test proves the integrated host + coprocessor run the reporter's actual
+disc to completion without deadlocking.
 """
 
 from __future__ import annotations
@@ -148,38 +136,59 @@ def bbc_tube(
         pytest.skip(str(e))
 
 
+def _back_at_prompt(bbc) -> bool:
+    """True when the program has ended and BASIC is showing its prompt.
+
+    The R3 program fills the screen with status/write/read lines while it runs;
+    the bare ">" prompt reappears as the last non-empty row only once it ends
+    (the boot prompt has long since scrolled off). This is the program's own
+    completion output, polled between step chunks -- not a fixed-time sleep.
+    """
+    rows = [row.rstrip() for row in read_mode7_screen(bbc)]
+    non_empty = [row for row in rows if row]
+    return bool(non_empty) and non_empty[-1] == ">"
+
+
 @_skip_windows_ci
 class TestTubeR3TranscriptScenario:
-    """Reproduce issue #71 with hoglet's actual R3 test disc over the Tube."""
+    """Guard the integrated Tube against the issue #71 deadlock, on hoglet's disc."""
 
     def test_program_runs_to_completion_without_deadlock(
         self, bbc_tube: Beebium, r3_disc_filepath: Path
     ) -> None:
-        """The R3 test program must run all four sections and return to BASIC.
+        """The R3 test program runs all four sections and returns to BASIC.
 
-        Before issue #71 was fixed the third host write of the "W W W" pattern
-        stalled the host, the coprocessor never got its reply, and the program
-        deadlocked in the HP3 one-byte section (the screen froze at "host write
-        data=55"). With the stall removed the program completes and BASIC
-        regains control.
+        The third host write of the "W W W" pattern writes into a full R3; the
+        ULA drops it and the host carries on. (A regression that re-introduced
+        the bus stretch would deadlock the host against the waiting coprocessor
+        in the HP3 one-byte section, freezing the screen at "host write data=55".)
 
-        That control is checked with a sentinel: after CHAINing the program the
-        test runs a bounded emulated-time budget (so a regression that
-        re-introduces the deadlock times out cleanly rather than hanging), then
-        types a PRINT of a unique token. The token only reaches the screen if
-        BASIC is back at the prompt -- i.e. the host is not stalled. A deadlocked
-        host cannot process the keypress, so the token never appears.
+        Polls, within a bounded emulated-time budget, for the program's own
+        completion output -- the BASIC prompt returning -- so a deadlock times
+        out cleanly rather than hanging. Then types a PRINT of a unique token to
+        confirm BASIC actually processes input: a live host echoes it, a stalled
+        host never would.
         """
         bbc_tube.disc.drive(0).insert(r3_disc_filepath)
         bbc_tube.keyboard.type('CHAIN "R3TEST"\r')
 
-        # Give the whole program time to run (it completes well within this on a
-        # working build; a deadlocked build simply burns the bounded budget).
-        _step_until_or_timeout(
-            bbc_tube, lambda: False, emulated_seconds=60.0, chunk_seconds=1.0
+        # Poll for the program to finish and BASIC to return to the prompt.
+        finished = _step_until_or_timeout(
+            bbc_tube, lambda: _back_at_prompt(bbc_tube),
+            emulated_seconds=60.0, chunk_seconds=0.5,
         )
+        if not finished:
+            rows = read_mode7_screen(bbc_tube)
+            print("\nScreen (issue #71 -- a deadlocked build freezes at 'host write data=55'):")
+            for i, row in enumerate(rows):
+                print(f"Row {i:2d}: [{row}]")
+            dump_diagnostics(bbc_tube)
+            assert finished, (
+                "BASIC did not return to its prompt after CHAIN \"R3TEST\": the host "
+                "stalled on a write to a full Tube R3 register (issue #71)."
+            )
 
-        # If the host is alive, BASIC is at the prompt and runs this.
+        # BASIC is back; confirm it still processes input (the host is truly alive).
         bbc_tube.keyboard.type('PRINT "TUBE71DONE"\r')
         completed = _step_until_or_timeout(
             bbc_tube,
@@ -190,12 +199,12 @@ class TestTubeR3TranscriptScenario:
 
         if not completed:
             rows = read_mode7_screen(bbc_tube)
-            print("\nScreen (issue #71 -- a deadlocked build freezes at 'host write data=55'):")
+            print("\nScreen (BASIC did not run the sentinel PRINT):")
             for i, row in enumerate(rows):
                 print(f"Row {i:2d}: [{row}]")
             dump_diagnostics(bbc_tube)
 
         assert completed, (
-            "BASIC did not regain control after CHAIN \"R3TEST\": the host stalled "
-            "on a write to a full Tube R3 register (issue #71). See the screen dump."
+            "The program reached the BASIC prompt but BASIC did not run the typed "
+            "PRINT, so the host is not processing input. See the screen dump."
         )

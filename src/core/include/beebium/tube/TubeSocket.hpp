@@ -131,10 +131,10 @@ public:
             register_access_observer_(host_time_,
                                       static_cast<uint8_t>(offset), /*is_write=*/false);
         }
-        // Reads complete immediately. The Tube ULA does not generate
-        // read-side bus stretches: an empty R3 P-to-H returns stale
-        // latch data, matching real hardware (and B2, BeebEm, jsbeeb,
-        // and B-Em). Only writes to full registers can stretch.
+        // Every access completes in its own cycle: the Tube ULA has no way to
+        // stall the host (issue #71). A read of an empty register returns the
+        // opposite side's data bus latch, as on the real hardware (and B2,
+        // BeebEm, jsbeeb, B-Em).
         return active_backend()->host_read(static_cast<uint8_t>(offset));
     }
 
