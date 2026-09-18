@@ -19,6 +19,24 @@ struct AudioSourceInfo: Identifiable {
     let name: String
     let channelNames: [String]
     let groupId: UInt32
+
+    /// The channels of every source in `groupId`, concatenated in source-index
+    /// order, as (mixer channel index, channel name) pairs.
+    ///
+    /// A group may span several sources: the SN76489 is two sources (index 0 =
+    /// "1","2", index 1 = "3","0") in one group. The running position is the
+    /// mixer channel index (0..3 = tone0, tone1, tone2, noise), which matches the
+    /// order AudioRenderer unpacks and the indices AudioMixerState, meters, pan
+    /// and mute-solo use, so slider N controls the channel labelled N.
+    static func channelsInGroup(_ sources: [AudioSourceInfo],
+                                groupId: UInt32) -> [(Int, String)] {
+        sources
+            .filter { $0.groupId == groupId }
+            .sorted { $0.id < $1.id }
+            .flatMap { $0.channelNames }
+            .enumerated()
+            .map { ($0.offset, $0.element) }
+    }
 }
 
 /// Channel group information for UI organization

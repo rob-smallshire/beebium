@@ -130,13 +130,9 @@ struct AudioMixerView: View {
     }
 
     private func channelsInGroup(_ groupId: UInt32) -> [(Int, String)] {
-        // For SN76489, all 4 channels are in group 1 (Internal Sound)
-        // Find the source that belongs to this group
-        guard let source = audioClient.sources.first(where: { $0.groupId == groupId }) else {
-            return []
-        }
-
-        return source.channelNames.enumerated().map { ($0, $1) }
+        // A group may span several sources (the SN76489 is two); list all of
+        // their channels, concatenated in source-index order.
+        AudioSourceInfo.channelsInGroup(audioClient.sources, groupId: groupId)
     }
 
     private func channelRow(index: Int, name: String) -> some View {

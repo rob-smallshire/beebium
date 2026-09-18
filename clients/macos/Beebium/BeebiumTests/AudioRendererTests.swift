@@ -63,4 +63,33 @@ final class AudioRendererTests: XCTestCase {
         // The pipeline should produce real signal, not silence.
         XCTAssertGreaterThan(peak, 0.1)
     }
+
+    // MARK: - Mixer channel listing
+
+    // The SN76489 is described as two sources sharing one group; the mixer must
+    // list the channels of every source in the group, concatenated in
+    // source-index order, so the running position is the mixer channel index
+    // (0..3 = tone0, tone1, tone2, noise). Reserved sources sit in another group.
+    func testChannelsInGroupConcatenatesSourcesInIndexOrder() {
+        // Deliberately out of source-index order to prove the function sorts.
+        let sources = [
+            AudioSourceInfo(id: 1, name: "SN76489", channelNames: ["3", "0"], groupId: 1),
+            AudioSourceInfo(id: 3, name: "Reserved", channelNames: [], groupId: 0),
+            AudioSourceInfo(id: 0, name: "SN76489", channelNames: ["1", "2"], groupId: 1),
+        ]
+
+        let channels = AudioSourceInfo.channelsInGroup(sources, groupId: 1)
+
+        XCTAssertEqual(channels.map { $0.0 }, [0, 1, 2, 3])
+        XCTAssertEqual(channels.map { $0.1 }, ["1", "2", "3", "0"])
+    }
+
+    func testChannelsInUnknownGroupIsEmpty() {
+        let sources = [
+            AudioSourceInfo(id: 0, name: "SN76489", channelNames: ["1", "2"], groupId: 1),
+            AudioSourceInfo(id: 1, name: "SN76489", channelNames: ["3", "0"], groupId: 1),
+        ]
+
+        XCTAssertTrue(AudioSourceInfo.channelsInGroup(sources, groupId: 99).isEmpty)
+    }
 }
