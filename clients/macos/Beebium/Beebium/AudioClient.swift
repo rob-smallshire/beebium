@@ -27,8 +27,10 @@ struct AudioSourceInfo: Identifiable {
     /// "1","2", index 1 = "3","0") in one group. Each channel's mixer index comes
     /// from concatenating the group's sources in source-index order (0..3 =
     /// tone0, tone1, tone2, noise), which matches the order AudioRenderer unpacks
-    /// and the indices AudioMixerState, meters, pan and mute-solo use, so the row
-    /// labelled N controls and meters mixer channel N regardless of its position.
+    /// and the indices AudioMixerState, meters, pan and mute-solo use. Each row
+    /// keeps its mixer channel index paired with its name whatever its display
+    /// position, so it controls and meters that channel (the row labelled "0" is
+    /// mixer channel 3, noise).
     ///
     /// Rows are then displayed ordered by channel name compared numerically when
     /// every name in the group parses as an integer (so "10" follows "2"); if any
