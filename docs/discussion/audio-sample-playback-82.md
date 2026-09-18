@@ -9,6 +9,26 @@ and records the before/after.
 
 ## Phase 2 summary (fixes landed)
 
+### Paradroid in Beebium (headline)
+
+The issue's headline disc, `play_paradroid.ssd`, runs in Beebium and its audio
+is clean. A 30 s capture of the stock SHIFT+BREAK boot (fresh disc copy, fresh
+work directory), analysed at the raw 48 kHz server output:
+
+- Out-of-band energy above 7.5 kHz is **0.00%**: no aliased carrier, no grit.
+- The loudest spectral lines are music -- **70, 117 and 521 Hz** -- not an
+  ultrasonic carrier.
+- Against the beebjit render of the same disc, the audible-band (0.1-8 kHz)
+  log-spectra correlate at **0.848**; spectral centroids are 357 Hz (beebjit) and
+  480 Hz (Beebium), a level/voicing difference, not a defect.
+
+Regenerate the WAV with::
+
+    uv run --project clients/beebium-python-client \
+        python tools/audio-analysis/capture_disc.py \
+        --disc <path>/play_paradroid.ssd --seconds 30 \
+        --out-dirpath <scratch>/wav
+
 The SN76489 output stage was rebuilt: the emitted per-channel sample is now
 **unipolar** (silence 0, louder = higher, so the mean carries the sampled
 baseband), the 250 kHz stream is **anti-alias low-passed and fractionally
@@ -33,9 +53,9 @@ to the actual music (521 Hz and its neighbours).
 
 ### beebjit oracle
 
-beebjit (the sample player's own emulator, which plays `play_paradroid.ssd`) was built headless for arm64 with a local WAV sound
-backend (kept outside both repos) and run with `-accurate` for synchronous,
-deterministic audio.
+beebjit (the sample player's own emulator) is built headless for arm64 with a
+local WAV sound backend (kept outside both repos) and run with `-accurate` for
+synchronous, deterministic audio.
 
 - `ReetPetite.ssd` in both: beebjit and Beebium both render it clean --
   out-of-band (>7.5 kHz) 0.02% each, loudest lines the music. Their averaged
@@ -43,10 +63,10 @@ deterministic audio.
   match-SNR is not meaningful: the two emulators boot and phase the player
   differently, so they do not sample-align over the clip (correlation ~0); the
   spectral agreement is the confirmation.
-- `play_paradroid.ssd` in beebjit (Beebium cannot run it): out-of-band 0.01%,
-  loudest lines the music (~123, 521 Hz). This is the reference for what the
-  headline material should sound like; it matches the clean character Beebium
-  now produces on running material.
+- `play_paradroid.ssd` in both: beebjit renders it clean (out-of-band 0.01%,
+  loudest lines the music at ~123, 521 Hz), and Beebium now does too (out-of-band
+  0.00%, music at 70/117/521 Hz). Their audible-band log-spectra correlate at
+  **0.848** -- the same spectral-agreement confirmation as ReetPetite.
 - beebjit's defaults are its own choices, not a Beebium target: a 7.2 kHz filter
   cutoff (the same value Beebium adopted), positive-silence off (zero-mean
   output) and a quarter-full-scale per-channel gain. These shift absolute levels
@@ -105,64 +125,42 @@ asks for) has no filtering at all.
 
 ### Which discs actually run (issue material sanity check)
 
-The issue's headline disc, `play_paradroid.ssd`, does **not** run under our only
-FDC (WD1770) with DFS 2.26: its BASIC loader `*LOAD`s ADVTAB (1536 bytes) to
-&1300, which overruns filing-system workspace (&1100-&18FF) below PAGE (&1900),
-so later `*LOAD`s corrupt and the player never starts. Booted, the CPU sits in
-the BASIC ROM, the loader's zero-page pokes are never written, and two sample
-files load as zeros. This is a disc/filing-system compatibility matter (the disc
-was authored on an 8271 machine, whose workspace layout differs; we have no
-8271), the same family as Flip! (#85/#86, tracked by #87), not an audio defect.
-An earlier "Paradroid capture" in this note's history was therefore a recording
-of a dead player with stale registers; those numbers are struck and the real
-material used here is a disc that genuinely runs.
+Verified with the isolated methodology (a fresh copy of the disc and a fresh,
+empty disc work directory per run, with the mounted image hashed before and
+after -- see "A rig artefact" below for why):
 
-Sanity-checked via the debugger (PC location, SN write activity, parked
-divider):
+| Disc | Machine | Runs? | Notes |
+|------|---------|-------|-------|
+| `play_paradroid.ssd` | model-b | yes | stock SHIFT+BREAK boot reaches the &40 player loop; all files load and the pokes are made |
+| `ReetPetite.ssd` | model-b | yes | PC in the player loop (<&0900); ~21,600 distinct SN writes/s; tone divider parked at 4 |
 
-| Disc | Machine | Runs? | Symptom / parameters |
-|------|---------|-------|----------------------|
-| `ReetPetite.ssd` | model-b | yes | PC in the player loop (<&0900); ~21,600 distinct SN writes/s; values 0x9x/0xBx/0xDx (3-channel volume modulation, gate held open); tone divider parked at 4 |
-| `play_paradroid.ssd` | model-b | no | loader corrupts FS workspace (above); PC in BASIC ROM, registers at reset defaults |
-| `dizzy.ssd` | model-b | no | PC 100% in MOS; no SN writes; divider at cold-boot default |
-| `Speech.dsd` | romram | no | PC 100% in MOS; no SN writes |
-| `tyb-enjoy.ssd` | romram | no | PC in BASIC/MOS; no SN writes |
+`dizzy.ssd`, `Speech.dsd` and `tyb-enjoy.ssd` were assessed only on the earlier,
+contaminated rig; they are not re-verified here and their status is unknown.
 
-`ReetPetite.ssd` is real-material fixture #1. `play_paradroid.ssd` is revisited
-at the oracle stage, where beebjit (which models the 8271) plays it.
+### A rig artefact, recorded so it is not repeated
 
-DFS 2.26's "8271 compatibility" boot (Z held across Break) was tried on
-Paradroid and makes no difference: SHIFT+Z+BREAK gives an outcome identical to a
-plain SHIFT+BREAK -- the same nine files load (all but GUITAR, the last
-`*LOAD`), the loader never reaches its pokes, and the player never starts;
-CTRL+SHIFT+Z+BREAK hard-resets to a blank MOS. So Beebium's DFS 2.26 shows no
-observable difference from a plain Break for this disc, and Paradroid still does
-not run.
+Earlier revisions of this note claimed `play_paradroid.ssd` did not run in
+Beebium and drew two successive conclusions from that -- first that the disc was
+8271-only and needed a filing system Beebium lacks, then that Beebium's
+WD1770/DFS path had a defect (an independent MAME check appeared to show the disc
+playing on MAME's WD1770 but not Beebium's). Both conclusions are wrong.
 
-### Correction: Paradroid is a Beebium WD1770 defect, not an incompatible disc
+The cause is a damaged working copy of the disc. The captures reused one
+`BEEBIUM_DISC_WORK_DIR` across many runs; the per-user copy-on-write image in it
+became corrupted -- the final sample file, GUITAR, read back as zero, so the
+player never started -- and every later run inherited the damage, while MAME read
+the pristine image directly and therefore played. On a fresh build, a fresh copy
+of the disc and a fresh empty work directory, `*LOAD GUITAR 2900` returns the
+file byte-for-byte and the stock boot plays (the headline at the top of this
+note).
 
-An independent-emulator split check (MAME 0.289 via `oracle/mame/`) refutes the
-"8271-only disc" reading above. Paradroid, booted the same way (`*EXEC !BOOT`,
-option 3):
-
-| Emulator | FDC | DFS | GUITAR (&2900) loaded? | Player running (PC in &40 loop)? |
-|----------|-----|-----|------------------------|----------------------------------|
-| MAME | 8271 | DNFS 1.20 | yes | yes (PC 0x0057) |
-| MAME | WD1770 | 2.23 | yes | yes (PC 0x005F) |
-| Beebium | WD1770 | 2.26 | no | no |
-| Beebium | WD1770 | 2.23 | no | no |
-
-Beebium's DFS 2.26 is byte-identical (SHA-1 `cf2ebc42...`) to MAME's, and with
-DFS 2.23 and the same `*EXEC` boot MAME's WD1770 plays the disc while Beebium's
-does not. Same disc, same DFS, same boot: the difference is the emulator, so
-**Beebium's WD1770/DFS path has a real defect** -- it is not that the disc needs
-an 8271. The coarsest divergence: every file up to and including BRIGHT loads on
-both, but GUITAR (the final `*LOAD`) loads on MAME and stays zero on Beebium,
-after which the loader's zero-page pokes and `*RUN PLAY` never execute. This is
-consistent with the loader being fed from an open `*EXEC` channel whose buffer
-in the &1100-&18FF filing-system workspace is disturbed by the loads; MAME
-survives it and Beebium does not. Not chased further here; it is a WD1770/DFS
-bug for its own issue (bears on #85/#86/#87), separate from the audio work.
+The origin of the damage is not established: the corrupted copy no longer exists,
+so it cannot be inspected. The DFS 2.26 "8271 compatibility" Z-Break boot was
+tried and made no observable difference from a plain Break, but that was measured
+on the damaged copy and is therefore uninformative. To stop this recurring,
+`capture_disc.py` now copies the disc fresh and uses a fresh work directory per
+run, and hashes the mounted image before and after so a write-back is caught
+rather than silently trusted.
 
 ## The five questions
 
@@ -334,10 +332,6 @@ The limiter is now a unit-tested pure function (`AudioRenderer.softLimit`).
   `sound_advance_sn_timing`). Beebium models neither the two-edge cadence nor the
   corruption. This did not block ReetPetite (its writes are stable volume-latch
   bytes), so it is noted and deferred, not fixed here.
-- **Paradroid in Beebium** waits on #88: `*LOAD GUITAR 2900` transfers nothing
-  in Beebium although the same command works on MAME's WD1770, so the disc is
-  sound and the defect is in Beebium's disc path. Once that is fixed, capture
-  Paradroid here and compare it with the beebjit render recorded above.
 - **Register-write trace against beebjit** was not made; the spectral agreement
   on ReetPetite made it unnecessary for the output-stage fixes. It becomes
   relevant only if the bus-cadence item above is taken up.
@@ -351,8 +345,9 @@ c++ -std=c++20 -O2 -I src/core/include -I tests \
     src/core/src/Sn76489.cpp -o <scratch>/sn76489_baseband_experiment
 <scratch>/sn76489_baseband_experiment <scratch>/wav
 
-# Capture real material (real-time; needs a freshly built beebium-model-b)
-export BEEBIUM_DISC_WORK_DIR=<scratch>/discwork
+# Capture real material (real-time; needs a freshly built beebium-model-b).
+# capture_disc.py copies the disc and uses a fresh work directory per run,
+# and hashes the mounted image before and after, so no manual isolation is needed.
 uv run --project clients/beebium-python-client \
     python tools/audio-analysis/capture_disc.py \
     --disc ~/Code/beebjit/test/sound/ReetPetite.ssd \
