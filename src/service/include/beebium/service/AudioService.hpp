@@ -66,7 +66,6 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
 
     size_t chunk_size = request->chunk_size() > 0 ? request->chunk_size() : DEFAULT_CHUNK_SIZE;
     std::vector<AudioSample> samples(chunk_size);
-    uint64_t sequence = 0;
 
     while (!context->IsCancelled()) {
         // Check if audio buffer is available
@@ -81,9 +80,13 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
             size_t count = audio_buffer.read(samples.data(), chunk_size);
 
             AudioChunk chunk;
-            chunk.set_sequence(sequence++);
+            // sequence is the produced index of this chunk's first sample (it
+            // counts dropped samples too), so a consumer that sees it jump by
+            // more than the previous chunk's sample_count has detected a drop.
+            // cycle_count carries the total generated so far as a cross-check.
+            chunk.set_sequence(audio_buffer.last_read_index());
             chunk.set_sample_count(static_cast<uint32_t>(count));
-            chunk.set_cycle_count(0);  // Reserved for future use
+            chunk.set_cycle_count(audio_buffer.produced());
 
             // Pack samples into bytes: each sample is N × 32-bit fields
             // For now, just source 0 (SN76489) is active

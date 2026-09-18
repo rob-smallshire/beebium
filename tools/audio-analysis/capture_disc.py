@@ -94,13 +94,21 @@ class _AudioRecorder:
     def total_samples(self) -> int:
         return sum(self._sample_counts)
 
-    def chunk_index_gaps(self) -> int:
-        """Non-consecutive chunk indices (should be zero; index is not sample-based)."""
-        gaps = 0
-        for prev, cur in zip(self._chunk_indices, self._chunk_indices[1:]):
-            if cur != prev + 1:
-                gaps += 1
-        return gaps
+    def dropped_samples(self) -> int:
+        """Samples dropped, detected from the produced-index sequence.
+
+        Each chunk's ``sequence`` is the produced index of its first sample
+        (counting dropped samples). If it jumps beyond the previous chunk's
+        first index plus that chunk's length, the shortfall was dropped.
+        """
+        dropped = 0
+        for (prev_seq, prev_count), cur_seq in zip(
+            zip(self._chunk_indices, self._sample_counts), self._chunk_indices[1:]
+        ):
+            expected = prev_seq + prev_count
+            if cur_seq > expected:
+                dropped += cur_seq - expected
+        return dropped
 
     def channels(self) -> tuple[list[int], list[int], list[int], list[int], list[int]]:
         """Return (mix, tone0, tone1, tone2, noise) as 16-bit signed sample lists.
@@ -193,16 +201,11 @@ def main() -> None:
     _write_mono_wav(os.path.join(args.out_dirpath, f"{name}_noise.wav"), nz, sample_rate)
 
     received = recorder.total_samples
-    expected = int(wall_elapsed * sample_rate)
-    shortfall = expected - received
+    dropped = recorder.dropped_samples()
     print(f"recorded {received} samples ({received / sample_rate:.2f}s) over "
-          f"{wall_elapsed:.2f}s wall clock")
-    print(f"expected ~{expected} samples at {sample_rate} Hz; "
-          f"shortfall {shortfall} ({shortfall / max(expected,1) * 100:+.2f}%) "
-          f"-- a large shortfall implies silently dropped samples")
-    print(f"chunk-index gaps: {recorder.chunk_index_gaps()} "
-          f"(note: chunk.sequence is a chunk counter, not a sample count, so it "
-          f"cannot reveal dropped samples)")
+          f"{wall_elapsed:.2f}s wall clock at speed x{args.speed:g}")
+    print(f"dropped samples (from the produced-index sequence): {dropped}"
+          + ("" if dropped == 0 else " -- capture is NOT drop-free"))
     print(f"wrote {name}_mix.wav and per-channel WAVs to {args.out_dirpath}/")
 
 

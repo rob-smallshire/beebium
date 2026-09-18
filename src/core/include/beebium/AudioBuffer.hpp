@@ -15,6 +15,7 @@
 #include "OutputQueue.hpp"
 #include <cstdint>
 #include <cstddef>
+#include <vector>
 
 namespace beebium {
 
@@ -80,26 +81,41 @@ public:
     static constexpr size_t DEFAULT_CAPACITY = 48000;  // 1 second @ 48 kHz
 
     explicit AudioBuffer(size_t capacity = DEFAULT_CAPACITY)
-        : queue_(capacity), sequence_(0) {}
+        : queue_(capacity), sequence_(0), produced_(0), consumed_(0),
+          last_read_index_(0), gen_ring_(capacity + 1) {}
 
     // --- Producer interface (core thread) ---
 
-    // Push a single sample (returns false if buffer full)
+    // Push a single sample (returns false if buffer full).
+    //
+    // `produced_` counts every generated sample, whether kept or dropped, so it
+    // is the sample's index in the full produced stream. Each kept sample's
+    // produced index is recorded in a parallel ring; because drops only occur at
+    // the tail when the buffer is full, that index is the only way the consumer
+    // can see the gap a drop leaves.
     bool push(const AudioSample& sample) {
         if (queue_.push(sample)) {
+            gen_ring_[sequence_ % gen_ring_.size()] = produced_;
             sequence_++;
+            produced_++;
             return true;
         }
+        produced_++;  // dropped: counted, but not delivered
         return false;
     }
 
     // Get producer buffer for batch writes
     auto get_producer_buffer() { return queue_.get_producer_buffer(); }
 
-    // Commit n samples (after writing to producer buffer)
+    // Commit n samples (after writing to producer buffer). The batch path
+    // reserves space first, so these are never dropped.
     void produce(size_t n) {
         queue_.produce(n);
+        for (size_t i = 0; i < n; ++i) {
+            gen_ring_[(sequence_ + i) % gen_ring_.size()] = produced_ + i;
+        }
         sequence_ += n;
+        produced_ += n;
     }
 
     // --- Consumer interface (gRPC thread) ---
@@ -110,6 +126,12 @@ public:
         auto bufs = queue_.get_consumer_buffer();
         size_t available = bufs.total();
         size_t to_read = (available < max_count) ? available : max_count;
+
+        // Produced index of the first sample this read returns, captured before
+        // the consume cursor advances.
+        if (to_read > 0) {
+            last_read_index_ = gen_ring_[consumed_ % gen_ring_.size()];
+        }
 
         size_t read_count = 0;
 
@@ -132,6 +154,7 @@ public:
         }
 
         queue_.consume(read_count);
+        consumed_ += read_count;
         return read_count;
     }
 
@@ -142,14 +165,30 @@ public:
     bool empty() const { return queue_.empty(); }
     uint64_t sequence() const { return sequence_; }
 
+    // Total samples generated, including any dropped when the buffer was full.
+    uint64_t produced() const { return produced_; }
+    // Total samples dropped because the buffer was full.
+    uint64_t dropped() const { return produced_ - sequence_; }
+    // Produced index of the first sample returned by the most recent read(). A
+    // consumer that sees this jump by more than the previous chunk's length has
+    // detected dropped samples.
+    uint64_t last_read_index() const { return last_read_index_; }
+
     void reset() {
         queue_.reset();
         sequence_ = 0;
+        produced_ = 0;
+        consumed_ = 0;
+        last_read_index_ = 0;
     }
 
 private:
     OutputQueue<AudioSample> queue_;
-    uint64_t sequence_;  // Total samples produced (for drop detection)
+    uint64_t sequence_;         // Total samples kept (successfully pushed)
+    uint64_t produced_;         // Total samples generated (kept + dropped)
+    uint64_t consumed_;         // Total samples read out
+    uint64_t last_read_index_;  // Produced index of the last read()'s first sample
+    std::vector<uint64_t> gen_ring_;  // Per-kept-sample produced index
 };
 
 } // namespace beebium

@@ -759,6 +759,11 @@ add_executable(test_sn76489_sample_playback test_sn76489_sample_playback.cpp)
 target_link_libraries(test_sn76489_sample_playback PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_sn76489_sample_playback)
 
+# AudioBuffer drop-detection tests (issue #82)
+add_executable(test_audio_buffer test_audio_buffer.cpp)
+target_link_libraries(test_audio_buffer PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_audio_buffer)
+
 # SN76489 MAME-inspired tests (hardware-verified behaviors)
 add_executable(test_sn76489_mame test_sn76489_mame.cpp)
 target_link_libraries(test_sn76489_mame PRIVATE beebium_core Catch2::Catch2WithMain)
