@@ -754,6 +754,11 @@ add_executable(test_sn76489 test_sn76489.cpp)
 target_link_libraries(test_sn76489 PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_sn76489)
 
+# SN76489 sampled-sound playback regression tests (issue #82)
+add_executable(test_sn76489_sample_playback test_sn76489_sample_playback.cpp)
+target_link_libraries(test_sn76489_sample_playback PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_sn76489_sample_playback)
+
 # SN76489 MAME-inspired tests (hardware-verified behaviors)
 add_executable(test_sn76489_mame test_sn76489_mame.cpp)
 target_link_libraries(test_sn76489_mame PRIVATE beebium_core Catch2::Catch2WithMain)
