@@ -71,6 +71,11 @@ constexpr uint16_t kLoadAddress = 0x2000;
 // to decrement. Pinned by the suite's "Timer Zero Error" probe; see the file header.
 constexpr int kTimerPhase = 0;
 
+// One VIA tick is two CPU cycles, so perturbing the phase by two cycles moves
+// every measured time by exactly one tick. Used by the negative-control test to
+// prove the harness can see a mistimed instruction, not just report zero.
+constexpr int kOneTickPerturbation = 2;
+
 struct RunResult {
     bool completed = false;   // the suite wrote its failure count to &FCD0
     int failures = -1;        // that count, or -1 if the run never reached the end
@@ -95,6 +100,7 @@ std::vector<uint8_t> load_vector_build(const std::string& filename) {
 
 RunResult run_vector_build(const std::vector<uint8_t>& image,
                            const M6502Config* config,
+                           int phase = kTimerPhase,
                            uint64_t max_cycles = 60'000'000) {
     RunResult result;
 
@@ -134,7 +140,7 @@ RunResult run_vector_build(const std::vector<uint8_t>& image,
         if (cpu.read) {
             if (timer_running && cpu.abus.w == kViaT1CL) {
                 uint64_t elapsed = cycles - timer_start_cycle;
-                long ticks = static_cast<long>((elapsed + kTimerPhase) / 2);
+                long ticks = static_cast<long>((elapsed + phase) / 2);
                 cpu.dbus = static_cast<uint8_t>((timer_load - ticks) & 0xFF);
             } else {
                 cpu.dbus = (*mem)[cpu.abus.w];
@@ -199,6 +205,35 @@ TEST_CASE("dp111 timing, Rockwell 65C02 core, vector build", "[6502][dp111][timi
     INFO(diagnostics(result));
     REQUIRE(result.completed);
     REQUIRE(result.failures == 0);
+}
+
+// Negative control. The two guards above assert zero failures, so on their own
+// they cannot distinguish a correct core from a harness that always reports zero.
+// Perturb the timer by exactly one VIA tick (two CPU cycles) and the suite must
+// then see every instruction, and its own "Timer Zero Error" probe, as mistimed:
+// the run still completes (the instruction stream is unaffected, only the timing
+// comparison), but with a non-zero failure count and the zero-error warning in the
+// output. That is proof the guards can actually catch a mistimed instruction.
+TEST_CASE("dp111 timing harness detects a one-tick error (negative control)",
+          "[6502][dp111][timing]") {
+    auto nmos = load_vector_build("6502timing.6502");
+    REQUIRE(!nmos.empty());
+    RunResult nmos_result =
+        run_vector_build(nmos, &M6502_nmos6502_config, kOneTickPerturbation);
+    INFO(diagnostics(nmos_result));
+    REQUIRE(nmos_result.completed);
+    REQUIRE(nmos_result.failures > 0);
+    REQUIRE(nmos_result.console.find("Warning Timer Zero Error") != std::string::npos);
+
+    auto rockwell = load_vector_build("65C02timing.6502");
+    REQUIRE(!rockwell.empty());
+    RunResult rockwell_result =
+        run_vector_build(rockwell, &M6502_rockwell65c02_config, kOneTickPerturbation);
+    INFO(diagnostics(rockwell_result));
+    REQUIRE(rockwell_result.completed);
+    REQUIRE(rockwell_result.failures > 0);
+    REQUIRE(rockwell_result.console.find("Warning Timer Zero Error") !=
+            std::string::npos);
 }
 
 // The generic M6502_cmos6502_config is deliberately not run against 65C02timing.6502.
