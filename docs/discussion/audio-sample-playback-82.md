@@ -130,7 +130,15 @@ divider):
 | `tyb-enjoy.ssd` | romram | no | PC in BASIC/MOS; no SN writes |
 
 `ReetPetite.ssd` is real-material fixture #1. `play_paradroid.ssd` is revisited
-at the oracle stage, where beebjit (which models the 8271) will play it.
+at the oracle stage, where beebjit (which models the 8271) plays it.
+
+DFS 2.26's "8271 compatibility" boot (Z held across Break) was tried on
+Paradroid and makes no difference: SHIFT+Z+BREAK gives an outcome identical to a
+plain SHIFT+BREAK -- the same nine files load (all but GUITAR, the last
+`*LOAD`), the loader never reaches its pokes, and the player never starts;
+CTRL+SHIFT+Z+BREAK hard-resets to a blank MOS. So Beebium's DFS 2.26 shows no
+observable difference from a plain Break for this disc, and Paradroid still does
+not run.
 
 ## The five questions
 
