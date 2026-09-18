@@ -42,19 +42,46 @@ what dominates instead is an aliased ultrasonic carrier.
   real-chip output **87.6%** of the energy sits above 7.5 kHz, and the single
   loudest spectral line is the aliased carrier at **14.5 kHz**, not the 1 kHz
   tone (which is at the noise floor).
-- Real material (`play_paradroid.ssd`, 11.5 s captured): the loudest spectral
-  peak is again the carrier alias at **14502 Hz**, **4.5 dB above** the actual
-  musical content at ~521 Hz; **66%** of the energy is above 7.5 kHz.
+- Real material (`ReetPetite.ssd`, a genuinely running player -- see "Which
+  discs actually run" below): **93.7%** of the energy sits above 7.5 kHz; the
+  loudest spectral lines are the aliased carrier at **23 / 21 / 19 kHz**, and the
+  actual musical content (521 Hz, 1002 Hz, 3000 Hz) is **11-20 dB below** it. The
+  same defect signature as the synthetic experiment, on live material.
 - The only carrier filtering anywhere in the shipped path is in the macOS client
-  (20 Hz high-pass + 8 kHz low-pass, `AudioRenderer.swift`). Emulating that chain
-  on the Paradroid capture brings the music back to being the loudest component,
-  but leaves in-band alias whistles at **4.5 kHz (-4.7 dB)** and **6.3 kHz
-  (-4.9 dB)** -- only ~5 dB below the music -- because those alias products were
-  folded below 8 kHz by the decimation *before* the filter runs, so no amount of
-  8 kHz low-pass can remove them.
+  (20 Hz high-pass + 8 kHz low-pass, `AudioRenderer.swift`). It runs at 48 kHz,
+  after the decimation has already folded carrier energy across the band, so it
+  cannot remove alias products that landed below 8 kHz.
 
 The raw Python-captured WAV (the independent-of-front-end recording the issue
-asks for) has no filtering at all, so it is 66% out-of-band grit.
+asks for) has no filtering at all.
+
+### Which discs actually run (issue material sanity check)
+
+The issue's headline disc, `play_paradroid.ssd`, does **not** run under our only
+FDC (WD1770) with DFS 2.26: its BASIC loader `*LOAD`s ADVTAB (1536 bytes) to
+&1300, which overruns filing-system workspace (&1100-&18FF) below PAGE (&1900),
+so later `*LOAD`s corrupt and the player never starts. Booted, the CPU sits in
+the BASIC ROM, the loader's zero-page pokes are never written, and two sample
+files load as zeros. This is a disc/filing-system compatibility matter (the disc
+was authored on an 8271 machine, whose workspace layout differs; we have no
+8271), the same family as Flip! (#85/#86, tracked by #87), not an audio defect.
+An earlier "Paradroid capture" in this note's history was therefore a recording
+of a dead player with stale registers; those numbers are struck and the real
+material used here is a disc that genuinely runs.
+
+Sanity-checked via the debugger (PC location, SN write activity, parked
+divider):
+
+| Disc | Machine | Runs? | Symptom / parameters |
+|------|---------|-------|----------------------|
+| `ReetPetite.ssd` | model-b | yes | PC in the player loop (<&0900); ~21,600 distinct SN writes/s; values 0x9x/0xBx/0xDx (3-channel volume modulation, gate held open); tone divider parked at 4 |
+| `play_paradroid.ssd` | model-b | no | loader corrupts FS workspace (above); PC in BASIC ROM, registers at reset defaults |
+| `dizzy.ssd` | model-b | no | PC 100% in MOS; no SN writes; divider at cold-boot default |
+| `Speech.dsd` | romram | no | PC 100% in MOS; no SN writes |
+| `tyb-enjoy.ssd` | romram | no | PC in BASIC/MOS; no SN writes |
+
+`ReetPetite.ssd` is real-material fixture #1. `play_paradroid.ssd` is revisited
+at the oracle stage, where beebjit (which models the 8271) will play it.
 
 ## The five questions
 
@@ -132,7 +159,7 @@ high-pass and 8 kHz low-pass biquads (`AudioRenderer.swift:199,202`,
 capture, a future Windows/Linux front-end) gets an unfiltered, carrier-dominated
 stream; (b) even the macOS low-pass is too late -- it runs at 48 kHz after the
 aliasing has already folded carrier energy below 8 kHz, so it cannot remove the
-in-band whistles measured at 4.5 and 6.3 kHz.
+in-band alias products the decimation leaves there.
 
 ### 5. Buffering and drops
 
@@ -159,7 +186,8 @@ currently possible without a seam (below).
    model the output as unipolar (level-or-silence) so the carrier's local mean
    tracks the volume register.
 2. **Point-sampling decimation with no anti-alias filter** (defect 1). Evidence:
-   dominant 14.5 kHz alias line; 66-88% out-of-band energy. Fix: low-pass the
+   dominant 14.5 kHz alias line (synthetic), 87.6% out-of-band (synthetic) and
+   93.7% out-of-band on running ReetPetite material. Fix: low-pass the
    250 kHz stream (e.g. beebjit's ~7.2 kHz 4th-order Butterworth) and decimate by
    fractional averaging rather than point sampling.
 3. **No carrier/DC filtering in the server path; the only filter is macOS-only
@@ -195,15 +223,22 @@ baseband. Both must be fixed together to reproduce this material.
   a threshold and out-of-band energy below one, on the synthetic tone and on a
   short committed passage.
 
-## Remaining phase-1 work (not yet done)
+## Deferred (noted, no action in this work)
 
-- Deliverable 2 (register-write trace) and deliverable 3 (beebjit oracle WAV)
-  require building beebjit locally and a small non-committed logging patch. The
-  code comparison above already establishes *what* beebjit does differently and
-  *why* it matters; the oracle capture would quantify the residual once defects
-  1 and 3 are fixed. Flagged to the architect for go/no-go, since the decisive
-  measurements (baseband recovery, alias dominance) are already in hand without
-  it.
+- **Open-gate write model.** With the sound write gate held open, Beebium
+  re-presents the System VIA Port A output register to the chip on every VIA
+  tick (`SystemViaPeripheral::update_port_a`), so an unchanged byte is applied
+  hundreds of thousands of times per second. This is harmless for volume-latch
+  bytes (idempotent) but wrong for data bytes (bit 7 = 0), and wasteful. The real
+  chip instead samples the bus on its own 250 kHz clock across two edges, with
+  deliberate corruption if the bus changes between them (beebjit's
+  `sound_advance_sn_timing`). Beebium models neither the two-edge cadence nor the
+  corruption. This did not block ReetPetite (its writes are stable volume-latch
+  bytes), so it is noted and deferred, not fixed here.
+- **beebjit oracle** (register-write trace and reference WAV) is deferred to the
+  end of phase 2, as the acceptance measurement once the output-stage fixes land.
+  beebjit models the 8271 and can play `play_paradroid.ssd`, so it is also the
+  route to using the issue's headline material as an oracle.
 
 ## Reproduce
 
@@ -218,12 +253,12 @@ c++ -std=c++20 -O2 -I src/core/include \
 export BEEBIUM_DISC_WORK_DIR=<scratch>/discwork
 uv run --project clients/beebium-python-client \
     python tools/audio-analysis/capture_disc.py \
-    --disc ~/Code/beebjit/test/sound/play_paradroid.ssd \
-    --seconds 10 --out-dirpath <scratch>/wav
+    --disc ~/Code/beebjit/test/sound/ReetPetite.ssd \
+    --seconds 8 --out-dirpath <scratch>/wav --name reetpetite
 
 # Analyse
 cd tools/audio-analysis
-uv run python analyze.py measure <scratch>/wav/play_paradroid_mix.wav --plots <scratch>/plots
+uv run python analyze.py measure <scratch>/wav/reetpetite_mix.wav --plots <scratch>/plots
 uv run python analyze.py compare <scratch>/wav/ideal_period1_1khz.wav \
     <scratch>/wav/beebium_period1_1khz.wav --plots <scratch>/plots
 ```
