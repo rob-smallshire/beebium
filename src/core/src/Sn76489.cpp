@@ -257,50 +257,50 @@ int8_t Sn76489::get_noise_amplitude() const {
 uint8_t Sn76489::get_tone_normalized(size_t channel) const {
     assert(channel < 3);
     const auto& tone = tone_[channel];
-
-    // Volume 15 = silence → return mid-point (128)
-    if (tone.volume >= 15) {
-        return 128;
-    }
-
-    // Get base amplitude from volume table (0-127)
-    int8_t amplitude = VOLUME_TABLE[tone.volume];
-
-    // Map to 0-255 range centered at 128:
-    // output_bit=1 → 128 + amplitude (high)
-    // output_bit=0 → 128 - amplitude (low)
-    return static_cast<uint8_t>(128 + (tone.output_bit ? amplitude : -amplitude));
+    return normalized_level(tone.volume, tone.output_bit);
 }
 
 uint8_t Sn76489::get_noise_normalized() const {
-    // Volume 15 = silence → return mid-point (128)
-    if (noise_.volume >= 15) {
-        return 128;
+    return normalized_level(noise_.volume, noise_.output_bit);
+}
+
+uint8_t Sn76489::normalized_level(uint8_t volume, bool output_bit) {
+    // Unipolar output, matching the real SN76489: the pin sits at a silence
+    // level and pulls to a louder level while the flip-flop is high, so the
+    // short-term MEAN of a fast (ultrasonic-period) channel tracks the volume
+    // register. This is what lets sampled-sound players recover PCM by
+    // modulating volume; a symmetric bipolar square would leave the mean fixed
+    // and carry no baseband.
+    //
+    // Silence is level 0; the high level is twice the volume-table amplitude, so
+    // the AC swing about the mean (amplitude, up to 127) is unchanged from the
+    // previous bipolar encoding and ordinary audio keeps its loudness. Volume 15
+    // is the silence level, not the mid-point.
+    if (volume >= 15) {
+        return 0;
     }
-
-    // Get base amplitude from volume table (0-127)
-    int8_t amplitude = VOLUME_TABLE[noise_.volume];
-
-    // Map to 0-255 range centered at 128
-    return static_cast<uint8_t>(128 + (noise_.output_bit ? amplitude : -amplitude));
+    int amplitude = VOLUME_TABLE[volume];  // 0-127
+    return static_cast<uint8_t>(output_bit ? (2 * amplitude) : 0);
 }
 
 // --- Introspection interface ---
 
 void Sn76489::compute_voltage_levels(uint8_t volume, float& dc_bias,
                                      float& peak, float& trough) {
+    // The output is unipolar: it rests at the silence level when the flip-flop
+    // is low and rises by the volume-dependent swing when it is high. The
+    // MID-POINT therefore varies with volume (silence + swing/2), which is the
+    // property sampled-sound playback exploits; a silent channel sits at the
+    // silence level with no swing.
     if (volume >= 15) {
-        // Silent: constant voltage at DC_BIAS_SILENT_V
-        dc_bias = DC_BIAS_SILENT_V;
-        peak = DC_BIAS_SILENT_V;
         trough = DC_BIAS_SILENT_V;
-    } else {
-        // Active: oscillates around a mid-point voltage
-        // The mid-point is at DC_BIAS_SILENT_V, with swing determined by volume
-        float swing = VOLUME_SWING_V[volume];
+        peak = DC_BIAS_SILENT_V;
         dc_bias = DC_BIAS_SILENT_V;
-        peak = dc_bias + (swing / 2.0f);
-        trough = dc_bias - (swing / 2.0f);
+    } else {
+        float swing = VOLUME_SWING_V[volume];
+        trough = DC_BIAS_SILENT_V;          // flip-flop low: silence level
+        peak = DC_BIAS_SILENT_V + swing;    // flip-flop high: louder level
+        dc_bias = DC_BIAS_SILENT_V + swing / 2.0f;  // mean tracks volume
     }
 }
 

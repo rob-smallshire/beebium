@@ -305,7 +305,8 @@ inline std::vector<double> ideal_reference(uint16_t period, double test_freq,
             flip = !flip;
             counter = (period == 0) ? 1024 : period;
         }
-        double level = flip ? (kVolumeAmplitude[code] / 127.0) : 0.0;
+        // Unipolar, on the same 0..254 scale the chip emits (2 x amplitude).
+        double level = flip ? (2.0 * kVolumeAmplitude[code] / 127.0) : 0.0;
         internal.push_back(level);
     }
 

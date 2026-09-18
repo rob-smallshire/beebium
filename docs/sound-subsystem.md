@@ -134,55 +134,58 @@ The SN76489 has unusual DC bias characteristics that are important for advanced 
 
 **Key observations from real hardware** (see [Chris Evans' analysis](https://scarybeastsecurity.blogspot.com/2020/06/sampled-sound-1980s-style-from-sn76489.html)):
 
-- Output is centered around ~0.8V, not 0V
-- Silent channels output a constant ~0.8V
-- Max volume channels oscillate with ~0.8V peak-to-peak swing
-- The mid-point voltage varies with volume setting
+- The output is unipolar: it rests at a silence level and pulls to a louder
+  level while the flip-flop is high, rather than swinging symmetrically about a
+  fixed mid-point.
+- A silent channel sits at the silence level with no swing.
+- The mid-point (mean) voltage of an active channel therefore varies with the
+  volume setting -- it is the silence level plus half the volume-dependent swing.
 
 **Why this matters:**
 
-Sampled sound playback on the BBC Micro works by rapidly modulating volume to encode PCM data. The varying mid-point voltage at each volume level allows PCM waveforms to emerge from a high-frequency carrier (125 kHz). Downstream circuitry (LM386 amplifier) filters out the carrier, leaving the modulated audio.
+Sampled sound playback on the BBC Micro works by rapidly modulating volume to encode PCM data. Because the output is unipolar, the short-term mean of a fast (short-period) channel tracks the volume register, so a PCM waveform emerges at baseband from the high-frequency carrier. Downstream circuitry (LM386 amplifier) filters out the carrier, leaving the modulated audio.
 
 **Beebium implementation:**
 
-Beebium exposes DC bias as metadata (not baked into samples) to enable accurate reconstruction when needed:
+Each emitted per-channel sample is unipolar and unsigned: 0 at the silence level,
+rising to twice the volume-table amplitude while the flip-flop is high. The AC
+swing about the mean equals the volume-table amplitude (up to 127), so ordinary
+audio keeps its loudness while the mean now carries the sampled baseband. DC is
+NOT removed in the core; that is a consumer responsibility (the macOS renderer
+high-passes at 20 Hz).
+
+`compute_voltage_levels` reports the same shape as metadata, with a mid-point
+that varies with volume:
 
 ```cpp
 struct ToneChannelState {
     // ... standard fields ...
-    float dc_bias_v;   // Mid-point voltage (~0.8V)
-    float peak_v;      // Voltage when output_bit=1
-    float trough_v;    // Voltage when output_bit=0
+    float dc_bias_v;   // Mid-point voltage: silence level + swing/2 (varies with volume)
+    float peak_v;      // Voltage when output_bit=1: silence level + swing
+    float trough_v;    // Voltage when output_bit=0: the silence level
 };
 ```
 
-The swing follows a 2dB attenuation curve matching the volume table:
+The swing follows the 2 dB attenuation curve of the volume table; the mid-point
+rises with it (silence level 0.8 V):
 
-| Volume | Swing (V) | DC Bias (V) |
-|--------|-----------|-------------|
-| 0 (max) | 0.800 | 0.800 |
-| 5 | 0.253 | 0.800 |
-| 10 | 0.080 | 0.800 |
+| Volume | Swing (V) | Mid-point / DC bias (V) |
+|--------|-----------|-------------------------|
+| 0 (max) | 0.800 | 1.200 |
+| 5 | 0.253 | 0.927 |
+| 10 | 0.080 | 0.840 |
 | 15 (silent) | 0.000 | 0.800 |
 
 **Frontend usage example:**
 
 ```python
-# Reconstruct analog voltage from sample + DC bias metadata
+# Samples are already unipolar (0 = silence). Mix, then remove DC and the carrier.
 for sample in audio_chunk:
-    tone0_amplitude = unpack_int8(sample.sources[0], 0)
+    tone0 = unpack_uint8(sample.sources[0], 0)  # 0..254, 0 = silence
 
-    # Get DC bias from channel state
-    state = audio_service.get_channel_states()
-
-    # Reconstruct analog voltage
-    if tone0_amplitude > 0:
-        voltage = state.channels[0].peak_voltage
-    else:
-        voltage = state.channels[0].trough_voltage
-
-    # Apply high-pass filter to remove DC, low-pass for carrier removal
-    filtered_output = process(voltage)
+    # Apply a high-pass to remove the (volume-dependent) DC, and a low-pass to
+    # remove any residual carrier, before mixing/playback.
+    filtered_output = process(tone0)
 ```
 
 ## Audio Sample Format

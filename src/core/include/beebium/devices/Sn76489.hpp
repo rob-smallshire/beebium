@@ -190,9 +190,12 @@ private:
     // Returns unsigned 0-255, centered at 128
     uint8_t get_tone_normalized(size_t channel) const;
 
-    // Compute normalized noise channel sample (DC bias pre-applied)
-    // Returns unsigned 0-255, centered at 128
+    // Compute normalized noise channel sample (unipolar; see normalized_level)
     uint8_t get_noise_normalized() const;
+
+    // Map a volume/output-bit pair to a unipolar 0-254 sample: 0 = silence,
+    // 2*amplitude = flip-flop high. The mean of a fast channel tracks volume.
+    static uint8_t normalized_level(uint8_t volume, bool output_bit);
 
     // Logarithmic volume table: 4-bit register → 8-bit signed amplitude
     // Formula: amplitude[v] = round(127 × 10^(-0.1v))
