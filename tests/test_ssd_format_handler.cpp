@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -416,9 +417,14 @@ namespace {
 // that exists on disk). Returns the path; the caller removes it.
 std::filesystem::path write_temp_ssd(const std::vector<uint8_t>& bytes,
                                      const std::string& suffix = ".ssd") {
+    // Unique per call AND per process: catch_discover_tests runs each test case
+    // in its own process and ctest runs them in parallel, so a shared name would
+    // collide in the temp directory.
     static int counter = 0;
+    std::random_device rd;
+    auto token = std::to_string(rd()) + "_" + std::to_string(++counter);
     auto path = std::filesystem::temp_directory_path() /
-                ("beebium_writeback_" + std::to_string(++counter) + suffix);
+                ("beebium_writeback_" + token + suffix);
     std::ofstream f(path, std::ios::binary);
     f.write(reinterpret_cast<const char*>(bytes.data()),
             static_cast<std::streamsize>(bytes.size()));
