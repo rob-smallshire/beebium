@@ -3,8 +3,33 @@
 Phase 1: measurement and analysis of Beebium's SN76489 audio path against the
 scarybeasts 3-channel 15 kHz sample player (`play_paradroid.ssd`), with beebjit
 as the reference for how a faithful path behaves. No production code is changed
-in this phase; this note records what was measured, what the defects are, and
-what the fixes should be.
+in phase 1; it records what was measured, what the defects are, and what the
+fixes should be. Phase 2 (summarised immediately below) implements the fixes
+and records the before/after.
+
+## Phase 2 summary (fixes landed)
+
+The SN76489 output stage was rebuilt: the emitted per-channel sample is now
+**unipolar** (silence 0, louder = higher, so the mean carries the sampled
+baseband), the 250 kHz stream is **anti-alias low-passed and fractionally
+decimated** to the output rate (a 4th-order Butterworth designed from the actual
+rates), the wire carries **two 16-bit channels per source field with headroom**
+(full scale 16384, so the filter overshoot no longer clips), and `AudioChunk`
+now carries an **honest produced-sample index** so consumers can detect dropped
+samples. Results, before -> after:
+
+| Measure | Before | After |
+|---------|--------|-------|
+| Baseband recovery vs ideal, period 1 | 0.0001 | 0.997 |
+| Baseband recovery vs ideal, period 4 | 0.155 | 0.998 |
+| Out-of-band (>7.5 kHz), synthetic | 0.88 / 0.99 | ~0.000 |
+| Out-of-band (>7.5 kHz), ReetPetite (running) | 93.7% | 0.02% |
+| Full-volume tone clipping (samples at rail) | ~6% | 0 |
+| Match-SNR of the wire quantisation | 31-43 dB (8-bit) | 80-91 dB (16-bit) |
+| Added filter cost in tick() | -- | ~0.2 ns/tick (~0.04% of a core) |
+
+On ReetPetite the loudest spectral lines move from the 19-23 kHz aliased carrier
+to the actual music (521 Hz and its neighbours).
 
 ## Tooling built for this work
 
