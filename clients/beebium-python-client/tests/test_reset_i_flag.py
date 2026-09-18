@@ -44,15 +44,12 @@ from beebium.client.screen import read_mode7_screen, screen_contains
 ROM_TYPE_TABLE = 0x02A1  # bank N type at ROM_TYPE_TABLE + N
 LAST_BREAK_TYPE = 0x028D  # 0 = soft, 1 = power-on, 2 = Ctrl (hard)
 
-# These scenarios are driven entirely in emulated time by DEBUGGER stepping
-# (_step_run / _step_until), never by wall-clock sleeps. Two properties of the
-# platform make that the right tool. A cycle-budget free-run stop
-# (run_until_or_timeout) is only evaluated at an opcode fetch, so it never fires
-# while the CPU is halted -- by a Break hold or by a jam -- and hangs there
-# (issue #79). Debugger stepping, by contrast, keeps advancing the emulated
-# clock and ticking the peripherals whatever the CPU is doing: a KIL (jam) does
-# NOT freeze the cycle counter, and the free-running System VIA timer keeps
-# raising interrupts during a Break hold, exactly as on real hardware.
+# These scenarios are driven in emulated time by run_until_or_timeout, never by
+# wall-clock sleeps. As of issue #79 a cycle-budget wait completes even while the
+# CPU is halted -- during a Break hold, or after a jam (KIL) opcode -- so it is
+# the right tool throughout, and unlike debugger stepping it also ticks the disc
+# drives. The System VIA keeps ticking during a Break hold, so the free-running
+# 100 Hz timer raises an interrupt then, exactly as on real hardware.
 
 
 def _read_byte(bbc: Beebium, address: int) -> int:
@@ -71,39 +68,9 @@ def _count_on_screen(bbc: Beebium, text: str) -> int:
     return sum(row.count(text) for row in read_mode7_screen(bbc))
 
 
-def _step_run(bbc: Beebium, emulated_seconds: float) -> None:
-    """Advance a fixed span of emulated time by DEBUGGER stepping.
-
-    Unlike free-run (run_until_or_timeout), debugger stepping keeps advancing
-    the emulated clock and ticking the peripherals even while the reset line is
-    held, so the free-running System VIA timer raises an interrupt during a
-    Break hold exactly as it does on real hardware. All emulated time, no
-    wall-clock sleep.
-    """
-    hz = bbc.system.clock_speed_hz or 2_000_000
-    bbc.debugger.ensure_stopped()
-    bbc.debugger.step_cycles(max(1, int(emulated_seconds * hz)))
-
-
-def _step_until(bbc: Beebium, predicate, emulated_seconds: float,
-                chunk_seconds: float = 0.1) -> bool:
-    """Debugger-step in fixed chunks until predicate() or the budget expires.
-
-    Stepping advances even when the CPU is halted (Break held, or a jam), so
-    this cannot hang the way a cycle-budget free-run wait does."""
-    hz = bbc.system.clock_speed_hz or 2_000_000
-    remaining = int(emulated_seconds * hz)
-    chunk = max(1, int(chunk_seconds * hz))
-    bbc.debugger.ensure_stopped()
-    if predicate():
-        return True
-    while remaining > 0:
-        step = min(chunk, remaining)
-        bbc.debugger.step_cycles(step)
-        remaining -= step
-        if predicate():
-            return True
-    return False
+def _run_emulated(bbc: Beebium, seconds: float) -> None:
+    """Advance a fixed span of emulated time (a wait with no early exit)."""
+    bbc.run_until_or_timeout(lambda: False, emulated_seconds=seconds)
 
 
 def _erase_screen(bbc: Beebium) -> None:
@@ -165,26 +132,25 @@ class TestResetIFlag:
 
         # Let the machine wander into the empty bank: interrupts get masked, a
         # System VIA interrupt goes pending, and the CPU eventually hits a KIL
-        # (jam). Debugger stepping keeps advancing the clock through the jam.
-        _step_run(bbc, 3.0)
+        # (jam). The cycle-budget wait keeps advancing the clock through the jam.
+        _run_emulated(bbc, 3.0)
 
         # Erase the screen so the banner's return is a real signal.
         _erase_screen(bbc)
 
-        # Ctrl-Break: hold Ctrl across the Break, and step while it is still held
+        # Ctrl-Break: hold Ctrl across the Break, and run while it is still held
         # so the MOS reset routine reads the matrix and treats it as a hard
         # reset.
-        bbc.debugger.ensure_stopped()
         bbc.keyboard.ctrl_down()
         assert bbc.keyboard.break_down(), "BreakDown RPC failed"
-        _step_run(bbc, 0.1)
+        _run_emulated(bbc, 0.1)
         assert bbc.keyboard.break_up(), "BreakUp RPC failed"
-        _step_run(bbc, 1.0)
+        _run_emulated(bbc, 1.0)
         bbc.keyboard.ctrl_up()
 
         # Give the MOS reset code time to redraw and re-initialise.
-        recovered = _step_until(
-            bbc, lambda: screen_contains(bbc, "BASIC"), emulated_seconds=5.0
+        recovered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "BASIC"), emulated_seconds=5.0
         )
         if not recovered:
             rows = read_mode7_screen(bbc)
@@ -266,19 +232,17 @@ class TestResetIFlag:
 
         _erase_screen(bbc)
 
-        # Break with the space bar tapped while Break is held. Debugger stepping
-        # (not free-run) keeps the VIA ticking while the reset line is held, and
-        # the keypress latches the System VIA CA2 interrupt; on release the IRQ
-        # is pending. All emulated time.
-        bbc.debugger.ensure_stopped()
+        # Break with the space bar tapped while Break is held. The keypress
+        # latches the System VIA CA2 interrupt; the VIA keeps ticking while the
+        # reset line is held, so on release the IRQ is pending. All emulated time.
         assert bbc.keyboard.break_down(), "BreakDown RPC failed"
         bbc.keyboard.key_down(" ")
-        _step_run(bbc, 0.05)
+        _run_emulated(bbc, 0.05)
         assert bbc.keyboard.break_up(), "BreakUp RPC failed"
         bbc.keyboard.key_up(" ")
 
-        recovered = _step_until(
-            bbc, lambda: screen_contains(bbc, "BASIC"), emulated_seconds=3.0
+        recovered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "BASIC"), emulated_seconds=3.0
         )
         if not recovered:
             rows = read_mode7_screen(bbc)
@@ -355,17 +319,15 @@ class TestResetIFlag:
         # stale boot banner still on screen from before.
         _erase_screen(bbc)
 
-        # Press Break on its own (soft reset). Debugger stepping keeps the
-        # free-running 100 Hz timer ticking while the reset line is held, so an
-        # interrupt latches pending exactly as on real hardware; on release it is
-        # pending. All emulated time, no wall-clock sleep.
-        bbc.debugger.ensure_stopped()
+        # Press Break on its own (soft reset). The free-running 100 Hz timer keeps
+        # ticking while the reset line is held, so an interrupt latches pending
+        # exactly as on real hardware; on release it is pending. All emulated time.
         assert bbc.keyboard.break_down(), "BreakDown RPC failed"
-        _step_run(bbc, 0.05)
+        _run_emulated(bbc, 0.05)
         assert bbc.keyboard.break_up(), "BreakUp RPC failed"
 
-        recovered = _step_until(
-            bbc, lambda: screen_contains(bbc, "BASIC"), emulated_seconds=3.0
+        recovered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "BASIC"), emulated_seconds=3.0
         )
         assert recovered, "Banner did not return after Break (issue #78)."
 
