@@ -1089,6 +1089,15 @@ class InstrGen {
             // Handle JMP. This is a special case as it involves a
             // word copy.
             P("s->pc=s->ad;\n");
+        } else if (c->action == "reset_flags") {
+            // RESET sets the interrupt-disable flag (so a pending IRQ stays
+            // masked until the reset handler runs CLI); CMOS parts also clear
+            // the decimal flag. This runs before CheckForInterrupts on the
+            // next reset cycle. See the "Reset" definition (issue #78).
+            P("s->p.bits.i=1;\n");
+            P("if(s->config->clear_decimal_on_reset) {\n");
+            P("s->p.bits.d=0;\n");
+            P("}\n");
         } else {
             ASSERT(false);
         }
@@ -1338,7 +1347,13 @@ static std::vector<InstrGen> GetAll() {
     {
         G("JSR", "JSR", {Ri("pc++", "adl", nullptr), Ru("sp", "data!", nullptr), W("sp--", "pch", nullptr), W("sp--", "pcl", nullptr), Ri("pc++", "adh", "jmp")});
 
-        G("Reset", "Interrupts", {Ri("pc", "data!", nullptr), Rd("sp--", "pch", nullptr), Rd("sp--", "pcl", nullptr), Rd("sp--", "data", nullptr), Ra("resl", "pcl", nullptr), Ra("resh", "pch", nullptr)});
+        // The RESET sequence is the interrupt sequence with the stack writes
+        // suppressed. "reset_flags" on the FFFC (vector-low) read sets the
+        // interrupt-disable flag at the vector-fetch point, mirroring
+        // Cycle4_Interrupt, before CheckForInterrupts runs on the next cycle;
+        // CMOS parts also clear the decimal flag there. Without it a pending
+        // IRQ would be taken instead of the reset handler (issue #78).
+        G("Reset", "Interrupts", {Ri("pc", "data!", nullptr), Rd("sp--", "pch", nullptr), Rd("sp--", "pcl", nullptr), Rd("sp--", "data", nullptr), Ra("resl", "pcl", "reset_flags"), Ra("resh", "pch", nullptr)});
 
         G("RTI", "RTI", {
                             Ri("pc", "data!", nullptr),

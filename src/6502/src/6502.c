@@ -2838,6 +2838,7 @@ const M6502Config M6502_cmos6502_config = {
     .name = "CMOS 65C02",
     .fns = g_cmos6502_fns,
     .interrupt_tfn = &Cycle0_InterruptCMOS,
+    .clear_decimal_on_reset = 1,
     .disassembly_info = g_cmos6502_disassembly_info,
 };
 
@@ -2845,6 +2846,7 @@ const M6502Config M6502_rockwell65c02_config = {
     .name = "Rockwell 65C02",
     .fns = g_rockwell65c02_fns,
     .interrupt_tfn = &Cycle0_InterruptCMOS,
+    .clear_decimal_on_reset = 1,
     .disassembly_info = g_rockwell65c02_disassembly_info,
 };
 

@@ -212,6 +212,13 @@ struct M6502Config {
      */
     uint8_t xaa_magic;
 
+    /* Non-zero for CMOS parts (65C02), which initialise the decimal flag to 0
+     * during reset. The NMOS 6502 leaves the decimal flag unchanged by the
+     * reset sequence. (The interrupt-disable flag is set on reset for every
+     * variant, so it needs no flag here.)
+     */
+    uint8_t clear_decimal_on_reset;
+
     /* The 256 opcode function pairs. */
     const M6502Fns *fns;
 
