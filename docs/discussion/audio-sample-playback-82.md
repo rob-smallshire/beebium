@@ -31,6 +31,30 @@ samples. Results, before -> after:
 On ReetPetite the loudest spectral lines move from the 19-23 kHz aliased carrier
 to the actual music (521 Hz and its neighbours).
 
+### beebjit oracle
+
+beebjit (the sample player's own emulator, which models the 8271 and so plays
+`play_paradroid.ssd`) was built headless for arm64 with a local WAV sound
+backend (kept outside both repos) and run with `-accurate` for synchronous,
+deterministic audio.
+
+- `ReetPetite.ssd` in both: beebjit and Beebium both render it clean --
+  out-of-band (>7.5 kHz) 0.02% each, loudest lines the music. Their averaged
+  audible-band (0.1-8 kHz) log-spectra correlate at **0.925**. A sample-exact
+  match-SNR is not meaningful: the two emulators boot and phase the player
+  differently, so they do not sample-align over the clip (correlation ~0); the
+  spectral agreement is the confirmation.
+- `play_paradroid.ssd` in beebjit (Beebium cannot run it): out-of-band 0.01%,
+  loudest lines the music (~123, 521 Hz). This is the reference for what the
+  headline material should sound like; it matches the clean character Beebium
+  now produces on running material.
+- beebjit's defaults are its own choices, not a Beebium target: a 7.2 kHz filter
+  cutoff (the same value Beebium adopted), positive-silence off (zero-mean
+  output) and a quarter-full-scale per-channel gain. These shift absolute levels
+  and slightly shift the spectral centroid (beebjit ~990 Hz vs Beebium
+  ~1360 Hz on the captured windows), so a level or centroid difference is not a
+  Beebium defect.
+
 ## Tooling built for this work
 
 Under `tools/audio-analysis/`:
