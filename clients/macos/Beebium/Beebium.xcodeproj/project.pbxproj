@@ -46,6 +46,7 @@
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
 		345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */; };
+		361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */; };
 		394059FE9C2A8CC58886CC50 /* PeripheralsModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F91689B09CACC55C956BA2 /* PeripheralsModeView.swift */; };
 		3A5F2C41B8468DD7E63EC414 /* audio.proto in Resources */ = {isa = PBXBuildFile; fileRef = A16BD17340EC98E2C5EF1127 /* audio.proto */; };
 		3B3122E1626E09ABEAC4315B /* ConfigurationSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */; };
@@ -377,6 +378,7 @@
 		F0120B84124735271034BFC9 /* serial.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = serial.pb.swift; sourceTree = "<group>"; };
 		F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDisplayStyleTests.swift; sourceTree = "<group>"; };
 		F309AF35B280ABE8DDCE6E15 /* MemoryModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryModeView.swift; sourceTree = "<group>"; };
+		F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLimiterTests.swift; sourceTree = "<group>"; };
 		F4F91689B09CACC55C956BA2 /* PeripheralsModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralsModeView.swift; sourceTree = "<group>"; };
 		F6A0228B7AD63C2E38A63080 /* StorageModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageModeView.swift; sourceTree = "<group>"; };
 		F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FailurePopoverDecisionTests.swift; sourceTree = "<group>"; };
@@ -653,6 +655,7 @@
 		F07BCA445DC9C4A1F9AD1711 /* BeebiumTests */ = {
 			isa = PBXGroup;
 			children = (
+				F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */,
 				CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */,
 				1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */,
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
@@ -814,6 +817,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */,
 				0C7D8FBEE3E4006E99C883D0 /* AudioRendererTests.swift in Sources */,
 				E2C3C9AB563A0A8406735C73 /* BBCModifierStateTests.swift in Sources */,
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,

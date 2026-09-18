@@ -222,9 +222,9 @@ final class AudioRenderer: @unchecked Sendable {
                 left *= masterVolume
                 right *= masterVolume
 
-                // Soft clipping to prevent harsh distortion
-                left = softClip(left)
-                right = softClip(right)
+                // Soft limiting to prevent harsh distortion
+                left = Self.softLimit(left)
+                right = Self.softLimit(right)
             }
 
             leftBuffer[i] = left
@@ -342,11 +342,11 @@ final class AudioRenderer: @unchecked Sendable {
     }
 
     /// Soft clipping to prevent harsh distortion
-    private func softClip(_ x: Float) -> Float {
+    static func softLimit(_ x: Float) -> Float {
         if x > 1.0 {
-            return 1.0 - exp(1.0 - x)   // saturates toward +1 as x -> +inf
+            return 1.0 - exp(1.0 - x)
         } else if x < -1.0 {
-            return -1.0 + exp(1.0 + x)  // saturates toward -1 as x -> -inf
+            return -1.0 + exp(1.0 + x)
         }
         return x
     }
