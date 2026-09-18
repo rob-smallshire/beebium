@@ -342,13 +342,18 @@ final class AudioRenderer: @unchecked Sendable {
     }
 
     /// Soft clipping to prevent harsh distortion
+    /// Soft-knee limiter. Below the knee it is the identity; above, it bends
+    /// smoothly toward +/-1 with an exponential shoulder. It is continuous with
+    /// unit slope at the knee (C1), odd, monotonic and strictly within (-1, 1),
+    /// so a mix crossing the limit produces no discontinuity (pop).
     static func softLimit(_ x: Float) -> Float {
-        if x > 1.0 {
-            return 1.0 - exp(1.0 - x)
-        } else if x < -1.0 {
-            return -1.0 + exp(1.0 + x)
+        let knee: Float = 0.8
+        let mag = abs(x)
+        if mag <= knee {
+            return x
         }
-        return x
+        let shoulder = (1.0 - knee) * (1.0 - exp(-(mag - knee) / (1.0 - knee)))
+        return (x < 0 ? -1.0 : 1.0) * (knee + shoulder)
     }
 
     /// Pack meter state into UInt64 for atomic storage

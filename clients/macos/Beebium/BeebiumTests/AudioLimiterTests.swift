@@ -36,11 +36,22 @@ final class AudioLimiterTests: XCTestCase {
         }
     }
 
-    func testBoundedBelowOne() {
+    func testBounded() {
+        // Never exceeds full scale, so it cannot hard-clip in CoreAudio. The
+        // shoulder approaches +/-1 asymptotically; for a steady multi-channel mix
+        // (four channels at 0.707 pan sum to ~2.83) it stays strictly inside,
+        // while for very large inputs the exponential underflows in Float and the
+        // output rounds to exactly 1.0.
         var x: Float = -8.0
         while x <= 8.0 {
-            XCTAssertLessThan(abs(AudioRenderer.softLimit(x)), 1.0)
+            XCTAssertLessThanOrEqual(abs(AudioRenderer.softLimit(x)), 1.0)
             x += 0.001
+        }
+        // Strictly inside across the steady-state mix range.
+        var m: Float = -3.0
+        while m <= 3.0 {
+            XCTAssertLessThan(abs(AudioRenderer.softLimit(m)), 1.0)
+            m += 0.001
         }
     }
 
