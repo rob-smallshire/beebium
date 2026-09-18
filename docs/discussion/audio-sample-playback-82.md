@@ -244,7 +244,7 @@ baseband. Both must be fixed together to reproduce this material.
 
 ```
 # Synthetic baseband experiment
-c++ -std=c++20 -O2 -I src/core/include \
+c++ -std=c++20 -O2 -I src/core/include -I tests \
     tools/audio-analysis/sn76489_baseband_experiment.cpp \
     src/core/src/Sn76489.cpp -o <scratch>/sn76489_baseband_experiment
 <scratch>/sn76489_baseband_experiment <scratch>/wav
