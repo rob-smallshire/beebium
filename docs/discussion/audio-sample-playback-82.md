@@ -33,8 +33,7 @@ to the actual music (521 Hz and its neighbours).
 
 ### beebjit oracle
 
-beebjit (the sample player's own emulator, which models the 8271 and so plays
-`play_paradroid.ssd`) was built headless for arm64 with a local WAV sound
+beebjit (the sample player's own emulator, which plays `play_paradroid.ssd`) was built headless for arm64 with a local WAV sound
 backend (kept outside both repos) and run with `-accurate` for synchronous,
 deterministic audio.
 
@@ -335,10 +334,13 @@ The limiter is now a unit-tested pure function (`AudioRenderer.softLimit`).
   `sound_advance_sn_timing`). Beebium models neither the two-edge cadence nor the
   corruption. This did not block ReetPetite (its writes are stable volume-latch
   bytes), so it is noted and deferred, not fixed here.
-- **beebjit oracle** (register-write trace and reference WAV) is deferred to the
-  end of phase 2, as the acceptance measurement once the output-stage fixes land.
-  beebjit models the 8271 and can play `play_paradroid.ssd`, so it is also the
-  route to using the issue's headline material as an oracle.
+- **Paradroid in Beebium** waits on #88: `*LOAD GUITAR 2900` transfers nothing
+  in Beebium although the same command works on MAME's WD1770, so the disc is
+  sound and the defect is in Beebium's disc path. Once that is fixed, capture
+  Paradroid here and compare it with the beebjit render recorded above.
+- **Register-write trace against beebjit** was not made; the spectral agreement
+  on ReetPetite made it unnecessary for the output-stage fixes. It becomes
+  relevant only if the bus-cadence item above is taken up.
 
 ## Reproduce
 
