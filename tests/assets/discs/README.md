@@ -47,3 +47,29 @@ Needs a 6502 second processor (`--tube-65c02`). Catalogue: `$.!BOOT`,
 A./S. source variants). Used by test_tak_benchmark.py: CHAIN "TAKAsm" prints
 `TAK(18,12,6)=7 Time=NNN` in centiseconds; hardware is 264 (2.64 s on a BBC B
 OS 1.20 + 6502 Second Processor).
+
+## 6502timing.ssd, 6502timing1M.ssd
+
+Dominic Plunkett's (dp111) 6502 instruction timing test suite, from
+https://github.com/dp111/6502Timing. GPL-3.0 (the same licence as Beebium),
+version 0.24, pinned upstream commit
+`2cb005d7c04eee011c43e0954d9243dcfc4f5ffb`.
+
+- `6502timing.ssd` -- 12800 bytes, SHA-256
+  `c69941c5e607b8d3954b6f5e2006dd6790a61d2fc5a4abc8f5eda66be12f887c`.
+- `6502timing1M.ssd` -- 12800 bytes, SHA-256
+  `2824451d75d8a84109204ee3b6ebdc1d40b3e827200aae75fb892f5cfcc9b48c`. Places the
+  timed absolute addresses at &FCFE, straddling the 1 MHz page boundary, so the
+  suite also measures Beebium's own 1 MHz bus cycle stretching.
+
+Standard Model B (no second processor). Each disc is `!Boot` (SHIFT-BREAK)
+bootable and also runs from BASIC with `*RUN 6502tim`. The suite times almost
+every documented and undocumented NMOS 6502 instruction against the 1 MHz System
+VIA timer 1, prints any instruction whose timing is wrong, writes the failure
+count to zero page &7A (`passfailzp`) and to &FCD0 (FRED, "so emulators can trap
+writes to this address"), and prints `Number of failures : 0xNN`. About four
+emulated seconds each. Both pass on master today, so the Python scenario test
+test_dp111_timing.py and the C++ &FCD0-trap test test_dp111_timing_fcd0.cpp use
+them as regression guards for the core, the VIA timer and the 1 MHz stretch --
+not as reproductions of a known defect. Not checked by the suite, per its
+README: BRK and the jam (HALT) instructions.
