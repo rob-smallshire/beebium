@@ -35,14 +35,21 @@ Run under the Python client's environment, e.g.::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import shutil
 import struct
+import tempfile
 import threading
 import time
 import wave
 from pathlib import Path
 
 from beebium.client import Beebium
+
+
+def _sha1(path: Path) -> str:
+    return hashlib.sha1(path.read_bytes()).hexdigest()
 
 
 def _repo_root() -> Path:
@@ -156,12 +163,25 @@ def main() -> None:
     args = p.parse_args()
 
     root = _repo_root()
-    disc_filepath = Path(args.disc).expanduser().resolve()
+    source_disc_filepath = Path(args.disc).expanduser().resolve()
     mos_filepath = Path(args.mos_rom) if args.mos_rom else root / "roms" / "acorn-mos_1_20.rom"
     basic_filepath = Path(args.basic_rom) if args.basic_rom else root / "roms" / "bbc-basic_2.rom"
     dfs_filepath = Path(args.dfs_rom) if args.dfs_rom else root / "roms" / "acorn-dfs_2_26.rom"
-    name = args.name or disc_filepath.stem
+    name = args.name or source_disc_filepath.stem
     os.makedirs(args.out_dirpath, exist_ok=True)
+
+    # Isolate the run: mount a fresh copy of the disc and give the server a fresh,
+    # empty disc work directory. A per-user copy-on-write image damaged by one run
+    # (e.g. a boot that writes back over filing-system workspace) must never leak
+    # into the next, and the mounted image is hashed before and after so any
+    # write-back to it is caught rather than silently trusted.
+    run_dir = Path(tempfile.mkdtemp(prefix="beebium_capture_"))
+    disc_filepath = run_dir / source_disc_filepath.name
+    shutil.copyfile(source_disc_filepath, disc_filepath)
+    os.environ["BEEBIUM_DISC_WORK_DIR"] = str(run_dir / "workdir")
+    os.makedirs(os.environ["BEEBIUM_DISC_WORK_DIR"], exist_ok=True)
+    disc_sha1_before = _sha1(disc_filepath)
+    print(f"mounted a fresh copy of {source_disc_filepath.name} (sha1 {disc_sha1_before})")
 
     sample_rate = 48000
 
@@ -200,13 +220,22 @@ def main() -> None:
     _write_mono_wav(os.path.join(args.out_dirpath, f"{name}_tone2.wav"), t2, sample_rate)
     _write_mono_wav(os.path.join(args.out_dirpath, f"{name}_noise.wav"), nz, sample_rate)
 
+    disc_sha1_after = _sha1(disc_filepath)
+
     received = recorder.total_samples
     dropped = recorder.dropped_samples()
     print(f"recorded {received} samples ({received / sample_rate:.2f}s) over "
           f"{wall_elapsed:.2f}s wall clock at speed x{args.speed:g}")
     print(f"dropped samples (from the produced-index sequence): {dropped}"
           + ("" if dropped == 0 else " -- capture is NOT drop-free"))
+    if disc_sha1_after != disc_sha1_before:
+        print(f"WARNING: the mounted disc image changed during the run "
+              f"({disc_sha1_before} -> {disc_sha1_after}); the run wrote back to it. "
+              f"Treat this capture with suspicion.")
+    else:
+        print(f"mounted disc unchanged (sha1 {disc_sha1_after})")
     print(f"wrote {name}_mix.wav and per-channel WAVs to {args.out_dirpath}/")
+    shutil.rmtree(run_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
