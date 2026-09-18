@@ -95,6 +95,41 @@ def _count_on_screen(bbc: Beebium, text: str) -> int:
     return sum(row.count(text) for row in read_mode7_screen(bbc))
 
 
+def _step_run(bbc: Beebium, emulated_seconds: float) -> None:
+    """Advance a fixed span of emulated time by DEBUGGER stepping.
+
+    Unlike free-run (run_until_or_timeout), debugger stepping keeps advancing
+    the emulated clock and ticking the peripherals even while the reset line is
+    held, so the free-running System VIA timer raises an interrupt during a
+    Break hold exactly as it does on real hardware. All emulated time, no
+    wall-clock sleep.
+    """
+    hz = bbc.system.clock_speed_hz or 2_000_000
+    bbc.debugger.ensure_stopped()
+    bbc.debugger.step_cycles(max(1, int(emulated_seconds * hz)))
+
+
+def _step_until(bbc: Beebium, predicate, emulated_seconds: float,
+                chunk_seconds: float = 0.1) -> bool:
+    """Debugger-step in fixed chunks until predicate() or the budget expires.
+
+    Stepping advances even when the CPU is halted (Break held, or a jam), so
+    this cannot hang the way a cycle-budget free-run wait does."""
+    hz = bbc.system.clock_speed_hz or 2_000_000
+    remaining = int(emulated_seconds * hz)
+    chunk = max(1, int(chunk_seconds * hz))
+    bbc.debugger.ensure_stopped()
+    if predicate():
+        return True
+    while remaining > 0:
+        step = min(chunk, remaining)
+        bbc.debugger.step_cycles(step)
+        remaining -= step
+        if predicate():
+            return True
+    return False
+
+
 def _erase_screen(bbc: Beebium) -> None:
     bbc.debugger.ensure_stopped()
     bbc.memory.address.bus[0x7C00:0x8000] = bytes([0x20] * 0x400)
@@ -255,19 +290,19 @@ class TestResetIFlag:
 
         _erase_screen(bbc)
 
-        # Break with the space bar tapped while Break is held. The Break/key
-        # choreography is wall-clock (like the other Break tests): the emulated
-        # clock does not advance an emulated-time budget while the reset line is
-        # held, and the pending interrupt is latched in the VIA IFR regardless.
+        # Break with the space bar tapped while Break is held. Debugger stepping
+        # (not free-run) keeps the VIA ticking while the reset line is held, and
+        # the keypress latches the System VIA CA2 interrupt; on release the IRQ
+        # is pending. All emulated time.
+        bbc.debugger.ensure_stopped()
         assert bbc.keyboard.break_down(), "BreakDown RPC failed"
         bbc.keyboard.key_down(" ")
-        time.sleep(0.3)
+        _step_run(bbc, 0.05)
         assert bbc.keyboard.break_up(), "BreakUp RPC failed"
         bbc.keyboard.key_up(" ")
 
-        recovered = bbc.run_until_or_timeout(
-            lambda: screen_contains(bbc, "BASIC"),
-            emulated_seconds=3.0,
+        recovered = _step_until(
+            bbc, lambda: screen_contains(bbc, "BASIC"), emulated_seconds=3.0
         )
         if not recovered:
             rows = read_mode7_screen(bbc)
@@ -340,15 +375,21 @@ class TestResetIFlag:
         )
         assert ran, "the detector program did not RUN to its PRINT"
 
-        # Press Break on its own (soft reset). An IRQ from the free-running
-        # 100 Hz timer is latched pending at release. Wall-clock hold, as above.
+        # Erase the screen so the banner's return is a real signal, not the
+        # stale boot banner still on screen from before.
+        _erase_screen(bbc)
+
+        # Press Break on its own (soft reset). Debugger stepping keeps the
+        # free-running 100 Hz timer ticking while the reset line is held, so an
+        # interrupt latches pending exactly as on real hardware; on release it is
+        # pending. All emulated time, no wall-clock sleep.
+        bbc.debugger.ensure_stopped()
         assert bbc.keyboard.break_down(), "BreakDown RPC failed"
-        time.sleep(0.3)
+        _step_run(bbc, 0.05)
         assert bbc.keyboard.break_up(), "BreakUp RPC failed"
 
-        recovered = bbc.run_until_or_timeout(
-            lambda: screen_contains(bbc, "BASIC"),
-            emulated_seconds=3.0,
+        recovered = _step_until(
+            bbc, lambda: screen_contains(bbc, "BASIC"), emulated_seconds=3.0
         )
         assert recovered, "Banner did not return after Break (issue #78)."
 
