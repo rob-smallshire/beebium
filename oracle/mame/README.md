@@ -31,6 +31,14 @@ The minimal default `bbcb` set is five files (from `mame -listroms bbcb`): `os12
 satisfy -- identical SHA-1), the speech VSM `cm62024.bin`, the SAA5050 charset `saa5050`,
 and the 8271 DFS `dnfs120.rom` (DFS 1.20).
 
+The `saa5050` charset and the WD1770 DFS 2.2x ROMs (for `-fdc acorn1770`) are MAME-specific
+dumps not in Beebium's `roms/`. They are in the standard MAME BBC romset collection; one
+source the maintainers have used is the stardot archive
+`https://stardot.org.uk/files/mame%20roms_245.zip` (the BBC files `bbcb.zip`, `saa5050.zip`,
+`bbc_acorn8271.zip`, `bbc_acorn1770.zip`). ROMs are copyrighted -- keep them in the rompath
+OUTSIDE the repo (`setup_roms.sh` accepts those romset `.zip` files as sources, or drop the
+zips straight into the rompath for MAME to read).
+
 ## setup_roms.sh
 
 ```

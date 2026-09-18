@@ -140,6 +140,31 @@ CTRL+SHIFT+Z+BREAK hard-resets to a blank MOS. So Beebium's DFS 2.26 shows no
 observable difference from a plain Break for this disc, and Paradroid still does
 not run.
 
+### Correction: Paradroid is a Beebium WD1770 defect, not an incompatible disc
+
+An independent-emulator split check (MAME 0.289 via `oracle/mame/`) refutes the
+"8271-only disc" reading above. Paradroid, booted the same way (`*EXEC !BOOT`,
+option 3):
+
+| Emulator | FDC | DFS | GUITAR (&2900) loaded? | Player running (PC in &40 loop)? |
+|----------|-----|-----|------------------------|----------------------------------|
+| MAME | 8271 | DNFS 1.20 | yes | yes (PC 0x0057) |
+| MAME | WD1770 | 2.23 | yes | yes (PC 0x005F) |
+| Beebium | WD1770 | 2.26 | no | no |
+| Beebium | WD1770 | 2.23 | no | no |
+
+Beebium's DFS 2.26 is byte-identical (SHA-1 `cf2ebc42...`) to MAME's, and with
+DFS 2.23 and the same `*EXEC` boot MAME's WD1770 plays the disc while Beebium's
+does not. Same disc, same DFS, same boot: the difference is the emulator, so
+**Beebium's WD1770/DFS path has a real defect** -- it is not that the disc needs
+an 8271. The coarsest divergence: every file up to and including BRIGHT loads on
+both, but GUITAR (the final `*LOAD`) loads on MAME and stays zero on Beebium,
+after which the loader's zero-page pokes and `*RUN PLAY` never execute. This is
+consistent with the loader being fed from an open `*EXEC` channel whose buffer
+in the &1100-&18FF filing-system workspace is disturbed by the loads; MAME
+survives it and Beebium does not. Not chased further here; it is a WD1770/DFS
+bug for its own issue (bears on #85/#86/#87), separate from the audio work.
+
 ## The five questions
 
 ### 1. What the 250 kHz -> 48 kHz stage does, and its stopband
