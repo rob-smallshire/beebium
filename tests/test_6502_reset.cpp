@@ -230,6 +230,53 @@ TEST_CASE("Reset performs no writes and lowers SP by three (#78 guard)") {
     }
 }
 
+// A RESET is not a power-on: it preserves the registers. Sources: MCS6500
+// Programming Manual s9.3 ("the only automatic operations of the microprocessor
+// during reset are to turn on the interrupt disable bit and to force the program
+// counter to the vector location specified in locations FFFC and FFFD");
+// NESdev "CPU power up state" (https://www.nesdev.org/wiki/CPU_power_up_state),
+// hardware-measured on a 6502 core: after reset A, X, Y and the C, Z, D, V, N
+// flags are unchanged, I = 1; and Michael Steil's Visual6502 analysis
+// (https://www.pagetable.com/?p=410): the three stack cycles are reads, so S
+// ends three lower.
+TEST_CASE("Reset preserves A/X/Y and the N V Z C flags across the sequence (#78 guard)") {
+    for (const auto &nc : kConfigs) {
+        SECTION(nc.name) {
+            setup_memory();
+            M6502 cpu = make_reset_cpu(nc.config, /*irq_asserted=*/false);
+            cpu.a = 0x12;
+            cpu.x = 0x34;
+            cpu.y = 0x56;
+            cpu.p.bits.n = 1;
+            cpu.p.bits.v = 1;
+            cpu.p.bits.z = 1;
+            cpu.p.bits.c = 1;
+            cpu.p.bits.d = 1;
+            cpu.p.bits.i = 0;
+            uint16_t sp_before = cpu.s.w;
+
+            int writes = 0;
+            drive_to_first_opcode(cpu, writes);
+
+            INFO(nc.name);
+            CHECK(cpu.a == 0x12);
+            CHECK(cpu.x == 0x34);
+            CHECK(cpu.y == 0x56);
+            CHECK(cpu.p.bits.n == 1);
+            CHECK(cpu.p.bits.v == 1);
+            CHECK(cpu.p.bits.z == 1);
+            CHECK(cpu.p.bits.c == 1);
+            CHECK(cpu.p.bits.i == 1); // set by the sequence
+            CHECK(((sp_before - cpu.s.w) & 0xff) == 3);
+            if (nc.cmos) {
+                CHECK(cpu.p.bits.d == 0);
+            } else {
+                CHECK(cpu.p.bits.d == 1);
+            }
+        }
+    }
+}
+
 TEST_CASE("Reset clears D on CMOS parts and leaves it unchanged on NMOS (#78)") {
     for (const auto &nc : kConfigs) {
         SECTION(nc.name) {

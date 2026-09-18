@@ -85,6 +85,16 @@ def _read_byte(bbc: Beebium, address: int) -> int:
     return bbc.memory.address.peek[address]
 
 
+def _read_word(bbc: Beebium, address: int) -> int:
+    lo = bbc.memory.address.peek[address]
+    hi = bbc.memory.address.peek[address + 1]
+    return lo | (hi << 8)
+
+
+def _count_on_screen(bbc: Beebium, text: str) -> int:
+    return sum(row.count(text) for row in read_mode7_screen(bbc))
+
+
 def _erase_screen(bbc: Beebium) -> None:
     bbc.debugger.ensure_stopped()
     bbc.memory.address.bus[0x7C00:0x8000] = bytes([0x20] * 0x400)
@@ -181,4 +191,183 @@ class TestResetIFlag:
         assert bank0_type == 0, (
             f"&02A1 (bank 0 ROM type) = {bank0_type:#04x}, expected 0; the ROM "
             "type table was not rebuilt (issue #78)."
+        )
+
+    def test_break_recovers_with_an_irq_raised_while_break_is_held(
+        self, bbc_model_b: Beebium
+    ) -> None:
+        """Type-in regression for the core defect (basis of an upstream report).
+
+        A BASIC program masks off every System VIA interrupt but the keyboard
+        (CA2), points IRQ1V at a planted JAM opcode, and spins with interrupts
+        enabled. Holding Break, tapping the space bar, then releasing Break
+        raises a CA2 interrupt while the CPU is halted, so an IRQ is pending at
+        the instant reset completes. Before the fix the CPU left reset through
+        the IRQ vector, ran IRQ1V into the JAM and halted: PC static at &0900,
+        blank screen, &028D stuck at its power-on value. With the fix RESET sets
+        I, the pending IRQ stays masked, the MOS reset code runs, the banner
+        returns, &028D records a soft Break (0) and the MOS rebuilds IRQ1V.
+
+        Timing is paced in emulated time: the machine runs a clean BASIC loop
+        until Break (so the cycle counter advances and emulated-time waits are
+        reliable here), and the program's own output is polled for.
+        """
+        bbc = bbc_model_b
+
+        program = (
+            "10 REM BREAK WITH AN IRQ PENDING\r"
+            "20 T%=TIME:REPEAT UNTIL TIME>T%+100\r"
+            "30 ?&900=2:REM JAM OPCODE\r"
+            "40 ?&FE4E=&7E:REM ONLY THE KEYBOARD IRQ LEFT ENABLED\r"
+            "50 ?&204=0:?&205=9:REM IRQ1V -> &0900\r"
+            '60 PRINT "HOLD BREAK, TAP SPACE, RELEASE BREAK"\r'
+            "70 REPEAT UNTIL FALSE\r"
+        )
+        bbc.keyboard.type(program)
+
+        # Let the whole program finish being entered before RUN. This matters:
+        # once RUN arms IRQ1V at the JAM (line 50), any leftover keystroke's CA2
+        # interrupt would vector straight into the JAM and halt the machine, so
+        # the keyboard must be fully idle first. Wait for the last line to echo,
+        # then drain a little emulated time so no key event is still in flight.
+        entered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "REPEAT UNTIL FALSE"),
+            emulated_seconds=45.0,
+        )
+        assert entered, "the type-in program was not fully entered"
+        bbc.run_until_or_timeout(lambda: False, emulated_seconds=3.0)
+
+        bbc.keyboard.type("RUN\r")
+
+        # The phrase appears once in the listing (as line 60 was typed) and
+        # again when the running program PRINTs it, so >= 2 means RUN got past
+        # the one-second delay in line 20 to line 60.
+        ran = bbc.run_until_or_timeout(
+            lambda: _count_on_screen(bbc, "HOLD BREAK") >= 2,
+            emulated_seconds=10.0,
+        )
+        if not ran:
+            rows = read_mode7_screen(bbc)
+            print("\nScreen while waiting for the program to RUN:")
+            for i, row in enumerate(rows):
+                print(f"Row {i:2d}: [{row}]")
+        assert ran, "the type-in program did not reach its PRINT"
+
+        _erase_screen(bbc)
+
+        # Break with the space bar tapped while Break is held. The Break/key
+        # choreography is wall-clock (like the other Break tests): the emulated
+        # clock does not advance an emulated-time budget while the reset line is
+        # held, and the pending interrupt is latched in the VIA IFR regardless.
+        assert bbc.keyboard.break_down(), "BreakDown RPC failed"
+        bbc.keyboard.key_down(" ")
+        time.sleep(0.3)
+        assert bbc.keyboard.break_up(), "BreakUp RPC failed"
+        bbc.keyboard.key_up(" ")
+
+        recovered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "BASIC"),
+            emulated_seconds=3.0,
+        )
+        if not recovered:
+            rows = read_mode7_screen(bbc)
+            print("\nScreen after Break (issue #78 -- no recovery):")
+            for i, row in enumerate(rows):
+                print(f"Row {i:2d}: [{row}]")
+        assert recovered, "Banner did not return after Break (issue #78)."
+
+        last_break = _read_byte(bbc, LAST_BREAK_TYPE)
+        irq1v = _read_word(bbc, 0x0204)
+        assert last_break == 0, (
+            f"&028D = {last_break}, expected 0 (soft Break); the MOS reset code "
+            "did not run (issue #78)."
+        )
+        assert irq1v != 0x0900, (
+            f"IRQ1V = {irq1v:#06x}, still the planted vector; the MOS did not "
+            "rebuild it (issue #78)."
+        )
+
+    def test_self_validating_detector_reports_no_irq_taken_at_reset(
+        self, bbc_model_b: Beebium
+    ) -> None:
+        """Self-validating detector: does RESET take a pending IRQ? (issue #78)
+
+        A short BASIC program (assembled into DIMmed memory, reset vector read
+        at run time) hooks IRQ1V with a handler that, on every interrupt,
+        compares the stacked return address with the reset vector's target and
+        increments a marker at &70 when they match -- i.e. when an interrupt was
+        taken in place of the first instruction of the reset handler -- then
+        chains to the original handler. It also sets a control flag at &76
+        whenever the stacked return address lies in &8000-&BFFF (BASIC running
+        in a sideways ROM), which happens during the one-second wait on line 80;
+        the control proves the handler's stack offsets fit this MOS and the hook
+        really ran, so a broken hook cannot produce a false green. A soft Break
+        preserves zero page and lets the MOS restore IRQ1V.
+
+        Reading the pair after Break (MCS6500 Programming Manual s3.2, s9.3):
+        &76 == 1 and &70 == 0 is the documented behaviour (predicted for real
+        hardware): RESET sets I and the pending IRQ is masked until the MOS's own
+        CLI, long after the vectors are restored. Beebium 0.1.16 measured 3, 1.
+        This is the end-to-end assertion a volunteer can run on real hardware.
+        """
+        bbc = bbc_model_b
+
+        program = (
+            "10 REM DOES RESET TAKE A PENDING IRQ?\r"
+            "20 DIM C% 80:?&70=0:?&76=0:?&71=?&204:?&72=?&205:?&74=?&FFFC:?&75=?&FFFD\r"
+            "30 FOR P=0 TO 2 STEP 2:P%=C%:[OPT P\r"
+            "40 .H STX &73:TSX:LDA &103,X:CMP #&80:BCC N:CMP #&C0:BCS N:LDA #1:STA &76\r"
+            "50 .N LDA &103,X:CMP &75:BNE K:LDA &102,X:CMP &74:BNE K:INC &70\r"
+            "60 .K LDX &73:JMP (&71)\r"
+            "70 .I SEI:LDA #H MOD 256:STA &204:LDA #H DIV 256:STA &205:CLI:RTS\r"
+            "80 ]:NEXT:CALL I:T%=TIME:REPEAT UNTIL TIME>T%+100\r"
+            '90 PRINT "PRESS BREAK, THEN TYPE  PRINT ?&70,?&76"\r'
+        )
+        bbc.keyboard.type(program)
+        entered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "?&70,?&76"),
+            emulated_seconds=45.0,
+        )
+        assert entered, "the detector program was not fully entered"
+        bbc.run_until_or_timeout(lambda: False, emulated_seconds=3.0)
+
+        bbc.keyboard.type("RUN\r")
+        # line 80 waits one second (control &76 gets set during it) before line
+        # 90 prints, so >= 2 occurrences means RUN reached the PRINT.
+        ran = bbc.run_until_or_timeout(
+            lambda: _count_on_screen(bbc, "PRESS BREAK") >= 2,
+            emulated_seconds=12.0,
+        )
+        assert ran, "the detector program did not RUN to its PRINT"
+
+        # Press Break on its own (soft reset). An IRQ from the free-running
+        # 100 Hz timer is latched pending at release. Wall-clock hold, as above.
+        assert bbc.keyboard.break_down(), "BreakDown RPC failed"
+        time.sleep(0.3)
+        assert bbc.keyboard.break_up(), "BreakUp RPC failed"
+
+        recovered = bbc.run_until_or_timeout(
+            lambda: screen_contains(bbc, "BASIC"),
+            emulated_seconds=3.0,
+        )
+        assert recovered, "Banner did not return after Break (issue #78)."
+
+        control = _read_byte(bbc, 0x0076)
+        marker = _read_byte(bbc, 0x0070)
+        last_break = _read_byte(bbc, LAST_BREAK_TYPE)
+        irq1v = _read_word(bbc, 0x0204)
+        original_irq1v = _read_word(bbc, 0x0071)  # saved by line 20
+        # Assert the control first: a broken hook cannot produce a false green.
+        assert control == 1, (
+            f"&76 = {control}, expected 1: the detector hook did not run with the "
+            "assumed stack offsets, so the result is invalid, not a pass."
+        )
+        assert marker == 0, (
+            f"&70 = {marker}: RESET took a pending IRQ in place of the reset "
+            "handler's first instruction (issue #78; real hardware reports 0)."
+        )
+        assert last_break == 0, f"&028D = {last_break}, expected 0 (soft Break)."
+        assert irq1v == original_irq1v, (
+            f"IRQ1V = {irq1v:#06x}, expected the MOS default {original_irq1v:#06x}; "
+            "it was not restored."
         )

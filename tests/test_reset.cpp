@@ -429,7 +429,11 @@ TEST_CASE("Break with a pending System VIA IRQ still enters the reset handler (#
     machine.break_up();
     REQUIRE(!machine.is_in_reset());
 
-    // Step to the first opcode fetch out of reset.
+    // Step to the first opcode fetch out of reset. break_up() arms the reset
+    // sequence (tfn = Cycle0_Reset) but cpu.read may still hold the pre-Break
+    // opcode-fetch state, so advance one cycle into the sequence before waiting
+    // for the reset target's opcode fetch.
+    machine.step();
     while (!M6502_IsAboutToExecute(&machine.cpu())) {
         machine.step();
     }
@@ -446,4 +450,78 @@ TEST_CASE("Break with a pending System VIA IRQ still enters the reset handler (#
         machine.step();
     }
     CHECK(machine.peek(0x028D) == 0);
+}
+
+// =============================================================================
+// Break (soft reset) preserves CPU registers (issue #78, register faithfulness)
+// =============================================================================
+//
+// A 6502 RES is not a power-on. Sources: MCS6500 Programming Manual s9.3 (reset
+// only sets the interrupt-disable flag and loads PC from &FFFC/&FFFD); NESdev
+// "CPU power up state" (hardware-measured: A/X/Y and C/Z/D/V/N unchanged by
+// reset, I = 1); pagetable.com/?p=410 (the three stack cycles are reads, so S
+// ends three lower). Beebium's Break must therefore preserve the registers,
+// not memset them. Before the fix soft_reset() ran M6502_Init (a power-on
+// memset) so A/X/Y and the flags were cleared and S forced to &01FF: unfaithful,
+// and the cleared I flag is what made #78 bite.
+
+TEST_CASE("Break (soft reset) preserves CPU registers, sets I and lowers SP by three (#78)",
+          "[reset][break]") {
+    REQUIRE(roms_available());
+    ModelB machine;
+    setup_machine(machine);
+    boot_to_basic(machine);
+
+    // A routine at &0900 that loads known registers and flags, then spins on
+    // itself with interrupts masked (SEI) so the state is stable at Break:
+    //   A9 12    LDA #&12
+    //   A2 34    LDX #&34
+    //   A0 56    LDY #&56
+    //   38       SEC        (C=1)
+    //   F8       SED        (D=1)
+    //   B8       CLV        (V=0)
+    //   78       SEI        (I=1)
+    //   4C 0A 09 JMP &090A  (the JMP jumps to itself)
+    const uint8_t routine[] = {0xA9, 0x12, 0xA2, 0x34, 0xA0, 0x56, 0x38,
+                               0xF8, 0xB8, 0x78, 0x4C, 0x0A, 0x09};
+    for (size_t i = 0; i < sizeof(routine); ++i) {
+        machine.write(0x0900 + static_cast<uint16_t>(i), routine[i]);
+    }
+    machine.set_pc(0x0900);
+
+    // Run until the CPU is spinning on the JMP at &090A.
+    for (int i = 0; i < 100 && machine.pc() != 0x090A; ++i) {
+        machine.step_instruction();
+    }
+    REQUIRE(machine.pc() == 0x090A);
+    REQUIRE(machine.cpu().a == 0x12);
+    REQUIRE(machine.cpu().x == 0x34);
+    REQUIRE(machine.cpu().y == 0x56);
+    uint16_t sp_before = machine.cpu().s.w;
+
+    // Press and release Break (soft reset; no Ctrl held).
+    machine.break_down();
+    machine.break_up();
+    REQUIRE(!machine.is_in_reset());
+
+    // Step to the first opcode fetch out of reset -- i.e. after the reset
+    // sequence but before any MOS code executes. Advance one cycle into the
+    // armed reset sequence first, so the stale pre-Break opcode-fetch state does
+    // not end the wait immediately.
+    machine.step();
+    while (!M6502_IsAboutToExecute(&machine.cpu())) {
+        machine.step();
+    }
+
+    const M6502& cpu = machine.cpu();
+    CHECK(cpu.a == 0x12); // registers preserved across RES
+    CHECK(cpu.x == 0x34);
+    CHECK(cpu.y == 0x56);
+    CHECK(cpu.p.bits.c == 1); // N V Z C preserved
+    CHECK(cpu.p.bits.v == 0);
+    CHECK(cpu.p.bits.z == 0);
+    CHECK(cpu.p.bits.n == 0);
+    CHECK(cpu.p.bits.d == 1); // NMOS host: decimal unchanged by reset
+    CHECK(cpu.p.bits.i == 1); // interrupt-disable set by reset
+    CHECK(((sp_before - cpu.s.w) & 0xff) == 3); // three dummy stack reads
 }
