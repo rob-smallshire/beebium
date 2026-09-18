@@ -144,14 +144,12 @@ public:
     // Does NOT clear RAM - programs and variables survive.
     // This is what happens when the Break key is released.
     //
-    // The CPU goes through M6502_Reset ONLY - NOT M6502_Init. A real 6502 RES
-    // is not a power-on: it preserves A, X, Y and the N V D Z C flags, sets the
-    // interrupt-disable flag, lowers S by three (three dummy stack reads), and
-    // loads PC from the reset vector. M6502_Init memsets the whole CPU, which is
-    // a power-on state, not a reset; it also cleared the interrupt-disable flag,
-    // which (with an IRQ pending) let the CPU leave reset through the IRQ vector
-    // instead of the reset handler (issue #78). config/fns/interrupt_tfn were
-    // established by the power-on reset() and persist across a soft reset.
+    // The CPU goes through M6502_Reset only. A 6502 RES preserves A, X, Y and the
+    // N V D Z C flags, sets the interrupt-disable flag, lowers S by three (three
+    // dummy stack reads) and loads PC from the reset vector at &FFFC. M6502_Init
+    // is a power-on state (it memsets the CPU) and must not be used for a reset;
+    // config/fns/interrupt_tfn were established by the power-on reset() and
+    // persist across a soft reset.
     void soft_reset() {
         M6502_Reset(&state_.cpu);
         state_.memory.soft_reset();
@@ -188,11 +186,10 @@ public:
     // reset sequence. If Ctrl is held, MOS itself clears the VIA configuration
     // to force a "hard reset" behavior.
     //
-    // soft_reset() mutates CPU state (tfn, S, flags) -- it MUST run while the
-    // emulation loop is idle, otherwise a torn read of cpu.tfn or a call through
-    // a half-updated tfn races against `(*cpu.tfn)(&cpu)` and can segfault the
-    // server (issues #27 / #39). with_emulation_paused() provides that
-    // exclusion; the pause is the protection, not any register clearing.
+    // soft_reset() mutates CPU state (tfn, S, flags), so it MUST run while the
+    // emulation loop is idle: otherwise a torn read of cpu.tfn, or a call through
+    // a half-updated tfn, races against `(*cpu.tfn)(&cpu)` and can crash the
+    // server (issues #27 / #39). with_emulation_paused() provides that exclusion.
     void break_up() {
         with_emulation_paused([this] {
             soft_reset();

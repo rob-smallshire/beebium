@@ -33,9 +33,6 @@ non-recovery. Ctrl-Break is the recovery, as on hardware.
 
 from __future__ import annotations
 
-import os
-import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -44,39 +41,18 @@ from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import read_mode7_screen, screen_contains
 
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Break/reset timing is sensitive on Windows CI runners",
-)
-
 ROM_TYPE_TABLE = 0x02A1  # bank N type at ROM_TYPE_TABLE + N
 LAST_BREAK_TYPE = 0x028D  # 0 = soft, 1 = power-on, 2 = Ctrl (hard)
 
-# This scenario is driven in real (wall-clock) time rather than by an emulated
-# cycle budget, and deliberately so: the whole point of the test is a guest that
-# runs off into an empty bank and executes garbage. That garbage reaches an
-# undefined "jam" (KIL) opcode, which halts the CPU and freezes the cycle
-# counter, so a cycle-budget wait (run_until_or_timeout / step_cycles) never
-# reaches its target and hangs. Only a hardware reset (Break) revives the
-# machine. Beebium paces to real BBC speed, so a wall-clock sleep advances a
-# comparable span of emulated time; the waits below are bounded.
-
-
-def _run_free(bbc: Beebium, seconds: float) -> None:
-    """Let the machine run at real speed for a bounded wall-clock span."""
-    bbc.debugger.ensure_running()
-    time.sleep(seconds)
-
-
-def _wait_for(bbc: Beebium, predicate, timeout_seconds: float) -> bool:
-    """Poll predicate() at real-BBC pace until true or the budget expires."""
-    bbc.debugger.ensure_running()
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.1)
-    return predicate()
+# These scenarios are driven entirely in emulated time by DEBUGGER stepping
+# (_step_run / _step_until), never by wall-clock sleeps. Two properties of the
+# platform make that the right tool. A cycle-budget free-run stop
+# (run_until_or_timeout) is only evaluated at an opcode fetch, so it never fires
+# while the CPU is halted -- by a Break hold or by a jam -- and hangs there
+# (issue #79). Debugger stepping, by contrast, keeps advancing the emulated
+# clock and ticking the peripherals whatever the CPU is doing: a KIL (jam) does
+# NOT freeze the cycle counter, and the free-running System VIA timer keeps
+# raising interrupts during a Break hold, exactly as on real hardware.
 
 
 def _read_byte(bbc: Beebium, address: int) -> int:
@@ -174,7 +150,6 @@ def bbc_model_b(
         pytest.skip(str(e))
 
 
-@_skip_windows_ci
 class TestResetIFlag:
     """Issue #78: Ctrl-Break recovers a machine with a pending interrupt."""
 
@@ -185,30 +160,31 @@ class TestResetIFlag:
 
         # Poison the ROM type table so the MOS believes bank 0 holds a service
         # ROM, then *HELP sends it into the empty bank's garbage.
-        bbc.debugger.ensure_running()
         bbc.keyboard.type("?&2A1=&FF\r")
         bbc.keyboard.type("*HELP\r")
 
-        # Let the machine wander into the empty bank (interrupts get masked and a
-        # System VIA interrupt goes pending; the CPU eventually jams).
-        _run_free(bbc, 3.0)
+        # Let the machine wander into the empty bank: interrupts get masked, a
+        # System VIA interrupt goes pending, and the CPU eventually hits a KIL
+        # (jam). Debugger stepping keeps advancing the clock through the jam.
+        _step_run(bbc, 3.0)
 
         # Erase the screen so the banner's return is a real signal.
         _erase_screen(bbc)
 
-        # Ctrl-Break: hold Ctrl across the Break, and run while it is still held
+        # Ctrl-Break: hold Ctrl across the Break, and step while it is still held
         # so the MOS reset routine reads the matrix and treats it as a hard
         # reset.
+        bbc.debugger.ensure_stopped()
         bbc.keyboard.ctrl_down()
         assert bbc.keyboard.break_down(), "BreakDown RPC failed"
-        _run_free(bbc, 0.1)
+        _step_run(bbc, 0.1)
         assert bbc.keyboard.break_up(), "BreakUp RPC failed"
-        _run_free(bbc, 1.0)
+        _step_run(bbc, 1.0)
         bbc.keyboard.ctrl_up()
 
         # Give the MOS reset code time to redraw and re-initialise.
-        recovered = _wait_for(
-            bbc, lambda: screen_contains(bbc, "BASIC"), timeout_seconds=5.0
+        recovered = _step_until(
+            bbc, lambda: screen_contains(bbc, "BASIC"), emulated_seconds=5.0
         )
         if not recovered:
             rows = read_mode7_screen(bbc)

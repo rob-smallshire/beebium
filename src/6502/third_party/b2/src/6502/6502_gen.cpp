@@ -1349,10 +1349,10 @@ static std::vector<InstrGen> GetAll() {
 
         // The RESET sequence is the interrupt sequence with the stack writes
         // suppressed. "reset_flags" on the FFFC (vector-low) read sets the
-        // interrupt-disable flag at the vector-fetch point, mirroring
-        // Cycle4_Interrupt, before CheckForInterrupts runs on the next cycle;
-        // CMOS parts also clear the decimal flag there. Without it a pending
-        // IRQ would be taken instead of the reset handler (issue #78).
+        // interrupt-disable flag at the vector-fetch point (mirroring
+        // Cycle4_Interrupt) and clears the decimal flag on CMOS parts, before
+        // CheckForInterrupts runs on the next cycle, so a pending IRQ stays
+        // masked into the reset handler (issue #78).
         G("Reset", "Interrupts", {Ri("pc", "data!", nullptr), Rd("sp--", "pch", nullptr), Rd("sp--", "pcl", nullptr), Rd("sp--", "data", nullptr), Ra("resl", "pcl", "reset_flags"), Ra("resh", "pch", nullptr)});
 
         G("RTI", "RTI", {
