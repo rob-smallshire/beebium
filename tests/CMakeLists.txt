@@ -21,6 +21,11 @@ add_executable(test_6502_nmi_concurrent_sources test_6502_nmi_concurrent_sources
 target_link_libraries(test_6502_nmi_concurrent_sources PRIVATE 6502_lib Catch2::Catch2WithMain)
 catch_discover_tests(test_6502_nmi_concurrent_sources)
 
+# 6502 reset-sequence flag behaviour (I set, CMOS D cleared) (no Beebium core dependency)
+add_executable(test_6502_reset test_6502_reset.cpp)
+target_link_libraries(test_6502_reset PRIVATE 6502_lib Catch2::Catch2WithMain)
+catch_discover_tests(test_6502_reset)
+
 # Memory tests
 add_executable(test_memory test_memory.cpp)
 target_link_libraries(test_memory PRIVATE beebium_core Catch2::Catch2WithMain)

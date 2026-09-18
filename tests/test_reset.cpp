@@ -379,3 +379,71 @@ TEST_CASE("Model B Plus soft reset preserves System VIA", "[reset][via][b+]") {
     // System VIA IER should be preserved
     CHECK(machine.peek(SYSTEM_VIA_IER) == ier_before);
 }
+
+// =============================================================================
+// Break with a pending System VIA IRQ (issue #78)
+// =============================================================================
+//
+// If the 6502 core's reset sequence fails to set the I flag, a Break taken
+// while a System VIA interrupt is pending leaves reset through the IRQ vector
+// (&FFFE) instead of the reset vector (&FFFC): the first instruction executed
+// is the MOS IRQ handler, not the MOS reset code, so the machine never
+// re-initialises and never records the Break. This reproduces the field
+// failure from #78 at the machine level.
+
+TEST_CASE("Break with a pending System VIA IRQ still enters the reset handler (#78)",
+          "[reset][via][break][integration]") {
+    REQUIRE(roms_available());
+    ModelB machine;
+    setup_machine(machine);
+
+    // Boot fully so the MOS has enabled System VIA interrupts.
+    boot_to_basic(machine);
+    constexpr uint16_t SYSTEM_VIA_IFR = 0xFE4D;
+    REQUIRE((machine.peek(SYSTEM_VIA_IER) & 0x7F) != 0);
+
+    // Hijack the CPU into "SEI; JMP *" so interrupts are masked and the CPU
+    // spins in RAM without ever servicing the VIA. Bytes at &0900:
+    //   78          SEI
+    //   4C 01 09    JMP &0901   (the JMP jumps to itself)
+    machine.write(0x0900, 0x78);
+    machine.write(0x0901, 0x4C);
+    machine.write(0x0902, 0x01);
+    machine.write(0x0903, 0x09);
+    machine.set_pc(0x0900);
+
+    // Run ~60 ms of emulated time (2 MHz -> 120000 cycles). With interrupts
+    // masked the System VIA interrupt goes pending and stays pending.
+    for (int i = 0; i < 120000; ++i) {
+        machine.step();
+    }
+
+    // A System VIA interrupt is now pending (enabled and flagged), unserviced.
+    uint8_t ier = machine.peek(SYSTEM_VIA_IER);
+    uint8_t ifr = machine.peek(SYSTEM_VIA_IFR);
+    INFO("IER=" << std::hex << int(ier) << " IFR=" << int(ifr));
+    REQUIRE((ier & ifr & 0x7F) != 0);
+
+    // Press and release Break (soft reset; no Ctrl held).
+    machine.break_down();
+    machine.break_up();
+    REQUIRE(!machine.is_in_reset());
+
+    // Step to the first opcode fetch out of reset.
+    while (!M6502_IsAboutToExecute(&machine.cpu())) {
+        machine.step();
+    }
+    uint16_t first_pc = machine.cpu().abus.w;
+    uint16_t reset_vector =
+        machine.peek(0xFFFC) | (uint16_t(machine.peek(0xFFFD)) << 8);
+    INFO("first_pc=" << std::hex << first_pc << " reset_vector=" << reset_vector);
+    CHECK(first_pc == reset_vector); // enters the reset handler, not the IRQ handler
+
+    // Let the MOS reset code run (1 s emulated) and confirm it recorded a soft
+    // Break at &028D (0 = soft Break; 1 = the power-on value it would keep if
+    // the reset code never ran).
+    for (int i = 0; i < 2'000'000; ++i) {
+        machine.step();
+    }
+    CHECK(machine.peek(0x028D) == 0);
+}
