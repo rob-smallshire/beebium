@@ -26,6 +26,14 @@ add_executable(test_6502_reset test_6502_reset.cpp)
 target_link_libraries(test_6502_reset PRIVATE 6502_lib Catch2::Catch2WithMain)
 catch_discover_tests(test_6502_reset)
 
+# dp111 6502 instruction timing suite, bare-core vector-build harness
+add_executable(test_6502_dp111_timing test_6502_dp111_timing.cpp)
+target_link_libraries(test_6502_dp111_timing PRIVATE 6502_lib Catch2::Catch2WithMain)
+target_compile_definitions(test_6502_dp111_timing PRIVATE
+    BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+)
+catch_discover_tests(test_6502_dp111_timing)
+
 # Memory tests
 add_executable(test_memory test_memory.cpp)
 target_link_libraries(test_memory PRIVATE beebium_core Catch2::Catch2WithMain)
