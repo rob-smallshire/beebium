@@ -145,22 +145,30 @@ Beebium and drew two successive conclusions from that -- first that the disc was
 WD1770/DFS path had a defect (an independent MAME check appeared to show the disc
 playing on MAME's WD1770 but not Beebium's). Both conclusions are wrong.
 
-The cause is a damaged working copy of the disc. The captures reused one
-`BEEBIUM_DISC_WORK_DIR` across many runs; the per-user copy-on-write image in it
-became corrupted -- the final sample file, GUITAR, read back as zero, so the
-player never started -- and every later run inherited the damage, while MAME read
-the pristine image directly and therefore played. On a fresh build, a fresh copy
-of the disc and a fresh empty work directory, `*LOAD GUITAR 2900` returns the
-file byte-for-byte and the stock boot plays (the headline at the top of this
-note).
+The cause of those failing runs is not established. They were first put down to
+a damaged working copy of the disc in a reused `BEEBIUM_DISC_WORK_DIR`, but that
+does not hold either: mounting a disc by explicit path opens the file in place,
+with no working copy, and the file that was mounted (the copy in the beebjit
+repository) is byte-identical to its git HEAD. A second, independent rig could
+not reproduce the failure by any route, including the original capture script
+run verbatim against the original path on a current build, which plays and
+leaves the file unchanged. The most plausible explanation is a stale server
+binary on the investigating rig at the time. While the failure persisted, MAME
+read the same image and played it, which is what made it look like a Beebium
+defect.
 
-The origin of the damage is not established: the corrupted copy no longer exists,
-so it cannot be inspected. The DFS 2.26 "8271 compatibility" Z-Break boot was
-tried and made no observable difference from a plain Break, but that was measured
-on the damaged copy and is therefore uninformative. To stop this recurring,
-`capture_disc.py` now copies the disc fresh and uses a fresh work directory per
-run, and hashes the mounted image before and after so a write-back is caught
-rather than silently trusted.
+What the episode did turn up is a real defect elsewhere: disc write-back
+persisted sectors that had failed to decode (bad data CRC, or a short data field
+padded with zeros), so a single guest write to a track could damage that track's
+other sectors on the host image. That is fixed (#88).
+
+The DFS 2.26 "8271 compatibility" Z-Break boot was tried and made no observable
+difference from a plain Break, but that was measured on the failing rig and is
+therefore uninformative. To keep captures trustworthy, `capture_disc.py` copies
+the disc fresh and uses a fresh work directory per run, and hashes the mounted
+image before and after so any write-back is caught rather than silently trusted.
+The wider lesson: confirm a surprising failure on a second, independent rig with
+a fresh build before drawing conclusions from it.
 
 ## The five questions
 
