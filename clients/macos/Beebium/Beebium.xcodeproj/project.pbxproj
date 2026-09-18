@@ -19,6 +19,7 @@
 		06B9C1E897D9DB39E8392078 /* SidebarModeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7386122C0E5009AE250FECD /* SidebarModeContent.swift */; };
 		07C91006D788A614860664BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4635C74CA6E1654868006CA6 /* Assets.xcassets */; };
 		089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66676E0A17481C9E2BE66969 /* HostFingerprint.swift */; };
+		0C7D8FBEE3E4006E99C883D0 /* AudioRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */; };
 		0C9F21B8F3D60663F6BC11BD /* VideoSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E101DD75E1EF0B125CB46B1 /* VideoSettingsPane.swift */; };
 		0DA8A667A8A7A3861F00B88F /* MachineManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7319BB6A760A9042161B98EB /* MachineManager.swift */; };
 		0DB84CA71C7998BEE8527F1B /* DiscImageDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */; };
@@ -349,6 +350,7 @@
 		C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysClient.swift; sourceTree = "<group>"; };
 		C9A1A70DB6662E96A6210970 /* KeyboardMappings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KeyboardMappings; path = Beebium/Resources/KeyboardMappings; sourceTree = SOURCE_ROOT; };
 		CA006204A482FCD8B77F7549 /* EconetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetClient.swift; sourceTree = "<group>"; };
+		CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRendererTests.swift; sourceTree = "<group>"; };
 		CC51B6CDDCA00180CC81969A /* serial.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = serial.grpc.swift; sourceTree = "<group>"; };
 		CF33113C39D9E1D2BE649FF6 /* system.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.grpc.swift; sourceTree = "<group>"; };
 		CF6562062957B62B8C099A42 /* DiscClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscClient.swift; sourceTree = "<group>"; };
@@ -651,6 +653,7 @@
 		F07BCA445DC9C4A1F9AD1711 /* BeebiumTests */ = {
 			isa = PBXGroup;
 			children = (
+				CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */,
 				1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */,
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
@@ -811,6 +814,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0C7D8FBEE3E4006E99C883D0 /* AudioRendererTests.swift in Sources */,
 				E2C3C9AB563A0A8406735C73 /* BBCModifierStateTests.swift in Sources */,
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,

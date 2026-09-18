@@ -237,9 +237,7 @@ final class AudioClient: ObservableObject, Disconnectable {
             for i in 0..<sampleCount {
                 let offset = i * bytesPerSample
                 if offset + 8 <= bytes.count {
-                    for b in 0..<8 {
-                        frameData.append(bytes[offset + b])
-                    }
+                    frameData.append(contentsOf: bytes[offset..<offset + 8])
                 }
             }
         }

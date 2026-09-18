@@ -117,10 +117,17 @@ final class AudioRingBuffer: @unchecked Sendable {
     /// - Returns: Number of samples written
     func write(data: Data) -> Int {
         let sampleCount = data.count / MemoryLayout<UInt64>.size
-        return data.withUnsafeBytes { rawBuffer in
-            guard let baseAddress = rawBuffer.baseAddress else { return 0 }
-            let samples = baseAddress.assumingMemoryBound(to: UInt64.self)
-            return write(samples, count: sampleCount)
+        if sampleCount == 0 { return 0 }
+        // Data storage is not guaranteed 8-byte aligned, so load each frame
+        // unaligned rather than reinterpreting the pointer.
+        var frames = [UInt64](repeating: 0, count: sampleCount)
+        data.withUnsafeBytes { rawBuffer in
+            for i in 0..<sampleCount {
+                frames[i] = rawBuffer.loadUnaligned(fromByteOffset: i * 8, as: UInt64.self)
+            }
+        }
+        return frames.withUnsafeBufferPointer { buffer in
+            write(buffer.baseAddress!, count: sampleCount)
         }
     }
 

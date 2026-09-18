@@ -40,8 +40,7 @@ final class AudioRenderer: @unchecked Sendable {
     static let channelCount = 4
 
     /// Half the backend's full-scale (Sn76489::FULL_SCALE = 16384). Dividing an
-    /// int16 channel by this gives a volume-0 square unit AC amplitude, matching
-    /// the loudness of the previous 8-bit path.
+    /// int16 channel by this gives a volume-0 square unit AC amplitude.
     static let halfFullScale: Float = 8192.0
 
     /// Default lowpass cutoff frequency (BBC Microcomputer Service Manual, 1985)
@@ -345,9 +344,9 @@ final class AudioRenderer: @unchecked Sendable {
     /// Soft clipping to prevent harsh distortion
     private func softClip(_ x: Float) -> Float {
         if x > 1.0 {
-            return 1.0 - exp(1.0 - x)
+            return 1.0 - exp(1.0 - x)   // saturates toward +1 as x -> +inf
         } else if x < -1.0 {
-            return -1.0 + exp(-1.0 - x)
+            return -1.0 + exp(1.0 + x)  // saturates toward -1 as x -> -inf
         }
         return x
     }
