@@ -272,6 +272,24 @@ baseband. Both must be fixed together to reproduce this material.
   a threshold and out-of-band energy below one, on the synthetic tone and on a
   short committed passage.
 
+## Pops and crackles in ordinary game audio (#83, #84)
+
+The macOS renderer's output limiter was a discontinuous soft clip: its positive
+branch `1 - exp(1 - x)` jumps from 1.0 to ~0 as the mix crosses +1.0 (and the
+old negative branch diverged to the wrong sign). The mixer sums four channels at
+0.707 pan gain with no mix scaling, so two loud channels already reach ~1.41 and
+ordinary loud multi-channel music crosses the limit continuously -- every
+crossing was a near-full-scale step, i.e. a pop or crackle. This is the likely
+cause of the macOS-client pops reported as #83 (Revs+) and #84 (Manic Miner
+2021).
+
+Measured with the offline model of the client chain, on a loud continuous
+three-tone chord (peak |mix| ~1.9, with 31% of samples beyond the 0.8 knee): the
+old clip produced **1248 near-full-scale discontinuities** over two seconds (max
+jump ~1.0); a C1 soft-knee limiter produces **0** (max jump 0.08). The WAVs
+`chord_old_softclip.wav` and `chord_new_limiter.wav` were saved for listening.
+The limiter is now a unit-tested pure function (`AudioRenderer.softLimit`).
+
 ## Deferred (noted, no action in this work)
 
 - **Open-gate write model.** With the sound write gate held open, Beebium
