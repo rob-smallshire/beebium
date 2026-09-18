@@ -1,0 +1,16 @@
+# ROMs and disc images are copyrighted and must never be committed. The MAME
+# oracle defaults its rompath outside the repository; these are belt-and-braces
+# guards in case someone points it here anyway.
+mame_roms/
+mame/mame_roms/
+mame/**/*.zip
+mame/**/*.rom
+mame/**/*.ssd
+mame/**/*.dsd
+mame/**/*.bin
+
+# MAME runtime artifacts written relative to the working directory.
+mame/cfg/
+mame/snap/
+mame/nvram/
+mame/**/*.png

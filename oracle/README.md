@@ -7,6 +7,13 @@ assumed source of truth. It is not part of the build, is not run in CI, and is
 not a distributable -- it is a bug-hunting instrument, picked up when a defect
 resists ordinary debugging and put down again afterwards.
 
+A second, independent oracle lives in [`mame/`](mame/): a headless harness for
+running a BBC under [MAME](https://www.mamedev.org) and reading back CPU state,
+memory and snapshots. Reach for it when a third opinion helps -- in particular
+MAME's default `bbcb` is an Intel 8271 machine, which is how it settled the
+"Flip!" reports (#85/#86): the game runs on the 8271 and fails on every WD1770 /
+DFS 2.2x configuration. See `mame/README.md`.
+
 **Status: dormant, preserved deliberately.** It was driven hard in March 2026
 against the Chuckie Egg 2023 Tube hang and earned its keep (see *What it
 found*). Nothing has needed it since. It is kept working rather than deleted
