@@ -38,8 +38,8 @@ class SourceEncoding(IntEnum):
     ENCODING_1X32BIT_SIGNED = audio_pb2.ENCODING_1X32BIT_SIGNED
     # Unused / silent source.
     ENCODING_SILENCE = audio_pb2.ENCODING_SILENCE
-    # 4 x uint8 channels, unipolar (0 = silence). No longer used by the SN76489,
-    # which now uses two ENCODING_2X16BIT_SIGNED fields.
+    # 4 x uint8 channels, unipolar (0 = silence). Unused by any current source
+    # (the SN76489 uses two ENCODING_2X16BIT_SIGNED fields).
     ENCODING_4X8BIT_UNSIGNED = audio_pb2.ENCODING_4X8BIT_UNSIGNED
 
 
@@ -78,9 +78,11 @@ class AudioFormat:
 class AudioChunk:
     """A batch of audio samples as they were generated."""
 
-    sequence: int  # chunk sequence number (for drop detection)
+    # Produced index of the first sample (delivered plus dropped so far); a jump
+    # beyond the previous chunk's first index plus its sample_count is a drop.
+    sequence: int
     sample_count: int  # samples in this chunk
-    cycle_count: int  # emulation cycle at start of chunk (reserved)
+    cycle_count: int  # reserved (zero)
     # Packed sample data: sample_count x source_count x 4 bytes. Use the
     # AudioFormat sources' encodings to unpack each 32-bit field.
     samples: bytes

@@ -98,16 +98,16 @@ class _AudioRecorder:
         """Samples dropped, detected from the produced-index sequence.
 
         Each chunk's ``sequence`` is the produced index of its first sample
-        (counting dropped samples). If it jumps beyond the previous chunk's
-        first index plus that chunk's length, the shortfall was dropped.
+        (delivered plus dropped so far). Tracking the expected next index from
+        the stream start, every jump beyond it is dropped samples; this counts
+        drops before the first delivered chunk too.
         """
         dropped = 0
-        for (prev_seq, prev_count), cur_seq in zip(
-            zip(self._chunk_indices, self._sample_counts), self._chunk_indices[1:]
-        ):
-            expected = prev_seq + prev_count
-            if cur_seq > expected:
-                dropped += cur_seq - expected
+        expected = 0
+        for seq, count in zip(self._chunk_indices, self._sample_counts):
+            if seq > expected:
+                dropped += seq - expected
+            expected = seq + count
         return dropped
 
     def channels(self) -> tuple[list[int], list[int], list[int], list[int], list[int]]:

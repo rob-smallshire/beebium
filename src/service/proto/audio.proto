@@ -17,9 +17,13 @@ message SubscribeAudioRequest {
 }
 
 message AudioChunk {
-    uint64 sequence = 1;        // Chunk sequence number (for drop detection)
+    // Produced index of this chunk's first sample: delivered plus dropped so
+    // far. A consumer that sees it jump beyond the previous chunk's first index
+    // plus that chunk's sample_count has detected dropped samples. The drop
+    // total is exact; a drop is attributed to the first chunk read after it.
+    uint64 sequence = 1;
     uint32 sample_count = 2;    // Number of samples in this chunk
-    uint64 cycle_count = 3;     // Emulation cycle at start of chunk (reserved)
+    uint64 cycle_count = 3;     // Reserved (zero).
 
     // Packed sample data: sample_count × source_count × 4 bytes
     // Each sample is N × 32-bit fields, where N = source_count from AudioFormat
@@ -39,9 +43,9 @@ enum SourceEncoding {
     ENCODING_2X16BIT_SIGNED = 1;
     ENCODING_1X32BIT_SIGNED = 2;  // 1 × int32 channel (high-quality)
     ENCODING_SILENCE = 3;         // Unused/silent source
-    // 4 x uint8 channels, unipolar (0 = silence). No longer used by the
-    // SN76489, which now uses two ENCODING_2X16BIT_SIGNED fields (see below).
-    // The wire enum value is retained and never reused.
+    // 4 x uint8 channels, unipolar (0 = silence). Unused by any current source
+    // (the SN76489 uses two ENCODING_2X16BIT_SIGNED fields). The wire enum value
+    // is retained and never reused.
     ENCODING_4X8BIT_UNSIGNED = 4;
 }
 

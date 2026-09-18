@@ -80,13 +80,13 @@ grpc::Status AudioServiceImpl<MachineType>::SubscribeAudio(
             size_t count = audio_buffer.read(samples.data(), chunk_size);
 
             AudioChunk chunk;
-            // sequence is the produced index of this chunk's first sample (it
-            // counts dropped samples too), so a consumer that sees it jump by
-            // more than the previous chunk's sample_count has detected a drop.
-            // cycle_count carries the total generated so far as a cross-check.
+            // sequence is the produced index of this chunk's first sample
+            // (delivered plus dropped so far), so a consumer that sees it jump
+            // beyond the previous chunk's sample_count has detected dropped
+            // samples. cycle_count is reserved and left zero.
             chunk.set_sequence(audio_buffer.last_read_index());
             chunk.set_sample_count(static_cast<uint32_t>(count));
-            chunk.set_cycle_count(audio_buffer.produced());
+            chunk.set_cycle_count(0);
 
             // Pack samples into bytes: each sample is N × 32-bit fields
             // For now, just source 0 (SN76489) is active

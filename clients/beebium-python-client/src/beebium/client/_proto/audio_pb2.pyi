@@ -52,9 +52,9 @@ class _SourceEncodingEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Source
     ENCODING_SILENCE: _SourceEncoding.ValueType  # 3
     """Unused/silent source"""
     ENCODING_4X8BIT_UNSIGNED: _SourceEncoding.ValueType  # 4
-    """4 x uint8 channels, unipolar (0 = silence). No longer used by the
-    SN76489, which now uses two ENCODING_2X16BIT_SIGNED fields (see below).
-    The wire enum value is retained and never reused.
+    """4 x uint8 channels, unipolar (0 = silence). Unused by any current source
+    (the SN76489 uses two ENCODING_2X16BIT_SIGNED fields). The wire enum value
+    is retained and never reused.
     """
 
 class SourceEncoding(_SourceEncoding, metaclass=_SourceEncodingEnumTypeWrapper):
@@ -75,9 +75,9 @@ ENCODING_1X32BIT_SIGNED: SourceEncoding.ValueType  # 2
 ENCODING_SILENCE: SourceEncoding.ValueType  # 3
 """Unused/silent source"""
 ENCODING_4X8BIT_UNSIGNED: SourceEncoding.ValueType  # 4
-"""4 x uint8 channels, unipolar (0 = silence). No longer used by the
-SN76489, which now uses two ENCODING_2X16BIT_SIGNED fields (see below).
-The wire enum value is retained and never reused.
+"""4 x uint8 channels, unipolar (0 = silence). Unused by any current source
+(the SN76489 uses two ENCODING_2X16BIT_SIGNED fields). The wire enum value
+is retained and never reused.
 """
 Global___SourceEncoding: _TypeAlias = SourceEncoding  # noqa: Y015
 
@@ -110,11 +110,15 @@ class AudioChunk(_message.Message):
     CYCLE_COUNT_FIELD_NUMBER: _builtins.int
     SAMPLES_FIELD_NUMBER: _builtins.int
     sequence: _builtins.int
-    """Chunk sequence number (for drop detection)"""
+    """Produced index of this chunk's first sample: delivered plus dropped so
+    far. A consumer that sees it jump beyond the previous chunk's first index
+    plus that chunk's sample_count has detected dropped samples. The drop
+    total is exact; a drop is attributed to the first chunk read after it.
+    """
     sample_count: _builtins.int
     """Number of samples in this chunk"""
     cycle_count: _builtins.int
-    """Emulation cycle at start of chunk (reserved)"""
+    """Reserved (zero)."""
     samples: _builtins.bytes
     """Packed sample data: sample_count × source_count × 4 bytes
     Each sample is N × 32-bit fields, where N = source_count from AudioFormat

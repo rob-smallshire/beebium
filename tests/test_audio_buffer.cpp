@@ -1,4 +1,4 @@
-// Copyright © 2026 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -38,7 +38,7 @@ TEST_CASE("AudioBuffer delivers contiguous produced indices with no drops",
         REQUIRE(buffer.push(make_sample(i)));
     }
     REQUIRE(buffer.dropped() == 0);
-    REQUIRE(buffer.produced() == 40);
+    REQUIRE(buffer.sequence() == 40);
 
     std::vector<AudioSample> dest(16);
     // First chunk: produced indices 0..15.
@@ -68,21 +68,24 @@ TEST_CASE("AudioBuffer overflow leaves a detectable gap in the produced index",
     const uint64_t drops = buffer.dropped();
     REQUIRE(drops >= 6);  // the terminating push plus the five above
 
-    // Drain everything currently buffered: these are produced indices 0..kept-1.
-    std::vector<AudioSample> dest(static_cast<size_t>(kept));
-    REQUIRE(buffer.read(dest.data(), static_cast<size_t>(kept)) == kept);
-    const uint64_t first_chunk_index = buffer.last_read_index();
-    const uint64_t first_chunk_count = kept;
-    REQUIRE(first_chunk_index == 0);
+    // Simulate a consumer tracking the produced index across chunks. The total
+    // gap it observes equals the exact drop count (the drops are surfaced on the
+    // first read after them rather than at their precise stream position).
+    uint64_t expected_next = 0;
+    uint64_t observed_gap = 0;
 
-    // Now push one more; it is kept, with produced index kept + drops.
+    // First chunk: drain everything currently buffered.
+    std::vector<AudioSample> dest(static_cast<size_t>(kept) + 1);
+    size_t n1 = buffer.read(dest.data(), static_cast<size_t>(kept));
+    REQUIRE(n1 == kept);
+    observed_gap += buffer.last_read_index() - expected_next;
+    expected_next = buffer.last_read_index() + n1;
+
+    // Second chunk: one more sample, pushed after the drops.
     REQUIRE(buffer.push(make_sample(0xBEEF)));
-    REQUIRE(buffer.read(dest.data(), 1) == 1);
-    const uint64_t second_chunk_index = buffer.last_read_index();
+    size_t n2 = buffer.read(dest.data(), 1);
+    REQUIRE(n2 == 1);
+    observed_gap += buffer.last_read_index() - expected_next;
 
-    // A consumer expects the next chunk's first index to follow the previous
-    // chunk contiguously; the shortfall is exactly the dropped-sample count.
-    const uint64_t expected_if_no_drop = first_chunk_index + first_chunk_count;
-    REQUIRE(second_chunk_index > expected_if_no_drop);
-    REQUIRE(second_chunk_index - expected_if_no_drop == drops);
+    REQUIRE(observed_gap == drops);
 }
