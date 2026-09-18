@@ -66,11 +66,12 @@ final class AudioRendererTests: XCTestCase {
 
     // MARK: - Mixer channel listing
 
-    // The SN76489 is described as two sources sharing one group; the mixer must
-    // list the channels of every source in the group, concatenated in
-    // source-index order, so the running position is the mixer channel index
-    // (0..3 = tone0, tone1, tone2, noise). Reserved sources sit in another group.
-    func testChannelsInGroupConcatenatesSourcesInIndexOrder() {
+    // The SN76489 is described as two sources sharing one group. The mixer maps
+    // each channel to a mixer channel index by concatenating the group's sources
+    // in source-index order (0..3 = tone0, tone1, tone2, noise), then DISPLAYS
+    // the rows ordered by channel name numerically (0, 1, 2, 3 -- noise first).
+    // The (index, name) pairing is unchanged: name "0" stays mixer channel 3.
+    func testChannelsInGroupDisplaysNumericNameOrderWithStableIndexPairing() {
         // Deliberately out of source-index order to prove the function sorts.
         let sources = [
             AudioSourceInfo(id: 1, name: "SN76489", channelNames: ["3", "0"], groupId: 1),
@@ -80,8 +81,36 @@ final class AudioRendererTests: XCTestCase {
 
         let channels = AudioSourceInfo.channelsInGroup(sources, groupId: 1)
 
-        XCTAssertEqual(channels.map { $0.0 }, [0, 1, 2, 3])
-        XCTAssertEqual(channels.map { $0.1 }, ["1", "2", "3", "0"])
+        // Displayed noise-first, but "0" still controls mixer channel 3.
+        XCTAssertEqual(channels.map { $0.0 }, [3, 0, 1, 2])
+        XCTAssertEqual(channels.map { $0.1 }, ["0", "1", "2", "3"])
+    }
+
+    // Numeric ordering compares as integers, not strings, so "10" follows "2".
+    func testChannelsInGroupOrdersNamesAsIntegersNotStrings() {
+        let sources = [
+            AudioSourceInfo(id: 0, name: "X", channelNames: ["2", "10"], groupId: 1),
+            AudioSourceInfo(id: 1, name: "X", channelNames: ["1"], groupId: 1),
+        ]
+
+        let channels = AudioSourceInfo.channelsInGroup(sources, groupId: 1)
+
+        XCTAssertEqual(channels.map { $0.1 }, ["1", "2", "10"])
+        // "1" is source 1's only channel -> mixer index 2; "2","10" are source 0.
+        XCTAssertEqual(channels.map { $0.0 }, [2, 0, 1])
+    }
+
+    // If any name in the group is non-numeric, keep source (mixer-index) order.
+    func testChannelsInGroupKeepsSourceOrderWhenNamesAreNotAllNumeric() {
+        let sources = [
+            AudioSourceInfo(id: 0, name: "Speech", channelNames: ["Left", "Right"], groupId: 2),
+            AudioSourceInfo(id: 1, name: "Speech", channelNames: ["Mono"], groupId: 2),
+        ]
+
+        let channels = AudioSourceInfo.channelsInGroup(sources, groupId: 2)
+
+        XCTAssertEqual(channels.map { $0.0 }, [0, 1, 2])
+        XCTAssertEqual(channels.map { $0.1 }, ["Left", "Right", "Mono"])
     }
 
     func testChannelsInUnknownGroupIsEmpty() {

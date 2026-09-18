@@ -20,22 +20,39 @@ struct AudioSourceInfo: Identifiable {
     let channelNames: [String]
     let groupId: UInt32
 
-    /// The channels of every source in `groupId`, concatenated in source-index
-    /// order, as (mixer channel index, channel name) pairs.
+    /// The channels of every source in `groupId`, as (mixer channel index,
+    /// channel name) pairs, ready for display in the mixer.
     ///
     /// A group may span several sources: the SN76489 is two sources (index 0 =
-    /// "1","2", index 1 = "3","0") in one group. The running position is the
-    /// mixer channel index (0..3 = tone0, tone1, tone2, noise), which matches the
-    /// order AudioRenderer unpacks and the indices AudioMixerState, meters, pan
-    /// and mute-solo use, so slider N controls the channel labelled N.
+    /// "1","2", index 1 = "3","0") in one group. Each channel's mixer index comes
+    /// from concatenating the group's sources in source-index order (0..3 =
+    /// tone0, tone1, tone2, noise), which matches the order AudioRenderer unpacks
+    /// and the indices AudioMixerState, meters, pan and mute-solo use, so the row
+    /// labelled N controls and meters mixer channel N regardless of its position.
+    ///
+    /// Rows are then displayed ordered by channel name compared numerically when
+    /// every name in the group parses as an integer (so "10" follows "2"); if any
+    /// name is non-numeric the source order is kept. The (index, name) pairing is
+    /// never changed, only the row order: for the SN76489 this displays the noise
+    /// channel ("0", mixer index 3) first, then tones "1","2","3".
     static func channelsInGroup(_ sources: [AudioSourceInfo],
                                 groupId: UInt32) -> [(Int, String)] {
-        sources
+        let channels = sources
             .filter { $0.groupId == groupId }
             .sorted { $0.id < $1.id }
             .flatMap { $0.channelNames }
             .enumerated()
             .map { ($0.offset, $0.element) }
+
+        let numbers = channels.compactMap { Int($0.1) }
+        guard numbers.count == channels.count else { return channels }
+
+        // Stable numeric sort: equal numbers keep their source (mixer-index) order.
+        return channels
+            .sorted { lhs, rhs in
+                let a = Int(lhs.1)!, b = Int(rhs.1)!
+                return a != b ? a < b : lhs.0 < rhs.0
+            }
     }
 }
 
