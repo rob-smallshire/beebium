@@ -2064,3 +2064,80 @@ TEST_CASE("Clear removes disabled breakpoints", "[grpc][debugger][breakpoint]") 
         CHECK(resp.breakpoints_size() == 0);
     }
 }
+
+// =============================================================================
+// Issue #79: a cycle-budget stop must fire even while the CPU is halted
+// =============================================================================
+//
+// The clients implement run_until_or_timeout by installing a full-range address
+// breakpoint [0x0000, 0x10000) with a "cycles >= N" condition. Machine::run()
+// evaluates breakpoints only at an opcode fetch (M6502_IsAboutToExecute), so
+// while the CPU is halted -- by a jam (KIL) opcode or by holding Break -- there
+// are no opcode fetches, the condition is never evaluated, and the stop never
+// fires although cycle_count keeps advancing. The client then waits out its 30 s
+// gRPC deadline.
+//
+// These assert the DESIRED behaviour: the machine stops once the cycle target is
+// reached, whatever the CPU is doing. They are RED until #79 is fixed. Their
+// final form depends on the fix chosen (fixing conditional-breakpoint evaluation
+// vs a first-class temporal breakpoint), so treat them as the starting point.
+
+TEST_CASE("Cycle-budget stop must fire while the CPU is jammed (#79)",
+          "[grpc][debugger][cycle]") {
+    DebuggerTestFixture fixture;
+    prepare_for_code(fixture.machine());
+
+    // A KIL/jam opcode at &0400: executing it halts the CPU (no more opcode
+    // fetches), exactly the empty-bank crash shape from #78.
+    plant_code(fixture.machine(), 0x0400, {0x02});
+    fixture.machine().set_pc(0x0400);
+
+    const uint64_t target = fixture.machine().cycle_count() + 1000;
+    {
+        grpc::ClientContext ctx;
+        beebium::AddBreakpointRequest req;
+        req.set_start_address(0x0000);
+        req.set_end_address(0x10000);
+        req.set_condition("cycles >= " + std::to_string(target));
+        beebium::AddBreakpointResponse resp;
+        fixture.debugger().AddBreakpoint(&ctx, req, &resp);
+        REQUIRE(resp.success());
+    }
+
+    fixture.machine().resume();
+    fixture.machine().run(100000);
+
+    // The machine kept ticking well past the target...
+    CHECK(fixture.machine().cycle_count() >= target);
+    // ...and the cycle-budget stop must have fired. RED today: it never does
+    // while the CPU is jammed.
+    CHECK(fixture.machine().is_paused());
+}
+
+TEST_CASE("Cycle-budget stop must fire while Break is held (#79)",
+          "[grpc][debugger][cycle]") {
+    DebuggerTestFixture fixture;
+    prepare_for_code(fixture.machine());
+
+    // Hold the Break/reset line: the CPU is halted, so it presents no opcode
+    // fetches even though the peripherals and cycle_count keep advancing.
+    fixture.machine().break_down();
+
+    const uint64_t target = fixture.machine().cycle_count() + 1000;
+    {
+        grpc::ClientContext ctx;
+        beebium::AddBreakpointRequest req;
+        req.set_start_address(0x0000);
+        req.set_end_address(0x10000);
+        req.set_condition("cycles >= " + std::to_string(target));
+        beebium::AddBreakpointResponse resp;
+        fixture.debugger().AddBreakpoint(&ctx, req, &resp);
+        REQUIRE(resp.success());
+    }
+
+    fixture.machine().resume();
+    fixture.machine().run(100000);
+
+    CHECK(fixture.machine().cycle_count() >= target);
+    CHECK(fixture.machine().is_paused());  // RED today: never fires while halted
+}
