@@ -112,10 +112,18 @@ static void adfs_write_track_callback(Disc& disc, bool upper_side, uint32_t trac
 
     for (const auto& sec : sectors) {
         if (sec.sector >= k_adfs_sectors_per_track) continue;
+
+        // Persist a sector only if it decoded cleanly: a trustworthy ID, a
+        // present data field with a good CRC, and a complete sector's worth of
+        // bytes. A bad-CRC or short/incomplete sector must leave the host image's
+        // existing bytes untouched, never overwritten with corrupt data or
+        // zero-padding the guest did not write (#88).
+        if (sec.has_header_crc_error) continue;
         if (!sec.has_data_field) continue;
+        if (sec.has_data_crc_error) continue;
 
         std::array<uint8_t, k_adfs_sector_size> buffer{};
-        decoder.read_sector_data(sec, buffer);
+        if (decoder.read_sector_data(sec, buffer) != k_adfs_sector_size) continue;
 
         // ADL interleaved layout: track 0 side 0, track 0 side 1, track 1 side 0, ...
         size_t offset = (static_cast<size_t>(track_number) * (disc.is_double_sided() ? 2 : 1) + side)
