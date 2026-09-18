@@ -29,6 +29,7 @@
 
 #include "sn76489_audio_analysis.hpp"
 
+using namespace beebium;
 using namespace beebium::audio_analysis;
 
 namespace {
@@ -114,6 +115,34 @@ TEST_CASE("sample playback: ordinary tone loudness and pitch preserved",
         // AC amplitude within 12% (loudness must not change).
         CHECK(ac == Catch::Approx(c.expected_rms).epsilon(0.12));
     }
+}
+
+// Headroom: a full-volume ordinary tone must not clip. The unipolar high level
+// at volume 0 is 254, so the only way an emitted sample can reach the 255 rail
+// is the anti-alias filter's step overshoot being clamped -- i.e. hard clipping
+// on the loudest, most common game sound. This is RED on the headroom-free
+// 0..254 8-bit encoding and turns green once the samples carry headroom.
+TEST_CASE("sample playback: full-volume tone does not clip",
+          "[sn76489][sample-playback]") {
+    Sn76489 chip(kClockHz, kSampleRate);
+    AudioBuffer buffer(static_cast<size_t>(kSampleRate * 2));
+    // ~625 Hz square at volume 0 (max): divider 200, high level = 2 * 127 = 254.
+    program_tone(chip, 0, 200, 0);
+    chip.write(0x80 | (3 << 4) | 15);
+    chip.write(0x80 | (5 << 4) | 15);
+    chip.write(0x80 | (7 << 4) | 15);
+    const uint64_t total_ticks = static_cast<uint64_t>(kCpuTickHz);  // 1 s
+    for (uint64_t t = 0; t < total_ticks; ++t) chip.tick(buffer);
+
+    std::vector<AudioSample> samples(buffer.available());
+    size_t count = buffer.read(samples.data(), samples.size());
+    REQUIRE(count > 1000);
+    size_t at_rail = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (((samples[i].sources[0] >> 24) & 0xFF) == 255) at_rail++;
+    }
+    INFO("samples pinned at the 255 clamp rail: " << at_rail << " / " << count);
+    CHECK(at_rail == 0);
 }
 
 // A2 alias guard: a high tone must not acquire audible alias lines low in the
