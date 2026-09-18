@@ -25,9 +25,10 @@ Under `tools/audio-analysis/`:
   Beebium-vs-reference comparison with match-SNR) and a CLI over them.
 
 WAVs and PNG plots are written to a scratch directory outside the repo (they are
-not committed); regenerate them with the commands below. The plots referenced
-here were produced at
-`/private/tmp/claude-501/.../scratchpad/{wav,plots}/`.
+not committed); regenerate them with the commands below, which take the scratch
+directory as an argument. Throughout this note `<scratch>` stands for that
+directory (any writable path outside the repo); the `wav/` and `plots/`
+subdirectories under it hold the artifacts.
 
 ## Headline result
 
@@ -210,8 +211,8 @@ baseband. Both must be fixed together to reproduce this material.
 # Synthetic baseband experiment
 c++ -std=c++20 -O2 -I src/core/include \
     tools/audio-analysis/sn76489_baseband_experiment.cpp \
-    src/core/src/Sn76489.cpp -o /tmp/sn_exp
-/tmp/sn_exp <scratch>/wav
+    src/core/src/Sn76489.cpp -o <scratch>/sn76489_baseband_experiment
+<scratch>/sn76489_baseband_experiment <scratch>/wav
 
 # Capture real material (real-time; needs a freshly built beebium-model-b)
 export BEEBIUM_DISC_WORK_DIR=<scratch>/discwork
