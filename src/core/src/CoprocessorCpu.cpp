@@ -27,7 +27,13 @@ CoprocessorCpu::~CoprocessorCpu() {
 }
 
 void CoprocessorCpu::reset() {
-    M6502_Init(&cpu_, &M6502_rockwell65c02_config);
+    // The host's RST line propagates through the Tube cable to the parasite, so
+    // a parasite reset is a 6502 RES, not a power-on: M6502_Reset ONLY, which
+    // preserves the registers and flags and sets the interrupt-disable flag
+    // (config/fns were established by the constructor's M6502_Init). Using
+    // M6502_Init here would memset the CPU -- a power-on state -- and clear the
+    // interrupt-disable flag, so a parasite reset with PIRQ asserted could leave
+    // reset through the IRQ vector instead of the reset handler (issue #78).
     M6502_Reset(&cpu_);
     memory_.reset();
     tube_port_.reset();
