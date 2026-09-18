@@ -13,9 +13,16 @@
 #include <beebium/disc/formats/SsdFormatHandler.hpp>
 #include <beebium/disc/DiscFormatRegistry.hpp>
 #include <beebium/disc/TrackDecoder.hpp>
+#include <beebium/disc/TrackBuilder.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <vector>
 
 using namespace beebium;
 using namespace beebium::ibm_disc_format;
@@ -390,4 +397,187 @@ TEST_CASE("DiscFormatRegistry reports error for empty handler list", "[disc][reg
     auto result = registry.load_from_data(data, ".ssd", "/tmp/test.ssd");
 
     CHECK_FALSE(result.success());
+}
+
+// =============================================================================
+// Write-back safety (issue #88): a disc image must not be silently damaged.
+//
+// SsdFormatHandler installs ssd_write_track_callback, which flushes a dirty
+// track's sectors back to the host image. It must persist a sector ONLY if it
+// decoded cleanly -- good ID CRC, good data CRC, and a complete (full length)
+// data field. A bad-CRC or short/incomplete sector must leave the host image's
+// existing bytes untouched, and must never grow the file with zero-padding the
+// guest did not write.
+// =============================================================================
+
+namespace {
+
+// Write bytes to a real, writable temp file (write-back needs a source_filepath
+// that exists on disk). Returns the path; the caller removes it.
+std::filesystem::path write_temp_ssd(const std::vector<uint8_t>& bytes,
+                                     const std::string& suffix = ".ssd") {
+    static int counter = 0;
+    auto path = std::filesystem::temp_directory_path() /
+                ("beebium_writeback_" + std::to_string(++counter) + suffix);
+    std::ofstream f(path, std::ios::binary);
+    f.write(reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+    return path;
+}
+
+std::vector<uint8_t> read_file(const std::filesystem::path& path) {
+    std::ifstream f(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
+}
+
+// Build one FM track holding three sectors that exercise the write-back guard:
+//   sector 0: good ID CRC, good data CRC, full 256 bytes of `good_fill`
+//   sector 1: good ID CRC, but a deliberately WRONG data CRC (data = bad_fill)
+//   sector 2: a data field that is cut off short (the track ends mid-data)
+// The track ends inside sector 2, exactly as a truncated image's partial track
+// would, so read_sector_data cannot return a full sector for it.
+void build_good_bad_short_track(DiscTrack& track, uint8_t id_track, uint8_t good_fill,
+                                uint8_t bad_fill, uint8_t short_fill) {
+    TrackBuilder b(track);
+    b.append_fm_bytes(0xFF, k_std_gap1_FFs);
+    b.append_fm_bytes(0x00, k_std_sync_00s);
+
+    auto id_field = [&](uint8_t sector) {
+        b.reset_crc(false);
+        b.append_fm_data_and_clocks(k_id_mark_data_pattern, k_mark_clock_pattern);
+        b.append_fm_byte(id_track);  // track
+        b.append_fm_byte(0);        // side
+        b.append_fm_byte(sector);   // sector id
+        b.append_fm_byte(0x01);     // 256-byte sectors
+        b.append_crc_fm();
+        b.append_fm_bytes(0xFF, k_std_gap2_FFs);
+        b.append_fm_bytes(0x00, k_std_sync_00s);
+    };
+    auto gap3 = [&]() {
+        b.append_fm_bytes(0xFF, k_std_10_sector_gap3_FFs);
+        b.append_fm_bytes(0x00, k_std_sync_00s);
+    };
+
+    // Sector 0: valid.
+    id_field(0);
+    b.reset_crc(false);
+    b.append_fm_data_and_clocks(k_data_mark_data_pattern, k_mark_clock_pattern);
+    for (int i = 0; i < 256; ++i) b.append_fm_byte(good_fill);
+    b.append_crc_fm();
+    gap3();
+
+    // Sector 1: complete data field, but the stored data CRC is wrong.
+    id_field(1);
+    b.reset_crc(false);
+    b.append_fm_data_and_clocks(k_data_mark_data_pattern, k_mark_clock_pattern);
+    for (int i = 0; i < 256; ++i) b.append_fm_byte(bad_fill);
+    b.append_fm_byte(0x00);  // wrong CRC (not the computed one)
+    b.append_fm_byte(0x00);
+    gap3();
+
+    // Sector 2: data field cut short -- the track ends before the sector does.
+    id_field(2);
+    b.reset_crc(false);
+    b.append_fm_data_and_clocks(k_data_mark_data_pattern, k_mark_clock_pattern);
+    for (int i = 0; i < 128; ++i) b.append_fm_byte(short_fill);
+    b.finalize();
+}
+
+}  // namespace
+
+TEST_CASE("Write-back persists only fully-valid sectors (#88)",
+          "[disc][ssd][writeback]") {
+    SsdFormatHandler handler;
+    // A single-track image pre-filled with 0xEE, so any sector the callback
+    // leaves alone is still 0xEE and any it rewrites is visibly different.
+    std::vector<uint8_t> original(2560, 0xEE);
+    auto path = write_temp_ssd(original);
+
+    auto result = handler.load(original, path.string());
+    REQUIRE(result.success());
+
+    build_good_bad_short_track(result.disc->track(false, 0), /*id_track*/ 0,
+                               /*good*/ 0xA0, /*bad*/ 0xA1, /*short*/ 0xA2);
+    result.disc->track(false, 0).set_dirty(true);
+
+    // The crafted track really does present all three sectors to the decoder.
+    {
+        TrackDecoder decoder(result.disc->track(false, 0));
+        auto sectors = decoder.find_sectors();
+        REQUIRE(sectors.size() >= 3);
+    }
+
+    result.disc->flush_track(false, 0);
+
+    auto after = read_file(path);
+    std::filesystem::remove(path);
+
+    REQUIRE(after.size() == original.size());  // no growth from short/invalid sectors
+    for (int i = 0; i < 256; ++i) {
+        CHECK(after[i] == 0xA0);          // sector 0: valid -> rewritten
+        CHECK(after[256 + i] == 0xEE);    // sector 1: bad data CRC -> untouched
+        CHECK(after[512 + i] == 0xEE);    // sector 2: short data field -> untouched
+    }
+}
+
+TEST_CASE("Write-back to a DSD upper side persists only valid sectors (#88)",
+          "[disc][ssd][writeback]") {
+    SsdFormatHandler handler;
+    // One track per side (2 * 2560 bytes), prefilled 0xEE.
+    std::vector<uint8_t> original(2 * 2560, 0xEE);
+    auto path = write_temp_ssd(original, ".dsd");
+
+    auto result = handler.load(original, path.string());
+    REQUIRE(result.success());
+    REQUIRE(result.disc->is_double_sided());
+
+    build_good_bad_short_track(result.disc->track(true, 0), /*id_track*/ 0,
+                               /*good*/ 0xB0, /*bad*/ 0xB1, /*short*/ 0xB2);
+    result.disc->track(true, 0).set_dirty(true);
+    result.disc->flush_track(true, 0);
+
+    auto after = read_file(path);
+    std::filesystem::remove(path);
+
+    REQUIRE(after.size() == original.size());
+    // DSD interleave: track 0 side 1 begins at offset 2560.
+    const size_t base = 2560;
+    for (int i = 0; i < 256; ++i) {
+        CHECK(after[base + i] == 0xB0);          // good -> written
+        CHECK(after[base + 256 + i] == 0xEE);    // bad CRC -> untouched
+        CHECK(after[base + 512 + i] == 0xEE);    // short -> untouched
+    }
+    // Side 0 of track 0 (offsets 0..2560) is untouched.
+    for (int i = 0; i < 2560; ++i) CHECK(after[i] == 0xEE);
+}
+
+TEST_CASE("Write-back extends the image only for a valid sector past EOF (#88)",
+          "[disc][ssd][writeback]") {
+    SsdFormatHandler handler;
+    // A single-track image; track 1 lies entirely past the file's extent.
+    std::vector<uint8_t> original(2560, 0xEE);
+    auto path = write_temp_ssd(original);
+
+    auto result = handler.load(original, path.string());
+    REQUIRE(result.success());
+
+    // Track 1 holds one valid sector (0, at offset 2560 == old EOF) plus a
+    // bad-CRC sector (1) and a short sector (2). Only the valid sector may be
+    // written, so the file grows by exactly one sector; the gap is nil here
+    // because the valid sector sits at the old end-of-file. (Were a valid
+    // sector to sit beyond a gap, seekp would extend the file and the OS
+    // zero-fills the skipped span -- but no invalid sector ever triggers that.)
+    build_good_bad_short_track(result.disc->track(false, 1), /*id_track*/ 1,
+                               /*good*/ 0xC0, /*bad*/ 0xC1, /*short*/ 0xC2);
+    result.disc->track(false, 1).set_dirty(true);
+    result.disc->flush_track(false, 1);
+
+    auto after = read_file(path);
+    std::filesystem::remove(path);
+
+    // Grew by exactly the one valid sector, not by the bad or short ones.
+    REQUIRE(after.size() == 2560 + 256);
+    for (int i = 0; i < 256; ++i) CHECK(after[2560 + i] == 0xC0);
+    // The original track 0 is untouched.
+    for (int i = 0; i < 2560; ++i) CHECK(after[i] == 0xEE);
 }
