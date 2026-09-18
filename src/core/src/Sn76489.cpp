@@ -12,7 +12,9 @@
 
 #include "beebium/devices/Sn76489.hpp"
 #include "beebium/AudioBuffer.hpp"
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 
 namespace beebium {
 
@@ -22,11 +24,45 @@ Sn76489::Sn76489(uint32_t clock_hz, uint32_t sample_rate)
     , latched_reg_(0)
     , phase_accumulator_(0)
     , phase_increment_((1ULL << 32) / 8)  // Emulator: 2 MHz call rate ÷8 → 250 kHz internal
-    , sample_accumulator_(0)
     , clock_hz_(clock_hz)
     , sample_rate_(sample_rate)
 {
+    configure_resampler();
     reset();
+}
+
+void Sn76489::configure_resampler() {
+    // Internal update rate: 4 MHz / 16 = 250 kHz on the BBC. Derived from the
+    // configured clock so the filter and decimation follow any clock/rate.
+    const double internal_rate = static_cast<double>(clock_hz_) / 16.0;
+    // Anti-alias cutoff, kept well below the output Nyquist. beebjit uses
+    // ~7.2 kHz; clamp so an unusually low output rate still gets a valid filter.
+    const double cutoff_hz = std::min(7200.0, 0.4 * static_cast<double>(sample_rate_));
+    // Second-order Butterworth low-pass by the bilinear transform (RBJ/earlevel
+    // cookbook form); two of these cascade to a 4th-order response.
+    const double q = 1.0 / std::sqrt(2.0);
+    const double k = std::tan(M_PI * cutoff_hz / internal_rate);
+    const double norm = 1.0 / (1.0 + k / q + k * k);
+    lp_b0_ = k * k * norm;
+    lp_b1_ = 2.0 * lp_b0_;
+    lp_b2_ = lp_b0_;
+    lp_a1_ = 2.0 * (k * k - 1.0) * norm;
+    lp_a2_ = (1.0 - k / q + k * k) * norm;
+
+    decim_ratio_ = internal_rate / static_cast<double>(sample_rate_);
+}
+
+double Sn76489::apply_lowpass(int channel, double x) {
+    for (int s = 0; s < kFilterStages; ++s) {
+        double y = lp_b0_ * x + lp_b1_ * lp_x1_[channel][s] + lp_b2_ * lp_x2_[channel][s]
+                   - lp_a1_ * lp_y1_[channel][s] - lp_a2_ * lp_y2_[channel][s];
+        lp_x2_[channel][s] = lp_x1_[channel][s];
+        lp_x1_[channel][s] = x;
+        lp_y2_[channel][s] = lp_y1_[channel][s];
+        lp_y1_[channel][s] = y;
+        x = y;
+    }
+    return x;
 }
 
 void Sn76489::reset() {
@@ -47,7 +83,15 @@ void Sn76489::reset() {
 
     latched_reg_ = 0;
     phase_accumulator_ = 0;
-    sample_accumulator_ = 0;
+
+    // Clear the low-pass histories and decimation accumulators.
+    for (int c = 0; c < kAudioChannels; ++c) {
+        for (int s = 0; s < kFilterStages; ++s) {
+            lp_x1_[c][s] = lp_x2_[c][s] = lp_y1_[c][s] = lp_y2_[c][s] = 0.0;
+        }
+        decim_acc_[c] = 0.0;
+    }
+    decim_count_ = 0.0;
 }
 
 void Sn76489::write(uint8_t data) {
@@ -125,17 +169,47 @@ void Sn76489::tick(AudioBuffer& buffer) {
     // Phase accumulator: tick at 250 kHz from 2 MHz input
     phase_accumulator_ += phase_increment_;
 
-    if (phase_accumulator_ >= (1ULL << 32)) {
-        phase_accumulator_ -= (1ULL << 32);
-        update_250khz_state();
-
-        // Sample accumulator: generate 48 kHz output from 250 kHz internal
-        sample_accumulator_ += sample_rate_;
-        while (sample_accumulator_ >= (clock_hz_ / 16)) {  // 250000 Hz internal rate
-            emit_sample(buffer);
-            sample_accumulator_ -= (clock_hz_ / 16);
-        }
+    if (phase_accumulator_ < (1ULL << 32)) {
+        return;
     }
+    phase_accumulator_ -= (1ULL << 32);
+    update_250khz_state();
+
+    // Generate each channel's unipolar level at the internal rate, low-pass it,
+    // then decimate to the output rate by fractional averaging (splitting the
+    // boundary internal-sample into fractions so the output rate is exact).
+    double filtered[kAudioChannels];
+    filtered[0] = apply_lowpass(0, get_tone_normalized(0));
+    filtered[1] = apply_lowpass(1, get_tone_normalized(1));
+    filtered[2] = apply_lowpass(2, get_tone_normalized(2));
+    filtered[3] = apply_lowpass(3, get_noise_normalized());
+
+    decim_count_ += 1.0;
+    if (decim_count_ < decim_ratio_) {
+        for (int c = 0; c < kAudioChannels; ++c) {
+            decim_acc_[c] += filtered[c];
+        }
+        return;
+    }
+
+    const double leftover = decim_count_ - decim_ratio_;
+    AudioSample sample;
+    uint8_t out[kAudioChannels];
+    for (int c = 0; c < kAudioChannels; ++c) {
+        double value = (decim_acc_[c] + (1.0 - leftover) * filtered[c]) / decim_ratio_;
+        double rounded = std::lround(value);
+        if (rounded < 0.0) rounded = 0.0;
+        if (rounded > 255.0) rounded = 255.0;
+        out[c] = static_cast<uint8_t>(rounded);
+        decim_acc_[c] = leftover * filtered[c];
+    }
+    decim_count_ = leftover;
+
+    sample.pack_4x8bit_unsigned(0, out[0], out[1], out[2], out[3]);
+    sample.sources[1] = 0;
+    sample.sources[2] = 0;
+    sample.sources[3] = 0;
+    buffer.push(sample);
 }
 
 void Sn76489::update_250khz_state() {
@@ -201,28 +275,6 @@ uint8_t Sn76489::next_periodic_noise_bit() {
     uint8_t result = noise_.lfsr & 1;
     noise_.lfsr = ((noise_.lfsr >> 1) | (noise_.lfsr << 14)) & LFSR_MASK;
     return result;
-}
-
-void Sn76489::emit_sample(AudioBuffer& buffer) {
-    // Generate audio sample with 4 separate channels
-    // Uses unsigned encoding (0-255) with DC bias pre-applied
-    AudioSample sample;
-
-    // Get normalized samples for each channel (unsigned, centered at 128)
-    uint8_t tone0 = get_tone_normalized(0);
-    uint8_t tone1 = get_tone_normalized(1);
-    uint8_t tone2 = get_tone_normalized(2);
-    uint8_t noise_samp = get_noise_normalized();
-
-    // Pack into 32-bit field: [tone0|tone1|tone2|noise]
-    sample.pack_4x8bit_unsigned(0, tone0, tone1, tone2, noise_samp);
-
-    // Sources 1-3 reserved for future expansion (speech, 1MHz bus audio)
-    sample.sources[1] = 0;
-    sample.sources[2] = 0;
-    sample.sources[3] = 0;
-
-    buffer.push(sample);
 }
 
 int8_t Sn76489::get_tone_amplitude(size_t channel) const {

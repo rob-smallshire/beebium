@@ -153,10 +153,39 @@ private:
     uint64_t phase_accumulator_;
     uint64_t phase_increment_;   // (2^32) / 8 for emulator's 2MHz→250kHz
 
-    // Sample accumulator for 48 kHz output from 250 kHz internal
-    uint32_t sample_accumulator_;
     uint32_t clock_hz_;
     uint32_t sample_rate_;
+
+    // --- Anti-alias low-pass and decimation ---
+    //
+    // Each of the four channels is generated at the internal rate (clock/16),
+    // low-passed, then decimated to the output sample rate by fractional
+    // averaging. Point sampling would fold the ultrasonic carrier and the
+    // sample-update images back into the audible band; the low-pass removes them
+    // first. The filter is two cascaded second-order Butterworth low-pass
+    // sections (a 4th-order response), designed by the bilinear transform for
+    // the actual internal and output rates, so no coefficients are hard-coded.
+
+    static constexpr int kAudioChannels = 4;  // tone 0-2 + noise
+    static constexpr int kFilterStages = 2;   // cascaded biquads -> 4th order
+
+    // Biquad low-pass coefficients (Direct Form I), shared by all channels.
+    double lp_b0_, lp_b1_, lp_b2_, lp_a1_, lp_a2_;
+    // Per-channel, per-stage history.
+    double lp_x1_[kAudioChannels][kFilterStages];
+    double lp_x2_[kAudioChannels][kFilterStages];
+    double lp_y1_[kAudioChannels][kFilterStages];
+    double lp_y2_[kAudioChannels][kFilterStages];
+    // Fractional-average decimation state (shared count, per-channel accumulator).
+    double decim_acc_[kAudioChannels];
+    double decim_count_;
+    double decim_ratio_;
+
+    // Compute the shared low-pass coefficients and decimation ratio from the
+    // configured clock and output rates.
+    void configure_resampler();
+    // Run channel c's cascaded low-pass over one internal-rate sample.
+    double apply_lowpass(int channel, double x);
 
     // --- Helper methods ---
 
@@ -174,9 +203,6 @@ private:
 
     // Generate periodic noise bit (15-cycle pattern)
     uint8_t next_periodic_noise_bit();
-
-    // Emit audio sample to buffer (uses unsigned encoding with DC bias pre-applied)
-    void emit_sample(AudioBuffer& buffer);
 
     // Compute tone channel output amplitude (applies volume table)
     // Returns signed -127 to +127 (legacy, for signed encoding)
