@@ -88,18 +88,20 @@ UnpackedSample unpack_sn76489_sample(const AudioSample& sample) {
     };
 }
 
-// Helper: Check if channel has activity (deviation from DC midpoint 128)
+// Helper: Check if channel has activity (deviation from the silence level 0).
+// The output is unipolar: a silent channel sits at 0, an active one oscillates
+// above it.
 bool has_channel_activity(const std::vector<AudioSample>& samples, size_t channel_index) {
     for (const auto& sample : samples) {
         auto unpacked = unpack_sn76489_sample(sample);
-        uint8_t value = 128;  // DC midpoint = silence
+        uint8_t value = 0;  // silence level
         switch (channel_index) {
             case 0: value = unpacked.tone0; break;
             case 1: value = unpacked.tone1; break;
             case 2: value = unpacked.tone2; break;
             case 3: value = unpacked.noise; break;
         }
-        if (value != 128) return true;
+        if (value != 0) return true;
     }
     return false;
 }

@@ -435,32 +435,42 @@ TEST_CASE("Square wave integrity", "[sn76489][waveform]") {
         size_t count = buffer.read(samples.data(), samples.size());
         REQUIRE(count > 100);
 
-        // Extract tone 0 samples and count positive vs negative
-        int positive = 0, negative = 0;
+        // The output is unipolar (0..254) and band-limited, so split about the
+        // mean level: a symmetric square spends roughly equal time above and
+        // below its own average.
+        double sum = 0.0;
+        std::vector<uint8_t> tone_values(count);
         for (size_t i = 0; i < count; ++i) {
-            uint32_t packed = samples[i].sources[0];
-            int8_t tone0 = static_cast<int8_t>((packed >> 24) & 0xFF);
-            if (tone0 > 0) positive++;
-            else if (tone0 < 0) negative++;
+            uint8_t tone0 = static_cast<uint8_t>((samples[i].sources[0] >> 24) & 0xFF);
+            tone_values[i] = tone0;
+            sum += tone0;
+        }
+        double mean = sum / static_cast<double>(count);
+        int above = 0, below = 0;
+        for (uint8_t v : tone_values) {
+            if (v > mean) above++;
+            else if (v < mean) below++;
         }
 
         // Should be approximately 50/50 (within 5% tolerance)
-        int total = positive + negative;
+        int total = above + below;
         REQUIRE(total > 0);
-        float ratio = static_cast<float>(positive) / total;
+        float ratio = static_cast<float>(above) / total;
         REQUIRE(ratio > 0.45f);
         REQUIRE(ratio < 0.55f);
     }
 
-    SECTION("Amplitude consistency within wave cycle") {
-        // All high samples should have the same value (128 + amplitude),
-        // and all low samples should have the same value (128 - amplitude)
+    SECTION("Amplitude spans the full unipolar swing") {
+        // The output is unipolar (0 = silence level, 2*amplitude = flip-flop
+        // high) and band-limited by the anti-alias low-pass, so a square is no
+        // longer just two levels: it reaches near the extremes on each plateau
+        // with smooth band-limited transitions between them.
         Sn76489 chip(4'000'000, 48'000);
         AudioBuffer buffer(8192);
 
-        chip.write(0x84);  // Freq = 100
+        chip.write(0x84);  // Freq = 100 -> ~1250 Hz
         chip.write(0x06);
-        chip.write(0x90);  // Volume = 0 (max)
+        chip.write(0x90);  // Volume = 0 (max): high level = 2 * 127 = 254
 
         for (int i = 0; i < 100'000; ++i) {
             chip.tick(buffer);
@@ -470,22 +480,27 @@ TEST_CASE("Square wave integrity", "[sn76489][waveform]") {
         size_t count = buffer.read(samples.data(), samples.size());
         REQUIRE(count > 10);
 
-        // Collect unique sample values (unsigned)
         std::set<uint8_t> values;
+        uint8_t min_v = 255, max_v = 0;
         for (size_t i = 0; i < count; ++i) {
-            uint32_t packed = samples[i].sources[0];
-            uint8_t tone0 = static_cast<uint8_t>((packed >> 24) & 0xFF);
+            uint8_t tone0 = static_cast<uint8_t>((samples[i].sources[0] >> 24) & 0xFF);
             values.insert(tone0);
+            min_v = std::min(min_v, tone0);
+            max_v = std::max(max_v, tone0);
         }
 
-        // Should only have 2 unique values: 255 (128+127) and 1 (128-127) for volume=0
-        REQUIRE(values.size() == 2);
-        REQUIRE(values.find(255) != values.end());  // 128 + 127
-        REQUIRE(values.find(1) != values.end());    // 128 - 127
+        // Reaches near the silence level and near the max level (2 * 127 = 254).
+        REQUIRE(min_v <= 6);
+        REQUIRE(max_v >= 248);
+        // Band-limited: more than the two point-sampled levels.
+        REQUIRE(values.size() > 2);
     }
 
-    SECTION("Symmetric around DC midpoint") {
-        // The average of samples over multiple complete cycles should be ~128 (DC midpoint)
+    SECTION("Mean tracks the volume level") {
+        // The unipolar output of a 50%-duty square averages to the mid-point,
+        // which is the volume-table amplitude: 127 at volume 0 (high level 254,
+        // silence level 0). This volume-dependent mean is what carries sampled
+        // PCM.
         Sn76489 chip(4'000'000, 48'000);
         AudioBuffer buffer(48000);
 
@@ -512,8 +527,8 @@ TEST_CASE("Square wave integrity", "[sn76489][waveform]") {
 
         double avg = static_cast<double>(sum) / count;
 
-        // Average should be near DC midpoint (128)
-        REQUIRE(std::abs(avg - 128.0) < 5.0);  // Allow small bias due to incomplete cycles
+        // Mean should be near the volume-0 amplitude (127).
+        REQUIRE(std::abs(avg - 127.0) < 5.0);  // Allow small bias due to incomplete cycles
     }
 
     SECTION("DC midpoint crossings match expected frequency") {

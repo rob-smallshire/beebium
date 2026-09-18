@@ -377,9 +377,9 @@ TEST_CASE("SN76489 sample generation", "[sn76489]") {
         if (buffer.available() > 0) {
             buffer.read(&sample, 1);
 
-            // All channels should be at DC midpoint (128 = 0x80)
-            // Packed as: [tone0|tone1|tone2|noise] = 0x80808080
-            REQUIRE(sample.sources[0] == 0x80808080);
+            // All channels silent: unipolar output rests at the silence level 0.
+            // Packed as: [tone0|tone1|tone2|noise] = 0x00000000
+            REQUIRE(sample.sources[0] == 0x00000000);
         }
     }
 }
@@ -572,19 +572,27 @@ TEST_CASE("SN76489 LFSR sequence verification", "[sn76489][lfsr]") {
         std::vector<AudioSample> samples(buffer.available());
         size_t count = buffer.read(samples.data(), samples.size());
 
-        int positive = 0, negative = 0;
+        // The output is unipolar (0..254) and band-limited, so split about the
+        // mean level rather than about a fixed midpoint: a fair coin LFSR should
+        // spend roughly equal time above and below its own average.
+        double sum = 0.0;
+        std::vector<uint8_t> noise_values(count);
         for (size_t i = 0; i < count; ++i) {
-            uint32_t data = samples[i].sources[0];
-            int8_t noise = static_cast<int8_t>(data & 0xFF);
-            if (noise > 0) positive++;
-            else if (noise < 0) negative++;
+            uint8_t noise = static_cast<uint8_t>(samples[i].sources[0] & 0xFF);
+            noise_values[i] = noise;
+            sum += noise;
+        }
+        double mean = sum / static_cast<double>(count);
+        int above = 0, below = 0;
+        for (uint8_t v : noise_values) {
+            if (v > mean) above++;
+            else if (v < mean) below++;
         }
 
         // Distribution should be roughly 50/50 (within 10% tolerance)
-        // Note: Not all samples will be non-zero due to aliasing/timing
-        int total = positive + negative;
+        int total = above + below;
         REQUIRE(total > 0);
-        double ratio = static_cast<double>(positive) / total;
+        double ratio = static_cast<double>(above) / total;
         REQUIRE(ratio > 0.40);  // At least 40%
         REQUIRE(ratio < 0.60);  // At most 60%
     }
