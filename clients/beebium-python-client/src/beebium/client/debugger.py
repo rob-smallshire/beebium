@@ -413,6 +413,17 @@ class Debugger:
                 Examples: ``"A == 0x42"``, ``"hits == 5"``, ``"hits % 10 == 0"``,
                 ``"cycles >= 100000"``, ``"X > 0 && mem[0x0070] == 0xFF"``,
                 ``"N && !Z"``.
+
+                A ``cycles`` condition is evaluated at instruction boundaries, so
+                on a running CPU it stops at the first boundary at or after the
+                target (never mid-instruction; it may be up to one instruction
+                late). While the CPU is halted -- Break/reset held, or jammed on
+                a KIL opcode -- there are no boundaries, so a *whole-address-space*
+                (``address=0x0000, end_address=0x10000``) conditional breakpoint
+                is evaluated every cycle and stops at exactly the target cycle.
+                Unconditional or partial-range breakpoints do not fire while the
+                CPU is halted. This is what makes :meth:`Beebium.run_until_or_timeout`
+                complete on a halted machine.
             stop_counterpart: Also signal the counterpart processor (host or
                 coprocessor) to stop -- used to coordinate breakpoints across the
                 Tube.

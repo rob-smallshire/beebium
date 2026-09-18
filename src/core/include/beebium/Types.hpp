@@ -62,6 +62,17 @@ enum WatchType : uint8_t {
 // A single-address breakpoint is [addr, addr+1). A full-range breakpoint
 // [0x0000, 0x10000) fires at every instruction boundary, useful with a
 // condition like "cycles >= 10000000" for cycle-budget runs.
+//
+// A condition on `cycles` is evaluated at instruction boundaries, so on a
+// running CPU it stops at the first boundary at or after the target and never
+// mid-instruction (it can be up to one instruction late). While the CPU is
+// halted -- Break/reset held, or jammed on a KIL opcode -- there are no
+// instruction boundaries, so a WHOLE-address-space ([0x0000, 0x10000))
+// CONDITIONAL breakpoint is evaluated every cycle instead, and a cycle budget
+// stops at exactly the target cycle (there is no instruction in flight to
+// finish). Unconditional or partial-range breakpoints are NOT evaluated while
+// halted: the PC is static then and they would fire spuriously (see
+// Machine::run and issue #79).
 struct BreakpointEntry {
     uint32_t id;
     uint32_t start;

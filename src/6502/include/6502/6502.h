@@ -409,6 +409,15 @@ void M6502_Reset(M6502 *s);
  */
 void M6502_Halt(M6502 *s);
 
+/* True when the 6502 is halted and will make no further progress until it is
+ * reset: either jammed on a KIL/HLT opcode, or held by M6502_Halt (as the BBC's
+ * Break/reset line does). A halted 6502 fetches no further opcodes, so
+ * M6502_IsAboutToExecute never becomes true again on its own; cycle_count and
+ * the surrounding peripherals still advance. Not const-correct in signature to
+ * match the other M6502_ accessors.
+ */
+int M6502_IsHalted(const M6502 *s);
+
 /* If the 6502 is about to execute an instruction, return true. The
  * address of the instruction can be seen on the address bus, and
  * s->read is M6502ReadType_Opcode.

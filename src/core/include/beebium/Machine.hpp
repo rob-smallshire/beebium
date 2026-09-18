@@ -368,22 +368,51 @@ public:
 
         const uint64_t target = state_.cycle_count + cycles;
         while (state_.cycle_count < target && !paused_.load()) {
-            // Check breakpoints before step(), when all register updates from
-            // the previous instruction have been applied by the T0 tfn that set
-            // read=Opcode.  Use opcode_pc (the address of the opcode about to
-            // be decoded), not pc (which has already been advanced past it by
-            // M6502_NextInstruction's post-increment).
-            if (!breakpoint_entries_.empty() && M6502_IsAboutToExecute(&state_.cpu)) {
-                uint16_t pc = state_.cpu.opcode_pc.w;
-                bool hit_stop = false;
-                for (auto& bp : breakpoint_entries_) {
-                    if (bp.start > pc) break;  // sorted by start: early exit
-                    if (bp.matches(pc)) {
-                        if (on_breakpoint_hit_) on_breakpoint_hit_(bp, pc);
-                        if (paused_.load()) { hit_stop = true; break; }
+            // Breakpoint evaluation. Nothing here runs when no breakpoints are
+            // installed, so an unwatched machine pays nothing per cycle.
+            if (!breakpoint_entries_.empty()) {
+                if (M6502_IsAboutToExecute(&state_.cpu)) {
+                    // Running: check breakpoints before step(), when all register
+                    // updates from the previous instruction have been applied by
+                    // the T0 tfn that set read=Opcode. Use opcode_pc (the address
+                    // of the opcode about to be decoded), not pc (already advanced
+                    // past it by M6502_NextInstruction's post-increment). A
+                    // running CPU only ever stops at an instruction boundary, so
+                    // a `cycles >= N` condition can be up to one instruction late
+                    // and the state is always that of a completed instruction.
+                    uint16_t pc = state_.cpu.opcode_pc.w;
+                    bool hit_stop = false;
+                    for (auto& bp : breakpoint_entries_) {
+                        if (bp.start > pc) break;  // sorted by start: early exit
+                        if (bp.matches(pc)) {
+                            if (on_breakpoint_hit_) on_breakpoint_hit_(bp, pc);
+                            if (paused_.load()) { hit_stop = true; break; }
+                        }
                     }
+                    if (hit_stop) break;  // fall through to the sync below
+                } else if (M6502_IsHalted(&state_.cpu)) {
+                    // Halted (Break held, or jammed on a KIL opcode): there are
+                    // no instruction boundaries, so ONLY a whole-address-space
+                    // conditional breakpoint is evaluated -- and then every cycle,
+                    // because a cycle budget is a property of emulated time, not
+                    // of an address. A halted CPU has no instruction in flight, so
+                    // stopping at an exact cycle is well defined. Unconditional or
+                    // partial-range breakpoints are skipped here: the PC is static
+                    // while halted and they would fire spuriously (issue #79). The
+                    // hit_count of an evaluated breakpoint still increments per
+                    // cycle here, consistent with it being evaluated. The running
+                    // path above pays only one M6502_IsHalted() test on the cycles
+                    // that are not opcode fetches, and no condition evaluation.
+                    bool hit_stop = false;
+                    for (auto& bp : breakpoint_entries_) {
+                        if (bp.start == 0 && bp.end == 0x10000 && bp.condition) {
+                            if (on_breakpoint_hit_)
+                                on_breakpoint_hit_(bp, state_.cpu.opcode_pc.w);
+                            if (paused_.load()) { hit_stop = true; break; }
+                        }
+                    }
+                    if (hit_stop) break;
                 }
-                if (hit_stop) break;  // fall through to the sync below
             }
 
             step();

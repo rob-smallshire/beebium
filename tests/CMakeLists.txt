@@ -936,6 +936,11 @@ target_compile_definitions(test_reset PRIVATE
 )
 catch_discover_tests(test_reset)
 
+# Cycle-budget breakpoint behaviour (issue #79): halted-CPU per-cycle evaluation
+add_executable(test_cycle_breakpoint test_cycle_breakpoint.cpp)
+target_link_libraries(test_cycle_breakpoint PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_cycle_breakpoint)
+
 # Video output tests
 add_executable(test_video test_video.cpp)
 target_link_libraries(test_video PRIVATE beebium_core Catch2::Catch2WithMain)

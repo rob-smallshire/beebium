@@ -393,6 +393,8 @@ Breakpoints fire at instruction boundaries when PC falls within a specified addr
 
 Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `+`, `-`, `*`, `/`, `%`, `&&`, `||`, `!`, `(`, `)`. Integer literals: decimal, `0x` hex, `0b` binary.
 
+**When conditions are evaluated.** A condition is normally evaluated at instruction boundaries. A `cycles >= N` budget therefore stops at the first instruction boundary at or after cycle N, never inside an instruction, and can be up to one instruction late (the state is always that of a completed instruction). While the CPU is halted -- the Break/reset line held, or the CPU jammed on a KIL opcode -- there are no instruction boundaries, so a **whole-address-space** (`start_address` 0, `end_address` 0x10000) breakpoint that **carries a condition** is evaluated on every cycle instead, and a cycle budget stops at exactly cycle N (a halted CPU has no instruction in flight to finish). Unconditional or partial-range breakpoints are not evaluated while the CPU is halted: the PC is static then and they would fire spuriously. This is what lets a client's cycle-budget wait (`run_until_or_timeout`) complete on a machine stopped at Break or on a jam.
+
 Examples:
 ```bash
 # Simple breakpoint at $C000

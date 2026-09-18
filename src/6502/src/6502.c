@@ -2926,6 +2926,13 @@ void M6502_Halt(M6502 *s) {
     s->tfn = &Cycle1_HLT;
 }
 
+int M6502_IsHalted(const M6502 *s) {
+    // The HLT state is the single stuck state: a KIL opcode enters it via
+    // Cycle0_HLT and it then spins on Cycle1_HLT, and M6502_Halt (the Break /
+    // reset line) sets Cycle1_HLT directly. Both are covered here.
+    return s->tfn == &Cycle0_HLT || s->tfn == &Cycle1_HLT;
+}
+
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 

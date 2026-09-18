@@ -212,6 +212,12 @@ export class Debugger {
      * @param options.endAddress - End address (exclusive). 0 = address+1 (single address).
      *   Use 0x10000 for a full-range breakpoint that fires at every instruction boundary.
      * @param options.condition - Expression evaluated on hit. Empty = unconditional.
+     *   A `cycles` condition is evaluated at instruction boundaries, so on a running CPU it
+     *   stops at the first boundary at or after the target (never mid-instruction). While the
+     *   CPU is halted (Break/reset held, or jammed on a KIL opcode) there are no boundaries,
+     *   so a whole-address-space (0x0000..0x10000) *conditional* breakpoint is evaluated every
+     *   cycle and stops at exactly the target cycle; unconditional or partial-range breakpoints
+     *   do not fire while halted. This is what lets runUntilOrTimeout complete on a halted machine.
      * @param options.stopCounterpart - Signal the other processor to stop.
      */
     async addBreakpoint(
