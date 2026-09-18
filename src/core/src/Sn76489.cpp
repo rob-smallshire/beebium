@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <numbers>
 
 namespace beebium {
 
@@ -41,7 +42,7 @@ void Sn76489::configure_resampler() {
     // Second-order Butterworth low-pass by the bilinear transform (RBJ/earlevel
     // cookbook form); two of these cascade to a 4th-order response.
     const double q = 1.0 / std::sqrt(2.0);
-    const double k = std::tan(M_PI * cutoff_hz / internal_rate);
+    const double k = std::tan(std::numbers::pi * cutoff_hz / internal_rate);
     const double norm = 1.0 / (1.0 + k / q + k * k);
     lp_b0_ = k * k * norm;
     lp_b1_ = 2.0 * lp_b0_;

@@ -31,6 +31,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
+#include <numbers>
 #include <vector>
 
 namespace beebium::audio_analysis {
@@ -74,7 +75,7 @@ inline double rms(const std::vector<double>& x) {
 inline double goertzel_amplitude(const std::vector<double>& x, double freq, double rate) {
     const size_t n = x.size();
     if (n == 0) return 0.0;
-    double w = 2.0 * M_PI * freq / rate;
+    double w = 2.0 * std::numbers::pi * freq / rate;
     double cw = std::cos(w), sw = std::sin(w);
     double coeff = 2.0 * cw;
     double s1 = 0, s2 = 0;
@@ -98,7 +99,7 @@ inline void fft(std::vector<std::complex<double>>& a) {
         if (i < j) std::swap(a[i], a[j]);
     }
     for (size_t len = 2; len <= n; len <<= 1) {
-        double ang = -2.0 * M_PI / static_cast<double>(len);
+        double ang = -2.0 * std::numbers::pi / static_cast<double>(len);
         std::complex<double> wlen(std::cos(ang), std::sin(ang));
         for (size_t i = 0; i < n; i += len) {
             std::complex<double> w(1.0, 0.0);
@@ -123,7 +124,7 @@ inline double out_of_band_fraction(const std::vector<double>& signal, double rat
     double dc = mean(signal);
     std::vector<std::complex<double>> spec(n);
     for (size_t i = 0; i < n; ++i) {
-        double win = 0.5 - 0.5 * std::cos(2.0 * M_PI * i / (n - 1));  // Hann
+        double win = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * i / (n - 1));  // Hann
         spec[i] = std::complex<double>((signal[i] - dc) * win, 0.0);
     }
     fft(spec);
@@ -146,7 +147,7 @@ inline double band_energy_fraction(const std::vector<double>& signal, double rat
     double dc = mean(signal);
     std::vector<std::complex<double>> spec(n);
     for (size_t i = 0; i < n; ++i) {
-        double win = 0.5 - 0.5 * std::cos(2.0 * M_PI * i / (n - 1));
+        double win = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * i / (n - 1));
         spec[i] = std::complex<double>((signal[i] - dc) * win, 0.0);
     }
     fft(spec);
@@ -168,7 +169,7 @@ inline double peak_frequency(const std::vector<double>& signal, double rate) {
     double dc = mean(signal);
     std::vector<std::complex<double>> spec(n);
     for (size_t i = 0; i < n; ++i) {
-        double win = 0.5 - 0.5 * std::cos(2.0 * M_PI * i / (n - 1));
+        double win = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * i / (n - 1));
         spec[i] = std::complex<double>((signal[i] - dc) * win, 0.0);
     }
     fft(spec);
@@ -214,7 +215,7 @@ inline std::vector<double> capture_sample_player(uint16_t period, double test_fr
     uint64_t next_update_tick = 0;
     for (uint64_t t = 0; t < total_ticks; ++t) {
         if (t >= next_update_tick) {
-            double phase = 2.0 * M_PI * test_freq * (static_cast<double>(t) / kCpuTickHz);
+            double phase = 2.0 * std::numbers::pi * test_freq * (static_cast<double>(t) / kCpuTickHz);
             double target = 0.5 * (std::sin(phase) + 1.0) * 127.0;
             chip.write(0x80 | (1 << 4) | amplitude_to_volume_code(target));
             next_update_tick += static_cast<uint64_t>(ticks_per_update);
@@ -269,8 +270,8 @@ inline std::vector<double> make_lowpass_fir(double cutoff_hz, double rate, int t
     double sum = 0;
     for (int i = 0; i < taps; ++i) {
         double x = i - m / 2.0;
-        double sinc = (x == 0.0) ? 2.0 * fc : std::sin(2.0 * M_PI * fc * x) / (M_PI * x);
-        double win = 0.54 - 0.46 * std::cos(2.0 * M_PI * i / m);  // Hamming
+        double sinc = (x == 0.0) ? 2.0 * fc : std::sin(2.0 * std::numbers::pi * fc * x) / (std::numbers::pi * x);
+        double win = 0.54 - 0.46 * std::cos(2.0 * std::numbers::pi * i / m);  // Hamming
         h[i] = sinc * win;
         sum += h[i];
     }
@@ -294,7 +295,7 @@ inline std::vector<double> ideal_reference(uint16_t period, double test_freq,
     uint64_t next_update_tick = 0;
     for (uint64_t t = 0; t < internal_ticks; ++t) {
         if (t >= next_update_tick) {
-            double phase = 2.0 * M_PI * test_freq * (static_cast<double>(t) / kInternalHz);
+            double phase = 2.0 * std::numbers::pi * test_freq * (static_cast<double>(t) / kInternalHz);
             double target = 0.5 * (std::sin(phase) + 1.0) * 127.0;
             code = amplitude_to_volume_code(target);
             next_update_tick += static_cast<uint64_t>(ticks_per_update);
