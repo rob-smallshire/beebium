@@ -949,6 +949,16 @@ add_executable(test_cycle_breakpoint test_cycle_breakpoint.cpp)
 target_link_libraries(test_cycle_breakpoint PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_cycle_breakpoint)
 
+# dp111 6502 timing suite, whole-machine &FCD0 result-register trap (issue #81)
+add_executable(test_dp111_timing_fcd0 test_dp111_timing_fcd0.cpp)
+target_link_libraries(test_dp111_timing_fcd0 PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_dp111_timing_fcd0 PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+    BEEBIUM_TEST_ROM_DIR="${BEEBIUM_TEST_ROM_DIR}"
+    BEEBIUM_TEST_ASSETS_DIR="${BEEBIUM_TEST_ASSETS_DIR}"
+)
+catch_discover_tests(test_dp111_timing_fcd0)
+
 # Video output tests
 add_executable(test_video test_video.cpp)
 target_link_libraries(test_video PRIVATE beebium_core Catch2::Catch2WithMain)
