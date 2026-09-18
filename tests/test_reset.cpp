@@ -429,11 +429,8 @@ TEST_CASE("Break with a pending System VIA IRQ still enters the reset handler (#
     machine.break_up();
     REQUIRE(!machine.is_in_reset());
 
-    // Step to the first opcode fetch out of reset. break_up() arms the reset
-    // sequence (tfn = Cycle0_Reset) but cpu.read may still hold the pre-Break
-    // opcode-fetch state, so advance one cycle into the sequence before waiting
-    // for the reset target's opcode fetch.
-    machine.step();
+    // Step to the first opcode fetch out of reset. M6502_Reset leaves the CPU
+    // not "about to execute", so this waits correctly for the reset target.
     while (!M6502_IsAboutToExecute(&machine.cpu())) {
         machine.step();
     }
@@ -505,10 +502,8 @@ TEST_CASE("Break (soft reset) preserves CPU registers, sets I and lowers SP by t
     REQUIRE(!machine.is_in_reset());
 
     // Step to the first opcode fetch out of reset -- i.e. after the reset
-    // sequence but before any MOS code executes. Advance one cycle into the
-    // armed reset sequence first, so the stale pre-Break opcode-fetch state does
-    // not end the wait immediately.
-    machine.step();
+    // sequence but before any MOS code executes. M6502_Reset leaves the CPU
+    // not "about to execute", so this waits correctly.
     while (!M6502_IsAboutToExecute(&machine.cpu())) {
         machine.step();
     }
@@ -524,4 +519,94 @@ TEST_CASE("Break (soft reset) preserves CPU registers, sets I and lowers SP by t
     CHECK(cpu.p.bits.d == 1); // NMOS host: decimal unchanged by reset
     CHECK(cpu.p.bits.i == 1); // interrupt-disable set by reset
     CHECK(((sp_before - cpu.s.w) & 0xff) == 3); // three dummy stack reads
+}
+
+// =============================================================================
+// A Break must not leave the CPU "about to execute" the pre-Break instruction
+// (regression guard for routing soft_reset through M6502_Reset only, #78)
+// =============================================================================
+//
+// Machine::run() evaluates breakpoints at the top of its loop whenever
+// M6502_IsAboutToExecute is true (read == Opcode), using opcode_pc. A RES must
+// leave the CPU beginning its reset sequence, not still presenting as an opcode
+// fetch at the pre-Break PC -- otherwise a breakpoint at that PC fires
+// spuriously once, before the reset sequence runs. The power-on memset that
+// soft_reset() used to run hid this by zeroing read; M6502_Reset now sets the
+// reset read state itself.
+
+TEST_CASE("A Break does not fire a breakpoint at the pre-Break PC (#78)",
+          "[reset][break]") {
+    REQUIRE(roms_available());
+    ModelB machine;
+    setup_machine(machine);
+    boot_to_basic(machine);
+
+    // Spin on JMP-self at &0900 so the CPU sits at a known opcode fetch.
+    machine.write(0x0900, 0x4C);
+    machine.write(0x0901, 0x00);
+    machine.write(0x0902, 0x09);
+    machine.set_pc(0x0900);
+    for (int i = 0; i < 50 && machine.pc() != 0x0900; ++i) {
+        machine.step_instruction();
+    }
+    REQUIRE(machine.pc() == 0x0900);
+    REQUIRE(M6502_IsAboutToExecute(&machine.cpu()));
+    const uint16_t old_pc = 0x0900;
+    const uint16_t reset_target =
+        machine.peek(0xFFFC) | (uint16_t(machine.peek(0xFFFD)) << 8);
+
+    std::vector<BreakpointEntry> bps;
+    BreakpointEntry at_old{};
+    at_old.id = 1; at_old.start = old_pc; at_old.end = old_pc + 1;
+    bps.push_back(at_old);
+    BreakpointEntry at_target{};
+    at_target.id = 2; at_target.start = reset_target; at_target.end = reset_target + 1;
+    bps.push_back(at_target);
+    machine.set_breakpoint_entries(std::move(bps));
+
+    int old_pc_hits = 0;
+    int reset_target_hits = 0;
+    machine.set_breakpoint_hit_callback(
+        [&](const BreakpointEntry&, uint32_t pc) {
+            if (pc == old_pc) ++old_pc_hits;
+            else if (pc == reset_target) ++reset_target_hits;
+        });
+
+    machine.break_down();
+    machine.break_up();
+
+    // Run through the reset sequence and into the MOS reset handler.
+    machine.run(200000);
+
+    CHECK(old_pc_hits == 0);        // no spurious hit at the pre-Break PC
+    CHECK(reset_target_hits >= 1);  // the machine did reset and ran the handler
+}
+
+TEST_CASE("step_instruction after Break runs the reset sequence to the handler (#78)",
+          "[reset][break]") {
+    REQUIRE(roms_available());
+    ModelB machine;
+    setup_machine(machine);
+    boot_to_basic(machine);
+
+    machine.write(0x0900, 0x4C);
+    machine.write(0x0901, 0x00);
+    machine.write(0x0902, 0x09);
+    machine.set_pc(0x0900);
+    for (int i = 0; i < 50 && machine.pc() != 0x0900; ++i) {
+        machine.step_instruction();
+    }
+    REQUIRE(machine.pc() == 0x0900);
+    const uint16_t reset_target =
+        machine.peek(0xFFFC) | (uint16_t(machine.peek(0xFFFD)) << 8);
+
+    machine.break_down();
+    machine.break_up();
+
+    // One step_instruction consumes the whole reset sequence and stops at the
+    // first opcode fetch of the reset handler (about to execute it, not yet).
+    uint64_t cycles = machine.step_instruction();
+    INFO("reset sequence took " << cycles << " cycles");
+    CHECK(machine.pc() == reset_target);
+    CHECK(cycles == 7);  // Cycle0_Reset..Cycle6_Reset, then the handler fetch
 }

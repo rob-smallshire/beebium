@@ -2908,6 +2908,14 @@ void M6502_Destroy(M6502 *s) {
 
 void M6502_Reset(M6502 *s) {
     s->d1x1 = 1;
+
+    // The next cycle is the start of the reset sequence, not an opcode fetch of
+    // the instruction the CPU was on before RES. Present a non-Opcode read so
+    // M6502_IsAboutToExecute is false until the reset sequence fetches the first
+    // opcode of the reset handler; without this a debugger stopped straight
+    // after reset sees a spurious "about to execute" at the pre-reset PC.
+    s->read = M6502ReadType_Instruction;
+
     s->tfn = &Cycle0_Reset;
 }
 
