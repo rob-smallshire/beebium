@@ -26,6 +26,7 @@
 
 #include "beebium/AudioBuffer.hpp"
 #include "beebium/devices/Sn76489.hpp"
+#include "sn76489_channels.hpp"
 
 #include <array>
 #include <cmath>
@@ -228,8 +229,7 @@ inline std::vector<double> capture_sample_player(uint16_t period, double test_fr
     std::vector<double> out;
     out.reserve(got);
     for (size_t i = 0; i < got; ++i) {
-        uint8_t tone0 = static_cast<uint8_t>((raw[i].sources[0] >> 24) & 0xFF);
-        out.push_back((static_cast<double>(tone0) - 128.0) / 127.0);
+        out.push_back(static_cast<double>(sn_tone0(raw[i])));
     }
     double dc = mean(out);
     for (double& v : out) v -= dc;
@@ -237,7 +237,7 @@ inline std::vector<double> capture_sample_player(uint16_t period, double test_fr
 }
 
 // Drive a plain steady tone 0 (period + volume fixed) for `seconds`, capturing
-// the 48 kHz output centred and scaled. Used to check ordinary audio is intact.
+// the 48 kHz output centred. Used to check ordinary audio is intact.
 inline std::vector<double> capture_plain_tone(uint16_t period, uint8_t volume,
                                               double seconds) {
     Sn76489 chip(kClockHz, kSampleRate);
@@ -250,11 +250,13 @@ inline std::vector<double> capture_plain_tone(uint16_t period, uint8_t volume,
     for (uint64_t t = 0; t < total_ticks; ++t) chip.tick(buffer);
     std::vector<AudioSample> raw(buffer.available());
     size_t got = buffer.read(raw.data(), raw.size());
+    // Normalise by half full-scale so a volume-0 square has unit AC amplitude,
+    // matching the pre-16-bit loudness convention (the AC swing is FULL_SCALE/2).
+    const double norm = Sn76489::FULL_SCALE / 2.0;
     std::vector<double> out;
     out.reserve(got);
     for (size_t i = 0; i < got; ++i) {
-        uint8_t tone0 = static_cast<uint8_t>((raw[i].sources[0] >> 24) & 0xFF);
-        out.push_back((static_cast<double>(tone0) - 128.0) / 127.0);
+        out.push_back(static_cast<double>(sn_tone0(raw[i])) / norm);
     }
     double dc = mean(out);
     for (double& v : out) v -= dc;
@@ -306,9 +308,10 @@ inline std::vector<double> ideal_reference(uint16_t period, double test_freq,
             flip = !flip;
             counter = (period == 0) ? 1024 : period;
         }
-        // Unipolar, on the same 0..254 scale the chip emits (2 x amplitude).
-        double level = flip ? (2.0 * kVolumeAmplitude[code] / 127.0) : 0.0;
-        internal.push_back(level);
+        // Unipolar, on the same full-scale law the chip emits.
+        double high = (code >= 15) ? 0.0
+                                   : Sn76489::FULL_SCALE * std::pow(10.0, -0.1 * code);
+        internal.push_back(flip ? high : 0.0);
     }
 
     std::vector<double> fir = make_lowpass_fir(fir_cutoff_hz, kInternalHz, 129);

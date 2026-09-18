@@ -105,8 +105,10 @@ class _AudioRecorder:
     def channels(self) -> tuple[list[int], list[int], list[int], list[int], list[int]]:
         """Return (mix, tone0, tone1, tone2, noise) as 16-bit signed sample lists.
 
-        Source 0 packs four unsigned 8-bit channels centred at 128, MSB first
-        within the little-endian 32-bit field: [tone0|tone1|tone2|noise].
+        The SN76489 uses two 2x16 source fields, little-endian: source 0 =
+        (tone0, tone1), source 1 = (tone2, noise); each channel is a signed
+        16-bit unipolar value (0 = silence). DC is left in; the analysis stage
+        removes it.
         """
         tone0: list[int] = []
         tone1: list[int] = []
@@ -114,20 +116,16 @@ class _AudioRecorder:
         noise: list[int] = []
         mix: list[int] = []
         data = b"".join(self._chunks)
-        # 4 sources x 4 bytes = 16 bytes per sample; source 0 is the first word.
+        # 4 sources x 4 bytes = 16 bytes per sample; sources 0 and 1 hold the SN.
         stride = 16
         for off in range(0, len(data) - stride + 1, stride):
-            word = struct.unpack_from("<I", data, off)[0]
-            t0 = ((word >> 24) & 0xFF) - 128
-            t1 = ((word >> 16) & 0xFF) - 128
-            t2 = ((word >> 8) & 0xFF) - 128
-            nz = (word & 0xFF) - 128
-            tone0.append(t0 * 256)
-            tone1.append(t1 * 256)
-            tone2.append(t2 * 256)
-            noise.append(nz * 256)
-            # Mix: sum the four, scaled to stay within 16-bit range.
-            mix.append(max(-32768, min(32767, (t0 + t1 + t2 + nz) * 64)))
+            t0, t1, t2, nz = struct.unpack_from("<4h", data, off)
+            tone0.append(t0)
+            tone1.append(t1)
+            tone2.append(t2)
+            noise.append(nz)
+            # Mix: average the four so the sum stays within 16-bit range.
+            mix.append(max(-32768, min(32767, (t0 + t1 + t2 + nz) // 4)))
         return mix, tone0, tone1, tone2, noise
 
 

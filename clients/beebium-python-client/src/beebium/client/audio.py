@@ -38,7 +38,8 @@ class SourceEncoding(IntEnum):
     ENCODING_1X32BIT_SIGNED = audio_pb2.ENCODING_1X32BIT_SIGNED
     # Unused / silent source.
     ENCODING_SILENCE = audio_pb2.ENCODING_SILENCE
-    # 4 x uint8 channels, DC bias pre-applied (SN76489).
+    # 4 x uint8 channels, unipolar (0 = silence). No longer used by the SN76489,
+    # which now uses two ENCODING_2X16BIT_SIGNED fields.
     ENCODING_4X8BIT_UNSIGNED = audio_pb2.ENCODING_4X8BIT_UNSIGNED
 
 

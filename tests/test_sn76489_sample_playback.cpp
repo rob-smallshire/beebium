@@ -117,16 +117,16 @@ TEST_CASE("sample playback: ordinary tone loudness and pitch preserved",
     }
 }
 
-// Headroom: a full-volume ordinary tone must not clip. The unipolar high level
-// at volume 0 is 254, so the only way an emitted sample can reach the 255 rail
-// is the anti-alias filter's step overshoot being clamped -- i.e. hard clipping
-// on the loudest, most common game sound. This is RED on the headroom-free
-// 0..254 8-bit encoding and turns green once the samples carry headroom.
+// Headroom: no single channel, at any volume or period, may reach the int16
+// clamp rail. The anti-alias filter's step overshoot (up to ~11%) rides above
+// the full-scale high level, so the emitted samples must carry headroom above
+// FULL_SCALE; if they did not, a full-volume square would clip on every edge --
+// hard clipping on the loudest, most common game sound.
 TEST_CASE("sample playback: full-volume tone does not clip",
           "[sn76489][sample-playback]") {
     Sn76489 chip(kClockHz, kSampleRate);
     AudioBuffer buffer(static_cast<size_t>(kSampleRate * 2));
-    // ~625 Hz square at volume 0 (max): divider 200, high level = 2 * 127 = 254.
+    // ~625 Hz square at volume 0 (max): divider 200.
     program_tone(chip, 0, 200, 0);
     chip.write(0x80 | (3 << 4) | 15);
     chip.write(0x80 | (5 << 4) | 15);
@@ -138,11 +138,17 @@ TEST_CASE("sample playback: full-volume tone does not clip",
     size_t count = buffer.read(samples.data(), samples.size());
     REQUIRE(count > 1000);
     size_t at_rail = 0;
+    int16_t peak = 0;
     for (size_t i = 0; i < count; ++i) {
-        if (((samples[i].sources[0] >> 24) & 0xFF) == 255) at_rail++;
+        int16_t v = sn_tone0(samples[i]);
+        peak = std::max<int16_t>(peak, v);
+        if (v >= 32767 || v <= -32768) at_rail++;
     }
-    INFO("samples pinned at the 255 clamp rail: " << at_rail << " / " << count);
+    INFO("peak " << peak << " / FULL_SCALE " << Sn76489::FULL_SCALE
+                 << "; samples at the int16 clamp rail: " << at_rail << " / " << count);
     CHECK(at_rail == 0);
+    // The overshoot rides above full scale but well within int16.
+    CHECK(peak > Sn76489::FULL_SCALE);
 }
 
 // A2 alias guard: a high tone must not acquire audible alias lines low in the

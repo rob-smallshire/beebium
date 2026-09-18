@@ -132,20 +132,29 @@ grpc::Status AudioServiceImpl<MachineType>::GetAudioFormat(
     internal_group->set_description("BBC Micro built-in SN76489 sound chip");
     internal_group->set_color("#FF6B35");  // Orange
 
-    // SN76489 source (always present at index 0)
-    // Channel names use MOS SOUND command numbering: 0=noise, 1-3=tones
-    auto* sn76489 = response->add_sources();
-    sn76489->set_source_index(0);
-    sn76489->set_source_name("SN76489");
-    sn76489->set_encoding(ENCODING_4X8BIT_UNSIGNED);
-    sn76489->add_channel_names("1");  // Tone0 = MOS channel 1
-    sn76489->add_channel_names("2");  // Tone1 = MOS channel 2
-    sn76489->add_channel_names("3");  // Tone2 = MOS channel 3
-    sn76489->add_channel_names("0");  // Noise = MOS channel 0
-    sn76489->set_group_id(1);
+    // SN76489 occupies two source fields, each two signed 16-bit channels.
+    // pack_2x16bit stores the first (left) channel in the low half and the
+    // second (right) in the high half. Channel names use MOS SOUND numbering.
+    // Field 0 = (tone0, tone1).
+    auto* sn_lo = response->add_sources();
+    sn_lo->set_source_index(0);
+    sn_lo->set_source_name("SN76489");
+    sn_lo->set_encoding(ENCODING_2X16BIT_SIGNED);
+    sn_lo->add_channel_names("1");  // Tone0 = MOS channel 1
+    sn_lo->add_channel_names("2");  // Tone1 = MOS channel 2
+    sn_lo->set_group_id(1);
+
+    // Field 1 = (tone2, noise).
+    auto* sn_hi = response->add_sources();
+    sn_hi->set_source_index(1);
+    sn_hi->set_source_name("SN76489");
+    sn_hi->set_encoding(ENCODING_2X16BIT_SIGNED);
+    sn_hi->add_channel_names("3");  // Tone2 = MOS channel 3
+    sn_hi->add_channel_names("0");  // Noise = MOS channel 0
+    sn_hi->set_group_id(1);
 
     // Reserved sources (silent for now)
-    for (size_t i = 1; i < AudioSample::MAX_SOURCES; ++i) {
+    for (size_t i = 2; i < AudioSample::MAX_SOURCES; ++i) {
         auto* reserved = response->add_sources();
         reserved->set_source_index(static_cast<uint32_t>(i));
         reserved->set_source_name("Reserved");

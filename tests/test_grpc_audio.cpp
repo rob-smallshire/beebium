@@ -106,20 +106,22 @@ TEST_CASE("AudioService GetAudioFormat returns correct metadata", "[grpc][audio]
     CHECK(response.sample_rate() == 48000);
     CHECK(response.source_count() == beebium::AudioSample::MAX_SOURCES);
 
-    // Verify SN76489 source metadata
-    REQUIRE(response.sources_size() >= 1);
-    auto& sn76489 = response.sources(0);
-    CHECK(sn76489.source_index() == 0);
-    CHECK(sn76489.source_name() == "SN76489");
-    CHECK(sn76489.encoding() == beebium::ENCODING_4X8BIT_UNSIGNED);
-    // Channel names use MOS SOUND command numbering: 0=noise, 1-3=tones
-    // The sample data layout matches chip order: Tone0, Tone1, Tone2, Noise
-    // So channel_names[0] = "1" (Tone0 maps to MOS channel 1)
-    REQUIRE(sn76489.channel_names_size() == 4);
-    CHECK(sn76489.channel_names(0) == "1");  // Tone0 = MOS channel 1
-    CHECK(sn76489.channel_names(1) == "2");  // Tone1 = MOS channel 2
-    CHECK(sn76489.channel_names(2) == "3");  // Tone2 = MOS channel 3
-    CHECK(sn76489.channel_names(3) == "0");  // Noise = MOS channel 0
+    // Verify SN76489 source metadata: two 2x16 fields, MOS SOUND numbering.
+    REQUIRE(response.sources_size() >= 2);
+    auto& sn_lo = response.sources(0);
+    CHECK(sn_lo.source_index() == 0);
+    CHECK(sn_lo.source_name() == "SN76489");
+    CHECK(sn_lo.encoding() == beebium::ENCODING_2X16BIT_SIGNED);
+    REQUIRE(sn_lo.channel_names_size() == 2);
+    CHECK(sn_lo.channel_names(0) == "1");  // Tone0 = MOS channel 1
+    CHECK(sn_lo.channel_names(1) == "2");  // Tone1 = MOS channel 2
+    auto& sn_hi = response.sources(1);
+    CHECK(sn_hi.source_index() == 1);
+    CHECK(sn_hi.source_name() == "SN76489");
+    CHECK(sn_hi.encoding() == beebium::ENCODING_2X16BIT_SIGNED);
+    REQUIRE(sn_hi.channel_names_size() == 2);
+    CHECK(sn_hi.channel_names(0) == "3");  // Tone2 = MOS channel 3
+    CHECK(sn_hi.channel_names(1) == "0");  // Noise = MOS channel 0
 
     // Verify channel group
     REQUIRE(response.groups_size() >= 1);
@@ -227,24 +229,22 @@ TEST_CASE("AudioService sample unpacking", "[grpc][audio]") {
     REQUIRE(received);
     REQUIRE(chunk.sample_count() > 0);
 
-    // Unpack first sample's SN76489 source (index 0)
+    // Unpack the first sample. The SN76489 uses two 2x16 fields written
+    // little-endian: source 0 (bytes 0-3) = (tone0, tone1), source 1
+    // (bytes 4-7) = (tone2, noise), each channel a signed 16-bit value.
     const uint8_t* data = reinterpret_cast<const uint8_t*>(chunk.samples().data());
+    auto le16 = [](const uint8_t* p) {
+        return static_cast<int16_t>(static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8));
+    };
+    int16_t tone0 = le16(data + 0);
+    int16_t tone1 = le16(data + 2);
+    int16_t tone2 = le16(data + 4);
+    int16_t noise = le16(data + 6);
 
-    // Extract channels: [tone0|tone1|tone2|noise] packed big-endian in the 32-bit field
-    // But written as little-endian to the stream
-    // In pack_4x8bit: (u0 << 24) | (u1 << 16) | (u2 << 8) | u3
-    // So after little-endian read: byte[0]=u3, byte[1]=u2, byte[2]=u1, byte[3]=u0
+    INFO("Sample 0: tone0=" << tone0 << " tone1=" << tone1
+         << " tone2=" << tone2 << " noise=" << noise);
 
-    int8_t noise = static_cast<int8_t>(data[0]);
-    int8_t tone2 = static_cast<int8_t>(data[1]);
-    int8_t tone1 = static_cast<int8_t>(data[2]);
-    int8_t tone0 = static_cast<int8_t>(data[3]);
-
-    // Just verify we can unpack - values will vary based on chip state
-    INFO("Sample 0: tone0=" << (int)tone0 << " tone1=" << (int)tone1
-         << " tone2=" << (int)tone2 << " noise=" << (int)noise);
-
-    // At boot, channels should be silent (amplitude ~0)
-    // Due to chip initialization, this should generally hold
-    CHECK(true);  // Test that unpacking doesn't crash
+    // Values are within the int16 range and unipolar (silence 0). Just verify we
+    // can unpack without crashing; concrete values depend on chip state.
+    CHECK(true);
 }

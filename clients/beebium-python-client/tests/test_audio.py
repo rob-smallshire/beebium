@@ -33,25 +33,34 @@ from beebium.client.audio import (
 
 
 def test_audio_format_from_proto_maps_sources_and_encoding():
-    proto = audio_pb2.AudioFormat(sample_rate=48000, source_count=1)
+    # The SN76489 uses two ENCODING_2X16BIT_SIGNED fields.
+    proto = audio_pb2.AudioFormat(sample_rate=48000, source_count=2)
     proto.sources.add(
         source_index=0,
         source_name="SN76489",
-        encoding=audio_pb2.ENCODING_4X8BIT_UNSIGNED,
-        channel_names=["0", "1", "2", "3"],
-        group_id=0,
+        encoding=audio_pb2.ENCODING_2X16BIT_SIGNED,
+        channel_names=["1", "2"],
+        group_id=1,
+    )
+    proto.sources.add(
+        source_index=1,
+        source_name="SN76489",
+        encoding=audio_pb2.ENCODING_2X16BIT_SIGNED,
+        channel_names=["3", "0"],
+        group_id=1,
     )
     fmt = _audio_format_from_proto(proto)
 
     assert isinstance(fmt, AudioFormat)
     assert fmt.sample_rate == 48000
-    assert fmt.source_count == 1
-    assert len(fmt.sources) == 1
+    assert fmt.source_count == 2
+    assert len(fmt.sources) == 2
     source = fmt.sources[0]
     assert isinstance(source, AudioSource)
     assert source.source_name == "SN76489"
-    assert source.encoding is SourceEncoding.ENCODING_4X8BIT_UNSIGNED
-    assert source.channel_names == ("0", "1", "2", "3")
+    assert source.encoding is SourceEncoding.ENCODING_2X16BIT_SIGNED
+    assert source.channel_names == ("1", "2")
+    assert fmt.sources[1].channel_names == ("3", "0")
 
 
 # --------------------------------------------------------------------------
@@ -75,3 +84,29 @@ def test_subscribe_yields_a_chunk(bbc):
     # samples is sample_count x source_count x 4 bytes.
     expected = chunk.sample_count * bbc.audio.format.source_count * 4
     assert len(chunk.samples) == expected
+
+
+def test_chunk_unpacks_according_to_format(bbc):
+    """Unpack a chunk using GetAudioFormat, exercising the wire contract."""
+    import struct
+
+    fmt = bbc.audio.format
+    # The SN76489 is delivered as two 2x16 signed fields.
+    sn_sources = [s for s in fmt.sources if s.source_name == "SN76489"]
+    assert len(sn_sources) == 2
+    assert all(
+        s.encoding is SourceEncoding.ENCODING_2X16BIT_SIGNED for s in sn_sources
+    )
+
+    chunk = next(bbc.audio.subscribe(chunk_size=256))
+    stride = fmt.source_count * 4  # bytes per sample across all source fields
+    assert len(chunk.samples) >= chunk.sample_count * stride
+    for i in range(chunk.sample_count):
+        base = i * stride
+        # Unpack each SN source field as two little-endian signed 16-bit channels.
+        for s in sn_sources:
+            off = base + s.source_index * 4
+            left, right = struct.unpack_from("<2h", chunk.samples, off)
+            # Values are signed 16-bit; silence is 0.
+            assert -32768 <= left <= 32767
+            assert -32768 <= right <= 32767

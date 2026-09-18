@@ -14,6 +14,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "beebium/devices/Sn76489.hpp"
 #include "beebium/AudioBuffer.hpp"
+#include "sn76489_channels.hpp"
 #include <vector>
 #include <set>
 #include <cmath>
@@ -345,16 +346,14 @@ TEST_CASE("SN76489 sample generation", "[sn76489]") {
         if (buffer.available() > 0) {
             buffer.read(&sample, 1);
 
-            // Sample should have sources[0] populated with 4 × 8-bit channels
-            // Extract channels from 32-bit field
-            uint32_t data = sample.sources[0];
-            int8_t tone0 = static_cast<int8_t>((data >> 24) & 0xFF);
-            int8_t tone1 = static_cast<int8_t>((data >> 16) & 0xFF);
-            int8_t tone2 = static_cast<int8_t>((data >> 8) & 0xFF);
-            int8_t noise = static_cast<int8_t>(data & 0xFF);
+            // The SN76489 uses the 2x16 encoding: source 0 = (tone0, tone1),
+            // source 1 = (tone2, noise). Unipolar, silence = 0.
+            int16_t tone0 = sn_tone0(sample);
+            int16_t tone1 = sn_tone1(sample);
+            int16_t tone2 = sn_tone2(sample);
+            int16_t noise = sn_noise(sample);
 
-            // All channels should have non-zero amplitude (volume=0, max amplitude)
-            // Note: Amplitude can be ±127 depending on output bit
+            // At volume 0 every channel is active, so some are non-zero.
             bool all_non_zero = (tone0 != 0) || (tone1 != 0) || (tone2 != 0) || (noise != 0);
             REQUIRE(all_non_zero);
         }
@@ -572,19 +571,19 @@ TEST_CASE("SN76489 LFSR sequence verification", "[sn76489][lfsr]") {
         std::vector<AudioSample> samples(buffer.available());
         size_t count = buffer.read(samples.data(), samples.size());
 
-        // The output is unipolar (0..254) and band-limited, so split about the
-        // mean level rather than about a fixed midpoint: a fair coin LFSR should
-        // spend roughly equal time above and below its own average.
+        // The output is unipolar and band-limited, so split about the mean level
+        // rather than about a fixed midpoint: a fair coin LFSR should spend
+        // roughly equal time above and below its own average.
         double sum = 0.0;
-        std::vector<uint8_t> noise_values(count);
+        std::vector<int16_t> noise_values(count);
         for (size_t i = 0; i < count; ++i) {
-            uint8_t noise = static_cast<uint8_t>(samples[i].sources[0] & 0xFF);
+            int16_t noise = sn_noise(samples[i]);
             noise_values[i] = noise;
             sum += noise;
         }
         double mean = sum / static_cast<double>(count);
         int above = 0, below = 0;
-        for (uint8_t v : noise_values) {
+        for (int16_t v : noise_values) {
             if (v > mean) above++;
             else if (v < mean) below++;
         }

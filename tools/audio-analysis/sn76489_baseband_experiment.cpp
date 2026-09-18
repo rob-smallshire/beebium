@@ -85,13 +85,19 @@ void run(const std::string& out_dirpath, uint16_t period, double test_freq,
     double real_oob = out_of_band_fraction(real, kSampleRate, 7500.0);
     double ideal_oob = out_of_band_fraction(ideal, kSampleRate, 7500.0);
 
+    // Samples are on the chip's full-scale (see Sn76489::FULL_SCALE); scale to
+    // [-1, 1] for the WAV. FULL_SCALE/2 is the AC amplitude of a full square.
+    auto to_unit = [](std::vector<double> v) {
+        for (double& s : v) s /= (beebium::Sn76489::FULL_SCALE / 2.0);
+        return v;
+    };
     char name[256];
     std::snprintf(name, sizeof(name), "%s/beebium_period%u_%gk.wav", out_dirpath.c_str(),
                   period, test_freq / 1000.0);
-    write_wav(name, real, kSampleRate);
+    write_wav(name, to_unit(real), kSampleRate);
     std::snprintf(name, sizeof(name), "%s/ideal_period%u_%gk.wav", out_dirpath.c_str(),
                   period, test_freq / 1000.0);
-    write_wav(name, ideal, kSampleRate);
+    write_wav(name, to_unit(ideal), kSampleRate);
 
     std::printf("  period %-2u  baseband real=%.5f ideal=%.5f  recovery=%.4f  "
                 "out-of-band real=%.3f ideal=%.5f\n",

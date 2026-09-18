@@ -26,6 +26,7 @@
 
 #include "beebium/devices/Sn76489.hpp"
 #include "beebium/AudioBuffer.hpp"
+#include "sn76489_channels.hpp"
 
 #include <vector>
 #include <cmath>
@@ -147,15 +148,16 @@ TEST_CASE("SN76489 timing precision", "[sn76489][timing]") {
         std::vector<AudioSample> samples(buffer.available());
         size_t count = buffer.read(samples.data(), samples.size());
 
-        // Count zero crossings (output toggles)
+        // The output is unipolar; count crossings of the mean level (one per
+        // half-cycle) rather than of zero.
+        double sum = 0.0;
+        for (size_t i = 0; i < count; ++i) sum += sn_tone0(samples[i]);
+        const double mid = sum / static_cast<double>(count);
         int crossings = 0;
         for (size_t i = 1; i < count; ++i) {
-            uint32_t prev_packed = samples[i-1].sources[0];
-            uint32_t curr_packed = samples[i].sources[0];
-            int8_t prev = static_cast<int8_t>((prev_packed >> 24) & 0xFF);
-            int8_t curr = static_cast<int8_t>((curr_packed >> 24) & 0xFF);
-
-            if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) {
+            int16_t prev = sn_tone0(samples[i-1]);
+            int16_t curr = sn_tone0(samples[i]);
+            if ((prev < mid && curr >= mid) || (prev > mid && curr <= mid)) {
                 crossings++;
             }
         }

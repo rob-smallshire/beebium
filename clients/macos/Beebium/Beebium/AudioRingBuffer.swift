@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -15,8 +15,9 @@ import Atomics
 
 /// Thread-safe lock-free single-producer single-consumer (SPSC) ring buffer for audio samples.
 ///
-/// The buffer stores packed 32-bit audio samples where each sample contains 4 x 8-bit signed
-/// channel values (Tone0, Tone1, Tone2, Noise) in big-endian order within the 32-bit field.
+/// The buffer stores one 64-bit element per audio frame: the SN76489's two
+/// 32-bit source fields (source 0 = tone0|tone1, source 1 = tone2|noise), each
+/// two signed 16-bit channels, packed with source 0 in the low half.
 ///
 /// Thread safety:
 /// - Producer thread (gRPC callback): calls `write()` to add samples
@@ -29,7 +30,10 @@ final class AudioRingBuffer: @unchecked Sendable {
     /// Default capacity in samples (~85ms at 48kHz)
     static let defaultCapacity = 4096
 
-    private let buffer: UnsafeMutableBufferPointer<UInt32>
+    // Each element holds one audio frame: the SN76489's two 32-bit source
+    // fields (source 0 = tone0|tone1, source 1 = tone2|noise) packed as a
+    // UInt64, low half = source 0.
+    private let buffer: UnsafeMutableBufferPointer<UInt64>
     private let capacity: Int
 
     /// Read index - only modified by consumer, read by producer
@@ -67,7 +71,7 @@ final class AudioRingBuffer: @unchecked Sendable {
     ///   - samples: Pointer to packed 32-bit samples
     ///   - count: Number of samples to write
     /// - Returns: Number of samples actually written (may be less if buffer full)
-    func write(_ samples: UnsafePointer<UInt32>, count: Int) -> Int {
+    func write(_ samples: UnsafePointer<UInt64>, count: Int) -> Int {
         let currentWrite = writeIndex.load(ordering: .relaxed)
         let currentRead = readIndex.load(ordering: .acquiring)
 
@@ -107,15 +111,15 @@ final class AudioRingBuffer: @unchecked Sendable {
         return toWrite
     }
 
-    /// Write samples from a Data object containing packed UInt32 values.
+    /// Write samples from a Data object containing packed UInt64 frames.
     ///
-    /// - Parameter data: Data containing packed samples (4 bytes per sample)
+    /// - Parameter data: Data containing packed frames (8 bytes per frame)
     /// - Returns: Number of samples written
     func write(data: Data) -> Int {
-        let sampleCount = data.count / MemoryLayout<UInt32>.size
+        let sampleCount = data.count / MemoryLayout<UInt64>.size
         return data.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return 0 }
-            let samples = baseAddress.assumingMemoryBound(to: UInt32.self)
+            let samples = baseAddress.assumingMemoryBound(to: UInt64.self)
             return write(samples, count: sampleCount)
         }
     }
@@ -131,7 +135,7 @@ final class AudioRingBuffer: @unchecked Sendable {
     ///   - destination: Buffer to write samples into
     ///   - count: Maximum number of samples to read
     /// - Returns: Number of samples actually read
-    func read(_ destination: UnsafeMutablePointer<UInt32>, count: Int) -> Int {
+    func read(_ destination: UnsafeMutablePointer<UInt64>, count: Int) -> Int {
         let currentRead = readIndex.load(ordering: .relaxed)
         let currentWrite = writeIndex.load(ordering: .acquiring)
 

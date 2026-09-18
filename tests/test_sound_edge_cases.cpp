@@ -26,6 +26,7 @@
 #include <beebium/Machines.hpp>
 #include <beebium/devices/Sn76489.hpp>
 #include <beebium/AudioBuffer.hpp>
+#include "sn76489_channels.hpp"
 
 #include <vector>
 #include <cmath>
@@ -57,29 +58,23 @@ void write_sound_chip(MachineType& machine, uint8_t data) {
     set_latch_bit(machine, LATCH_ADDR_SOUND_WRITE, true);   // Disable
 }
 
-// Helper: Unpack SN76489 channels from AudioSample
+// Helper: Unpack SN76489 channels from AudioSample (2x16 encoding, silence = 0)
 struct UnpackedSample {
-    int8_t tone0;
-    int8_t tone1;
-    int8_t tone2;
-    int8_t noise;
+    int16_t tone0;
+    int16_t tone1;
+    int16_t tone2;
+    int16_t noise;
 };
 
 UnpackedSample unpack_sn76489_sample(const AudioSample& sample) {
-    uint32_t packed = sample.sources[0];
-    return {
-        static_cast<int8_t>((packed >> 24) & 0xFF),
-        static_cast<int8_t>((packed >> 16) & 0xFF),
-        static_cast<int8_t>((packed >> 8) & 0xFF),
-        static_cast<int8_t>(packed & 0xFF)
-    };
+    return {sn_tone0(sample), sn_tone1(sample), sn_tone2(sample), sn_noise(sample)};
 }
 
-// Helper: Check if channel has activity
+// Helper: Check if channel has activity (deviation from the silence level 0)
 bool has_channel_activity(const std::vector<AudioSample>& samples, size_t channel_index) {
     for (const auto& sample : samples) {
         auto unpacked = unpack_sn76489_sample(sample);
-        int8_t amp = 0;
+        int16_t amp = 0;
         switch (channel_index) {
             case 0: amp = unpacked.tone0; break;
             case 1: amp = unpacked.tone1; break;

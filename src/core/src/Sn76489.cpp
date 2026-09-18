@@ -51,6 +51,14 @@ void Sn76489::configure_resampler() {
     lp_a2_ = (1.0 - k / q + k * k) * norm;
 
     decim_ratio_ = internal_rate / static_cast<double>(sample_rate_);
+
+    // Per-volume unipolar high level, on the -2 dB/step law, computed in floating
+    // point at the emitted full scale (not scaled up from the 7-bit table, which
+    // would bake 8-bit rounding into the 16-bit path). Volume 15 is silence.
+    for (int v = 0; v < 15; ++v) {
+        level_table_[v] = FULL_SCALE * std::pow(10.0, -0.1 * v);
+    }
+    level_table_[15] = 0.0;
 }
 
 double Sn76489::apply_lowpass(int channel, double x) {
@@ -180,10 +188,10 @@ void Sn76489::tick(AudioBuffer& buffer) {
     // then decimate to the output rate by fractional averaging (splitting the
     // boundary internal-sample into fractions so the output rate is exact).
     double filtered[kAudioChannels];
-    filtered[0] = apply_lowpass(0, get_tone_normalized(0));
-    filtered[1] = apply_lowpass(1, get_tone_normalized(1));
-    filtered[2] = apply_lowpass(2, get_tone_normalized(2));
-    filtered[3] = apply_lowpass(3, get_noise_normalized());
+    filtered[0] = apply_lowpass(0, channel_level(tone_[0].volume, tone_[0].output_bit));
+    filtered[1] = apply_lowpass(1, channel_level(tone_[1].volume, tone_[1].output_bit));
+    filtered[2] = apply_lowpass(2, channel_level(tone_[2].volume, tone_[2].output_bit));
+    filtered[3] = apply_lowpass(3, channel_level(noise_.volume, noise_.output_bit));
 
     decim_count_ += 1.0;
     if (decim_count_ < decim_ratio_) {
@@ -195,19 +203,21 @@ void Sn76489::tick(AudioBuffer& buffer) {
 
     const double leftover = decim_count_ - decim_ratio_;
     AudioSample sample;
-    uint8_t out[kAudioChannels];
+    int16_t out[kAudioChannels];
     for (int c = 0; c < kAudioChannels; ++c) {
         double value = (decim_acc_[c] + (1.0 - leftover) * filtered[c]) / decim_ratio_;
-        double rounded = std::lround(value);
-        if (rounded < 0.0) rounded = 0.0;
-        if (rounded > 255.0) rounded = 255.0;
-        out[c] = static_cast<uint8_t>(rounded);
+        long rounded = std::lround(value);
+        // int16 clamp: a guard only -- FULL_SCALE plus overshoot stays in range.
+        if (rounded < -32768) rounded = -32768;
+        if (rounded > 32767) rounded = 32767;
+        out[c] = static_cast<int16_t>(rounded);
         decim_acc_[c] = leftover * filtered[c];
     }
     decim_count_ = leftover;
 
-    sample.pack_4x8bit_unsigned(0, out[0], out[1], out[2], out[3]);
-    sample.sources[1] = 0;
+    // Two 2x16 source fields: field 0 = (tone0, tone1), field 1 = (tone2, noise).
+    sample.pack_2x16bit(0, out[0], out[1]);
+    sample.pack_2x16bit(1, out[2], out[3]);
     sample.sources[2] = 0;
     sample.sources[3] = 0;
     buffer.push(sample);
@@ -305,35 +315,6 @@ int8_t Sn76489::get_noise_amplitude() const {
 
     // Apply noise bit polarity
     return noise_.output_bit ? amplitude : -amplitude;
-}
-
-uint8_t Sn76489::get_tone_normalized(size_t channel) const {
-    assert(channel < 3);
-    const auto& tone = tone_[channel];
-    return normalized_level(tone.volume, tone.output_bit);
-}
-
-uint8_t Sn76489::get_noise_normalized() const {
-    return normalized_level(noise_.volume, noise_.output_bit);
-}
-
-uint8_t Sn76489::normalized_level(uint8_t volume, bool output_bit) {
-    // Unipolar output, matching the real SN76489: the pin sits at a silence
-    // level and pulls to a louder level while the flip-flop is high, so the
-    // short-term MEAN of a fast (ultrasonic-period) channel tracks the volume
-    // register. This is what lets sampled-sound players recover PCM by
-    // modulating volume; a symmetric bipolar square would leave the mean fixed
-    // and carry no baseband.
-    //
-    // Silence is level 0; the high level is twice the volume-table amplitude, so
-    // the AC swing about the mean (amplitude, up to 127) is unchanged from the
-    // previous bipolar encoding and ordinary audio keeps its loudness. Volume 15
-    // is the silence level, not the mid-point.
-    if (volume >= 15) {
-        return 0;
-    }
-    int amplitude = VOLUME_TABLE[volume];  // 0-127
-    return static_cast<uint8_t>(output_bit ? (2 * amplitude) : 0);
 }
 
 // --- Introspection interface ---

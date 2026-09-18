@@ -50,6 +50,13 @@ class AudioBuffer;
 //
 class Sn76489 {
 public:
+    // Full-scale of one emitted channel: the sample value when the flip-flop is
+    // high at maximum volume. The output is unipolar (0 = silence), so a single
+    // channel's full swing is FULL_SCALE. It sits well below the int16 range so
+    // the anti-alias filter's step overshoot (up to ~11%) and sums of the three
+    // tone channels stay within range. DC removal is the consumer's job.
+    static constexpr int32_t FULL_SCALE = 16384;
+
     // Constructor: clock_hz = input clock rate (e.g., 4000000 for 4 MHz)
     //             sample_rate = output sample rate (e.g., 48000)
     explicit Sn76489(uint32_t clock_hz, uint32_t sample_rate);
@@ -169,6 +176,10 @@ private:
     static constexpr int kAudioChannels = 4;  // tone 0-2 + noise
     static constexpr int kFilterStages = 2;   // cascaded biquads -> 4th order
 
+    // Per-volume unipolar high level at the emitted full scale, computed from the
+    // -2 dB/step law: level_table_[v] = FULL_SCALE * 10^(-0.1 v), 0 at v = 15.
+    double level_table_[16];
+
     // Biquad low-pass coefficients (Direct Form I), shared by all channels.
     double lp_b0_, lp_b1_, lp_b2_, lp_a1_, lp_a2_;
     // Per-channel, per-stage history.
@@ -204,24 +215,19 @@ private:
     // Generate periodic noise bit (15-cycle pattern)
     uint8_t next_periodic_noise_bit();
 
-    // Compute tone channel output amplitude (applies volume table)
-    // Returns signed -127 to +127 (legacy, for signed encoding)
+    // Relative signed amplitude for introspection (state.amplitude): the swing
+    // on a 0-127 scale, independent of the emitted sample's full-scale. Volume
+    // 15 = 0. This is a "how loud" indicator, not the wire sample value.
     int8_t get_tone_amplitude(size_t channel) const;
-
-    // Compute noise channel output amplitude
-    // Returns signed -127 to +127 (legacy, for signed encoding)
     int8_t get_noise_amplitude() const;
 
-    // Compute normalized tone channel sample (DC bias pre-applied)
-    // Returns unsigned 0-255, centered at 128
-    uint8_t get_tone_normalized(size_t channel) const;
-
-    // Compute normalized noise channel sample (unipolar; see normalized_level)
-    uint8_t get_noise_normalized() const;
-
-    // Map a volume/output-bit pair to a unipolar 0-254 sample: 0 = silence,
-    // 2*amplitude = flip-flop high. The mean of a fast channel tracks volume.
-    static uint8_t normalized_level(uint8_t volume, bool output_bit);
+    // Unipolar output level for one channel at the emitted full scale:
+    // FULL_SCALE while the flip-flop is high, 0 (silence) while low, on the same
+    // -2 dB/step law as the volume table but computed in floating point (not
+    // scaled up from the 7-bit table). The mean of a fast channel tracks volume.
+    double channel_level(uint8_t volume, bool output_bit) const {
+        return output_bit ? level_table_[volume] : 0.0;
+    }
 
     // Logarithmic volume table: 4-bit register → 8-bit signed amplitude
     // Formula: amplitude[v] = round(127 × 10^(-0.1v))

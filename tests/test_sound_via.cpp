@@ -25,6 +25,7 @@
 #include <beebium/Machines.hpp>
 #include <beebium/devices/Sn76489.hpp>
 #include <beebium/AudioBuffer.hpp>
+#include "sn76489_channels.hpp"
 
 #include <vector>
 
@@ -71,21 +72,14 @@ void write_sound_chip(MachineType& machine, uint8_t data) {
 // Helper: Unpack SN76489 channels from AudioSample
 // Samples are unsigned (0-255) with DC midpoint at 128
 struct UnpackedSample {
-    uint8_t tone0;
-    uint8_t tone1;
-    uint8_t tone2;
-    uint8_t noise;
+    int16_t tone0;
+    int16_t tone1;
+    int16_t tone2;
+    int16_t noise;
 };
 
 UnpackedSample unpack_sn76489_sample(const AudioSample& sample) {
-    uint32_t packed = sample.sources[0];
-
-    return {
-        static_cast<uint8_t>((packed >> 24) & 0xFF),
-        static_cast<uint8_t>((packed >> 16) & 0xFF),
-        static_cast<uint8_t>((packed >> 8) & 0xFF),
-        static_cast<uint8_t>(packed & 0xFF)
-    };
+    return {sn_tone0(sample), sn_tone1(sample), sn_tone2(sample), sn_noise(sample)};
 }
 
 // Helper: Check if channel has activity (deviation from the silence level 0).

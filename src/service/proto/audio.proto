@@ -30,10 +30,19 @@ message AudioChunk {
 // Describes how to interpret a 32-bit source field
 enum SourceEncoding {
     ENCODING_4X8BIT_SIGNED = 0;   // 4 × int8 channels, zero-centered (legacy)
-    ENCODING_2X16BIT_SIGNED = 1;  // 2 × int16 channels (e.g., Music 5000 stereo)
+    // 2 x int16 channels (e.g. Music 5000 stereo). The SN76489 uses two such
+    // fields: source 0 = (tone0, tone1), source 1 = (tone2, noise). Its samples
+    // are unipolar (0 = silence); a single channel's full-scale high level is
+    // 16384 (Sn76489::FULL_SCALE), leaving headroom for the anti-alias filter's
+    // overshoot (~11%) and for summing the three tone channels. DC removal and
+    // any final scaling are the consumer's responsibility.
+    ENCODING_2X16BIT_SIGNED = 1;
     ENCODING_1X32BIT_SIGNED = 2;  // 1 × int32 channel (high-quality)
     ENCODING_SILENCE = 3;         // Unused/silent source
-    ENCODING_4X8BIT_UNSIGNED = 4; // 4 × uint8 channels, DC bias pre-applied (SN76489)
+    // 4 x uint8 channels, unipolar (0 = silence). No longer used by the
+    // SN76489, which now uses two ENCODING_2X16BIT_SIGNED fields (see below).
+    // The wire enum value is retained and never reused.
+    ENCODING_4X8BIT_UNSIGNED = 4;
 }
 
 message AudioSource {

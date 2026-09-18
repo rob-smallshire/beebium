@@ -199,21 +199,27 @@ struct AudioSample {
 };
 ```
 
-### SN76489 Source (index 0)
+### SN76489 Source (indices 0 and 1)
 
-Encoding: 4 x 8-bit signed channels
+Encoding: two `ENCODING_2X16BIT_SIGNED` fields, each two signed 16-bit channels
+(`pack_2x16bit` stores the first channel in the low half, the second in the
+high half):
 
 ```
-Byte order (big-endian within 32-bit field):
-[Tone0 | Tone1 | Tone2 | Noise]
-  MSB                     LSB
+source 0 = (tone0, tone1)
+source 1 = (tone2, noise)
 ```
 
-Each channel is an 8-bit signed amplitude (-127 to +127).
+Each channel is unipolar: 0 is the silence level, rising toward the full-scale
+high level `Sn76489::FULL_SCALE` (16384). The short-term mean carries any
+sampled-sound baseband. Full scale sits well below the int16 range so the
+anti-alias filter's overshoot (~11%) and the sum of the three tone channels
+stay within range. DC removal and any final scaling are the consumer's job
+(the macOS renderer high-passes at 20 Hz and normalises by half full-scale, so
+a volume-0 square keeps unit AC amplitude).
 
 ### Future Sources (reserved)
 
-- Index 1: Speech synthesizer (TMS5220)
 - Index 2: 1 MHz bus audio (Music 5000)
 - Index 3: Reserved
 
@@ -237,9 +243,10 @@ queue that bridges the emulator core and gRPC streaming.
 ```cpp
 AudioBuffer buffer(48000);
 
-// Single sample push
+// Single sample push (SN76489: two 2x16 fields)
 AudioSample sample;
-sample.pack_4x8bit(0, tone0, tone1, tone2, noise);
+sample.pack_2x16bit(0, tone0, tone1);
+sample.pack_2x16bit(1, tone2, noise);
 if (!buffer.push(sample)) {
     // Buffer full - sample dropped
 }
@@ -392,15 +399,11 @@ def unpack_samples(chunk, format):
     for i in range(chunk.sample_count):
         offset = i * source_count * 4
 
-        # Read SN76489 source (index 0), little-endian
-        sn76489_data = struct.unpack_from('<I', samples, offset)[0]
+        # SN76489: sources 0 and 1, each two little-endian signed 16-bit
+        # channels. source 0 = (tone0, tone1), source 1 = (tone2, noise).
+        tone0, tone1, tone2, noise = struct.unpack_from('<4h', samples, offset)
 
-        # Unpack 4 channels (stored big-endian in the 32-bit field)
-        tone0 = ctypes.c_int8((sn76489_data >> 24) & 0xFF).value
-        tone1 = ctypes.c_int8((sn76489_data >> 16) & 0xFF).value
-        tone2 = ctypes.c_int8((sn76489_data >> 8) & 0xFF).value
-        noise = ctypes.c_int8(sn76489_data & 0xFF).value
-
+        # Unipolar: 0 = silence, up to Sn76489::FULL_SCALE (16384) at full volume.
         yield (tone0, tone1, tone2, noise)
 ```
 

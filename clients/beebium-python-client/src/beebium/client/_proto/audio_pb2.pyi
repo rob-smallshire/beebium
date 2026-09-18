@@ -40,13 +40,22 @@ class _SourceEncodingEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Source
     ENCODING_4X8BIT_SIGNED: _SourceEncoding.ValueType  # 0
     """4 × int8 channels, zero-centered (legacy)"""
     ENCODING_2X16BIT_SIGNED: _SourceEncoding.ValueType  # 1
-    """2 × int16 channels (e.g., Music 5000 stereo)"""
+    """2 x int16 channels (e.g. Music 5000 stereo). The SN76489 uses two such
+    fields: source 0 = (tone0, tone1), source 1 = (tone2, noise). Its samples
+    are unipolar (0 = silence); a single channel's full-scale high level is
+    16384 (Sn76489::FULL_SCALE), leaving headroom for the anti-alias filter's
+    overshoot (~11%) and for summing the three tone channels. DC removal and
+    any final scaling are the consumer's responsibility.
+    """
     ENCODING_1X32BIT_SIGNED: _SourceEncoding.ValueType  # 2
     """1 × int32 channel (high-quality)"""
     ENCODING_SILENCE: _SourceEncoding.ValueType  # 3
     """Unused/silent source"""
     ENCODING_4X8BIT_UNSIGNED: _SourceEncoding.ValueType  # 4
-    """4 × uint8 channels, DC bias pre-applied (SN76489)"""
+    """4 x uint8 channels, unipolar (0 = silence). No longer used by the
+    SN76489, which now uses two ENCODING_2X16BIT_SIGNED fields (see below).
+    The wire enum value is retained and never reused.
+    """
 
 class SourceEncoding(_SourceEncoding, metaclass=_SourceEncodingEnumTypeWrapper):
     """Describes how to interpret a 32-bit source field"""
@@ -54,13 +63,22 @@ class SourceEncoding(_SourceEncoding, metaclass=_SourceEncodingEnumTypeWrapper):
 ENCODING_4X8BIT_SIGNED: SourceEncoding.ValueType  # 0
 """4 × int8 channels, zero-centered (legacy)"""
 ENCODING_2X16BIT_SIGNED: SourceEncoding.ValueType  # 1
-"""2 × int16 channels (e.g., Music 5000 stereo)"""
+"""2 x int16 channels (e.g. Music 5000 stereo). The SN76489 uses two such
+fields: source 0 = (tone0, tone1), source 1 = (tone2, noise). Its samples
+are unipolar (0 = silence); a single channel's full-scale high level is
+16384 (Sn76489::FULL_SCALE), leaving headroom for the anti-alias filter's
+overshoot (~11%) and for summing the three tone channels. DC removal and
+any final scaling are the consumer's responsibility.
+"""
 ENCODING_1X32BIT_SIGNED: SourceEncoding.ValueType  # 2
 """1 × int32 channel (high-quality)"""
 ENCODING_SILENCE: SourceEncoding.ValueType  # 3
 """Unused/silent source"""
 ENCODING_4X8BIT_UNSIGNED: SourceEncoding.ValueType  # 4
-"""4 × uint8 channels, DC bias pre-applied (SN76489)"""
+"""4 x uint8 channels, unipolar (0 = silence). No longer used by the
+SN76489, which now uses two ENCODING_2X16BIT_SIGNED fields (see below).
+The wire enum value is retained and never reused.
+"""
 Global___SourceEncoding: _TypeAlias = SourceEncoding  # noqa: Y015
 
 @_typing.final

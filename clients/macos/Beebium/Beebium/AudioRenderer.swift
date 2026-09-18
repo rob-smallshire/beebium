@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -16,7 +16,7 @@ import Atomics
 /// Audio signal processing pipeline for BBC Micro audio.
 ///
 /// Handles the full DSP chain:
-/// 1. Unpack 4 x 8-bit unsigned channels from packed samples (DC bias pre-applied)
+/// 1. Unpack the four SN76489 channels (signed 16-bit, unipolar) from packed frames
 /// 2. High-pass filter to remove DC offset
 /// 3. Low-pass filter for anti-aliasing
 /// 4. Per-channel volume with exponential scaling
@@ -24,8 +24,9 @@ import Atomics
 /// 6. Mix to stereo with master volume
 /// 7. Level metering (RMS/peak per channel)
 ///
-/// Sample format: Backend emits unsigned 8-bit samples (0-255) with DC bias pre-applied.
-/// Value 128 = DC mid-point (silence), 0-127 = negative swing, 129-255 = positive swing.
+/// Sample format: the backend emits unipolar signed 16-bit channels across two
+/// source fields. 0 is silence; a channel's full-scale high level is 16384. DC
+/// removal is the consumer's job -- the highpass strips the volume-dependent DC.
 ///
 /// Thread safety:
 /// - Volume and mute state are accessed atomically
@@ -37,6 +38,11 @@ final class AudioRenderer: @unchecked Sendable {
 
     /// Number of audio channels (Tone0, Tone1, Tone2, Noise)
     static let channelCount = 4
+
+    /// Half the backend's full-scale (Sn76489::FULL_SCALE = 16384). Dividing an
+    /// int16 channel by this gives a volume-0 square unit AC amplitude, matching
+    /// the loudness of the previous 8-bit path.
+    static let halfFullScale: Float = 8192.0
 
     /// Default lowpass cutoff frequency (BBC Microcomputer Service Manual, 1985)
     static let defaultLowpassCutoffHz: Float = 8000.0
@@ -94,7 +100,7 @@ final class AudioRenderer: @unchecked Sendable {
 
     // MARK: - Scratch Buffers (allocated once, reused)
 
-    private var packedSamples: [UInt32]
+    private var packedSamples: [UInt64]
     private let maxFrameCount: Int
 
     // MARK: - Initialization
@@ -143,7 +149,7 @@ final class AudioRenderer: @unchecked Sendable {
         }
 
         // Allocate scratch buffers
-        packedSamples = [UInt32](repeating: 0, count: maxFrameCount)
+        packedSamples = [UInt64](repeating: 0, count: maxFrameCount)
     }
 
     // MARK: - Render Callback
@@ -182,20 +188,17 @@ final class AudioRenderer: @unchecked Sendable {
             var right: Float = 0
 
             if i < samplesRead && !isMuted {
-                // Unpack 4 x 8-bit unsigned channels from packed sample
-                // Backend emits normalized samples with DC bias pre-applied:
-                // - 128 = DC mid-point (silent channel)
-                // - 0-127 = negative swing, 129-255 = positive swing
-                let packed = packedSamples[i]
-                let samples = unpackChannelsUnsigned(packed)
+                // Unpack the four SN76489 channels (signed 16-bit, unipolar).
+                let samples = unpackChannels(packedSamples[i])
 
                 // Process each channel
                 for ch in 0..<Self.channelCount {
-                    // Convert unsigned to signed float: (value - 128) / 127.0
-                    // This maps 0→-1.008, 128→0, 255→+1.0
-                    var sample = (Float(samples[ch]) - 128.0) / 127.0
+                    // Normalise by half full-scale so a volume-0 square has unit
+                    // AC amplitude (silence 0 maps to 0). The highpass below
+                    // removes the volume-dependent DC.
+                    var sample = Float(samples[ch]) / Self.halfFullScale
 
-                    // Apply highpass filter (removes residual DC)
+                    // Apply highpass filter (removes the DC bias)
                     sample = highpassFilters.process(sample, channel: ch)
 
                     // Apply lowpass filter (anti-aliasing)
@@ -316,14 +319,18 @@ final class AudioRenderer: @unchecked Sendable {
 
     // MARK: - Private Helpers
 
-    /// Unpack 4 x 8-bit unsigned channels from a big-endian packed 32-bit sample
-    /// Values are normalized with DC bias pre-applied: 128 = silence, 0-255 = full swing
-    private func unpackChannelsUnsigned(_ packed: UInt32) -> [UInt8] {
+    /// Unpack the four SN76489 channels from a 64-bit frame. The two source
+    /// fields are packed low-half = source 0 (tone0, tone1), high-half = source 1
+    /// (tone2, noise); each channel is a signed 16-bit unipolar value (0 =
+    /// silence). Order: [tone0, tone1, tone2, noise].
+    private func unpackChannels(_ frame: UInt64) -> [Int16] {
+        let source0 = UInt32(truncatingIfNeeded: frame)
+        let source1 = UInt32(truncatingIfNeeded: frame >> 32)
         return [
-            UInt8((packed >> 24) & 0xFF),  // Tone0
-            UInt8((packed >> 16) & 0xFF),  // Tone1
-            UInt8((packed >> 8) & 0xFF),   // Tone2
-            UInt8(packed & 0xFF)           // Noise
+            Int16(truncatingIfNeeded: source0),         // Tone0 (low half of source 0)
+            Int16(truncatingIfNeeded: source0 >> 16),   // Tone1 (high half of source 0)
+            Int16(truncatingIfNeeded: source1),         // Tone2 (low half of source 1)
+            Int16(truncatingIfNeeded: source1 >> 16)    // Noise (high half of source 1)
         ]
     }
 

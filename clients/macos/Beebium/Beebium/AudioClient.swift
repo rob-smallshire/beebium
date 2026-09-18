@@ -222,31 +222,29 @@ final class AudioClient: ObservableObject, Disconnectable {
     }
 
     private func handleAudioChunk(_ chunk: Beebium_AudioChunk) {
-        // The samples field contains: sample_count * source_count * 4 bytes
-        // Each sample has MAX_SOURCES (4) × 32-bit fields
-        // We only need source 0 (SN76489) - extract it
+        // The samples field contains: sample_count * source_count * 4 bytes.
+        // The SN76489 uses sources 0 and 1 (the first 8 bytes of each sample):
+        // source 0 = (tone0, tone1), source 1 = (tone2, noise), each two int16.
         let data = chunk.samples
         let sampleCount = Int(chunk.sampleCount)
         let sourceCount = Int(sourceCount)  // Usually 4
         let bytesPerSample = sourceCount * 4  // 16 bytes per sample
 
-        // Extract only source 0 from each sample
-        var source0Data = Data(capacity: sampleCount * 4)
+        // Extract sources 0 and 1 (8 contiguous bytes) from each sample.
+        var frameData = Data(capacity: sampleCount * 8)
         data.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             for i in 0..<sampleCount {
                 let offset = i * bytesPerSample
-                // Source 0 is at the beginning of each sample (4 bytes)
-                if offset + 4 <= bytes.count {
-                    source0Data.append(bytes[offset])
-                    source0Data.append(bytes[offset + 1])
-                    source0Data.append(bytes[offset + 2])
-                    source0Data.append(bytes[offset + 3])
+                if offset + 8 <= bytes.count {
+                    for b in 0..<8 {
+                        frameData.append(bytes[offset + b])
+                    }
                 }
             }
         }
 
-        _ = ringBuffer.write(data: source0Data)
+        _ = ringBuffer.write(data: frameData)
     }
 
     // MARK: - Volume Control Passthrough
