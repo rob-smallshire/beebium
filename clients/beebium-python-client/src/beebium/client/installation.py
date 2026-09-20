@@ -50,7 +50,13 @@ def _warn_if_wheel_version_differs() -> None:
         )
 
 # The machine variants, as the suffix of the binary name (beebium-<variant>).
-VARIANTS = ("model-b", "model-b-plus", "model-b-plus-128k", "model-b-romram")
+VARIANTS = (
+    "model-b",
+    "model-b-plus",
+    "model-b-plus-128k",
+    "model-b-romram",
+    "model-b-atpl-sidewise",
+)
 DEFAULT_VARIANT = "model-b"
 
 

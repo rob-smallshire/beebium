@@ -92,6 +92,10 @@ class SocketStatus:
     image_filepath: str
     capabilities: SocketCapabilities
     rom_header: RomHeader | None
+    # True when this is a RAM slot whose write-protect switch is engaged
+    # (e.g. the ATPL Sidewise slot 15). Always False for ROM/empty slots
+    # and machines with no write-protect control.
+    write_protected: bool = False
 
     @property
     def priority(self) -> int:
@@ -232,6 +236,26 @@ class Sideways:
             raise BeebiumError(response.error or "ConfigureSlot failed")
         return response.actual_socket
 
+    def set_write_protect(self, slot: int, write_protected: bool) -> bool:
+        """Engage or release a RAM slot's write-protect switch.
+
+        Models a board's write-protect switch (e.g. the ATPL Sidewise
+        slot 15). Returns the slot's write-protect state after the call.
+
+        Raises:
+            BeebiumError: If the server rejects the request - most
+                commonly because the slot is not RAM, or the machine has
+                no write-protect control.
+        """
+        request = sideways_pb2.SetSlotWriteProtectRequest(
+            slot=slot,
+            write_protected=write_protected,
+        )
+        response = self._stub.SetSlotWriteProtect(request)
+        if not response.success:
+            raise BeebiumError(response.error or "SetSlotWriteProtect failed")
+        return response.write_protected
+
     def read_slot_data(
         self,
         slot: int,
@@ -337,6 +361,7 @@ def _map_socket(s: sideways_pb2.SocketStatus) -> SocketStatus:
             runtime_configurable=s.capabilities.runtime_configurable,
         ),
         rom_header=header,
+        write_protected=s.write_protected,
     )
 
 

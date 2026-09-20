@@ -21,13 +21,40 @@ from __future__ import annotations
 
 import pytest
 
-from beebium.client.exceptions import BeebiumError
+from pathlib import Path
+
+from beebium.client import Beebium
+from beebium.client.exceptions import BeebiumError, ServerNotFoundError
 from beebium.client.sideways import (
     RomHeader,
     SlotStatusReport,
     SlotType,
     SocketStatus,
 )
+
+
+@pytest.fixture
+def atpl_sidewise(
+    mos_filepath: Path,
+    beebium_server_filepath: Path | None,
+):
+    """A Model B with the ATPL Sidewise board, slot 15 fitted as RAM.
+
+    BASIC is deliberately not passed as a custom ROM: the client launcher
+    would inject it at slot 15 (its default language slot), which this
+    variant reserves for RAM. Instead the server auto-loads its own default
+    BASIC into slot 14, where the Sidewise manual puts it.
+    """
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-atpl-sidewise",
+            extra_args=["--sideways", "15:ram"],
+        ) as instance:
+            yield instance
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
 
 
 def test_get_slot_status_returns_typed_report(bbc):
@@ -116,3 +143,39 @@ def test_subscribe_events_stream_is_cancellable(bbc):
     # teardown will close the channel and unblock it. The point of this
     # test is to fail loudly if subscribe_events() itself blows up.
     assert not error, f"subscribe_events raised: {error[0]!r}"
+
+
+def test_atpl_sidewise_reports_16_slots_with_ram_in_15(atpl_sidewise):
+    """The ATPL Sidewise exposes 16 non-aliased slots; slot 15 is RAM."""
+    status = atpl_sidewise.sideways.get_slot_status()
+
+    assert status.has_aliasing is False
+    assert status.num_physical_slots == 16
+
+    slot15 = status.find_socket_for_slot(15)
+    assert slot15 is not None
+    assert slot15.type is SlotType.RAM
+    assert slot15.capabilities.supports_ram is True
+    assert slot15.capabilities.runtime_configurable is False
+    assert slot15.write_protected is False
+
+
+def test_atpl_sidewise_write_protect_roundtrip(atpl_sidewise):
+    """SetSlotWriteProtect toggles slot 15 and GetSlotStatus reflects it."""
+    sideways = atpl_sidewise.sideways
+
+    assert sideways.set_write_protect(15, True) is True
+    slot15 = sideways.get_slot_status().find_socket_for_slot(15)
+    assert slot15 is not None
+    assert slot15.write_protected is True
+
+    assert sideways.set_write_protect(15, False) is False
+    slot15 = sideways.get_slot_status().find_socket_for_slot(15)
+    assert slot15 is not None
+    assert slot15.write_protected is False
+
+
+def test_atpl_sidewise_write_protect_rejects_non_ram_slot(atpl_sidewise):
+    """Slot 14 holds BASIC (ROM), so write-protect must be rejected."""
+    with pytest.raises(BeebiumError):
+        atpl_sidewise.sideways.set_write_protect(14, True)
