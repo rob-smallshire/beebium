@@ -118,7 +118,7 @@ def main(argv=None):
                             / "beebium-model-b"),
         extra_args=["--fdc", "acorn-1770",
                     "--sideways",
-                    f"14:rom:{ROMS_DIRPATH / 'acorn-dfs_2_26.rom'}"],
+                    f"slot=14:type=rom:image={ROMS_DIRPATH / 'acorn-dfs_2_26.rom'}"],
     ) as bbc:
         bbc.debugger.ensure_running()
         time.sleep(1.5)

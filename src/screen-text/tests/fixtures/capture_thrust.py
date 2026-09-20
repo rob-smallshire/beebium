@@ -42,7 +42,7 @@ def frame(bbc):
 with Beebium.launch(mos_filepath=str(ROMS/"acorn-mos_1_20.rom"),
     basic_filepath=str(ROMS/"bbc-basic_2.rom"),
     server_filepath=str(REPO/"build"/"src"/"server"/"beebium-model-b"),
-    extra_args=["--fdc","acorn-1770","--sideways",f"14:rom:{ROMS/'acorn-dfs_2_26.rom'}"]) as bbc:
+    extra_args=["--fdc","acorn-1770","--sideways",f"slot=14:type=rom:image={ROMS/'acorn-dfs_2_26.rom'}"]) as bbc:
     bbc.debugger.ensure_running(); time.sleep(1.5)
     bbc.disc.drive(0).insert(str(DISC))
     sb(bbc); time.sleep(8.0)
