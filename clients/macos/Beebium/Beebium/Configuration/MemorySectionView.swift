@@ -112,6 +112,15 @@ struct MemorySectionView: View {
                 // independent of any image loaded into it.
                 kindPicker(index: index, socket: socket)
 
+                // Power-on write-protect for a RAM socket. A plain checkbox is
+                // right here: config-time is pure local state that becomes a
+                // launch argument, with no running server to side-effect (the
+                // Indicator+Button rule applies only to the runtime control).
+                // RAM-only, mirroring the runtime gating.
+                if socket.supportsRam && socket.content.kind == .ram {
+                    writeProtectToggle(index: index)
+                }
+
                 // Verbs menu: browse / clear / copy / reveal the image, revert.
                 actionsMenu(index: index, socket: socket)
             }
@@ -147,6 +156,11 @@ struct MemorySectionView: View {
                     memoryConfig.sockets[index].resolvedVersion = nil
                     memoryConfig.sockets[index].resolvedKinds = []
                 }
+                // Write-protect is a RAM-only switch; drop it when the socket
+                // is no longer RAM so a stale tick can't linger or be emitted.
+                if newKind != .ram {
+                    memoryConfig.sockets[index].content.writeProtected = false
+                }
             }
         )) {
             // Only offer kinds the physical socket can actually be.
@@ -161,6 +175,19 @@ struct MemorySectionView: View {
         .help(optionCount <= 1
               ? "This socket only ever holds \(socket.content.kind.label)"
               : "ROM (read-only), RAM (writable), or empty")
+    }
+
+    /// Config-time write-protect checkbox for a RAM socket. Sets the power-on
+    /// switch position (`--write-protect <slot>`); a lock glyph labels it.
+    private func writeProtectToggle(index: Int) -> some View {
+        Toggle(isOn: Binding(
+            get: { memoryConfig.sockets[index].content.writeProtected },
+            set: { memoryConfig.sockets[index].content.writeProtected = $0 }
+        )) {
+            Image(systemName: "lock")
+        }
+        .toggleStyle(.checkbox)
+        .help("Boot with this sideways RAM write-protected")
     }
 
     private func actionsMenu(index: Int, socket: MemoryConfigurationState.SocketConfig) -> some View {

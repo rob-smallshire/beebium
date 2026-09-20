@@ -40,6 +40,13 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         let populated: Bool
         let imageName: String
         let romHeader: RomHeader?
+        /// Whether this physical socket can hold RAM. Drives whether the
+        /// write-protect control is offered at all (write-protect is a
+        /// RAM-only affordance).
+        let supportsRam: Bool
+        /// Whether this RAM slot's write-protect switch is currently engaged.
+        /// Always false for ROM/empty slots and machines without the control.
+        let writeProtected: Bool
 
         var id: UInt32 { socketIndex }
         /// Effective boot priority: the highest slot the socket answers.
@@ -97,6 +104,73 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         }
     }
 
+    // MARK: - Write-protect (the sidebar's one mutable affordance)
+
+    /// Engage or release a RAM slot's write-protect switch on the running
+    /// machine. The server enforces the RAM-only rule and returns the resulting
+    /// state; we reflect exactly what it reports (there is no push event for
+    /// write-protect, so the RPC response is the source of truth). On any
+    /// failure the reason is surfaced via `errorMessage` and the indicator is
+    /// left showing the last known good state.
+    func setWriteProtect(slot: UInt32, _ protected: Bool) async {
+        guard let client = client else { return }
+        var request = Beebium_SetSlotWriteProtectRequest()
+        request.slot = slot
+        request.writeProtected = protected
+        do {
+            let response = try await client.setSlotWriteProtect(request).response.get()
+            switch Self.writeProtectOutcome(success: response.success,
+                                            error: response.error,
+                                            writeProtected: response.writeProtected,
+                                            slot: slot) {
+            case .applied(let state):
+                applyWriteProtect(slot: Int(slot), writeProtected: state)
+                errorMessage = nil
+            case .rejected(let reason):
+                errorMessage = reason
+            }
+        } catch {
+            errorMessage = "Write-protect failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// How a `SetSlotWriteProtect` response maps to a state change or an error
+    /// message. Pure so the success / rejected / empty-error branches are unit
+    /// testable without a live server.
+    enum WriteProtectOutcome: Equatable {
+        case applied(Bool)      // reflect this write-protect state
+        case rejected(String)   // surface this reason via errorMessage
+    }
+
+    static func writeProtectOutcome(success: Bool, error: String,
+                                    writeProtected: Bool, slot: UInt32) -> WriteProtectOutcome {
+        guard success else {
+            return .rejected(error.isEmpty
+                ? "Could not change write-protect for slot \(slot)."
+                : error)
+        }
+        return .applied(writeProtected)
+    }
+
+    /// Patch the write-protect state of whichever socket answers `slot`, in
+    /// place, mirroring `applyHeaderChange`.
+    private func applyWriteProtect(slot: Int, writeProtected: Bool) {
+        guard let socketIndex = sockets.firstIndex(where: { $0.slots.contains(slot) }) else {
+            return
+        }
+        let existing = sockets[socketIndex]
+        sockets[socketIndex] = Socket(
+            socketIndex: existing.socketIndex,
+            label: existing.label,
+            slots: existing.slots,
+            kind: existing.kind,
+            populated: existing.populated,
+            imageName: existing.imageName,
+            romHeader: existing.romHeader,
+            supportsRam: existing.supportsRam,
+            writeProtected: writeProtected)
+    }
+
     private func subscribeEvents() async {
         guard let client = client else { return }
         var request = Beebium_SubscribeEventsRequest()
@@ -152,7 +226,9 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             kind: existing.kind,
             populated: existing.populated || header != nil,
             imageName: existing.imageName,
-            romHeader: header)
+            romHeader: header,
+            supportsRam: existing.supportsRam,
+            writeProtected: existing.writeProtected)
     }
 
     // MARK: - Proto -> Swift mapping
@@ -165,7 +241,9 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             kind: mapKind(status.type),
             populated: status.populated,
             imageName: status.imageName,
-            romHeader: status.hasRomHeader ? mapHeader(status.romHeader) : nil)
+            romHeader: status.hasRomHeader ? mapHeader(status.romHeader) : nil,
+            supportsRam: status.capabilities.supportsRam,
+            writeProtected: status.writeProtected)
     }
 
     private static func mapKind(_ type: Beebium_SidewaysSlotType) -> SocketKind {

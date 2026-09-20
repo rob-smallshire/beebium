@@ -101,63 +101,88 @@ struct Beebium_GetSlotStatusResponse: Sendable {
 }
 
 /// Status of a physical socket (or independent slot for ROM/RAM board)
-struct Beebium_SocketStatus: Sendable {
+struct Beebium_SocketStatus: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// Physical socket/slot number
-  var socketIndex: UInt32 = 0
+  var socketIndex: UInt32 {
+    get {return _storage._socketIndex}
+    set {_uniqueStorage()._socketIndex = newValue}
+  }
 
   /// Slot numbers that map here (e.g., [0,4,8,12])
-  var aliasedSlots: [UInt32] = []
+  var aliasedSlots: [UInt32] {
+    get {return _storage._aliasedSlots}
+    set {_uniqueStorage()._aliasedSlots = newValue}
+  }
 
   /// For non-aliased, contains only socket_index
-  var type: Beebium_SidewaysSlotType = .empty
+  var type: Beebium_SidewaysSlotType {
+    get {return _storage._type}
+    set {_uniqueStorage()._type = newValue}
+  }
 
   /// Has content loaded
-  var populated: Bool = false
+  var populated: Bool {
+    get {return _storage._populated}
+    set {_uniqueStorage()._populated = newValue}
+  }
 
   /// Source filepath if loaded - absolute path on the server. Clients that
   /// want a short display name should take the basename. Empty for empty or
   /// blank-RAM slots, and on machines that have no per-slot image storage
   /// (e.g. Model B+).
-  var imageName: String = String()
+  var imageName: String {
+    get {return _storage._imageName}
+    set {_uniqueStorage()._imageName = newValue}
+  }
 
   /// Physical label (e.g., "IC52", "IC88") for Model B
-  var socketLabel: String = String()
+  var socketLabel: String {
+    get {return _storage._socketLabel}
+    set {_uniqueStorage()._socketLabel = newValue}
+  }
 
   /// Capability flags describing what types this physical socket can hold
   /// and whether the type can change at runtime via ConfigureSlot. Lets
   /// GUI clients gray out RAM/Empty options on ROM-only machines (Model B+).
   var capabilities: Beebium_SocketCapabilities {
-    get {return _capabilities ?? Beebium_SocketCapabilities()}
-    set {_capabilities = newValue}
+    get {return _storage._capabilities ?? Beebium_SocketCapabilities()}
+    set {_uniqueStorage()._capabilities = newValue}
   }
   /// Returns true if `capabilities` has been explicitly set.
-  var hasCapabilities: Bool {return self._capabilities != nil}
+  var hasCapabilities: Bool {return _storage._capabilities != nil}
   /// Clears the value of `capabilities`. Subsequent reads from it will return its default value.
-  mutating func clearCapabilities() {self._capabilities = nil}
+  mutating func clearCapabilities() {_uniqueStorage()._capabilities = nil}
 
   /// Parsed sideways ROM header for whatever is loaded in this socket.
   /// Populated only when the header is recognised (the MOS's "(C)" marker
   /// is present); absent / recognised=false for an empty socket, blank RAM,
   /// or a non-standard image. Mirrors the describe-rom JSON.
   var romHeader: Beebium_RomHeader {
-    get {return _romHeader ?? Beebium_RomHeader()}
-    set {_romHeader = newValue}
+    get {return _storage._romHeader ?? Beebium_RomHeader()}
+    set {_uniqueStorage()._romHeader = newValue}
   }
   /// Returns true if `romHeader` has been explicitly set.
-  var hasRomHeader: Bool {return self._romHeader != nil}
+  var hasRomHeader: Bool {return _storage._romHeader != nil}
   /// Clears the value of `romHeader`. Subsequent reads from it will return its default value.
-  mutating func clearRomHeader() {self._romHeader = nil}
+  mutating func clearRomHeader() {_uniqueStorage()._romHeader = nil}
+
+  /// True when this slot is a RAM slot whose write-protect switch is engaged,
+  /// inhibiting writes to the RAM. Always false for ROM/empty slots and on
+  /// machines with no write-protect control.
+  var writeProtected: Bool {
+    get {return _storage._writeProtected}
+    set {_uniqueStorage()._writeProtected = newValue}
+  }
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 
-  fileprivate var _capabilities: Beebium_SocketCapabilities? = nil
-  fileprivate var _romHeader: Beebium_RomHeader? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 /// Parsed sideways ROM header, when one is recognised in the slot's contents.
@@ -292,6 +317,40 @@ struct Beebium_ConfigureSlotResponse: Sendable {
 
   /// Parsed name from ROM header (if applicable)
   var imageName: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_SetSlotWriteProtectRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Slot number (0-15)
+  var slot: UInt32 = 0
+
+  /// true to engage write-protect, false to release
+  var writeProtected: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_SetSlotWriteProtectResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  /// Error message if !success
+  var error: String = String()
+
+  /// The slot's write-protect state after the call
+  var writeProtected: Bool = false
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -524,68 +583,125 @@ extension Beebium_GetSlotStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Beebium_SocketStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SocketStatus"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}socket_index\0\u{3}aliased_slots\0\u{1}type\0\u{1}populated\0\u{3}image_name\0\u{3}socket_label\0\u{1}capabilities\0\u{3}rom_header\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}socket_index\0\u{3}aliased_slots\0\u{1}type\0\u{1}populated\0\u{3}image_name\0\u{3}socket_label\0\u{1}capabilities\0\u{3}rom_header\0\u{3}write_protected\0")
+
+  fileprivate class _StorageClass {
+    var _socketIndex: UInt32 = 0
+    var _aliasedSlots: [UInt32] = []
+    var _type: Beebium_SidewaysSlotType = .empty
+    var _populated: Bool = false
+    var _imageName: String = String()
+    var _socketLabel: String = String()
+    var _capabilities: Beebium_SocketCapabilities? = nil
+    var _romHeader: Beebium_RomHeader? = nil
+    var _writeProtected: Bool = false
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _socketIndex = source._socketIndex
+      _aliasedSlots = source._aliasedSlots
+      _type = source._type
+      _populated = source._populated
+      _imageName = source._imageName
+      _socketLabel = source._socketLabel
+      _capabilities = source._capabilities
+      _romHeader = source._romHeader
+      _writeProtected = source._writeProtected
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.socketIndex) }()
-      case 2: try { try decoder.decodeRepeatedUInt32Field(value: &self.aliasedSlots) }()
-      case 3: try { try decoder.decodeSingularEnumField(value: &self.type) }()
-      case 4: try { try decoder.decodeSingularBoolField(value: &self.populated) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.imageName) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.socketLabel) }()
-      case 7: try { try decoder.decodeSingularMessageField(value: &self._capabilities) }()
-      case 8: try { try decoder.decodeSingularMessageField(value: &self._romHeader) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularUInt32Field(value: &_storage._socketIndex) }()
+        case 2: try { try decoder.decodeRepeatedUInt32Field(value: &_storage._aliasedSlots) }()
+        case 3: try { try decoder.decodeSingularEnumField(value: &_storage._type) }()
+        case 4: try { try decoder.decodeSingularBoolField(value: &_storage._populated) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._imageName) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._socketLabel) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._capabilities) }()
+        case 8: try { try decoder.decodeSingularMessageField(value: &_storage._romHeader) }()
+        case 9: try { try decoder.decodeSingularBoolField(value: &_storage._writeProtected) }()
+        default: break
+        }
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.socketIndex != 0 {
-      try visitor.visitSingularUInt32Field(value: self.socketIndex, fieldNumber: 1)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._socketIndex != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._socketIndex, fieldNumber: 1)
+      }
+      if !_storage._aliasedSlots.isEmpty {
+        try visitor.visitPackedUInt32Field(value: _storage._aliasedSlots, fieldNumber: 2)
+      }
+      if _storage._type != .empty {
+        try visitor.visitSingularEnumField(value: _storage._type, fieldNumber: 3)
+      }
+      if _storage._populated != false {
+        try visitor.visitSingularBoolField(value: _storage._populated, fieldNumber: 4)
+      }
+      if !_storage._imageName.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._imageName, fieldNumber: 5)
+      }
+      if !_storage._socketLabel.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._socketLabel, fieldNumber: 6)
+      }
+      try { if let v = _storage._capabilities {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._romHeader {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+      } }()
+      if _storage._writeProtected != false {
+        try visitor.visitSingularBoolField(value: _storage._writeProtected, fieldNumber: 9)
+      }
     }
-    if !self.aliasedSlots.isEmpty {
-      try visitor.visitPackedUInt32Field(value: self.aliasedSlots, fieldNumber: 2)
-    }
-    if self.type != .empty {
-      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 3)
-    }
-    if self.populated != false {
-      try visitor.visitSingularBoolField(value: self.populated, fieldNumber: 4)
-    }
-    if !self.imageName.isEmpty {
-      try visitor.visitSingularStringField(value: self.imageName, fieldNumber: 5)
-    }
-    if !self.socketLabel.isEmpty {
-      try visitor.visitSingularStringField(value: self.socketLabel, fieldNumber: 6)
-    }
-    try { if let v = self._capabilities {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
-    } }()
-    try { if let v = self._romHeader {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_SocketStatus, rhs: Beebium_SocketStatus) -> Bool {
-    if lhs.socketIndex != rhs.socketIndex {return false}
-    if lhs.aliasedSlots != rhs.aliasedSlots {return false}
-    if lhs.type != rhs.type {return false}
-    if lhs.populated != rhs.populated {return false}
-    if lhs.imageName != rhs.imageName {return false}
-    if lhs.socketLabel != rhs.socketLabel {return false}
-    if lhs._capabilities != rhs._capabilities {return false}
-    if lhs._romHeader != rhs._romHeader {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._socketIndex != rhs_storage._socketIndex {return false}
+        if _storage._aliasedSlots != rhs_storage._aliasedSlots {return false}
+        if _storage._type != rhs_storage._type {return false}
+        if _storage._populated != rhs_storage._populated {return false}
+        if _storage._imageName != rhs_storage._imageName {return false}
+        if _storage._socketLabel != rhs_storage._socketLabel {return false}
+        if _storage._capabilities != rhs_storage._capabilities {return false}
+        if _storage._romHeader != rhs_storage._romHeader {return false}
+        if _storage._writeProtected != rhs_storage._writeProtected {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -838,6 +954,81 @@ extension Beebium_ConfigureSlotResponse: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.error != rhs.error {return false}
     if lhs.actualSocket != rhs.actualSocket {return false}
     if lhs.imageName != rhs.imageName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_SetSlotWriteProtectRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SetSlotWriteProtectRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}slot\0\u{3}write_protected\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.slot) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.writeProtected) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.slot != 0 {
+      try visitor.visitSingularUInt32Field(value: self.slot, fieldNumber: 1)
+    }
+    if self.writeProtected != false {
+      try visitor.visitSingularBoolField(value: self.writeProtected, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SetSlotWriteProtectRequest, rhs: Beebium_SetSlotWriteProtectRequest) -> Bool {
+    if lhs.slot != rhs.slot {return false}
+    if lhs.writeProtected != rhs.writeProtected {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_SetSlotWriteProtectResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".SetSlotWriteProtectResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{3}write_protected\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.writeProtected) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if self.writeProtected != false {
+      try visitor.visitSingularBoolField(value: self.writeProtected, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_SetSlotWriteProtectResponse, rhs: Beebium_SetSlotWriteProtectResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.writeProtected != rhs.writeProtected {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

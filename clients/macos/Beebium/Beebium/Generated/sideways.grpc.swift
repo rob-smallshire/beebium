@@ -32,6 +32,11 @@ internal protocol Beebium_SidewaysServiceClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_ConfigureSlotRequest, Beebium_ConfigureSlotResponse>
 
+  func setSlotWriteProtect(
+    _ request: Beebium_SetSlotWriteProtectRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_SetSlotWriteProtectRequest, Beebium_SetSlotWriteProtectResponse>
+
   func readSlotData(
     _ request: Beebium_ReadSlotDataRequest,
     callOptions: CallOptions?
@@ -82,6 +87,26 @@ extension Beebium_SidewaysServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeConfigureSlotInterceptors() ?? []
+    )
+  }
+
+  /// Set or clear the write-protect switch on a RAM slot. Models a board's
+  /// write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+  /// slots that are not currently RAM.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to SetSlotWriteProtect.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func setSlotWriteProtect(
+    _ request: Beebium_SetSlotWriteProtectRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_SetSlotWriteProtectRequest, Beebium_SetSlotWriteProtectResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_SidewaysServiceClientMetadata.Methods.setSlotWriteProtect.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetSlotWriteProtectInterceptors() ?? []
     )
   }
 
@@ -202,6 +227,11 @@ internal protocol Beebium_SidewaysServiceAsyncClientProtocol: GRPCClient {
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_ConfigureSlotRequest, Beebium_ConfigureSlotResponse>
 
+  func makeSetSlotWriteProtectCall(
+    _ request: Beebium_SetSlotWriteProtectRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_SetSlotWriteProtectRequest, Beebium_SetSlotWriteProtectResponse>
+
   func makeReadSlotDataCall(
     _ request: Beebium_ReadSlotDataRequest,
     callOptions: CallOptions?
@@ -244,6 +274,18 @@ extension Beebium_SidewaysServiceAsyncClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeConfigureSlotInterceptors() ?? []
+    )
+  }
+
+  internal func makeSetSlotWriteProtectCall(
+    _ request: Beebium_SetSlotWriteProtectRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_SetSlotWriteProtectRequest, Beebium_SetSlotWriteProtectResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_SidewaysServiceClientMetadata.Methods.setSlotWriteProtect.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetSlotWriteProtectInterceptors() ?? []
     )
   }
 
@@ -298,6 +340,18 @@ extension Beebium_SidewaysServiceAsyncClientProtocol {
     )
   }
 
+  internal func setSlotWriteProtect(
+    _ request: Beebium_SetSlotWriteProtectRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_SetSlotWriteProtectResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_SidewaysServiceClientMetadata.Methods.setSlotWriteProtect.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeSetSlotWriteProtectInterceptors() ?? []
+    )
+  }
+
   internal func readSlotData(
     _ request: Beebium_ReadSlotDataRequest,
     callOptions: CallOptions? = nil
@@ -348,6 +402,9 @@ internal protocol Beebium_SidewaysServiceClientInterceptorFactoryProtocol: Senda
   /// - Returns: Interceptors to use when invoking 'configureSlot'.
   func makeConfigureSlotInterceptors() -> [ClientInterceptor<Beebium_ConfigureSlotRequest, Beebium_ConfigureSlotResponse>]
 
+  /// - Returns: Interceptors to use when invoking 'setSlotWriteProtect'.
+  func makeSetSlotWriteProtectInterceptors() -> [ClientInterceptor<Beebium_SetSlotWriteProtectRequest, Beebium_SetSlotWriteProtectResponse>]
+
   /// - Returns: Interceptors to use when invoking 'readSlotData'.
   func makeReadSlotDataInterceptors() -> [ClientInterceptor<Beebium_ReadSlotDataRequest, Beebium_ReadSlotDataResponse>]
 
@@ -362,6 +419,7 @@ internal enum Beebium_SidewaysServiceClientMetadata {
     methods: [
       Beebium_SidewaysServiceClientMetadata.Methods.getSlotStatus,
       Beebium_SidewaysServiceClientMetadata.Methods.configureSlot,
+      Beebium_SidewaysServiceClientMetadata.Methods.setSlotWriteProtect,
       Beebium_SidewaysServiceClientMetadata.Methods.readSlotData,
       Beebium_SidewaysServiceClientMetadata.Methods.subscribeEvents,
     ]
@@ -377,6 +435,12 @@ internal enum Beebium_SidewaysServiceClientMetadata {
     internal static let configureSlot = GRPCMethodDescriptor(
       name: "ConfigureSlot",
       path: "/beebium.SidewaysService/ConfigureSlot",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setSlotWriteProtect = GRPCMethodDescriptor(
+      name: "SetSlotWriteProtect",
+      path: "/beebium.SidewaysService/SetSlotWriteProtect",
       type: GRPCCallType.unary
     )
 
@@ -409,6 +473,11 @@ internal protocol Beebium_SidewaysServiceProvider: CallHandlerProvider {
 
   /// Configure a slot (empty/rom/ram) with optional image data
   func configureSlot(request: Beebium_ConfigureSlotRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ConfigureSlotResponse>
+
+  /// Set or clear the write-protect switch on a RAM slot. Models a board's
+  /// write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+  /// slots that are not currently RAM.
+  func setSlotWriteProtect(request: Beebium_SetSlotWriteProtectRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetSlotWriteProtectResponse>
 
   /// Read slot contents (for debugging/inspection)
   func readSlotData(request: Beebium_ReadSlotDataRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ReadSlotDataResponse>
@@ -445,6 +514,15 @@ extension Beebium_SidewaysServiceProvider {
         responseSerializer: ProtobufSerializer<Beebium_ConfigureSlotResponse>(),
         interceptors: self.interceptors?.makeConfigureSlotInterceptors() ?? [],
         userFunction: self.configureSlot(request:context:)
+      )
+
+    case "SetSlotWriteProtect":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SetSlotWriteProtectRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SetSlotWriteProtectResponse>(),
+        interceptors: self.interceptors?.makeSetSlotWriteProtectInterceptors() ?? [],
+        userFunction: self.setSlotWriteProtect(request:context:)
       )
 
     case "ReadSlotData":
@@ -494,6 +572,14 @@ internal protocol Beebium_SidewaysServiceAsyncProvider: CallHandlerProvider, Sen
     request: Beebium_ConfigureSlotRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_ConfigureSlotResponse
+
+  /// Set or clear the write-protect switch on a RAM slot. Models a board's
+  /// write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+  /// slots that are not currently RAM.
+  func setSlotWriteProtect(
+    request: Beebium_SetSlotWriteProtectRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_SetSlotWriteProtectResponse
 
   /// Read slot contents (for debugging/inspection)
   func readSlotData(
@@ -546,6 +632,15 @@ extension Beebium_SidewaysServiceAsyncProvider {
         wrapping: { try await self.configureSlot(request: $0, context: $1) }
       )
 
+    case "SetSlotWriteProtect":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_SetSlotWriteProtectRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_SetSlotWriteProtectResponse>(),
+        interceptors: self.interceptors?.makeSetSlotWriteProtectInterceptors() ?? [],
+        wrapping: { try await self.setSlotWriteProtect(request: $0, context: $1) }
+      )
+
     case "ReadSlotData":
       return GRPCAsyncServerHandler(
         context: context,
@@ -580,6 +675,10 @@ internal protocol Beebium_SidewaysServiceServerInterceptorFactoryProtocol: Senda
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeConfigureSlotInterceptors() -> [ServerInterceptor<Beebium_ConfigureSlotRequest, Beebium_ConfigureSlotResponse>]
 
+  /// - Returns: Interceptors to use when handling 'setSlotWriteProtect'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeSetSlotWriteProtectInterceptors() -> [ServerInterceptor<Beebium_SetSlotWriteProtectRequest, Beebium_SetSlotWriteProtectResponse>]
+
   /// - Returns: Interceptors to use when handling 'readSlotData'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeReadSlotDataInterceptors() -> [ServerInterceptor<Beebium_ReadSlotDataRequest, Beebium_ReadSlotDataResponse>]
@@ -596,6 +695,7 @@ internal enum Beebium_SidewaysServiceServerMetadata {
     methods: [
       Beebium_SidewaysServiceServerMetadata.Methods.getSlotStatus,
       Beebium_SidewaysServiceServerMetadata.Methods.configureSlot,
+      Beebium_SidewaysServiceServerMetadata.Methods.setSlotWriteProtect,
       Beebium_SidewaysServiceServerMetadata.Methods.readSlotData,
       Beebium_SidewaysServiceServerMetadata.Methods.subscribeEvents,
     ]
@@ -611,6 +711,12 @@ internal enum Beebium_SidewaysServiceServerMetadata {
     internal static let configureSlot = GRPCMethodDescriptor(
       name: "ConfigureSlot",
       path: "/beebium.SidewaysService/ConfigureSlot",
+      type: GRPCCallType.unary
+    )
+
+    internal static let setSlotWriteProtect = GRPCMethodDescriptor(
+      name: "SetSlotWriteProtect",
+      path: "/beebium.SidewaysService/SetSlotWriteProtect",
       type: GRPCCallType.unary
     )
 

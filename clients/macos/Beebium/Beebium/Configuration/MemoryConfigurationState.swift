@@ -47,12 +47,18 @@ class MemoryConfigurationState: ObservableObject {
     struct SocketContent: Equatable {
         var kind: SocketKind
         var image: String?  // ROM image, or RAM pre-load image; nil for empty/blank RAM
+        /// Power-on write-protect position for a sideways-RAM socket. Meaningful
+        /// only when `kind == .ram`; emitted as `--write-protect <slot>` at
+        /// launch. (Presets do not yet persist this - see the save-as-preset
+        /// TODO in the plan.)
+        var writeProtected: Bool
 
         static let empty = SocketContent(kind: .empty, image: nil)
 
-        init(kind: SocketKind, image: String? = nil) {
+        init(kind: SocketKind, image: String? = nil, writeProtected: Bool = false) {
             self.kind = kind
             self.image = image
+            self.writeProtected = writeProtected
         }
 
         /// Build from a preset slot's type/image strings.
@@ -276,8 +282,13 @@ class MemoryConfigurationState: ObservableObject {
                 }
             }
 
+            // Write-protect is the socket's own switch, not a property of the
+            // image being dragged, so it stays with the socket (cleared if the
+            // socket is no longer RAM). Rebuilding content wholesale would
+            // otherwise silently untick it on every reorder.
+            let keepWriteProtect = (newKind == .ram) ? socket.content.writeProtected : false
             sockets[index].content = SocketContent(
-                kind: newKind, image: payload.image
+                kind: newKind, image: payload.image, writeProtected: keepWriteProtect
             )
             sockets[index].resolvedTitle = payload.resolvedTitle
             sockets[index].resolvedVersion = payload.resolvedVersion
@@ -308,6 +319,12 @@ class MemoryConfigurationState: ObservableObject {
                 } else {
                     arguments.append(contentsOf: ["--sideways", "\(slot):ram"])
                 }
+            }
+            // Set the power-on write-protect position for a RAM socket the user
+            // asked to protect. RAM-only by construction (the flag is rejected
+            // for non-RAM slots), so it is gated on the configured kind.
+            if socket.content.kind == .ram && socket.content.writeProtected {
+                arguments.append(contentsOf: ["--write-protect", "\(slot)"])
             }
         }
         return arguments

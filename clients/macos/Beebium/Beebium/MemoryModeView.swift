@@ -96,6 +96,12 @@ struct MemoryModeView: View {
                 .foregroundColor(.secondary)
                 .frame(width: 32, alignment: .trailing)
 
+            // Write-protect: the sidebar's one mutable affordance, offered
+            // only on RAM sockets (write-protect is a RAM-only switch).
+            if socket.kind == .ram && socket.supportsRam {
+                writeProtectControl(for: socket)
+            }
+
             // Always render the menu so populated and empty rows have
             // the exact same trailing column width; hide and disable
             // it on rows with nothing to act on. Trying to substitute
@@ -160,6 +166,35 @@ struct MemoryModeView: View {
         case .rom:   return "ROM"
         case .ram:   return "RAM"
         case .empty: return "\u{2014}"  // em dash
+        }
+    }
+
+    // MARK: - Write-protect control (Indicator + Button)
+
+    /// Write-protect for a RAM socket, following the house rule that a state
+    /// which can change for reasons beyond this click (another client, or the
+    /// launch position) is shown by an Indicator and changed by a Button, never
+    /// a Toggle. The lock glyph reflects the server's reported switch position;
+    /// the button requests a change and the indicator follows the RPC result,
+    /// never the click optimistically.
+    private func writeProtectControl(for socket: SidewaysClient.Socket) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: socket.writeProtected ? "lock.fill" : "lock.open")
+                .font(.caption)
+                .foregroundColor(socket.writeProtected ? .accentColor : .secondary)
+                .help(socket.writeProtected
+                      ? "Sideways RAM is write-protected"
+                      : "Sideways RAM is writable")
+
+            Button(socket.writeProtected ? "Unprotect" : "Protect") {
+                let target = !socket.writeProtected
+                Task { await sidewaysClient.setWriteProtect(slot: UInt32(socket.priority), target) }
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .help(socket.writeProtected
+                  ? "Allow the machine to write to this sideways RAM"
+                  : "Prevent the machine from writing to this sideways RAM")
         }
     }
 

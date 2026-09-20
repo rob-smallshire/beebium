@@ -53,6 +53,7 @@
 		3E893BDCD15B92A2A29AD7EB /* VideoSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16524154FADCB403497AFB1F /* VideoSettingsTests.swift */; };
 		406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */; };
 		40670274CFC1B6A355867C8E /* SvgPathParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */; };
+		40E2113DA076BC2B281B0F34 /* SidewaysWriteProtectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AB4718470C6723E24FBA9E9 /* SidewaysWriteProtectTests.swift */; };
 		40F2A089FF91784C67231853 /* IndicatorClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */; };
 		42072CC836ABE4A92B2EF2AC /* BeebiumApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E7A0E6AF52A2C316C7C419 /* BeebiumApp.swift */; };
 		4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */; };
@@ -303,6 +304,7 @@
 		87E7F7F1255B32F8C85FAFDA /* indicator.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = indicator.proto; sourceTree = "<group>"; };
 		899F340E434ACDCAA75F913F /* EditableChoiceField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableChoiceField.swift; sourceTree = "<group>"; };
 		89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLossKeyReleaseTests.swift; sourceTree = "<group>"; };
+		8AB4718470C6723E24FBA9E9 /* SidewaysWriteProtectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysWriteProtectTests.swift; sourceTree = "<group>"; };
 		8ADC7C5C44D2AAF8D8920E36 /* VideoSettingsCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsCache.swift; sourceTree = "<group>"; };
 		8B269A5937DAC1914CA8BF39 /* video.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = video.grpc.swift; sourceTree = "<group>"; };
 		8C179B6CADA71E65979BE60C /* BeebiumTouchBarEscapeKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarEscapeKey.swift; sourceTree = "<group>"; };
@@ -682,6 +684,7 @@
 				58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */,
 				9CD03C0FA5A6E6032A953101 /* SelectionCoordinatorTests.swift */,
 				B79C08E01A7BA46EE2246BF7 /* SidewaysSchemaTests.swift */,
+				8AB4718470C6723E24FBA9E9 /* SidewaysWriteProtectTests.swift */,
 				8389EA15AADAB20C859E9702 /* StandardDisplayStyleTests.swift */,
 				D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */,
 				1F66DA1B5AF0659B892650E5 /* TransientMessageTests.swift */,
@@ -844,6 +847,7 @@
 				AC8547463BFF17B483A076FA /* ScreenSelectionGeometryTests.swift in Sources */,
 				54C94C4200C162B935D5C4AB /* SelectionCoordinatorTests.swift in Sources */,
 				0E39819B2C23C51F72129F27 /* SidewaysSchemaTests.swift in Sources */,
+				40E2113DA076BC2B281B0F34 /* SidewaysWriteProtectTests.swift in Sources */,
 				E309480FD076251390C77416 /* StandardDisplayStyleTests.swift in Sources */,
 				40670274CFC1B6A355867C8E /* SvgPathParserTests.swift in Sources */,
 				E1FD68EC890C314200FC59EC /* TransientMessageTests.swift in Sources */,
