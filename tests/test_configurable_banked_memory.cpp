@@ -536,3 +536,48 @@ TEST_CASE("ConfigurableBankedMemory typical ROM/RAM board configuration", "[conf
         }
     }
 }
+
+TEST_CASE("ConfigurableBankedMemory write-protect", "[configurable_memory][write_protect]") {
+    ConfigurableBankedMemory mem;
+    mem.configure_slot_as_ram(15);
+
+    SECTION("RAM is writable by default") {
+        REQUIRE_FALSE(mem.is_slot_write_protected(15));
+        REQUIRE(mem.slot(15).is_writable());
+        mem.select_bank(15);
+        mem.write(0x0100, 0x42);
+        REQUIRE(mem.read(0x0100) == 0x42);
+    }
+
+    SECTION("Write-protect inhibits writes to RAM") {
+        mem.select_bank(15);
+        mem.write(0x0100, 0x42);
+        mem.set_slot_write_protected(15, true);
+        REQUIRE(mem.is_slot_write_protected(15));
+        REQUIRE_FALSE(mem.slot(15).is_writable());
+
+        mem.write(0x0100, 0x99);           // ignored while protected
+        REQUIRE(mem.read(0x0100) == 0x42); // retains earlier value
+    }
+
+    SECTION("Write-protect also blocks direct write_bank") {
+        mem.set_slot_write_protected(15, true);
+        mem.write_bank(15, 0x0000, 0x99);
+        REQUIRE(mem.peek_bank(15, 0x0000) == 0x00); // RAM power-on default retained
+    }
+
+    SECTION("Clearing write-protect restores writability") {
+        mem.set_slot_write_protected(15, true);
+        mem.set_slot_write_protected(15, false);
+        REQUIRE(mem.slot(15).is_writable());
+        mem.select_bank(15);
+        mem.write(0x0100, 0x7E);
+        REQUIRE(mem.read(0x0100) == 0x7E);
+    }
+
+    SECTION("slot_info reports write-protect state") {
+        REQUIRE_FALSE(mem.slot_info(15).write_protected);
+        mem.set_slot_write_protected(15, true);
+        REQUIRE(mem.slot_info(15).write_protected);
+    }
+}

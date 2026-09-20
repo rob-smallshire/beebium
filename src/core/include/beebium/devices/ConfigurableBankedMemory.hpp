@@ -198,11 +198,26 @@ public:
         configure_slot(slot, SlotType::Empty);
     }
 
+    // Per-bank write-protect control (models a board's write-protect switch).
+    void set_slot_write_protected(uint8_t slot, bool protect) {
+        if (slot < num_banks) {
+            slots_[slot].set_write_protected(protect);
+        }
+    }
+
+    bool is_slot_write_protected(uint8_t slot) const {
+        if (slot < num_banks) {
+            return slots_[slot].is_write_protected();
+        }
+        return false;
+    }
+
     // Uniform per-slot query (see SlotInfo in ConfigurableSlot.hpp).
     SlotInfo slot_info(uint8_t slot) const {
         if (slot >= num_banks) return {};
         const auto& s = slots_[slot];
-        return {s.type(), s.is_populated(), std::string(s.image_name())};
+        return {s.type(), s.is_populated(), std::string(s.image_name()),
+                s.is_write_protected()};
     }
 };
 

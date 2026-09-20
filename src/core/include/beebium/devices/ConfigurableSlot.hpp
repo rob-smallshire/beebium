@@ -38,10 +38,15 @@ enum class SlotType : uint8_t {
 //               soldered ROM/RAM. Empty sockets are not populated.
 // - image_name: identifier (typically a filepath) recorded when content
 //               was loaded; empty string when none.
+// - write_protected: true when a writable (Ram) slot has had its writes
+//               inhibited at runtime, modelling a board's write-protect
+//               switch (e.g. the ATPL Sidewise S6 link). Meaningless for
+//               Rom/Empty slots, which never accept writes regardless.
 struct SlotInfo {
     SlotType type = SlotType::Empty;
     bool populated = false;
     std::string image_name;
+    bool write_protected = false;
 };
 
 // Runtime-configurable 16KB memory slot.
@@ -57,6 +62,7 @@ class ConfigurableSlot {
     std::array<uint8_t, 16384> data_{};
     SlotType type_ = SlotType::Empty;
     std::string image_name_;  // Source filename/identifier if loaded
+    bool write_protected_ = false;  // When true, a Ram slot inhibits writes
 
 public:
     static constexpr size_t size = 16384;
@@ -83,12 +89,12 @@ public:
         return 0xFF;
     }
 
-    // Write to slot - only affects Ram type
+    // Write to slot - only affects Ram type, and only when not write-protected
     void write(uint16_t offset, uint8_t value) {
-        if (type_ == SlotType::Ram) {
+        if (type_ == SlotType::Ram && !write_protected_) {
             data_[offset % size] = value;
         }
-        // Empty and Rom types ignore writes
+        // Empty, Rom, and write-protected Ram slots ignore writes
     }
 
     // Get/set slot type
@@ -122,7 +128,13 @@ public:
     bool is_empty() const { return type_ == SlotType::Empty; }
     bool is_rom() const { return type_ == SlotType::Rom; }
     bool is_ram() const { return type_ == SlotType::Ram; }
-    bool is_writable() const { return type_ == SlotType::Ram; }
+    bool is_writable() const { return type_ == SlotType::Ram && !write_protected_; }
+
+    // Runtime write-protect control. Models a hardware write-protect switch on a
+    // RAM slot; the flag is retained regardless of type but only affects Ram
+    // slots (Rom/Empty ignore writes anyway).
+    bool is_write_protected() const { return write_protected_; }
+    void set_write_protected(bool protect) { write_protected_ = protect; }
 
     // Load data into slot (typically ROM image or pre-loaded RAM).
     // If source is smaller than the slot, mirrors the data to fill the remainder.
