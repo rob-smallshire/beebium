@@ -238,6 +238,7 @@ add_beebium_server(beebium-model-b main_model_b.cpp)
 add_beebium_server(beebium-model-b-plus main_model_b_plus.cpp)
 add_beebium_server(beebium-model-b-plus-128k main_model_b_plus_128k.cpp)
 add_beebium_server(beebium-model-b-romram main_model_b_romram.cpp)
+add_beebium_server(beebium-model-b-atpl-sidewise main_model_b_atpl_sidewise.cpp)
 
 # System presets are generated below (after the ROM copy) via add_system_preset,
 # which runs the create-preset subcommand as a POST_BUILD step.
@@ -252,6 +253,7 @@ set(BEEBIUM_SERVERS_DEPS
     beebium-model-b-plus
     beebium-model-b-plus-128k
     beebium-model-b-romram
+    beebium-model-b-atpl-sidewise
 )
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
@@ -311,6 +313,12 @@ add_system_preset(beebium-model-b-romram "model-b-romram-disc"
     "Model B with ROM/RAM Board (Disc)" "1984"
     DESCRIPTION "Model B, ROM/RAM board, 1770 DFS"
     --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
+# BASIC auto-loads into slot 14 (this machine's default language slot), so the
+# DFS goes in slot 13 and slot 15 is the board's sideways RAM.
+add_system_preset(beebium-model-b-atpl-sidewise "model-b-atpl-sidewise-disc"
+    "Model B with ATPL Sidewise (Disc)" "1984"
+    DESCRIPTION "Model B, ATPL Sidewise board, 1770 DFS, 16K sideways RAM in slot 15"
+    --fdc acorn-1770 --sideways 13:rom:acorn-dfs_2_26.rom --sideways 15:ram)
 add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
     DESCRIPTION "64K Model B+, integral DFS")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
@@ -431,6 +439,7 @@ install(TARGETS
         beebium-model-b-plus
         beebium-model-b-plus-128k
         beebium-model-b-romram
+        beebium-model-b-atpl-sidewise
     RUNTIME DESTINATION bin
 )
 install(DIRECTORY ${BEEBIUM_ROM_DIR}/
