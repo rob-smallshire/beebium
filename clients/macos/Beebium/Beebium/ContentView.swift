@@ -128,6 +128,19 @@ struct ContentView: View {
     /// Initial sidebar visibility (e.g. from a beebium://…&sidebar=closed launch);
     /// nil leaves the default. Applied once in onAppear.
     let initialShowSidebar: Bool?
+    /// Settle delay before the lock resync runs, measured from a reset trigger
+    /// (connect/boot or a MACHINE_RESET event). The reset event fires before the
+    /// MOS finishes re-initialising the locks, so the caps push waits this long
+    /// to be the last word and not be overwritten. Biased late for the same
+    /// reason the L3FS caps work chose it; overridable via BEEBIUM_CAPS_SYNC_DELAY_MS.
+    static var lockResyncSettleNanos: UInt64 {
+        let defaultMs: UInt64 = 1500
+        if let raw = ProcessInfo.processInfo.environment["BEEBIUM_CAPS_SYNC_DELAY_MS"],
+           let ms = UInt64(raw) {
+            return ms * 1_000_000
+        }
+        return defaultMs * 1_000_000
+    }
     /// Whether this window needs to call Run() after connection (for cores launched with --wait=api).
     /// Initialised from initialNeedsRun in onAppear; reset to false after Run() succeeds.
     @State private var needsRun: Bool = false
@@ -425,13 +438,17 @@ struct ContentView: View {
             // Wire up audio mixer state to audio client
             audioMixerState.audioClient = audioClient
 
-            // The app no longer drives the machine's lock latches from host
-            // state on a timer. The emulated machine is authoritative: its
-            // caps-lock-led / shift-lock-led indicators change exactly when the
-            // MOS (re-)inits the locks, and the app mirrors that state into
-            // lockReconciler (see the lockLedChangeToken observer). This fixes
-            // #73, where the old timer/compare sync fought the MOS after a reset.
-            // The host Caps Lock key still toggles the machine (handleCapsLockToggle).
+            // Lock handling (issue #73), two distinct concerns:
+            //  - Caps Lock is host -> guest: one resync routine (resyncLocks)
+            //    pushes the host caps into the guest after a settle delay,
+            //    fired by connect (boot) and each MACHINE_RESET event. Boot is
+            //    just the power-on instance of a reset, so both share the path.
+            //  - Shift Lock is guest-only on macOS: the app reflects the guest
+            //    shift latch from the lock-LED change signal into lockReconciler
+            //    (see the lockLedChangeToken observer). LEDs always show guest.
+            // The host Caps Lock key also toggles the machine live
+            // (handleCapsLockToggle). Which locks are host-synced is the
+            // per-platform LockSyncPolicy.
 
             // Wire the speed control to the system client for its RPCs.
             speedModel.bind(to: systemClient)
@@ -578,10 +595,11 @@ struct ContentView: View {
                     await keyboardClient.loadKeyMappings()
                 }
 
-                // The lock mirror follows the machine via the lock-LED change
-                // signal (the lockLedChangeToken observer), so a reconnect needs
-                // no explicit re-sync here: the reconnected stream re-delivers
-                // the LED values, which re-arm as changes and re-adopt the latch.
+                // Boot is the power-on instance of a reset: resync the locks
+                // (caps host->guest, after the settle) on connect, the same
+                // routine the MACHINE_RESET event fires. The guest shift latch
+                // is reflected continuously via the lockLedChangeToken observer.
+                resyncLocks()
             } else {
                 // Handle unexpected disconnection (server dropped connection).
                 // IndicatorClient re-arms its lock-LED change detection inside
@@ -610,15 +628,32 @@ struct ContentView: View {
             onWillSleep: { reconnectCoordinator.handleWillSleep() }
         ))
         .onChange(of: indicatorClient.lockLedChangeToken) { _ in
-            // The machine's lock LEDs changed (boot, reset/BREAK, or another
-            // client), so re-read the exact latch and adopt it into the app's
-            // mirror -- the machine is authoritative (issue #73). Race-free: the
-            // LEDs move exactly when the latch does, so this lands after the MOS
-            // finishes (re-)initialising the locks, with no launch timer.
+            // A lock LED changed (boot, reset, or another client): re-read the
+            // exact guest latch and reflect it into the app's mirror. This is the
+            // guest-only Shift Lock reflection (issue #73); caps is displayed the
+            // same way but driven host->guest separately (resyncLocks).
             Task {
                 if let state = await keyboardClient.currentLockState() {
                     lockReconciler.adoptEmulated(state)
                 }
+            }
+        }
+        .onChange(of: systemClient.machineResetToken) { _ in
+            // The machine reset (Break etc.): re-align caps host->guest after the
+            // settle, exactly as on connect. The shift reflection follows from
+            // the lock-LED change above.
+            resyncLocks()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            // The host Caps Lock may have changed while we were unfocused; realign
+            // the guest to it. Immediate (no settle): the machine is already past
+            // boot. syncCapsLockState no-ops if not yet connected or already aligned.
+            keyboardClient.syncCapsLockState(macCapsLockIsOn: NSEvent.modifierFlags.contains(.capsLock))
+        }
+        .onChange(of: keyboardMappingManager.isCapsLockSyncEnabled) { isEnabled in
+            // Enabling the feature aligns the guest caps to the host immediately.
+            if isEnabled {
+                keyboardClient.syncCapsLockState(macCapsLockIsOn: NSEvent.modifierFlags.contains(.capsLock))
             }
         }
         .onChange(of: systemClient.clientCount) { count in
@@ -652,6 +687,20 @@ struct ContentView: View {
         let uuid = systemClient.machineUUID
         guard !uuid.isEmpty else { return }
         videoSettingsCache.save(videoSettings.makeSnapshot(), forMachineUUID: uuid)
+    }
+
+    /// The one lock-resync routine, fired by both connect (boot) and a
+    /// MACHINE_RESET event (issue #73). After the settle delay -- so the MOS has
+    /// finished re-initialising the locks and won't overwrite us -- push the
+    /// host Caps Lock into the guest (host->guest; no-op unless enabled and they
+    /// differ). Shift Lock is guest-only on macOS and needs no push here; it is
+    /// reflected from the lock-LED signal. The delay is wall-clock, so a machine
+    /// running well below 1x could want a larger BEEBIUM_CAPS_SYNC_DELAY_MS.
+    private func resyncLocks() {
+        Task {
+            try? await Task.sleep(nanoseconds: Self.lockResyncSettleNanos)
+            keyboardClient.syncCapsLockState(macCapsLockIsOn: NSEvent.modifierFlags.contains(.capsLock))
+        }
     }
 
     /// Toggle the deferred unlink request for this window's machine

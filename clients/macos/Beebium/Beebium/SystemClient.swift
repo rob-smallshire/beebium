@@ -77,6 +77,12 @@ final class SystemClient: ObservableObject, Disconnectable {
     }
     @Published private(set) var liveness: Liveness = .active
 
+    /// Bumped each time the server reports a machine reset (Break, Ctrl-Break,
+    /// Reset RPC, power-on). Observed as the trigger to resync the locks after a
+    /// reset (issue #73). `lastResetKind` carries whether it was soft or hard.
+    @Published private(set) var machineResetToken: Int = 0
+    @Published private(set) var lastResetKind: Beebium_ResetKind = .unspecified
+
     /// No status event (heartbeat or otherwise) within this window means the
     /// server is unreachable. The server heartbeats every ~0.5s, so this
     /// tolerates a few missed beats (jitter, a busy main thread) before
@@ -307,6 +313,11 @@ final class SystemClient: ObservableObject, Disconnectable {
             break  // liveness handled above; nothing else to do
         case .serverStatusShutdownProgress:
             break
+        case .serverStatusMachineReset:
+            // The MOS re-inits the locks on a reset; signal so the app resyncs
+            // caps (host->guest) and re-reads the guest shift latch (issue #73).
+            lastResetKind = event.resetKind
+            machineResetToken &+= 1
         case .UNRECOGNIZED:
             break
         }

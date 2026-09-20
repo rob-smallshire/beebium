@@ -503,11 +503,46 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     }
 
     /// The BBC's exact CAPS/SHIFT LOCK latch state, or nil if it could not be
-    /// read. Used to update the app's authoritative mirror (issue #73): the
-    /// lock LEDs signal *that* the state changed, this reads *what* it is.
+    /// read. The lock LEDs signal *that* the state changed; this reads *what* it
+    /// is -- used both to reflect the guest shift latch (issue #73) and to
+    /// compare the guest caps latch against the host for the caps sync below.
     func currentLockState() async -> LockState? {
         guard let state = await getLockState() else { return nil }
         return LockState(capsLockOn: state.capsLockOn, shiftLockOn: state.shiftLockOn)
+    }
+
+    /// Align the guest's Caps Lock to the host's (host → guest), if the feature
+    /// is enabled and the platform host-syncs caps. Reads the exact guest latch
+    /// and taps only when it disagrees with the host, so it never fights the
+    /// MOS's own re-initialisation (issue #73). Shift Lock is not host-synced on
+    /// macOS, so it is untouched here -- it is reflected from the guest instead.
+    /// - Parameter macCapsLockIsOn: Current macOS Caps Lock state.
+    func syncCapsLockState(macCapsLockIsOn: Bool, policy: LockSyncPolicy = .current) {
+        let enabled = mappingManager?.isCapsLockSyncEnabled == true
+
+        // The keyboard stub may not be wired up yet during startup. A call
+        // arriving before connect() would pressCapsLock(), have its KeyDown
+        // dropped ("no client!") but its later KeyUp go through -- an orphan
+        // KeyUp and a lost sync. Drop it; the resync triggers re-fire once
+        // connected.
+        guard isConnected else {
+            print("[KBD][capsLock.sync] not connected, deferring")
+            return
+        }
+
+        Task {
+            // Read the exact guest caps latch (correct at any emulation speed,
+            // unlike the duty-cycle-filtered LED).
+            guard let guest = await currentLockState() else { return }
+            if LockSyncPolicy.shouldTapGuest(hostSynced: policy.capsIsHostSynced,
+                                             syncEnabled: enabled,
+                                             hostOn: macCapsLockIsOn,
+                                             guestOn: guest.capsLockOn) {
+                print("[KBD][capsLock.sync] hostOn=\(macCapsLockIsOn)"
+                      + " guestOn=\(guest.capsLockOn) -> tap")
+                pressCapsLock()
+            }
+        }
     }
 
     /// Send a complete Caps Lock key DOWN/UP cycle to BBC.

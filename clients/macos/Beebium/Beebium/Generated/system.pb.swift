@@ -59,6 +59,52 @@ enum Beebium_ShutdownMode: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// How a machine reset was performed. A reset re-initialises the machine (the MOS
+/// re-runs its startup, re-initialising keyboard lock state, screen mode, etc.),
+/// so a client that mirrors any of that resyncs on the event -- the same way it
+/// does at boot (boot is the power-on instance of a reset).
+enum Beebium_ResetKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  typealias RawValue = Int
+  case unspecified // = 0
+
+  /// Break key: CPU + peripherals reset, RAM preserved
+  case soft // = 1
+
+  /// Power-on / Ctrl-Break / Reset RPC: full re-init
+  case hard // = 2
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .unspecified
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .soft
+    case 2: self = .hard
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .soft: return 1
+    case .hard: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  static let allCases: [Beebium_ResetKind] = [
+    .unspecified,
+    .soft,
+    .hard,
+  ]
+
+}
+
 /// Server status types
 enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
   typealias RawValue = Int
@@ -85,6 +131,14 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// partition or a frozen process) by the *absence* of heartbeats. A healthy
   /// connection delivers these at a steady cadence.
   case serverStatusHeartbeat // = 4
+
+  /// The emulated machine was reset (however initiated: the Break key,
+  /// Ctrl-Break, a Reset RPC, power-on). The reset_kind field carries which.
+  /// A client that mirrors machine state (e.g. keyboard lock state) resyncs on
+  /// this, the same way it does at boot. Fires when the reset is applied,
+  /// before the MOS finishes re-initialising, so a consumer that needs the
+  /// re-initialised state should let it settle.
+  case serverStatusMachineReset // = 5
   case UNRECOGNIZED(Int)
 
   init() {
@@ -98,6 +152,7 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 2: self = .serverStatusIdentityChanged
     case 3: self = .serverStatusShutdownProgress
     case 4: self = .serverStatusHeartbeat
+    case 5: self = .serverStatusMachineReset
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -109,6 +164,7 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .serverStatusIdentityChanged: return 2
     case .serverStatusShutdownProgress: return 3
     case .serverStatusHeartbeat: return 4
+    case .serverStatusMachineReset: return 5
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -120,6 +176,7 @@ enum Beebium_ServerStatusType: SwiftProtobuf.Enum, Swift.CaseIterable {
     .serverStatusIdentityChanged,
     .serverStatusShutdownProgress,
     .serverStatusHeartbeat,
+    .serverStatusMachineReset,
   ]
 
 }
@@ -421,6 +478,10 @@ struct Beebium_ServerStatusEvent: Sendable {
   /// For SHUTDOWN_PROGRESS: status of each subsystem condition
   var shutdownConditions: [Beebium_ShutdownConditionStatus] = []
 
+  /// For MACHINE_RESET: whether the reset was hard (power-on / Ctrl-Break /
+  /// Reset RPC) or soft (the Break key). See ResetKind.
+  var resetKind: Beebium_ResetKind = .unspecified
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -621,8 +682,12 @@ extension Beebium_ShutdownMode: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SHUTDOWN_GRACEFUL\0\u{1}SHUTDOWN_IMMEDIATE\0")
 }
 
+extension Beebium_ResetKind: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0RESET_KIND_UNSPECIFIED\0\u{1}RESET_KIND_SOFT\0\u{1}RESET_KIND_HARD\0")
+}
+
 extension Beebium_ServerStatusType: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_STATUS_READY\0\u{1}SERVER_STATUS_SHUTTING_DOWN\0\u{1}SERVER_STATUS_IDENTITY_CHANGED\0\u{1}SERVER_STATUS_SHUTDOWN_PROGRESS\0\u{1}SERVER_STATUS_HEARTBEAT\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_STATUS_READY\0\u{1}SERVER_STATUS_SHUTTING_DOWN\0\u{1}SERVER_STATUS_IDENTITY_CHANGED\0\u{1}SERVER_STATUS_SHUTDOWN_PROGRESS\0\u{1}SERVER_STATUS_HEARTBEAT\0\u{1}SERVER_STATUS_MACHINE_RESET\0")
 }
 
 extension Beebium_GetSystemInfoRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1028,7 +1093,7 @@ extension Beebium_WatchServerStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ServerStatusEvent"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{1}message\0\u{3}shutdown_grace_ms\0\u{1}identity\0\u{3}shutdown_conditions\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{1}message\0\u{3}shutdown_grace_ms\0\u{1}identity\0\u{3}shutdown_conditions\0\u{3}reset_kind\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1041,6 +1106,7 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case 3: try { try decoder.decodeSingularUInt32Field(value: &self.shutdownGraceMs) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._identity) }()
       case 5: try { try decoder.decodeRepeatedMessageField(value: &self.shutdownConditions) }()
+      case 6: try { try decoder.decodeSingularEnumField(value: &self.resetKind) }()
       default: break
       }
     }
@@ -1066,6 +1132,9 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if !self.shutdownConditions.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.shutdownConditions, fieldNumber: 5)
     }
+    if self.resetKind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.resetKind, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1075,6 +1144,7 @@ extension Beebium_ServerStatusEvent: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs.shutdownGraceMs != rhs.shutdownGraceMs {return false}
     if lhs._identity != rhs._identity {return false}
     if lhs.shutdownConditions != rhs.shutdownConditions {return false}
+    if lhs.resetKind != rhs.resetKind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
