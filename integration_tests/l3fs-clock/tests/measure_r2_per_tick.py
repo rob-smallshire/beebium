@@ -60,9 +60,9 @@ def main():
     )
 
     extra_args = [
-        "--sideways", f"9:rom:{roms / 'acorn-anfs_4_18.rom'}",
-        "--sideways", f"10:rom:{roms / 'acorn-adfs_1_30.rom'}",
-        "--sideways", f"11:rom:{roms / 'acorn-dfs_2_26.rom'}",
+        "--sideways", f"slot=9:type=rom:image={roms / 'acorn-anfs_4_18.rom'}",
+        "--sideways", f"slot=10:type=rom:image={roms / 'acorn-adfs_1_30.rom'}",
+        "--sideways", f"slot=11:type=rom:image={roms / 'acorn-dfs_2_26.rom'}",
         "--fdc", "acorn-1770",
         "--floppy", "0:/Users/rjs/Code/L3V126/FS3v126.ssd",
         "--acorn-scsi",

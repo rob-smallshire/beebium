@@ -143,7 +143,7 @@ def bbc_dfs(bplus_server_filepath, mos_filepath, basic_filepath,
             dfs_rom_filepath, blank_ssd_filepath):
     """Launch Model B+ with DFS 2.26 and a blank writable SSD in drive 0."""
     extra_args = [
-        "--sideways", f"{DFS_SLOT}:rom:{dfs_rom_filepath}",
+        "--sideways", f"slot={DFS_SLOT}:type=rom:image={dfs_rom_filepath}",
         "--floppy", f"0:{blank_ssd_filepath}",
     ]
 

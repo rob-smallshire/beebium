@@ -108,7 +108,7 @@ def bbc_no_tube(
             server_filepath=beebium_server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_rom_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_rom_filepath}",
                 "--floppy", f"0:{source_ssd_filepath}",
                 "--floppy", f"1:{blank_ssd_filepath}",
             ],
@@ -143,7 +143,7 @@ def bbc_with_tube(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_rom_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_rom_filepath}",
                 "--floppy", f"0:{source_ssd_filepath}",
                 "--floppy", f"1:{blank_ssd_filepath}",
             ],

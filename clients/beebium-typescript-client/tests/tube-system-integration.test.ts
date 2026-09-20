@@ -33,7 +33,7 @@ async function launchTubeServer(): Promise<Beebium> {
         args: [
             "--tube-65c02",
             "--fdc", "acorn-1770",
-            "--sideways", `14:rom:${DFS_ROM_FILEPATH}`,
+            "--sideways", `slot=14:type=rom:image=${DFS_ROM_FILEPATH}`,
         ],
         timeoutMs: 20000,
     });

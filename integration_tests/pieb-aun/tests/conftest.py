@@ -313,7 +313,7 @@ def beebium_args_via_proxy(bridge, perturbing_proxy, beebium_aun_port,
 
 def _beebium_args(aun_port, net, nfs_filepath, map_entry):
     return [
-        "--sideways", f"9:rom:{nfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={nfs_filepath}",
         "--station", str(BEEBIUM_STATION),
         "--aun", (
             f"port={aun_port}"

@@ -154,7 +154,7 @@ def bbc_rtc(model_b_server_filepath, mos_filepath, basic_filepath,
     ssd_filepath.write_bytes(test_disc_ssd)
 
     extra_args = [
-        "--sideways", f"{DFS_SLOT}:rom:{dfs_rom_filepath}",
+        "--sideways", f"slot={DFS_SLOT}:type=rom:image={dfs_rom_filepath}",
         "--fdc", "acorn-1770",
         "--floppy", f"0:{ssd_filepath}",
         "--extension-dir", str(extension_dirpath),

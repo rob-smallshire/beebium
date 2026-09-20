@@ -218,8 +218,8 @@ class SoakResult:
 
 def run_soak(args: argparse.Namespace) -> SoakResult:
     extra_args = [
-        "--sideways", f"{COMAL_SLOT}:rom:{args.roms / 'comal_1_0.rom'}",
-        "--sideways", f"{DFS_SLOT}:rom:{args.roms / 'acorn-dfs_2_26.rom'}",
+        "--sideways", f"slot={COMAL_SLOT}:type=rom:image={args.roms / 'comal_1_0.rom'}",
+        "--sideways", f"slot={DFS_SLOT}:type=rom:image={args.roms / 'acorn-dfs_2_26.rom'}",
         "--floppy", f"0:{args.ssd}",
     ]
     if args.advertise:

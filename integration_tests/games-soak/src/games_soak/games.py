@@ -51,7 +51,7 @@ class Game:
     mos_rom: str = "acorn-mos_1_20.rom"       # filename under roms/
     basic_rom: str | None = "bbc-basic_2.rom"  # filename under roms/, or None
     fdc: str | None = "acorn-1770"
-    sideways: tuple[str, ...] = ("14:rom:acorn-dfs_2_26.rom",)  # "SLOT:rom:FILE"
+    sideways: tuple[str, ...] = ("slot=14:type=rom:image=acorn-dfs_2_26.rom",)  # --sideways spec
     tube_args: tuple[str, ...] = ()            # e.g. ("--tube-65c02",)
 
     # --- disc + boot ---

@@ -47,7 +47,7 @@ def test_boot_from_full_size_ssd(
             server_filepath=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
-                "--sideways", f"11:rom:{dfs_filepath}",
+                "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
                 "--auto-boot",
             ],
@@ -91,7 +91,7 @@ def test_boot_from_truncated_beebasm_ssd(
             server_filepath=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
-                "--sideways", f"11:rom:{dfs_filepath}",
+                "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
                 "--auto-boot",
             ],
@@ -136,8 +136,8 @@ def test_boot_from_truncated_ssd_with_adfs_rom_no_scsi(
             server_filepath=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
-                "--sideways", f"10:rom:{adfs_filepath}",
-                "--sideways", f"11:rom:{dfs_filepath}",
+                "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
+                "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
                 "--auto-boot",
             ],
@@ -182,8 +182,8 @@ def test_boot_from_truncated_ssd_with_adfs_and_scsi(
             server_filepath=server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
-                "--sideways", f"10:rom:{adfs_filepath}",
-                "--sideways", f"11:rom:{dfs_filepath}",
+                "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
+                "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
                 "--acorn-scsi",
                 "--scsi-hdd", f"0:{scsi_hdd_filepath}",
                 "--floppy", f"0:{ssd_filepath}",

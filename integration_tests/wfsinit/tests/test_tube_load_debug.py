@@ -45,7 +45,7 @@ def test_tube_load_detailed_debug(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
             ],
             startup_timeout=30.0,
@@ -171,7 +171,7 @@ def test_exec_boot_with_tube(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
             ],
             startup_timeout=30.0,
@@ -231,7 +231,7 @@ def test_run_from_keyboard_with_tube(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
             ],
             startup_timeout=30.0,
@@ -293,7 +293,7 @@ def test_auto_boot_with_tube(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
                 "--auto-boot",
             ],

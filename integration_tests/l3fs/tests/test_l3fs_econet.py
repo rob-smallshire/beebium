@@ -123,8 +123,8 @@ def test_l3fs_client_login(
 
     # ---- Launch the file server (station 254) ----
     server_extra_args = [
-        "--sideways", f"9:rom:{anfs_filepath}",
-        "--sideways", f"10:rom:{adfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
+        "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
         "--fdc", "acorn-1770",
         "--station", str(SERVER_STATION),
         "--aun", f"port={SERVER_AUN_PORT}:map=0.{CLIENT_STATION}@127.0.0.1@{CLIENT_AUN_PORT}",
@@ -137,7 +137,7 @@ def test_l3fs_client_login(
 
     # ---- Launch the client (station 221) ----
     client_extra_args = [
-        "--sideways", f"9:rom:{anfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
         "--station", str(CLIENT_STATION),
         "--aun", f"port={CLIENT_AUN_PORT}:map=0.{SERVER_STATION}@127.0.0.1@{SERVER_AUN_PORT}",
         "--machine-name", "Station 221",

@@ -175,8 +175,8 @@ def _make_bbc_adfs(bplus_server_filepath, mos_filepath, basic_filepath,
     ssd_filepath.write_bytes(test_disc_ssd)
 
     extra_args = [
-        "--sideways", f"{ADFS_SLOT}:rom:{adfs_rom_filepath}",
-        "--sideways", f"{DFS_SLOT}:rom:{dfs_rom_filepath}",
+        "--sideways", f"slot={ADFS_SLOT}:type=rom:image={adfs_rom_filepath}",
+        "--sideways", f"slot={DFS_SLOT}:type=rom:image={dfs_rom_filepath}",
         "--floppy", f"0:{ssd_filepath}",
         "--acorn-scsi",
         "--scsi-hdd", f"0:{scsi_dat_filepath}",

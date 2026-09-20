@@ -554,9 +554,9 @@ def run_soak(args: argparse.Namespace) -> StallReport | None:
         return None
     _log(f"Games this run: {', '.join(g.name for g in games)}")
 
-    extra_args = ["--fdc", FDC, "--sideways", f"{DFS_SLOT}:rom:{args.roms / DFS_ROM}"]
+    extra_args = ["--fdc", FDC, "--sideways", f"slot={DFS_SLOT}:type=rom:image={args.roms / DFS_ROM}"]
     for slot in SIDEWAYS_RAM_SLOTS:
-        extra_args += ["--sideways", f"{slot}:ram"]
+        extra_args += ["--sideways", f"slot={slot}:type=ram"]
     if args.tube:
         extra_args = ["--tube-65c02", *extra_args]
     if args.advertise:

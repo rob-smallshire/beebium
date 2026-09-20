@@ -50,7 +50,7 @@ def test_packaged_tube_rom_boots_banner(
             extra_args=[
                 tube_flag,
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
             ],
             startup_timeout=30.0,
         ) as bbc:

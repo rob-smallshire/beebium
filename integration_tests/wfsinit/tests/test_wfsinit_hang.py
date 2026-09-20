@@ -65,9 +65,9 @@ def test_wfsinit_completes(
 ):
     """Run WFSINIT through all prompts to successful disc initialisation."""
     extra_args = [
-        "--sideways", f"9:rom:{anfs_filepath}",
-        "--sideways", f"10:rom:{adfs_filepath}",
-        "--sideways", f"11:rom:{dfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
+        "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
+        "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
         "--fdc", "acorn-1770",
         "--floppy", f"0:{wfsinit_ssd_filepath}",
         "--acorn-scsi",

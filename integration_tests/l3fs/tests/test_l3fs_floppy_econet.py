@@ -190,9 +190,9 @@ def test_l3fs_floppy_client_login(
     # RTC (required by L3FS), and the L3FS ADFS floppy.
     # --auto-boot triggers the !BOOT exec on reset.
     server_extra_args = [
-        "--sideways", f"9:rom:{anfs_filepath}",
-        "--sideways", f"10:rom:{adfs_filepath}",
-        "--sideways", f"11:rom:{dfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
+        "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
+        "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
         "--fdc", "acorn-1770",
         "--floppy", f"0:{l3fs_floppy_filepath}",
         "--station", str(SERVER_STATION),
@@ -204,7 +204,7 @@ def test_l3fs_floppy_client_login(
 
     # ---- Client (station 221) ----
     client_extra_args = [
-        "--sideways", f"9:rom:{anfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
         "--station", str(CLIENT_STATION),
         "--aun", f"port={CLIENT_AUN_PORT}:map=0.{SERVER_STATION}@127.0.0.1@{SERVER_AUN_PORT}",
         "--machine-name", "Station 221",

@@ -40,7 +40,7 @@ def test_tube_presence_flag(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
             ],
             startup_timeout=30.0,
         ) as bbc:
@@ -100,7 +100,7 @@ def test_load_puts_data_in_host_ram(
             extra_args=[
                 "--tube-65c02",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_filepath}",
                 "--floppy", f"0:{ssd_filepath}",
             ],
             startup_timeout=30.0,

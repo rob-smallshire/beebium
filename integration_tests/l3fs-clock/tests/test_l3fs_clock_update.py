@@ -120,9 +120,9 @@ def test_l3fs_clock_update_interval(
             pytest.skip(f"{name} ROM not found: {rom}")
 
     extra_args = [
-        "--sideways", f"9:rom:{anfs_filepath}",
-        "--sideways", f"10:rom:{adfs_filepath}",
-        "--sideways", f"11:rom:{dfs_filepath}",
+        "--sideways", f"slot=9:type=rom:image={anfs_filepath}",
+        "--sideways", f"slot=10:type=rom:image={adfs_filepath}",
+        "--sideways", f"slot=11:type=rom:image={dfs_filepath}",
         "--fdc", "acorn-1770",
         "--floppy", f"0:{l3fs_ssd_filepath}",
         "--acorn-scsi",

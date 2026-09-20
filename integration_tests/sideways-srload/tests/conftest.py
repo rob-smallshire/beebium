@@ -289,7 +289,7 @@ def b_plus_128k_with_adfs_at_startup(
             basic_filepath=None,
             server_filepath=b_plus_128k_server_filepath,
             extra_args=[
-                "--sideways", f"9:rom:{adfs_rom_filepath}",
+                "--sideways", f"slot=9:type=rom:image={adfs_rom_filepath}",
             ],
             startup_timeout=15.0,
         ) as bbc:
@@ -365,8 +365,8 @@ def romram_with_srload_disc(
             server_filepath=romram_server_filepath,
             extra_args=[
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_rom_filepath}",
-                "--sideways", f"{SRAM_TARGET_SLOT}:ram",
+                "--sideways", f"slot=14:type=rom:image={dfs_rom_filepath}",
+                "--sideways", f"slot={SRAM_TARGET_SLOT}:type=ram",
                 "--floppy", f"0:{srload_ssd_filepath}",
             ],
             startup_timeout=15.0,
