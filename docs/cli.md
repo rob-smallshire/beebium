@@ -9,6 +9,7 @@ The Beebium emulator runs as a headless gRPC server. This document covers all co
 | `beebium-model-b` | BBC Model B | Original 32K BBC Micro with MOS 1.20 |
 | `beebium-model-b-plus` | BBC Model B+ 64K | Enhanced 64K model with MOS 2.0 |
 | `beebium-model-b-romram` | BBC Model B with ROM/RAM expansion | Notional 16-slot ROM/RAM expansion board over an MOS 1.20 Model B |
+| `beebium-model-b-atpl-sidewise` | BBC Model B with ATPL Sidewise | The historical ATPL Sidewise board: 16 slots, slot 15 a RAM/ROM socket with write-through and a runtime write-protect switch |
 
 ## Usage
 

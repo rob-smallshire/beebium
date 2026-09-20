@@ -45,6 +45,17 @@ PCB:
   a notional "sufficiently sophisticated" board with hot-reconfigurable
   slot types - useful as a flexible test bed.
 
+- **Model B with ATPL Sidewise** (`ConfigurableBankedMemory`): the
+  historical ATPL Sidewise board, full 4-bit ROMSEL decoding, sixteen
+  slots. Slots 0-14 are ROM sockets; slot 15 is the board's single
+  RAM/ROM socket (the real 15a/15b halves modelled as one 16K slot).
+  Slot 15 has two distinguishing behaviours: **write-through** (any write
+  to `&8000-&BFFF` is latched into the slot-15 RAM regardless of the
+  currently paged ROM, so the RAM only reads back when slot 15 is paged
+  in) and a runtime **write-protect** switch. Chip population is fixed at
+  launch; the write-protect switch is the only runtime control. Intended
+  to replace the notional ROM/RAM board.
+
 ### Socket capabilities
 
 Each socket carries four boolean capability flags:
@@ -75,6 +86,7 @@ capability:
 | Model B | `false` (real-hardware-faithful) |
 | Model B+ | `false` (real-hardware-faithful) |
 | Model B with ROM/RAM board | `true` (fantasy hot-swap test bed) |
+| Model B with ATPL Sidewise | `false` (real-hardware-faithful) |
 
 Future Master 128 cartridge slots will be `runtime_configurable=true`
 to model cartridge insertion/removal during a session - the closest
@@ -194,6 +206,30 @@ Sixteen independent slots, each a single-slot socket of the same name
 (`Slot 0` through `Slot 15`). Each supports ROM/RAM/empty and is
 runtime-reconfigurable. No aliasing.
 
+### Model B with ATPL Sidewise
+
+Sixteen independent slots, no aliasing. Slots 0-3 are the relocated
+motherboard sockets (`Motherboard ROM 0-3`) and slots 4-14 are the
+board's ROM sockets (`Sidewise ROM 4-14`): all `supports_rom=true,
+supports_ram=false`. Slot 15 (`Sidewise RAM/ROM 15`) is the board's only
+RAM-capable socket (`supports_rom=true, supports_ram=true`). No socket is
+runtime-reconfigurable: chip population, and whether slot 15 holds RAM or
+a ROM, is fixed at launch with `--sideways`.
+
+Slot 15 has two board-specific behaviours when fitted with RAM:
+
+- **Write-through.** A CPU write to `&8000-&BFFF` is latched into the
+  slot-15 RAM directly, irrespective of and without affecting the
+  currently paged ROM. Reads stay ROMSEL-gated, so the RAM only reads
+  back when slot 15 is paged in via `&FE30`.
+- **Write-protect.** A runtime switch (the board's S6 link) inhibits
+  writes to the slot-15 RAM. Toggle it with
+  `SidewaysService.SetSlotWriteProtect`; the current state is reported in
+  `SocketStatus.write_protected`.
+
+BASIC defaults to slot 14 (the manual reserves slot 15 for RAM). Battery
+backup is not modelled.
+
 ## Startup validation
 
 When the server parses `--sideways` arguments, it groups them by the
@@ -268,11 +304,19 @@ saves the user a round-trip and a confusing error.
       string image_name = 5;
       string socket_label = 6;
       SocketCapabilities capabilities = 7;
+      RomHeader rom_header = 8;
+      bool write_protected = 9;
   }
   ```
 
 - **`ConfigureSlot`** changes a runtime-configurable socket's type
   and/or loads an image. Subject to the rules above.
+
+- **`SetSlotWriteProtect`** engages or releases a RAM slot's
+  write-protect switch (e.g. the ATPL Sidewise slot 15). Rejected for
+  slots that are not currently RAM, and for machines with no
+  write-protect control. The resulting state is also reported in
+  `SocketStatus.write_protected`.
 
 - **`ReadSlotData`** reads bytes from a slot for inspection.
 
