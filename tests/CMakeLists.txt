@@ -316,6 +316,11 @@ add_executable(test_model_b_romram_hardware test_model_b_romram_hardware.cpp)
 target_link_libraries(test_model_b_romram_hardware PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_model_b_romram_hardware)
 
+# Model B ATPL Sidewise hardware tests
+add_executable(test_model_b_atpl_sidewise_hardware test_model_b_atpl_sidewise_hardware.cpp)
+target_link_libraries(test_model_b_atpl_sidewise_hardware PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_model_b_atpl_sidewise_hardware)
+
 # IBM disc format tests (FM/MFM encoding, CRC)
 add_executable(test_ibm_disc_format test_ibm_disc_format.cpp)
 target_link_libraries(test_ibm_disc_format PRIVATE beebium_core Catch2::Catch2WithMain)

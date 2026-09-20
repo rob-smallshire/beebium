@@ -19,6 +19,7 @@
 #include "ModelBPlusHardware.hpp"
 #include "ModelBPlus128KHardware.hpp"
 #include "ModelBRomRamBoardHardware.hpp"
+#include "ModelBAtplSidewiseHardware.hpp"
 
 namespace beebium {
 
@@ -32,6 +33,12 @@ using ModelB = Machine<Nmos6502, ModelBHardware>;
 // Features: 16 independent sideways slots (no aliasing), jsbeeb-style layout
 //   Slots 0-7: RAM, Slots 8-12: empty, Slot 13: ADFS, Slot 14: DFS, Slot 15: BASIC
 using ModelBRomRamBoard = Machine<Nmos6502, ModelBRomRamBoardHardware>;
+
+// BBC Model B with the ATPL Sidewise expansion board: NMOS 6502 + Model B
+// hardware with 16 sideways slots. Slots 0-14 are ROM sockets; slot 15 is the
+// board's RAM/ROM socket with write-through and a runtime write-protect switch.
+// A specific historical board, intended to replace ModelBRomRamBoard.
+using ModelBAtplSidewise = Machine<Nmos6502, ModelBAtplSidewiseHardware>;
 
 // BBC Model B+ 64K: NMOS 6502 + Model B+ hardware (64KB RAM with shadow/ANDY)
 using ModelBPlus = Machine<Nmos6502, ModelBPlusHardware>;
