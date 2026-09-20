@@ -32,6 +32,10 @@
 #include <utility>
 #include <vector>
 
+// The shared colon key=value tokenizer (split_colon_args) lives here; --sideways
+// and the extension args use the same one.
+#include "beebium/extension/ExtensionArgParser.hpp"
+
 namespace beebium::server {
 
 enum class WaitMode {
@@ -139,28 +143,11 @@ inline std::pair<std::uint8_t, std::string> parse_floppy_arg(const std::string& 
 //   4:ram                     - Empty RAM
 //   4:ram:preload.bin         - RAM with pre-loaded image
 //   2:empty                   - Empty slot
-// Split a colon-separated argument into tokens, honouring double quotes so a
-// value may contain a ':' (e.g. a URL or a Windows path) when quoted:
-//   slot=15:type=rom:image="C:\roms\a.rom"
-// The surrounding quotes are stripped from each token's value by the caller.
-inline std::vector<std::string> split_sideways_tokens(const std::string& arg) {
-    std::vector<std::string> tokens;
-    std::string current;
-    bool in_quotes = false;
-    for (char c : arg) {
-        if (c == '"') {
-            in_quotes = !in_quotes;
-            current.push_back(c);
-        } else if (c == ':' && !in_quotes) {
-            tokens.push_back(current);
-            current.clear();
-        } else {
-            current.push_back(c);
-        }
-    }
-    tokens.push_back(current);
-    return tokens;
-}
+// The colon-separated key=value tokenizer is shared with the extension-args
+// parser (beebium::split_colon_args in ExtensionArgParser.hpp): the same
+// convention -- and now the same code -- backs `--<ext> key=value:...` and
+// `--sideways slot=...:type=...`. It honours double quotes so a value may
+// contain a ':' (a URL or a Windows path); the caller strips the quotes.
 
 inline std::string strip_quotes(const std::string& s) {
     if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
@@ -188,7 +175,7 @@ inline SidewaysConfig parse_sideways_arg(const std::string& arg) {
     bool have_slot = false;
     bool have_type = false;
 
-    for (const auto& token : split_sideways_tokens(arg)) {
+    for (const auto& token : split_colon_args(arg)) {
         if (token.empty()) {
             throw std::runtime_error(
                 "Invalid --sideways: empty field in '" + arg
