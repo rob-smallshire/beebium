@@ -1,0 +1,507 @@
+ATPL SIDEWISE USER MANUAL
+
+Advanced Technology Products Limited
+Station Road, Clowne, Chesterfield S43 4AB, England
+Tel: Chesterfield (0246) 811585 (4 lines)
+(c) 1983 ATPL
+
+Source: docs/atpl_sidewise/ATPL-Sidewise-User-Manual.pdf (scanned PDF, 12 pages)
+Transcribed by OCR (tesseract via ocrmypdf) and hand-corrected against the
+page images. Obvious typewriter-OCR slips have been fixed; the two figure
+pages (the power-connector crimping note and the layout diagram) are
+summarised as [FIGURE] blocks because they do not transcribe faithfully.
+Technical values (addresses, device types, link directions and defaults)
+are reproduced verbatim from the original.
+
+========================================================================
+
+CONTENTS
+
+  Section 1  - What are sideways ROMs?              Page 2
+  Section 2  - ROM filing system                    Page 2
+  Section 3  - Introducing Sidewise                 Page 2
+  Section 4  - Connection to the BBC computer       Page 3
+  Section 5  - Battery backed RAM option            Page 5
+  Section 6  - Link selectable options              Page 6
+             Table 1                                Page 8
+             Sidewise layout diagram               Page 9
+
+========================================================================
+
+[FIGURE] IMPORTANT NOTICE - NOTE ON BENDING POWER CONNECTORS
+
+We have recently purchased a BBC computer with hard plastic power
+connectors. These are most easily identified by their sharp cornered
+rectangular shape. We could not bend the connectors by hand alone,
+however, we could damage them by forcing them over the edge of a table.
+
+"DON'T DO THIS"!
+
+Instead, if you have one of these BBCs, please proceed as follows:-
+
+  For BBC computers with these crimps only: cut the plastic angles with
+  the crimp on the flat side, then bend at right angles on the step on
+  the inside of the bend. (Accompanying sketch shows the cut and the
+  90-degree bend.)
+
+This replaces section 7 on page 4 of the manual.
+
+========================================================================
+
+SECTION 1 - WHAT ARE SIDEWAYS ROMS?
+
+The BBC COMPUTER incorporates facilities whereby a number of
+applications programs may be resident in the machine in firmware, (e.g.
+ROM or EPROM memory) and which may be called upon by the user via the
+operating system to perform specific tasks such as word processing,
+floppy disc management and so on. The memory is organised in such a way
+that only one such SIDEWAYS ROM may be active at any instant in time
+and all communication between such ROMs must be performed via the
+operating system.
+
+Each SIDEWAYS ROM occupies the same physical area of the BBC COMPUTER
+memory map - namely 8000-BFFF HEX.
+
+SIDEWAYS ROMS therefore provide a convenient method of expanding the
+memory of the BBC COMPUTER.
+
+The BBC COMPUTER OPERATING SYSTEM (OS) requires that all software for
+SIDEWAYS ROM application be written to obey specific rules regarding
+communications with the OS. This aspect may become quite complicated,
+but a useful application note is available from
+
+  CUSTOMER SERVICES DEPARTMENT
+  ACORN COMPUTERS LTD.
+  FULBOURN ROAD
+  CHERRY HINTON
+  CAMBRIDGE
+  CB1 4JN
+  TELEPHONE 0223 210111
+
+and is entitled "BBC MICROCOMPUTER SIDEWAYS ROMS".
+
+Fortunately, many of the more serious applications software packages
+are available in ROM form which greatly enhance the facilities offered
+by the machine.
+
+
+SECTION 2 - ROM FILING SYSTEM
+
+A special application of the SIDEWAYS ROM is the ROM FILING SYSTEM,
+referred to but not explained in the USER GUIDE on page 472. It is
+possible to generate EPROMS, again formatted in a specific way,
+containing your favourite programs, allowing you to have them
+instantaneously available in the firmware of the machine.
+
+The data is stored on the EPROM in a form very similar to the cassette
+file format.
+
+This specific application of SIDEWAYS ROMS does not however save you
+any memory, as the programs must be downloaded into RAM to execute,
+unlike SIDEWAYS ROMS such as BASIC, DFS, and others. However, the
+ability to have programs and data stored in ROM in this form is very
+useful in many applications.
+
+
+SECTION 3 - INTRODUCING SIDEWISE
+
+The ATPL SIDEWISE BOARD provides an expansion of the SIDEWAYS ROM
+facility of the BBC COMPUTER, increasing support from four devices up
+to the maximum of sixteen supported by the OS. Each device may be
+either 8K or 16K bytes in standard configuration with some useful
+options selectable by links on the board (see section 6).
+
+The socket for ROM number 15 has been split into two 8K sockets -15a
+and 15b- to allow use of 8K byte CMOS RAM chips and therefore provides
+support for up to 16K of SIDEWAYS RAM. The logic is arranged such that
+any write performed to the SIDEWAYS ROM area of the machine will
+access the RAM directly, irrespective of and without affecting the
+current ROM selected. The RAM may be read as a normal SIDEWAYS ROM by
+writing the appropriate number into the latch at HEX FE30, as
+performed by the OS.
+
+The most obvious application of the RAM option is in the development
+of SIDEWAYS ROM software, as the interaction with the OS may be
+checked out in the true SIDEWAYS ROM environment. The RAM option will
+also allow you to download SIDEWAYS ROM software from cassette or disc
+and then to run as normal.
+
+By addition of a few components, the RAM may be backed up by a battery
+to allow for retention of data in the RAM even with the power to the
+computer removed.
+
+A WRITE PROTECT facility may be added to the board simply by fitting a
+switch, as may a RAM READ DISABLE facility - to get you out of trouble
+should your development software CRASH within the RAM and lock you out
+of the machine!
+
+It is also possible to fit an 8K ROM together with 8K RAM as device
+number 15, thereby allowing a ROM to have private access to its own 8K
+RAM workspace.
+
+In standard form, SIDEWISE is supplied ready to PLUG-IN-AND-GO - no
+soldering being required. The board will accept 16K of RAM simply by
+inserting appropriate devices, but the battery backup circuit and RAM
+chips are available at extra cost as a kit from ATPL.
+
+
+SECTION 4 - CONNECTION TO THE BBC COMPUTER
+
+On receipt of SIDEWISE the following installation procedure MUST be
+followed carefully.
+
+It is ESSENTIAL that your machine contains an operating system which
+will support SIDEWAYS ROMS. Some early machines were provided with the
+OPERATING SYSTEM in EPROM mounted on a carrier board. Unfortunately,
+this carrier may not be used with the SIDEWISE board as it will foul
+on the keyboard. If your machine is like this, it will be necessary
+for you to obtain a 1.2 OS ROM. Your local dealer should be able to
+provide this, but if in doubt please contact ATPL.
+
+(1)  Ensure that the BBC COMPUTER is switched OFF and the mains plug
+     is removed.
+
+(2)  Remove the lid of the machine by releasing the four screws on the
+     case marked "FIX".
+
+(3)  Disconnect the keyboard cable from its connector on the main
+     circuit board and remove the two keyboard retaining bolts thereby
+     releasing the keyboard. Remove the loudspeaker connecting lead
+     from its connector.
+
+(4)  Carefully remove the OS ROM from its socket, being careful not to
+     bend any pins. This is IC51 on the main board and is the leftmost
+     28 pin device of the five situated immediately behind the keyboard
+     to the right of the machine.
+
+(5)  Now remove the A/D CONVERTOR chip, IC73. This is situated at the
+     rear of the machine in front of the "ANALOGUE IN" socket. Again,
+     be careful not to bend any pins. If you do not have this device
+     fitted do not worry, it is not essential to the functioning of
+     SIDEWISE.
+
+(6)  These two devices may now be re-inserted into the corresponding
+     sockets on the SIDEWISE board being careful to observe correct
+     orientation and insertion of the devices.
+
+(7)  Carefully ease off one of the pair of push-on power supply
+     connector leads adjacent to IC32. Holding the female connector
+     between finger and thumb, gently bend the connector over at 90 deg
+     as shown. Now replace the connector and repeat for the other one
+     of the pair.
+
+     [FIGURE] Position of power connectors on BBC P.C.B.: the pair of
+     leads (RED = VCC2, BLACK = 0V/ground) sit adjacent to IC32, near
+     the ANALOGUE ADC. Bend each power connector at 90 degrees.
+
+(8)  Remove the shorting link from the lower half of S21. This is
+     situated close to the centre of the main board.
+
+     [FIGURE] Sketch of S20/S21/S22 links; "REMOVE THIS LINK" points to
+     the lower half of S21.
+
+     Save the link for future use by placing it on the spare pin of S20.
+
+(9)  Connect the flying leads from SIDEWISE to the vacated S21 ensuring
+     that the wire marked E1 is to the right.
+
+(10) Position the SIDEWISE connector pins directly over the sockets of
+     IC51 and IC73 and, observing pin alignment, firmly push each
+     connector in turn, starting with the rear one, into the respective
+     socket to ensure good contact.
+
+(11) In order that the BBC COMPUTER will power up into BASIC, the BASIC
+     ROM should be removed from the main board and inserted into the
+     ROM SOCKET marked 14 in the SIDEWISE layout diagram. This is
+     required as the BBC COMPUTER treats ROM NUMBER 15 as highest
+     priority in its search of the SIDEWAYS ROMS - ROM NUMBER 0 is the
+     lowest priority. With SIDEWISE fitted, the four sockets on the main
+     board are now ROM NUMBERS 0,1,2,3. SIDEWISE is supplied with ROM
+     NUMBER 15 split into two 8K devices in order that RAM may be easily
+     added to the system. ROM NUMBER 14 is therefore the highest
+     priority 16K socket. (Refer to section 6 for changing the
+     configuration of ROM NUMBER 15).
+
+(12) Re-assemble the machine in reverse order - DO NOT forget the
+     loudspeaker lead (Note.. polarity of this lead is not important.)
+
+(13) Re-connect the machine and switch on. The machine should now
+     function as normal - except that you now have a further twelve
+     SIDEWAYS ROM sockets available. Should the machine fail to function
+     check to ensure that you have followed the above instructions
+     carefully, paying particular attention to orientation and insertion
+     of all devices and connectors.
+
+Typical problems which might occur due to faulty insertion are:-
+
+(a)  SCREEN SHOWS NOTHING AT SWITCH ON.
+     This is normally the OS ROM or its connector badly inserted. Also
+     check that the BASIC and OS ROMs have not been interchanged. Of
+     course, you may have forgotten the connection to the monitor!
+
+(b)  SCREEN SHOWS "No language ROM" AT SWITCH ON.
+     This is normally due to faulty insertion of the connector into
+     IC73, causing the OS ROM not to recognise the SIDEWISE board.
+     Another possibility is that the two flying leads onto S21 have been
+     inserted the wrong way round.
+
+N.B.
+
+Failure to comply with ATPL installation instructions will invalidate
+any possible warranty claim. If in doubt regarding the installation
+procedure please feel free to contact ATPL for guidance.
+
+ATPL standard terms and conditions of sale available on request.
+
+It has been brought to our attention that some Model B's and upgraded
+Model A's do not switch between ROMs. This is because IC76 (74LS163)
+is not fitted or wire links S12 and S13 are not cut (open-circuit). To
+enable paging of ROMs, IC76 must therefore be fitted AND S12 and S13
+should be cut.
+
+Similarly, there are apparently several ROMs available which cause
+interaction problems when combined in a system. This is generally due
+to the offending ROMs not obeying the operating system correctly in
+terms of workspace used and is typically not associated with using ROM
+extension boards.
+
+
+SECTION 5 - BATTERY BACKED RAM OPTION
+
+As supplied, SIDEWISE will accept up to 16K RAM in the two special
+sockets 15a and 15b. The RAM is written to by any write instruction to
+the SIDEWAYS ROM area, addresses in the range 8000 - BFFF hex. The
+write access will override the currently selected SIDEWAYS ROM causing
+data to be stored on the RAM chips. This data may then only be read by
+selecting ROM NUMBER 15 in the normal way. This allows a FILING SYSTEM
+ROM, which may be itself a SIDEWAYS ROM, to control the loading of a
+file to this RAM area, without affecting itself.
+
+A not altogether useful example might be the BASIC line
+
+  FOR X=&8000 TO &BFFF: ?X=?X: NEXT
+
+This will make a copy of the BASIC ROM in the SIDEWAYS RAM.
+
+The contents of any Sideways ROM (or RAM) may be read by use of the
+Operating system OSRDRM call at &FFB9. On entry, Y should be set to
+the ROM number (0-&F) and locations &F6,&F7 should contain the address
+of the byte to be read. On exit, A will contain the value of the byte
+read.
+
+Note that this is an undocumented operating system call!
+
+By addition of a few suitable components, the RAM may be backed up by
+a rechargeable battery allowing data to be retained for long periods
+(of the order of months) with power to the BBC COMPUTER removed. A
+suitable upgrade kit with fitting instructions is obtainable from
+ATPL. The kit comprises battery and charging circuit together with a
+low voltage detection circuit to shut down the RAM as the power supply
+voltage rail falls.
+
+For lowest standby power consumption, we recommend that only true low
+power RAMs such as TC5565LP or HM6264LP are used - the Low Power
+suffix is important! Note that the RAM option will function without
+the battery circuit, it being a simple matter of inserting the one or
+two RAM chips as required; however, in this case data will NOT be
+retained when power is removed.
+
+
+SECTION 6 - LINK SELECTABLE OPTIONS
+
+In standard form, SIDEWISE is supplied to accept the following
+devices:-
+
+ROM ONLY SOCKETS
+
+  ROM#4 thru ROM#14 - 2764 or 27128 EPROMS (i.e. 8K or 16K) and
+  equivalent MASKED ROM devices such as BASIC
+
+ROM/RAM SOCKETS
+
+  ROM 15a - 2764 - addressed from 8000 - 9FFF or CMOS RAM
+  ROM 15b - 2764 - addressed from A000 - BFFF or CMOS RAM
+
+The standard configuration will therefore permit one 16K program to be
+split across two 8K devices and used in sockets 15a and 15b.
+
+SIDEWISE provides several link options to permit other configurations.
+These are detailed below and summarised in TABLE 1.
+
+The default conditions are formed as part of the p.c.b. etch and
+should be CAREFULLY cut with a modelling knife if it is desired to
+change the link position.
+
+S1
+  This selects the power source for socket number 15b to originate from
+  either the main 5v supply or from the battery backup supply if the
+  battery backup option is installed.
+  Default condition is to 5v (direction NORTH).
+
+S2
+  This has a similar effect to S1, but applies to socket number 15a.
+  Default condition is to 5v (direction NORTH).
+
+S3
+  When made, joins the battery backup supply rail to the main 5v supply
+  to ensure operation without the battery backup circuit installed.
+  Default condition MADE.
+
+S4
+  When made, socket number 15a is mapped into 8000 - 9FFF (8K). With S4
+  and S5 both not made, socket number 15a is effectively disabled, (chip
+  select pulled high to the power rail of socket number 15a) allowing
+  any garbage in this device to be ignored. This facility is useful for
+  disabling the RAM devices to prevent the machine hanging up on a badly
+  formatted SIDEWAYS RAM program.
+  This link must NOT be made at the same time as S5.
+  Default condition MADE.
+
+S5
+  When made, socket number 15a is mapped into 8000 - BFFF (16K). This
+  permits use of a 16K device in socket number 15a. Socket number 15b
+  will still be enabled from A000 - BFFF as normal and hence must be
+  vacated to avoid possible conflict.
+  S5 must NOT be made at the same time as S4.
+  Default condition NOT MADE.
+
+S6
+  When made, inhibits write access to sockets 15a and 15b. A suggested
+  way of applying S6 with the RAM option fitted is to hard wire a single
+  pole switch across S6. The switch may then be conveniently mounted at
+  the rear of the machine to provide a WRITE PROTECT facility for the
+  RAM.
+  Default condition NOT MADE.
+
+S7
+  This two way link permits use of 2732 (4K) devices in sockets 4,5, and
+  6 only. When made to EAST, pin 26 of sockets 4,5, and 6 is connected
+  to +5v. Devices may therefore be either 2732 or 2764. When made to
+  WEST, pin 26 is connected to address line A13. Devices may then be
+  either 2764 or 27128.
+  Default condition is WEST.
+
+S8
+  This link controls the secondary chip select signal on pin 26 of
+  socket number 15a. With RAM fitted in socket 15a, S8 should be made in
+  the EAST direction to provide secondary chip select. With a 16K device
+  in socket number 15a (see S4 and S5), S8 should be made in the WEST
+  direction in order to apply address line A13 to pin 26.
+  Note that it is possible to have an 8K EPROM in socket 15a and RAM in
+  socket 15b irrespective of S8.
+  Default condition is EAST.
+
+
+TABLE 1
+
+  LINK   DIRECTION   ACTION
+  ----   ---------   ------
+  S1     N *         Power to #15b from Vcc
+         S           Power to #15b from Vbb
+
+  S2     N *         Power to #15a from Vcc
+         S           Power to #15a from Vbb
+
+  S3     MADE *      Connects Vcc to Vbb for no battery circuit
+
+  S4     MADE *      #15a enabled from 8000 - 9FFF (8K)
+                     Do NOT make with S5 made
+                     Also provides RAM inhibit
+
+  S5     MADE        #15a enabled from 8000 - BFFF (16K)
+                     Do NOT make with S4 made
+                     Vacate #15b
+
+  S6     MADE        Inhibit write to #15a,#15b
+                     Provides WRITE PROTECT for RAM
+
+  S7     EAST        4K or 8K devices in #4,#5,#6
+         WEST *      8K or 16K devices in #4,#5,#6
+
+  S8     EAST *      Secondary chip select to pin 26 of #15a
+         WEST        A13 to pin 26 of #15a (refer to S4,S5)
+
+  Vcc - main 5v supply
+  Vbb - battery supply
+  *   - DENOTES DEFAULT POSITION OF LINK
+  Absence of * indicates NOT made.
+
+
+[FIGURE] SIDEWISE LAYOUT DIAGRAM (page 9)
+
+Plan view of the board. The keyboard side of the BBC computer is at the
+bottom; the flying-lead connectors to A.D.C. socket (IC73) and OS ROM
+socket (IC51) project from the board. Sockets, left to right / top to
+bottom:
+
+  ROM 4, ROM 5, ROM 6            (S7 two-way link nearby)
+  ROM 7, ROM 8, ROM 9, ROM 10, ROM 11
+  ROM 12
+  ROM 13
+  ROM 14
+  RAM/ROM 15A
+  RAM/ROM 15B                    (S1 link nearby)
+
+Board legend: "Sidewise - SIDEWAYS ROM/RAM EXPANSION". Support ICs
+IC1-IC8 and resistors R6/R7/R8 are placed around the ROM sockets.
+
+
+========================================================================
+
+ALSO AVAILABLE FROM ATPL - ref RH1.17
+(Note - all prices are excluding VAT. Historical price list, retained
+for provenance only.)
+
+  SYMPHONY - 108.70 (ptp inc.)
+    The SYMPHONY 4 octave electronic keyboard turns your BBC into a
+    versatile musical instrument taking full advantage of the sound
+    generation capabilities of the computer.
+
+  SYMPHONY OPTIONS
+    SUSTAIN FOOTSWITCH - 5.75 (+50p ptp). Complete with cable and jack
+      plug.
+    5 WATT AMPLIFIER - 39.50 (+3.00 ptp). In robust vinyl covered
+      cabinet. Phones and Input sockets. Tone and volume controls.
+      340x290x210 mm.
+    AMPLIFIER INTERFACE KIT - 6.70 (+50p ptp). 1/4" jack socket mounts
+      through ECONET hole. Pre-wired for installation without soldering.
+    SYMPHONY/ACORN MUSIC 500 SOFTWARE - 10.00 (+50p ptp). Allows the
+      SYMPHONY keyboard to be used in conjunction with the MUSIC 500
+      Synthesiser.
+
+  SIDEWISE - 38.00 (+1.00 ptp)
+    Sideways ROM/RAM expansion board for the BBC microcomputer provides
+    for an expansion of an additional 12 Sideways ROMs.
+
+  SIDEWISE OPTIONS
+    8K LOW POWER CMOS RAM - 40.00 per pair (+50p ptp)
+    BATTERY BACK-UP KIT FOR ABOVE - 17.00 (+50p ptp)
+
+  AUTOPROM - 120.00 (inc ptp)
+    EPROM programmer for BBC with facility for the contents of a ROM to
+    be downloaded and run from on-board on power up.
+
+  INSIDE-OUT - 13.00 (+50p ptp)
+    Allows extension of one Sideways ROM socket out of the BBC allowing
+    ROMs to be exchanged without opening the case.
+
+  BREAK-LOCK - 8.53 (+50p ptp)
+    This is a two position lockable keyswitch which is mounted in the
+    "ash-tray" which allows the BREAK key to be isolated, thereby
+    preventing accidental loss of data. In addition, the machine may be
+    locked in a disabled state, thereby rendering it unusable by
+    unauthorised persons.
+
+  DISC SOFTWARE FROM ATPL
+
+    SPOOLIT - 10.00 (+50p ptp). Allows Sideways RAM on SIDEWISE to be
+      used as a printer buffer.
+    TURBOPROM - 10.00 (+50p ptp). Uses a fast programming algorithm to
+      greatly reduce programming time of EPROMs when used in conjunction
+      with AUTOPROM.
+    DFS-SHIFT - 10.00 (+50p ptp). Available for ACORN 0.90 and 1.2 DFS
+      only, moves the workspace required by the DFS into Sideways RAM
+      allowing reclamation of DFS workspace. Note, either ACORN DFS 0.90
+      or 1.2 MUST be resident in ROM in your system.
+    SIDESWIPE - 10.00 (+50p ptp). Allows Sideways ROM/RAM contents to be
+      transferred to disc direct from the computer.
