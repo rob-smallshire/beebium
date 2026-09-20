@@ -1203,13 +1203,45 @@ TEST_CASE("SidewaysService GetSlotStatus reports 16 fixed slots for ATPL Sidewis
         // No slot is runtime-reconfigurable on a real board.
         CHECK_FALSE(caps.runtime_configurable());
         CHECK(caps.supports_rom());
-        // Only slot 15 can hold RAM.
+        // Only slot 15 can hold RAM and carries the write-protect switch.
         if (socket.socket_index() == 15) {
             CHECK(caps.supports_ram());
+            CHECK(caps.supports_write_protect());
         } else {
             CHECK_FALSE(caps.supports_ram());
+            CHECK_FALSE(caps.supports_write_protect());
         }
     }
+}
+
+TEST_CASE("SidewaysService write-protect capability is absent on B+ 128K SRAM",
+          "[grpc][sideways][model_b_plus][write_protect]") {
+    // The B+ 128K has sideways RAM (SRAM W/X/Y/Z) but no write-protect switch,
+    // so its RAM sockets must report supports_write_protect == false and reject
+    // SetSlotWriteProtect - a front-end keys the control off the capability.
+    ModelBPlus128KSidewaysFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::GetSlotStatusRequest request;
+    beebium::GetSlotStatusResponse response;
+    REQUIRE(fixture.sideways().GetSlotStatus(&context, request, &response).ok());
+
+    bool saw_ram = false;
+    for (int i = 0; i < response.sockets_size(); ++i) {
+        const auto& socket = response.sockets(i);
+        if (socket.type() == beebium::SIDEWAYS_SLOT_TYPE_RAM) {
+            saw_ram = true;
+            CHECK_FALSE(socket.capabilities().supports_write_protect());
+            grpc::ClientContext ctx;
+            beebium::SetSlotWriteProtectRequest req;
+            beebium::SetSlotWriteProtectResponse resp;
+            req.set_slot(socket.socket_index());
+            req.set_write_protected(true);
+            REQUIRE(fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp).ok());
+            CHECK_FALSE(resp.success());
+        }
+    }
+    CHECK(saw_ram);  // the fixture must actually expose SRAM to make the point
 }
 
 TEST_CASE("SidewaysService ConfigureSlot is rejected on ATPL Sidewise",
@@ -1275,20 +1307,23 @@ TEST_CASE("SidewaysService SetSlotWriteProtect toggles slot 15 on ATPL Sidewise"
     CHECK_FALSE(write_protected_of_slot_15());
 }
 
-TEST_CASE("SidewaysService SetSlotWriteProtect rejects a non-RAM slot",
+TEST_CASE("SidewaysService SetSlotWriteProtect rejects a slot with no switch",
           "[grpc][sideways][atpl_sidewise][write_protect]") {
+    // Slot 14 is a ROM-only socket on the Sidewise: no write-protect switch,
+    // so the request is rejected on the capability before the RAM check.
     AtplSidewiseSidewaysFixture fixture;
 
     grpc::ClientContext ctx;
     beebium::SetSlotWriteProtectRequest req;
     beebium::SetSlotWriteProtectResponse resp;
-    req.set_slot(14);  // BASIC ROM, not RAM
+    req.set_slot(14);
     req.set_write_protected(true);
 
     auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
     REQUIRE(status.ok());
     CHECK_FALSE(resp.success());
-    CHECK_THAT(resp.error(), Catch::Matchers::ContainsSubstring("not RAM"));
+    CHECK_THAT(resp.error(),
+               Catch::Matchers::ContainsSubstring("no write-protect switch"));
 }
 
 TEST_CASE("SidewaysService SetSlotWriteProtect rejects an invalid slot number",

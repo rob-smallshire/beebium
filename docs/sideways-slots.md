@@ -66,6 +66,7 @@ Each socket carries four boolean capability flags:
 | `supports_ram` | The socket can be configured as sideways RAM. |
 | `supports_empty` | The socket can be left vacant. |
 | `runtime_configurable` | The socket *type* (ROM/RAM/empty) can be changed at runtime via `SidewaysService.ConfigureSlot`, without restarting the server. |
+| `supports_write_protect` | The socket has a RAM write-protect switch, so its RAM may be write-protected (at launch via `--write-protect`, or at runtime via `SidewaysService.SetSlotWriteProtect`). False for sideways RAM with no such switch (e.g. the B+ 128K SRAM banks), so a front-end offers the control only where it exists. |
 
 **Every present socket supports the ROM/RAM/empty trifecta.** Third-party
 sideways-RAM modules that plugged into a ROM socket (with a flying lead for

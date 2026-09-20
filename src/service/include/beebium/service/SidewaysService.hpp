@@ -90,6 +90,7 @@ inline void fill_capabilities(beebium::SocketCapabilities* caps,
     caps->set_supports_ram(spec.supports_ram);
     caps->set_supports_empty(spec.supports_empty);
     caps->set_runtime_configurable(spec.runtime_configurable);
+    caps->set_supports_write_protect(spec.supports_write_protect);
 }
 
 // Helper to convert protobuf enum to SlotType
@@ -414,14 +415,24 @@ public:
             }
             uint8_t slot = static_cast<uint8_t>(slot_num);
 
-            // The slot must exist on this machine variant.
+            // The slot must exist on this machine variant and its socket must
+            // have a write-protect switch.
             if constexpr (requires { Memory::slot_topology(motherboard_links_); }) {
                 auto topo = Memory::slot_topology(motherboard_links_);
-                if (topo.find_socket_for_slot(static_cast<int>(slot)) == nullptr) {
+                const auto* spec =
+                    topo.find_socket_for_slot(static_cast<int>(slot));
+                if (spec == nullptr) {
                     response->set_success(false);
                     response->set_error(
                         "Slot " + std::to_string(slot)
                         + " does not exist on this machine variant");
+                    return grpc::Status::OK;
+                }
+                if (!spec->supports_write_protect) {
+                    response->set_success(false);
+                    response->set_error(
+                        "Slot " + std::to_string(slot)
+                        + " has no write-protect switch");
                     return grpc::Status::OK;
                 }
             }

@@ -1188,9 +1188,9 @@ std::optional<std::string> validate_config(const ServerConfig<MachineType>& conf
                     return "--write-protect slot " + std::to_string(slot)
                            + " does not exist on this machine variant";
                 }
-                if (!spec->supports_ram) {
+                if (!spec->supports_write_protect) {
                     return "--write-protect slot " + std::to_string(slot)
-                           + " cannot hold RAM on this machine variant";
+                           + " has no write-protect switch on this machine variant";
                 }
             }
         }
@@ -3364,6 +3364,7 @@ public:
                 if (sock.supports_rom) capabilities.push_back("rom");
                 if (sock.supports_ram) capabilities.push_back("ram");
                 if (sock.supports_empty) capabilities.push_back("empty");
+                if (sock.supports_write_protect) capabilities.push_back("write_protect");
 
                 sockets.push_back(ojson{
                     {"label", sock.label},

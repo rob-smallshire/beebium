@@ -249,10 +249,16 @@ class SocketCapabilities(_message.Message):
     SUPPORTS_RAM_FIELD_NUMBER: _builtins.int
     SUPPORTS_EMPTY_FIELD_NUMBER: _builtins.int
     RUNTIME_CONFIGURABLE_FIELD_NUMBER: _builtins.int
+    SUPPORTS_WRITE_PROTECT_FIELD_NUMBER: _builtins.int
     supports_rom: _builtins.bool
     supports_ram: _builtins.bool
     supports_empty: _builtins.bool
     runtime_configurable: _builtins.bool
+    supports_write_protect: _builtins.bool
+    """The socket has a RAM write-protect switch. Only then may a front-end
+    offer a write-protect control (and only while the slot is RAM). False for
+    sideways RAM with no such switch (e.g. the B+ 128K SRAM banks).
+    """
     def __init__(
         self,
         *,
@@ -260,10 +266,11 @@ class SocketCapabilities(_message.Message):
         supports_ram: _builtins.bool = ...,
         supports_empty: _builtins.bool = ...,
         runtime_configurable: _builtins.bool = ...,
+        supports_write_protect: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["runtime_configurable", b"runtime_configurable", "supports_empty", b"supports_empty", "supports_ram", b"supports_ram", "supports_rom", b"supports_rom"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["runtime_configurable", b"runtime_configurable", "supports_empty", b"supports_empty", "supports_ram", b"supports_ram", "supports_rom", b"supports_rom", "supports_write_protect", b"supports_write_protect"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

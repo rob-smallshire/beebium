@@ -31,9 +31,14 @@ All of this is on the `atpl-sidewise` branch and needs no further server work.
   `ProtocolFingerprint.swift`). Do **not** run `sync_protocol_fingerprint.py`;
   it is already correct. Just regenerate the Swift stubs (below).
 
-Gate the UI on a slot being **RAM** (`SocketCapabilities.supports_ram`, or the
-mapped `kind == .ram`). There is deliberately no separate "write-protectable"
-capability yet — RAM-capable is the signal; the server enforces the rest.
+Gate the UI on the socket having a write-protect switch:
+`SocketCapabilities.supports_write_protect` (proto field 5), and, for the runtime
+control, only while the slot is currently RAM. Do **not** gate on `supports_ram`
+alone — some machines have sideways RAM with no write-protect switch (the B+ 128K
+SRAM banks), where a control would appear and always fail. `describe-preset-
+schema` also lists `"write_protect"` in each socket's `capabilities` array for
+the config UI. (This capability was added after the first spec revision; the
+runtime RPC and the launch flag both enforce it server-side too.)
 
 ## Deliverable 1 — Swift stubs
 
@@ -53,9 +58,10 @@ Regenerate the Swift stubs for `sideways.proto` so they carry
 `MemoryModeView.swift` is read-only today by design; the write-protect control
 becomes its single mutable affordance. Keep everything else read-only.
 
-- **Model:** in `SidewaysClient.swift`, add `writeProtected: Bool` (and
-  `supportsRam: Bool`) to `struct Socket` and map them in `mapSocket`
-  (from `SocketStatus.writeProtected` / `capabilities.supportsRam`).
+- **Model:** in `SidewaysClient.swift`, add `writeProtected: Bool` and
+  `supportsWriteProtect: Bool` to `struct Socket` and map them in `mapSocket`
+  (from `SocketStatus.writeProtected` / `capabilities.supportsWriteProtect`).
+  Show the control only when `supportsWriteProtect` is true and the slot is RAM.
 - **Mutation:** add an async method on `SidewaysClient`, e.g.
   `func setWriteProtect(slot: UInt32, _ protected: Bool) async`, calling
   `client.setSlotWriteProtect(...)`. Follow the existing `fetchSlotStatus`
@@ -92,7 +98,9 @@ Indicator+Button rule applies only to the runtime, side-effecting control).
   `writeProtected` is true. (Keep emitting the `--sideways <slot>:ram` as today.)
 - **View:** in `MemorySectionView.swift`, in `socketRow` / near `kindPicker`
   (line 129), show the write-protect checkbox only when the selected kind is RAM
-  and `supportsRam` is true; hide/disable otherwise.
+  and the socket schema advertises the `"write_protect"` capability
+  (`SidewaysSocketSchema` — add a `supportsWriteProtect` computed from the
+  capability string, alongside the existing `supportsRom/Ram/Empty`).
 - **Persistence:** the Memory tab does not yet persist to a preset file
   (save-as-preset is a known deferred TODO); write-protect follows suit — it
   applies to the launched session via `--write-protect`. When save-as-preset

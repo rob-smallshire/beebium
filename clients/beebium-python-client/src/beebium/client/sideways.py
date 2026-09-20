@@ -75,6 +75,9 @@ class SocketCapabilities:
     supports_ram: bool
     supports_empty: bool
     runtime_configurable: bool
+    # The socket has a RAM write-protect switch; only then can its RAM be
+    # write-protected. False for sideways RAM with no such switch.
+    supports_write_protect: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -359,6 +362,7 @@ def _map_socket(s: sideways_pb2.SocketStatus) -> SocketStatus:
             supports_ram=s.capabilities.supports_ram,
             supports_empty=s.capabilities.supports_empty,
             runtime_configurable=s.capabilities.runtime_configurable,
+            supports_write_protect=s.capabilities.supports_write_protect,
         ),
         rom_header=header,
         write_protected=s.write_protected,

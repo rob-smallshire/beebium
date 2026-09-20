@@ -98,7 +98,7 @@ beebium-model-b [options]           # Equivalent (start is default)
 | `--mos <filepath>` | Path to MOS ROM (default: machine-specific) |
 | `--language-rom <filepath>` | Language ROM image for the machine's own default language slot (default: machine-specific). Use this instead of `--sideways` when you don't want to assume which slot holds the language ROM - e.g. the ATPL Sidewise uses slot 14, others use slot 15 |
 | `--sideways <slot>:<type>[:<image>]` | Configure sideways slot (see below) |
-| `--write-protect <slot>` | Engage a RAM slot's write-protect switch at startup (repeatable; the slot must be RAM). This is the switch's power-on position; it can also be toggled at runtime via `SidewaysService.SetSlotWriteProtect`. Only machines with a write-protect control (e.g. the ATPL Sidewise) accept it |
+| `--write-protect <slot>` | Engage a RAM slot's write-protect switch at startup (repeatable). Accepted only for sockets that have a write-protect switch (`SocketCapabilities.supports_write_protect`, e.g. the ATPL Sidewise slot 15); rejected for RAM with no such switch (e.g. the B+ 128K SRAM banks). This is the switch's power-on position; it can also be toggled at runtime via `SidewaysService.SetSlotWriteProtect` |
 | `--rom-dir <dirpath>` | ROM directory (auto-detected if not specified) |
 
 The `--sideways` option supports three slot types:

@@ -103,6 +103,10 @@ message SocketCapabilities {
     bool supports_ram = 2;
     bool supports_empty = 3;
     bool runtime_configurable = 4;
+    // The socket has a RAM write-protect switch. Only then may a front-end
+    // offer a write-protect control (and only while the slot is RAM). False for
+    // sideways RAM with no such switch (e.g. the B+ 128K SRAM banks).
+    bool supports_write_protect = 5;
 }
 
 // One motherboard link (jumper) and its current position. Reported back so

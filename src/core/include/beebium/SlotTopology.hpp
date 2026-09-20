@@ -39,6 +39,12 @@ struct SocketSpec {
     bool supports_ram = true;        // Socket may be configured as sideways RAM
     bool supports_empty = true;      // Socket may be left empty
     bool runtime_configurable = false; // Type may change at runtime via the API
+    // The socket has a RAM write-protect switch (e.g. the ATPL Sidewise S6
+    // link). Only then may its RAM be write-protected, at launch
+    // (--write-protect) or at runtime (SidewaysService.SetSlotWriteProtect).
+    // False for sideways RAM with no such switch (e.g. the B+ 128K SRAM banks),
+    // so a front-end offers the control only where it exists.
+    bool supports_write_protect = false;
 };
 
 // SlotTopology describes the sideways memory layout of a machine variant.

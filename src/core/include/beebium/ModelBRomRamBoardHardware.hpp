@@ -535,6 +535,9 @@ public:
             // ROM/RAM/empty come from the SocketSpec defaults; the ROM/RAM
             // board uniquely allows reconfiguring a slot's type at runtime.
             spec.runtime_configurable = true;
+            // The notional board carries a per-slot write-protect switch on any
+            // slot configured as RAM.
+            spec.supports_write_protect = true;
             topo.sockets.push_back(std::move(spec));
         }
         return topo;
