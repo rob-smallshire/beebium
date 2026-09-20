@@ -24,7 +24,11 @@ import pytest
 from pathlib import Path
 
 from beebium.client import Beebium
-from beebium.client.exceptions import BeebiumError, ServerNotFoundError
+from beebium.client.exceptions import (
+    BeebiumError,
+    ServerNotFoundError,
+    ServerStartupError,
+)
 from beebium.client.sideways import (
     RomHeader,
     SlotStatusReport,
@@ -189,3 +193,43 @@ def test_atpl_sidewise_write_protect_rejects_non_ram_slot(atpl_sidewise):
     """Slot 14 holds BASIC (ROM), so write-protect must be rejected."""
     with pytest.raises(BeebiumError):
         atpl_sidewise.sideways.set_write_protect(14, True)
+
+
+def test_atpl_sidewise_write_protect_at_launch(
+    mos_filepath: Path,
+    beebium_server_filepath: Path | None,
+):
+    """--write-protect engages the switch at boot, before any runtime call."""
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-atpl-sidewise",
+            extra_args=["--sideways", "15:ram", "--write-protect", "15"],
+        ) as bbc:
+            slot15 = bbc.sideways.get_slot_status().find_socket_for_slot(15)
+            assert slot15 is not None
+            assert slot15.type is SlotType.RAM
+            assert slot15.write_protected is True
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+
+def test_atpl_sidewise_write_protect_launch_rejects_non_ram_slot(
+    mos_filepath: Path,
+    beebium_server_filepath: Path | None,
+):
+    """--write-protect on a slot that cannot hold RAM fails at launch."""
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-atpl-sidewise",
+            extra_args=["--write-protect", "14"],  # slot 14 is ROM-only
+        ):
+            pass
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+    except ServerStartupError:
+        return  # expected: server rejects the configuration
+    pytest.fail("expected ServerStartupError for --write-protect on a ROM-only slot")

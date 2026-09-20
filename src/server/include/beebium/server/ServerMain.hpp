@@ -432,6 +432,11 @@ struct ServerConfig {
     std::string rom_dirpath;
     std::map<uint8_t, std::string> rom_slots;
     std::vector<SidewaysConfig> sideways_configs;
+    // Slots whose RAM write-protect switch should be engaged at startup. The
+    // switch models a board control (e.g. the ATPL Sidewise S6 link) and is
+    // also runtime-toggleable via SidewaysService.SetSlotWriteProtect; this is
+    // just its power-on position.
+    std::vector<uint8_t> write_protect_slots;
     // Sideways slots supplied by a --preset, applied as a baseline after CLI
     // parsing. A CLI --sideways for the same slot takes precedence. See the
     // merge step at the end of parse_start_arguments().
@@ -539,6 +544,9 @@ void print_usage(const char* program_name) {
               << "                           SLOT:rom:IMAGE - ROM with image file\n"
               << "                           SLOT:ram[:IMAGE] - RAM (optional pre-load)\n"
               << "                           SLOT:empty - Empty slot\n"
+              << "  --write-protect SLOT     Engage the RAM write-protect switch on SLOT at\n"
+              << "                           startup (repeatable; RAM slots only). Runtime-\n"
+              << "                           toggleable via SidewaysService.SetSlotWriteProtect\n"
               << "  --rom-dir <dirpath>      ROM directory (auto-detected if not specified)\n"
               << "  --port <port>            gRPC port (default: " << DEFAULT_GRPC_PORT << ")\n"
               << "  --floppy <drive>:<filepath|url>\n"
@@ -936,6 +944,21 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             config.mos_filepath = argv[++i];
         } else if (arg == "--language-rom" && i + 1 < argc) {
             config.language_rom_filepath = argv[++i];
+        } else if (arg == "--write-protect" && i + 1 < argc) {
+            std::string value = argv[++i];
+            try {
+                int slot = std::stoi(value);
+                if (slot < 0 || slot > 15) {
+                    std::cerr << "Error: --write-protect slot must be 0-15, got "
+                              << value << "\n";
+                    return ExitCode::CONFIG;
+                }
+                config.write_protect_slots.push_back(static_cast<uint8_t>(slot));
+            } catch (const std::exception&) {
+                std::cerr << "Error: --write-protect expects a slot number, got "
+                          << value << "\n";
+                return ExitCode::CONFIG;
+            }
         } else if (arg == "--sideways" && i + 1 < argc) {
             std::string value = argv[++i];
             complete_colon_arg(value, i, argc, argv);
@@ -1145,6 +1168,34 @@ std::optional<std::string> validate_config(const ServerConfig<MachineType>& conf
         }
     }
 
+    // Validate --write-protect slots: the machine must have a write-protect
+    // control, and each named slot must exist and be RAM-capable. Whether the
+    // slot is actually configured as RAM at launch is checked when the switch
+    // is applied (load_roms), since default ROMs are resolved there.
+    if (!config.write_protect_slots.empty()) {
+        if constexpr (!requires(Memory m) {
+                          m.set_slot_write_protected(uint8_t{0}, bool{});
+                      }) {
+            return "--write-protect is not supported on this machine variant "
+                   "(no sideways write-protect control)";
+        } else if constexpr (requires {
+                                 Memory::slot_topology(config.motherboard_links);
+                             }) {
+            auto topo = Memory::slot_topology(config.motherboard_links);
+            for (uint8_t slot : config.write_protect_slots) {
+                const auto* spec = topo.find_socket_for_slot(static_cast<int>(slot));
+                if (spec == nullptr) {
+                    return "--write-protect slot " + std::to_string(slot)
+                           + " does not exist on this machine variant";
+                }
+                if (!spec->supports_ram) {
+                    return "--write-protect slot " + std::to_string(slot)
+                           + " cannot hold RAM on this machine variant";
+                }
+            }
+        }
+    }
+
     return std::nullopt;  // Valid
 }
 
@@ -1291,6 +1342,27 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
             machine.state().memory.load_sideways_data(
                 sideways_config.slot, ram_data.data(), ram_data.size(),
                 ram_path.string());
+        }
+    }
+
+    // Engage the RAM write-protect switch on any --write-protect slots, now
+    // that every slot's type is settled. validate_config already ensured the
+    // machine has the control and the slots are RAM-capable; a slot that ended
+    // up not being RAM (e.g. also configured as ROM) is reported and skipped.
+    if constexpr (requires(typename MachineType::Memory m) {
+                      m.set_slot_write_protected(uint8_t{0}, bool{});
+                  }) {
+        auto& memory = machine.state().memory;
+        for (uint8_t slot : config.write_protect_slots) {
+            if (memory.sideways.bank_type(slot) == SlotType::Ram) {
+                std::cout << "Slot " << static_cast<int>(slot)
+                          << ": write-protected\n";
+                memory.set_slot_write_protected(slot, true);
+            } else {
+                std::cerr << "Warning: --write-protect slot "
+                          << static_cast<int>(slot)
+                          << " is not RAM; ignoring\n";
+            }
         }
     }
 }

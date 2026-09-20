@@ -222,10 +222,12 @@ Slot 15 has two board-specific behaviours when fitted with RAM:
   slot-15 RAM directly, irrespective of and without affecting the
   currently paged ROM. Reads stay ROMSEL-gated, so the RAM only reads
   back when slot 15 is paged in via `&FE30`.
-- **Write-protect.** A runtime switch (the board's S6 link) inhibits
-  writes to the slot-15 RAM. Toggle it with
+- **Write-protect.** A switch (the board's S6 link) inhibits writes to the
+  slot-15 RAM. Its power-on position is set with `--write-protect 15` at
+  launch, and it can be toggled at runtime with
   `SidewaysService.SetSlotWriteProtect`; the current state is reported in
-  `SocketStatus.write_protected`.
+  `SocketStatus.write_protected`. `--write-protect` is repeatable, applies
+  only to RAM slots, and is accepted only by machines that have the control.
 
 BASIC defaults to slot 14 (the manual reserves slot 15 for RAM). Battery
 backup is not modelled.
