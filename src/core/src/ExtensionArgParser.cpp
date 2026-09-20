@@ -94,30 +94,8 @@ void normalise_list_params(
     }
 }
 
-std::vector<std::string> split_colon_args(std::string_view input) {
-    std::vector<std::string> tokens;
-    if (input.empty()) return tokens;
-
-    // Split on ':' EXCEPT inside a double-quoted run: a value that contains a
-    // colon (a URL like ip232://host:port, a Windows C:\path) must be wrapped in
-    // double quotes. The quote characters are retained in the token here and
-    // stripped from the value by parse_extension_args.
-    std::string current;
-    bool in_quotes = false;
-    for (char c : input) {
-        if (c == '"') {
-            in_quotes = !in_quotes;
-            current += c;
-        } else if (c == ':' && !in_quotes) {
-            tokens.push_back(std::move(current));
-            current.clear();
-        } else {
-            current += c;
-        }
-    }
-    tokens.push_back(std::move(current));
-    return tokens;
-}
+// split_colon_args now lives in beebium/CliArgSplit.hpp (a neutral home; it is
+// not extension-specific). It is used below via the header.
 
 namespace {
 

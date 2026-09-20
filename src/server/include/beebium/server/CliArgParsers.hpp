@@ -32,9 +32,9 @@
 #include <utility>
 #include <vector>
 
-// The shared colon key=value tokenizer (split_colon_args) lives here; --sideways
-// and the extension args use the same one.
-#include "beebium/extension/ExtensionArgParser.hpp"
+// The shared colon key=value tokenizer (split_colon_args); --sideways and the
+// extension args build on the same one.
+#include "beebium/CliArgSplit.hpp"
 
 namespace beebium::server {
 

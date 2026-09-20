@@ -14,6 +14,7 @@
 #define BEEBIUM_EXTENSION_ARG_PARSER_HPP
 
 #include "Export.hpp"
+#include "beebium/CliArgSplit.hpp"  // split_colon_args (shared tokenizer)
 
 #include <map>
 #include <string>
@@ -71,8 +72,9 @@ BEEBIUM_EXT_API ParseResult parse_extension_args(
     std::string_view arg_string,
     const std::vector<ParameterSchema>& schema);
 
-// Split a colon-separated string, respecting '://' in URIs.
-BEEBIUM_EXT_API std::vector<std::string> split_colon_args(std::string_view input);
+// The colon-separated CLI tokenizer split_colon_args() moved to a neutral home
+// (beebium/CliArgSplit.hpp) - it is not extension-specific. Included here so
+// existing users of this header keep compiling.
 
 // Move any key in `config` that names an is_list schema param into
 // `list_config` as a single-element vector (unless list_config already
