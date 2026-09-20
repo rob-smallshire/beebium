@@ -102,18 +102,20 @@ class TestStandardModeDisplayWidth:
         )
 
 
-# Tube scenario tests are skipped on Windows CI: booting a second processor
-# on the slow Windows runners is timing-sensitive and either boots normally
-# or never gets going. Issue #76 tracks diagnosing that; the guard matches
-# test_tube_elite.py, which boots the same disc. Local Windows runs are
-# unaffected (the guard needs CI=true).
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Tube boot too timing-sensitive for Windows CI runners (issue #76)",
+# The game-boot display-width tests boot a disc and wait in real time for a
+# game screen to appear. On the shared Windows and macOS CI runners that boot is
+# timing-sensitive and intermittently overruns the wait (Elite through its Tube
+# second processor; Boffin loading its game screen), so the tests flake. Issue
+# #76 tracks diagnosing that. The standard-mode display-width tests below do not
+# boot a game and run everywhere. Linux CI is reliable and keeps the coverage;
+# local runs are unaffected (the guard needs CI=true).
+_skip_game_boot_ci = pytest.mark.skipif(
+    sys.platform in ("win32", "darwin") and os.environ.get("CI") == "true",
+    reason="Game boot too timing-sensitive for Windows/macOS CI runners (issue #76)",
 )
 
 
-@_skip_windows_ci
+@_skip_game_boot_ci
 class TestEliteDisplayWidth:
     """Elite's 32-column split screen reports 512, not the old hardcoded 640."""
 
@@ -205,6 +207,7 @@ def _wait_for_frame(bbc: Beebium, predicate, timeout: float = 30.0) -> Frame:
         frame = bbc.video.capture_frame()
 
 
+@_skip_game_boot_ci
 class TestBoffinDisplayWidth:
     """Boffin's 92-column game screen is wider than 640: the opposite of Elite.
 
