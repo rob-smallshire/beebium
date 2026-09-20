@@ -56,6 +56,15 @@ constexpr uint8_t kEconetNmiDeviceMask = 0x02;
 // Receives the entry (for condition evaluation) and the PC.
 using BreakpointHitCallback = std::function<void(const BreakpointEntry& bp, uint32_t pc)>;
 
+// Machine reset callback: invoked at the end of reset()/soft_reset() so a client
+// can learn the emulated machine has been reset (however initiated - the Break
+// key, a Reset RPC, power-on) and resync, the same way it does at boot. `hard`
+// is true for a power-on/hard reset() and false for a soft_reset() (Break). The
+// callback fires when the reset is applied, before the MOS re-initialisation
+// code runs, so an observer that needs the re-initialised state should let it
+// settle (as the boot-time resync already does).
+using MachineResetCallback = std::function<void(bool hard)>;
+
 // Watchpoint hit callback: same type as CpuBinding's inline check callback
 using WatchpointHitCallback = CpuWatchpointHitCallback;
 
@@ -137,6 +146,7 @@ public:
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
         ++sequence_;
+        if (on_reset_) on_reset_(/*hard=*/true);
     }
 
     // Soft reset (Break key): reset CPU and peripherals, but preserve System VIA.
@@ -159,6 +169,7 @@ public:
         in_nmi_handler_ = false;
         in_irq_handler_ = false;
         ++sequence_;
+        if (on_reset_) on_reset_(/*hard=*/false);
     }
 
     // =========================================================================
@@ -652,6 +663,14 @@ public:
         on_breakpoint_hit_ = std::move(cb);
     }
 
+    // Register a callback invoked whenever the machine is reset (reset() /
+    // soft_reset()). Set by the server bootstrap to surface a machine-reset
+    // event to clients. Not set during construction, so the power-on reset() in
+    // the constructor does not fire it.
+    void set_reset_callback(MachineResetCallback cb) {
+        on_reset_ = std::move(cb);
+    }
+
     const std::vector<BreakpointEntry>& breakpoint_entries() const { return breakpoint_entries_; }
 
     // Debugger watchpoint entry management. As with breakpoints, the swap runs
@@ -777,6 +796,7 @@ private:
 
     std::vector<BreakpointEntry> breakpoint_entries_;    // sorted by address, modified only while stopped
     BreakpointHitCallback on_breakpoint_hit_;           // rare-path callback
+    MachineResetCallback on_reset_;                     // fired on reset()/soft_reset()
     std::vector<WatchpointEntry> watchpoint_entries_;   // sorted by start, modified only while stopped
     WatchpointHitCallback on_watchpoint_hit_;           // rare-path callback
     ProgramCounterHistogram* pc_histogram_ = nullptr;

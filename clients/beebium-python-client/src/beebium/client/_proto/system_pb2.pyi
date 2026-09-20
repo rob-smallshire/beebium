@@ -54,6 +54,32 @@ SHUTDOWN_IMMEDIATE: ShutdownMode.ValueType  # 1
 """Immediate shutdown: terminate as soon as possible, skip coordination"""
 Global___ShutdownMode: _TypeAlias = ShutdownMode  # noqa: Y015
 
+class _ResetKind:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _ResetKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_ResetKind.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    RESET_KIND_UNSPECIFIED: _ResetKind.ValueType  # 0
+    RESET_KIND_SOFT: _ResetKind.ValueType  # 1
+    """Break key: CPU + peripherals reset, RAM preserved"""
+    RESET_KIND_HARD: _ResetKind.ValueType  # 2
+    """Power-on / Ctrl-Break / Reset RPC: full re-init"""
+
+class ResetKind(_ResetKind, metaclass=_ResetKindEnumTypeWrapper):
+    """How a machine reset was performed. A reset re-initialises the machine (the MOS
+    re-runs its startup, re-initialising keyboard lock state, screen mode, etc.),
+    so a client that mirrors any of that resyncs on the event -- the same way it
+    does at boot (boot is the power-on instance of a reset).
+    """
+
+RESET_KIND_UNSPECIFIED: ResetKind.ValueType  # 0
+RESET_KIND_SOFT: ResetKind.ValueType  # 1
+"""Break key: CPU + peripherals reset, RAM preserved"""
+RESET_KIND_HARD: ResetKind.ValueType  # 2
+"""Power-on / Ctrl-Break / Reset RPC: full re-init"""
+Global___ResetKind: _TypeAlias = ResetKind  # noqa: Y015
+
 class _ServerStatusType:
     ValueType = _typing.NewType("ValueType", _builtins.int)
     V: _TypeAlias = ValueType  # noqa: Y015
@@ -83,6 +109,14 @@ class _ServerStatusTypeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Serv
     partition or a frozen process) by the *absence* of heartbeats. A healthy
     connection delivers these at a steady cadence.
     """
+    SERVER_STATUS_MACHINE_RESET: _ServerStatusType.ValueType  # 5
+    """The emulated machine was reset (however initiated: the Break key,
+    Ctrl-Break, a Reset RPC, power-on). The reset_kind field carries which.
+    A client that mirrors machine state (e.g. keyboard lock state) resyncs on
+    this, the same way it does at boot. Fires when the reset is applied,
+    before the MOS finishes re-initialising, so a consumer that needs the
+    re-initialised state should let it settle.
+    """
 
 class ServerStatusType(_ServerStatusType, metaclass=_ServerStatusTypeEnumTypeWrapper):
     """Server status types"""
@@ -109,6 +143,14 @@ seconds. Carries no payload; its job is to keep the stream producing
 traffic so a client can detect a silently-unreachable server (network
 partition or a frozen process) by the *absence* of heartbeats. A healthy
 connection delivers these at a steady cadence.
+"""
+SERVER_STATUS_MACHINE_RESET: ServerStatusType.ValueType  # 5
+"""The emulated machine was reset (however initiated: the Break key,
+Ctrl-Break, a Reset RPC, power-on). The reset_kind field carries which.
+A client that mirrors machine state (e.g. keyboard lock state) resyncs on
+this, the same way it does at boot. Fires when the reset is applied,
+before the MOS finishes re-initialising, so a consumer that needs the
+re-initialised state should let it settle.
 """
 Global___ServerStatusType: _TypeAlias = ServerStatusType  # noqa: Y015
 
@@ -477,6 +519,7 @@ class ServerStatusEvent(_message.Message):
     SHUTDOWN_GRACE_MS_FIELD_NUMBER: _builtins.int
     IDENTITY_FIELD_NUMBER: _builtins.int
     SHUTDOWN_CONDITIONS_FIELD_NUMBER: _builtins.int
+    RESET_KIND_FIELD_NUMBER: _builtins.int
     status: Global___ServerStatusType.ValueType
     """Type of status event"""
     message: _builtins.str
@@ -484,6 +527,10 @@ class ServerStatusEvent(_message.Message):
     shutdown_grace_ms: _builtins.int
     """For SHUTTING_DOWN: grace period in milliseconds before forced termination
     Clients should disconnect within this time
+    """
+    reset_kind: Global___ResetKind.ValueType
+    """For MACHINE_RESET: whether the reset was hard (power-on / Ctrl-Break /
+    Reset RPC) or soft (the Break key). See ResetKind.
     """
     @_builtins.property
     def identity(self) -> Global___MachineIdentity:
@@ -501,10 +548,11 @@ class ServerStatusEvent(_message.Message):
         shutdown_grace_ms: _builtins.int = ...,
         identity: Global___MachineIdentity | None = ...,
         shutdown_conditions: _abc.Iterable[Global___ShutdownConditionStatus] | None = ...,
+        reset_kind: Global___ResetKind.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "message", b"message", "shutdown_conditions", b"shutdown_conditions", "shutdown_grace_ms", b"shutdown_grace_ms", "status", b"status"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "message", b"message", "reset_kind", b"reset_kind", "shutdown_conditions", b"shutdown_conditions", "shutdown_grace_ms", b"shutdown_grace_ms", "status", b"status"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

@@ -610,3 +610,28 @@ TEST_CASE("step_instruction after Break runs the reset sequence to the handler (
     CHECK(machine.pc() == reset_target);
     CHECK(cycles == 7);  // Cycle0_Reset..Cycle6_Reset, then the handler fetch
 }
+
+TEST_CASE("Reset callback fires on reset()/soft_reset() with the right kind", "[reset][callback]") {
+    ModelB machine;
+
+    // Not set during construction, so the constructor's power-on reset() does
+    // not fire it. Register after construction, as the server does.
+    std::vector<bool> kinds;  // one entry per reset; true = hard
+    machine.set_reset_callback([&](bool hard) { kinds.push_back(hard); });
+
+    REQUIRE(kinds.empty());
+
+    machine.soft_reset();
+    REQUIRE(kinds.size() == 1);
+    REQUIRE(kinds[0] == false);   // soft
+
+    machine.reset();
+    REQUIRE(kinds.size() == 2);
+    REQUIRE(kinds[1] == true);    // hard
+
+    // The Break key (release) performs a soft reset.
+    machine.break_down();
+    machine.break_up();
+    REQUIRE(kinds.size() == 3);
+    REQUIRE(kinds[2] == false);   // soft
+}

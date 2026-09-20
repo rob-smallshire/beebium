@@ -34,6 +34,15 @@ class ServerStatus(Enum):
     IDENTITY_CHANGED = "identity_changed"
     SHUTDOWN_PROGRESS = "shutdown_progress"
     HEARTBEAT = "heartbeat"
+    MACHINE_RESET = "machine_reset"
+
+
+class ResetKind(Enum):
+    """How a machine reset was performed (for MACHINE_RESET events)."""
+
+    UNSPECIFIED = "unspecified"
+    SOFT = "soft"  # Break key
+    HARD = "hard"  # Power-on / Ctrl-Break / Reset RPC
 
 
 class ShutdownMode(Enum):
@@ -169,6 +178,7 @@ class ServerStatusEvent:
     shutdown_grace_ms: int  # Grace period for SHUTTING_DOWN
     identity: MachineIdentity | None = None  # For IDENTITY_CHANGED events
     shutdown_conditions: tuple[ShutdownConditionStatus, ...] = ()  # For SHUTDOWN_PROGRESS
+    reset_kind: ResetKind = ResetKind.UNSPECIFIED  # For MACHINE_RESET events
 
 
 @dataclass(frozen=True)
@@ -282,6 +292,7 @@ class System:
         for response in self._stub.WatchServerStatus(request):
             identity = None
             conditions: tuple[ShutdownConditionStatus, ...] = ()
+            reset_kind = ResetKind.UNSPECIFIED
 
             if response.status == system_pb2.SERVER_STATUS_READY:
                 status = ServerStatus.READY
@@ -301,6 +312,12 @@ class System:
                 self._identity_cache = identity
             elif response.status == system_pb2.SERVER_STATUS_HEARTBEAT:
                 status = ServerStatus.HEARTBEAT
+            elif response.status == system_pb2.SERVER_STATUS_MACHINE_RESET:
+                status = ServerStatus.MACHINE_RESET
+                if response.reset_kind == system_pb2.RESET_KIND_SOFT:
+                    reset_kind = ResetKind.SOFT
+                elif response.reset_kind == system_pb2.RESET_KIND_HARD:
+                    reset_kind = ResetKind.HARD
             elif response.status == system_pb2.SERVER_STATUS_SHUTDOWN_PROGRESS:
                 status = ServerStatus.SHUTDOWN_PROGRESS
                 # Parse shutdown condition status
@@ -323,6 +340,7 @@ class System:
                 shutdown_grace_ms=response.shutdown_grace_ms,
                 identity=identity,
                 shutdown_conditions=conditions,
+                reset_kind=reset_kind,
             )
 
     @property

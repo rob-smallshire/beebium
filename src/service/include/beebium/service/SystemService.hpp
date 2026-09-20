@@ -148,6 +148,13 @@ public:
     /// Thread-safe: can be called from any thread.
     void notify_shutdown(uint32_t grace_ms = 5000);
 
+    /// Notify watchers that the emulated machine was reset. Wired to the
+    /// Machine's reset callback by the server bootstrap, so it fires for any
+    /// reset cause (Break, Ctrl-Break, Reset RPC, power-on). `hard` selects the
+    /// reported ResetKind. Safe to call from the emulation thread (it only bumps
+    /// an atomic generation and notifies the watchers' condition variable).
+    void notify_machine_reset(bool hard);
+
     /// Set the server port after it's determined.
     /// Must be called before advertisement can work correctly.
     void set_server_port(uint16_t port);
@@ -191,6 +198,11 @@ private:
     std::atomic<bool> shutdown_signaled_{false};
     std::atomic<uint32_t> shutdown_grace_ms_{5000};
     std::atomic<bool> identity_changed_{false};
+    // Machine-reset signal: a monotonic generation bumped on each reset, plus
+    // the last reset's kind. Each watcher tracks the generation it last emitted,
+    // so every watcher sees every reset (coalescing bursts to the latest).
+    std::atomic<uint64_t> reset_generation_{0};
+    std::atomic<bool> last_reset_hard_{false};
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -375,19 +387,41 @@ grpc::Status SystemServiceImpl<MachineType>::WatchServerStatus(
     const auto heartbeat_interval = std::chrono::milliseconds(500);
     auto last_heartbeat = std::chrono::steady_clock::now();
 
+    // Track the machine-reset generation this watcher has already emitted, so a
+    // reset that happened before this subscription is not replayed (the client
+    // resyncs on the READY event above), and every later reset is delivered.
+    uint64_t last_reset_gen = reset_generation_.load(std::memory_order_acquire);
+
     // Wait for events in a loop
     // Use wait_for with timeout to periodically check for client cancellation,
     // since context->IsCancelled() doesn't notify the condition variable.
     while (!context->IsCancelled()) {
         std::unique_lock<std::mutex> lock(watchers_mutex_);
-        watchers_cv_.wait_for(lock, std::chrono::milliseconds(100), [this, context] {
+        watchers_cv_.wait_for(lock, std::chrono::milliseconds(100),
+                              [this, context, last_reset_gen] {
             return shutdown_signaled_.load() ||
                    identity_changed_.load() ||
+                   reset_generation_.load(std::memory_order_acquire) != last_reset_gen ||
                    context->IsCancelled();
         });
 
         if (context->IsCancelled()) {
             break;
+        }
+
+        // Handle machine-reset events: emit one per generation advance (bursts
+        // coalesce to the latest kind). The machine is authoritative; a client
+        // that mirrors machine state resyncs on this.
+        uint64_t gen = reset_generation_.load(std::memory_order_acquire);
+        if (gen != last_reset_gen) {
+            last_reset_gen = gen;
+            ServerStatusEvent event;
+            event.set_status(SERVER_STATUS_MACHINE_RESET);
+            event.set_reset_kind(last_reset_hard_.load() ? RESET_KIND_HARD
+                                                         : RESET_KIND_SOFT);
+            if (!writer->Write(event)) {
+                break;
+            }
         }
 
         // Periodic liveness heartbeat.
@@ -436,6 +470,13 @@ void SystemServiceImpl<MachineType>::notify_shutdown(uint32_t grace_ms) {
 template<typename MachineType>
 void SystemServiceImpl<MachineType>::notify_identity_changed() {
     identity_changed_.store(true);
+    watchers_cv_.notify_all();
+}
+
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::notify_machine_reset(bool hard) {
+    last_reset_hard_.store(hard);
+    reset_generation_.fetch_add(1, std::memory_order_release);
     watchers_cv_.notify_all();
 }
 

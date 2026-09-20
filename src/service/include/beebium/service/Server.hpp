@@ -275,6 +275,15 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         static_cast<uint32_t>(MachineType::Memory::default_pacing_config().base_clock_hz),
         policy_config, nullptr, std::move(shutdown_callback));
 
+    // Surface every machine reset (Break, Ctrl-Break, Reset RPC) to
+    // WatchServerStatus subscribers, so clients resync as they do at boot. The
+    // callback runs on whatever thread applied the reset; notify_machine_reset
+    // only bumps an atomic and signals the watchers, so it is safe there.
+    impl_->machine.set_reset_callback(
+        [system_service = impl_->system_service.get()](bool hard) {
+            system_service->notify_machine_reset(hard);
+        });
+
     impl_->audio_service = std::make_unique<AudioServiceImpl<MachineType>>(
         impl_->machine);
 
