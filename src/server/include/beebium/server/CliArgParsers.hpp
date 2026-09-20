@@ -175,7 +175,29 @@ inline SidewaysConfig parse_sideways_arg(const std::string& arg) {
     bool have_slot = false;
     bool have_type = false;
 
-    for (const auto& token : split_colon_args(arg)) {
+    // split_colon_args treats every unquoted ':' as a field separator, but an
+    // image filepath can legitimately contain one -- a Windows drive letter
+    // (image=D:\roms\dfs.rom) most commonly, also a URL. Re-join any token that
+    // does not begin a known field onto the previous one with the ':' that split
+    // it, so such a value survives without the caller having to quote it. Only
+    // the fixed --sideways keys begin a field; anything else is a continuation.
+    auto begins_field = [](const std::string& token) {
+        std::string lower = ascii_to_lower(token);
+        return lower.rfind("slot=", 0) == 0 || lower.rfind("type=", 0) == 0
+            || lower.rfind("image=", 0) == 0
+            || lower.rfind("write-protect=", 0) == 0 || lower == "write-protect";
+    };
+    std::vector<std::string> tokens;
+    for (auto& piece : split_colon_args(arg)) {
+        if (!tokens.empty() && !begins_field(piece)) {
+            tokens.back() += ':';
+            tokens.back() += piece;
+        } else {
+            tokens.push_back(std::move(piece));
+        }
+    }
+
+    for (const auto& token : tokens) {
         if (token.empty()) {
             throw std::runtime_error(
                 "Invalid --sideways: empty field in '" + arg

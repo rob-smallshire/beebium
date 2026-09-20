@@ -62,6 +62,25 @@ TEST_CASE("parse_sideways_arg parses image and write-protect", "[cli][sideways]"
     REQUIRE(parse_sideways_arg("slot=15:type=rom:image=\"a:b.rom\"").image_filepath == "a:b.rom");
 }
 
+TEST_CASE("parse_sideways_arg keeps colons in an unquoted image path", "[cli][sideways]") {
+    // A Windows filepath carries a drive-letter colon; the colon-separated
+    // grammar must not tear image=D:\... into separate fields, so clients need
+    // not quote the path.
+    auto win = parse_sideways_arg("slot=14:type=rom:image=D:\\roms\\acorn-dfs_2_26.rom");
+    REQUIRE(win.slot == 14);
+    REQUIRE(win.type == SidewaysSlotType::Rom);
+    REQUIRE(win.image_filepath == "D:\\roms\\acorn-dfs_2_26.rom");
+
+    // A trailing flag after such a path is still recognised as its own field.
+    auto win_wp = parse_sideways_arg("slot=15:type=ram:image=D:\\ram.bin:write-protect");
+    REQUIRE(win_wp.image_filepath == "D:\\ram.bin");
+    REQUIRE(win_wp.write_protected);
+
+    // The same holds for any multi-colon value, e.g. a URL.
+    auto url = parse_sideways_arg("slot=13:type=rom:image=ip232://host:1234/rom");
+    REQUIRE(url.image_filepath == "ip232://host:1234/rom");
+}
+
 TEST_CASE("parse_sideways_arg rejects the retired positional form", "[cli][sideways]") {
     // The old SLOT:TYPE[:IMAGE] form must be rejected with guidance.
     try {
