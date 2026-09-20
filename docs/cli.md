@@ -96,6 +96,7 @@ beebium-model-b [options]           # Equivalent (start is default)
 | Option | Description |
 |--------|-------------|
 | `--mos <filepath>` | Path to MOS ROM (default: machine-specific) |
+| `--language-rom <filepath>` | Language ROM image for the machine's own default language slot (default: machine-specific). Use this instead of `--sideways` when you don't want to assume which slot holds the language ROM - e.g. the ATPL Sidewise uses slot 14, others use slot 15 |
 | `--sideways <slot>:<type>[:<image>]` | Configure sideways slot (see below) |
 | `--rom-dir <dirpath>` | ROM directory (auto-detected if not specified) |
 

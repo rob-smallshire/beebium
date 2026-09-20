@@ -424,6 +424,11 @@ template<typename MachineType>
 struct ServerConfig {
     // ROM configuration
     std::string mos_filepath;
+    // Optional override for the default language ROM image. When set, it is
+    // loaded into the machine's own DEFAULT_LANGUAGE_SLOT instead of the
+    // built-in DEFAULT_LANGUAGE_ROM, so callers can supply a custom language
+    // ROM without knowing which slot this machine variant uses for it.
+    std::string language_rom_filepath;
     std::string rom_dirpath;
     std::map<uint8_t, std::string> rom_slots;
     std::vector<SidewaysConfig> sideways_configs;
@@ -526,6 +531,9 @@ void print_usage(const char* program_name) {
               << "  --preset <filepath>      Load configuration from preset file\n"
               << "                           (CLI options override preset values)\n"
               << "  --mos <filepath>         MOS ROM filepath (default: " << Memory::DEFAULT_MOS_ROM << ")\n"
+              << "  --language-rom <filepath> Language ROM image for this machine's default\n"
+              << "                           language slot (slot " << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT)
+              << "; default: " << Memory::DEFAULT_LANGUAGE_ROM << ")\n"
               << "  --sideways SLOT:TYPE[:IMAGE]\n"
               << "                           Configure sideways slot (0-15):\n"
               << "                           SLOT:rom:IMAGE - ROM with image file\n"
@@ -926,6 +934,8 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             return ExitCode::OK;
         } else if (arg == "--mos" && i + 1 < argc) {
             config.mos_filepath = argv[++i];
+        } else if (arg == "--language-rom" && i + 1 < argc) {
+            config.language_rom_filepath = argv[++i];
         } else if (arg == "--sideways" && i + 1 < argc) {
             std::string value = argv[++i];
             complete_colon_arg(value, i, argc, argv);
@@ -1196,11 +1206,18 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
         }
     };
 
-    // Load default language ROM into default slot unless overridden
+    // Load the language ROM into this machine's default language slot unless a
+    // --sideways already targets that socket. A --language-rom overrides only
+    // the image; the slot is still the machine's own DEFAULT_LANGUAGE_SLOT, so
+    // a caller need not know which slot a given variant uses for its language
+    // ROM (e.g. slot 14 on the ATPL Sidewise, 15 elsewhere).
     if (!skip_default_for_slot(Memory::DEFAULT_LANGUAGE_SLOT)
         && config.rom_slots.find(Memory::DEFAULT_LANGUAGE_SLOT)
                == config.rom_slots.end()) {
-        config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = std::string(Memory::DEFAULT_LANGUAGE_ROM);
+        config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] =
+            config.language_rom_filepath.empty()
+                ? std::string(Memory::DEFAULT_LANGUAGE_ROM)
+                : config.language_rom_filepath;
     }
 
     // Load default DFS ROM if machine has one and slot not overridden

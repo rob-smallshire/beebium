@@ -156,9 +156,13 @@ class ServerProcess:
             cmd.extend(["--mos", str(self._mos_filepath)])
         cmd.extend(["--port", str(self._port)])
         # BASIC ROM is auto-loaded by the server if present in the ROM directory.
-        # A custom BASIC filepath is configured via sideways ROM slot 15.
+        # A custom language ROM is passed via --language-rom, which the server
+        # places in that machine variant's own default language slot. The
+        # launcher deliberately does not assume a slot number - e.g. the ATPL
+        # Sidewise uses slot 14 (reserving slot 15 for RAM) while other
+        # variants use slot 15.
         if self._basic_filepath:
-            cmd.extend(["--sideways", f"15:rom:{self._basic_filepath}"])
+            cmd.extend(["--language-rom", str(self._basic_filepath)])
         cmd.extend(
             [
                 "--provenance-type",

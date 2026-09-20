@@ -36,18 +36,20 @@ from beebium.client.sideways import (
 @pytest.fixture
 def atpl_sidewise(
     mos_filepath: Path,
+    basic_filepath: Path | None,
     beebium_server_filepath: Path | None,
 ):
     """A Model B with the ATPL Sidewise board, slot 15 fitted as RAM.
 
-    BASIC is deliberately not passed as a custom ROM: the client launcher
-    would inject it at slot 15 (its default language slot), which this
-    variant reserves for RAM. Instead the server auto-loads its own default
-    BASIC into slot 14, where the Sidewise manual puts it.
+    A custom BASIC is passed to exercise --language-rom: the server places it
+    in this variant's default language slot (14), not slot 15 which the board
+    reserves for RAM. This is the regression case for the launcher's former
+    hardcoded slot-15 assumption.
     """
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,
+            basic_filepath=basic_filepath,
             server=beebium_server_filepath,
             variant="model-b-atpl-sidewise",
             extra_args=["--sideways", "15:ram"],
@@ -158,6 +160,14 @@ def test_atpl_sidewise_reports_16_slots_with_ram_in_15(atpl_sidewise):
     assert slot15.capabilities.supports_ram is True
     assert slot15.capabilities.runtime_configurable is False
     assert slot15.write_protected is False
+
+    # --language-rom must place the custom BASIC in slot 14, not slot 15.
+    slot14 = status.find_socket_for_slot(14)
+    assert slot14 is not None
+    assert slot14.type is SlotType.ROM
+    assert slot14.populated is True
+    assert slot14.rom_header is not None
+    assert slot14.rom_header.title == "BASIC"
 
 
 def test_atpl_sidewise_write_protect_roundtrip(atpl_sidewise):
