@@ -57,7 +57,7 @@ namespace beebium {
 // - Each slot can be configured as ROM or RAM at runtime
 //
 // All slots start as Empty (returning 0xFF). Slots are configured via:
-// - CLI options: --sideways 0:ram, --sideways 15:rom:basic.rom
+// - CLI options: --sideways slot=0:type=ram, --sideways slot=15:type=rom:image=basic.rom
 // - API: configure_slot(), load_rom_to_slot()
 //
 // Unlike stock Model B (which has 4-way aliasing), each slot here is independent.

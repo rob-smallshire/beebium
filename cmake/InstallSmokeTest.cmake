@@ -79,7 +79,7 @@ endforeach()
 execute_process(
     COMMAND "${server}" start
             --mos acorn-mos_1_20.rom
-            --sideways 15:rom:bbc-basic_2.rom
+            --sideways slot=15:type=rom:image=bbc-basic_2.rom
             --port 0
     TIMEOUT 20
     RESULT_VARIABLE rc

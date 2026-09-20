@@ -31,26 +31,60 @@ using beebium::server::OutputFormat;
 // ---- parse_sideways_arg ----
 
 TEST_CASE("parse_sideways_arg accepts lowercase rom/ram/empty", "[cli][sideways]") {
-    REQUIRE(parse_sideways_arg("4:rom:foo.rom").type == SidewaysSlotType::Rom);
-    REQUIRE(parse_sideways_arg("4:ram").type == SidewaysSlotType::Ram);
-    REQUIRE(parse_sideways_arg("4:empty").type == SidewaysSlotType::Empty);
+    REQUIRE(parse_sideways_arg("slot=4:type=rom:image=foo.rom").type == SidewaysSlotType::Rom);
+    REQUIRE(parse_sideways_arg("slot=4:type=ram").type == SidewaysSlotType::Ram);
+    REQUIRE(parse_sideways_arg("slot=4:type=empty").type == SidewaysSlotType::Empty);
 }
 
 TEST_CASE("parse_sideways_arg accepts uppercase ROM/RAM/EMPTY", "[cli][sideways]") {
-    REQUIRE(parse_sideways_arg("4:ROM:foo.rom").type == SidewaysSlotType::Rom);
-    REQUIRE(parse_sideways_arg("4:RAM").type == SidewaysSlotType::Ram);
-    REQUIRE(parse_sideways_arg("4:EMPTY").type == SidewaysSlotType::Empty);
+    REQUIRE(parse_sideways_arg("slot=4:type=ROM:image=foo.rom").type == SidewaysSlotType::Rom);
+    REQUIRE(parse_sideways_arg("slot=4:type=RAM").type == SidewaysSlotType::Ram);
+    REQUIRE(parse_sideways_arg("slot=4:type=EMPTY").type == SidewaysSlotType::Empty);
 }
 
-TEST_CASE("parse_sideways_arg accepts mixed-case values", "[cli][sideways]") {
-    REQUIRE(parse_sideways_arg("4:Rom:foo.rom").type == SidewaysSlotType::Rom);
-    REQUIRE(parse_sideways_arg("4:Ram").type == SidewaysSlotType::Ram);
-    REQUIRE(parse_sideways_arg("4:Empty").type == SidewaysSlotType::Empty);
+TEST_CASE("parse_sideways_arg accepts mixed-case values and keys", "[cli][sideways]") {
+    REQUIRE(parse_sideways_arg("slot=4:type=Rom:image=foo.rom").type == SidewaysSlotType::Rom);
+    REQUIRE(parse_sideways_arg("SLOT=4:TYPE=Ram").type == SidewaysSlotType::Ram);
+    REQUIRE(parse_sideways_arg("slot=4:type=Empty").type == SidewaysSlotType::Empty);
+}
+
+TEST_CASE("parse_sideways_arg parses image and write-protect", "[cli][sideways]") {
+    auto rom = parse_sideways_arg("slot=13:type=rom:image=dfs.rom");
+    REQUIRE(rom.slot == 13);
+    REQUIRE(rom.image_filepath == "dfs.rom");
+    REQUIRE_FALSE(rom.write_protected);
+
+    auto ram = parse_sideways_arg("slot=15:type=ram:write-protect");
+    REQUIRE(ram.type == SidewaysSlotType::Ram);
+    REQUIRE(ram.write_protected);
+
+    // A value containing ':' can be quoted.
+    REQUIRE(parse_sideways_arg("slot=15:type=rom:image=\"a:b.rom\"").image_filepath == "a:b.rom");
+}
+
+TEST_CASE("parse_sideways_arg rejects the retired positional form", "[cli][sideways]") {
+    // The old SLOT:TYPE[:IMAGE] form must be rejected with guidance.
+    try {
+        parse_sideways_arg("4:ram");
+        FAIL("expected std::runtime_error");
+    } catch (const std::runtime_error& e) {
+        std::string msg = e.what();
+        REQUIRE(msg.find("key=value") != std::string::npos);
+    }
+}
+
+TEST_CASE("parse_sideways_arg rejects write-protect on a non-RAM slot", "[cli][sideways]") {
+    try {
+        parse_sideways_arg("slot=4:type=rom:image=foo.rom:write-protect");
+        FAIL("expected std::runtime_error");
+    } catch (const std::runtime_error& e) {
+        REQUIRE(std::string(e.what()).find("write-protect") != std::string::npos);
+    }
 }
 
 TEST_CASE("parse_sideways_arg error message lists allowed values", "[cli][sideways]") {
     try {
-        parse_sideways_arg("4:WAT");
+        parse_sideways_arg("slot=4:type=WAT");
         FAIL("expected std::runtime_error");
     } catch (const std::runtime_error& e) {
         std::string msg = e.what();
@@ -66,7 +100,7 @@ TEST_CASE("parse_sideways_arg error message lists allowed values", "[cli][sidewa
 
 TEST_CASE("parse_sideways_arg rejects bad slot number with clear message", "[cli][sideways]") {
     try {
-        parse_sideways_arg("99:rom:foo.rom");
+        parse_sideways_arg("slot=99:type=rom:image=foo.rom");
         FAIL("expected std::runtime_error");
     } catch (const std::runtime_error& e) {
         std::string msg = e.what();

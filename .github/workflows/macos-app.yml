@@ -418,7 +418,7 @@ jobs:
           boot_log="$(mktemp)"
           "${srv}/bin/beebium-model-b" start \
             --mos acorn-mos_1_20.rom \
-            --sideways 15:rom:bbc-basic_2.rom \
+            --sideways slot=15:type=rom:image=bbc-basic_2.rom \
             --port 0 >"${boot_log}" 2>&1 &
           pid=$!
           for _ in $(seq 1 40); do

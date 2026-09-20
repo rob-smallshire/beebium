@@ -303,7 +303,6 @@ inline std::string generate_uuid_v4() {
 // appends the next argv to value and advances i to consume it.
 //
 // Example: "--floppy 0:" followed by "game.ssd" becomes "0:game.ssd"
-// Example: "--sideways 15:rom:" followed by "forth.rom" becomes "15:rom:forth.rom"
 inline void complete_colon_arg(std::string& value, int& i, int argc, char* argv[]) {
     if (value.empty() || value.back() != ':') {
         return;  // Doesn't end with colon, no completion needed
