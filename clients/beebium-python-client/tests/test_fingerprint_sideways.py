@@ -37,6 +37,8 @@ than blind-timing keypresses, following the Firetrack auto-boot tests.
 from __future__ import annotations
 
 import hashlib
+import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -164,3 +166,151 @@ def test_fingerprint_installs_into_slot15_sideways_ram(bbc_fingerprint: Beebium)
     help_text = bbc.video.screen_text().text
     assert HELP_BANNER in help_text, help_text
     assert HELP_COMMAND in help_text, help_text
+
+
+# ---------------------------------------------------------------------------
+# A wedged guest must never take the server down (issue #72, crash path)
+#
+# Installing a "service ROM" into a bank with no real RAM behind it is the #72
+# crash: the write goes nowhere, but the menu still pokes the MOS ROM-type table
+# to advertise a ROM in that bank. The empty bank reads 0xFF, so the next
+# paged-ROM service scan (any * command) makes the MOS jump into a bogus service
+# entry and the 6502 wanders into a tight loop in RAM. That is faithful guest
+# behaviour -- a real BBC does the same -- and it is unrecoverable from the
+# guest's side without a Break. What must NOT happen is the emulator SERVER
+# process dying or its gRPC surface hanging: a guest executing garbage is the
+# emulator working, not failing. This test drives the guest into that wedge on a
+# plain Model B and asserts the server stays alive and responsive.
+#
+# It deliberately does not assert Break recovery or the exact wander target
+# (&2551 in practice): those are faithful MOS behaviour and would make the test
+# brittle. The only guarded invariant is server survival.
+# ---------------------------------------------------------------------------
+
+# A guest executing below the sideways-ROM window is in RAM -- machine code that
+# the MOS/BASIC idle loops never run. Stable PC here is the wedge landmark.
+_SIDEWAYS_ROM_BASE = 0x8000
+# The MOS ROM-type table; entry N is 0x02A1 + N. The empty bank 0 install writes
+# 0xFF here (the byte it read back from the empty bank), the poison marker.
+_ROM_TYPE_TABLE = 0x02A1
+
+
+@pytest.fixture
+def bbc_fingerprint_manual_boot(
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+    dfs_1770_rom_filepath: Path,
+    fingerprint_disc_filepath: Path,
+    tmp_path: Path,
+) -> Beebium:
+    """A plain Model B with the Fingerprint disc mounted but NOT auto-booted.
+
+    Auto-boot is left off deliberately: with it on, a stray Break would re-run
+    the disc's !BOOT and re-enter the menu, muddying the state. The test boots
+    once itself with a Shift-Break. The disc is copied into the test's own tmp
+    dir so the run is hermetic (unique port comes from ``port=0``).
+    """
+    disc_copy_filepath = tmp_path / FINGERPRINT_DISC_FILENAME
+    shutil.copyfile(fingerprint_disc_filepath, disc_copy_filepath)
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            basic_filepath=basic_filepath,
+            server=beebium_server_filepath,
+            variant="model-b",
+            extra_args=[
+                "--fdc",
+                "acorn-1770",
+                "--sideways",
+                f"slot=13:type=rom:image={dfs_1770_rom_filepath}",
+                "--floppy",
+                f"0:{disc_copy_filepath}",
+            ],
+            startup_timeout=20.0,
+        ) as bbc:
+            bbc.debugger.ensure_running()
+            yield bbc
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+
+def _rpc_responds_within(call, timeout: float) -> tuple[bool, object]:
+    """Run ``call()`` on a helper thread; report whether it returned in time.
+
+    A dead server makes the RPC raise quickly; a hung one blocks. Bounding it on
+    a thread lets the test distinguish "responded" from "still hanging" without
+    the whole test just timing out.
+    """
+    box: dict[str, object] = {}
+
+    def run() -> None:
+        try:
+            box["value"] = call()
+        except Exception as error:  # noqa: BLE001 - reported, not raised, on the thread
+            box["error"] = error
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        return False, "timed out"
+    if "error" in box:
+        return False, box["error"]
+    return True, box.get("value")
+
+
+def _peek_byte(bbc: Beebium, address: int) -> int:
+    return bytes(bbc.memory.address.peek.read(address, 1))[0]
+
+
+def test_service_rom_install_into_empty_bank_wedges_guest_not_server(
+    bbc_fingerprint_manual_boot: Beebium,
+) -> None:
+    """Driving the guest into the #72 empty-bank wedge must not down the server."""
+    bbc = bbc_fingerprint_manual_boot
+    server = bbc._server
+
+    # Boot the disc (Shift-Break) and install the full build into bank 0, which
+    # has no RAM behind it on a plain Model B.
+    bbc.keyboard.shift_break()
+    bbc.expect(MENU_OPTION_1, timeout=30.0)
+    _drive(bbc, "1\r", BANK_PROMPT, timeout=15.0)
+    _drive(bbc, "0\r", INSTALLED_BANNER, timeout=25.0)
+
+    # The install advertised a ROM in the empty bank: type entry 0 == 0xFF.
+    assert _peek_byte(bbc, _ROM_TYPE_TABLE) == 0xFF
+
+    # A * command triggers the paged-ROM service scan that jumps into the bogus
+    # bank. Poll until the guest is wandering in RAM (PC below the sideways-ROM
+    # window on several consecutive reads) -- the faithful wedge.
+    bbc.keyboard.type("*HELP\r")
+    deadline = time.monotonic() + 20.0
+    consecutive_in_ram = 0
+    while time.monotonic() < deadline:
+        if 0 <= bbc.cpu.pc < _SIDEWAYS_ROM_BASE:
+            consecutive_in_ram += 1
+            if consecutive_in_ram >= 5:
+                break
+        else:
+            consecutive_in_ram = 0
+        time.sleep(0.2)
+    assert consecutive_in_ram >= 5, (
+        f"guest did not reach the RAM-wander wedge; last PC=&{bbc.cpu.pc:04X}"
+    )
+
+    # THE INVARIANT: the wedged guest has not taken the server down. The process
+    # is still up and every gRPC surface still answers promptly.
+    assert server.is_running, f"server process exited (code={server.last_exit_code})"
+
+    ok, value = _rpc_responds_within(lambda: bbc.system.protocol_fingerprint, timeout=5.0)
+    assert ok, f"SystemService did not respond after the wedge: {value!r}"
+
+    ok, value = _rpc_responds_within(lambda: bbc.debugger.get_state(), timeout=5.0)
+    assert ok, f"DebuggerControl did not respond after the wedge: {value!r}"
+
+    ok, value = _rpc_responds_within(lambda: _peek_byte(bbc, _ROM_TYPE_TABLE), timeout=5.0)
+    assert ok, f"memory peek did not respond after the wedge: {value!r}"
+
+    # And it is still alive after all that probing.
+    assert server.is_running, f"server process exited (code={server.last_exit_code})"
