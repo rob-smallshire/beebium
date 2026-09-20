@@ -499,6 +499,15 @@ public:
         return sideways.slot_info(slot);
     }
 
+    // Per-bank write-protect control, surfaced to SidewaysService.
+    void set_slot_write_protected(uint8_t slot, bool protect) {
+        sideways.set_slot_write_protected(slot, protect);
+    }
+
+    bool is_slot_write_protected(uint8_t slot) const {
+        return sideways.is_slot_write_protected(slot);
+    }
+
     // The ROM/RAM expansion board has full 4-bit ROMSEL decoding and no
     // motherboard links that affect slot mapping; every slot is independent
     // regardless of any link state.

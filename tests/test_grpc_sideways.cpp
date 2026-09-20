@@ -17,6 +17,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "beebium/Machines.hpp"
 #include "beebium/service/Server.hpp"
@@ -112,6 +113,40 @@ private:
     std::shared_ptr<grpc::Channel> channel_;
     std::unique_ptr<beebium::SidewaysService::Stub> sideways_stub_;
     std::unique_ptr<beebium::DebuggerControl::Stub> debugger_stub_;
+};
+
+// Test fixture for the ATPL Sidewise board (16 slots; slot 15 fitted as RAM).
+class AtplSidewiseSidewaysFixture {
+public:
+    AtplSidewiseSidewaysFixture() {
+#ifdef BEEBIUM_ROM_DIR
+        auto mos = load_rom(std::string(BEEBIUM_ROM_DIR) + "/acorn-mos_1_20.rom");
+        auto basic = load_rom(std::string(BEEBIUM_ROM_DIR) + "/bbc-basic_2.rom");
+        std::copy(mos.begin(), mos.end(), machine_.state().memory.mos_rom.data());
+        machine_.state().memory.load_basic(basic.data(), basic.size());  // slot 14
+#endif
+        machine_.state().memory.configure_slot_as_ram(15);  // fit RAM in slot 15
+        machine_.reset();
+
+        server_ = std::make_unique<beebium::service::Server<beebium::ModelBAtplSidewise>>(
+            machine_, "127.0.0.1", 0);
+        server_->start({}, {});
+
+        std::string address = "127.0.0.1:" + std::to_string(server_->port());
+        channel_ = grpc::CreateChannel(address, grpc::InsecureChannelCredentials());
+        sideways_stub_ = beebium::SidewaysService::NewStub(channel_);
+    }
+
+    ~AtplSidewiseSidewaysFixture() { server_->stop(); }
+
+    beebium::ModelBAtplSidewise& machine() { return machine_; }
+    beebium::SidewaysService::Stub& sideways() { return *sideways_stub_; }
+
+private:
+    beebium::ModelBAtplSidewise machine_;
+    std::unique_ptr<beebium::service::Server<beebium::ModelBAtplSidewise>> server_;
+    std::shared_ptr<grpc::Channel> channel_;
+    std::unique_ptr<beebium::SidewaysService::Stub> sideways_stub_;
 };
 
 // Fixture for Model B+ 128K with optional motherboard link override.
@@ -1143,4 +1178,147 @@ TEST_CASE("B+ 128K load_sideways_rom routes slots 0/1/14/15 by S13",
         CHECK(machine.state().memory.sram_y.read(0)   == 0x5A);
         CHECK(machine.state().memory.sram_z.read(0)   == 0x5B);
     }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// ATPL Sidewise Tests
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("SidewaysService GetSlotStatus reports 16 fixed slots for ATPL Sidewise",
+          "[grpc][sideways][atpl_sidewise]") {
+    AtplSidewiseSidewaysFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::GetSlotStatusRequest request;
+    beebium::GetSlotStatusResponse response;
+    auto status = fixture.sideways().GetSlotStatus(&context, request, &response);
+
+    REQUIRE(status.ok());
+    CHECK_FALSE(response.has_aliasing());
+    REQUIRE(response.sockets_size() == 16);
+
+    for (int i = 0; i < response.sockets_size(); ++i) {
+        const auto& socket = response.sockets(i);
+        const auto& caps = socket.capabilities();
+        // No slot is runtime-reconfigurable on a real board.
+        CHECK_FALSE(caps.runtime_configurable());
+        CHECK(caps.supports_rom());
+        // Only slot 15 can hold RAM.
+        if (socket.socket_index() == 15) {
+            CHECK(caps.supports_ram());
+        } else {
+            CHECK_FALSE(caps.supports_ram());
+        }
+    }
+}
+
+TEST_CASE("SidewaysService ConfigureSlot is rejected on ATPL Sidewise",
+          "[grpc][sideways][atpl_sidewise]") {
+    AtplSidewiseSidewaysFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::ConfigureSlotRequest request;
+    beebium::ConfigureSlotResponse response;
+    request.set_slot(15);
+    request.set_type(beebium::SIDEWAYS_SLOT_TYPE_ROM);
+
+    auto status = fixture.sideways().ConfigureSlot(&context, request, &response);
+
+    REQUIRE(status.ok());
+    CHECK_FALSE(response.success());  // fixed at launch, not runtime-configurable
+}
+
+TEST_CASE("SidewaysService SetSlotWriteProtect toggles slot 15 on ATPL Sidewise",
+          "[grpc][sideways][atpl_sidewise][write_protect]") {
+    AtplSidewiseSidewaysFixture fixture;
+
+    auto write_protected_of_slot_15 = [&]() {
+        grpc::ClientContext ctx;
+        beebium::GetSlotStatusRequest req;
+        beebium::GetSlotStatusResponse resp;
+        REQUIRE(fixture.sideways().GetSlotStatus(&ctx, req, &resp).ok());
+        for (int i = 0; i < resp.sockets_size(); ++i) {
+            if (resp.sockets(i).socket_index() == 15) {
+                return resp.sockets(i).write_protected();
+            }
+        }
+        FAIL("slot 15 not found");
+        return false;
+    };
+
+    CHECK_FALSE(write_protected_of_slot_15());
+
+    {
+        grpc::ClientContext ctx;
+        beebium::SetSlotWriteProtectRequest req;
+        beebium::SetSlotWriteProtectResponse resp;
+        req.set_slot(15);
+        req.set_write_protected(true);
+        auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
+        REQUIRE(status.ok());
+        CHECK(resp.success());
+        CHECK(resp.write_protected());
+    }
+    CHECK(write_protected_of_slot_15());
+
+    {
+        grpc::ClientContext ctx;
+        beebium::SetSlotWriteProtectRequest req;
+        beebium::SetSlotWriteProtectResponse resp;
+        req.set_slot(15);
+        req.set_write_protected(false);
+        auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
+        REQUIRE(status.ok());
+        CHECK(resp.success());
+        CHECK_FALSE(resp.write_protected());
+    }
+    CHECK_FALSE(write_protected_of_slot_15());
+}
+
+TEST_CASE("SidewaysService SetSlotWriteProtect rejects a non-RAM slot",
+          "[grpc][sideways][atpl_sidewise][write_protect]") {
+    AtplSidewiseSidewaysFixture fixture;
+
+    grpc::ClientContext ctx;
+    beebium::SetSlotWriteProtectRequest req;
+    beebium::SetSlotWriteProtectResponse resp;
+    req.set_slot(14);  // BASIC ROM, not RAM
+    req.set_write_protected(true);
+
+    auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
+    REQUIRE(status.ok());
+    CHECK_FALSE(resp.success());
+    CHECK_THAT(resp.error(), Catch::Matchers::ContainsSubstring("not RAM"));
+}
+
+TEST_CASE("SidewaysService SetSlotWriteProtect rejects an invalid slot number",
+          "[grpc][sideways][atpl_sidewise][write_protect]") {
+    AtplSidewiseSidewaysFixture fixture;
+
+    grpc::ClientContext ctx;
+    beebium::SetSlotWriteProtectRequest req;
+    beebium::SetSlotWriteProtectResponse resp;
+    req.set_slot(16);
+    req.set_write_protected(true);
+
+    auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
+    REQUIRE(status.ok());
+    CHECK_FALSE(resp.success());
+}
+
+TEST_CASE("SidewaysService SetSlotWriteProtect is unavailable on Model B",
+          "[grpc][sideways][write_protect]") {
+    // The stock Model B has no write-protect control; the RPC reports the
+    // feature as unavailable rather than pretending to succeed.
+    ModelBSidewaysFixture fixture;
+
+    grpc::ClientContext ctx;
+    beebium::SetSlotWriteProtectRequest req;
+    beebium::SetSlotWriteProtectResponse resp;
+    req.set_slot(0);
+    req.set_write_protected(true);
+
+    auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
+    REQUIRE(status.ok());
+    CHECK_FALSE(resp.success());
 }

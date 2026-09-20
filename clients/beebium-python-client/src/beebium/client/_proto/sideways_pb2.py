@@ -36,43 +36,47 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0esideways.proto\x12\x07\x62\x65\x65\x62ium\"\x16\n\x14GetSlotStatusRequest\"\xbb\x01\n\x15GetSlotStatusResponse\x12\x14\n\x0chas_aliasing\x18\x01 \x01(\x08\x12\x1a\n\x12num_physical_slots\x18\x02 \x01(\r\x12&\n\x07sockets\x18\x03 \x03(\x0b\x32\x15.beebium.SocketStatus\x12\x33\n\x11motherboard_links\x18\x05 \x03(\x0b\x32\x18.beebium.MotherboardLinkJ\x04\x08\x04\x10\x05R\rselected_bank\"\xfc\x01\n\x0cSocketStatus\x12\x14\n\x0csocket_index\x18\x01 \x01(\r\x12\x15\n\raliased_slots\x18\x02 \x03(\r\x12\'\n\x04type\x18\x03 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\x12\x11\n\tpopulated\x18\x04 \x01(\x08\x12\x12\n\nimage_name\x18\x05 \x01(\t\x12\x14\n\x0csocket_label\x18\x06 \x01(\t\x12\x31\n\x0c\x63\x61pabilities\x18\x07 \x01(\x0b\x32\x1b.beebium.SocketCapabilities\x12&\n\nrom_header\x18\x08 \x01(\x0b\x32\x12.beebium.RomHeader\"y\n\tRomHeader\x12\x12\n\nrecognised\x18\x01 \x01(\x08\x12\r\n\x05title\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x11\n\tcopyright\x18\x04 \x01(\t\x12\x16\n\x0e\x63ontains_romfs\x18\x05 \x01(\x08\x12\r\n\x05kinds\x18\x06 \x03(\t\"v\n\x12SocketCapabilities\x12\x14\n\x0csupports_rom\x18\x01 \x01(\x08\x12\x14\n\x0csupports_ram\x18\x02 \x01(\x08\x12\x16\n\x0esupports_empty\x18\x03 \x01(\x08\x12\x1c\n\x14runtime_configurable\x18\x04 \x01(\x08\"C\n\x0fMotherboardLink\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\"u\n\x14\x43onfigureSlotRequest\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\'\n\x04type\x18\x02 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\x12\r\n\x03url\x18\x03 \x01(\tH\x00\x12\x0e\n\x04\x64\x61ta\x18\x04 \x01(\x0cH\x00\x42\x07\n\x05image\"b\n\x15\x43onfigureSlotResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x15\n\ractual_socket\x18\x03 \x01(\r\x12\x12\n\nimage_name\x18\x04 \x01(\t\"C\n\x13ReadSlotDataRequest\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\x0e\n\x06offset\x18\x02 \x01(\r\x12\x0e\n\x06length\x18\x03 \x01(\r\"m\n\x14ReadSlotDataResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c\x12\'\n\x04type\x18\x04 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\"Q\n\x16SubscribeEventsRequest\x12\x17\n\x0fmin_interval_ms\x18\x01 \x01(\r\x12\x1e\n\x16monitor_header_changes\x18\x02 \x01(\x08\"\xc0\x01\n\rSidewaysEvent\x12\x18\n\x10timestamp_cycles\x18\x01 \x01(\x04\x12\x37\n\x0fslot_configured\x18\x02 \x01(\x0b\x32\x1c.beebium.SlotConfiguredEventH\x00\x12>\n\x13slot_header_changed\x18\x04 \x01(\x0b\x32\x1f.beebium.SlotHeaderChangedEventH\x00\x42\x07\n\x05\x65ventJ\x04\x08\x03\x10\x04R\rbank_selected\"p\n\x13SlotConfiguredEvent\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\x0e\n\x06socket\x18\x02 \x01(\r\x12\'\n\x04type\x18\x03 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\x12\x12\n\nimage_name\x18\x04 \x01(\t\"N\n\x16SlotHeaderChangedEvent\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12&\n\nrom_header\x18\x02 \x01(\x0b\x32\x12.beebium.RomHeader*h\n\x10SidewaysSlotType\x12\x1c\n\x18SIDEWAYS_SLOT_TYPE_EMPTY\x10\x00\x12\x1a\n\x16SIDEWAYS_SLOT_TYPE_ROM\x10\x01\x12\x1a\n\x16SIDEWAYS_SLOT_TYPE_RAM\x10\x02\x32\xcc\x02\n\x0fSidewaysService\x12N\n\rGetSlotStatus\x12\x1d.beebium.GetSlotStatusRequest\x1a\x1e.beebium.GetSlotStatusResponse\x12N\n\rConfigureSlot\x12\x1d.beebium.ConfigureSlotRequest\x1a\x1e.beebium.ConfigureSlotResponse\x12K\n\x0cReadSlotData\x12\x1c.beebium.ReadSlotDataRequest\x1a\x1d.beebium.ReadSlotDataResponse\x12L\n\x0fSubscribeEvents\x12\x1f.beebium.SubscribeEventsRequest\x1a\x16.beebium.SidewaysEvent0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0esideways.proto\x12\x07\x62\x65\x65\x62ium\"\x16\n\x14GetSlotStatusRequest\"\xbb\x01\n\x15GetSlotStatusResponse\x12\x14\n\x0chas_aliasing\x18\x01 \x01(\x08\x12\x1a\n\x12num_physical_slots\x18\x02 \x01(\r\x12&\n\x07sockets\x18\x03 \x03(\x0b\x32\x15.beebium.SocketStatus\x12\x33\n\x11motherboard_links\x18\x05 \x03(\x0b\x32\x18.beebium.MotherboardLinkJ\x04\x08\x04\x10\x05R\rselected_bank\"\x95\x02\n\x0cSocketStatus\x12\x14\n\x0csocket_index\x18\x01 \x01(\r\x12\x15\n\raliased_slots\x18\x02 \x03(\r\x12\'\n\x04type\x18\x03 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\x12\x11\n\tpopulated\x18\x04 \x01(\x08\x12\x12\n\nimage_name\x18\x05 \x01(\t\x12\x14\n\x0csocket_label\x18\x06 \x01(\t\x12\x31\n\x0c\x63\x61pabilities\x18\x07 \x01(\x0b\x32\x1b.beebium.SocketCapabilities\x12&\n\nrom_header\x18\x08 \x01(\x0b\x32\x12.beebium.RomHeader\x12\x17\n\x0fwrite_protected\x18\t \x01(\x08\"y\n\tRomHeader\x12\x12\n\nrecognised\x18\x01 \x01(\x08\x12\r\n\x05title\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x11\n\tcopyright\x18\x04 \x01(\t\x12\x16\n\x0e\x63ontains_romfs\x18\x05 \x01(\x08\x12\r\n\x05kinds\x18\x06 \x03(\t\"v\n\x12SocketCapabilities\x12\x14\n\x0csupports_rom\x18\x01 \x01(\x08\x12\x14\n\x0csupports_ram\x18\x02 \x01(\x08\x12\x16\n\x0esupports_empty\x18\x03 \x01(\x08\x12\x1c\n\x14runtime_configurable\x18\x04 \x01(\x08\"C\n\x0fMotherboardLink\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\"u\n\x14\x43onfigureSlotRequest\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\'\n\x04type\x18\x02 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\x12\r\n\x03url\x18\x03 \x01(\tH\x00\x12\x0e\n\x04\x64\x61ta\x18\x04 \x01(\x0cH\x00\x42\x07\n\x05image\"b\n\x15\x43onfigureSlotResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x15\n\ractual_socket\x18\x03 \x01(\r\x12\x12\n\nimage_name\x18\x04 \x01(\t\"C\n\x1aSetSlotWriteProtectRequest\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\x17\n\x0fwrite_protected\x18\x02 \x01(\x08\"V\n\x1bSetSlotWriteProtectResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x17\n\x0fwrite_protected\x18\x03 \x01(\x08\"C\n\x13ReadSlotDataRequest\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\x0e\n\x06offset\x18\x02 \x01(\r\x12\x0e\n\x06length\x18\x03 \x01(\r\"m\n\x14ReadSlotDataResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c\x12\'\n\x04type\x18\x04 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\"Q\n\x16SubscribeEventsRequest\x12\x17\n\x0fmin_interval_ms\x18\x01 \x01(\r\x12\x1e\n\x16monitor_header_changes\x18\x02 \x01(\x08\"\xc0\x01\n\rSidewaysEvent\x12\x18\n\x10timestamp_cycles\x18\x01 \x01(\x04\x12\x37\n\x0fslot_configured\x18\x02 \x01(\x0b\x32\x1c.beebium.SlotConfiguredEventH\x00\x12>\n\x13slot_header_changed\x18\x04 \x01(\x0b\x32\x1f.beebium.SlotHeaderChangedEventH\x00\x42\x07\n\x05\x65ventJ\x04\x08\x03\x10\x04R\rbank_selected\"p\n\x13SlotConfiguredEvent\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12\x0e\n\x06socket\x18\x02 \x01(\r\x12\'\n\x04type\x18\x03 \x01(\x0e\x32\x19.beebium.SidewaysSlotType\x12\x12\n\nimage_name\x18\x04 \x01(\t\"N\n\x16SlotHeaderChangedEvent\x12\x0c\n\x04slot\x18\x01 \x01(\r\x12&\n\nrom_header\x18\x02 \x01(\x0b\x32\x12.beebium.RomHeader*h\n\x10SidewaysSlotType\x12\x1c\n\x18SIDEWAYS_SLOT_TYPE_EMPTY\x10\x00\x12\x1a\n\x16SIDEWAYS_SLOT_TYPE_ROM\x10\x01\x12\x1a\n\x16SIDEWAYS_SLOT_TYPE_RAM\x10\x02\x32\xae\x03\n\x0fSidewaysService\x12N\n\rGetSlotStatus\x12\x1d.beebium.GetSlotStatusRequest\x1a\x1e.beebium.GetSlotStatusResponse\x12N\n\rConfigureSlot\x12\x1d.beebium.ConfigureSlotRequest\x1a\x1e.beebium.ConfigureSlotResponse\x12`\n\x13SetSlotWriteProtect\x12#.beebium.SetSlotWriteProtectRequest\x1a$.beebium.SetSlotWriteProtectResponse\x12K\n\x0cReadSlotData\x12\x1c.beebium.ReadSlotDataRequest\x1a\x1d.beebium.ReadSlotDataResponse\x12L\n\x0fSubscribeEvents\x12\x1f.beebium.SubscribeEventsRequest\x1a\x16.beebium.SidewaysEvent0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'sideways_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SIDEWAYSSLOTTYPE']._serialized_start=1679
-  _globals['_SIDEWAYSSLOTTYPE']._serialized_end=1783
+  _globals['_SIDEWAYSSLOTTYPE']._serialized_start=1861
+  _globals['_SIDEWAYSSLOTTYPE']._serialized_end=1965
   _globals['_GETSLOTSTATUSREQUEST']._serialized_start=27
   _globals['_GETSLOTSTATUSREQUEST']._serialized_end=49
   _globals['_GETSLOTSTATUSRESPONSE']._serialized_start=52
   _globals['_GETSLOTSTATUSRESPONSE']._serialized_end=239
   _globals['_SOCKETSTATUS']._serialized_start=242
-  _globals['_SOCKETSTATUS']._serialized_end=494
-  _globals['_ROMHEADER']._serialized_start=496
-  _globals['_ROMHEADER']._serialized_end=617
-  _globals['_SOCKETCAPABILITIES']._serialized_start=619
-  _globals['_SOCKETCAPABILITIES']._serialized_end=737
-  _globals['_MOTHERBOARDLINK']._serialized_start=739
-  _globals['_MOTHERBOARDLINK']._serialized_end=806
-  _globals['_CONFIGURESLOTREQUEST']._serialized_start=808
-  _globals['_CONFIGURESLOTREQUEST']._serialized_end=925
-  _globals['_CONFIGURESLOTRESPONSE']._serialized_start=927
-  _globals['_CONFIGURESLOTRESPONSE']._serialized_end=1025
-  _globals['_READSLOTDATAREQUEST']._serialized_start=1027
-  _globals['_READSLOTDATAREQUEST']._serialized_end=1094
-  _globals['_READSLOTDATARESPONSE']._serialized_start=1096
-  _globals['_READSLOTDATARESPONSE']._serialized_end=1205
-  _globals['_SUBSCRIBEEVENTSREQUEST']._serialized_start=1207
-  _globals['_SUBSCRIBEEVENTSREQUEST']._serialized_end=1288
-  _globals['_SIDEWAYSEVENT']._serialized_start=1291
-  _globals['_SIDEWAYSEVENT']._serialized_end=1483
-  _globals['_SLOTCONFIGUREDEVENT']._serialized_start=1485
-  _globals['_SLOTCONFIGUREDEVENT']._serialized_end=1597
-  _globals['_SLOTHEADERCHANGEDEVENT']._serialized_start=1599
-  _globals['_SLOTHEADERCHANGEDEVENT']._serialized_end=1677
-  _globals['_SIDEWAYSSERVICE']._serialized_start=1786
-  _globals['_SIDEWAYSSERVICE']._serialized_end=2118
+  _globals['_SOCKETSTATUS']._serialized_end=519
+  _globals['_ROMHEADER']._serialized_start=521
+  _globals['_ROMHEADER']._serialized_end=642
+  _globals['_SOCKETCAPABILITIES']._serialized_start=644
+  _globals['_SOCKETCAPABILITIES']._serialized_end=762
+  _globals['_MOTHERBOARDLINK']._serialized_start=764
+  _globals['_MOTHERBOARDLINK']._serialized_end=831
+  _globals['_CONFIGURESLOTREQUEST']._serialized_start=833
+  _globals['_CONFIGURESLOTREQUEST']._serialized_end=950
+  _globals['_CONFIGURESLOTRESPONSE']._serialized_start=952
+  _globals['_CONFIGURESLOTRESPONSE']._serialized_end=1050
+  _globals['_SETSLOTWRITEPROTECTREQUEST']._serialized_start=1052
+  _globals['_SETSLOTWRITEPROTECTREQUEST']._serialized_end=1119
+  _globals['_SETSLOTWRITEPROTECTRESPONSE']._serialized_start=1121
+  _globals['_SETSLOTWRITEPROTECTRESPONSE']._serialized_end=1207
+  _globals['_READSLOTDATAREQUEST']._serialized_start=1209
+  _globals['_READSLOTDATAREQUEST']._serialized_end=1276
+  _globals['_READSLOTDATARESPONSE']._serialized_start=1278
+  _globals['_READSLOTDATARESPONSE']._serialized_end=1387
+  _globals['_SUBSCRIBEEVENTSREQUEST']._serialized_start=1389
+  _globals['_SUBSCRIBEEVENTSREQUEST']._serialized_end=1470
+  _globals['_SIDEWAYSEVENT']._serialized_start=1473
+  _globals['_SIDEWAYSEVENT']._serialized_end=1665
+  _globals['_SLOTCONFIGUREDEVENT']._serialized_start=1667
+  _globals['_SLOTCONFIGUREDEVENT']._serialized_end=1779
+  _globals['_SLOTHEADERCHANGEDEVENT']._serialized_start=1781
+  _globals['_SLOTHEADERCHANGEDEVENT']._serialized_end=1859
+  _globals['_SIDEWAYSSERVICE']._serialized_start=1968
+  _globals['_SIDEWAYSSERVICE']._serialized_end=2398
 # @@protoc_insertion_point(module_scope)

@@ -14,6 +14,11 @@ service SidewaysService {
     // Configure a slot (empty/rom/ram) with optional image data
     rpc ConfigureSlot(ConfigureSlotRequest) returns (ConfigureSlotResponse);
 
+    // Set or clear the write-protect switch on a RAM slot. Models a board's
+    // write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+    // slots that are not currently RAM.
+    rpc SetSlotWriteProtect(SetSlotWriteProtectRequest) returns (SetSlotWriteProtectResponse);
+
     // Read slot contents (for debugging/inspection)
     rpc ReadSlotData(ReadSlotDataRequest) returns (ReadSlotDataResponse);
 
@@ -72,6 +77,10 @@ message SocketStatus {
     // is present); absent / recognised=false for an empty socket, blank RAM,
     // or a non-standard image. Mirrors the describe-rom JSON.
     RomHeader rom_header = 8;
+    // True when this slot is a RAM slot whose write-protect switch is engaged,
+    // inhibiting writes to the RAM. Always false for ROM/empty slots and on
+    // machines with no write-protect control.
+    bool write_protected = 9;
 }
 
 // Parsed sideways ROM header, when one is recognised in the slot's contents.
@@ -124,6 +133,19 @@ message ConfigureSlotResponse {
     string error = 2;                   // Error message if !success
     uint32 actual_socket = 3;           // Physical socket that was configured (for aliased)
     string image_name = 4;              // Parsed name from ROM header (if applicable)
+}
+
+// --- Set Slot Write Protect ---
+
+message SetSlotWriteProtectRequest {
+    uint32 slot = 1;              // Slot number (0-15)
+    bool write_protected = 2;     // true to engage write-protect, false to release
+}
+
+message SetSlotWriteProtectResponse {
+    bool success = 1;
+    string error = 2;             // Error message if !success
+    bool write_protected = 3;     // The slot's write-protect state after the call
 }
 
 // --- Read Slot Data ---

@@ -54,6 +54,11 @@ class SidewaysServiceStub:
     """Query slot/socket configuration and current state"""
     ConfigureSlot: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.ConfigureSlotRequest, _sideways_pb2.ConfigureSlotResponse]
     """Configure a slot (empty/rom/ram) with optional image data"""
+    SetSlotWriteProtect: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.SetSlotWriteProtectRequest, _sideways_pb2.SetSlotWriteProtectResponse]
+    """Set or clear the write-protect switch on a RAM slot. Models a board's
+    write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+    slots that are not currently RAM.
+    """
     ReadSlotData: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.ReadSlotDataRequest, _sideways_pb2.ReadSlotDataResponse]
     """Read slot contents (for debugging/inspection)"""
     SubscribeEvents: _grpc.UnaryStreamMultiCallable[_sideways_pb2.SubscribeEventsRequest, _sideways_pb2.SidewaysEvent]
@@ -73,6 +78,11 @@ class SidewaysServiceAsyncStub(SidewaysServiceStub):
     """Query slot/socket configuration and current state"""
     ConfigureSlot: _aio.UnaryUnaryMultiCallable[_sideways_pb2.ConfigureSlotRequest, _sideways_pb2.ConfigureSlotResponse]  # type: ignore[assignment]
     """Configure a slot (empty/rom/ram) with optional image data"""
+    SetSlotWriteProtect: _aio.UnaryUnaryMultiCallable[_sideways_pb2.SetSlotWriteProtectRequest, _sideways_pb2.SetSlotWriteProtectResponse]  # type: ignore[assignment]
+    """Set or clear the write-protect switch on a RAM slot. Models a board's
+    write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+    slots that are not currently RAM.
+    """
     ReadSlotData: _aio.UnaryUnaryMultiCallable[_sideways_pb2.ReadSlotDataRequest, _sideways_pb2.ReadSlotDataResponse]  # type: ignore[assignment]
     """Read slot contents (for debugging/inspection)"""
     SubscribeEvents: _aio.UnaryStreamMultiCallable[_sideways_pb2.SubscribeEventsRequest, _sideways_pb2.SidewaysEvent]  # type: ignore[assignment]
@@ -101,6 +111,17 @@ class SidewaysServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_sideways_pb2.ConfigureSlotResponse, _abc.Awaitable[_sideways_pb2.ConfigureSlotResponse]]:
         """Configure a slot (empty/rom/ram) with optional image data"""
+
+    @_abc_1.abstractmethod
+    def SetSlotWriteProtect(
+        self,
+        request: _sideways_pb2.SetSlotWriteProtectRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sideways_pb2.SetSlotWriteProtectResponse, _abc.Awaitable[_sideways_pb2.SetSlotWriteProtectResponse]]:
+        """Set or clear the write-protect switch on a RAM slot. Models a board's
+        write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
+        slots that are not currently RAM.
+        """
 
     @_abc_1.abstractmethod
     def ReadSlotData(

@@ -64,6 +64,15 @@ concept HasSlotMutators = requires(T t,
     { t.load_sideways_rom(uint8_t{0}, p, n, name) };
 };
 
+// Memory exposes a per-slot write-protect control. Boards with a write-protect
+// switch (e.g. the ATPL Sidewise) implement this; machines without one do not,
+// and SetSlotWriteProtect reports the feature as unavailable for them.
+template<typename T>
+concept HasSlotWriteProtect = requires(T t, const T ct) {
+    { t.set_slot_write_protected(uint8_t{0}, bool{}) };
+    { ct.is_slot_write_protected(uint8_t{0}) } -> std::convertible_to<bool>;
+};
+
 // Helper to convert SlotType to protobuf enum
 inline beebium::SidewaysSlotType slot_type_to_proto(beebium::SlotType type) {
     switch (type) {
@@ -211,6 +220,7 @@ public:
                     socket_status->set_type(slot_type_to_proto(info.type));
                     socket_status->set_populated(info.populated);
                     socket_status->set_image_name(info.image_name);
+                    socket_status->set_write_protected(info.write_protected);
                 }
 
                 if (parsed.recognised) {
@@ -376,6 +386,68 @@ public:
             });
 
             response->set_success(true);
+            return grpc::Status::OK;
+        }
+    }
+
+    grpc::Status SetSlotWriteProtect(
+        grpc::ServerContext* context,
+        const SetSlotWriteProtectRequest* request,
+        SetSlotWriteProtectResponse* response) override
+    {
+        (void)context;
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        using Memory = typename MachineType::Memory;
+
+        if constexpr (!HasSlotWriteProtect<Memory>) {
+            response->set_success(false);
+            response->set_error(
+                "This machine variant has no sideways write-protect control");
+            return grpc::Status::OK;
+        } else {
+            uint32_t slot_num = request->slot();
+            if (slot_num > 15) {
+                response->set_success(false);
+                response->set_error("Invalid slot number (must be 0-15)");
+                return grpc::Status::OK;
+            }
+            uint8_t slot = static_cast<uint8_t>(slot_num);
+
+            // The slot must exist on this machine variant.
+            if constexpr (requires { Memory::slot_topology(motherboard_links_); }) {
+                auto topo = Memory::slot_topology(motherboard_links_);
+                if (topo.find_socket_for_slot(static_cast<int>(slot)) == nullptr) {
+                    response->set_success(false);
+                    response->set_error(
+                        "Slot " + std::to_string(slot)
+                        + " does not exist on this machine variant");
+                    return grpc::Status::OK;
+                }
+            }
+
+            auto& memory = machine_.state().memory;
+
+            // Only RAM slots can be write-protected; a ROM/empty slot has no
+            // writable contents to protect.
+            if constexpr (HasSlotInfo<Memory>) {
+                const auto info = memory.slot_info(slot);
+                if (info.type != beebium::SlotType::Ram) {
+                    response->set_success(false);
+                    response->set_error(
+                        "Slot " + std::to_string(slot)
+                        + " is not RAM; only RAM slots can be write-protected");
+                    return grpc::Status::OK;
+                }
+            }
+
+            const bool protect = request->write_protected();
+            machine_.with_emulation_paused([&] {
+                memory.set_slot_write_protected(slot, protect);
+            });
+
+            response->set_success(true);
+            response->set_write_protected(memory.is_slot_write_protected(slot));
             return grpc::Status::OK;
         }
     }
