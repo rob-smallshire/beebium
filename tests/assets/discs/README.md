@@ -1,5 +1,27 @@
 # Disc test assets
 
+## DabsPressFingerprint.ssd
+
+Dabs Press Fingerprint (David Spencer / Dabs Press, 1987), a 6502
+machine-code monitor supplied as a sideways-ROM image with a BASIC installer.
+From the issue #72 report, Stardot download file id 121282
+(https://stardot.org.uk/forums/download/file.php?id=121282). 204800 bytes,
+SHA-256 `baeccaf6b0cf6135818c7f6aeddd0448bd27eb1534412f828d870090f802271d`.
+Committed under a space-free name (the disc is titled "Dabs Press FingerPrint")
+to match the other game discs here and to sidestep the DiscUrl spaced-path bug.
+
+Needs the ATPL Sidewise board (`model-b-atpl-sidewise`, `--fdc acorn-1770`) with
+slot 15 fitted as RAM. Catalogue includes `$.!BOOT` (`*BASIC` / `PAGE=&1900` /
+`CHAIN "INTRO"`), `$.INTRO` (the menu), and `$.SMON` (the 16K Fingerprint service
+ROM, title "Fingerprint", (C) 1987 David Spencer). Used by
+test_fingerprint_sideways.py: menu option 1 installs SMON into a sideways-RAM
+bank with a bare `*LOAD SMON FFFF8000`, which only lands in RAM on a
+write-through board -- the regression guard for the ATPL board's defining
+behaviour.
+
+Commercial software, included here as a test fixture for the write-through
+install path it uniquely exercises; redistribution remains the author's call.
+
 ## tube_r3_tests.ssd
 
 hoglet's Tube ULA register 3 test disc, from the "Tube ULA Re-Implementation"
