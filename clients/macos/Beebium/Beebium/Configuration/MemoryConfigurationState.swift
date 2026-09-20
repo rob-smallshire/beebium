@@ -102,6 +102,9 @@ class MemoryConfigurationState: ObservableObject {
         let supportsRom: Bool
         let supportsRam: Bool
         let supportsEmpty: Bool
+        /// The socket has a RAM write-protect switch (see the schema). Gates the
+        /// config-time write-protect checkbox and its launch argument.
+        let supportsWriteProtect: Bool
         /// Slot the initial content occupies (from preset or default), if any.
         let sourceSlot: Int?
         /// Content before any edit (for display and revert).
@@ -186,6 +189,7 @@ class MemoryConfigurationState: ObservableObject {
                 supportsRom: socket.supportsRom,
                 supportsRam: socket.supportsRam,
                 supportsEmpty: socket.supportsEmpty,
+                supportsWriteProtect: socket.supportsWriteProtect,
                 sourceSlot: sourceSlot,
                 initialContent: content,
                 content: content))
@@ -320,10 +324,11 @@ class MemoryConfigurationState: ObservableObject {
                     arguments.append(contentsOf: ["--sideways", "\(slot):ram"])
                 }
             }
-            // Set the power-on write-protect position for a RAM socket the user
-            // asked to protect. RAM-only by construction (the flag is rejected
-            // for non-RAM slots), so it is gated on the configured kind.
-            if socket.content.kind == .ram && socket.content.writeProtected {
+            // Set the power-on write-protect position, but only where the board
+            // has the switch and the socket is RAM. The server rejects the flag
+            // for any other socket, so match its rule rather than emit and fail.
+            if socket.supportsWriteProtect && socket.content.kind == .ram
+                && socket.content.writeProtected {
                 arguments.append(contentsOf: ["--write-protect", "\(slot)"])
             }
         }

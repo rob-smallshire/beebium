@@ -231,6 +231,11 @@ struct Beebium_SocketCapabilities: Sendable {
 
   var runtimeConfigurable: Bool = false
 
+  /// The socket has a RAM write-protect switch. Only then may a front-end
+  /// offer a write-protect control (and only while the slot is RAM). False for
+  /// sideways RAM with no such switch (e.g. the B+ 128K SRAM banks).
+  var supportsWriteProtect: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -764,7 +769,7 @@ extension Beebium_RomHeader: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
 
 extension Beebium_SocketCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".SocketCapabilities"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}supports_rom\0\u{3}supports_ram\0\u{3}supports_empty\0\u{3}runtime_configurable\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}supports_rom\0\u{3}supports_ram\0\u{3}supports_empty\0\u{3}runtime_configurable\0\u{3}supports_write_protect\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -776,6 +781,7 @@ extension Beebium_SocketCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
       case 2: try { try decoder.decodeSingularBoolField(value: &self.supportsRam) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.supportsEmpty) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.runtimeConfigurable) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.supportsWriteProtect) }()
       default: break
       }
     }
@@ -794,6 +800,9 @@ extension Beebium_SocketCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if self.runtimeConfigurable != false {
       try visitor.visitSingularBoolField(value: self.runtimeConfigurable, fieldNumber: 4)
     }
+    if self.supportsWriteProtect != false {
+      try visitor.visitSingularBoolField(value: self.supportsWriteProtect, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -802,6 +811,7 @@ extension Beebium_SocketCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.supportsRam != rhs.supportsRam {return false}
     if lhs.supportsEmpty != rhs.supportsEmpty {return false}
     if lhs.runtimeConfigurable != rhs.runtimeConfigurable {return false}
+    if lhs.supportsWriteProtect != rhs.supportsWriteProtect {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

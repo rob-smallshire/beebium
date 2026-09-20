@@ -186,12 +186,26 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
     // MARK: - Write-protect (config-time power-on switch position)
 
+    /// A board whose sockets carry a RAM write-protect switch (the
+    /// "write_protect" capability), for exercising the write-protect path.
+    /// Slots 15/14/12 so priority ordering is unambiguous.
+    private func writeProtectSchema() -> SidewaysSchemaSection {
+        SidewaysSchemaSection(
+            type: "sideways_bank", hasAliasing: false,
+            sockets: [
+                SidewaysSocketSchema(label: "S15", slots: [15], capabilities: ["rom", "ram", "empty", "write_protect"], runtimeConfigurable: true),
+                SidewaysSocketSchema(label: "S14", slots: [14], capabilities: ["rom", "ram", "empty", "write_protect"], runtimeConfigurable: true),
+                SidewaysSocketSchema(label: "S12", slots: [12], capabilities: ["rom", "ram", "empty", "write_protect"], runtimeConfigurable: true),
+            ],
+            defaultRoms: [])
+    }
+
     func testWriteProtectedRamEmitsWriteProtectFlag() {
         let state = MemoryConfigurationState()
-        state.configure(schema: modelBSchema(), presetSlots: [])
-        let ic52 = state.sockets.firstIndex { $0.label == "IC52" }!  // priority 12
+        state.configure(schema: writeProtectSchema(), presetSlots: [])
+        let s12 = state.sockets.firstIndex { $0.label == "S12" }!  // priority 12
 
-        state.sockets[ic52].content = Content(kind: .ram, image: nil, writeProtected: true)
+        state.sockets[s12].content = Content(kind: .ram, image: nil, writeProtected: true)
         // Both the RAM assignment and the power-on write-protect for its slot.
         XCTAssertEqual(state.sidewaysLaunchArguments(),
                        ["--sideways", "12:ram", "--write-protect", "12"])
@@ -199,42 +213,57 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
     func testWriteProtectedRamWithPreloadEmitsBothArgs() {
         let state = MemoryConfigurationState()
-        state.configure(schema: modelBSchema(), presetSlots: [])
-        let ic52 = state.sockets.firstIndex { $0.label == "IC52" }!
+        state.configure(schema: writeProtectSchema(), presetSlots: [])
+        let s12 = state.sockets.firstIndex { $0.label == "S12" }!
 
-        state.sockets[ic52].content = Content(kind: .ram, image: "/tmp/dev.rom", writeProtected: true)
+        state.sockets[s12].content = Content(kind: .ram, image: "/tmp/dev.rom", writeProtected: true)
         XCTAssertEqual(state.sidewaysLaunchArguments(),
                        ["--sideways", "12:ram:/tmp/dev.rom", "--write-protect", "12"])
     }
 
     func testUnprotectedRamEmitsNoWriteProtectFlag() {
         let state = MemoryConfigurationState()
-        state.configure(schema: modelBSchema(), presetSlots: [])
-        let ic52 = state.sockets.firstIndex { $0.label == "IC52" }!
+        state.configure(schema: writeProtectSchema(), presetSlots: [])
+        let s12 = state.sockets.firstIndex { $0.label == "S12" }!
 
-        state.sockets[ic52].content = Content(kind: .ram, image: nil, writeProtected: false)
+        state.sockets[s12].content = Content(kind: .ram, image: nil, writeProtected: false)
         XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:ram"])
         XCTAssertFalse(state.sidewaysLaunchArguments().contains("--write-protect"))
     }
 
     func testWriteProtectIsNeverEmittedForNonRamKind() {
         let state = MemoryConfigurationState()
-        state.configure(schema: modelBSchema(), presetSlots: [])
-        let ic52 = state.sockets.firstIndex { $0.label == "IC52" }!
+        state.configure(schema: writeProtectSchema(), presetSlots: [])
+        let s12 = state.sockets.firstIndex { $0.label == "S12" }!
 
         // A ROM socket carrying a stale write-protect flag must not emit it:
         // write-protect is RAM-only and the server would reject the slot.
-        state.sockets[ic52].content = Content(kind: .rom, image: "/tmp/toolkit.rom", writeProtected: true)
+        state.sockets[s12].content = Content(kind: .rom, image: "/tmp/toolkit.rom", writeProtected: true)
         XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:rom:/tmp/toolkit.rom"])
+    }
+
+    func testWriteProtectNotEmittedWhenSocketLacksSwitch() {
+        // Model B RAM has no write-protect switch (like the B+ 128K SRAM banks).
+        // Even RAM carrying a stale write-protect flag must NOT emit the arg:
+        // the server would reject it at launch, and no checkbox ever offered it.
+        let state = MemoryConfigurationState()
+        state.configure(schema: modelBSchema(), presetSlots: [])
+        let ic52 = state.sockets.firstIndex { $0.label == "IC52" }!  // RAM-capable, no switch
+
+        state.sockets[ic52].content = Content(kind: .ram, image: nil, writeProtected: true)
+        XCTAssertFalse(state.sockets[ic52].supportsWriteProtect)
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:ram"])
+        XCTAssertFalse(state.sidewaysLaunchArguments().contains("--write-protect"))
     }
 
     func testTogglingWriteProtectAloneCountsAsAChange() {
         let state = MemoryConfigurationState()
-        // Give slot 15 a RAM default so flipping write-protect is the only edit.
+        // A fixed-RAM socket with the switch, so flipping write-protect is the
+        // only edit (initial content is already RAM).
         let schema = SidewaysSchemaSection(
             type: "sideways_bank", hasAliasing: false,
             sockets: [SidewaysSocketSchema(label: "SRAM", slots: [15],
-                                           capabilities: ["ram"], runtimeConfigurable: true)],
+                                           capabilities: ["ram", "write_protect"], runtimeConfigurable: true)],
             defaultRoms: [])
         state.configure(schema: schema, presetSlots: [])
         let idx = state.sockets.firstIndex { $0.label == "SRAM" }!
@@ -247,18 +276,18 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
     func testMoveContentsKeepsWriteProtectWithTheSocketNotTheImage() {
         let state = MemoryConfigurationState()
-        state.configure(schema: modelBSchema(), presetSlots: [])
-        // Top two sockets in priority order: IC101 (protected, a.rom) and
-        // IC100 (unprotected, b.rom).
+        state.configure(schema: writeProtectSchema(), presetSlots: [])
+        // Top two sockets in priority order: S15 (protected, a.rom) and
+        // S14 (unprotected, b.rom).
         state.sockets[0].content = Content(kind: .ram, image: "/tmp/a.rom", writeProtected: true)
         state.sockets[1].content = Content(kind: .ram, image: "/tmp/b.rom", writeProtected: false)
-        XCTAssertEqual(state.sockets.map(\.label), ["IC101", "IC100", "IC88", "IC52"])
+        XCTAssertEqual(state.sockets.map(\.label), ["S15", "S14", "S12"])
 
         // Swap the two images by moving the top one just past the second.
         state.moveContents(fromOffsets: IndexSet(integer: 0), toOffset: 2)
 
-        // Images swapped, but each socket keeps its OWN switch position: IC101
-        // now holds b.rom yet stays protected; IC100 holds a.rom, unprotected.
+        // Images swapped, but each socket keeps its OWN switch position: S15
+        // now holds b.rom yet stays protected; S14 holds a.rom, unprotected.
         XCTAssertEqual(state.sockets[0].content.image, "/tmp/b.rom")
         XCTAssertTrue(state.sockets[0].content.writeProtected,
                       "write-protect stays with the socket, not the image")
@@ -268,16 +297,13 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
     func testMoveContentsClearsWriteProtectWhenSocketNoLongerRam() {
         let state = MemoryConfigurationState()
-        state.configure(schema: modelBSchema(), presetSlots: [])
-        let ic101 = state.sockets.firstIndex { $0.label == "IC101" }!
-        // A protected RAM socket that will lose its image on a move becomes
-        // Empty (Model B sockets support empty), so write-protect must clear.
-        state.sockets[ic101].content = Content(kind: .ram, image: nil, writeProtected: true)
+        state.configure(schema: writeProtectSchema(), presetSlots: [])
+        // A protected RAM socket that loses its image on a move becomes Empty
+        // (these sockets support empty), so write-protect must clear.
+        state.sockets[0].content = Content(kind: .ram, image: nil, writeProtected: true)
 
-        // Drag an empty socket's (nil) payload up into IC101 by moving IC101's
-        // own content away: after the move IC101 holds no image and collapses.
-        state.moveContents(fromOffsets: IndexSet(integer: ic101), toOffset: 4)
-        let nowTop = state.sockets.first { $0.label == "IC101" }!
+        state.moveContents(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+        let nowTop = state.sockets[0]
         XCTAssertEqual(nowTop.content.kind, .empty)
         XCTAssertFalse(nowTop.content.writeProtected)
     }

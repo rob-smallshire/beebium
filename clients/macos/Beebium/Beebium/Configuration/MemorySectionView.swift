@@ -116,8 +116,9 @@ struct MemorySectionView: View {
                 // right here: config-time is pure local state that becomes a
                 // launch argument, with no running server to side-effect (the
                 // Indicator+Button rule applies only to the runtime control).
-                // RAM-only, mirroring the runtime gating.
-                if socket.supportsRam && socket.content.kind == .ram {
+                // Offered only where the board has the switch and the socket is
+                // RAM, mirroring the runtime gating.
+                if socket.supportsWriteProtect && socket.content.kind == .ram {
                     writeProtectToggle(index: index)
                 }
 

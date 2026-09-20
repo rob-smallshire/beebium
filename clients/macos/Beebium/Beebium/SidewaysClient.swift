@@ -40,10 +40,10 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         let populated: Bool
         let imageName: String
         let romHeader: RomHeader?
-        /// Whether this physical socket can hold RAM. Drives whether the
-        /// write-protect control is offered at all (write-protect is a
-        /// RAM-only affordance).
-        let supportsRam: Bool
+        /// Whether this physical socket has a write-protect switch at all. Only
+        /// then is the control offered (and only while the slot is RAM). False
+        /// for sideways RAM with no switch, e.g. the B+ 128K SRAM banks.
+        let supportsWriteProtect: Bool
         /// Whether this RAM slot's write-protect switch is currently engaged.
         /// Always false for ROM/empty slots and machines without the control.
         let writeProtected: Bool
@@ -167,7 +167,7 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             populated: existing.populated,
             imageName: existing.imageName,
             romHeader: existing.romHeader,
-            supportsRam: existing.supportsRam,
+            supportsWriteProtect: existing.supportsWriteProtect,
             writeProtected: writeProtected)
     }
 
@@ -227,7 +227,7 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             populated: existing.populated || header != nil,
             imageName: existing.imageName,
             romHeader: header,
-            supportsRam: existing.supportsRam,
+            supportsWriteProtect: existing.supportsWriteProtect,
             writeProtected: existing.writeProtected)
     }
 
@@ -242,7 +242,7 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             populated: status.populated,
             imageName: status.imageName,
             romHeader: status.hasRomHeader ? mapHeader(status.romHeader) : nil,
-            supportsRam: status.capabilities.supportsRam,
+            supportsWriteProtect: status.capabilities.supportsWriteProtect,
             writeProtected: status.writeProtected)
     }
 

@@ -40,7 +40,7 @@ struct SidewaysSchemaSection: Codable {
 struct SidewaysSocketSchema: Codable, Identifiable {
     let label: String           // e.g. "IC52" or "Slot 7"
     let slots: [Int]            // logical slot numbers wired to this socket
-    let capabilities: [String]  // any of "rom", "ram", "empty"
+    let capabilities: [String]  // any of "rom", "ram", "empty", "write_protect"
     let runtimeConfigurable: Bool
 
     var id: String { label }
@@ -56,6 +56,10 @@ struct SidewaysSocketSchema: Codable, Identifiable {
     var supportsRom: Bool { capabilities.contains("rom") }
     var supportsRam: Bool { capabilities.contains("ram") }
     var supportsEmpty: Bool { capabilities.contains("empty") }
+    /// The socket has a RAM write-protect switch: only then may the write-protect
+    /// control be offered (and only while the slot is RAM). Absent for sideways
+    /// RAM with no such switch, e.g. the B+ 128K SRAM banks.
+    var supportsWriteProtect: Bool { capabilities.contains("write_protect") }
 
     enum CodingKeys: String, CodingKey {
         case label, slots, capabilities

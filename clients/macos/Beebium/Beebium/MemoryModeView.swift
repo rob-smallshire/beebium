@@ -96,9 +96,10 @@ struct MemoryModeView: View {
                 .foregroundColor(.secondary)
                 .frame(width: 32, alignment: .trailing)
 
-            // Write-protect: the sidebar's one mutable affordance, offered
-            // only on RAM sockets (write-protect is a RAM-only switch).
-            if socket.kind == .ram && socket.supportsRam {
+            // Write-protect: the sidebar's one mutable affordance, offered only
+            // where the board actually has the switch, and only while the slot
+            // is RAM (sideways RAM without a switch, e.g. B+ 128K, gets none).
+            if socket.supportsWriteProtect && socket.kind == .ram {
                 writeProtectControl(for: socket)
             }
 
