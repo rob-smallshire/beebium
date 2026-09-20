@@ -38,13 +38,18 @@ final class IndicatorClient: ObservableObject, Disconnectable {
     /// Error message if connection or streaming failed
     @Published private(set) var errorMessage: String?
 
-    /// True once the indicator stream has delivered its first
-    /// caps-lock-led value. Observable so SwiftUI views can use it as
-    /// the canonical "BBC LED state is now known" gate -- secondary
-    /// triggers (NSWindow.didBecomeKey, at-connect re-syncs) wait for
-    /// this before attempting Caps Lock sync, which avoids them firing
-    /// during startup with stale defaults.
-    @Published private(set) var hasTriggeredInitialSync = false
+    /// Bumped whenever a lock LED (`caps-lock-led` / `shift-lock-led`) value
+    /// changes, including the first time each arrives. It is the race-free push
+    /// signal for the app's lock mirror (issue #73): the LEDs change exactly when
+    /// the MOS re-inits the locks on reset, so an observer re-reads the exact
+    /// latch (`GetLockState`) and adopts it. Observable so ContentView can react.
+    @Published private(set) var lockLedChangeToken: Int = 0
+
+    /// Last-seen lock-LED brightnesses, to detect a change. The LED is a
+    /// duty-cycle-filtered projection of the latch, so we use it only as a
+    /// "something changed" trigger and read the exact value separately.
+    private var lastCapsLockLed: UInt32?
+    private var lastShiftLockLed: UInt32?
 
     private var client: Beebium_IndicatorServiceNIOClient?
     private var subscriptionTask: Task<Void, Never>?
@@ -67,7 +72,10 @@ final class IndicatorClient: ObservableObject, Disconnectable {
         values = [:]
         metadata = [:]
         errorMessage = nil
-        hasTriggeredInitialSync = false
+        // Re-arm the lock-LED change detection so a reconnect's first values are
+        // seen as changes and re-adopted. The token stays monotonic.
+        lastCapsLockLed = nil
+        lastShiftLockLed = nil
     }
 
     private func fetchMetadataAndSubscribe() async {
@@ -135,15 +143,22 @@ final class IndicatorClient: ObservableObject, Disconnectable {
             values[name] = value
         }
 
-        // Mark that the MOS has actively driven the lock LED -- i.e. the
-        // machine has booted far enough to own the caps-lock state. Secondary
-        // re-syncs (NSWindow.didBecomeKey, the at-connect reconnect sync) gate
-        // on this so they never run against stale startup defaults. The initial
-        // reconcile itself is no longer driven from here: it is deferred to the
-        // first key the user sends (see KeyboardClient), so nothing is injected
-        // into the matrix during the reset keyboard scan.
-        if !hasTriggeredInitialSync, update.values["caps-lock-led"] != nil {
-            hasTriggeredInitialSync = true
+        // Signal a lock-LED change so the app re-reads the exact latch and
+        // updates its authoritative mirror (issue #73). This fires the first
+        // time each LED arrives (machine booted far enough to own the locks) and
+        // whenever the MOS re-inits them on reset -- a race-free trigger, since
+        // the LEDs move exactly when the latch does.
+        var lockChanged = false
+        if let caps = update.values["caps-lock-led"], caps != lastCapsLockLed {
+            lastCapsLockLed = caps
+            lockChanged = true
+        }
+        if let shift = update.values["shift-lock-led"], shift != lastShiftLockLed {
+            lastShiftLockLed = shift
+            lockChanged = true
+        }
+        if lockChanged {
+            lockLedChangeToken &+= 1
         }
     }
 

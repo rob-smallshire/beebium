@@ -80,8 +80,7 @@ final class KeyboardClient: ObservableObject, Disconnectable {
 
     /// True while the gRPC keyboard stub is wired up and ready to send.
     /// Observed by SwiftUI views so they can re-trigger startup-time work
-    /// (e.g. Caps Lock sync) once the connection actually becomes usable.
-    /// See comment on syncCapsLockState for the race that motivates this.
+    /// once the connection actually becomes usable.
     @Published private(set) var isConnected: Bool = false
 
     /// Tail of a chained Task queue. Each gRPC send is enqueued in
@@ -98,12 +97,6 @@ final class KeyboardClient: ObservableObject, Disconnectable {
     private var disabledKeySoundID: SystemSoundID = 0
 
     // MARK: - Caps Lock Sync
-
-    /// Rate limiting: minimum interval between sync operations (500ms)
-    private let minSyncInterval: TimeInterval = 0.5
-
-    /// Time of last sync operation
-    private var lastSyncTime: Date = .distantPast
 
     /// Connect to the keyboard service using an existing channel
     /// - Parameter channel: The gRPC channel (shared with VideoClient)
@@ -509,47 +502,12 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
-    /// The BBC's logical CAPS LOCK state, or nil if it could not be read.
-    func capsLockIsOn() async -> Bool? {
-        await getLockState()?.capsLockOn
-    }
-
-    /// Sync BBC Caps Lock state to match macOS state (with rate limiting).
-    /// - Parameter macCapsLockIsOn: Current macOS Caps Lock state.
-    func syncCapsLockState(macCapsLockIsOn: Bool) {
-        let enabled = mappingManager?.isCapsLockSyncEnabled == true
-        guard enabled else { return }
-
-        // The keyboard service may not be wired up yet during startup. Calls
-        // arriving before connect() (e.g. NSWindow.didBecomeKey firing
-        // before the gRPC channel is established) would otherwise
-        // pressCapsLock(), have its sendKeyDown dropped with
-        // "no client!", but its sendKeyUp later go through after the 50ms
-        // sleep -- leaving an orphan KeyUp on the BBC and the sync intent
-        // silently lost. Drop the call here; ContentView observes
-        // isConnected and re-fires this method when connect() completes.
-        guard isConnected else {
-            print("[KBD][capsLock.sync] not connected, deferring")
-            return
-        }
-
-        // Rate limiting to prevent feedback loops. Claimed up front so the
-        // async latch query below is issued at most once per window.
-        let now = Date()
-        guard now.timeIntervalSince(lastSyncTime) >= minSyncInterval else { return }
-        lastSyncTime = now
-
-        Task {
-            // Read the exact logical caps-lock state from the latch. It is
-            // correct at any emulation speed, where the lock-LED brightness
-            // this used to infer from never settles to a definitive 0/255.
-            guard let bbcCapsLockIsOn = await capsLockIsOn() else { return }
-            if macCapsLockIsOn != bbcCapsLockIsOn {
-                print("[KBD][capsLock.sync] macOn=\(macCapsLockIsOn)"
-                      + " bbcOn=\(bbcCapsLockIsOn) -> tap")
-                pressCapsLock()
-            }
-        }
+    /// The BBC's exact CAPS/SHIFT LOCK latch state, or nil if it could not be
+    /// read. Used to update the app's authoritative mirror (issue #73): the
+    /// lock LEDs signal *that* the state changed, this reads *what* it is.
+    func currentLockState() async -> LockState? {
+        guard let state = await getLockState() else { return nil }
+        return LockState(capsLockOn: state.capsLockOn, shiftLockOn: state.shiftLockOn)
     }
 
     /// Send a complete Caps Lock key DOWN/UP cycle to BBC.
