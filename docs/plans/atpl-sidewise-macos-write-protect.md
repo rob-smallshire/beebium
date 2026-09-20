@@ -125,3 +125,53 @@ Design/spec: this document (owner: the atpl-sidewise session). Implementation:
 `macos-client-developer`. On completion, report back the changed files and the
 recording; the atpl-sidewise session reviews the diff before it is considered
 done. Work on the `atpl-sidewise` branch. Do not push.
+
+## UI refinement (round 2 — after first review)
+
+The first implementation worked but the affordance was too heavy (text
+Protect/Unprotect button; config checkbox+padlock). Revise both surfaces to a
+single **clickable padlock**, column-aligned, plus a menu item — keeping the
+server contract and gating unchanged.
+
+Shared rules:
+
+- **One clickable padlock, icon only.** `lock.fill` when write-protected,
+  `lock.open` when writable. No text label. The verb goes on `.help(...)`
+  ("Write-protect this sideways RAM" / "Allow writes to this sideways RAM").
+- **Column alignment.** The padlock sits in a fixed-width **leading** column,
+  immediately to the **left** of the ROM/RAM(/Empty) status/kind column, so that
+  column stays aligned across rows. Rows that can't be write-protected render an
+  empty spacer of the same width (mirroring how the trailing actions menu is
+  always rendered for width). Gating is unchanged: shown only when
+  `supportsWriteProtect && kind == .ram`.
+- **Three-dots menu item too.** Add a write-protect item to the existing
+  actions menu (the "…" menu the non-empty rows already show), so the control is
+  discoverable there as well as on the padlock. Use the idiomatic macOS
+  checkmarked form — a `Toggle("Write-Protect", isOn:)` inside the `Menu` (the
+  checkmark shows the current state); label **"Write-Protect"**. Ensure the menu
+  is enabled for a write-protectable RAM row even when its other items (Copy
+  Path / Reveal) don't apply to blank RAM.
+
+Runtime (Memory sidebar) specifics:
+
+- The padlock is a **Button**, not a SwiftUI `Toggle` bound to state — its glyph
+  reflects the **server-reported** `writeProtected` and updates from the RPC
+  response, never optimistically on the click. This preserves
+  `feedback_state_vs_action_controls` while presenting as a single control. The
+  menu item's toggle setter calls the same `setWriteProtect`; its checkmark also
+  follows the reported state.
+
+Config (New Machine, Memory tab) specifics:
+
+- **Remove the checkbox+padlock combo**; use the same clickable padlock. Config
+  time is pure local state, so the padlock just flips `content.writeProtected`
+  (no RPC, cannot fail) — a plain clickable icon is correct here. Place it in the
+  same fixed-width leading column, left of the kind dropdown, so the dropdowns
+  stay aligned. Add the same "Write-Protect" checkmarked item to that row's
+  three-dots actions menu. Keep the existing launch-arg emission and the
+  reorder/kind-change clearing behaviour.
+
+Acceptance additions: padlock is icon-only with a tooltip; the status/kind
+column is visually aligned across rows (padlock or equal-width spacer); the "…"
+menu carries a checkmarked Write-Protect item on write-protectable RAM rows in
+both surfaces; runtime padlock still follows server state (non-optimistic).
