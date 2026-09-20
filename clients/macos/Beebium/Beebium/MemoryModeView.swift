@@ -90,26 +90,36 @@ struct MemoryModeView: View {
                 .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            // Write-protect padlock in a fixed-width leading column, so the
+            // status column stays aligned whether or not a row has the control.
+            // Offered only where the board has the switch and the slot is RAM
+            // (sideways RAM without a switch, e.g. B+ 128K, gets an empty
+            // spacer of the same width).
+            let canWriteProtect = socket.supportsWriteProtect && socket.kind == .ram
+            Group {
+                if canWriteProtect {
+                    writeProtectPadlock(for: socket)
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 16)
+
             // ROM/RAM/- status, mirroring the running device.
             Text(statusText(for: socket))
                 .font(.caption.monospaced())
                 .foregroundColor(.secondary)
                 .frame(width: 32, alignment: .trailing)
 
-            // Write-protect: the sidebar's one mutable affordance, offered only
-            // where the board actually has the switch, and only while the slot
-            // is RAM (sideways RAM without a switch, e.g. B+ 128K, gets none).
-            if socket.supportsWriteProtect && socket.kind == .ram {
-                writeProtectControl(for: socket)
-            }
-
             // Always render the menu so populated and empty rows have
             // the exact same trailing column width; hide and disable
             // it on rows with nothing to act on. Trying to substitute
             // a bare Image as a placeholder dances the status column
             // because the Menu's internal padding doesn't match a
-            // plain Image.
-            let actionable = !socket.imageName.isEmpty
+            // plain Image. A write-protectable RAM row is always
+            // actionable (the menu carries Write-Protect) even when it
+            // has no image for Copy Path / Reveal.
+            let actionable = !socket.imageName.isEmpty || canWriteProtect
             actionsMenu(for: socket)
                 .opacity(actionable ? 1 : 0)
                 .allowsHitTesting(actionable)
@@ -170,39 +180,46 @@ struct MemoryModeView: View {
         }
     }
 
-    // MARK: - Write-protect control (Indicator + Button)
+    // MARK: - Write-protect padlock
 
-    /// Write-protect for a RAM socket, following the house rule that a state
-    /// which can change for reasons beyond this click (another client, or the
-    /// launch position) is shown by an Indicator and changed by a Button, never
-    /// a Toggle. The lock glyph reflects the server's reported switch position;
-    /// the button requests a change and the indicator follows the RPC result,
-    /// never the click optimistically.
-    private func writeProtectControl(for socket: SidewaysClient.Socket) -> some View {
-        HStack(spacing: 4) {
+    /// A single clickable padlock reflecting the write-protect switch. It is a
+    /// Button, not a Toggle: the glyph mirrors the server-reported state and
+    /// updates only from the RPC response, never optimistically on the click, so
+    /// it honours feedback_state_vs_action_controls while reading as one control.
+    private func writeProtectPadlock(for socket: SidewaysClient.Socket) -> some View {
+        Button {
+            toggleWriteProtect(for: socket)
+        } label: {
             Image(systemName: socket.writeProtected ? "lock.fill" : "lock.open")
                 .font(.caption)
                 .foregroundColor(socket.writeProtected ? .accentColor : .secondary)
-                .help(socket.writeProtected
-                      ? "Sideways RAM is write-protected"
-                      : "Sideways RAM is writable")
-
-            Button(socket.writeProtected ? "Unprotect" : "Protect") {
-                let target = !socket.writeProtected
-                Task { await sidewaysClient.setWriteProtect(slot: UInt32(socket.priority), target) }
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-            .help(socket.writeProtected
-                  ? "Allow the machine to write to this sideways RAM"
-                  : "Prevent the machine from writing to this sideways RAM")
         }
+        .buttonStyle(.borderless)
+        .help(socket.writeProtected
+              ? "Allow writes to this sideways RAM"
+              : "Write-protect this sideways RAM")
     }
 
-    // MARK: - Actions menu (read-only: Copy Path / Reveal in Finder)
+    private func toggleWriteProtect(for socket: SidewaysClient.Socket) {
+        let target = !socket.writeProtected
+        Task { await sidewaysClient.setWriteProtect(slot: UInt32(socket.priority), target) }
+    }
+
+    // MARK: - Actions menu (Write-Protect + read-only Copy Path / Reveal)
 
     private func actionsMenu(for socket: SidewaysClient.Socket) -> some View {
         Menu {
+            // Checkmarked Write-Protect, the idiomatic macOS menu form, mirroring
+            // the padlock. The toggle's checkmark follows the server-reported
+            // state and its setter goes through the same setWriteProtect.
+            if socket.supportsWriteProtect && socket.kind == .ram {
+                Toggle("Write-Protect", isOn: Binding(
+                    get: { socket.writeProtected },
+                    set: { _ in toggleWriteProtect(for: socket) }
+                ))
+                Divider()
+            }
+
             Button("Copy Path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(socket.imageName, forType: .string)

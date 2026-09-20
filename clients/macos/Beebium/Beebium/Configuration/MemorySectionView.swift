@@ -108,19 +108,24 @@ struct MemorySectionView: View {
                         .help("Changed from the preset's configuration")
                 }
 
+                // Write-protect padlock in a fixed-width column left of the kind
+                // dropdown, so the dropdowns stay aligned across rows. Config
+                // time is pure local state, so this padlock just flips
+                // content.writeProtected (no RPC, cannot fail). Offered only
+                // where the board has the switch and the socket is RAM; an
+                // equal-width spacer otherwise.
+                Group {
+                    if socket.supportsWriteProtect && socket.content.kind == .ram {
+                        writeProtectPadlock(index: index, socket: socket)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: 16)
+
                 // Tri-state ROM / RAM / Empty control (socket writability),
                 // independent of any image loaded into it.
                 kindPicker(index: index, socket: socket)
-
-                // Power-on write-protect for a RAM socket. A plain checkbox is
-                // right here: config-time is pure local state that becomes a
-                // launch argument, with no running server to side-effect (the
-                // Indicator+Button rule applies only to the runtime control).
-                // Offered only where the board has the switch and the socket is
-                // RAM, mirroring the runtime gating.
-                if socket.supportsWriteProtect && socket.content.kind == .ram {
-                    writeProtectToggle(index: index)
-                }
 
                 // Verbs menu: browse / clear / copy / reveal the image, revert.
                 actionsMenu(index: index, socket: socket)
@@ -178,21 +183,35 @@ struct MemorySectionView: View {
               : "ROM (read-only), RAM (writable), or empty")
     }
 
-    /// Config-time write-protect checkbox for a RAM socket. Sets the power-on
-    /// switch position (`--write-protect <slot>`); a lock glyph labels it.
-    private func writeProtectToggle(index: Int) -> some View {
-        Toggle(isOn: Binding(
-            get: { memoryConfig.sockets[index].content.writeProtected },
-            set: { memoryConfig.sockets[index].content.writeProtected = $0 }
-        )) {
-            Image(systemName: "lock")
+    /// Config-time write-protect padlock for a RAM socket. Sets the power-on
+    /// switch position (`--write-protect <slot>`). Config time is pure local
+    /// state with no server to side-effect, so a plain clickable icon is right
+    /// here (the Button/Toggle distinction only matters for the runtime control).
+    private func writeProtectPadlock(index: Int, socket: MemoryConfigurationState.SocketConfig) -> some View {
+        Button {
+            memoryConfig.sockets[index].content.writeProtected.toggle()
+        } label: {
+            Image(systemName: socket.content.writeProtected ? "lock.fill" : "lock.open")
+                .foregroundColor(socket.content.writeProtected ? .accentColor : .secondary)
         }
-        .toggleStyle(.checkbox)
-        .help("Boot with this sideways RAM write-protected")
+        .buttonStyle(.borderless)
+        .help(socket.content.writeProtected
+              ? "Allow writes to this sideways RAM"
+              : "Write-protect this sideways RAM")
     }
 
     private func actionsMenu(index: Int, socket: MemoryConfigurationState.SocketConfig) -> some View {
         Menu {
+            // Checkmarked Write-Protect, mirroring the padlock, on RAM sockets
+            // that have the switch. Config time is local state, so it flips
+            // content.writeProtected directly.
+            if socket.supportsWriteProtect && socket.content.kind == .ram {
+                Toggle("Write-Protect", isOn: Binding(
+                    get: { memoryConfig.sockets[index].content.writeProtected },
+                    set: { memoryConfig.sockets[index].content.writeProtected = $0 }
+                ))
+                Divider()
+            }
             Button("Browse for ROM image…") { chooseImage(index: index) }
             Button("Clear") {
                 memoryConfig.sockets[index].content.image = nil
