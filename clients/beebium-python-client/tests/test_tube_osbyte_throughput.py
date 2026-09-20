@@ -70,7 +70,7 @@ def bbc(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath: Path | N
             server_filepath=server,
             extra_args=[
                 "--sideways",
-                f"9:rom:{anfs}",
+                f"slot=9:type=rom:image={anfs}",
                 "--tube-65c02",
                 "--station",
                 "254",

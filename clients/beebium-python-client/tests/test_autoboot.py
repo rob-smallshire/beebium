@@ -144,7 +144,7 @@ def bbc_tube(
                 "--fdc",
                 "acorn-1770",
                 "--sideways",
-                f"14:rom:{dfs_1770_rom_filepath}",
+                f"slot=14:type=rom:image={dfs_1770_rom_filepath}",
             ],
             startup_timeout=20.0,
         ) as bbc:
@@ -220,7 +220,7 @@ def tube_launch(
     server is not found. Yields a context manager producing a Beebium."""
     base = [
         "--tube-65c02", "--fdc", "acorn-1770",
-        "--sideways", f"14:rom:{dfs_1770_rom_filepath}",
+        "--sideways", f"slot=14:type=rom:image={dfs_1770_rom_filepath}",
     ]
 
     @contextlib.contextmanager
@@ -380,7 +380,7 @@ def model_b_launch(
     dfs_1770_rom_filepath: Path,
 ):
     """Factory to launch a plain Model B (no Tube) with extra CLI args."""
-    base = ["--fdc", "acorn-1770", "--sideways", f"14:rom:{dfs_1770_rom_filepath}"]
+    base = ["--fdc", "acorn-1770", "--sideways", f"slot=14:type=rom:image={dfs_1770_rom_filepath}"]
 
     @contextlib.contextmanager
     def _launch(extra: list[str] | None = None):

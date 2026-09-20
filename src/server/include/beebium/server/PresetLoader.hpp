@@ -334,6 +334,11 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
         } else if (type_lc == "ram") {
             cfg.type = SidewaysSlotType::Ram;
             cfg.image_filepath = image;  // Optional preload image.
+            // Optional write-protect switch power-on position (RAM only).
+            if (slot_json.contains("write_protected")
+                && slot_json["write_protected"].is_boolean()) {
+                cfg.write_protected = slot_json["write_protected"].get<bool>();
+            }
         } else if (type_lc == "empty") {
             cfg.type = SidewaysSlotType::Empty;
             if (!image.empty()) {

@@ -138,7 +138,7 @@ def bbc_copro(
             extra_args=[
                 f"--{coprocessor_flag}",
                 "--fdc", "acorn-1770",
-                "--sideways", f"14:rom:{dfs_1770_rom_filepath}",
+                "--sideways", f"slot=14:type=rom:image={dfs_1770_rom_filepath}",
             ],
             startup_timeout=20.0,
         ) as bbc:

@@ -58,7 +58,7 @@ PCB:
 
 ### Socket capabilities
 
-Each socket carries four boolean capability flags:
+Each socket carries these boolean capability flags:
 
 | Flag | Meaning |
 |------|---------|
@@ -152,7 +152,7 @@ sideways RAM, or an empty socket - so the integral DFS at IC68 can be
 removed or replaced and any user socket can be configured as RAM. IC71
 is the soldered MOS+BASIC system ROM and cannot be reconfigured: it
 reports `supports_rom=true, supports_ram=false, supports_empty=false`,
-so `--sideways 14:ram` or `--sideways 15:empty` are rejected at
+so `--sideways slot=14:type=ram` or `--sideways slot=15:type=empty` are rejected at
 startup. None of the B+ sockets is runtime-reconfigurable.
 
 The B+ 64K has no built-in sideways RAM - that arrives with the B+
@@ -197,8 +197,8 @@ swap pairs based on link S13:
 The five user sockets (IC35..IC68) behave exactly as on the B+ 64K.
 IC71 is again ROM-only. The four SRAM banks report
 `supports_rom=false, supports_ram=true, supports_empty=false` - they
-are soldered RAM, so `--sideways 12:rom:foo.rom` is rejected at
-startup; pre-loading a RAM image with `--sideways 12:ram:foo.bin` is
+are soldered RAM, so `--sideways slot=12:type=rom:image=foo.rom` is rejected at
+startup; pre-loading a RAM image with `--sideways slot=12:type=ram:image=foo.bin` is
 supported. None of the B+ 128K sockets is runtime-reconfigurable.
 
 ### Model B with ROM/RAM expansion board
@@ -224,11 +224,12 @@ Slot 15 has two board-specific behaviours when fitted with RAM:
   currently paged ROM. Reads stay ROMSEL-gated, so the RAM only reads
   back when slot 15 is paged in via `&FE30`.
 - **Write-protect.** A switch (the board's S6 link) inhibits writes to the
-  slot-15 RAM. Its power-on position is set with `--write-protect 15` at
-  launch, and it can be toggled at runtime with
-  `SidewaysService.SetSlotWriteProtect`; the current state is reported in
-  `SocketStatus.write_protected`. `--write-protect` is repeatable, applies
-  only to RAM slots, and is accepted only by machines that have the control.
+  slot-15 RAM. Its power-on position is set with the `write-protect` flag on
+  the slot's `--sideways` spec (`--sideways slot=15:type=ram:write-protect`),
+  and it can be toggled at runtime with `SidewaysService.SetSlotWriteProtect`;
+  the current state is reported in `SocketStatus.write_protected`. The flag is
+  accepted only on a RAM slot whose socket has the switch
+  (`supports_write_protect`).
 
 BASIC defaults to slot 14 (the manual reserves slot 15 for RAM). Battery
 backup is not modelled.
@@ -239,12 +240,12 @@ When the server parses `--sideways` arguments, it groups them by the
 physical socket they target and rejects any of:
 
 - a slot that does not exist on the configured topology
-  (e.g. `--sideways 12:rom:foo.rom` on a Model B+ 64K);
-- a type the socket does not support (`--sideways 14:ram` on a B+ -
-  IC71 is ROM-only; `--sideways 12:rom:foo.rom` on a B+ 128K - SRAM W
+  (e.g. `--sideways slot=12:type=rom:image=foo.rom` on a Model B+ 64K);
+- a type the socket does not support (`--sideways slot=14:type=ram` on a B+ -
+  IC71 is ROM-only; `--sideways slot=12:type=rom:image=foo.rom` on a B+ 128K - SRAM W
   is RAM-only; etc.);
 - two requests targeting the same socket with different types
-  (e.g. `--sideways 0:rom:foo.rom --sideways 4:ram` on a Model B - both
+  (e.g. `--sideways slot=0:type=rom:image=foo.rom --sideways slot=4:type=ram` on a Model B - both
   reach IC52);
 - two requests targeting the same socket with different ROM image
   paths (a single chip can only hold one image);
@@ -258,14 +259,14 @@ edit. Example:
 Error: Invalid --sideways configuration:
   * Socket IC52 (aliased to slots 0, 4, 8, 12) has conflicting type
     requests:
-      - --sideways 0:ROM:bbc-basic_2.rom
-      - --sideways 12:RAM
+      - --sideways slot=0:type=rom:image=bbc-basic_2.rom
+      - --sideways slot=12:type=ram
     A single physical socket cannot hold more than one type.
 ```
 
 The default-language and default-DFS ROMs are skipped automatically
 when the user's `--sideways` already targets the same socket (so a
-user `--sideways 0:rom:bas128.rom` under B+ S13=North is not silently
+user `--sideways slot=0:type=rom:image=bas128.rom` under B+ S13=North is not silently
 overwritten by the default BASIC at slot 15), and when the default
 slot does not exist on the configured topology.
 

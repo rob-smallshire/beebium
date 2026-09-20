@@ -9,7 +9,9 @@ What exists today:
   in `PresetLoader.hpp` into `PresetConfig::sideways`. Shape:
   `{ "sideways_bank": { "slots": [ { "slot": 14, "type": "rom",
   "image_uri": "acorn-dfs_2_26.rom" } ] } }`. A slot's `type` is
-  `rom`/`ram`/`empty`; `image_uri` is a ROM-library name or path, stored
+  `rom`/`ram`/`empty`; a `ram` slot may also carry `"write_protected": true`
+  to engage its write-protect switch at boot (only where the socket has one);
+  `image_uri` is a ROM-library name or path, stored
   **verbatim** and resolved via the ROM search path (like `--sideways` and
   the machine defaults), not rewritten to a `file://` URI the way disc
   images are.
@@ -166,10 +168,10 @@ Only non-default slots need to be specified. Unspecified slots retain their defa
 ## CLI Mapping
 
 ```
---sideways 15:rom:library://roms/bbc-basic_2.rom
---sideways 14:rom:library://roms/acorn-dfs_0_90.rom
---sideways 13:empty
---sideways 4:ram:file:///path/to/preload.bin
+--sideways slot=15:type=rom:image=library://roms/bbc-basic_2.rom
+--sideways slot=14:type=rom:image=library://roms/acorn-dfs_0_90.rom
+--sideways slot=13:type=empty
+--sideways slot=4:type=ram:image=file:///path/to/preload.bin
 ```
 
 ## UI Considerations

@@ -109,7 +109,7 @@ def bbc_revs(
                 "--fdc",
                 "acorn-1770",
                 "--sideways",
-                f"14:rom:{dfs_1770_rom_filepath}",
+                f"slot=14:type=rom:image={dfs_1770_rom_filepath}",
                 "--auto-boot",
                 "--floppy",
                 f"0:{revs_disc_filepath}",

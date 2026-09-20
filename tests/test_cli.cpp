@@ -1135,7 +1135,7 @@ TEST_CASE("parse_start_arguments: --preset applies sideways_bank slots", "[cli][
 TEST_CASE("parse_start_arguments: CLI --sideways overrides preset sideways slot", "[cli][parse_start_arguments][preset][sideways]") {
     auto preset_path = presets_dirpath() / "sideways.preset.beebium";
     ArgvHelper args{"beebium", "start", "--preset", preset_path.string().c_str(),
-                    "--sideways", "14:empty"};
+                    "--sideways", "slot=14:type=empty"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
@@ -2097,7 +2097,7 @@ TEST_CASE("parse_start_arguments: --rom-dir sets rom_dirpath", "[cli][parse_star
 }
 
 TEST_CASE("parse_start_arguments: --sideways rom populates sideways_configs and rom_slots", "[cli][parse_start_arguments]") {
-    ArgvHelper args{"beebium", "start", "--sideways", "15:rom:test.rom"};
+    ArgvHelper args{"beebium", "start", "--sideways", "slot=15:type=rom:image=test.rom"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
@@ -2112,7 +2112,7 @@ TEST_CASE("parse_start_arguments: --sideways rom populates sideways_configs and 
 }
 
 TEST_CASE("parse_start_arguments: --sideways empty populates config", "[cli][parse_start_arguments]") {
-    ArgvHelper args{"beebium", "start", "--sideways", "11:empty"};
+    ArgvHelper args{"beebium", "start", "--sideways", "slot=11:type=empty"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
@@ -2124,7 +2124,7 @@ TEST_CASE("parse_start_arguments: --sideways empty populates config", "[cli][par
 }
 
 TEST_CASE("parse_start_arguments: --sideways ram populates config", "[cli][parse_start_arguments]") {
-    ArgvHelper args{"beebium", "start", "--sideways", "4:ram"};
+    ArgvHelper args{"beebium", "start", "--sideways", "slot=4:type=ram"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
@@ -2133,6 +2133,7 @@ TEST_CASE("parse_start_arguments: --sideways ram populates config", "[cli][parse
     REQUIRE(config.sideways_configs.size() == 1);
     REQUIRE(config.sideways_configs[0].slot == 4);
     REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Ram);
+    REQUIRE_FALSE(config.sideways_configs[0].write_protected);
 }
 
 TEST_CASE("parse_start_arguments: --floppy sets floppy_filepaths", "[cli][parse_start_arguments]") {
@@ -2167,8 +2168,8 @@ TEST_CASE("parse_start_arguments: --floppy with split filepath (colon completion
     REQUIRE(config.floppy_filepaths[0] == "game.ssd");
 }
 
-TEST_CASE("parse_start_arguments: --sideways with split filepath (colon completion)", "[cli][parse_start_arguments]") {
-    ArgvHelper args{"beebium", "start", "--sideways", "15:rom:", "forth.rom"};
+TEST_CASE("parse_start_arguments: --sideways ram with write-protect flag", "[cli][parse_start_arguments]") {
+    ArgvHelper args{"beebium", "start", "--sideways", "slot=15:type=ram:write-protect"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
@@ -2176,8 +2177,17 @@ TEST_CASE("parse_start_arguments: --sideways with split filepath (colon completi
     REQUIRE_FALSE(result.has_value());
     REQUIRE(config.sideways_configs.size() == 1);
     REQUIRE(config.sideways_configs[0].slot == 15);
-    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Rom);
-    REQUIRE(config.sideways_configs[0].image_filepath == "forth.rom");
+    REQUIRE(config.sideways_configs[0].type == SidewaysSlotType::Ram);
+    REQUIRE(config.sideways_configs[0].write_protected);
+}
+
+TEST_CASE("parse_start_arguments: legacy positional --sideways is rejected", "[cli][parse_start_arguments]") {
+    ArgvHelper args{"beebium", "start", "--sideways", "15:ram"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE(result.has_value());  // parse error -> non-empty exit code
 }
 
 TEST_CASE("parse_start_arguments: --floppy colon completion doesn't consume options", "[cli][parse_start_arguments]") {
@@ -2191,8 +2201,8 @@ TEST_CASE("parse_start_arguments: --floppy colon completion doesn't consume opti
     REQUIRE(*result == ExitCode::USAGE);
 }
 
-TEST_CASE("parse_start_arguments: --sideways colon completion with following option", "[cli][parse_start_arguments]") {
-    ArgvHelper args{"beebium", "start", "--sideways", "15:empty", "--port", "8080"};
+TEST_CASE("parse_start_arguments: --sideways does not consume a following option", "[cli][parse_start_arguments]") {
+    ArgvHelper args{"beebium", "start", "--sideways", "slot=15:type=empty", "--port", "8080"};
     ServerConfig<MachineType> config;
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);

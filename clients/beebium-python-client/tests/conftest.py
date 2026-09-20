@@ -73,7 +73,7 @@ def bbc_firetrack(
                 "--fdc",
                 "acorn-1770",
                 "--sideways",
-                f"14:rom:{dfs_1770_rom_filepath}",
+                f"slot=14:type=rom:image={dfs_1770_rom_filepath}",
                 "--auto-boot",
                 "--floppy",
                 f"0:{firetrack_disc_filepath}",
@@ -127,7 +127,7 @@ def commstar_prestel_bbc(
             extra_args=[
                 "--rpc-serial",
                 "--sideways",
-                f"13:rom:{commstar_rom_filepath}",
+                f"slot=13:type=rom:image={commstar_rom_filepath}",
             ],
         ) as bbc:
             enter_prestel_chat(bbc)

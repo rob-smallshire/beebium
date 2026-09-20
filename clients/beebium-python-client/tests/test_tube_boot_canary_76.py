@@ -219,7 +219,7 @@ class TestTubeBootCanary76:
                     "--fdc",
                     "acorn-1770",
                     "--sideways",
-                    f"14:rom:{dfs_1770_rom_filepath}",
+                    f"slot=14:type=rom:image={dfs_1770_rom_filepath}",
                     "--tube-65c02",
                 ],
                 startup_timeout=20.0,

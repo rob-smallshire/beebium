@@ -55,7 +55,7 @@ def bbc_with_tube(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath
             server_filepath=server,
             extra_args=[
                 "--sideways",
-                f"9:rom:{anfs}",
+                f"slot=9:type=rom:image={anfs}",
                 "--tube-65c02",
             ],
             startup_timeout=20.0,

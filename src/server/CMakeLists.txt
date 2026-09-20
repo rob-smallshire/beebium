@@ -308,17 +308,17 @@ add_system_preset(beebium-model-b "model-b" "Model B" "1981-12"
     DESCRIPTION "32K Model B, no disc")
 add_system_preset(beebium-model-b "model-b-disc" "Model B (Disc)" "1982"
     DESCRIPTION "32K Model B, 1770 DFS"
-    --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
+    --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom)
 add_system_preset(beebium-model-b-romram "model-b-romram-disc"
     "Model B with ROM/RAM Board (Disc)" "1984"
     DESCRIPTION "Model B, ROM/RAM board, 1770 DFS"
-    --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom)
+    --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom)
 # BASIC auto-loads into slot 14 (this machine's default language slot), so the
 # DFS goes in slot 13 and slot 15 is the board's sideways RAM.
 add_system_preset(beebium-model-b-atpl-sidewise "model-b-atpl-sidewise-disc"
     "Model B with ATPL Sidewise (Disc)" "1984"
     DESCRIPTION "Model B, ATPL Sidewise board, 1770 DFS, 16K sideways RAM in slot 15"
-    --fdc acorn-1770 --sideways 13:rom:acorn-dfs_2_26.rom --sideways 15:ram)
+    --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom --sideways slot=15:type=ram)
 add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
     DESCRIPTION "64K Model B+, integral DFS")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
@@ -337,8 +337,8 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
     "Station 80 (AUN, Model B)" "1985"
     DESCRIPTION "Econet over AUN (UDP), ANFS + DFS"
     --fdc acorn-1770
-    --sideways 13:rom:acorn-dfs_2_26.rom
-    --sideways 14:rom:acorn-anfs_4_18.rom
+    --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
+    --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
     # port=0: bind an OS-ephemeral UDP port rather than the fixed 32768, so
     # this station and a file-server station (both AUN) can run on ONE host
     # without a bind conflict. Each advertises its real bound port over
@@ -358,7 +358,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         "Model B (Disc), 65C02 Copro (3 MHz)" "1984"
         DESCRIPTION "Model B disc, 65C02 copro (3 MHz)"
         THUMBNAIL_DELAY 6
-        --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom --tube-65c02)
+        --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
 if(TARGET beebium_ext_acorn_65c102_plugin)
     add_plugin_preset(beebium-model-b-plus-128k beebium_ext_acorn_65c102_plugin
@@ -382,8 +382,8 @@ if(TARGET beebium_ext_piconet_plugin)
         "Station 81 (Piconet, Model B)" "1985"
         DESCRIPTION "Econet via Piconet USB, ANFS + DFS"
         --fdc acorn-1770
-        --sideways 13:rom:acorn-dfs_2_26.rom
-        --sideways 14:rom:acorn-anfs_4_18.rom
+        --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
+        --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
         --station 81 --piconet)
 endif()
 
@@ -415,8 +415,8 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         --machine-name "L3FS"
         --auto-boot
         --fdc acorn-1770
-        --sideways 9:rom:acorn-anfs_4_18.rom
-        --sideways 10:rom:acorn-adfs_1_30.rom
+        --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom
+        --sideways slot=10:type=rom:image=acorn-adfs_1_30.rom
         # port=0: OS-ephemeral UDP port (not fixed 32768) so this server and a
         # client station (both AUN) coexist on one host with no bind conflict;
         # the real bound port is advertised over _aun._udp for mDNS discovery.

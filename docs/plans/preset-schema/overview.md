@@ -57,7 +57,7 @@ All configuration values must map to CLI arguments:
 ```bash
 beebium-model-b start \
   --mos mos120 \
-  --sideways 15:rom:basic.rom \
+  --sideways slot=15:type=rom:image=basic.rom \
   --fdc acorn-1770 \
   --floppy 0:/path/to/game.ssd
 ```

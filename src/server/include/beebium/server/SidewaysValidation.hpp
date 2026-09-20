@@ -79,10 +79,13 @@ inline std::string format_socket_alias_clause(const SocketSpec& spec) {
 // so the error message points back at their CLI input.
 inline std::string format_request(const SidewaysConfig& cfg) {
     std::ostringstream out;
-    out << "--sideways " << static_cast<int>(cfg.slot) << ':'
-        << sideways_type_name(cfg.type);
+    out << "--sideways slot=" << static_cast<int>(cfg.slot)
+        << ":type=" << sideways_type_name(cfg.type);
     if (!cfg.image_filepath.empty()) {
-        out << ':' << cfg.image_filepath;
+        out << ":image=" << cfg.image_filepath;
+    }
+    if (cfg.write_protected) {
+        out << ":write-protect";
     }
     return out.str();
 }

@@ -222,7 +222,7 @@ def bbc_anfs_tube(
             server_filepath=server_filepath,
             extra_args=[
                 "--sideways",
-                f"9:rom:{anfs_filepath}",
+                f"slot=9:type=rom:image={anfs_filepath}",
                 "--tube-65c02",
             ],
             startup_timeout=20.0,

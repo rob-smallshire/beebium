@@ -14,7 +14,7 @@
 
 Configuration mirrors the bug report:
 
-    beebium-model-b-romram --sideways 9:rom:roms/acorn-anfs_4_18.rom --tube-65C02
+    beebium-model-b-romram --sideways slot=9:type=rom:image=roms/acorn-anfs_4_18.rom --tube-65C02
 
 Originally, pressing Break only reset the host CPU; the coprocessor kept its
 pre-Break state (typically blocked in a Tube R2 OSRDCH wait inside BASIC's
@@ -85,7 +85,7 @@ def bbc_anfs_tube(
             server_filepath=server_filepath,
             extra_args=[
                 "--sideways",
-                f"9:rom:{anfs_filepath}",
+                f"slot=9:type=rom:image={anfs_filepath}",
                 "--tube-65c02",
             ],
             startup_timeout=20.0,

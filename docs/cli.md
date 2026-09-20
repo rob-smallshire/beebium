@@ -97,14 +97,25 @@ beebium-model-b [options]           # Equivalent (start is default)
 |--------|-------------|
 | `--mos <filepath>` | Path to MOS ROM (default: machine-specific) |
 | `--language-rom <filepath>` | Language ROM image for the machine's own default language slot (default: machine-specific). Use this instead of `--sideways` when you don't want to assume which slot holds the language ROM - e.g. the ATPL Sidewise uses slot 14, others use slot 15 |
-| `--sideways <slot>:<type>[:<image>]` | Configure sideways slot (see below) |
-| `--write-protect <slot>` | Engage a RAM slot's write-protect switch at startup (repeatable). Accepted only for sockets that have a write-protect switch (`SocketCapabilities.supports_write_protect`, e.g. the ATPL Sidewise slot 15); rejected for RAM with no such switch (e.g. the B+ 128K SRAM banks). This is the switch's power-on position; it can also be toggled at runtime via `SidewaysService.SetSlotWriteProtect` |
+| `--sideways slot=<0-15>:type=<rom\|ram\|empty>[:image=<path>][:write-protect]` | Configure a sideways slot (repeatable; see below) |
 | `--rom-dir <dirpath>` | ROM directory (auto-detected if not specified) |
 
-The `--sideways` option supports three slot types:
-- `SLOT:rom:IMAGE` - Load ROM image file into slot
-- `SLOT:ram[:IMAGE]` - Configure as RAM (optionally pre-load from file)
-- `SLOT:empty` - Leave slot empty
+`--sideways` takes colon-separated `key=value` pairs (the same convention
+as the extension args, e.g. `--aun net=0:port=32768`). Quote a value that
+itself contains a colon, e.g. `image="C:\roms\a.rom"`.
+
+- `slot=<0-15>` and `type=<rom|ram|empty>` are required.
+- `image=<path>` is required for `rom`, optional for `ram` (a pre-load), and
+  forbidden for `empty`.
+- `write-protect` is a bare flag (RAM only) that engages the slot's
+  write-protect switch at startup - its power-on position. Accepted only for
+  a socket that has such a switch (`SocketCapabilities.supports_write_protect`,
+  e.g. the ATPL Sidewise slot 15); rejected for RAM with no switch (e.g. the
+  B+ 128K SRAM banks). The switch is also runtime-toggleable via
+  `SidewaysService.SetSlotWriteProtect`.
+
+The former positional `SLOT:TYPE[:IMAGE]` form is no longer accepted; the
+server rejects it with a message pointing at the key=value grammar.
 
 `--sideways` arguments are validated against each machine variant's
 slot topology at startup. The server refuses to start when an argument
@@ -285,7 +296,7 @@ current configuration without re-parsing CLI arguments.
 Example:
 
 ```bash
-beebium-model-b-plus --motherboard-link s13=north --sideways 0:rom:bbc-basic_2.rom
+beebium-model-b-plus --motherboard-link s13=north --sideways slot=0:type=rom:image=bbc-basic_2.rom
 ```
 
 See [sideways-slots.md](sideways-slots.md) for the full slot topology
@@ -610,16 +621,19 @@ beebium-model-b start
 beebium-model-b start --floppy 0:elite.ssd --auto-boot
 
 # Replace BASIC with Forth
-beebium-model-b start --sideways 15:rom:forth.rom
+beebium-model-b start --sideways slot=15:type=rom:image=forth.rom
 
 # Multiple ROMs
-beebium-model-b start --sideways 14:rom:dfs.rom --sideways 13:rom:viewsheet.rom
+beebium-model-b start --sideways slot=14:type=rom:image=dfs.rom --sideways slot=13:type=rom:image=viewsheet.rom
 
 # Configure slot as RAM
-beebium-model-b start --sideways 4:ram
+beebium-model-b start --sideways slot=4:type=ram
+
+# Sideways RAM, write-protected from boot (ATPL Sidewise slot 15)
+beebium-model-b-atpl-sidewise start --sideways slot=15:type=ram:write-protect
 
 # Remove default DFS on Model B+ (leave slot 11 empty)
-beebium-model-b-plus start --sideways 11:empty
+beebium-model-b-plus start --sideways slot=11:type=empty
 
 # Dynamic port for testing
 beebium-model-b start --port 0

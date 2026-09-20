@@ -56,7 +56,7 @@ def atpl_sidewise(
             basic_filepath=basic_filepath,
             server=beebium_server_filepath,
             variant="model-b-atpl-sidewise",
-            extra_args=["--sideways", "15:ram"],
+            extra_args=["--sideways", "slot=15:type=ram"],
         ) as instance:
             yield instance
     except ServerNotFoundError as e:
@@ -205,7 +205,7 @@ def test_atpl_sidewise_write_protect_at_launch(
             mos_filepath=mos_filepath,
             server=beebium_server_filepath,
             variant="model-b-atpl-sidewise",
-            extra_args=["--sideways", "15:ram", "--write-protect", "15"],
+            extra_args=["--sideways", "slot=15:type=ram:write-protect"],
         ) as bbc:
             slot15 = bbc.sideways.get_slot_status().find_socket_for_slot(15)
             assert slot15 is not None
@@ -225,7 +225,8 @@ def test_atpl_sidewise_write_protect_launch_rejects_non_ram_slot(
             mos_filepath=mos_filepath,
             server=beebium_server_filepath,
             variant="model-b-atpl-sidewise",
-            extra_args=["--write-protect", "14"],  # slot 14 is ROM-only
+            # write-protect on a non-RAM slot is rejected at parse time
+            extra_args=["--sideways", "slot=14:type=rom:image=bbc-basic_2.rom:write-protect"],
         ):
             pass
     except ServerNotFoundError as e:

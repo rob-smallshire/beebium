@@ -30,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace beebium::server {
 
@@ -52,6 +53,7 @@ struct SidewaysConfig {
     std::uint8_t slot;
     SidewaysSlotType type;
     std::string image_filepath;  // Optional: filepath for ROM or pre-loaded RAM
+    bool write_protected = false;  // RAM only: engage the write-protect switch
 };
 
 inline std::string ascii_to_lower(std::string_view s) {
@@ -137,54 +139,140 @@ inline std::pair<std::uint8_t, std::string> parse_floppy_arg(const std::string& 
 //   4:ram                     - Empty RAM
 //   4:ram:preload.bin         - RAM with pre-loaded image
 //   2:empty                   - Empty slot
+// Split a colon-separated argument into tokens, honouring double quotes so a
+// value may contain a ':' (e.g. a URL or a Windows path) when quoted:
+//   slot=15:type=rom:image="C:\roms\a.rom"
+// The surrounding quotes are stripped from each token's value by the caller.
+inline std::vector<std::string> split_sideways_tokens(const std::string& arg) {
+    std::vector<std::string> tokens;
+    std::string current;
+    bool in_quotes = false;
+    for (char c : arg) {
+        if (c == '"') {
+            in_quotes = !in_quotes;
+            current.push_back(c);
+        } else if (c == ':' && !in_quotes) {
+            tokens.push_back(current);
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+    tokens.push_back(current);
+    return tokens;
+}
+
+inline std::string strip_quotes(const std::string& s) {
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+        return s.substr(1, s.size() - 2);
+    }
+    return s;
+}
+
+// Parse a --sideways slot specification. Colon-separated key=value pairs,
+// matching the extension-args convention (see split_colon_args in
+// ExtensionArgParser.cpp / `--<ext> key=value:...`):
+//
+//   slot=<0-15>:type=<rom|ram|empty>[:image=<path>][:write-protect]
+//
+// - slot and type are required.
+// - image is required for rom, optional for ram (a pre-load), forbidden for empty.
+// - write-protect is a bare flag (RAM only) engaging the write-protect switch;
+//   whether the socket actually has one is validated against the topology later.
+//
+// The former positional form (SLOT:TYPE[:IMAGE]) is no longer accepted; a token
+// without '=' (other than the write-protect flag) is reported with guidance.
 inline SidewaysConfig parse_sideways_arg(const std::string& arg) {
     SidewaysConfig config{};
 
-    auto first_colon = arg.find(':');
-    if (first_colon == std::string::npos) {
-        throw std::runtime_error(
-            "Invalid --sideways format: " + arg + " (expected SLOT:TYPE[:IMAGE])");
-    }
+    bool have_slot = false;
+    bool have_type = false;
 
-    std::string slot_str = arg.substr(0, first_colon);
-    int slot = parse_int(slot_str, "--sideways slot");
-    if (slot < 0 || slot > 15) {
-        throw std::runtime_error(
-            "Invalid --sideways slot number: " + slot_str + " (must be 0-15)");
-    }
-    config.slot = static_cast<std::uint8_t>(slot);
-
-    std::string remainder = arg.substr(first_colon + 1);
-    auto second_colon = remainder.find(':');
-
-    std::string type_str;
-    if (second_colon == std::string::npos) {
-        type_str = remainder;
-    } else {
-        type_str = remainder.substr(0, second_colon);
-        config.image_filepath = remainder.substr(second_colon + 1);
-    }
-
-    std::string type_lc = ascii_to_lower(type_str);
-    if (type_lc == "empty") {
-        config.type = SidewaysSlotType::Empty;
-        if (!config.image_filepath.empty()) {
+    for (const auto& token : split_sideways_tokens(arg)) {
+        if (token.empty()) {
             throw std::runtime_error(
-                "Invalid --sideways: 'empty' type cannot have an image path");
+                "Invalid --sideways: empty field in '" + arg
+                + "' (expected slot=<0-15>:type=<rom|ram|empty>[:image=<path>]"
+                  "[:write-protect])");
         }
-    } else if (type_lc == "rom") {
-        config.type = SidewaysSlotType::Rom;
-        if (config.image_filepath.empty()) {
+
+        auto eq = token.find('=');
+        if (eq == std::string::npos) {
+            // The only valid bare flag is write-protect.
+            if (ascii_to_lower(token) == "write-protect") {
+                config.write_protected = true;
+                continue;
+            }
             throw std::runtime_error(
-                "Invalid --sideways: 'rom' type requires an image path");
+                "Invalid --sideways field '" + token + "' in '" + arg
+                + "'. Use key=value pairs: slot=<0-15>:type=<rom|ram|empty>"
+                  "[:image=<path>][:write-protect] "
+                  "(the positional SLOT:TYPE[:IMAGE] form is no longer supported)");
         }
-    } else if (type_lc == "ram") {
-        config.type = SidewaysSlotType::Ram;
-        // image_filepath is optional for RAM.
-    } else {
+
+        std::string key = ascii_to_lower(token.substr(0, eq));
+        std::string value = token.substr(eq + 1);
+
+        if (key == "slot") {
+            int slot = parse_int(value, "--sideways slot");
+            if (slot < 0 || slot > 15) {
+                throw std::runtime_error(
+                    "Invalid --sideways slot number: " + value + " (must be 0-15)");
+            }
+            config.slot = static_cast<std::uint8_t>(slot);
+            have_slot = true;
+        } else if (key == "type") {
+            std::string type_lc = ascii_to_lower(value);
+            if (type_lc == "rom") {
+                config.type = SidewaysSlotType::Rom;
+            } else if (type_lc == "ram") {
+                config.type = SidewaysSlotType::Ram;
+            } else if (type_lc == "empty") {
+                config.type = SidewaysSlotType::Empty;
+            } else {
+                throw std::runtime_error(
+                    "Invalid --sideways type: '" + value
+                    + "' (expected one of: rom, ram, empty -- case-insensitive)");
+            }
+            have_type = true;
+        } else if (key == "image") {
+            config.image_filepath = strip_quotes(value);
+        } else if (key == "write-protect") {
+            std::string v = ascii_to_lower(value);
+            if (v == "true" || v == "1") {
+                config.write_protected = true;
+            } else if (v == "false" || v == "0") {
+                config.write_protected = false;
+            } else {
+                throw std::runtime_error(
+                    "Invalid --sideways write-protect value: '" + value
+                    + "' (expected true or false, or the bare flag)");
+            }
+        } else {
+            throw std::runtime_error(
+                "Invalid --sideways key '" + key + "' in '" + arg
+                + "' (expected slot, type, image, write-protect)");
+        }
+    }
+
+    if (!have_slot || !have_type) {
         throw std::runtime_error(
-            "Invalid --sideways type: '" + type_str
-            + "' (expected one of: rom, ram, empty -- case-insensitive)");
+            "Invalid --sideways '" + arg
+            + "': slot and type are required "
+              "(slot=<0-15>:type=<rom|ram|empty>[:image=<path>][:write-protect])");
+    }
+
+    if (config.type == SidewaysSlotType::Empty && !config.image_filepath.empty()) {
+        throw std::runtime_error(
+            "Invalid --sideways: 'empty' type cannot have an image");
+    }
+    if (config.type == SidewaysSlotType::Rom && config.image_filepath.empty()) {
+        throw std::runtime_error(
+            "Invalid --sideways: 'rom' type requires an image");
+    }
+    if (config.write_protected && config.type != SidewaysSlotType::Ram) {
+        throw std::runtime_error(
+            "Invalid --sideways: write-protect applies only to a RAM slot");
     }
     return config;
 }

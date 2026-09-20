@@ -62,7 +62,7 @@ def commstar_after_stale_burst(
             extra_args=[
                 "--rpc-serial",
                 "--sideways",
-                f"13:rom:{commstar_rom_filepath}",
+                f"slot=13:type=rom:image={commstar_rom_filepath}",
             ],
         ) as bbc:
             wait_for_screen(bbc, "BASIC")

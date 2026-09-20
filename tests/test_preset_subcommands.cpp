@@ -799,7 +799,7 @@ TEST_CASE("create-preset --fdc and --sideways build a loadable rich preset",
 
     auto create_result = run_command(
         EXECUTABLE + " create-preset --name \"Gen Disc\" --release-date 1982"
-        " --fdc acorn-1770 --sideways 14:rom:acorn-dfs_2_26.rom"
+        " --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom"
         " --output \"" + output_filepath.string() + "\"");
     REQUIRE(create_result.exit_code == 0);
     REQUIRE(std::filesystem::exists(output_filepath));
