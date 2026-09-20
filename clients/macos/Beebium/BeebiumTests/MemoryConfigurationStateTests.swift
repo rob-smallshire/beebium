@@ -61,7 +61,7 @@ final class MemoryConfigurationStateTests: XCTestCase {
         // Remove DFS (IC100): must emit at slot 14 (the preset's slot).
         state.sockets[1].content = .empty
         XCTAssertTrue(state.hasChanges)
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "14:empty"])
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=14:type=empty"])
     }
 
     func testLoadingRomIntoEmptySocketEmitsAtPrioritySlot() {
@@ -71,7 +71,7 @@ final class MemoryConfigurationStateTests: XCTestCase {
         // IC52 was empty (priority 12). Make it a ROM from a file.
         let ic52 = state.sockets.firstIndex { $0.label == "IC52" }!
         state.sockets[ic52].content = Content(kind: .rom, image: "/tmp/toolkit.rom")
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:rom:/tmp/toolkit.rom"])
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=12:type=rom:image=/tmp/toolkit.rom"])
     }
 
     func testSidewaysRamWithAndWithoutPreload() {
@@ -81,11 +81,11 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
         // Blank sideways RAM.
         state.sockets[ic52].content = Content(kind: .ram, image: nil)
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:ram"])
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=12:type=ram"])
 
         // RAM pre-loaded from an image at startup (e.g. battery-backed RAM).
         state.sockets[ic52].content = Content(kind: .ram, image: "/tmp/under-test.rom")
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:ram:/tmp/under-test.rom"])
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=12:type=ram:image=/tmp/under-test.rom"])
     }
 
     func testRomKindWithoutImageIsNotEmitted() {
@@ -180,8 +180,8 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
         // Launch: IC100 emits empty at slot 14; IC52 emits DFS at slot 12.
         let args = state.sidewaysLaunchArguments()
-        XCTAssertTrue(args.contains("14:empty"))
-        XCTAssertTrue(args.contains("12:rom:acorn-dfs_2_26.rom"))
+        XCTAssertTrue(args.contains("slot=14:type=empty"))
+        XCTAssertTrue(args.contains("slot=12:type=rom:image=acorn-dfs_2_26.rom"))
     }
 
     // MARK: - Write-protect (config-time power-on switch position)
@@ -206,9 +206,9 @@ final class MemoryConfigurationStateTests: XCTestCase {
         let s12 = state.sockets.firstIndex { $0.label == "S12" }!  // priority 12
 
         state.sockets[s12].content = Content(kind: .ram, image: nil, writeProtected: true)
-        // Both the RAM assignment and the power-on write-protect for its slot.
+        // The RAM assignment and its power-on write-protect fold into one spec.
         XCTAssertEqual(state.sidewaysLaunchArguments(),
-                       ["--sideways", "12:ram", "--write-protect", "12"])
+                       ["--sideways", "slot=12:type=ram:write-protect"])
     }
 
     func testWriteProtectedRamWithPreloadEmitsBothArgs() {
@@ -218,7 +218,7 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
         state.sockets[s12].content = Content(kind: .ram, image: "/tmp/dev.rom", writeProtected: true)
         XCTAssertEqual(state.sidewaysLaunchArguments(),
-                       ["--sideways", "12:ram:/tmp/dev.rom", "--write-protect", "12"])
+                       ["--sideways", "slot=12:type=ram:image=/tmp/dev.rom:write-protect"])
     }
 
     func testUnprotectedRamEmitsNoWriteProtectFlag() {
@@ -227,8 +227,8 @@ final class MemoryConfigurationStateTests: XCTestCase {
         let s12 = state.sockets.firstIndex { $0.label == "S12" }!
 
         state.sockets[s12].content = Content(kind: .ram, image: nil, writeProtected: false)
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:ram"])
-        XCTAssertFalse(state.sidewaysLaunchArguments().contains("--write-protect"))
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=12:type=ram"])
+        XCTAssertFalse(state.sidewaysLaunchArguments().contains { $0.contains("write-protect") })
     }
 
     func testWriteProtectIsNeverEmittedForNonRamKind() {
@@ -239,7 +239,7 @@ final class MemoryConfigurationStateTests: XCTestCase {
         // A ROM socket carrying a stale write-protect flag must not emit it:
         // write-protect is RAM-only and the server would reject the slot.
         state.sockets[s12].content = Content(kind: .rom, image: "/tmp/toolkit.rom", writeProtected: true)
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:rom:/tmp/toolkit.rom"])
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=12:type=rom:image=/tmp/toolkit.rom"])
     }
 
     func testWriteProtectNotEmittedWhenSocketLacksSwitch() {
@@ -252,8 +252,8 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
         state.sockets[ic52].content = Content(kind: .ram, image: nil, writeProtected: true)
         XCTAssertFalse(state.sockets[ic52].supportsWriteProtect)
-        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "12:ram"])
-        XCTAssertFalse(state.sidewaysLaunchArguments().contains("--write-protect"))
+        XCTAssertEqual(state.sidewaysLaunchArguments(), ["--sideways", "slot=12:type=ram"])
+        XCTAssertFalse(state.sidewaysLaunchArguments().contains { $0.contains("write-protect") })
     }
 
     func testTogglingWriteProtectAloneCountsAsAChange() {
@@ -271,7 +271,7 @@ final class MemoryConfigurationStateTests: XCTestCase {
 
         state.sockets[idx].content.writeProtected = true
         XCTAssertTrue(state.sockets[idx].isChanged, "flipping write-protect must mark the socket changed")
-        XCTAssertTrue(state.sidewaysLaunchArguments().contains("--write-protect"))
+        XCTAssertTrue(state.sidewaysLaunchArguments().contains { $0.contains("write-protect") })
     }
 
     func testMoveContentsKeepsWriteProtectWithTheSocketNotTheImage() {

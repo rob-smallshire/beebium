@@ -310,26 +310,25 @@ class MemoryConfigurationState: ObservableObject {
             let image = socket.content.image
             switch socket.content.kind {
             case .empty:
-                arguments.append(contentsOf: ["--sideways", "\(slot):empty"])
+                arguments.append(contentsOf: ["--sideways", "slot=\(slot):type=empty"])
             case .rom:
                 // A ROM needs an image; skip an incomplete selection so the
                 // preset/default for the slot still applies.
                 if let image = image, !image.isEmpty {
-                    arguments.append(contentsOf: ["--sideways", "\(slot):rom:\(image)"])
+                    arguments.append(contentsOf: ["--sideways", "slot=\(slot):type=rom:image=\(image)"])
                 }
             case .ram:
+                // RAM: optional preload image, and the power-on write-protect
+                // folded into the same spec as a bare token -- only where the
+                // board has the switch (the server rejects it otherwise).
+                var spec = "slot=\(slot):type=ram"
                 if let image = image, !image.isEmpty {
-                    arguments.append(contentsOf: ["--sideways", "\(slot):ram:\(image)"])
-                } else {
-                    arguments.append(contentsOf: ["--sideways", "\(slot):ram"])
+                    spec += ":image=\(image)"
                 }
-            }
-            // Set the power-on write-protect position, but only where the board
-            // has the switch and the socket is RAM. The server rejects the flag
-            // for any other socket, so match its rule rather than emit and fail.
-            if socket.supportsWriteProtect && socket.content.kind == .ram
-                && socket.content.writeProtected {
-                arguments.append(contentsOf: ["--write-protect", "\(slot)"])
+                if socket.supportsWriteProtect && socket.content.writeProtected {
+                    spec += ":write-protect"
+                }
+                arguments.append(contentsOf: ["--sideways", spec])
             }
         }
         return arguments
