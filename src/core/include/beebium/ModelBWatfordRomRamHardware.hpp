@@ -25,6 +25,7 @@
 #include "MotherboardLinks.hpp"
 #include "OutputQueue.hpp"
 #include "Saa5050.hpp"
+#include "SlotProtection.hpp"
 #include "SlotTopology.hpp"
 #include "SystemViaPeripheral.hpp"
 #include "Via6522.hpp"
@@ -364,6 +365,42 @@ public:
     bool bank14_read_protect() const { return bank14_read_protect_; }
     void set_bank14_read_protect(bool engaged) { bank14_read_protect_ = engaged; }
 
+    // Slot protection groups (the board-agnostic protection surface). The Watford
+    // board has two: S2 (a board-wide write-protect covering every slot) and S1
+    // (a read-protect covering socket 14, the battery-backed static-RAM socket).
+    std::vector<SlotProtectionGroup> protection_groups() const {
+        SlotProtectionGroup s2;
+        s2.id = "board";
+        s2.label = "Board write-protect (S2)";
+        for (int slot = 0; slot < 16; ++slot) s2.slots.push_back(slot);
+        s2.supports_write_protect = true;
+        s2.write_protected = write_protect_switch_;
+
+        SlotProtectionGroup s1;
+        // Logical slot 14, not "socket 14": on this board slot 14 is physically
+        // two 8K sockets. Group ids use the logical slot number, like slot-15 on
+        // the ATPL board and slot-N on the ROM/RAM board.
+        s1.id = "slot-14";
+        s1.label = "Hide slot 14 (S1)";
+        s1.slots = {SLOT_14};
+        s1.supports_hide = true;
+        s1.hidden = bank14_read_protect_;
+
+        return {s2, s1};
+    }
+
+    bool set_protection(std::string_view group_id, ProtectionKind kind, bool engaged) {
+        if (group_id == "board" && kind == ProtectionKind::WriteProtect) {
+            write_protect_switch_ = engaged;
+            return true;
+        }
+        if (group_id == "slot-14" && kind == ProtectionKind::Hide) {
+            bank14_read_protect_ = engaged;
+            return true;
+        }
+        return false;
+    }
+
     uint8_t peek(uint16_t addr) const {
         if (addr >= 0xFE40 && addr <= 0xFE5F) {
             return system_via.peek(addr & 0x0F);
@@ -589,19 +626,11 @@ public:
         return sideways.slot_info(slot);
     }
 
-    // Per-slot write-protect control, surfaced to SidewaysService. The Watford
-    // board has no per-socket write-protect: write-protection is the board-wide S2
-    // switch (see set_global_write_protect) and the ?&FF38 write-select trick. The
-    // topology therefore leaves supports_write_protect false on every socket, so
-    // the service rejects per-slot requests; these forwarders are kept for the
-    // shared SidewaysService concept.
-    void set_slot_write_protected(uint8_t slot, bool protect) {
-        sideways.set_slot_write_protected(slot, protect);
-    }
-
-    bool is_slot_write_protected(uint8_t slot) const {
-        return sideways.is_slot_write_protected(slot);
-    }
+    // The Watford board has no per-slot write-protect: protection is the
+    // board-wide S2 switch and the socket-14 S1 switch, exposed as protection
+    // groups (see protection_groups / set_protection above). It deliberately does
+    // not implement the per-slot set_slot_write_protected surface, so the
+    // per-slot launch --sideways ...:write-protect flag is rejected for it.
 
     // The Watford board provides full 4-bit ROMSEL decoding (no aliasing) with no
     // motherboard links that affect slot mapping.
@@ -626,7 +655,6 @@ public:
             spec.slots = {slot};
             spec.supports_empty = true;
             spec.runtime_configurable = false;
-            spec.supports_write_protect = false;  // board-level S2, not per-socket
             if (slot <= 7) {
                 spec.label = "Sideways RAM " + std::to_string(slot);
                 spec.supports_ram = true;

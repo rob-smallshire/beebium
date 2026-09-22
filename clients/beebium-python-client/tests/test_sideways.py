@@ -30,11 +30,20 @@ from beebium.client.exceptions import (
     ServerStartupError,
 )
 from beebium.client.sideways import (
+    ProtectionKind,
     RomHeader,
     SlotStatusReport,
     SlotType,
     SocketStatus,
 )
+
+
+def _group(status: SlotStatusReport, group_id: str):
+    """The protection group with the given id, or None."""
+    for g in status.protection_groups:
+        if g.id == group_id:
+            return g
+    return None
 
 
 @pytest.fixture
@@ -163,7 +172,12 @@ def test_atpl_sidewise_reports_16_slots_with_ram_in_15(atpl_sidewise):
     assert slot15.type is SlotType.RAM
     assert slot15.capabilities.supports_ram is True
     assert slot15.capabilities.runtime_configurable is False
-    assert slot15.write_protected is False
+    # The write-protect switch is a one-slot protection group over slot 15.
+    group = _group(status, "slot-15")
+    assert group is not None
+    assert group.slots == (15,)
+    assert group.supports_write_protect is True
+    assert group.write_protected is False
 
     # --language-rom must place the custom BASIC in slot 14, not slot 15.
     slot14 = status.find_socket_for_slot(14)
@@ -175,24 +189,22 @@ def test_atpl_sidewise_reports_16_slots_with_ram_in_15(atpl_sidewise):
 
 
 def test_atpl_sidewise_write_protect_roundtrip(atpl_sidewise):
-    """SetSlotWriteProtect toggles slot 15 and GetSlotStatus reflects it."""
+    """SetSlotProtection toggles the slot-15 write group and GetSlotStatus reflects it."""
     sideways = atpl_sidewise.sideways
 
-    assert sideways.set_write_protect(15, True) is True
-    slot15 = sideways.get_slot_status().find_socket_for_slot(15)
-    assert slot15 is not None
-    assert slot15.write_protected is True
+    assert sideways.set_protection("slot-15", ProtectionKind.WRITE_PROTECT, True) is True
+    assert _group(sideways.get_slot_status(), "slot-15").write_protected is True
 
-    assert sideways.set_write_protect(15, False) is False
-    slot15 = sideways.get_slot_status().find_socket_for_slot(15)
-    assert slot15 is not None
-    assert slot15.write_protected is False
+    assert sideways.set_protection("slot-15", ProtectionKind.WRITE_PROTECT, False) is False
+    assert _group(sideways.get_slot_status(), "slot-15").write_protected is False
 
 
-def test_atpl_sidewise_write_protect_rejects_non_ram_slot(atpl_sidewise):
-    """Slot 14 holds BASIC (ROM), so write-protect must be rejected."""
+def test_atpl_sidewise_protection_rejects_unknown_group(atpl_sidewise):
+    """The ATPL board has only the slot-15 write group; other requests are rejected."""
     with pytest.raises(BeebiumError):
-        atpl_sidewise.sideways.set_write_protect(14, True)
+        atpl_sidewise.sideways.set_protection("slot-14", ProtectionKind.WRITE_PROTECT, True)
+    with pytest.raises(BeebiumError):
+        atpl_sidewise.sideways.set_protection("slot-15", ProtectionKind.HIDE, True)
 
 
 def test_atpl_sidewise_write_protect_at_launch(
@@ -207,10 +219,11 @@ def test_atpl_sidewise_write_protect_at_launch(
             variant="model-b-atpl-sidewise",
             extra_args=["--sideways", "slot=15:type=ram:write-protect"],
         ) as bbc:
-            slot15 = bbc.sideways.get_slot_status().find_socket_for_slot(15)
+            status = bbc.sideways.get_slot_status()
+            slot15 = status.find_socket_for_slot(15)
             assert slot15 is not None
             assert slot15.type is SlotType.RAM
-            assert slot15.write_protected is True
+            assert _group(status, "slot-15").write_protected is True
     except ServerNotFoundError as e:
         pytest.skip(str(e))
 

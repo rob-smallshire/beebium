@@ -149,6 +149,37 @@ private:
     std::unique_ptr<beebium::SidewaysService::Stub> sideways_stub_;
 };
 
+// Fixture for the Watford ROM/RAM board (16 slots; banks 0-7 RAM; the &FF30
+// write-select latch and the S1/S2 board protection switches).
+class WatfordRomRamSidewaysFixture {
+public:
+    WatfordRomRamSidewaysFixture() {
+        for (uint8_t bank = 0; bank <= 7; ++bank) {
+            machine_.state().memory.configure_slot_as_ram(bank);
+        }
+        machine_.reset();
+
+        server_ = std::make_unique<beebium::service::Server<beebium::ModelBWatfordRomRam>>(
+            machine_, "127.0.0.1", 0);
+        server_->start({}, {});
+
+        std::string address = "127.0.0.1:" + std::to_string(server_->port());
+        channel_ = grpc::CreateChannel(address, grpc::InsecureChannelCredentials());
+        sideways_stub_ = beebium::SidewaysService::NewStub(channel_);
+    }
+
+    ~WatfordRomRamSidewaysFixture() { server_->stop(); }
+
+    beebium::ModelBWatfordRomRam& machine() { return machine_; }
+    beebium::SidewaysService::Stub& sideways() { return *sideways_stub_; }
+
+private:
+    beebium::ModelBWatfordRomRam machine_;
+    std::unique_ptr<beebium::service::Server<beebium::ModelBWatfordRomRam>> server_;
+    std::shared_ptr<grpc::Channel> channel_;
+    std::unique_ptr<beebium::SidewaysService::Stub> sideways_stub_;
+};
+
 // Fixture for Model B+ 128K with optional motherboard link override.
 // Like the 64K but with four integral sideways RAM banks (W=slot 12,
 // X=slot 13, Y/Z opposite IC71 per S13).
@@ -1203,45 +1234,44 @@ TEST_CASE("SidewaysService GetSlotStatus reports 16 fixed slots for ATPL Sidewis
         // No slot is runtime-reconfigurable on a real board.
         CHECK_FALSE(caps.runtime_configurable());
         CHECK(caps.supports_rom());
-        // Only slot 15 can hold RAM and carries the write-protect switch.
+        // Only slot 15 can hold RAM (and carries the write-protect group).
         if (socket.socket_index() == 15) {
             CHECK(caps.supports_ram());
-            CHECK(caps.supports_write_protect());
         } else {
             CHECK_FALSE(caps.supports_ram());
-            CHECK_FALSE(caps.supports_write_protect());
         }
     }
 }
 
-TEST_CASE("SidewaysService write-protect capability is absent on B+ 128K SRAM",
-          "[grpc][sideways][model_b_plus][write_protect]") {
-    // The B+ 128K has sideways RAM (SRAM W/X/Y/Z) but no write-protect switch,
-    // so its RAM sockets must report supports_write_protect == false and reject
-    // SetSlotWriteProtect - a front-end keys the control off the capability.
+TEST_CASE("SidewaysService reports no protection groups on B+ 128K SRAM",
+          "[grpc][sideways][model_b_plus][protection]") {
+    // The B+ 128K has sideways RAM (SRAM W/X/Y/Z) but no protection switch, so it
+    // reports no protection groups and SetSlotProtection is unavailable - a
+    // front-end offers no protection control for it.
     ModelBPlus128KSidewaysFixture fixture;
 
     grpc::ClientContext context;
     beebium::GetSlotStatusRequest request;
     beebium::GetSlotStatusResponse response;
     REQUIRE(fixture.sideways().GetSlotStatus(&context, request, &response).ok());
+    CHECK(response.protection_groups_size() == 0);
 
     bool saw_ram = false;
     for (int i = 0; i < response.sockets_size(); ++i) {
-        const auto& socket = response.sockets(i);
-        if (socket.type() == beebium::SIDEWAYS_SLOT_TYPE_RAM) {
+        if (response.sockets(i).type() == beebium::SIDEWAYS_SLOT_TYPE_RAM) {
             saw_ram = true;
-            CHECK_FALSE(socket.capabilities().supports_write_protect());
-            grpc::ClientContext ctx;
-            beebium::SetSlotWriteProtectRequest req;
-            beebium::SetSlotWriteProtectResponse resp;
-            req.set_slot(socket.socket_index());
-            req.set_write_protected(true);
-            REQUIRE(fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp).ok());
-            CHECK_FALSE(resp.success());
         }
     }
     CHECK(saw_ram);  // the fixture must actually expose SRAM to make the point
+
+    grpc::ClientContext ctx;
+    beebium::SetSlotProtectionRequest req;
+    beebium::SetSlotProtectionResponse resp;
+    req.set_group_id("slot-12");
+    req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+    req.set_engaged(true);
+    REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
+    CHECK_FALSE(resp.success());
 }
 
 TEST_CASE("SidewaysService ConfigureSlot is rejected on ATPL Sidewise",
@@ -1260,100 +1290,154 @@ TEST_CASE("SidewaysService ConfigureSlot is rejected on ATPL Sidewise",
     CHECK_FALSE(response.success());  // fixed at launch, not runtime-configurable
 }
 
-TEST_CASE("SidewaysService SetSlotWriteProtect toggles slot 15 on ATPL Sidewise",
-          "[grpc][sideways][atpl_sidewise][write_protect]") {
+TEST_CASE("SidewaysService SetSlotProtection toggles the ATPL slot-15 write group",
+          "[grpc][sideways][atpl_sidewise][protection]") {
     AtplSidewiseSidewaysFixture fixture;
 
-    auto write_protected_of_slot_15 = [&]() {
+    // The group is enumerated for a front-end to build a control from.
+    auto slot15_group = [&]() {
         grpc::ClientContext ctx;
         beebium::GetSlotStatusRequest req;
         beebium::GetSlotStatusResponse resp;
         REQUIRE(fixture.sideways().GetSlotStatus(&ctx, req, &resp).ok());
-        for (int i = 0; i < resp.sockets_size(); ++i) {
-            if (resp.sockets(i).socket_index() == 15) {
-                return resp.sockets(i).write_protected();
-            }
-        }
-        FAIL("slot 15 not found");
-        return false;
+        REQUIRE(resp.protection_groups_size() == 1);
+        return resp.protection_groups(0);
     };
 
-    CHECK_FALSE(write_protected_of_slot_15());
+    auto g = slot15_group();
+    CHECK(g.id() == "slot-15");
+    CHECK(g.supports_write_protect());
+    CHECK_FALSE(g.supports_hide());
+    CHECK(g.slots_size() == 1);
+    CHECK(g.slots(0) == 15);
+    CHECK_FALSE(g.write_protected());
 
     {
         grpc::ClientContext ctx;
-        beebium::SetSlotWriteProtectRequest req;
-        beebium::SetSlotWriteProtectResponse resp;
-        req.set_slot(15);
-        req.set_write_protected(true);
-        auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
+        beebium::SetSlotProtectionRequest req;
+        beebium::SetSlotProtectionResponse resp;
+        req.set_group_id("slot-15");
+        req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+        req.set_engaged(true);
+        auto status = fixture.sideways().SetSlotProtection(&ctx, req, &resp);
         REQUIRE(status.ok());
         CHECK(resp.success());
-        CHECK(resp.write_protected());
+        CHECK(resp.engaged());
     }
-    CHECK(write_protected_of_slot_15());
+    CHECK(slot15_group().write_protected());
 
     {
         grpc::ClientContext ctx;
-        beebium::SetSlotWriteProtectRequest req;
-        beebium::SetSlotWriteProtectResponse resp;
-        req.set_slot(15);
-        req.set_write_protected(false);
-        auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
-        REQUIRE(status.ok());
+        beebium::SetSlotProtectionRequest req;
+        beebium::SetSlotProtectionResponse resp;
+        req.set_group_id("slot-15");
+        req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+        req.set_engaged(false);
+        REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
         CHECK(resp.success());
-        CHECK_FALSE(resp.write_protected());
+        CHECK_FALSE(resp.engaged());
     }
-    CHECK_FALSE(write_protected_of_slot_15());
+    CHECK_FALSE(slot15_group().write_protected());
 }
 
-TEST_CASE("SidewaysService SetSlotWriteProtect rejects a slot with no switch",
-          "[grpc][sideways][atpl_sidewise][write_protect]") {
-    // Slot 14 is a ROM-only socket on the Sidewise: no write-protect switch,
-    // so the request is rejected on the capability before the RAM check.
+TEST_CASE("SidewaysService SetSlotProtection rejects an unknown group or kind",
+          "[grpc][sideways][atpl_sidewise][protection]") {
     AtplSidewiseSidewaysFixture fixture;
 
+    // ATPL has only a slot-15 WRITE group: a read kind, or an unknown group, is
+    // rejected.
     grpc::ClientContext ctx;
-    beebium::SetSlotWriteProtectRequest req;
-    beebium::SetSlotWriteProtectResponse resp;
-    req.set_slot(14);
-    req.set_write_protected(true);
-
-    auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
-    REQUIRE(status.ok());
+    beebium::SetSlotProtectionRequest req;
+    beebium::SetSlotProtectionResponse resp;
+    req.set_group_id("slot-15");
+    req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_HIDE);
+    req.set_engaged(true);
+    REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
     CHECK_FALSE(resp.success());
-    CHECK_THAT(resp.error(),
-               Catch::Matchers::ContainsSubstring("no write-protect switch"));
+
+    grpc::ClientContext ctx2;
+    beebium::SetSlotProtectionResponse resp2;
+    req.set_group_id("no-such-group");
+    req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+    REQUIRE(fixture.sideways().SetSlotProtection(&ctx2, req, &resp2).ok());
+    CHECK_FALSE(resp2.success());
 }
 
-TEST_CASE("SidewaysService SetSlotWriteProtect rejects an invalid slot number",
-          "[grpc][sideways][atpl_sidewise][write_protect]") {
-    AtplSidewiseSidewaysFixture fixture;
-
-    grpc::ClientContext ctx;
-    beebium::SetSlotWriteProtectRequest req;
-    beebium::SetSlotWriteProtectResponse resp;
-    req.set_slot(16);
-    req.set_write_protected(true);
-
-    auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
-    REQUIRE(status.ok());
-    CHECK_FALSE(resp.success());
-}
-
-TEST_CASE("SidewaysService SetSlotWriteProtect is unavailable on Model B",
-          "[grpc][sideways][write_protect]") {
-    // The stock Model B has no write-protect control; the RPC reports the
-    // feature as unavailable rather than pretending to succeed.
+TEST_CASE("SidewaysService SetSlotProtection is unavailable on Model B",
+          "[grpc][sideways][protection]") {
+    // The stock Model B has no protection controls; the RPC reports the feature
+    // as unavailable rather than pretending to succeed.
     ModelBSidewaysFixture fixture;
 
     grpc::ClientContext ctx;
-    beebium::SetSlotWriteProtectRequest req;
-    beebium::SetSlotWriteProtectResponse resp;
-    req.set_slot(0);
-    req.set_write_protected(true);
+    beebium::SetSlotProtectionRequest req;
+    beebium::SetSlotProtectionResponse resp;
+    req.set_group_id("slot-0");
+    req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+    req.set_engaged(true);
 
-    auto status = fixture.sideways().SetSlotWriteProtect(&ctx, req, &resp);
-    REQUIRE(status.ok());
+    REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
+    CHECK_FALSE(resp.success());
+}
+
+TEST_CASE("SidewaysService reports Watford protection groups and write-select latch",
+          "[grpc][sideways][watford][protection]") {
+    WatfordRomRamSidewaysFixture fixture;
+
+    grpc::ClientContext ctx;
+    beebium::GetSlotStatusRequest req;
+    beebium::GetSlotStatusResponse resp;
+    REQUIRE(fixture.sideways().GetSlotStatus(&ctx, req, &resp).ok());
+
+    REQUIRE(resp.protection_groups_size() == 2);
+    const auto& s2 = resp.protection_groups(0);
+    CHECK(s2.id() == "board");
+    CHECK(s2.supports_write_protect());
+    CHECK(s2.slots_size() == 16);
+    const auto& s1 = resp.protection_groups(1);
+    CHECK(s1.id() == "slot-14");
+    CHECK(s1.supports_hide());
+    REQUIRE(s1.slots_size() == 1);
+    CHECK(s1.slots(0) == 14);
+
+    // The &FF30 write-select latch is reported (read-only).
+    CHECK(resp.write_select_latch().present());
+    CHECK(resp.write_select_latch().socket() == 0);
+}
+
+TEST_CASE("SidewaysService SetSlotProtection drives the Watford S1/S2 switches",
+          "[grpc][sideways][watford][protection]") {
+    WatfordRomRamSidewaysFixture fixture;
+
+    {
+        grpc::ClientContext ctx;
+        beebium::SetSlotProtectionRequest req;
+        beebium::SetSlotProtectionResponse resp;
+        req.set_group_id("board");
+        req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+        req.set_engaged(true);
+        REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
+        CHECK(resp.success());
+        CHECK(fixture.machine().state().memory.global_write_protect());
+    }
+    {
+        grpc::ClientContext ctx;
+        beebium::SetSlotProtectionRequest req;
+        beebium::SetSlotProtectionResponse resp;
+        req.set_group_id("slot-14");
+        req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_HIDE);
+        req.set_engaged(true);
+        REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
+        CHECK(resp.success());
+        CHECK(fixture.machine().state().memory.bank14_read_protect());
+    }
+    // Read on the board group (write-only) is rejected.
+    grpc::ClientContext ctx;
+    beebium::SetSlotProtectionRequest req;
+    beebium::SetSlotProtectionResponse resp;
+    req.set_group_id("board");
+    req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_HIDE);
+    req.set_engaged(true);
+    REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
     CHECK_FALSE(resp.success());
 }

@@ -48,6 +48,17 @@ class SlotType(IntEnum):
     RAM = sideways_pb2.SIDEWAYS_SLOT_TYPE_RAM
 
 
+class ProtectionKind(IntEnum):
+    """A control a protection group can carry.
+
+    WRITE_PROTECT inhibits writes to the group's slots; HIDE makes them "vanish"
+    (reads return a constant). Mirrors :class:`sideways_pb2.SidewaysProtectionKind`.
+    """
+
+    WRITE_PROTECT = sideways_pb2.SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT
+    HIDE = sideways_pb2.SIDEWAYS_PROTECTION_KIND_HIDE
+
+
 @dataclasses.dataclass(frozen=True)
 class RomHeader:
     """Parsed sideways ROM header for what is currently in a socket.
@@ -75,9 +86,6 @@ class SocketCapabilities:
     supports_ram: bool
     supports_empty: bool
     runtime_configurable: bool
-    # The socket has a RAM write-protect switch; only then can its RAM be
-    # write-protected. False for sideways RAM with no such switch.
-    supports_write_protect: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -95,10 +103,6 @@ class SocketStatus:
     image_filepath: str
     capabilities: SocketCapabilities
     rom_header: RomHeader | None
-    # True when this is a RAM slot whose write-protect switch is engaged
-    # (e.g. the ATPL Sidewise slot 15). Always False for ROM/empty slots
-    # and machines with no write-protect control.
-    write_protected: bool = False
 
     @property
     def priority(self) -> int:
@@ -124,6 +128,41 @@ class MotherboardLink:
 
 
 @dataclasses.dataclass(frozen=True)
+class SlotProtectionGroup:
+    """A set of slots whose read/write protection is engaged as a whole.
+
+    The board-agnostic model of sideways-memory protection: one board switch or
+    link protects a set of slots together. The ATPL Sidewise slot-15
+    write-protect is a one-slot write group; the Watford board's S2 is a write
+    group over every slot and S1 a read group over socket 14; the ROM/RAM board
+    exposes a one-slot write group per RAM slot. Enumerate these from
+    :attr:`SlotStatusReport.protection_groups` to build a control per group, and
+    toggle one with :meth:`Sideways.set_protection`.
+    """
+
+    id: str
+    label: str
+    slots: tuple[int, ...]
+    supports_write_protect: bool
+    supports_hide: bool
+    write_protected: bool
+    hidden: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class WriteSelectLatch:
+    """A board write-select latch routing sideways writes to one socket.
+
+    The Watford ROM/RAM board's &FF30 latch: writes to &8000-&BFFF go to
+    ``socket`` independently of the ROMSEL read-select. Read-only (driven by the
+    guest). ``present`` is False on machines with no such latch.
+    """
+
+    present: bool
+    socket: int
+
+
+@dataclasses.dataclass(frozen=True)
 class SlotStatusReport:
     """A snapshot of the machine's sideways topology and runtime state."""
 
@@ -131,6 +170,10 @@ class SlotStatusReport:
     num_physical_slots: int
     sockets: tuple[SocketStatus, ...]
     motherboard_links: tuple[MotherboardLink, ...]
+    # Board switches a front-end builds protection controls from (may be empty).
+    protection_groups: tuple[SlotProtectionGroup, ...] = ()
+    # The board's write-select latch, if any.
+    write_select_latch: WriteSelectLatch | None = None
 
     def find_socket_for_slot(self, slot: int) -> SocketStatus | None:
         """The socket that responds at the given logical slot, or None."""
@@ -239,25 +282,32 @@ class Sideways:
             raise BeebiumError(response.error or "ConfigureSlot failed")
         return response.actual_socket
 
-    def set_write_protect(self, slot: int, write_protected: bool) -> bool:
-        """Engage or release a RAM slot's write-protect switch.
+    def set_protection(
+        self, group_id: str, kind: ProtectionKind, engaged: bool
+    ) -> bool:
+        """Engage or release a slot-protection group's read/write switch.
 
-        Models a board's write-protect switch (e.g. the ATPL Sidewise
-        slot 15). Returns the slot's write-protect state after the call.
+        A group is a set of slots that one board switch protects as a whole; the
+        available groups (with their ids and which kinds they support) come from
+        :attr:`SlotStatusReport.protection_groups`. ``kind`` selects the
+        write-protect or read-protect switch. Returns the switch state after the
+        call.
 
         Raises:
-            BeebiumError: If the server rejects the request - most
-                commonly because the slot is not RAM, or the machine has
-                no write-protect control.
+            BeebiumError: If the server rejects the request - an unknown group,
+                an unsupported kind, or a machine with no protection controls.
         """
-        request = sideways_pb2.SetSlotWriteProtectRequest(
-            slot=slot,
-            write_protected=write_protected,
+        request = sideways_pb2.SetSlotProtectionRequest(
+            group_id=group_id,
+            kind=cast(
+                "sideways_pb2.SidewaysProtectionKind.ValueType", int(kind)
+            ),
+            engaged=engaged,
         )
-        response = self._stub.SetSlotWriteProtect(request)
+        response = self._stub.SetSlotProtection(request)
         if not response.success:
-            raise BeebiumError(response.error or "SetSlotWriteProtect failed")
-        return response.write_protected
+            raise BeebiumError(response.error or "SetSlotProtection failed")
+        return response.engaged
 
     def read_slot_data(
         self,
@@ -325,6 +375,12 @@ class Sideways:
 
 
 def _map_status(response: sideways_pb2.GetSlotStatusResponse) -> SlotStatusReport:
+    latch: WriteSelectLatch | None = None
+    if response.HasField("write_select_latch"):
+        latch = WriteSelectLatch(
+            present=response.write_select_latch.present,
+            socket=response.write_select_latch.socket,
+        )
     return SlotStatusReport(
         has_aliasing=response.has_aliasing,
         num_physical_slots=response.num_physical_slots,
@@ -337,6 +393,19 @@ def _map_status(response: sideways_pb2.GetSlotStatusResponse) -> SlotStatusRepor
             )
             for link in response.motherboard_links
         ),
+        protection_groups=tuple(
+            SlotProtectionGroup(
+                id=g.id,
+                label=g.label,
+                slots=tuple(g.slots),
+                supports_write_protect=g.supports_write_protect,
+                supports_hide=g.supports_hide,
+                write_protected=g.write_protected,
+                hidden=g.hidden,
+            )
+            for g in response.protection_groups
+        ),
+        write_select_latch=latch,
     )
 
 
@@ -362,10 +431,8 @@ def _map_socket(s: sideways_pb2.SocketStatus) -> SocketStatus:
             supports_ram=s.capabilities.supports_ram,
             supports_empty=s.capabilities.supports_empty,
             runtime_configurable=s.capabilities.runtime_configurable,
-            supports_write_protect=s.capabilities.supports_write_protect,
         ),
         rom_header=header,
-        write_protected=s.write_protected,
     )
 
 

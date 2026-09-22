@@ -61,10 +61,10 @@ class SidewaysServiceStub(object):
                 request_serializer=sideways__pb2.ConfigureSlotRequest.SerializeToString,
                 response_deserializer=sideways__pb2.ConfigureSlotResponse.FromString,
                 _registered_method=True)
-        self.SetSlotWriteProtect = channel.unary_unary(
-                '/beebium.SidewaysService/SetSlotWriteProtect',
-                request_serializer=sideways__pb2.SetSlotWriteProtectRequest.SerializeToString,
-                response_deserializer=sideways__pb2.SetSlotWriteProtectResponse.FromString,
+        self.SetSlotProtection = channel.unary_unary(
+                '/beebium.SidewaysService/SetSlotProtection',
+                request_serializer=sideways__pb2.SetSlotProtectionRequest.SerializeToString,
+                response_deserializer=sideways__pb2.SetSlotProtectionResponse.FromString,
                 _registered_method=True)
         self.ReadSlotData = channel.unary_unary(
                 '/beebium.SidewaysService/ReadSlotData',
@@ -100,10 +100,11 @@ class SidewaysServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SetSlotWriteProtect(self, request, context):
-        """Set or clear the write-protect switch on a RAM slot. Models a board's
-        write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
-        slots that are not currently RAM.
+    def SetSlotProtection(self, request, context):
+        """Engage or release the read/write protection on a slot-protection group.
+        A group is a named set of slots that one board switch/link protects as a
+        whole (see SlotProtectionGroup); the available groups are reported by
+        GetSlotStatus. Rejected for an unknown group or an unsupported kind.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -136,10 +137,10 @@ def add_SidewaysServiceServicer_to_server(servicer, server):
                     request_deserializer=sideways__pb2.ConfigureSlotRequest.FromString,
                     response_serializer=sideways__pb2.ConfigureSlotResponse.SerializeToString,
             ),
-            'SetSlotWriteProtect': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetSlotWriteProtect,
-                    request_deserializer=sideways__pb2.SetSlotWriteProtectRequest.FromString,
-                    response_serializer=sideways__pb2.SetSlotWriteProtectResponse.SerializeToString,
+            'SetSlotProtection': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSlotProtection,
+                    request_deserializer=sideways__pb2.SetSlotProtectionRequest.FromString,
+                    response_serializer=sideways__pb2.SetSlotProtectionResponse.SerializeToString,
             ),
             'ReadSlotData': grpc.unary_unary_rpc_method_handler(
                     servicer.ReadSlotData,
@@ -222,7 +223,7 @@ class SidewaysService(object):
             _registered_method=True)
 
     @staticmethod
-    def SetSlotWriteProtect(request,
+    def SetSlotProtection(request,
             target,
             options=(),
             channel_credentials=None,
@@ -235,9 +236,9 @@ class SidewaysService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/beebium.SidewaysService/SetSlotWriteProtect',
-            sideways__pb2.SetSlotWriteProtectRequest.SerializeToString,
-            sideways__pb2.SetSlotWriteProtectResponse.FromString,
+            '/beebium.SidewaysService/SetSlotProtection',
+            sideways__pb2.SetSlotProtectionRequest.SerializeToString,
+            sideways__pb2.SetSlotProtectionResponse.FromString,
             options,
             channel_credentials,
             insecure,

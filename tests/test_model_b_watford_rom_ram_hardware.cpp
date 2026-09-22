@@ -146,7 +146,7 @@ TEST_CASE("Watford S2 global write-protect", "[hardware][watford][s2]") {
     }
 }
 
-TEST_CASE("Watford S1 socket-14 read-protect", "[hardware][watford][s1]") {
+TEST_CASE("Watford S1 slot-14 read-protect", "[hardware][watford][s1]") {
     ModelBWatfordRomRamHardware hw;
     auto rom14 = make_image(0xE4, 0xE0);
     hw.load_sideways_rom(14, rom14.data(), rom14.size());
@@ -190,13 +190,12 @@ TEST_CASE("Watford reset behaviour", "[hardware][watford][reset]") {
 TEST_CASE("Watford topology", "[hardware][watford][topology]") {
     auto topo = ModelBWatfordRomRamHardware::slot_topology();
 
-    SECTION("16 independent, non-runtime-configurable slots, no per-slot write-protect") {
+    SECTION("16 independent, non-runtime-configurable slots") {
         REQUIRE(topo.sockets.size() == 16);
         REQUIRE_FALSE(topo.has_aliasing);
         for (const auto& s : topo.sockets) {
             REQUIRE(s.slots.size() == 1);
             REQUIRE_FALSE(s.runtime_configurable);
-            REQUIRE_FALSE(s.supports_write_protect);
         }
     }
 
@@ -214,6 +213,43 @@ TEST_CASE("Watford topology", "[hardware][watford][topology]") {
                 REQUIRE(s.supports_rom);
             }
         }
+    }
+}
+
+TEST_CASE("Watford protection groups", "[hardware][watford][protection]") {
+    ModelBWatfordRomRamHardware hw;
+
+    SECTION("reports an S2 board write group and an S1 slot-14 read group") {
+        auto groups = hw.protection_groups();
+        REQUIRE(groups.size() == 2);
+
+        const auto& s2 = groups[0];
+        REQUIRE(s2.id == "board");
+        REQUIRE(s2.slots.size() == 16);
+        REQUIRE(s2.supports_write_protect);
+        REQUIRE_FALSE(s2.supports_hide);
+
+        const auto& s1 = groups[1];
+        REQUIRE(s1.id == "slot-14");
+        REQUIRE(s1.slots == std::vector<int>{14});
+        REQUIRE(s1.supports_hide);
+        REQUIRE_FALSE(s1.supports_write_protect);
+    }
+
+    SECTION("set_protection drives S2 write and S1 read, and reports state back") {
+        REQUIRE(hw.set_protection("board", ProtectionKind::WriteProtect, true));
+        REQUIRE(hw.global_write_protect());
+        REQUIRE(hw.protection_groups()[0].write_protected);
+
+        REQUIRE(hw.set_protection("slot-14", ProtectionKind::Hide, true));
+        REQUIRE(hw.bank14_read_protect());
+        REQUIRE(hw.protection_groups()[1].hidden);
+    }
+
+    SECTION("rejects unknown groups and unsupported kinds") {
+        REQUIRE_FALSE(hw.set_protection("board", ProtectionKind::Hide, true));
+        REQUIRE_FALSE(hw.set_protection("slot-14", ProtectionKind::WriteProtect, true));
+        REQUIRE_FALSE(hw.set_protection("nope", ProtectionKind::WriteProtect, true));
     }
 }
 

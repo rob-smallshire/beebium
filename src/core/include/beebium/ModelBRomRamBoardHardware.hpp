@@ -25,6 +25,8 @@
 #include "MotherboardLinks.hpp"
 #include "OutputQueue.hpp"
 #include "Saa5050.hpp"
+#include <charconv>
+#include "SlotProtection.hpp"
 #include "SlotTopology.hpp"
 #include "SystemViaPeripheral.hpp"
 #include "Via6522.hpp"
@@ -508,6 +510,40 @@ public:
         return sideways.is_slot_write_protected(slot);
     }
 
+    // Slot protection groups (the board-agnostic protection surface). This
+    // notional board carries a per-slot write-protect switch on every slot, so it
+    // exposes a one-slot write group for each slot currently fitted as RAM.
+    std::vector<SlotProtectionGroup> protection_groups() const {
+        std::vector<SlotProtectionGroup> groups;
+        for (int slot = 0; slot < 16; ++slot) {
+            if (sideways.bank_type(static_cast<uint8_t>(slot)) != SlotType::Ram) {
+                continue;
+            }
+            SlotProtectionGroup g;
+            g.id = "slot-" + std::to_string(slot);
+            g.label = "Slot " + std::to_string(slot) + " write-protect";
+            g.slots = {slot};
+            g.supports_write_protect = true;
+            g.write_protected = sideways.is_slot_write_protected(static_cast<uint8_t>(slot));
+            groups.push_back(std::move(g));
+        }
+        return groups;
+    }
+
+    bool set_protection(std::string_view group_id, ProtectionKind kind, bool engaged) {
+        if (kind != ProtectionKind::WriteProtect) return false;
+        if (group_id.size() < 6 || group_id.substr(0, 5) != "slot-") return false;
+        int slot = -1;
+        auto num = group_id.substr(5);
+        auto [ptr, ec] = std::from_chars(num.data(), num.data() + num.size(), slot);
+        if (ec != std::errc{} || ptr != num.data() + num.size() || slot < 0 || slot > 15) {
+            return false;
+        }
+        if (sideways.bank_type(static_cast<uint8_t>(slot)) != SlotType::Ram) return false;
+        sideways.set_slot_write_protected(static_cast<uint8_t>(slot), engaged);
+        return true;
+    }
+
     // The ROM/RAM expansion board has full 4-bit ROMSEL decoding and no
     // motherboard links that affect slot mapping; every slot is independent
     // regardless of any link state.
@@ -535,9 +571,8 @@ public:
             // ROM/RAM/empty come from the SocketSpec defaults; the ROM/RAM
             // board uniquely allows reconfiguring a slot's type at runtime.
             spec.runtime_configurable = true;
-            // The notional board carries a per-slot write-protect switch on any
-            // slot configured as RAM.
-            spec.supports_write_protect = true;
+            // Its per-slot write-protect switches are exposed as one-slot write
+            // groups via protection_groups(), not a per-socket topology flag.
             topo.sockets.push_back(std::move(spec));
         }
         return topo;

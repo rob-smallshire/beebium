@@ -54,10 +54,11 @@ class SidewaysServiceStub:
     """Query slot/socket configuration and current state"""
     ConfigureSlot: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.ConfigureSlotRequest, _sideways_pb2.ConfigureSlotResponse]
     """Configure a slot (empty/rom/ram) with optional image data"""
-    SetSlotWriteProtect: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.SetSlotWriteProtectRequest, _sideways_pb2.SetSlotWriteProtectResponse]
-    """Set or clear the write-protect switch on a RAM slot. Models a board's
-    write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
-    slots that are not currently RAM.
+    SetSlotProtection: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.SetSlotProtectionRequest, _sideways_pb2.SetSlotProtectionResponse]
+    """Engage or release the read/write protection on a slot-protection group.
+    A group is a named set of slots that one board switch/link protects as a
+    whole (see SlotProtectionGroup); the available groups are reported by
+    GetSlotStatus. Rejected for an unknown group or an unsupported kind.
     """
     ReadSlotData: _grpc.UnaryUnaryMultiCallable[_sideways_pb2.ReadSlotDataRequest, _sideways_pb2.ReadSlotDataResponse]
     """Read slot contents (for debugging/inspection)"""
@@ -78,10 +79,11 @@ class SidewaysServiceAsyncStub(SidewaysServiceStub):
     """Query slot/socket configuration and current state"""
     ConfigureSlot: _aio.UnaryUnaryMultiCallable[_sideways_pb2.ConfigureSlotRequest, _sideways_pb2.ConfigureSlotResponse]  # type: ignore[assignment]
     """Configure a slot (empty/rom/ram) with optional image data"""
-    SetSlotWriteProtect: _aio.UnaryUnaryMultiCallable[_sideways_pb2.SetSlotWriteProtectRequest, _sideways_pb2.SetSlotWriteProtectResponse]  # type: ignore[assignment]
-    """Set or clear the write-protect switch on a RAM slot. Models a board's
-    write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
-    slots that are not currently RAM.
+    SetSlotProtection: _aio.UnaryUnaryMultiCallable[_sideways_pb2.SetSlotProtectionRequest, _sideways_pb2.SetSlotProtectionResponse]  # type: ignore[assignment]
+    """Engage or release the read/write protection on a slot-protection group.
+    A group is a named set of slots that one board switch/link protects as a
+    whole (see SlotProtectionGroup); the available groups are reported by
+    GetSlotStatus. Rejected for an unknown group or an unsupported kind.
     """
     ReadSlotData: _aio.UnaryUnaryMultiCallable[_sideways_pb2.ReadSlotDataRequest, _sideways_pb2.ReadSlotDataResponse]  # type: ignore[assignment]
     """Read slot contents (for debugging/inspection)"""
@@ -113,14 +115,15 @@ class SidewaysServiceServicer(metaclass=_abc_1.ABCMeta):
         """Configure a slot (empty/rom/ram) with optional image data"""
 
     @_abc_1.abstractmethod
-    def SetSlotWriteProtect(
+    def SetSlotProtection(
         self,
-        request: _sideways_pb2.SetSlotWriteProtectRequest,
+        request: _sideways_pb2.SetSlotProtectionRequest,
         context: _ServicerContext,
-    ) -> _typing.Union[_sideways_pb2.SetSlotWriteProtectResponse, _abc.Awaitable[_sideways_pb2.SetSlotWriteProtectResponse]]:
-        """Set or clear the write-protect switch on a RAM slot. Models a board's
-        write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
-        slots that are not currently RAM.
+    ) -> _typing.Union[_sideways_pb2.SetSlotProtectionResponse, _abc.Awaitable[_sideways_pb2.SetSlotProtectionResponse]]:
+        """Engage or release the read/write protection on a slot-protection group.
+        A group is a named set of slots that one board switch/link protects as a
+        whole (see SlotProtectionGroup); the available groups are reported by
+        GetSlotStatus. Rejected for an unknown group or an unsupported kind.
         """
 
     @_abc_1.abstractmethod

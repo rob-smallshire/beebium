@@ -432,8 +432,8 @@ struct ServerConfig {
     std::map<uint8_t, std::string> rom_slots;
     // Sideways slot configuration (type, image, and the RAM write-protect
     // switch's power-on position). The switch is also runtime-toggleable via
-    // SidewaysService.SetSlotWriteProtect; write_protected here is just its
-    // launch state.
+    // SidewaysService.SetSlotProtection (its slot-N write group); write_protected
+    // here is just its launch state.
     std::vector<SidewaysConfig> sideways_configs;
     // Sideways slots supplied by a --preset, applied as a baseline after CLI
     // parsing. A CLI --sideways for the same slot takes precedence. See the
@@ -543,7 +543,7 @@ void print_usage(const char* program_name) {
               << "                           image required for rom, optional for ram, none for empty.\n"
               << "                           write-protect (ram only) engages the write-protect\n"
               << "                           switch at startup; runtime-toggleable via\n"
-              << "                           SidewaysService.SetSlotWriteProtect.\n"
+              << "                           SidewaysService.SetSlotProtection.\n"
               << "  --rom-dir <dirpath>      ROM directory (auto-detected if not specified)\n"
               << "  --port <port>            gRPC port (default: " << DEFAULT_GRPC_PORT << ")\n"
               << "  --floppy <drive>:<filepath|url>\n"
@@ -1176,9 +1176,15 @@ std::optional<std::string> validate_config(const ServerConfig<MachineType>& conf
                     return "--sideways write-protect: slot " + std::to_string(c.slot)
                            + " does not exist on this machine variant";
                 }
-                if (!spec->supports_write_protect) {
+                // Per-slot launch write-protect targets a per-slot switch (a
+                // one-slot write-protect group, applied below via
+                // set_slot_write_protected). A slot that cannot be RAM cannot
+                // carry one. Board-wide switches (e.g. the Watford S2) are runtime
+                // controls via SidewaysService.SetSlotProtection, not this flag.
+                if (!spec->supports_ram) {
                     return "--sideways write-protect: slot " + std::to_string(c.slot)
-                           + " has no write-protect switch on this machine variant";
+                           + " has no per-slot write-protect switch on this "
+                             "machine variant";
                 }
             }
         }
@@ -3352,7 +3358,6 @@ public:
                 if (sock.supports_rom) capabilities.push_back("rom");
                 if (sock.supports_ram) capabilities.push_back("ram");
                 if (sock.supports_empty) capabilities.push_back("empty");
-                if (sock.supports_write_protect) capabilities.push_back("write_protect");
 
                 sockets.push_back(ojson{
                     {"label", sock.label},

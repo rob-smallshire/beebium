@@ -25,6 +25,7 @@
 #include "MotherboardLinks.hpp"
 #include "OutputQueue.hpp"
 #include "Saa5050.hpp"
+#include "SlotProtection.hpp"
 #include "SlotTopology.hpp"
 #include "SystemViaPeripheral.hpp"
 #include "Via6522.hpp"
@@ -544,6 +545,27 @@ public:
         return sideways.is_slot_write_protected(slot);
     }
 
+    // Slot protection groups (the board-agnostic protection surface). The
+    // Sidewise has one control: the slot-15 write-protect switch (the S6 link),
+    // a one-slot write group.
+    std::vector<SlotProtectionGroup> protection_groups() const {
+        SlotProtectionGroup g;
+        g.id = "slot-15";
+        g.label = "Sidewise RAM write-protect";
+        g.slots = {SLOT_15};
+        g.supports_write_protect = true;
+        g.write_protected = sideways.is_slot_write_protected(SLOT_15);
+        return {g};
+    }
+
+    bool set_protection(std::string_view group_id, ProtectionKind kind, bool engaged) {
+        if (group_id == "slot-15" && kind == ProtectionKind::WriteProtect) {
+            sideways.set_slot_write_protected(SLOT_15, engaged);
+            return true;
+        }
+        return false;
+    }
+
     // The Sidewise provides full 4-bit ROMSEL decoding (no aliasing) with no
     // motherboard links that affect slot mapping.
     using MotherboardLinks = EmptyMotherboardLinks;
@@ -569,7 +591,6 @@ public:
             if (slot == SLOT_15) {
                 spec.label = "Sidewise RAM/ROM " + std::to_string(slot);
                 spec.supports_ram = true;   // the board's only RAM-capable socket
-                spec.supports_write_protect = true;  // the S6 write-protect link
             } else if (slot <= 3) {
                 spec.label = "Motherboard ROM " + std::to_string(slot);
                 spec.supports_ram = false;

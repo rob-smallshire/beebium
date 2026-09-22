@@ -14,10 +14,11 @@ service SidewaysService {
     // Configure a slot (empty/rom/ram) with optional image data
     rpc ConfigureSlot(ConfigureSlotRequest) returns (ConfigureSlotResponse);
 
-    // Set or clear the write-protect switch on a RAM slot. Models a board's
-    // write-protect link/switch (e.g. the ATPL Sidewise S6 link). Rejected for
-    // slots that are not currently RAM.
-    rpc SetSlotWriteProtect(SetSlotWriteProtectRequest) returns (SetSlotWriteProtectResponse);
+    // Engage or release the read/write protection on a slot-protection group.
+    // A group is a named set of slots that one board switch/link protects as a
+    // whole (see SlotProtectionGroup); the available groups are reported by
+    // GetSlotStatus. Rejected for an unknown group or an unsupported kind.
+    rpc SetSlotProtection(SetSlotProtectionRequest) returns (SetSlotProtectionResponse);
 
     // Read slot contents (for debugging/inspection)
     rpc ReadSlotData(ReadSlotDataRequest) returns (ReadSlotDataResponse);
@@ -53,6 +54,43 @@ message GetSlotStatusResponse {
     // variant has slot-mapping links (e.g. Model B+ S13). Empty for
     // machines with no such links.
     repeated MotherboardLink motherboard_links = 5;
+    // Slot-protection groups: sets of slots whose read/write protection is
+    // engaged as a whole by a board switch/link (see SidewaysProtectionGroup). A
+    // front-end builds a control per group and toggles it with SetSlotProtection.
+    // Empty on machines with no protection controls.
+    repeated SidewaysProtectionGroup protection_groups = 6;
+    // The board's write-select latch, if any (the Watford ROM/RAM board's &FF30):
+    // it routes sideways-region writes to one socket independently of ROMSEL.
+    // Read-only, driven by the guest. Absent (present=false) on other machines.
+    WriteSelectLatch write_select_latch = 7;
+}
+
+// Which kind of access a protection group inhibits.
+enum SidewaysProtectionKind {
+    SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT = 0;
+    SIDEWAYS_PROTECTION_KIND_HIDE = 1;
+}
+
+// A named set of sideways slots whose read and/or write protection is engaged as
+// a whole by one board link/switch. The single, board-agnostic model of sideways
+// protection: the ATPL Sidewise slot-15 write-protect is a one-slot write group;
+// the Watford S2 is a write group over every slot and S1 a read group over
+// socket 14; the ROM/RAM board exposes a one-slot write group per RAM slot.
+message SidewaysProtectionGroup {
+    string id = 1;                     // Stable id, e.g. "board", "socket-14", "slot-15"
+    string label = 2;                  // Human-readable, e.g. "Write-protect (S2)"
+    repeated uint32 slots = 3;         // Slots this switch covers as a whole
+    bool supports_write_protect = 4;   // The group has a write-protect switch
+    bool supports_hide = 5;    // The group has a read-protect switch
+    bool write_protected = 6;          // Current state (iff supports_write_protect)
+    bool hidden = 7;           // Current state (iff supports_hide)
+}
+
+// A board write-select latch that routes sideways-region writes to one socket,
+// separate from the ROMSEL read-select (the Watford ROM/RAM board's &FF30).
+message WriteSelectLatch {
+    bool present = 1;                  // The machine has such a latch
+    uint32 socket = 2;                 // Currently latched write-target socket (0-15)
 }
 
 // Status of a physical socket (or independent slot for ROM/RAM board)
@@ -77,10 +115,11 @@ message SocketStatus {
     // is present); absent / recognised=false for an empty socket, blank RAM,
     // or a non-standard image. Mirrors the describe-rom JSON.
     RomHeader rom_header = 8;
-    // True when this slot is a RAM slot whose write-protect switch is engaged,
-    // inhibiting writes to the RAM. Always false for ROM/empty slots and on
-    // machines with no write-protect control.
-    bool write_protected = 9;
+    // Tag 9 (write_protected) was removed: per-slot write-protect state is now
+    // reported by GetSlotStatusResponse.protection_groups, which covers per-slot,
+    // per-socket and board-wide switches uniformly. Do not reuse this tag.
+    reserved 9;
+    reserved "write_protected";
 }
 
 // Parsed sideways ROM header, when one is recognised in the slot's contents.
@@ -103,10 +142,11 @@ message SocketCapabilities {
     bool supports_ram = 2;
     bool supports_empty = 3;
     bool runtime_configurable = 4;
-    // The socket has a RAM write-protect switch. Only then may a front-end
-    // offer a write-protect control (and only while the slot is RAM). False for
-    // sideways RAM with no such switch (e.g. the B+ 128K SRAM banks).
-    bool supports_write_protect = 5;
+    // Tag 5 (supports_write_protect) was removed: whether a slot can be
+    // write-protected is now expressed by GetSlotStatusResponse.protection_groups
+    // (a group covering that slot with supports_write_protect). Do not reuse.
+    reserved 5;
+    reserved "supports_write_protect";
 }
 
 // One motherboard link (jumper) and its current position. Reported back so
@@ -139,17 +179,18 @@ message ConfigureSlotResponse {
     string image_name = 4;              // Parsed name from ROM header (if applicable)
 }
 
-// --- Set Slot Write Protect ---
+// --- Set Slot Protection ---
 
-message SetSlotWriteProtectRequest {
-    uint32 slot = 1;              // Slot number (0-15)
-    bool write_protected = 2;     // true to engage write-protect, false to release
+message SetSlotProtectionRequest {
+    string group_id = 1;              // A group id from GetSlotStatus.protection_groups
+    SidewaysProtectionKind kind = 2;  // Which protection to change (write or read)
+    bool engaged = 3;                 // true to engage the switch, false to release
 }
 
-message SetSlotWriteProtectResponse {
+message SetSlotProtectionResponse {
     bool success = 1;
     string error = 2;             // Error message if !success
-    bool write_protected = 3;     // The slot's write-protect state after the call
+    bool engaged = 3;             // The switch state after the call
 }
 
 // --- Read Slot Data ---

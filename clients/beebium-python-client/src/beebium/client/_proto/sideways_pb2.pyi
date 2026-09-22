@@ -55,6 +55,22 @@ SIDEWAYS_SLOT_TYPE_RAM: SidewaysSlotType.ValueType  # 2
 """Returns data, accepts writes"""
 Global___SidewaysSlotType: _TypeAlias = SidewaysSlotType  # noqa: Y015
 
+class _SidewaysProtectionKind:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _SidewaysProtectionKindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_SidewaysProtectionKind.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT: _SidewaysProtectionKind.ValueType  # 0
+    SIDEWAYS_PROTECTION_KIND_HIDE: _SidewaysProtectionKind.ValueType  # 1
+
+class SidewaysProtectionKind(_SidewaysProtectionKind, metaclass=_SidewaysProtectionKindEnumTypeWrapper):
+    """Which kind of access a protection group inhibits."""
+
+SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT: SidewaysProtectionKind.ValueType  # 0
+SIDEWAYS_PROTECTION_KIND_HIDE: SidewaysProtectionKind.ValueType  # 1
+Global___SidewaysProtectionKind: _TypeAlias = SidewaysProtectionKind  # noqa: Y015
+
 @_typing.final
 class GetSlotStatusRequest(_message.Message):
     """--- Get Slot Status ---
@@ -83,6 +99,8 @@ class GetSlotStatusResponse(_message.Message):
     NUM_PHYSICAL_SLOTS_FIELD_NUMBER: _builtins.int
     SOCKETS_FIELD_NUMBER: _builtins.int
     MOTHERBOARD_LINKS_FIELD_NUMBER: _builtins.int
+    PROTECTION_GROUPS_FIELD_NUMBER: _builtins.int
+    WRITE_SELECT_LATCH_FIELD_NUMBER: _builtins.int
     has_aliasing: _builtins.bool
     """True for Model B (4 sockets with aliasing)"""
     num_physical_slots: _builtins.int
@@ -98,6 +116,21 @@ class GetSlotStatusResponse(_message.Message):
         machines with no such links.
         """
 
+    @_builtins.property
+    def protection_groups(self) -> _containers.RepeatedCompositeFieldContainer[Global___SidewaysProtectionGroup]:
+        """Slot-protection groups: sets of slots whose read/write protection is
+        engaged as a whole by a board switch/link (see SidewaysProtectionGroup). A
+        front-end builds a control per group and toggles it with SetSlotProtection.
+        Empty on machines with no protection controls.
+        """
+
+    @_builtins.property
+    def write_select_latch(self) -> Global___WriteSelectLatch:
+        """The board's write-select latch, if any (the Watford ROM/RAM board's &FF30):
+        it routes sideways-region writes to one socket independently of ROMSEL.
+        Read-only, driven by the guest. Absent (present=false) on other machines.
+        """
+
     def __init__(
         self,
         *,
@@ -105,14 +138,97 @@ class GetSlotStatusResponse(_message.Message):
         num_physical_slots: _builtins.int = ...,
         sockets: _abc.Iterable[Global___SocketStatus] | None = ...,
         motherboard_links: _abc.Iterable[Global___MotherboardLink] | None = ...,
+        protection_groups: _abc.Iterable[Global___SidewaysProtectionGroup] | None = ...,
+        write_select_latch: Global___WriteSelectLatch | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["write_select_latch", b"write_select_latch"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_aliasing", b"has_aliasing", "motherboard_links", b"motherboard_links", "num_physical_slots", b"num_physical_slots", "sockets", b"sockets"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_aliasing", b"has_aliasing", "motherboard_links", b"motherboard_links", "num_physical_slots", b"num_physical_slots", "protection_groups", b"protection_groups", "sockets", b"sockets", "write_select_latch", b"write_select_latch"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___GetSlotStatusResponse: _TypeAlias = GetSlotStatusResponse  # noqa: Y015
+
+@_typing.final
+class SidewaysProtectionGroup(_message.Message):
+    """A named set of sideways slots whose read and/or write protection is engaged as
+    a whole by one board link/switch. The single, board-agnostic model of sideways
+    protection: the ATPL Sidewise slot-15 write-protect is a one-slot write group;
+    the Watford S2 is a write group over every slot and S1 a read group over
+    socket 14; the ROM/RAM board exposes a one-slot write group per RAM slot.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    SLOTS_FIELD_NUMBER: _builtins.int
+    SUPPORTS_WRITE_PROTECT_FIELD_NUMBER: _builtins.int
+    SUPPORTS_HIDE_FIELD_NUMBER: _builtins.int
+    WRITE_PROTECTED_FIELD_NUMBER: _builtins.int
+    HIDDEN_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    """Stable id, e.g. "board", "socket-14", "slot-15" """
+    label: _builtins.str
+    """Human-readable, e.g. "Write-protect (S2)" """
+    supports_write_protect: _builtins.bool
+    """The group has a write-protect switch"""
+    supports_hide: _builtins.bool
+    """The group has a read-protect switch"""
+    write_protected: _builtins.bool
+    """Current state (iff supports_write_protect)"""
+    hidden: _builtins.bool
+    """Current state (iff supports_hide)"""
+    @_builtins.property
+    def slots(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
+        """Slots this switch covers as a whole"""
+
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        label: _builtins.str = ...,
+        slots: _abc.Iterable[_builtins.int] | None = ...,
+        supports_write_protect: _builtins.bool = ...,
+        supports_hide: _builtins.bool = ...,
+        write_protected: _builtins.bool = ...,
+        hidden: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["hidden", b"hidden", "id", b"id", "label", b"label", "slots", b"slots", "supports_hide", b"supports_hide", "supports_write_protect", b"supports_write_protect", "write_protected", b"write_protected"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___SidewaysProtectionGroup: _TypeAlias = SidewaysProtectionGroup  # noqa: Y015
+
+@_typing.final
+class WriteSelectLatch(_message.Message):
+    """A board write-select latch that routes sideways-region writes to one socket,
+    separate from the ROMSEL read-select (the Watford ROM/RAM board's &FF30).
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PRESENT_FIELD_NUMBER: _builtins.int
+    SOCKET_FIELD_NUMBER: _builtins.int
+    present: _builtins.bool
+    """The machine has such a latch"""
+    socket: _builtins.int
+    """Currently latched write-target socket (0-15)"""
+    def __init__(
+        self,
+        *,
+        present: _builtins.bool = ...,
+        socket: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["present", b"present", "socket", b"socket"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___WriteSelectLatch: _TypeAlias = WriteSelectLatch  # noqa: Y015
 
 @_typing.final
 class SocketStatus(_message.Message):
@@ -128,7 +244,6 @@ class SocketStatus(_message.Message):
     SOCKET_LABEL_FIELD_NUMBER: _builtins.int
     CAPABILITIES_FIELD_NUMBER: _builtins.int
     ROM_HEADER_FIELD_NUMBER: _builtins.int
-    WRITE_PROTECTED_FIELD_NUMBER: _builtins.int
     socket_index: _builtins.int
     """Physical socket/slot number"""
     type: Global___SidewaysSlotType.ValueType
@@ -145,11 +260,6 @@ class SocketStatus(_message.Message):
     """
     socket_label: _builtins.str
     """Physical label (e.g., "IC52", "IC88") for Model B"""
-    write_protected: _builtins.bool
-    """True when this slot is a RAM slot whose write-protect switch is engaged,
-    inhibiting writes to the RAM. Always false for ROM/empty slots and on
-    machines with no write-protect control.
-    """
     @_builtins.property
     def aliased_slots(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
         """Slot numbers that map here (e.g., [0,4,8,12])"""
@@ -180,11 +290,10 @@ class SocketStatus(_message.Message):
         socket_label: _builtins.str = ...,
         capabilities: Global___SocketCapabilities | None = ...,
         rom_header: Global___RomHeader | None = ...,
-        write_protected: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["capabilities", b"capabilities", "rom_header", b"rom_header"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["aliased_slots", b"aliased_slots", "capabilities", b"capabilities", "image_name", b"image_name", "populated", b"populated", "rom_header", b"rom_header", "socket_index", b"socket_index", "socket_label", b"socket_label", "type", b"type", "write_protected", b"write_protected"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["aliased_slots", b"aliased_slots", "capabilities", b"capabilities", "image_name", b"image_name", "populated", b"populated", "rom_header", b"rom_header", "socket_index", b"socket_index", "socket_label", b"socket_label", "type", b"type"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -249,16 +358,10 @@ class SocketCapabilities(_message.Message):
     SUPPORTS_RAM_FIELD_NUMBER: _builtins.int
     SUPPORTS_EMPTY_FIELD_NUMBER: _builtins.int
     RUNTIME_CONFIGURABLE_FIELD_NUMBER: _builtins.int
-    SUPPORTS_WRITE_PROTECT_FIELD_NUMBER: _builtins.int
     supports_rom: _builtins.bool
     supports_ram: _builtins.bool
     supports_empty: _builtins.bool
     runtime_configurable: _builtins.bool
-    supports_write_protect: _builtins.bool
-    """The socket has a RAM write-protect switch. Only then may a front-end
-    offer a write-protect control (and only while the slot is RAM). False for
-    sideways RAM with no such switch (e.g. the B+ 128K SRAM banks).
-    """
     def __init__(
         self,
         *,
@@ -266,11 +369,10 @@ class SocketCapabilities(_message.Message):
         supports_ram: _builtins.bool = ...,
         supports_empty: _builtins.bool = ...,
         runtime_configurable: _builtins.bool = ...,
-        supports_write_protect: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["runtime_configurable", b"runtime_configurable", "supports_empty", b"supports_empty", "supports_ram", b"supports_ram", "supports_rom", b"supports_rom", "supports_write_protect", b"supports_write_protect"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["runtime_configurable", b"runtime_configurable", "supports_empty", b"supports_empty", "supports_ram", b"supports_ram", "supports_rom", b"supports_rom"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -377,57 +479,61 @@ class ConfigureSlotResponse(_message.Message):
 Global___ConfigureSlotResponse: _TypeAlias = ConfigureSlotResponse  # noqa: Y015
 
 @_typing.final
-class SetSlotWriteProtectRequest(_message.Message):
-    """--- Set Slot Write Protect ---"""
+class SetSlotProtectionRequest(_message.Message):
+    """--- Set Slot Protection ---"""
 
     DESCRIPTOR: _descriptor.Descriptor
 
-    SLOT_FIELD_NUMBER: _builtins.int
-    WRITE_PROTECTED_FIELD_NUMBER: _builtins.int
-    slot: _builtins.int
-    """Slot number (0-15)"""
-    write_protected: _builtins.bool
-    """true to engage write-protect, false to release"""
+    GROUP_ID_FIELD_NUMBER: _builtins.int
+    KIND_FIELD_NUMBER: _builtins.int
+    ENGAGED_FIELD_NUMBER: _builtins.int
+    group_id: _builtins.str
+    """A group id from GetSlotStatus.protection_groups"""
+    kind: Global___SidewaysProtectionKind.ValueType
+    """Which protection to change (write or read)"""
+    engaged: _builtins.bool
+    """true to engage the switch, false to release"""
     def __init__(
         self,
         *,
-        slot: _builtins.int = ...,
-        write_protected: _builtins.bool = ...,
+        group_id: _builtins.str = ...,
+        kind: Global___SidewaysProtectionKind.ValueType = ...,
+        engaged: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["slot", b"slot", "write_protected", b"write_protected"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["engaged", b"engaged", "group_id", b"group_id", "kind", b"kind"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___SetSlotWriteProtectRequest: _TypeAlias = SetSlotWriteProtectRequest  # noqa: Y015
+Global___SetSlotProtectionRequest: _TypeAlias = SetSlotProtectionRequest  # noqa: Y015
 
 @_typing.final
-class SetSlotWriteProtectResponse(_message.Message):
+class SetSlotProtectionResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     SUCCESS_FIELD_NUMBER: _builtins.int
     ERROR_FIELD_NUMBER: _builtins.int
-    WRITE_PROTECTED_FIELD_NUMBER: _builtins.int
+    ENGAGED_FIELD_NUMBER: _builtins.int
     success: _builtins.bool
     error: _builtins.str
     """Error message if !success"""
-    write_protected: _builtins.bool
-    """The slot's write-protect state after the call"""
+    engaged: _builtins.bool
+    """The switch state after the call"""
     def __init__(
         self,
         *,
         success: _builtins.bool = ...,
         error: _builtins.str = ...,
-        write_protected: _builtins.bool = ...,
+        engaged: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "success", b"success", "write_protected", b"write_protected"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["engaged", b"engaged", "error", b"error", "success", b"success"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___SetSlotWriteProtectResponse: _TypeAlias = SetSlotWriteProtectResponse  # noqa: Y015
+Global___SetSlotProtectionResponse: _TypeAlias = SetSlotProtectionResponse  # noqa: Y015
 
 @_typing.final
 class ReadSlotDataRequest(_message.Message):
