@@ -591,6 +591,7 @@ public:
             if (slot == SLOT_15) {
                 spec.label = "Sidewise RAM/ROM " + std::to_string(slot);
                 spec.supports_ram = true;   // the board's only RAM-capable socket
+                spec.supports_write_protect = true;  // the S6 per-slot switch
             } else if (slot <= 3) {
                 spec.label = "Motherboard ROM " + std::to_string(slot);
                 spec.supports_ram = false;

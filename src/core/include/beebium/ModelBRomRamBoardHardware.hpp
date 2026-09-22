@@ -571,8 +571,10 @@ public:
             // ROM/RAM/empty come from the SocketSpec defaults; the ROM/RAM
             // board uniquely allows reconfiguring a slot's type at runtime.
             spec.runtime_configurable = true;
-            // Its per-slot write-protect switches are exposed as one-slot write
-            // groups via protection_groups(), not a per-socket topology flag.
+            // Every slot carries a per-slot write-protect switch (runtime state
+            // is the slot-N write group; this static flag drives config-time
+            // capability description and --sideways write-protect validation).
+            spec.supports_write_protect = true;
             topo.sockets.push_back(std::move(spec));
         }
         return topo;

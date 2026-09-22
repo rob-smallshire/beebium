@@ -1196,10 +1196,10 @@ std::optional<std::string> validate_config(const ServerConfig<MachineType>& conf
                 }
                 // Per-slot launch write-protect targets a per-slot switch (a
                 // one-slot write-protect group, applied below via
-                // set_slot_write_protected). A slot that cannot be RAM cannot
-                // carry one. Board-wide switches (e.g. the Watford S2) are runtime
-                // controls via SidewaysService.SetSlotProtection, not this flag.
-                if (!spec->supports_ram) {
+                // set_slot_write_protected). Board-wide switches (e.g. the Watford
+                // S2) are runtime controls via SidewaysService.SetSlotProtection,
+                // not this flag - their sockets set supports_write_protect false.
+                if (!spec->supports_write_protect) {
                     return "--sideways write-protect: slot " + std::to_string(c.slot)
                            + " has no per-slot write-protect switch on this "
                              "machine variant";
@@ -3401,6 +3401,7 @@ public:
                 if (sock.supports_rom) capabilities.push_back("rom");
                 if (sock.supports_ram) capabilities.push_back("ram");
                 if (sock.supports_empty) capabilities.push_back("empty");
+                if (sock.supports_write_protect) capabilities.push_back("write_protect");
 
                 sockets.push_back(ojson{
                     {"label", sock.label},

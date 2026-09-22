@@ -39,11 +39,15 @@ struct SocketSpec {
     bool supports_ram = true;        // Socket may be configured as sideways RAM
     bool supports_empty = true;      // Socket may be left empty
     bool runtime_configurable = false; // Type may change at runtime via the API
-    // Write/read protection is not a per-socket property: it is modelled by
-    // SlotProtectionGroup (see SlotProtection.hpp), which a machine exposes via
-    // Memory::protection_groups(). A one-slot write group covers the ATPL
-    // Sidewise / ROM-RAM-board per-slot switches; the Watford board's S1/S2 cover
-    // a socket / every slot as a whole.
+    // Static hint that this socket has a per-slot write-protect switch. Used only
+    // for config-time (pre-launch) capability description (describe-machine) and
+    // to validate the --sideways ...:write-protect launch flag - there is no
+    // running instance to enumerate protection groups from at that point. The
+    // RUNTIME protection state is modelled by SlotProtectionGroup (see
+    // SlotProtection.hpp / Memory::protection_groups()); this is just the static
+    // "can a per-slot write-protect be set here". False on boards whose
+    // write-protect is board-wide (e.g. the Watford S2 link), not per-slot.
+    bool supports_write_protect = false;
 };
 
 // SlotTopology describes the sideways memory layout of a machine variant.
