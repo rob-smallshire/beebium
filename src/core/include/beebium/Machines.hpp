@@ -20,6 +20,7 @@
 #include "ModelBPlus128KHardware.hpp"
 #include "ModelBRomRamBoardHardware.hpp"
 #include "ModelBAtplSidewiseHardware.hpp"
+#include "ModelBWatfordRomRamHardware.hpp"
 
 namespace beebium {
 
@@ -39,6 +40,15 @@ using ModelBRomRamBoard = Machine<Nmos6502, ModelBRomRamBoardHardware>;
 // board's RAM/ROM socket with write-through and a runtime write-protect switch.
 // A specific historical board, intended to replace ModelBRomRamBoard.
 using ModelBAtplSidewise = Machine<Nmos6502, ModelBAtplSidewiseHardware>;
+
+// BBC Model B with the Watford Electronics ROM/RAM board: NMOS 6502 + Model B
+// hardware with 16 sideways slots. Slots 0-7 are dynamic sideways RAM (32/64/128K
+// fitted at launch); slots 8-11 are the motherboard ROM sockets; slots 12,13,15
+// are the board's ROM sockets; slot 14 is the board's ROM/static-RAM socket. A
+// separate &FF30 write-select latch directs sideways-region writes independently
+// of the &FE30 read-select, with S1 (socket-14 read-protect) and S2 (global
+// write-protect) switches. A specific historical board.
+using ModelBWatfordRomRam = Machine<Nmos6502, ModelBWatfordRomRamHardware>;
 
 // BBC Model B+ 64K: NMOS 6502 + Model B+ hardware (64KB RAM with shadow/ANDY)
 using ModelBPlus = Machine<Nmos6502, ModelBPlusHardware>;

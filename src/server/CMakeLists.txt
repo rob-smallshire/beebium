@@ -239,6 +239,7 @@ add_beebium_server(beebium-model-b-plus main_model_b_plus.cpp)
 add_beebium_server(beebium-model-b-plus-128k main_model_b_plus_128k.cpp)
 add_beebium_server(beebium-model-b-romram main_model_b_romram.cpp)
 add_beebium_server(beebium-model-b-atpl-sidewise main_model_b_atpl_sidewise.cpp)
+add_beebium_server(beebium-model-b-watford-rom-ram main_model_b_watford_rom_ram.cpp)
 
 # System presets are generated below (after the ROM copy) via add_system_preset,
 # which runs the create-preset subcommand as a POST_BUILD step.
@@ -254,6 +255,7 @@ set(BEEBIUM_SERVERS_DEPS
     beebium-model-b-plus-128k
     beebium-model-b-romram
     beebium-model-b-atpl-sidewise
+    beebium-model-b-watford-rom-ram
 )
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
@@ -319,6 +321,29 @@ add_system_preset(beebium-model-b-atpl-sidewise "model-b-atpl-sidewise-disc"
     "Model B with ATPL Sidewise (Disc)" "1984"
     DESCRIPTION "Model B, ATPL Sidewise board, 1770 DFS, 16K sideways RAM in slot 15"
     --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom --sideways slot=15:type=ram)
+# The Watford ROM/RAM board shipped in 32K, 64K and 128K sideways-RAM
+# configurations (2, 4 and 8 of the DRAM banks 0-7). BASIC auto-loads into slot
+# 15 (this machine's default language slot, the board socket the manual
+# recommends); DFS goes in board ROM slot 13.
+add_system_preset(beebium-model-b-watford-rom-ram "model-b-watford-rom-ram-32k"
+    "Model B with Watford ROM/RAM (32K)" "1985"
+    DESCRIPTION "Model B, Watford ROM/RAM board, 1770 DFS, 32K sideways RAM (banks 0-1)"
+    --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
+    --sideways slot=0:type=ram --sideways slot=1:type=ram)
+add_system_preset(beebium-model-b-watford-rom-ram "model-b-watford-rom-ram-64k"
+    "Model B with Watford ROM/RAM (64K)" "1985"
+    DESCRIPTION "Model B, Watford ROM/RAM board, 1770 DFS, 64K sideways RAM (banks 0-3)"
+    --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
+    --sideways slot=0:type=ram --sideways slot=1:type=ram
+    --sideways slot=2:type=ram --sideways slot=3:type=ram)
+add_system_preset(beebium-model-b-watford-rom-ram "model-b-watford-rom-ram-128k"
+    "Model B with Watford ROM/RAM (128K)" "1985"
+    DESCRIPTION "Model B, Watford ROM/RAM board, 1770 DFS, 128K sideways RAM (banks 0-7)"
+    --fdc acorn-1770 --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
+    --sideways slot=0:type=ram --sideways slot=1:type=ram
+    --sideways slot=2:type=ram --sideways slot=3:type=ram
+    --sideways slot=4:type=ram --sideways slot=5:type=ram
+    --sideways slot=6:type=ram --sideways slot=7:type=ram)
 add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
     DESCRIPTION "64K Model B+, integral DFS")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
@@ -440,6 +465,7 @@ install(TARGETS
         beebium-model-b-plus-128k
         beebium-model-b-romram
         beebium-model-b-atpl-sidewise
+        beebium-model-b-watford-rom-ram
     RUNTIME DESTINATION bin
 )
 install(DIRECTORY ${BEEBIUM_ROM_DIR}/
