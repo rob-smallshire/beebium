@@ -40,20 +40,36 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         let populated: Bool
         let imageName: String
         let romHeader: RomHeader?
-        /// Whether this physical socket has a write-protect switch at all. Only
-        /// then is the control offered (and only while the slot is RAM). False
-        /// for sideways RAM with no switch, e.g. the B+ 128K SRAM banks.
-        let supportsWriteProtect: Bool
-        /// Whether this RAM slot's write-protect switch is currently engaged.
-        /// Always false for ROM/empty slots and machines without the control.
-        let writeProtected: Bool
 
         var id: UInt32 { socketIndex }
         /// Effective boot priority: the highest slot the socket answers.
         var priority: Int { slots.max() ?? 0 }
     }
 
+    /// Which access a protection group inhibits (mirrors the proto enum).
+    enum ProtectionKind: Sendable {
+        case writeProtect, hide
+        var proto: Beebium_SidewaysProtectionKind {
+            self == .writeProtect ? .writeProtect : .hide
+        }
+    }
+
+    /// A named set of sideways slots whose protection is engaged as a whole by
+    /// one board switch/link -- the single, board-agnostic model of sideways
+    /// protection. A one-slot group (ATPL slot-15, a ROM/RAM board slot) behaves
+    /// like a per-slot control; a whole-board group (Watford S2) moves together.
+    struct ProtectionGroup: Identifiable, Sendable, Equatable {
+        let id: String
+        let label: String
+        let slots: [Int]
+        let supportsWriteProtect: Bool
+        let supportsHide: Bool
+        let writeProtected: Bool
+        let hidden: Bool
+    }
+
     @Published private(set) var sockets: [Socket] = []
+    @Published private(set) var protectionGroups: [ProtectionGroup] = []
     @Published private(set) var hasAliasing: Bool = false
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var errorMessage: String?
@@ -77,9 +93,27 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         subscriptionTask = nil
         client = nil
         sockets = []
+        protectionGroups = []
         hasAliasing = false
         isLoaded = false
         errorMessage = nil
+    }
+
+    /// The protection group covering `socket` that offers the given kind of
+    /// protection, if any. A group covers a socket when their slot sets overlap,
+    /// so an aliased Model B socket and a whole-board Watford group both match.
+    func group(forSocket socket: Socket, kind: ProtectionKind) -> ProtectionGroup? {
+        Self.group(in: protectionGroups, forSocket: socket, kind: kind)
+    }
+
+    /// Pure lookup so the covering rule is unit-testable without a live client.
+    static func group(in groups: [ProtectionGroup], forSocket socket: Socket,
+                      kind: ProtectionKind) -> ProtectionGroup? {
+        let socketSlots = Set(socket.slots)
+        return groups.first { group in
+            let offersKind = kind == .writeProtect ? group.supportsWriteProtect : group.supportsHide
+            return offersKind && !socketSlots.isDisjoint(with: Set(group.slots))
+        }
     }
 
     // MARK: - Fetch + subscribe
@@ -89,10 +123,12 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         do {
             let response = try await client.getSlotStatus(.init()).response.get()
             let updated = response.sockets.map(Self.mapSocket)
+            let groups = response.protectionGroups.map(Self.mapGroup)
             await MainActor.run {
                 // Highest priority (highest slot) first - mirrors the MOS scan
                 // and the New Machine dialog's Memory tab ordering.
                 self.sockets = updated.sorted { $0.priority > $1.priority }
+                self.protectionGroups = groups
                 self.hasAliasing = response.hasAliasing_p
                 self.isLoaded = true
                 self.errorMessage = nil
@@ -104,71 +140,47 @@ final class SidewaysClient: ObservableObject, Disconnectable {
         }
     }
 
-    // MARK: - Write-protect (the sidebar's one mutable affordance)
+    // MARK: - Slot protection (write-protect / hide, by group)
 
-    /// Engage or release a RAM slot's write-protect switch on the running
-    /// machine. The server enforces the RAM-only rule and returns the resulting
-    /// state; we reflect exactly what it reports (there is no push event for
-    /// write-protect, so the RPC response is the source of truth). On any
-    /// failure the reason is surfaced via `errorMessage` and the indicator is
-    /// left showing the last known good state.
-    func setWriteProtect(slot: UInt32, _ protected: Bool) async {
+    /// Engage or release a protection group's write-protect or hide switch. The
+    /// switch acts on the whole group, so on success we re-fetch GetSlotStatus to
+    /// reflect every covered slot together (the RPC has no push event). On
+    /// failure the reason is surfaced via `errorMessage`.
+    func setSlotProtection(groupID: String, kind: ProtectionKind, engaged: Bool) async {
         guard let client = client else { return }
-        var request = Beebium_SetSlotWriteProtectRequest()
-        request.slot = slot
-        request.writeProtected = protected
+        var request = Beebium_SetSlotProtectionRequest()
+        request.groupID = groupID
+        request.kind = kind.proto
+        request.engaged = engaged
         do {
-            let response = try await client.setSlotWriteProtect(request).response.get()
-            switch Self.writeProtectOutcome(success: response.success,
-                                            error: response.error,
-                                            writeProtected: response.writeProtected,
-                                            slot: slot) {
-            case .applied(let state):
-                applyWriteProtect(slot: Int(slot), writeProtected: state)
+            let response = try await client.setSlotProtection(request).response.get()
+            switch Self.protectionOutcome(success: response.success,
+                                          error: response.error, groupID: groupID) {
+            case .applied:
+                await fetchSlotStatus()
                 errorMessage = nil
             case .rejected(let reason):
                 errorMessage = reason
             }
         } catch {
-            errorMessage = "Write-protect failed: \(error.localizedDescription)"
+            errorMessage = "Protection change failed: \(error.localizedDescription)"
         }
     }
 
-    /// How a `SetSlotWriteProtect` response maps to a state change or an error
-    /// message. Pure so the success / rejected / empty-error branches are unit
-    /// testable without a live server.
-    enum WriteProtectOutcome: Equatable {
-        case applied(Bool)      // reflect this write-protect state
+    /// How a `SetSlotProtection` response maps to an outcome. Pure so the
+    /// success / rejected / empty-error branches are unit testable.
+    enum ProtectionOutcome: Equatable {
+        case applied            // re-fetch to reflect every covered slot
         case rejected(String)   // surface this reason via errorMessage
     }
 
-    static func writeProtectOutcome(success: Bool, error: String,
-                                    writeProtected: Bool, slot: UInt32) -> WriteProtectOutcome {
+    static func protectionOutcome(success: Bool, error: String, groupID: String) -> ProtectionOutcome {
         guard success else {
             return .rejected(error.isEmpty
-                ? "Could not change write-protect for slot \(slot)."
+                ? "Could not change protection for \(groupID)."
                 : error)
         }
-        return .applied(writeProtected)
-    }
-
-    /// Patch the write-protect state of whichever socket answers `slot`, in
-    /// place, mirroring `applyHeaderChange`.
-    private func applyWriteProtect(slot: Int, writeProtected: Bool) {
-        guard let socketIndex = sockets.firstIndex(where: { $0.slots.contains(slot) }) else {
-            return
-        }
-        let existing = sockets[socketIndex]
-        sockets[socketIndex] = Socket(
-            socketIndex: existing.socketIndex,
-            label: existing.label,
-            slots: existing.slots,
-            kind: existing.kind,
-            populated: existing.populated,
-            imageName: existing.imageName,
-            romHeader: existing.romHeader,
-            supportsWriteProtect: existing.supportsWriteProtect,
-            writeProtected: writeProtected)
+        return .applied
     }
 
     private func subscribeEvents() async {
@@ -226,9 +238,7 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             kind: existing.kind,
             populated: existing.populated || header != nil,
             imageName: existing.imageName,
-            romHeader: header,
-            supportsWriteProtect: existing.supportsWriteProtect,
-            writeProtected: existing.writeProtected)
+            romHeader: header)
     }
 
     // MARK: - Proto -> Swift mapping
@@ -241,9 +251,18 @@ final class SidewaysClient: ObservableObject, Disconnectable {
             kind: mapKind(status.type),
             populated: status.populated,
             imageName: status.imageName,
-            romHeader: status.hasRomHeader ? mapHeader(status.romHeader) : nil,
-            supportsWriteProtect: status.capabilities.supportsWriteProtect,
-            writeProtected: status.writeProtected)
+            romHeader: status.hasRomHeader ? mapHeader(status.romHeader) : nil)
+    }
+
+    private static func mapGroup(_ g: Beebium_SidewaysProtectionGroup) -> ProtectionGroup {
+        ProtectionGroup(
+            id: g.id,
+            label: g.label,
+            slots: g.slots.map(Int.init),
+            supportsWriteProtect: g.supportsWriteProtect,
+            supportsHide: g.supportsHide,
+            writeProtected: g.writeProtected,
+            hidden: g.hidden)
     }
 
     private static func mapKind(_ type: Beebium_SidewaysSlotType) -> SocketKind {

@@ -92,13 +92,14 @@ struct MemoryModeView: View {
 
             // Write-protect padlock in a fixed-width leading column, so the
             // status column stays aligned whether or not a row has the control.
-            // Offered only where the board has the switch and the slot is RAM
-            // (sideways RAM without a switch, e.g. B+ 128K, gets an empty
-            // spacer of the same width).
-            let canWriteProtect = socket.supportsWriteProtect && socket.kind == .ram
+            // Shown for any slot covered by a group with a write-protect switch;
+            // toggling moves every slot in that group together. Slots with no
+            // such group get an equal-width spacer.
+            let writeGroup = sidewaysClient.group(forSocket: socket, kind: .writeProtect)
+            let hideGroup = sidewaysClient.group(forSocket: socket, kind: .hide)
             Group {
-                if canWriteProtect {
-                    writeProtectPadlock(for: socket)
+                if let writeGroup {
+                    writeProtectPadlock(group: writeGroup)
                 } else {
                     Color.clear
                 }
@@ -116,11 +117,11 @@ struct MemoryModeView: View {
             // it on rows with nothing to act on. Trying to substitute
             // a bare Image as a placeholder dances the status column
             // because the Menu's internal padding doesn't match a
-            // plain Image. A write-protectable RAM row is always
-            // actionable (the menu carries Write-Protect) even when it
-            // has no image for Copy Path / Reveal.
-            let actionable = !socket.imageName.isEmpty || canWriteProtect
-            actionsMenu(for: socket)
+            // plain Image. A row covered by a protection group is always
+            // actionable (the menu carries Write-Protect / Hide) even when
+            // it has no image for Copy Path / Reveal.
+            let actionable = !socket.imageName.isEmpty || writeGroup != nil || hideGroup != nil
+            actionsMenu(for: socket, writeGroup: writeGroup, hideGroup: hideGroup)
                 .opacity(actionable ? 1 : 0)
                 .allowsHitTesting(actionable)
                 .accessibilityHidden(!actionable)
@@ -182,41 +183,51 @@ struct MemoryModeView: View {
 
     // MARK: - Write-protect padlock
 
-    /// A single clickable padlock reflecting the write-protect switch. It is a
-    /// Button, not a Toggle: the glyph mirrors the server-reported state and
-    /// updates only from the RPC response, never optimistically on the click, so
-    /// it honours feedback_state_vs_action_controls while reading as one control.
-    private func writeProtectPadlock(for socket: SidewaysClient.Socket) -> some View {
+    /// A single clickable padlock reflecting a write-protect group's switch. It
+    /// is a Button, not a Toggle: the glyph mirrors the server-reported group
+    /// state and updates only from the RPC re-fetch, never optimistically on the
+    /// click, so it honours feedback_state_vs_action_controls as one control.
+    private func writeProtectPadlock(group: SidewaysClient.ProtectionGroup) -> some View {
         Button {
-            toggleWriteProtect(for: socket)
+            toggle(group: group, kind: .writeProtect, engaged: !group.writeProtected)
         } label: {
-            Image(systemName: socket.writeProtected ? "lock.fill" : "lock.open")
+            Image(systemName: group.writeProtected ? "lock.fill" : "lock.open")
                 .font(.caption)
-                .foregroundColor(socket.writeProtected ? .accentColor : .secondary)
+                .foregroundColor(group.writeProtected ? .accentColor : .secondary)
         }
         .buttonStyle(.borderless)
-        .help(socket.writeProtected
+        .help(group.writeProtected
               ? "Allow writes to this sideways RAM"
               : "Write-protect this sideways RAM")
     }
 
-    private func toggleWriteProtect(for socket: SidewaysClient.Socket) {
-        let target = !socket.writeProtected
-        Task { await sidewaysClient.setWriteProtect(slot: UInt32(socket.priority), target) }
+    private func toggle(group: SidewaysClient.ProtectionGroup,
+                        kind: SidewaysClient.ProtectionKind, engaged: Bool) {
+        Task { await sidewaysClient.setSlotProtection(groupID: group.id, kind: kind, engaged: engaged) }
     }
 
-    // MARK: - Actions menu (Write-Protect + read-only Copy Path / Reveal)
+    // MARK: - Actions menu (Write-Protect / Hide + read-only Copy Path / Reveal)
 
-    private func actionsMenu(for socket: SidewaysClient.Socket) -> some View {
+    private func actionsMenu(for socket: SidewaysClient.Socket,
+                             writeGroup: SidewaysClient.ProtectionGroup?,
+                             hideGroup: SidewaysClient.ProtectionGroup?) -> some View {
         Menu {
-            // Checkmarked Write-Protect, the idiomatic macOS menu form, mirroring
-            // the padlock. The toggle's checkmark follows the server-reported
-            // state and its setter goes through the same setWriteProtect.
-            if socket.supportsWriteProtect && socket.kind == .ram {
+            // Checkmarked protection items, the idiomatic macOS menu form. Each
+            // follows its group's server-reported state and toggles the whole
+            // group. Write-Protect mirrors the padlock; Hide has no padlock.
+            if let writeGroup {
                 Toggle("Write-Protect", isOn: Binding(
-                    get: { socket.writeProtected },
-                    set: { _ in toggleWriteProtect(for: socket) }
+                    get: { writeGroup.writeProtected },
+                    set: { toggle(group: writeGroup, kind: .writeProtect, engaged: $0) }
                 ))
+            }
+            if let hideGroup {
+                Toggle("Hide", isOn: Binding(
+                    get: { hideGroup.hidden },
+                    set: { toggle(group: hideGroup, kind: .hide, engaged: $0) }
+                ))
+            }
+            if writeGroup != nil || hideGroup != nil {
                 Divider()
             }
 
