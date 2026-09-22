@@ -92,10 +92,15 @@ struct MemoryModeView: View {
 
             // Write-protect padlock in a fixed-width leading column, so the
             // status column stays aligned whether or not a row has the control.
-            // Shown for any slot covered by a group with a write-protect switch;
-            // toggling moves every slot in that group together. Slots with no
-            // such group get an equal-width spacer.
-            let writeGroup = sidewaysClient.group(forSocket: socket, kind: .writeProtect)
+            // Shown only for a RAM slot covered by a write-protect group -- a ROM
+            // (or empty) slot is inherently write-protected, so the control is
+            // meaningless there. Toggling moves every RAM slot in that group
+            // together; slots without the control get an equal-width spacer.
+            let writeGroup = socket.kind == .ram
+                ? sidewaysClient.group(forSocket: socket, kind: .writeProtect)
+                : nil
+            // Hide (read-protect) is meaningful for a ROM too (S1's use case is
+            // hiding a hung ROM), so it is not gated on type.
             let hideGroup = sidewaysClient.group(forSocket: socket, kind: .hide)
             Group {
                 if let writeGroup {
