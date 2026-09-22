@@ -247,3 +247,55 @@ def test_atpl_sidewise_write_protect_launch_rejects_non_ram_slot(
     except ServerStartupError:
         return  # expected: server rejects the configuration
     pytest.fail("expected ServerStartupError for --write-protect on a ROM-only slot")
+
+
+def test_watford_launch_protection_flags(
+    mos_filepath: Path,
+    beebium_server_filepath: Path | None,
+):
+    """--write-protect <group> and --hide <group> engage board switches at launch."""
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-watford-rom-ram",
+            extra_args=[
+                "--sideways", "slot=0:type=ram",
+                "--sideways", "slot=14:type=ram",
+                "--write-protect", "board",
+                "--hide", "slot-14",
+            ],
+        ) as bbc:
+            status = bbc.sideways.get_slot_status()
+
+            board = _group(status, "board")
+            assert board is not None
+            assert board.supports_write_protect is True
+            assert board.write_protected is True
+
+            slot14 = _group(status, "slot-14")
+            assert slot14 is not None
+            assert slot14.supports_hide is True
+            assert slot14.hidden is True
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+
+
+def test_watford_launch_protection_rejects_unknown_group(
+    mos_filepath: Path,
+    beebium_server_filepath: Path | None,
+):
+    """--write-protect on a group the machine does not have fails at launch."""
+    try:
+        with Beebium.launch(
+            mos_filepath=mos_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-watford-rom-ram",
+            extra_args=["--write-protect", "no-such-group"],
+        ):
+            pass
+    except ServerNotFoundError as e:
+        pytest.skip(str(e))
+    except ServerStartupError:
+        return  # expected: server rejects the unknown protection group
+    pytest.fail("expected ServerStartupError for --write-protect on an unknown group")

@@ -56,6 +56,7 @@ VARIANTS = (
     "model-b-plus-128k",
     "model-b-romram",
     "model-b-atpl-sidewise",
+    "model-b-watford-rom-ram",
 )
 DEFAULT_VARIANT = "model-b"
 

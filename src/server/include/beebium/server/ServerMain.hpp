@@ -439,6 +439,12 @@ struct ServerConfig {
     // parsing. A CLI --sideways for the same slot takes precedence. See the
     // merge step at the end of parse_start_arguments().
     std::vector<SidewaysConfig> preset_sideways_configs;
+    // Protection groups to engage at launch, from --write-protect <group> /
+    // --hide <group>: a group id (see GetSlotStatus.protection_groups /
+    // describe-machine) and the control to engage. Applied after slot config via
+    // Memory::set_protection. Expresses the board-wide / hide switches that the
+    // per-slot --sideways ...:write-protect flag cannot (e.g. Watford S1/S2).
+    std::vector<std::pair<std::string, ProtectionKind>> launch_protections;
 
     // Motherboard link state (jumpers that affect sideways slot mapping).
     // Default-constructed to factory positions. For machine variants with no
@@ -544,6 +550,12 @@ void print_usage(const char* program_name) {
               << "                           write-protect (ram only) engages the write-protect\n"
               << "                           switch at startup; runtime-toggleable via\n"
               << "                           SidewaysService.SetSlotProtection.\n"
+              << "  --write-protect <group>  Engage a protection group's write-protect switch at\n"
+              << "                           startup (repeatable). <group> is a protection-group\n"
+              << "                           id from describe-machine (e.g. slot-15, board).\n"
+              << "  --hide <group>           Engage a protection group's hide switch at startup:\n"
+              << "                           its slots read as a constant (repeatable; e.g. the\n"
+              << "                           Watford slot-14 / S1 switch).\n"
               << "  --rom-dir <dirpath>      ROM directory (auto-detected if not specified)\n"
               << "  --port <port>            gRPC port (default: " << DEFAULT_GRPC_PORT << ")\n"
               << "  --floppy <drive>:<filepath|url>\n"
@@ -943,6 +955,12 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             config.mos_filepath = argv[++i];
         } else if (arg == "--language-rom" && i + 1 < argc) {
             config.language_rom_filepath = argv[++i];
+        } else if (arg == "--write-protect" && i + 1 < argc) {
+            config.launch_protections.emplace_back(argv[++i],
+                                                   ProtectionKind::WriteProtect);
+        } else if (arg == "--hide" && i + 1 < argc) {
+            config.launch_protections.emplace_back(argv[++i],
+                                                   ProtectionKind::Hide);
         } else if (arg == "--sideways" && i + 1 < argc) {
             std::string value = argv[++i];
             SidewaysConfig sideways_config;
@@ -1358,6 +1376,31 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
                           << " is not RAM; ignoring\n";
             }
         }
+    }
+
+    // Engage the group-addressed protection switches from --write-protect
+    // <group> / --hide <group>, now that every slot's type is settled. These
+    // reach the board-wide / hide switches the per-slot flag above cannot.
+    if constexpr (requires(typename MachineType::Memory m, std::string_view id) {
+                      m.set_protection(id, ProtectionKind::WriteProtect, bool{});
+                  }) {
+        auto& memory = machine.state().memory;
+        for (const auto& [group_id, kind] : config.launch_protections) {
+            if (memory.set_protection(group_id, kind, true)) {
+                std::cout << (kind == ProtectionKind::Hide ? "Hide" : "Write-protect")
+                          << " group '" << group_id << "': engaged\n";
+            } else {
+                throw std::runtime_error(
+                    std::string("--")
+                    + (kind == ProtectionKind::Hide ? "hide" : "write-protect")
+                    + ": no protection group '" + group_id
+                    + "' with that control on this machine variant");
+            }
+        }
+    } else if (!config.launch_protections.empty()) {
+        throw std::runtime_error(
+            "--write-protect/--hide: this machine variant has no protection "
+            "controls");
     }
 }
 
