@@ -57,6 +57,12 @@ struct SlotTopology {
     std::vector<SocketSpec> sockets;
     bool has_aliasing = false;       // True if any socket responds to >1 slot
 
+    // Slots served by a single RAM chip when RAM is fitted, e.g. a 32K static
+    // RAM in one socket of an Integra-B socket pair decodes both 16K slots.
+    // Fitting RAM is all-or-nothing across such a group: every slot in it is
+    // RAM, or none is. Slots that are always RAM need not be listed.
+    std::vector<std::vector<int>> ram_chips;
+
     // Find the socket spec that owns the given logical slot, or nullptr if the
     // slot does not exist on this machine.
     const SocketSpec* find_socket_for_slot(int slot) const {

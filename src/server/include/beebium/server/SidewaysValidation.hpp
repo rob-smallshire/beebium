@@ -37,6 +37,7 @@
 #include "CliArgParsers.hpp"
 #include <beebium/SlotTopology.hpp>
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -71,6 +72,20 @@ inline std::string format_socket_alias_clause(const SocketSpec& spec) {
     out << "Socket " << spec.label;
     if (spec.slots.size() > 1) {
         out << " (aliased to slots " << format_slot_list(spec.slots) << ")";
+    }
+    return out.str();
+}
+
+// The slot types a socket supports, e.g. "ROM or empty".
+inline std::string format_supported_types(const SocketSpec& spec) {
+    std::vector<std::string_view> names;
+    if (spec.supports_rom) names.push_back("ROM");
+    if (spec.supports_ram) names.push_back("RAM");
+    if (spec.supports_empty) names.push_back("empty");
+    std::ostringstream out;
+    for (size_t i = 0; i < names.size(); ++i) {
+        if (i > 0) out << (i + 1 == names.size() ? " or " : ", ");
+        out << names[i];
     }
     return out.str();
 }
@@ -131,7 +146,9 @@ inline std::optional<std::string> validate_sideways_configs(
                 << " cannot be configured as "
                 << detail::sideways_type_name(cfg.type)
                 << " (requested by " << detail::format_request(cfg)
-                << "). This socket is ROM-only on this machine variant.";
+                << "). This socket supports only "
+                << detail::format_supported_types(*socket)
+                << " on this machine variant.";
             errors.push_back(msg.str());
             continue;
         }
@@ -240,6 +257,35 @@ inline std::optional<std::string> validate_sideways_configs(
                 errors.push_back(msg.str());
             }
         }
+    }
+
+    // A RAM chip spanning several slots is fitted to all of them or none.
+    for (const auto& chip_slots : topo.ram_chips) {
+        std::vector<size_t> ram_requests;
+        for (size_t i = 0; i < configs.size(); ++i) {
+            if (configs[i].type != SidewaysSlotType::Ram) continue;
+            if (std::find(chip_slots.begin(), chip_slots.end(),
+                          static_cast<int>(configs[i].slot)) != chip_slots.end()) {
+                ram_requests.push_back(i);
+            }
+        }
+        if (ram_requests.empty()) continue;
+        std::vector<int> missing;
+        for (int slot : chip_slots) {
+            bool requested = std::any_of(
+                ram_requests.begin(), ram_requests.end(),
+                [&](size_t i) { return static_cast<int>(configs[i].slot) == slot; });
+            if (!requested) missing.push_back(slot);
+        }
+        if (missing.empty()) continue;
+        std::ostringstream msg;
+        msg << "Slots " << detail::format_slot_list(chip_slots)
+            << " share one RAM chip, so RAM must be fitted to all of them or none"
+            << " (requested by";
+        for (size_t i : ram_requests) msg << ' ' << detail::format_request(configs[i]);
+        msg << "). Also specify:";
+        for (int slot : missing) msg << " --sideways slot=" << slot << ":type=RAM";
+        errors.push_back(msg.str());
     }
 
     if (errors.empty()) return std::nullopt;

@@ -444,3 +444,76 @@ TEST_CASE("Validation reports multiple distinct problems in one message",
     REQUIRE_THAT(*err, ContainsSubstring("slot 12 does not exist"));
     REQUIRE_THAT(*err, ContainsSubstring("IC68"));
 }
+
+// ============================================================================
+// RAM chips spanning several slots (e.g. the Integra-B's 32K socket pairs).
+// ============================================================================
+
+namespace {
+
+// Two single-slot sockets that one 32K RAM chip spans when RAM is fitted.
+SlotTopology paired_ram_topology() {
+    SlotTopology topo;
+    for (int slot = 8; slot <= 9; ++slot) {
+        beebium::SocketSpec spec;
+        spec.socket_index = slot;
+        spec.label = "Socket " + std::to_string(slot);
+        spec.slots = {slot};
+        topo.sockets.push_back(spec);
+    }
+    topo.ram_chips = {{8, 9}};
+    return topo;
+}
+
+// A socket that is always fitted with RAM.
+SlotTopology fixed_ram_topology() {
+    SlotTopology topo;
+    beebium::SocketSpec spec;
+    spec.socket_index = 4;
+    spec.label = "RAM 4";
+    spec.slots = {4};
+    spec.supports_rom = false;
+    spec.supports_empty = false;
+    topo.sockets.push_back(spec);
+    return topo;
+}
+
+}  // namespace
+
+TEST_CASE("Validation accepts RAM fitted across every slot of a RAM chip",
+          "[sideways][validation][ram_chip]") {
+    std::vector<SidewaysConfig> configs{ram_cfg(8), ram_cfg(9)};
+    CHECK_FALSE(validate_sideways_configs(paired_ram_topology(), configs).has_value());
+}
+
+TEST_CASE("Validation accepts ROMs in both slots of a RAM chip's pair",
+          "[sideways][validation][ram_chip]") {
+    std::vector<SidewaysConfig> configs{rom_cfg(8, "a.rom"), rom_cfg(9, "b.rom")};
+    CHECK_FALSE(validate_sideways_configs(paired_ram_topology(), configs).has_value());
+}
+
+TEST_CASE("Validation rejects RAM in only one slot of a RAM chip",
+          "[sideways][validation][ram_chip]") {
+    std::vector<SidewaysConfig> configs{ram_cfg(9), rom_cfg(8, "a.rom")};
+    auto err = validate_sideways_configs(paired_ram_topology(), configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring("Slots 8, 9 share one RAM chip"));
+    CHECK_THAT(*err, ContainsSubstring("--sideways slot=8:type=RAM"));
+}
+
+TEST_CASE("Validation rejects RAM in one slot of a RAM chip when the other is unspecified",
+          "[sideways][validation][ram_chip]") {
+    std::vector<SidewaysConfig> configs{ram_cfg(8)};
+    auto err = validate_sideways_configs(paired_ram_topology(), configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring("slot=9:type=RAM"));
+}
+
+TEST_CASE("Validation names what a RAM-only socket supports",
+          "[sideways][validation]") {
+    std::vector<SidewaysConfig> configs{rom_cfg(4, "basic.rom")};
+    auto err = validate_sideways_configs(fixed_ram_topology(), configs);
+    REQUIRE(err.has_value());
+    CHECK_THAT(*err, ContainsSubstring("supports only RAM"));
+    CHECK_THAT(*err, !ContainsSubstring("ROM-only"));
+}
