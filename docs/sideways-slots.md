@@ -56,6 +56,13 @@ PCB:
   launch; the write-protect switch is the only runtime control. Intended
   to replace the notional ROM/RAM board.
 
+- **Model B with Integra-B** (`ConfigurableBankedMemory`): the Computech
+  Integra-B board, full 4-bit ROMSEL decoding. Slots 0-3 are the motherboard
+  sockets, slots 4-7 the board's always-fitted RAM, and slots 8-15 four
+  socket pairs that each hold ROMs or one 32K RAM spanning both slots.
+  Write protection is per RAM chip (two slots). See
+  `docs/integra-b/README.md`.
+
 ### Socket capabilities
 
 Each socket carries these boolean capability flags:
@@ -88,6 +95,7 @@ capability:
 | Model B+ | `false` (real-hardware-faithful) |
 | Model B with ROM/RAM board | `true` (fantasy hot-swap test bed) |
 | Model B with ATPL Sidewise | `false` (real-hardware-faithful) |
+| Model B with Integra-B | `false` (real-hardware-faithful) |
 
 Future Master 128 cartridge slots will be `runtime_configurable=true`
 to model cartridge insertion/removal during a session - the closest
@@ -234,6 +242,19 @@ Slot 15 has two board-specific behaviours when fitted with RAM:
 BASIC defaults to slot 14 (the manual reserves slot 15 for RAM). Battery
 backup is not modelled.
 
+### Model B with Integra-B
+
+Sixteen independent slots, no aliasing. Slots 0-3 (`Motherboard IC52` ...
+`IC101`) are ROM or empty. Slots 4-7 (`Board RAM 4/5`, `Board RAM 6/7`) are
+always RAM (`supports_rom=false, supports_empty=false`). Slots 8-15
+(`Board socket 8` ... `15`) support ROM, RAM and empty, but the topology
+lists each socket pair in `SlotTopology::ram_chips`: a 32K RAM spans both
+slots of its pair, so RAM must be fitted to both or neither (`--sideways
+slot=8:type=ram --sideways slot=9:type=ram`). No socket has a per-slot
+write-protect switch: each RAM chip's switch protects both of its slots,
+through the protection groups `slots-4-5`, `slots-6-7` and, when fitted,
+`slots-8-9` ... `slots-14-15`. IBOS defaults to slot 15 and BASIC to slot 3.
+
 ## Startup validation
 
 When the server parses `--sideways` arguments, it groups them by the
@@ -249,7 +270,10 @@ physical socket they target and rejects any of:
   reach IC52);
 - two requests targeting the same socket with different ROM image
   paths (a single chip can only hold one image);
-- the same slot specified twice.
+- the same slot specified twice;
+- RAM in only some slots of a RAM chip that spans several slots
+  (`SlotTopology::ram_chips`, e.g. `--sideways slot=9:type=ram` alone on the
+  Integra-B, whose 32K RAM in socket pair 8/9 decodes both slots).
 
 Errors are reported in a single multi-line message naming the affected
 socket(s) and full alias set, so multiple problems can be fixed in one

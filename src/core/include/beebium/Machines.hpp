@@ -21,6 +21,7 @@
 #include "ModelBRomRamBoardHardware.hpp"
 #include "ModelBAtplSidewiseHardware.hpp"
 #include "ModelBWatfordRomRamHardware.hpp"
+#include "ModelBIntegraBHardware.hpp"
 
 namespace beebium {
 
@@ -49,6 +50,12 @@ using ModelBAtplSidewise = Machine<Nmos6502, ModelBAtplSidewiseHardware>;
 // of the &FE30 read-select, with S1 (socket-14 read-protect) and S2 (global
 // write-protect) switches. A specific historical board.
 using ModelBWatfordRomRam = Machine<Nmos6502, ModelBWatfordRomRamHardware>;
+
+// BBC Model B with the Computech Integra-B board: NMOS 6502 + Model B hardware
+// with full 16-slot sideways decoding (motherboard ROM slots 0-3, board RAM
+// banks 4-7, four ROM/RAM socket pairs 8-15), 20K shadow RAM, 12K private RAM
+// and a CDP6818 real-time clock, managed by the board's IBOS ROM.
+using ModelBIntegraB = Machine<Nmos6502, ModelBIntegraBHardware>;
 
 // BBC Model B+ 64K: NMOS 6502 + Model B+ hardware (64KB RAM with shadow/ANDY)
 using ModelBPlus = Machine<Nmos6502, ModelBPlusHardware>;

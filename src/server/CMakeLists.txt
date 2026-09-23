@@ -240,6 +240,7 @@ add_beebium_server(beebium-model-b-plus-128k main_model_b_plus_128k.cpp)
 add_beebium_server(beebium-model-b-romram main_model_b_romram.cpp)
 add_beebium_server(beebium-model-b-atpl-sidewise main_model_b_atpl_sidewise.cpp)
 add_beebium_server(beebium-model-b-watford-rom-ram main_model_b_watford_rom_ram.cpp)
+add_beebium_server(beebium-model-b-integra-b main_model_b_integra_b.cpp)
 
 # System presets are generated below (after the ROM copy) via add_system_preset,
 # which runs the create-preset subcommand as a POST_BUILD step.
@@ -256,6 +257,7 @@ set(BEEBIUM_SERVERS_DEPS
     beebium-model-b-romram
     beebium-model-b-atpl-sidewise
     beebium-model-b-watford-rom-ram
+    beebium-model-b-integra-b
 )
 if(BEEBIUM_BUILD_SERVICE)
     list(APPEND BEEBIUM_SERVERS_DEPS
@@ -293,11 +295,13 @@ add_custom_command(TARGET beebium-model-b POST_BUILD
         # --sideways NN:rom:... lines above) must be copied here, or a dev-tree /
         # BEEBIUM_SERVERS_DIRPATH launch of that preset fails with "ROM file not
         # found" (installed bundles ship all *.rom, so this bites the build tree
-        # only). Currently: DFS 2.26, ANFS 4.18, ADFS 1.30. (Tube coprocessor
+        # only). Currently: DFS 2.26, ANFS 4.18, ADFS 1.30, plus the Integra-B's
+        # IBOS, a machine default ROM. (Tube coprocessor
         # ROMs are NOT here -- they ship inside each coprocessor plugin's roms/
         # directory and load via the extension, not the ROM directory.)
         "${BEEBIUM_ROM_DIR}/acorn-anfs_4_18.rom"
         "${BEEBIUM_ROM_DIR}/acorn-adfs_1_30.rom"
+        "${BEEBIUM_ROM_DIR}/computech-ibos_1_26.rom"
         "${ROM_OUTPUT_DIR}/"
     COMMENT "Copying host ROMs to build directory"
 )
@@ -334,6 +338,13 @@ add_system_preset(beebium-model-b-watford-rom-ram "model-b-watford-rom-ram-128k"
     --sideways slot=2:type=ram --sideways slot=3:type=ram
     --sideways slot=4:type=ram --sideways slot=5:type=ram
     --sideways slot=6:type=ram --sideways slot=7:type=ram)
+# Integra-B: IBOS auto-loads into slot 15 and BASIC into motherboard slot 3
+# (this machine's defaults); DFS goes in motherboard slot 1, as in the IBOS
+# guide's own *ROMS example. Board RAM banks 4-7 are always fitted.
+add_system_preset(beebium-model-b-integra-b "model-b-integra-b-disc"
+    "Model B with Integra-B (Disc)" "1988"
+    DESCRIPTION "Model B, Integra-B board (IBOS 1.26), 1770 DFS, shadow RAM, RTC"
+    --fdc acorn-1770 --sideways slot=1:type=rom:image=acorn-dfs_2_26.rom)
 add_system_preset(beebium-model-b-plus "model-b-plus" "Model B+ 64K" "1985-06"
     DESCRIPTION "64K Model B+, integral DFS")
 add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
@@ -456,6 +467,7 @@ install(TARGETS
         beebium-model-b-romram
         beebium-model-b-atpl-sidewise
         beebium-model-b-watford-rom-ram
+        beebium-model-b-integra-b
     RUNTIME DESTINATION bin
 )
 install(DIRECTORY ${BEEBIUM_ROM_DIR}/

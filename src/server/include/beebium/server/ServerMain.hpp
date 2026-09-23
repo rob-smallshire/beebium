@@ -646,6 +646,12 @@ void print_usage(const char* program_name) {
                   << Memory::DEFAULT_DFS_ROM << " (disc filing system)\n";
     }
 
+    // Show the expansion board's own ROM if the machine has one
+    if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+        std::cerr << "  Slot " << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT) << ": "
+                  << Memory::DEFAULT_BOARD_ROM << " (expansion board ROM)\n";
+    }
+
     std::cerr << "\n"
               << "Examples:\n"
               << "  " << program_name << "                                  # Use all defaults\n"
@@ -681,6 +687,12 @@ void print_info(const char* program_name) {
         std::cout << ",\n"
                   << "  \"default_dfs_rom\": \"" << Memory::DEFAULT_DFS_ROM << "\",\n"
                   << "  \"default_dfs_slot\": " << static_cast<int>(Memory::DEFAULT_DFS_SLOT);
+    }
+
+    if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+        std::cout << ",\n"
+                  << "  \"default_board_rom\": \"" << Memory::DEFAULT_BOARD_ROM << "\",\n"
+                  << "  \"default_board_rom_slot\": " << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT);
     }
 
     std::cout << "\n}\n";
@@ -1289,6 +1301,17 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
             && config.rom_slots.find(Memory::DEFAULT_DFS_SLOT)
                    == config.rom_slots.end()) {
             config.rom_slots[Memory::DEFAULT_DFS_SLOT] = std::string(Memory::DEFAULT_DFS_ROM);
+        }
+    }
+
+    // Load the expansion board's own ROM (e.g. the Integra-B's IBOS) if the
+    // machine has one and its slot is not overridden.
+    if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+        if (!skip_default_for_slot(Memory::DEFAULT_BOARD_ROM_SLOT)
+            && config.rom_slots.find(Memory::DEFAULT_BOARD_ROM_SLOT)
+                   == config.rom_slots.end()) {
+            config.rom_slots[Memory::DEFAULT_BOARD_ROM_SLOT] =
+                std::string(Memory::DEFAULT_BOARD_ROM);
         }
     }
 
@@ -3222,6 +3245,10 @@ public:
                     std::cout << "DFS ROM:        " << Memory::DEFAULT_DFS_ROM
                               << " (slot " << static_cast<int>(Memory::DEFAULT_DFS_SLOT) << ")\n";
                 }
+                if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+                    std::cout << "Board ROM:      " << Memory::DEFAULT_BOARD_ROM
+                              << " (slot " << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT) << ")\n";
+                }
                 break;
 
             case OutputFormat::Tsv:
@@ -3237,6 +3264,10 @@ public:
                     std::cout << "default_dfs_rom\t" << Memory::DEFAULT_DFS_ROM << "\n"
                               << "default_dfs_slot\t" << static_cast<int>(Memory::DEFAULT_DFS_SLOT) << "\n";
                 }
+                if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+                    std::cout << "default_board_rom\t" << Memory::DEFAULT_BOARD_ROM << "\n"
+                              << "default_board_rom_slot\t" << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT) << "\n";
+                }
                 break;
 
             case OutputFormat::Jsonl:
@@ -3250,6 +3281,10 @@ public:
                 if constexpr (requires { Memory::DEFAULT_DFS_ROM; }) {
                     std::cout << ",\"default_dfs_rom\":\"" << Memory::DEFAULT_DFS_ROM
                               << "\",\"default_dfs_slot\":" << static_cast<int>(Memory::DEFAULT_DFS_SLOT);
+                }
+                if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+                    std::cout << ",\"default_board_rom\":\"" << Memory::DEFAULT_BOARD_ROM
+                              << "\",\"default_board_rom_slot\":" << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT);
                 }
                 std::cout << "}\n";
                 break;

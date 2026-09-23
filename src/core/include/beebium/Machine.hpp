@@ -222,6 +222,12 @@ public:
         // contract permits.
         state_.memory.tube_socket.host_cycle(state_.cycle_count);
 
+        // Clock devices on an expansion board (e.g. the Integra-B real-time
+        // clock) on every cycle, including stretch cycles.
+        if constexpr (requires { state_.memory.tick_expansion_devices(); }) {
+            state_.memory.tick_expansion_devices();
+        }
+
         // Handle 1MHz bus stretch cycles.
         // During stretch, CPU is halted. VIAs have already been pre-ticked
         // by CpuBinding before the memory access, so we only tick video here.

@@ -180,6 +180,38 @@ private:
     std::unique_ptr<beebium::SidewaysService::Stub> sideways_stub_;
 };
 
+// Fixture for the Integra-B board (16 slots; banks 4-7 board RAM; per-chip
+// write-protect switches). Optionally fits a 32K RAM chip in socket pair 8/9.
+class IntegraBSidewaysFixture {
+public:
+    explicit IntegraBSidewaysFixture(bool pair_8_9_ram = false) {
+        if (pair_8_9_ram) {
+            machine_.state().memory.configure_slot_as_ram(8);
+            machine_.state().memory.configure_slot_as_ram(9);
+        }
+        machine_.reset();
+
+        server_ = std::make_unique<beebium::service::Server<beebium::ModelBIntegraB>>(
+            machine_, "127.0.0.1", 0);
+        server_->start({}, {});
+
+        std::string address = "127.0.0.1:" + std::to_string(server_->port());
+        channel_ = grpc::CreateChannel(address, grpc::InsecureChannelCredentials());
+        sideways_stub_ = beebium::SidewaysService::NewStub(channel_);
+    }
+
+    ~IntegraBSidewaysFixture() { server_->stop(); }
+
+    beebium::ModelBIntegraB& machine() { return machine_; }
+    beebium::SidewaysService::Stub& sideways() { return *sideways_stub_; }
+
+private:
+    beebium::ModelBIntegraB machine_;
+    std::unique_ptr<beebium::service::Server<beebium::ModelBIntegraB>> server_;
+    std::shared_ptr<grpc::Channel> channel_;
+    std::unique_ptr<beebium::SidewaysService::Stub> sideways_stub_;
+};
+
 // Fixture for Model B+ 128K with optional motherboard link override.
 // Like the 64K but with four integral sideways RAM banks (W=slot 12,
 // X=slot 13, Y/Z opposite IC71 per S13).
@@ -1440,4 +1472,58 @@ TEST_CASE("SidewaysService SetSlotProtection drives the Watford S1/S2 switches",
     req.set_engaged(true);
     REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
     CHECK_FALSE(resp.success());
+}
+
+TEST_CASE("SidewaysService reports Integra-B per-chip protection groups",
+          "[grpc][sideways][integra_b][protection]") {
+    IntegraBSidewaysFixture fixture(/*pair_8_9_ram=*/true);
+
+    grpc::ClientContext ctx;
+    beebium::GetSlotStatusRequest req;
+    beebium::GetSlotStatusResponse resp;
+    REQUIRE(fixture.sideways().GetSlotStatus(&ctx, req, &resp).ok());
+
+    REQUIRE(resp.protection_groups_size() == 3);
+    const char* ids[] = {"slots-4-5", "slots-6-7", "slots-8-9"};
+    for (int i = 0; i < 3; ++i) {
+        const auto& g = resp.protection_groups(i);
+        CHECK(g.id() == ids[i]);
+        CHECK(g.supports_write_protect());
+        CHECK_FALSE(g.supports_hide());
+        CHECK_FALSE(g.write_protected());
+        CHECK(g.slots_size() == 2);
+    }
+    CHECK(resp.protection_groups(0).label() == "Write-protect slots 4/5 (WP 4/5)");
+    // The Integra-B has no write-select latch.
+    CHECK_FALSE(resp.write_select_latch().present());
+}
+
+TEST_CASE("SidewaysService SetSlotProtection write-protects an Integra-B RAM chip",
+          "[grpc][sideways][integra_b][protection]") {
+    IntegraBSidewaysFixture fixture;
+    auto& hw = fixture.machine().state().memory;
+
+    {
+        grpc::ClientContext ctx;
+        beebium::SetSlotProtectionRequest req;
+        beebium::SetSlotProtectionResponse resp;
+        req.set_group_id("slots-6-7");
+        req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_WRITE_PROTECT);
+        req.set_engaged(true);
+        REQUIRE(fixture.sideways().SetSlotProtection(&ctx, req, &resp).ok());
+        CHECK(resp.success());
+    }
+    hw.write(0xFE30, 7);
+    hw.write(0x8000, 0x5A);
+    CHECK(hw.read(0x8000) != 0x5A);
+
+    // No hide switch on this board.
+    grpc::ClientContext ctx;
+    beebium::SetSlotProtectionRequest req;
+    beebium::SetSlotProtectionResponse resp;
+    req.set_group_id("slots-6-7");
+    req.set_kind(beebium::SIDEWAYS_PROTECTION_KIND_HIDE);
+    req.set_engaged(true);
+    auto status = fixture.sideways().SetSlotProtection(&ctx, req, &resp);
+    CHECK_FALSE((status.ok() && resp.success()));
 }

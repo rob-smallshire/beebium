@@ -57,6 +57,7 @@ VARIANTS = (
     "model-b-romram",
     "model-b-atpl-sidewise",
     "model-b-watford-rom-ram",
+    "model-b-integra-b",
 )
 DEFAULT_VARIANT = "model-b"
 
