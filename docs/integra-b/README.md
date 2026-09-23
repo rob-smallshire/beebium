@@ -11,17 +11,12 @@ expansion board and its IBOS ROM.
 | `Integra-B User Guide for IBOS v1.20-Rev02a-Final.pdf` | The Computech user guide for IBOS 1.20, rebuilt as a searchable document by Ken Lowe (2024). Sections 8-2 (memory registers), 9-4 (fitting RAM/ROM) and 9-6 (write protection) define the hardware behaviour emulated. |
 | `IntegraB.pdf` | KiCad schematic of the board (rev 1a), shared on Stardot by Ken Lowe, who amended the RTC sheet for compatibility with later CDP6818 parts. |
 
-Related disc images are in `discs/integra-b/`:
-
-- `INTWIN01.SSD`: the Integra-B system disc (40-track). It holds the
-  INTEGRA Windows 1.00 ROM image (`r.Windows`), its initialisation program,
-  BASIC procedure library, demo and documentation, and the GXR and VIEW A2.1
-  shadow-RAM conversion utilities. It also has application notes (`T.Apps`)
-  and a mouse note (`t.cfgmse`). SHIFT+BREAK loads Windows into bank 4.
-- `IntBEEP.ssd`: later utilities. `RAMSET` (Ken Lowe, 2019) records which
-  socket pairs hold RAM in IBOS's private RAM (&83FF), like
-  `*FX162,127,X`. `EELOAD`, `EEP32` and `EEP16` program EEPROMs fitted in
-  the board's sockets; Beebium does not emulate EEPROMs.
+The Integra-B system disc is `discs/integra-b/INTWIN01.SSD` (40-track). It
+holds the INTEGRA Windows 1.00 ROM image (`r.Windows`), its initialisation
+program, BASIC procedure library, demo and documentation, and the GXR and
+VIEW A2.1 shadow-RAM conversion utilities. It also has application notes
+(`T.Apps`) and a mouse note (`t.cfgmse`). SHIFT+BREAK loads Windows into
+bank 4.
 
 Khazul, the remaining rights holder of the original Integra-B software and
 hardware, has said it may be used in emulators such as Beebium
