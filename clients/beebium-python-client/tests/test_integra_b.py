@@ -79,6 +79,38 @@ def _run(bbc: Beebium, command: str, timeout: float = 30.0) -> None:
         time.sleep(0.2)
 
 
+def _wait_for_prompt(bbc: Beebium, prompt: str = ">", containing: str | None = None,
+                     timeout: float = 20.0) -> str:
+    """Wait until the screen ends with an empty `prompt` line (and contains
+    `containing`, if given), i.e. the machine is ready for typing."""
+    deadline = time.monotonic() + timeout
+    while True:
+        text = bbc.video.screen_text().text
+        lines = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
+        if lines and lines[-1] == prompt and (containing is None or containing in text):
+            return text
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"no {prompt!r} prompt (containing {containing!r}):\n{text}")
+        time.sleep(0.2)
+
+
+def _reset(bbc: Beebium, *, ctrl: bool = False) -> str:
+    """Press BREAK (or CTRL+BREAK) and wait until the machine has finished
+    resetting and BASIC is ready for input.
+
+    The screen is cleared first, so the prompt from before the reset cannot be
+    mistaken for the new one. Typing into a machine that is still resetting
+    loses keys and, worse, can leave SHIFT (needed for '*') held while the
+    filing system checks for a SHIFT+BREAK boot."""
+    _type(bbc, "CLS")
+    _wait_for_prompt(bbc)
+    if ctrl:
+        bbc.keyboard.ctrl_break()
+    else:
+        bbc.keyboard.press_break()
+    return _wait_for_prompt(bbc, containing="BASIC")
+
+
 def _rtc_register(bbc: Beebium, register: int) -> int:
     """Read an RTC register through the board's &FE38/&FE3C ports."""
     bbc.memory.address.bus[0xFE38] = register
@@ -192,10 +224,9 @@ def test_socket_pair_fitted_with_ram(beebium_server_filepath: Path | None):
             assert _group(bbc.sideways.get_slot_status(), "slots-8-9") is not None
             # IBOS must be told about RAM fitted in the sockets (IBOS guide 1-5):
             # 15, plus 16 for a chip in socket 9 (banks 8/9).
-            bbc.keyboard.type("*FX162,127,31\r")
-            bbc.keyboard.wait_until_typing_complete()
-            bbc.keyboard.ctrl_break()
-            bbc.expect("INTEGRA-B 160K", timeout=20.0, sample_interval_seconds=0.2)
+            _type(bbc, "*FX162,127,31")
+            banner = _reset(bbc, ctrl=True)
+            assert "INTEGRA-B 160K" in banner, banner
             screen = _command(bbc, "*ROMS", "  0 (")
             for bank in (8, 9):
                 assert re.search(rf"\b{bank} \(E", screen), screen
@@ -224,13 +255,13 @@ def test_time_and_date_can_be_set_and_run_on(integra_b):
     _type(integra_b, "*TIME=10:20:30", "*DATE=15/9/26")
     screen = _command(integra_b, "*DATE", "Sep 2026.")
     assert "Tue,15 Sep 2026." in screen
-    screen = _command(integra_b, "*TIME", "10:20:")
+    # Wait for the output ("...2026.10:20:nn"), not the echo of *TIME=10:20:30.
+    screen = _command(integra_b, "*TIME", "2026.10:20:")
     assert re.search(r"Tue,15 Sep 2026\.10:20:3\d", screen), screen
 
     # The clock keeps running, and survives Break (the RTC is battery backed).
     time.sleep(2.0)
-    integra_b.keyboard.press_break()
-    integra_b.expect(">", timeout=10.0, sample_interval_seconds=0.2)
+    _reset(integra_b)
     _type(integra_b, "CLS")
     screen = _command(integra_b, "*TIME", "Sep 2026")
     match = re.search(r"Tue,15 Sep 2026\.10:20:(\d\d)", screen)
@@ -255,7 +286,8 @@ def test_osword_14_reads_the_clock(integra_b):
     # Function 1: BCD year, month, date, day of week, hours, minutes, seconds.
     _type(integra_b, "CLS",
           "?B%=1:CALL &FFF1:PRINT \"BCD\";:FOR I%=0 TO 5:PRINT \" \";~B%?I%;:NEXT")
-    screen = _command(integra_b, "", "BCD")
+    # "BCD 2" is only in the output, not in the echoed PRINT "BCD".
+    screen = _command(integra_b, "", "BCD 2")
     assert "BCD 26 9 15 3 10 2" in screen, screen
 
 
@@ -287,8 +319,7 @@ def test_alarm_flashes_the_lock_leds_until_acknowledged(integra_b):
 
 def test_configuration_survives_ctrl_break(integra_b):
     _type(integra_b, "*CONFIGURE MODE 3")
-    integra_b.keyboard.ctrl_break()
-    integra_b.expect(">", timeout=10.0, sample_interval_seconds=0.2)
+    _reset(integra_b, ctrl=True)
     screen = _command(integra_b, "*STATUS MODE", "MODE")
     assert re.search(r"MODE\s+3", screen), screen
     screen = _command(integra_b, "PRINT ~HIMEM", "4000")  # MODE 3 screen at &4000
@@ -378,8 +409,9 @@ def test_shadow_command_selects_how_modes_are_interpreted(integra_b):
 
 def test_shadow_memory_is_not_exchanged_by_default(integra_b):
     _type(integra_b, "MODE 7:?&5000=&AA")
-    screen = _command(integra_b, "MODE 135:PRINT \"V\";~?&5000", "V")
-    assert "VAA" not in screen
+    # The +&1000 keeps the result ("V1nnn") distinct from the typed command.
+    screen = _command(integra_b, "MODE 135:PRINT \"V\";~(?&5000+&1000)", "V1")
+    assert re.search(r"V1[0-9A-F]{3}", screen) and "V10AA" not in screen, screen
 
 
 def test_shx_exchanges_main_and_shadow_memory_on_mode_change(integra_b):
@@ -405,10 +437,10 @@ def test_x_prefix_gives_commands_the_screen_memory(integra_b):
     """*X* runs a command with shadow memory switched out, so *SRWRITE copies
     the screen itself rather than shadow RAM."""
     _type(integra_b, "MODE 135", "PRINT \"MARKER\"", "*X*SRWRITE 7C00+400 8000 4")
-    integra_b.expect(">", timeout=10.0, sample_interval_seconds=0.2)
-    time.sleep(0.5)
-    copy = bytes(integra_b.memory.region("bank_4").peek[0x8000:0x8400])
-    assert b"MARKER" in copy
+    deadline = time.monotonic() + 10.0
+    while b"MARKER" not in bytes(integra_b.memory.region("bank_4").peek[0x8000:0x8400]):
+        assert time.monotonic() < deadline, "screen never copied into bank 4"
+        time.sleep(0.2)
 
 
 def test_reset_mode_full_system_reset(integra_b):
@@ -429,7 +461,8 @@ def test_reset_mode_full_system_reset(integra_b):
     assert "System Reset" in integra_b.video.screen_text().text
 
     _type(integra_b, "Y")
-    integra_b.expect("INTEGRA-B", timeout=20.0, sample_interval_seconds=0.2)
+    # IBOS's No Language Environment has a '*' prompt.
+    _wait_for_prompt(integra_b, "*", containing="INTEGRA-B")
     screen = _command(integra_b, "*STATUS LANG", "LANG")
     assert re.search(r"LANG\s+15", screen), screen
     assert _rtc_register(integra_b, 0x0B) & 0x80  # SET: clock halted
@@ -450,7 +483,7 @@ def test_reset_mode_without_reset_unplugs_other_roms(integra_b):
     kb.ctrl_up()
     integra_b.expect("Go (Y/N)", timeout=10.0, sample_interval_seconds=0.2)
     _type(integra_b, "N")
-    integra_b.expect("*", timeout=10.0, sample_interval_seconds=0.2)
+    _wait_for_prompt(integra_b, "*")
     screen = _command(integra_b, "*ROMS", "  0 (")
     assert re.search(r"\b3 \(\s*U\s*L\) BASIC", screen), screen
     assert re.search(r"\b1 \(\s*US\s*\) DFS", screen), screen
