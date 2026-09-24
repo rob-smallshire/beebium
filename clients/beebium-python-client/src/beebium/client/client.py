@@ -643,8 +643,10 @@ class Beebium:
                     end_address=0x10000,
                     condition=f"cycles >= {chunk_target}",
                 ):
-                    self.debugger.ensure_running()
-                    self.debugger.wait_for_stop()
+                    # Subscribe before resuming: a short chunk can stop before a
+                    # separate wait_for_stop() would subscribe, and that wait
+                    # would then never see the stop.
+                    self.debugger.run_and_wait_for_stop()
 
                 if predicate():
                     return True
