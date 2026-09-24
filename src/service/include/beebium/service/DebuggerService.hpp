@@ -332,6 +332,11 @@ private:
         std::queue<ExecutionEvent> queue;
         std::mutex mutex;
         std::condition_variable cv;
+        // New events are waiting in event_queue_ to be drained. Set under
+        // `mutex` before notifying `cv`, so the waiter's predicate sees it:
+        // `queue` alone stays empty until a subscriber drains, which it only
+        // does after waking.
+        bool events_pending = false;
     };
 
     // SPSC queue: emulation loop → service layer (single producer, single consumer)
@@ -348,6 +353,10 @@ private:
     void notify_subscribers() {
         std::lock_guard<std::mutex> lock(subscribers_mutex_);
         for (auto& sub : subscribers_) {
+            {
+                std::lock_guard<std::mutex> sub_lock(sub->mutex);
+                sub->events_pending = true;
+            }
             sub->cv.notify_all();
         }
     }
@@ -1247,8 +1256,10 @@ grpc::Status DebuggerControlServiceImpl::WatchExecutionState(
             std::unique_lock<std::mutex> lock(subscriber->mutex);
             subscriber->cv.wait_for(lock, std::chrono::milliseconds(100),
                 [&subscriber, context] {
-                    return !subscriber->queue.empty() || context->IsCancelled();
+                    return !subscriber->queue.empty() || subscriber->events_pending
+                        || context->IsCancelled();
                 });
+            subscriber->events_pending = false;
         }
 
         if (context->IsCancelled()) {

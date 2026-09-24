@@ -24,6 +24,8 @@
 #include "debugger.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <vector>
 
@@ -2140,4 +2142,45 @@ TEST_CASE("Cycle-budget stop must fire while Break is held (#79)",
 
     CHECK(fixture.machine().cycle_count() >= target);
     CHECK(fixture.machine().is_paused());  // RED today: never fires while halted
+}
+
+TEST_CASE("WatchExecutionState delivers events without waiting for its poll timeout",
+          "[grpc][debugger][watch]") {
+    // Each published event must wake the stream promptly. A lost wakeup leaves
+    // the subscriber asleep until its 100 ms fallback timeout, so every event
+    // arrives ~100 ms late. Take the fastest of several deliveries so a slow
+    // host cannot fail the test, while a lost wakeup still does.
+    DebuggerTestFixture fixture;
+
+    grpc::ClientContext watch_context;
+    // A missing event fails the test at the deadline instead of hanging it.
+    watch_context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+    beebium::WatchExecutionStateRequest watch_request;
+    auto reader = fixture.debugger().WatchExecutionState(&watch_context, watch_request);
+    beebium::ExecutionStateEvent event;
+    REQUIRE(reader->Read(&event));  // initial snapshot
+
+    auto fastest = std::chrono::steady_clock::duration::max();
+    for (int i = 0; i < 6; ++i) {
+        const bool run = (i % 2) == 1;  // the machine starts running: stop first
+        auto start = std::chrono::steady_clock::now();
+        {
+            grpc::ClientContext context;
+            beebium::Empty request;
+            if (run) {
+                beebium::RunResponse response;
+                REQUIRE(fixture.debugger().Run(&context, request, &response).ok());
+            } else {
+                beebium::StopResponse response;
+                REQUIRE(fixture.debugger().Stop(&context, request, &response).ok());
+            }
+        }
+        REQUIRE(reader->Read(&event));
+        CHECK(event.state().is_running() == run);
+        fastest = std::min(fastest, std::chrono::steady_clock::now() - start);
+    }
+    CHECK(std::chrono::duration_cast<std::chrono::milliseconds>(fastest).count() < 50);
+
+    watch_context.TryCancel();
+    reader->Finish();
 }
