@@ -188,6 +188,7 @@ Beebium is licensed under the [GNU General Public License v3.0](COPYING.txt).
 - **David Banks** (hoglet) - The Tube ULA register 3 FIFO test program from his [Tube ULA Re-Implementation](https://stardot.org.uk/forums/viewtopic.php?t=28080) thread, with measurements of a real Ferranti Tube ULA that Beebium's Tube register behaviour is validated against
 - **James** (acheton1984) - The [Tak benchmark reconstruction](https://github.com/acheton1984/ReTestingTheTak), timed on real BBC Micro and second-processor hardware, which showed Beebium's 6502 Second Processor running fast and now anchors its timing tests; and careful, generous testing of Beebium releases
 - **Dominic Plunkett** (dp111) - The [6502 instruction timing test suite](https://github.com/dp111/6502Timing), which times almost every documented and undocumented 6502 instruction against a 1MHz VIA and now guards Beebium's core, VIA timer and 1MHz bus stretching
+- **Ken Lowe** (KenLowe) - Documenting and reverse engineering the Computech Integra-B board: the rebuilt IBOS 1.20 User Guide and the board schematic that Beebium's Integra-B emulation is built from
 - The BBC Micro community at [Stardot](https://stardot.org.uk/)
 
 ## Third-Party Libraries
