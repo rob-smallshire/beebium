@@ -33,15 +33,17 @@ namespace beebium {
 //   0x0D       register D: VRT (read-only; always "valid")
 //   0x0E-0x3F  50 bytes of general-purpose battery-backed RAM
 //
-// Time model. The calendar follows a host clock - local civil time - plus an
-// offset, like the Acorn user-port RTC extension, so the clock keeps real time
-// across host sleep and emulation pauses. The offset is re-derived whenever
-// the guest writes a time register, or when the clock is released from being
-// held (SET, or the divider chain stopped), so guest-set times run on from
-// where they were set. While held, the time registers are frozen snapshots
-// that the guest may rewrite freely. The day-of-week register counts
-// independently of the date on the real chip, so a guest-set weekday is kept
-// as an adjustment relative to the computed weekday.
+// Time model. The time registers are held as last written and advance with a
+// time source. By default that is the host clock - local civil time - like the
+// Acorn user-port RTC extension, so the clock keeps real time across host sleep
+// and emulation pauses. Alternatively an emulated clock (use_emulated_clock)
+// starts at a given time and advances only with emulated CPU cycles, so
+// everything the chip does is a deterministic function of emulated time. When
+// the guest writes a time register, or releases the clock from being held (SET,
+// or the divider chain stopped), the registers are re-anchored to the current
+// second and run on from there. While held, they are frozen and the guest may
+// rewrite them freely. The day-of-week register counts independently of the
+// date, as on the real chip.
 //
 // Update-ended and alarm events fire when the (offset) host second rolls over,
 // detected every HOST_POLL_CYCLES emulated cycles. The periodic interrupt is a
@@ -128,7 +130,7 @@ public:
         : host_clock_(std::move(host_clock)) {
         registers_[REG_A] = A_DV_32768HZ;
         registers_[REG_B] = B_24_HOUR;
-        last_host_second_ = host_seconds();
+        rebase_to(seconds_to_civil(host_seconds()));
     }
 
     // --- Bus interface ------------------------------------------------------
@@ -175,6 +177,7 @@ public:
 
     // Advance by one emulated 2 MHz CPU cycle.
     void tick() {
+        ++emulated_cycles_;
         if (divider_running()) {
             time_base_accumulator_ += TIME_BASE_HZ;
             if (time_base_accumulator_ >= CPU_HZ) {
@@ -203,13 +206,38 @@ public:
         registers_[REG_C] = 0;
     }
 
+    // --- Time source ----------------------------------------------------------
+
+    // Replace the host clock with an emulated one: local civil time starting at
+    // `start_civil_seconds` (see civil_to_seconds) and advancing with emulated
+    // CPU cycles from now on.
+    void use_emulated_clock(int64_t start_civil_seconds) {
+        emulated_clock_ = true;
+        emulated_epoch_us_ = start_civil_seconds * 1'000'000;
+        emulated_cycles_ = 0;
+        rebase_to(seconds_to_civil(start_civil_seconds));
+    }
+    bool uses_emulated_clock() const { return emulated_clock_; }
+
+    // Set the calendar to `civil_seconds` now (the clock keeps running from
+    // there), as if the guest had set every time register.
+    void set_time(int64_t civil_seconds) {
+        CivilTime t = seconds_to_civil(civil_seconds);
+        if (frozen_) {
+            frozen_time_ = t;
+        } else {
+            rebase_to(t);
+        }
+    }
+
     // --- Host-clock offset --------------------------------------------------
 
     // The calendar is host local time plus this offset.
-    std::chrono::seconds clock_offset() const { return std::chrono::seconds(offset_seconds_); }
+    std::chrono::seconds clock_offset() const {
+        return std::chrono::seconds(to_seconds(current_time()) - host_seconds());
+    }
     void set_clock_offset(std::chrono::seconds offset) {
-        offset_seconds_ = offset.count();
-        last_host_second_ = host_seconds();
+        set_time(host_seconds() + offset.count());
     }
 
     // --- Battery-backed state -----------------------------------------------
@@ -308,8 +336,13 @@ private:
     std::array<uint8_t, REGISTER_COUNT> registers_{};
     uint8_t address_ = 0;
 
-    int64_t offset_seconds_ = 0;
-    int day_of_week_adjust_ = 0;  // guest weekday minus computed weekday, mod 7
+    // The time registers as last written (or set), and the time-source second
+    // at which they held those values. The clock runs on from there. Holding
+    // the registers as written matters: software sets the date one register
+    // at a time, passing through impossible dates (31 September while the
+    // month is still 9) that must not be normalised before it finishes.
+    CivilTime anchor_{};
+    int64_t anchor_second_ = 0;
 
     bool frozen_ = false;
     CivilTime frozen_time_{};
@@ -319,7 +352,19 @@ private:
     uint32_t host_poll_counter_ = 0;
     int64_t last_host_second_ = 0;
 
-    int64_t host_microseconds() const { return host_clock_().count(); }
+    // The emulated clock: 2 MHz cycles are half a microsecond each.
+    bool emulated_clock_ = false;
+    int64_t emulated_epoch_us_ = 0;
+    uint64_t emulated_cycles_ = 0;
+
+    // The time source the calendar follows: the host clock, or the emulated
+    // clock when one is in use.
+    int64_t host_microseconds() const {
+        if (emulated_clock_) {
+            return emulated_epoch_us_ + static_cast<int64_t>(emulated_cycles_ / 2);
+        }
+        return host_clock_().count();
+    }
 
     static int64_t floor_div(int64_t a, int64_t b) {
         return a >= 0 ? a / b : -((-a + b - 1) / b);
@@ -336,9 +381,24 @@ private:
         return (registers_[REG_B] & B_SET) != 0 || !divider_running();
     }
 
+    // Registers hold a two-digit year; the chip's leap-year rule (every fourth
+    // year) matches the Gregorian calendar throughout 2000-2099, so time
+    // arithmetic is done in that century.
+    static int64_t to_seconds(const CivilTime& t) {
+        return civil_to_seconds(2000 + (t.year % 100), t.month, t.date, t.hours,
+                                t.minutes, t.seconds);
+    }
+
+    // The running time registers: the anchored values advanced by the seconds
+    // elapsed since. The day of week counts on from its own value, as the
+    // chip's weekday counter is independent of the date.
     CivilTime running_time() const {
-        CivilTime t = seconds_to_civil(host_seconds() + offset_seconds_);
-        t.day_of_week = ((t.day_of_week - 1 + day_of_week_adjust_) % 7 + 7) % 7 + 1;
+        int64_t elapsed = host_seconds() - anchor_second_;
+        if (elapsed == 0) return anchor_;
+        int64_t base = to_seconds(anchor_);
+        CivilTime t = seconds_to_civil(base + elapsed);
+        int64_t days = floor_div(base + elapsed, 86400) - floor_div(base, 86400);
+        t.day_of_week = static_cast<int>(((anchor_.day_of_week - 1 + days) % 7 + 7) % 7) + 1;
         return t;
     }
 
@@ -350,16 +410,11 @@ private:
         return frac >= 1'000'000 - UIP_LEAD_US || frac < UPDATE_CYCLE_US;
     }
 
-    // Re-base the offset so the running clock shows `t` now.
+    // Anchor the running clock so it shows `t` now.
     void rebase_to(const CivilTime& t) {
-        // Registers hold a two-digit year; the chip's leap-year rule (every
-        // fourth year) matches the Gregorian calendar throughout 2000-2099.
-        int year = 2000 + (t.year % 100);
-        int64_t target = civil_to_seconds(year, t.month, t.date, t.hours, t.minutes, t.seconds);
-        offset_seconds_ = target - host_seconds();
-        CivilTime computed = seconds_to_civil(target);
-        day_of_week_adjust_ = ((t.day_of_week - computed.day_of_week) % 7 + 7) % 7;
-        last_host_second_ = host_seconds();
+        anchor_ = t;
+        anchor_second_ = host_seconds();
+        last_host_second_ = anchor_second_;
     }
 
     void write_register(uint8_t reg, uint8_t value) {

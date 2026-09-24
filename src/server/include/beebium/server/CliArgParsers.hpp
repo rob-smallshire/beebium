@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -35,6 +36,7 @@
 // The shared colon key=value tokenizer (split_colon_args); --sideways and the
 // extension args build on the same one.
 #include "beebium/CliArgSplit.hpp"
+#include "beebium/devices/Mc146818Rtc.hpp"
 
 namespace beebium::server {
 
@@ -287,6 +289,176 @@ inline SidewaysConfig parse_sideways_arg(const std::string& arg) {
 }
 
 // Parse --wait[=mode]. Case-insensitive.
+// A board's built-in real-time clock (e.g. --integra-rtc).
+enum class BoardRtcClock {
+    Host,      // follows the host's local time (plus any offset the guest sets)
+    Emulated,  // advances only with emulated CPU cycles (deterministic)
+};
+
+struct BoardRtcConfig {
+    BoardRtcClock clock = BoardRtcClock::Host;
+    std::optional<int64_t> time_civil_seconds;  // absolute start time
+    std::optional<std::string> offset;          // start relative to host local time
+};
+
+// Parse an ISO 8601 local date and time: YYYY-MM-DDThh:mm[:ss], or the compact
+// YYYY-MM-DDThhmm[ss]. Returns local civil seconds since 1970-01-01T00:00.
+inline int64_t parse_rtc_time(std::string_view text) {
+    auto fail = [&]() -> int64_t {
+        throw std::runtime_error(
+            "Invalid time '" + std::string(text)
+            + "' (expected YYYY-MM-DDThh:mm[:ss] or YYYY-MM-DDThhmm[ss])");
+    };
+    auto digits = [&](size_t pos, size_t len) -> int {
+        if (pos + len > text.size()) fail();
+        int value = 0;
+        for (size_t i = pos; i < pos + len; ++i) {
+            if (!std::isdigit(static_cast<unsigned char>(text[i]))) fail();
+            value = value * 10 + (text[i] - '0');
+        }
+        return value;
+    };
+    if (text.size() < 15 || text[4] != '-' || text[7] != '-'
+        || (text[10] != 'T' && text[10] != 't')) {
+        fail();
+    }
+    int year = digits(0, 4);
+    int month = digits(5, 2);
+    int day = digits(8, 2);
+    int hour = digits(11, 2);
+    int minute = 0;
+    int second = 0;
+    std::string_view rest;
+    if (text[13] == ':') {
+        minute = digits(14, 2);
+        rest = text.substr(16);
+        if (!rest.empty()) {
+            if (rest[0] != ':' || rest.size() != 3) fail();
+            second = digits(17, 2);
+        }
+    } else {
+        minute = digits(13, 2);
+        rest = text.substr(15);
+        if (!rest.empty()) {
+            if (rest.size() != 2) fail();
+            second = digits(15, 2);
+        }
+    }
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23
+        || minute > 59 || second > 59) {
+        fail();
+    }
+    return Mc146818Rtc::civil_to_seconds(year, month, day, hour, minute, second);
+}
+
+// Shift local civil seconds by an offset such as "-10y", "+5h", "-365d",
+// "+30m", "+90s" or "-1y6M" (units y M d h m s; one sign for the whole
+// offset). Year and month steps keep the day of the month, clamped to the
+// length of the resulting month.
+inline int64_t apply_rtc_offset(int64_t civil_seconds, std::string_view offset) {
+    auto fail = [&](const std::string& why) -> int64_t {
+        throw std::runtime_error("Invalid offset '" + std::string(offset) + "': " + why
+                                 + " (e.g. -10y, +5h, -365d, +30m, -1y6M)");
+    };
+    if (offset.empty()) fail("empty");
+    int sign = 1;
+    size_t pos = 0;
+    if (offset[0] == '-' || offset[0] == '+') {
+        sign = offset[0] == '-' ? -1 : 1;
+        pos = 1;
+    }
+    int64_t months = 0;
+    int64_t seconds = 0;
+    if (pos >= offset.size()) fail("no amount");
+    while (pos < offset.size()) {
+        if (!std::isdigit(static_cast<unsigned char>(offset[pos]))) fail("expected a number");
+        int64_t value = 0;
+        while (pos < offset.size() && std::isdigit(static_cast<unsigned char>(offset[pos]))) {
+            value = value * 10 + (offset[pos++] - '0');
+        }
+        if (pos >= offset.size()) fail("missing unit");
+        switch (offset[pos++]) {
+            case 'y': months += 12 * value; break;
+            case 'M': months += value; break;
+            case 'd': seconds += 86400 * value; break;
+            case 'h': seconds += 3600 * value; break;
+            case 'm': seconds += 60 * value; break;
+            case 's': seconds += value; break;
+            default: fail("unknown unit (use y M d h m s)");
+        }
+    }
+    auto t = Mc146818Rtc::seconds_to_civil(civil_seconds);
+    int64_t month_index = static_cast<int64_t>(t.year) * 12 + (t.month - 1) + sign * months;
+    int year = static_cast<int>(month_index >= 0 ? month_index / 12 : (month_index - 11) / 12);
+    int month = static_cast<int>(month_index - static_cast<int64_t>(year) * 12) + 1;
+    static constexpr int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int max_day = days_in_month[month - 1];
+    if (month == 2 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) max_day = 29;
+    int day = t.date > max_day ? max_day : t.date;
+    return Mc146818Rtc::civil_to_seconds(year, month, day, t.hours, t.minutes, t.seconds)
+           + sign * seconds;
+}
+
+// Parse a board RTC option value: key=value fields separated by ':' --
+// clock=<host|emulated>, time=<YYYY-MM-DDThh:mm[:ss]>, offset=<e.g. -10y>.
+// time and offset are mutually exclusive. The ':' inside a time value is kept:
+// only the fixed keys begin a field.
+inline BoardRtcConfig parse_board_rtc_arg(const std::string& arg, std::string_view option) {
+    const std::string usage = std::string(option)
+        + " clock=<host|emulated>[:time=<YYYY-MM-DDThh:mm[:ss]>|:offset=<e.g. -10y>]";
+    auto begins_field = [](const std::string& token) {
+        std::string lower = ascii_to_lower(token);
+        return lower.rfind("clock=", 0) == 0 || lower.rfind("time=", 0) == 0
+            || lower.rfind("offset=", 0) == 0;
+    };
+    std::vector<std::string> tokens;
+    for (auto& piece : split_colon_args(arg)) {
+        if (!tokens.empty() && !begins_field(piece)) {
+            tokens.back() += ':';
+            tokens.back() += piece;
+        } else {
+            tokens.push_back(std::move(piece));
+        }
+    }
+    if (tokens.empty()) {
+        throw std::runtime_error("Invalid " + std::string(option) + ": empty. Use " + usage);
+    }
+
+    BoardRtcConfig config;
+    for (const auto& token : tokens) {
+        auto eq = token.find('=');
+        if (eq == std::string::npos) {
+            throw std::runtime_error("Invalid " + std::string(option) + " field '" + token
+                                     + "'. Use " + usage);
+        }
+        std::string key = ascii_to_lower(token.substr(0, eq));
+        std::string value = token.substr(eq + 1);
+        if (key == "clock") {
+            std::string v = ascii_to_lower(value);
+            if (v == "host") {
+                config.clock = BoardRtcClock::Host;
+            } else if (v == "emulated") {
+                config.clock = BoardRtcClock::Emulated;
+            } else {
+                throw std::runtime_error("Invalid " + std::string(option) + " clock '" + value
+                                         + "' (expected host or emulated)");
+            }
+        } else if (key == "time") {
+            config.time_civil_seconds = parse_rtc_time(value);
+        } else if (key == "offset") {
+            apply_rtc_offset(0, value);  // validate now; applied at launch
+            config.offset = value;
+        } else {
+            throw std::runtime_error("Unknown " + std::string(option) + " key '" + key
+                                     + "'. Use " + usage);
+        }
+    }
+    if (config.time_civil_seconds && config.offset) {
+        throw std::runtime_error(std::string(option) + ": time and offset are mutually exclusive");
+    }
+    return config;
+}
+
 inline WaitMode parse_wait_arg(const std::string& value) {
     std::string lc = ascii_to_lower(value);
     if (lc == "cli") return WaitMode::Cli;

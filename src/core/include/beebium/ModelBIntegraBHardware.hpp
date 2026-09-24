@@ -112,6 +112,10 @@ public:
     static constexpr std::string_view DEFAULT_BOARD_ROM = "computech-ibos_1_26.rom";
     static constexpr uint8_t DEFAULT_BOARD_ROM_SLOT = 15;
 
+    // Launch option for the board's real-time clock: --integra-rtc
+    // clock=<host|emulated>[:time=...|:offset=...].
+    static constexpr std::string_view BOARD_RTC_OPTION = "integra-rtc";
+
     // The board's own sideways RAM banks, always fitted.
     static constexpr uint8_t FIRST_BOARD_RAM_SLOT = 4;
     static constexpr uint8_t LAST_BOARD_RAM_SLOT = 7;

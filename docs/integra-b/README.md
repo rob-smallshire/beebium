@@ -48,10 +48,12 @@ the 1.20 guide.
   as well as power-on.
 - **Real-time clock:** a CDP6818 (MC146818-compatible). The address goes to
   `&FE38` and data is read or written at `&FE3C`. Its IRQ output drives the
-  CPU IRQ line, and its RESET pin is the 6502 reset line. The calendar is
-  host local time plus an offset that the guest sets, so the clock keeps
-  real time across host sleep. The periodic interrupt is driven by emulated
-  cycles.
+  CPU IRQ line, and its RESET pin is the 6502 reset line. By default the
+  calendar follows host local time (plus whatever the guest sets), so the
+  clock keeps real time across host sleep. `--integra-rtc clock=emulated`
+  makes it advance with emulated time instead, from a given `time=`, which
+  makes it deterministic (the integration tests use this). The periodic
+  interrupt is always driven by emulated cycles.
 - **Battery backup:** a launch starts from a board that has been set up,
   as if IBOS's Full System Reset and `*CONFIGURE LANG 3` had already been
   run and the clock set (`IntegraBBatterySeed.hpp`). Changes made during a

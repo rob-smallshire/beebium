@@ -304,6 +304,30 @@ beebium-model-b-plus --motherboard-link s13=north --sideways slot=0:type=rom:ima
 See [sideways-slots.md](sideways-slots.md) for the full slot topology
 behind these options.
 
+#### Board Real-Time Clock
+
+| Option | Description |
+|--------|-------------|
+| `--integra-rtc KEY=VALUE[:KEY=VALUE...]` | Configure the Integra-B's built-in CDP6818 real-time clock (only `beebium-model-b-integra-b` accepts it). |
+
+| KEY | Values | Effect |
+|-----|--------|--------|
+| `clock` | `host` (default), `emulated` | `host`: the calendar follows the host's local time, so it keeps real time across host sleep and pauses. `emulated`: it advances only with emulated CPU cycles, so everything the clock does is a deterministic function of emulated time (reproducible sessions and tests). |
+| `time` | `YYYY-MM-DDThh:mm[:ss]` or `YYYY-MM-DDThhmm[ss]` | Start the clock at this local time. |
+| `offset` | e.g. `-10y`, `+5h`, `-1y6M` (units `y M d h m s`) | Start the clock this far from the host's local time. Mutually exclusive with `time`. |
+
+The guest can still set the time itself (IBOS `*TIME=` / `*DATE=`); the
+clock then runs on from what it set, under either time source.
+
+Examples:
+
+```bash
+# Deterministic: start at 10:20:30 on 15 September 2026, advance with emulated time
+beebium-model-b-integra-b --integra-rtc clock=emulated:time=2026-09-15T10:20:30
+# Host time, but ten years ago
+beebium-model-b-integra-b --integra-rtc offset=-10y
+```
+
 ### list-fdcs
 
 List available disc controllers that can be installed in machines with a disc controller socket.

@@ -446,6 +446,10 @@ struct ServerConfig {
     // per-slot --sideways ...:write-protect flag cannot (e.g. Watford S1/S2).
     std::vector<std::pair<std::string, ProtectionKind>> launch_protections;
 
+    // The board's built-in real-time clock (e.g. --integra-rtc): its time
+    // source and start time. Only machines declaring BOARD_RTC_OPTION accept it.
+    std::optional<BoardRtcConfig> board_rtc;
+
     // Motherboard link state (jumpers that affect sideways slot mapping).
     // Default-constructed to factory positions. For machine variants with no
     // such links this is EmptyMotherboardLinks and accepts no assignments.
@@ -560,6 +564,14 @@ void print_usage(const char* program_name) {
               << "  --port <port>            gRPC port (default: " << DEFAULT_GRPC_PORT << ")\n"
               << "  --floppy <drive>:<filepath|url>\n"
               << "                           Load disc image into floppy drive (0 or 1)\n";
+    if constexpr (requires { Memory::BOARD_RTC_OPTION; }) {
+        std::cerr << "  --" << Memory::BOARD_RTC_OPTION
+                  << " clock=<host|emulated>[:time=<YYYY-MM-DDThh:mm[:ss]>|:offset=<e.g. -10y>]\n"
+                  << "                           The board's real-time clock. clock=host (default)\n"
+                  << "                           follows the host's local time; clock=emulated\n"
+                  << "                           advances only with emulated time (deterministic).\n"
+                  << "                           time/offset set the start (offset: y M d h m s).\n";
+    }
 
     // Show --fdc option only for machines with disc controller sockets
     if constexpr (HasDiscControllerSocket<Memory>) {
@@ -784,6 +796,17 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
 // by validate_sideways_configs.
 //
 // Must run after CLI parsing; called at the end of parse_start_arguments.
+// The command-line flag for a machine's built-in real-time clock (e.g.
+// "--integra-rtc"), or empty if the machine has none.
+template<typename Memory>
+std::string board_rtc_flag() {
+    if constexpr (requires { Memory::BOARD_RTC_OPTION; }) {
+        return "--" + std::string(Memory::BOARD_RTC_OPTION);
+    } else {
+        return {};
+    }
+}
+
 template<typename MachineType>
 void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
     for (const auto& preset_slot : config.preset_sideways_configs) {
@@ -973,6 +996,13 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
         } else if (arg == "--hide" && i + 1 < argc) {
             config.launch_protections.emplace_back(argv[++i],
                                                    ProtectionKind::Hide);
+        } else if (arg == board_rtc_flag<typename MachineType::Memory>() && i + 1 < argc) {
+            try {
+                config.board_rtc = parse_board_rtc_arg(argv[++i], arg);
+            } catch (const std::runtime_error& e) {
+                std::cerr << "Error: " << e.what() << "\n";
+                return ExitCode::USAGE;
+            }
         } else if (arg == "--sideways" && i + 1 < argc) {
             std::string value = argv[++i];
             SidewaysConfig sideways_config;
@@ -1424,6 +1454,25 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
         throw std::runtime_error(
             "--write-protect/--hide: this machine variant has no protection "
             "controls");
+    }
+
+    // The board's built-in real-time clock: time source and start time.
+    if constexpr (requires { MachineType::Memory::BOARD_RTC_OPTION; }) {
+        if (config.board_rtc) {
+            auto& rtc = machine.state().memory.rtc;
+            const auto& spec = *config.board_rtc;
+            const int64_t host_now =
+                Mc146818Rtc::host_local_civil_now().count() / 1'000'000;
+            std::optional<int64_t> start = spec.time_civil_seconds;
+            if (spec.offset) start = apply_rtc_offset(host_now, *spec.offset);
+            if (spec.clock == BoardRtcClock::Emulated) {
+                rtc.use_emulated_clock(start.value_or(host_now));
+                std::cout << "Real-time clock: emulated time\n";
+            } else if (start) {
+                rtc.set_time(*start);
+                std::cout << "Real-time clock: host time, shifted\n";
+            }
+        }
     }
 }
 

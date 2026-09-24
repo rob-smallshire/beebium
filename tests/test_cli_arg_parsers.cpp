@@ -214,3 +214,72 @@ TEST_CASE("parse_speed_arg rejects non-finite values", "[cli][speed]") {
     REQUIRE_THROWS_AS(parse_speed_arg("inf"), std::runtime_error);
     REQUIRE_THROWS_AS(parse_speed_arg("nan"), std::runtime_error);
 }
+
+// ============================================================================
+// --integra-rtc (a board's built-in real-time clock)
+// ============================================================================
+
+using beebium::server::BoardRtcClock;
+using beebium::server::apply_rtc_offset;
+using beebium::server::parse_board_rtc_arg;
+using beebium::server::parse_rtc_time;
+
+namespace {
+constexpr int64_t civil(int y, int mo, int d, int h, int mi, int s) {
+    return beebium::Mc146818Rtc::civil_to_seconds(y, mo, d, h, mi, s);
+}
+}  // namespace
+
+TEST_CASE("parse_rtc_time accepts ISO 8601 with and without seconds", "[cli][rtc]") {
+    CHECK(parse_rtc_time("2026-09-15T10:20:30") == civil(2026, 9, 15, 10, 20, 30));
+    CHECK(parse_rtc_time("2026-09-15T10:20") == civil(2026, 9, 15, 10, 20, 0));
+    CHECK(parse_rtc_time("2026-09-15T1020") == civil(2026, 9, 15, 10, 20, 0));
+    CHECK(parse_rtc_time("2026-09-15T102030") == civil(2026, 9, 15, 10, 20, 30));
+    CHECK(parse_rtc_time("1988-09-15t13:33") == civil(1988, 9, 15, 13, 33, 0));
+}
+
+TEST_CASE("parse_rtc_time rejects malformed and out-of-range values", "[cli][rtc]") {
+    CHECK_THROWS(parse_rtc_time("2026-09-15"));
+    CHECK_THROWS(parse_rtc_time("2026/09/15T10:20"));
+    CHECK_THROWS(parse_rtc_time("2026-13-15T10:20"));
+    CHECK_THROWS(parse_rtc_time("2026-09-15T24:00"));
+    CHECK_THROWS(parse_rtc_time("2026-09-15T10:20:61"));
+    CHECK_THROWS(parse_rtc_time("2026-09-15T10:20x"));
+}
+
+TEST_CASE("apply_rtc_offset shifts by calendar and clock units", "[cli][rtc]") {
+    const int64_t now = civil(2026, 3, 31, 12, 0, 0);
+    CHECK(apply_rtc_offset(now, "-10y") == civil(2016, 3, 31, 12, 0, 0));
+    CHECK(apply_rtc_offset(now, "+5h") == civil(2026, 3, 31, 17, 0, 0));
+    CHECK(apply_rtc_offset(now, "-365d") == civil(2025, 3, 31, 12, 0, 0));
+    CHECK(apply_rtc_offset(now, "+30m") == civil(2026, 3, 31, 12, 30, 0));
+    CHECK(apply_rtc_offset(now, "+90s") == civil(2026, 3, 31, 12, 1, 30));
+    CHECK(apply_rtc_offset(now, "-1y6M") == civil(2024, 9, 30, 12, 0, 0));  // clamps day
+    CHECK_THROWS(apply_rtc_offset(now, ""));
+    CHECK_THROWS(apply_rtc_offset(now, "+5"));
+    CHECK_THROWS(apply_rtc_offset(now, "+5w"));
+}
+
+TEST_CASE("parse_board_rtc_arg reads the clock source and start time", "[cli][rtc]") {
+    auto cfg = parse_board_rtc_arg("clock=emulated:time=2026-09-15T10:20:30", "--integra-rtc");
+    CHECK(cfg.clock == BoardRtcClock::Emulated);
+    REQUIRE(cfg.time_civil_seconds.has_value());
+    CHECK(*cfg.time_civil_seconds == civil(2026, 9, 15, 10, 20, 30));
+    CHECK_FALSE(cfg.offset.has_value());
+
+    auto host = parse_board_rtc_arg("offset=-1y", "--integra-rtc");
+    CHECK(host.clock == BoardRtcClock::Host);
+    REQUIRE(host.offset.has_value());
+    CHECK(*host.offset == "-1y");
+
+    auto order = parse_board_rtc_arg("time=2026-09-15T10:20:30:clock=host", "--integra-rtc");
+    CHECK(order.clock == BoardRtcClock::Host);
+    CHECK(*order.time_civil_seconds == civil(2026, 9, 15, 10, 20, 30));
+}
+
+TEST_CASE("parse_board_rtc_arg rejects bad input", "[cli][rtc]") {
+    CHECK_THROWS(parse_board_rtc_arg("clock=atomic", "--integra-rtc"));
+    CHECK_THROWS(parse_board_rtc_arg("colour=blue", "--integra-rtc"));
+    CHECK_THROWS(parse_board_rtc_arg("time=2026-09-15T10:20:offset=+1h", "--integra-rtc"));
+    CHECK_THROWS(parse_board_rtc_arg("", "--integra-rtc"));
+}

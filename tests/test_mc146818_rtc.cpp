@@ -458,3 +458,95 @@ TEST_CASE("Mc146818Rtc battery image loads configuration and RAM", "[mc146818]")
     CHECK(rd(rtc, REG_SECONDS) == 30);
     CHECK(rtc.battery_image()[0x3F] == 0xEE);
 }
+
+TEST_CASE("Mc146818Rtc emulated clock advances only with emulated cycles", "[mc146818][emulated_clock]") {
+    FakeHostClock host;
+    host.set(2030, 1, 1, 0, 0, 0);
+    Mc146818Rtc rtc(host.source());
+    rtc.use_emulated_clock(Mc146818Rtc::civil_to_seconds(2026, 9, 15, 10, 20, 30));
+    start_running(rtc);
+
+    CHECK(rd(rtc, REG_HOURS) == 0x10);
+    CHECK(rd(rtc, REG_MINUTES) == 0x20);
+    CHECK(rd(rtc, REG_SECONDS) == 0x30);
+    CHECK(rd(rtc, REG_DATE) == 0x15);
+
+    host.advance_us(3'600'000'000);  // host time is irrelevant
+    CHECK(rd(rtc, REG_SECONDS) == 0x30);
+
+    run_cycles(rtc, 2 * Mc146818Rtc::CPU_HZ);  // two emulated seconds
+    CHECK(rd(rtc, REG_SECONDS) == 0x32);
+    CHECK(rtc.uses_emulated_clock());
+}
+
+TEST_CASE("Mc146818Rtc emulated clock drives update and alarm events", "[mc146818][emulated_clock]") {
+    FakeHostClock host;
+    Mc146818Rtc rtc(host.source());
+    rtc.use_emulated_clock(Mc146818Rtc::civil_to_seconds(2026, 9, 15, 7, 29, 59));
+    start_running(rtc, B_24H | B_AIE);
+    wr(rtc, REG_HOURS_ALARM, 0x07);
+    wr(rtc, REG_MINUTES_ALARM, 0x30);
+    wr(rtc, REG_SECONDS_ALARM, 0x00);
+
+    run_cycles(rtc, Mc146818Rtc::CPU_HZ / 2);
+    CHECK_FALSE(rtc.irq_pending());
+    run_cycles(rtc, Mc146818Rtc::CPU_HZ / 2 + Mc146818Rtc::HOST_POLL_CYCLES);
+    CHECK(rtc.irq_pending());
+    CHECK((rd(rtc, REG_C) & C_AF) != 0);
+}
+
+TEST_CASE("Mc146818Rtc guest-set time runs on under the emulated clock", "[mc146818][emulated_clock]") {
+    FakeHostClock host;
+    Mc146818Rtc rtc(host.source());
+    rtc.use_emulated_clock(Mc146818Rtc::civil_to_seconds(2026, 1, 1, 0, 0, 0));
+    start_running(rtc);
+    wr(rtc, REG_B, B_SET | B_24H);
+    wr(rtc, REG_HOURS, 0x12);
+    wr(rtc, REG_MINUTES, 0x00);
+    wr(rtc, REG_SECONDS, 0x00);
+    wr(rtc, REG_B, B_24H);
+    run_cycles(rtc, 5 * Mc146818Rtc::CPU_HZ);
+    CHECK(rd(rtc, REG_HOURS) == 0x12);
+    CHECK(rd(rtc, REG_SECONDS) == 0x05);
+}
+
+TEST_CASE("Mc146818Rtc set_time rebases the host clock", "[mc146818]") {
+    FakeHostClock host;
+    host.set(2026, 9, 23, 17, 45, 30);
+    Mc146818Rtc rtc(host.source());
+    start_running(rtc);
+    rtc.set_time(Mc146818Rtc::civil_to_seconds(1988, 9, 15, 13, 33, 35));
+    CHECK(rd(rtc, REG_HOURS) == 0x13);
+    CHECK(rd(rtc, REG_YEAR) == 0x88);
+    CHECK(rd(rtc, REG_DAY_OF_WEEK) == 0x05);  // Thursday
+    host.advance_us(1'000'000);
+    CHECK(rd(rtc, REG_SECONDS) == 0x36);
+}
+
+TEST_CASE("Mc146818Rtc holds registers as written while the clock runs", "[mc146818]") {
+    // Software sets the date one register at a time without SET (as IBOS
+    // does). A transiently impossible date, e.g. 31 September while the month
+    // is still 9, must not be normalised before the month is written.
+    FakeHostClock host;
+    host.set(2026, 9, 15, 10, 20, 30, 100'000);
+    Mc146818Rtc rtc(host.source());
+    start_running(rtc);
+
+    wr(rtc, REG_DATE, 0x31);
+    CHECK(rd(rtc, REG_DATE) == 0x31);
+    CHECK(rd(rtc, REG_MONTH) == 0x09);
+    wr(rtc, REG_MONTH, 0x12);
+    wr(rtc, REG_YEAR, 0x26);
+    CHECK(rd(rtc, REG_DATE) == 0x31);
+    CHECK(rd(rtc, REG_MONTH) == 0x12);
+
+    // It then runs on from the written values, across midnight into the new year.
+    wr(rtc, REG_HOURS, 0x23);
+    wr(rtc, REG_MINUTES, 0x59);
+    wr(rtc, REG_SECONDS, 0x58);
+    host.advance_us(3'000'000);
+    CHECK(rd(rtc, REG_SECONDS) == 0x01);
+    CHECK(rd(rtc, REG_DATE) == 0x01);
+    CHECK(rd(rtc, REG_MONTH) == 0x01);
+    CHECK(rd(rtc, REG_YEAR) == 0x27);
+}
