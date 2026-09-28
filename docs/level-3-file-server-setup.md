@@ -263,6 +263,14 @@ from `Uade04.asm`. The register-7 year convention is unique to v1.26: a
 dongle written by any other version is not readable by it, and vice versa.
 See `docs/FileServer-RTC-and-Timekeeping.md` and `docs/acorn-user-port-rtc.md`.
 
+A note on naming. I very much dislike the all-too-common community practice
+of extending, or worse, inserting into, the original vendor's version numbers
+with unofficial modifications. I much prefer that people use something like a
+personal three-letter suffix, L3FSv106MMX rather than inventing L3FSv126.
+Invented version numbers make the real history incredibly difficult to
+follow, especially if you were not there at the time and lack the tribal
+knowledge of Acorn culture.
+
 ## Where to Get WFSINIT
 
 Several sources exist:
