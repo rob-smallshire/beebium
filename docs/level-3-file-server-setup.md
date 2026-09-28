@@ -232,6 +232,37 @@ The file server is started with `*RUN FS3v126` after booting from this disc.
 The code relocates itself to the 65C02 parasite processor.
 
 
+### Why v1.26
+
+`FS3v126` is not an Acorn release. It is a third-party build by mmbeeb
+(`https://github.com/mmbeeb/L3V126`), produced from the v1.06 source updated
+to v1.24 with further changes, and it runs as a disc executable rather than a
+sideways ROM. It is used here because it is the only Level 3 file server
+version whose User Port real-time-clock dongle path handles 21st-century
+dates, which is exactly what the `acorn-rtc` extension (SAF3019P emulation)
+needs to exercise. Per the mmbeeb README, the time/date functions "now handle
+21st century dates", and the single binary tests for the dongle first, falls
+back to OSWORD 14 (an onboard RTC), then to manual entry.
+
+None of the alternatives serve this purpose:
+
+- Acorn originals v0.90 to v1.24 store a 4-bit year offset from 1981, so the
+  dongle covers 1981-1996 only.
+- J.G. Harston's Y2K patches sidestep the dongle: v0.92 is assembled with no
+  dongle code at all, and v1.25 never writes the dongle, reading the Master's
+  onboard RTC via OSWORD 14 instead.
+- v1.31/v1.33 write a 7-bit year into alarm register 1, which has only 5 data
+  bits on the SAF3019P, so years from 2001 wrap back into 1981-2000 on read.
+
+v1.26 instead stores the absolute two-digit year in alarm register 7 (the
+7-bit minute alarm) and moves dongle detection to register 5, giving
+1981-2099 with a working dongle round trip. The `acorn-rtc` extension
+implements this as the `7bit-year-in-r7` register layout, and
+`tests/test_saf3019p_v126.cpp` replicates v1.26's exact CBUS byte sequences
+from `Uade04.asm`. The register-7 year convention is unique to v1.26: a
+dongle written by any other version is not readable by it, and vice versa.
+See `docs/FileServer-RTC-and-Timekeeping.md` and `docs/acorn-user-port-rtc.md`.
+
 ## Where to Get WFSINIT
 
 Several sources exist:
