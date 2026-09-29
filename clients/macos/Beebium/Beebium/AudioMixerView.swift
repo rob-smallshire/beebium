@@ -72,8 +72,38 @@ struct AudioMixerView: View {
                 ForEach(audioClient.groups) { group in
                     groupSection(group)
                 }
+
+                bufferHealthLine
             }
             .padding(.vertical, 8)
+        }
+    }
+
+    // MARK: - Buffer Health
+
+    /// A small text line reporting audio glitches for the session. Hidden while
+    /// the host keeps up (the common case); it appears only once the ring buffer
+    /// has dropped or underrun, so a stutter has something to point at.
+    @ViewBuilder
+    private var bufferHealthLine: some View {
+        let health = mixerState.bufferHealth
+        if health.droppedSamples > 0 || health.underrunEvents > 0 {
+            Divider()
+                .padding(.horizontal, 12)
+            HStack {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundColor(.yellow)
+                Text("\(health.underrunEvents) underruns, \(health.droppedSamples) dropped")
+                    .monospacedDigit()
+                Spacer()
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .help("Audio glitches this session: underruns (host too busy to keep the "
+                  + "buffer filled) and samples dropped on overflow. Zero means the "
+                  + "machine kept up.")
         }
     }
 

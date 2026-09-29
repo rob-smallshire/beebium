@@ -315,4 +315,25 @@ final class AudioClient: ObservableObject, Disconnectable {
     func getAllMeterStates() -> [AudioRenderer.MeterState] {
         return renderer.getAllMeterStates()
     }
+
+    // MARK: - Buffer Health
+
+    /// Playback ring-buffer health for the current session: samples the producer
+    /// dropped because the buffer was full (overflow), and the frames of silence
+    /// substituted for underruns with the number of underrun events. Both are
+    /// zero on a machine that keeps up; non-zero means the host starved the audio
+    /// threads (see AudioPreRoll for how underruns are then absorbed).
+    struct BufferHealth: Equatable, Sendable {
+        var droppedSamples: UInt64 = 0
+        var underrunSamples: UInt64 = 0
+        var underrunEvents: UInt64 = 0
+    }
+
+    /// Read the current playback ring-buffer health.
+    func bufferHealth() -> BufferHealth {
+        BufferHealth(
+            droppedSamples: ringBuffer.totalSamplesDropped,
+            underrunSamples: ringBuffer.totalUnderrunSamples,
+            underrunEvents: ringBuffer.totalUnderrunEvents)
+    }
 }

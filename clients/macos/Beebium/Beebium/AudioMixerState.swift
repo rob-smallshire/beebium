@@ -61,6 +61,11 @@ final class AudioMixerState: ObservableObject {
     /// Per-channel meter states (updated periodically)
     @Published private(set) var channelLevels: [AudioRenderer.MeterState] = []
 
+    /// Playback ring-buffer health (overflow drops and underruns). Reassigned
+    /// only when it changes, so the sidebar redraws at most when a glitch occurs,
+    /// not on every meter tick.
+    @Published private(set) var bufferHealth = AudioClient.BufferHealth()
+
     // MARK: - Audio Client Reference
 
     /// Reference to the audio client (set during app initialization)
@@ -109,6 +114,10 @@ final class AudioMixerState: ObservableObject {
     private func updateMeterLevels() {
         guard let client = audioClient else { return }
         channelLevels = client.getAllMeterStates()
+        let health = client.bufferHealth()
+        if health != bufferHealth {
+            bufferHealth = health
+        }
     }
 
     // MARK: - State Synchronization

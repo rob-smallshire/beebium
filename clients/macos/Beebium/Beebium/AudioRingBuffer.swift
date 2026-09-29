@@ -45,8 +45,17 @@ final class AudioRingBuffer: @unchecked Sendable {
     /// Statistics: total samples written (for drop detection)
     private let totalWritten = ManagedAtomic<UInt64>(0)
 
-    /// Statistics: samples dropped due to buffer full
+    /// Statistics: samples dropped due to buffer full (producer outran consumer)
     private let droppedSamples = ManagedAtomic<UInt64>(0)
+
+    /// Statistics: frames of silence substituted because a read found the buffer
+    /// short (consumer outran producer -- an underrun). Counted here so the
+    /// offline pre-roll test and the mixer read the same number.
+    private let underrunSamples = ManagedAtomic<UInt64>(0)
+
+    /// Statistics: number of reads that came back short (underrun events, as
+    /// distinct from the total silent frames they substituted).
+    private let underrunEvents = ManagedAtomic<UInt64>(0)
 
     /// Initialize the ring buffer with specified capacity.
     /// - Parameter capacity: Number of samples the buffer can hold
@@ -150,6 +159,13 @@ final class AudioRingBuffer: @unchecked Sendable {
         let available = Int(currentWrite &- currentRead)
         let toRead = min(count, available)
 
+        if toRead < count {
+            // The read found fewer frames than asked for: the consumer will
+            // substitute silence for the shortfall. Count it as an underrun.
+            underrunSamples.wrappingIncrement(by: UInt64(count - toRead), ordering: .relaxed)
+            underrunEvents.wrappingIncrement(by: 1, ordering: .relaxed)
+        }
+
         if toRead > 0 {
             let readPos = Int(currentRead % UInt64(capacity))
 
@@ -198,16 +214,29 @@ final class AudioRingBuffer: @unchecked Sendable {
         return droppedSamples.load(ordering: .relaxed)
     }
 
+    /// Frames of silence substituted for underruns (buffer ran short on a read)
+    var totalUnderrunSamples: UInt64 {
+        return underrunSamples.load(ordering: .relaxed)
+    }
+
+    /// Number of underrun events (reads that came back short)
+    var totalUnderrunEvents: UInt64 {
+        return underrunEvents.load(ordering: .relaxed)
+    }
+
     /// Buffer capacity in samples
     var bufferCapacity: Int {
         return capacity
     }
 
-    /// Reset the buffer to empty state.
+    /// Reset the buffer to empty state and zero the per-session statistics.
     ///
     /// Only safe to call when no concurrent reads/writes are occurring.
     func reset() {
         readIndex.store(0, ordering: .relaxed)
         writeIndex.store(0, ordering: .relaxed)
+        droppedSamples.store(0, ordering: .relaxed)
+        underrunSamples.store(0, ordering: .relaxed)
+        underrunEvents.store(0, ordering: .relaxed)
     }
 }
