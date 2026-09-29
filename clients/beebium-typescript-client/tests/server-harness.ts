@@ -37,8 +37,8 @@ export async function withServer(
     activeServers.add(server);
     await server.start(10000);
     const conn = new Connection(server.target);
-    await conn.waitForReady(5000);
     try {
+        await conn.waitForReady(5000);
         await body(conn, server);
     } finally {
         conn.close();

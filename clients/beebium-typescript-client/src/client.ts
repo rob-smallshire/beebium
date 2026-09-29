@@ -185,21 +185,33 @@ export class Beebium {
         const { timeoutMs = 5000, ...serverOptions } = options;
         const server = new ServerProcess(serverOptions);
         await server.start(serverOptions.timeout ?? timeoutMs);
-        const connection = new Connection(server.target);
-        await connection.waitForReady(timeoutMs);
-        const bbc = new Beebium(connection, server, server.provenanceUuid);
-        await bbc.verifyProtocol();
 
-        // Wait for WaitMode startup to complete (the server runs 7 cycles
-        // then pauses). Without this, the first debugger operation may race
-        // with the WaitMode setup.
-        const deadline = Date.now() + timeoutMs;
-        while ((await bbc.debugger.getState()).cycleCount < 7) {
-            if (Date.now() > deadline) break;
-            await new Promise(r => setTimeout(r, 10));
+        // From here on the server is running, and on failure no Beebium is
+        // returned for the caller to close, so stop it here before rethrowing:
+        // a server left waiting for a client (--wait=api) would outlive this
+        // process's interest in it.
+        let connection: Connection | undefined;
+        try {
+            connection = new Connection(server.target);
+            await connection.waitForReady(timeoutMs);
+            const bbc = new Beebium(connection, server, server.provenanceUuid);
+            await bbc.verifyProtocol();
+
+            // Wait for WaitMode startup to complete (the server runs 7 cycles
+            // then pauses). Without this, the first debugger operation may race
+            // with the WaitMode setup.
+            const deadline = Date.now() + timeoutMs;
+            while ((await bbc.debugger.getState()).cycleCount < 7) {
+                if (Date.now() > deadline) break;
+                await new Promise(r => setTimeout(r, 10));
+            }
+
+            return bbc;
+        } catch (error) {
+            connection?.close();
+            await server.stop();
+            throw error;
         }
-
-        return bbc;
     }
 
     /** The gRPC target string. */
