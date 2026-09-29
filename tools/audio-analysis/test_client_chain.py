@@ -27,7 +27,7 @@ from client_chain import BUTTERWORTH_Q, KNEE, MIX_GAIN, channel_peak, in_phase_m
 def test_the_high_pass_worst_case_is_a_125hz_tone() -> None:
     peaks = {f: channel_peak(f) for f in (125, 250, 1000, 6000)}
     assert max(peaks, key=peaks.__getitem__) == 125
-    assert peaks[125] == pytest.approx(1.353, abs=0.002)
+    assert peaks[125] == pytest.approx(1.177, abs=0.002)
 
 
 def test_the_mix_gain_is_quarter_scale_over_the_worst_case_peak() -> None:
@@ -37,7 +37,7 @@ def test_the_mix_gain_is_quarter_scale_over_the_worst_case_peak() -> None:
 def test_one_channel_at_1khz_matches_the_swift_measurement() -> None:
     # AudioRendererTests.testOneFullScaleChannelAt1kHzPeaksAtItsMeasuredLevel
     one_side, _ = in_phase_mix(1000, 1, MIX_GAIN)
-    assert one_side == pytest.approx(0.1362, abs=0.0005)
+    assert one_side == pytest.approx(0.1535, abs=0.0005)
 
 
 @pytest.mark.parametrize("frequency_hz", [125, 1000, 6000])

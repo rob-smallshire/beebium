@@ -24,7 +24,7 @@ final class AudioRendererTests: XCTestCase {
     }
 
     // A volume-0 onset on all four channels must never drive the output beyond
-    // the valid float range, even during the 20 Hz high-pass settling transient
+    // the valid float range, even during the 10 Hz high-pass settling transient
     // where the unipolar DC step pushes the per-channel signal toward full scale.
     func testVolume0OnsetOnAllChannelsStaysInRange() {
         let ring = AudioRingBuffer(capacity: 8192)
@@ -68,12 +68,12 @@ final class AudioRendererTests: XCTestCase {
 
     // Render a full-scale (volume 0) square at `frequencyHz` on the given
     // channels, all in phase and centre-panned at master volume 1.0, and return
-    // the output after the 20 Hz high-pass has settled from the onset (which
+    // the output after the 10 Hz high-pass has settled from the onset (which
     // briefly doubles the AC swing as it removes the unipolar DC).
     private func renderSquare(onChannels channels: Set<Int>, frequencyHz: Int) -> (left: [Float], right: [Float]) {
         let sampleRate = 48000
         let chunk = 4096
-        let settleChunks = 3       // 0.26 s, many time constants of the 20 Hz high-pass
+        let settleChunks = 3       // 0.26 s, many time constants of the 10 Hz high-pass
         let measureChunks = 2
         let halfPeriod = sampleRate / (2 * frequencyHz)
         let ring = AudioRingBuffer(capacity: chunk * 2)
@@ -119,7 +119,7 @@ final class AudioRendererTests: XCTestCase {
     }
 
     func testMixGainIsTheChipWeightingOverTheHighpassWorstCasePeak() {
-        XCTAssertEqual(AudioRenderer.mixGain, 0.1848)
+        XCTAssertEqual(AudioRenderer.mixGain, 0.2125)
     }
 
     // One full-volume channel at 1 kHz: its measured peak per side, recorded
@@ -129,7 +129,7 @@ final class AudioRendererTests: XCTestCase {
         let one = renderSquare(onChannels: [0], frequencyHz: 1000)
         let peakLeft = peak(one.left)
         print("mix gain: one channel at 1 kHz peaks at \(peakLeft) per side")
-        XCTAssertEqual(peakLeft, 0.1362, accuracy: 0.0005)
+        XCTAssertEqual(peakLeft, 0.1535, accuracy: 0.0005)
         XCTAssertEqual(peakLeft, peak(one.right), accuracy: 1e-6)
     }
 

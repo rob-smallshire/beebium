@@ -47,8 +47,13 @@ final class AudioRenderer: @unchecked Sendable {
     /// int16 channel by this gives a volume-0 square unit AC amplitude.
     static let halfFullScale: Float = 8192.0
 
-    /// Highpass cutoff for DC removal
-    static let highpassCutoffHz: Float = 20.0
+    /// Highpass cutoff for DC removal. 10 Hz is the lowest cutoff whose settling
+    /// time after a volume step stays under 100 ms (82 ms to within 1% of the
+    /// step), and going this low (from 20 Hz) roughly halves the half-cycle tilt
+    /// the high-pass puts on the chip's lowest tones: a 125 Hz square's peak
+    /// falls from 1.35 to 1.18. It is still well below the 20 Hz audible floor,
+    /// so DC removal stays complete and inaudible.
+    static let highpassCutoffHz: Float = 10.0
 
     /// Fixed gain applied to every channel before pan and master volume.
     ///
@@ -56,9 +61,9 @@ final class AudioRenderer: @unchecked Sendable {
     /// four equal DACs into one full-scale output, so one channel is a quarter
     /// of it (0.25; beebjit uses the same quarter-scale weighting). The second
     /// is this chain's high-pass: a full-volume channel is normalised to unit AC
-    /// amplitude, but a square wave through the 20 Hz DC-removal high-pass peaks
-    /// above that, worst at 1.35 for a 125 Hz tone (the chip's lowest), where the
-    /// high-pass half-cycle tilt is largest. 0.25 / 1.35 = 0.1848.
+    /// amplitude, but a square wave through the 10 Hz DC-removal high-pass peaks
+    /// above that, worst at 1.18 for a 125 Hz tone (the chip's lowest), where the
+    /// high-pass half-cycle tilt is largest. 0.25 / 1.18 = 0.2125.
     ///
     /// With constant-power centre panning (0.707 per side), four full-volume
     /// channels in phase then reach at most 4 x 0.25 x 0.707 = 0.71 per side
@@ -69,7 +74,7 @@ final class AudioRenderer: @unchecked Sendable {
     /// The worst case is set by the high-pass, so re-derive this whenever it
     /// changes. tools/audio-analysis/client_chain.py models this chain and
     /// reports the peak for any gain.
-    static let mixGain: Float = 0.1848
+    static let mixGain: Float = 0.2125
 
     /// Sample rate
     let sampleRate: Float

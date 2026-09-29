@@ -83,6 +83,6 @@ final class BiquadFilterTests: XCTestCase {
 
         var highpass = BiquadFilter(lowpassCutoffHz: 100, sampleRate: sampleRate)
         highpass.setHighpassCutoff(AudioRenderer.highpassCutoffHz, sampleRate: sampleRate)
-        XCTAssertEqual(gainDB(highpass, atHz: 20), -3.01, accuracy: 0.1)
+        XCTAssertEqual(gainDB(highpass, atHz: Int(AudioRenderer.highpassCutoffHz)), -3.01, accuracy: 0.1)
     }
 }

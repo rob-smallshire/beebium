@@ -14,7 +14,7 @@
 
 Reproduces, sample for sample, what the macOS front end does to the SN76489
 channels it receives: normalise each unipolar channel by half full scale, pass
-it through the 20 Hz DC-removal high-pass biquad (Audio EQ Cookbook
+it through the 10 Hz DC-removal high-pass biquad (Audio EQ Cookbook
 coefficients, as in BiquadFilter.swift), apply the per-channel volume and the
 fixed mix gain, pan with constant power, sum, apply the master volume, and soft
 limit. There is no client low-pass: the server band-limits the chip with a
@@ -44,13 +44,13 @@ SAMPLE_RATE = 48000
 HALF_FULL_SCALE = 8192.0
 #: A full-volume channel's high level; its low level is 0 (unipolar).
 FULL_SCALE_HIGH = 16384
-HIGHPASS_CUTOFF_HZ = 20.0
+HIGHPASS_CUTOFF_HZ = 10.0
 #: Q of a second-order Butterworth section (BiquadFilter.butterworthQ).
 BUTTERWORTH_Q = 1.0 / math.sqrt(2.0)
 #: The soft limiter's knee: the identity below it.
 KNEE = 0.8
 #: AudioRenderer.mixGain.
-MIX_GAIN = 0.1848
+MIX_GAIN = 0.2125
 
 #: The render windows AudioRendererTests uses: settle three 4096-frame chunks,
 #: then measure two.
