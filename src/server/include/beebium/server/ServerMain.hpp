@@ -3547,12 +3547,14 @@ public:
     std::string_view description() const override { return "List available presets for this model"; }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " list-presets [--json]\n"
+        std::cerr << "Usage: " << program_name << " [--format pretty|tsv|jsonl] list-presets [--json]\n"
                   << "\n"
-                  << "Lists presets compatible with this machine model.\n"
+                  << "Lists presets compatible with this machine model. The output format\n"
+                  << "follows the global --format option (pretty on a terminal, tsv when\n"
+                  << "piped); rows carry the preset id, name and source (system or user).\n"
                   << "\n"
                   << "Options:\n"
-                  << "  --json    Output machine-readable JSON\n";
+                  << "  --json    Same as --format jsonl\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -3623,45 +3625,58 @@ public:
             }
         }
 
-        // Output
-        if (json_output) {
-            nlohmann::json output;
-            output["presets"] = nlohmann::json::array();
-            for (const auto& p : system_presets) {
-                output["presets"].push_back({{"id", p.id}, {"name", p.name}, {"source", p.source}});
-            }
-            for (const auto& p : user_presets) {
-                output["presets"].push_back({{"id", p.id}, {"name", p.name}, {"source", p.source}});
-            }
-            std::cout << output.dump() << "\n";
-        } else {
-            // Human-readable output
-            std::cout << "Built-in presets:\n";
-            if (system_presets.empty()) {
-                std::cout << "  (none)\n";
-            } else {
-                for (const auto& p : system_presets) {
-                    std::cout << "  " << p.id;
-                    // Pad for alignment
-                    for (size_t i = p.id.size(); i < 26; ++i) {
-                        std::cout << ' ';
+        OutputFormat format = json_output ? OutputFormat::Jsonl
+                                          : resolve_output_format(global.output_format);
+
+        switch (format) {
+            case OutputFormat::Pretty: {
+                // The id column is as wide as the longest id plus a two-space gap.
+                size_t id_width = 0;
+                for (const auto* presets : {&system_presets, &user_presets}) {
+                    for (const auto& p : *presets) {
+                        id_width = std::max(id_width, p.id.size());
                     }
-                    std::cout << p.name << "\n";
                 }
-            }
-            std::cout << "\nUser presets:\n";
-            if (user_presets.empty()) {
-                std::cout << "  (none)\n";
-            } else {
-                for (const auto& p : user_presets) {
-                    std::cout << "  " << p.id;
-                    // Pad for alignment
-                    for (size_t i = p.id.size(); i < 26; ++i) {
-                        std::cout << ' ';
+                id_width += 2;
+                auto print_section = [&](std::string_view heading,
+                                         const std::vector<PresetEntry>& presets) {
+                    std::cout << heading << "\n";
+                    if (presets.empty()) {
+                        std::cout << "  (none)\n";
+                        return;
                     }
-                    std::cout << p.name << "\n";
-                }
+                    for (const auto& p : presets) {
+                        std::cout << "  " << p.id << std::string(id_width - p.id.size(), ' ')
+                                  << p.name << "\n";
+                    }
+                };
+                print_section("Built-in presets:", system_presets);
+                std::cout << "\n";
+                print_section("User presets:", user_presets);
+                break;
             }
+
+            case OutputFormat::Tsv:
+                std::cout << "id\tname\tsource\n";
+                for (const auto* presets : {&system_presets, &user_presets}) {
+                    for (const auto& p : *presets) {
+                        std::cout << p.id << "\t" << p.name << "\t" << p.source << "\n";
+                    }
+                }
+                break;
+
+            case OutputFormat::Jsonl:
+                for (const auto* presets : {&system_presets, &user_presets}) {
+                    for (const auto& p : *presets) {
+                        nlohmann::json row{{"id", p.id}, {"name", p.name}, {"source", p.source}};
+                        std::cout << row.dump() << "\n";
+                    }
+                }
+                break;
+
+            case OutputFormat::Auto:
+                // Should not reach here after resolve_output_format
+                break;
         }
 
         return ExitCode::OK;

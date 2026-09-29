@@ -501,22 +501,33 @@ These subcommands manage preset files. GUIs invoke these rather than implementin
 List available presets for this model.
 
 ```bash
-beebium-model-b list-presets [--json]
+beebium-model-b [--format pretty|tsv|jsonl] list-presets [--json]
 ```
 
-**Default output** (human-readable):
+The output follows the global `--format` option: pretty on a terminal, TSV when piped. `--json` is an alias of `--format jsonl`.
+
+**`pretty`** (the id column is as wide as the longest id plus a two-space gap):
 ```
 Built-in presets:
-  model-b                    BBC Model B
-  model-b-with-acorn-dfs     BBC Model B with Acorn DFS
+  model-b                 BBC Model B
+  model-b-with-acorn-dfs  BBC Model B with Acorn DFS
 
 User presets:
-  my-elite-setup             My Elite Setup
+  my-elite-setup          My Elite Setup
 ```
 
-**`--json` output**:
+**`tsv`**:
+```
+id	name	source
+model-b	BBC Model B	system
+model-b-with-acorn-dfs	BBC Model B with Acorn DFS	system
+my-elite-setup	My Elite Setup	user
+```
+
+**`jsonl`** (one object per preset):
 ```json
-{"presets":[{"id":"model-b","name":"BBC Model B","source":"system"},{"id":"my-elite-setup","name":"My Elite Setup","source":"user"}]}
+{"id":"model-b","name":"BBC Model B","source":"system"}
+{"id":"my-elite-setup","name":"My Elite Setup","source":"user"}
 ```
 
 #### show-preset

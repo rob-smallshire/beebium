@@ -210,6 +210,63 @@ TEST_CASE("list-presets --json: outputs valid JSON array", "[integration][preset
              result.stdout_output.find('{') != std::string::npos));
 }
 
+namespace {
+
+// A 30-character preset id, longer than any fixed-width id column.
+const std::string LONG_PRESET_ID = "a-thirty-character-preset-id-x";
+
+void write_long_id_user_preset(const std::filesystem::path& user_dirpath) {
+    std::ofstream out(user_dirpath / (LONG_PRESET_ID + ".preset.beebium"));
+    out << R"({"model": "model-b", "name": "Long Id Preset"})";
+}
+
+}  // namespace
+
+TEST_CASE("list-presets: pretty id column leaves a gap after the longest id", "[integration][preset][list-presets]") {
+    REQUIRE(LONG_PRESET_ID.size() == 30);
+    TempDirectory temp_dir;
+    write_long_id_user_preset(temp_dir.path());
+
+    auto result = run_command(EXECUTABLE + " --format pretty list-presets",
+                              {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 0);
+    INFO(result.stdout_output);
+    REQUIRE(result.stdout_output.find("  " + LONG_PRESET_ID + "  Long Id Preset\n") != std::string::npos);
+}
+
+TEST_CASE("list-presets: --format tsv yields tab-separated rows", "[integration][preset][list-presets]") {
+    TempDirectory temp_dir;
+    write_long_id_user_preset(temp_dir.path());
+
+    auto result = run_command(EXECUTABLE + " --format tsv list-presets",
+                              {{"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}});
+
+    REQUIRE(result.exit_code == 0);
+    INFO(result.stdout_output);
+    REQUIRE(result.stdout_output.rfind("id\tname\tsource\n", 0) == 0);
+    REQUIRE(result.stdout_output.find("\nmodel-b\t") != std::string::npos);
+    REQUIRE(result.stdout_output.find("\n" + LONG_PRESET_ID + "\tLong Id Preset\tuser\n") != std::string::npos);
+}
+
+TEST_CASE("list-presets: --format jsonl and --json yield the same rows", "[integration][preset][list-presets]") {
+    TempDirectory temp_dir;
+    write_long_id_user_preset(temp_dir.path());
+    std::vector<std::pair<std::string, std::string>> env{
+        {"BEEBIUM_USER_PRESETS_DIRPATH", temp_dir.path().string()}};
+
+    auto jsonl = run_command(EXECUTABLE + " --format jsonl list-presets", env);
+    auto json = run_command(EXECUTABLE + " list-presets --json", env);
+
+    REQUIRE(jsonl.exit_code == 0);
+    REQUIRE(json.exit_code == 0);
+    REQUIRE(jsonl.stdout_output == json.stdout_output);
+    INFO(jsonl.stdout_output);
+    REQUIRE(jsonl.stdout_output.find(
+        "{\"id\":\"" + LONG_PRESET_ID + "\",\"name\":\"Long Id Preset\",\"source\":\"user\"}\n")
+        != std::string::npos);
+}
+
 TEST_CASE("list-presets --help: returns OK", "[integration][preset][list-presets]") {
     auto result = run_command(EXECUTABLE + " list-presets --help");
 

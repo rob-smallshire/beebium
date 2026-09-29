@@ -80,11 +80,11 @@ class BeebiumServer < Formula
     end
 
     # Preset discovery: the built-in presets live in libexec/share/beebium/
-    # presets. A binary that anchors on the symlink's own directory lists
-    # "(none)" here.
-    presets = shell_output("#{bin}/beebium-model-b list-presets")
-    assert_match(/^\s+model-b\s/, presets)
-    assert_match "model-b-disc", presets
+    # presets. A binary that anchors on the symlink's own directory lists no
+    # rows here. TSV rows start with the preset id and a tab.
+    presets = shell_output("#{bin}/beebium-model-b --format tsv list-presets")
+    assert_match(/^model-b\t/, presets)
+    assert_match(/^model-b-disc\t/, presets)
 
     # ROM discovery: a headless screenshot loads the MOS from libexec/share/
     # beebium/roms, runs briefly and exits on its own, so no server has to be

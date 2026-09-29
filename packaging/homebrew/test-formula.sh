@@ -137,9 +137,10 @@ echo "all expected extensions discovered"
 
 # ROMs, presets and bundled discs are found relative to the binary's real
 # location too; both checks fail if the symlink is not resolved first.
-preset_out="$("${keg_bin_dirpath}/beebium-model-b" list-presets)"
+# TSV rows start with the preset id and a tab.
+preset_out="$("${keg_bin_dirpath}/beebium-model-b" --format tsv list-presets)"
 for preset in model-b model-b-disc; do
-  echo "${preset_out}" | grep -qE "^ +${preset} " || {
+  printf '%s\n' "${preset_out}" | grep -q "^${preset}$(printf '\t')" || {
     echo "MISSING preset: ${preset}" >&2
     exit 1
   }
