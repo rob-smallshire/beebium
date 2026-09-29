@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -24,6 +24,11 @@ import Foundation
 /// Reference: Audio EQ Cookbook by Robert Bristow-Johnson
 /// https://www.w3.org/2011/audio/audio-eq-cookbook.html
 struct BiquadFilter {
+
+    /// Q of a second-order Butterworth section: 1/sqrt(2), the maximally flat
+    /// passband, 3 dB down at the cutoff with no resonant peak. In the Audio EQ
+    /// Cookbook's parameterisation alpha = sin(w0) / (2 * Q).
+    static let butterworthQ: Float = 1.0 / Float(2.0).squareRoot()
 
     // MARK: - Coefficients (normalized by a0)
 
@@ -53,8 +58,7 @@ struct BiquadFilter {
         let sn = sin(omega)
         let cs = cos(omega)
 
-        // Q = 1/sqrt(2) for Butterworth (maximally flat passband)
-        let alpha = sn / (2.0 * sqrt(2.0))
+        let alpha = sn / (2.0 * Self.butterworthQ)
 
         // Lowpass coefficients (Audio EQ Cookbook)
         let b0_unnorm = (1.0 - cs) / 2.0
@@ -81,7 +85,7 @@ struct BiquadFilter {
         let omega = 2.0 * Float.pi * cutoffHz / sampleRate
         let sn = sin(omega)
         let cs = cos(omega)
-        let alpha = sn / (2.0 * sqrt(2.0))
+        let alpha = sn / (2.0 * Self.butterworthQ)
 
         // Highpass coefficients (Audio EQ Cookbook)
         let b0_unnorm = (1.0 + cs) / 2.0
@@ -161,7 +165,7 @@ struct BiquadFilter {
         let omega = 2.0 * Float.pi * cutoffHz / sampleRate
         let sn = sin(omega)
         let cs = cos(omega)
-        let alpha = sn / (2.0 * sqrt(2.0))
+        let alpha = sn / (2.0 * Self.butterworthQ)
 
         let b0_unnorm = (1.0 - cs) / 2.0
         let b1_unnorm = 1.0 - cs
@@ -186,7 +190,7 @@ struct BiquadFilter {
         let omega = 2.0 * Float.pi * cutoffHz / sampleRate
         let sn = sin(omega)
         let cs = cos(omega)
-        let alpha = sn / (2.0 * sqrt(2.0))
+        let alpha = sn / (2.0 * Self.butterworthQ)
 
         let b0_unnorm = (1.0 + cs) / 2.0
         let b1_unnorm = -(1.0 + cs)
