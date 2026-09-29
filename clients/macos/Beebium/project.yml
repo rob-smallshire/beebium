@@ -153,3 +153,39 @@ targets:
         SWIFT_STRICT_CONCURRENCY: targeted
     dependencies:
       - target: Beebium
+
+# Explicit shared schemes. Without them Xcode auto-creates one per target, and
+# an auto-created scheme gathers code coverage, which compiles the C-language
+# package targets (the NIO and BoringSSL shims, CGRPCZlib, _AtomicsShims) with
+# -fprofile-instr-generate even in a Release build: the shipped app then writes
+# default.profraw into its working directory on exit. Coverage is off
+# everywhere except the BeebiumTests scheme's Test action.
+schemes:
+  Beebium:
+    build:
+      targets:
+        Beebium: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - BeebiumTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  BeebiumTests:
+    build:
+      targets:
+        BeebiumTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: true
+      coverageTargets:
+        - Beebium
+      targets:
+        - BeebiumTests

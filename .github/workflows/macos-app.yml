@@ -141,6 +141,25 @@ jobs:
             -derivedDataPath build \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES
 
+      # The Release app must carry no code-coverage instrumentation: an
+      # instrumented binary writes default.profraw into its working directory
+      # on exit. project.yml's explicit schemes keep coverage out of Release;
+      # this fails the build if anything puts it back.
+      - name: Assert no coverage instrumentation
+        run: |
+          set -euo pipefail
+          app="clients/macos/Beebium/build/Build/Products/Release/Beebium.app"
+          instrumented=0
+          while IFS= read -r f; do
+            file "$f" | grep -q Mach-O || continue
+            if otool -l "$f" | grep -q 'sectname __llvm_prf_cnts'; then
+              echo "::error::coverage-instrumented Mach-O in the Release app: $f"
+              instrumented=1
+            fi
+          done < <(find "${app}" -type f)
+          [ "$instrumented" = 0 ] || exit 1
+          echo "no __llvm_prf_cnts section in any Mach-O in ${app}"
+
       - name: Assert self-containment and signature
         run: |
           set -euo pipefail
