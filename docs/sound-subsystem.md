@@ -152,7 +152,7 @@ rising to twice the volume-table amplitude while the flip-flop is high. The AC
 swing about the mean equals the volume-table amplitude (up to 127), so ordinary
 audio keeps its loudness while the mean now carries the sampled baseband. DC is
 NOT removed in the core; that is a consumer responsibility (the macOS renderer
-high-passes at 20 Hz).
+high-passes at 10 Hz).
 
 `compute_voltage_levels` reports the same shape as metadata, with a mid-point
 that varies with volume:
@@ -179,12 +179,14 @@ rises with it (silence level 0.8 V):
 **Frontend usage example:**
 
 ```python
-# Samples are already unipolar (0 = silence). Mix, then remove DC and the carrier.
+# Samples are already unipolar (0 = silence) and band-limited (the server
+# low-passes before decimation), so a consumer only has to remove the DC.
 for sample in audio_chunk:
     tone0 = unpack_uint8(sample.sources[0], 0)  # 0..254, 0 = silence
 
-    # Apply a high-pass to remove the (volume-dependent) DC, and a low-pass to
-    # remove any residual carrier, before mixing/playback.
+    # Apply a high-pass to remove the (volume-dependent) DC before mixing or
+    # playback. No consumer low-pass is needed: the carrier and the update
+    # images are already gone.
     filtered_output = process(tone0)
 ```
 
@@ -215,7 +217,7 @@ high level `Sn76489::FULL_SCALE` (16384). The short-term mean carries any
 sampled-sound baseband. Full scale sits well below the int16 range so the
 anti-alias filter's overshoot (~11%) and the sum of the three tone channels
 stay within range. DC removal and any final scaling are the consumer's job
-(the macOS renderer high-passes at 20 Hz and normalises by half full-scale, so
+(the macOS renderer high-passes at 10 Hz and normalises by half full-scale, so
 a volume-0 square keeps unit AC amplitude).
 
 ### Future Sources (reserved)
