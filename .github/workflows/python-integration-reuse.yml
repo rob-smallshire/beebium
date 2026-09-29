@@ -62,7 +62,7 @@ jobs:
 
       - name: Make servers executable
         if: inputs.platform != 'windows'
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
 
       - name: Set up Python
         uses: actions/setup-python@v6

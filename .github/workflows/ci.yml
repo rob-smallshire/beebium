@@ -169,6 +169,7 @@ jobs:
           path: |
             build/src/server/beebium-model-b
             build/src/server/beebium-model-b-plus
+            build/src/server/beebium-model-b-plus-128k
             build/src/server/beebium-model-b-romram
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
@@ -298,6 +299,7 @@ jobs:
           path: |
             build/src/server/beebium-model-b
             build/src/server/beebium-model-b-plus
+            build/src/server/beebium-model-b-plus-128k
             build/src/server/beebium-model-b-romram
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
@@ -448,6 +450,8 @@ jobs:
           name: beebium-server-linux
           path: |
             build/src/server/beebium-model-b
+            build/src/server/beebium-model-b-plus
+            build/src/server/beebium-model-b-plus-128k
             build/src/server/beebium-model-b-romram
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
@@ -550,6 +554,12 @@ jobs:
           name: beebium-server-linux-arm64
           path: |
             build/src/server/beebium-model-b
+            build/src/server/beebium-model-b-plus
+            build/src/server/beebium-model-b-plus-128k
+            build/src/server/beebium-model-b-romram
+            build/src/server/beebium-model-b-atpl-sidewise
+            build/src/server/beebium-model-b-watford-rom-ram
+            build/src/server/beebium-model-b-integra-b
             build/src/server/presets/
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.so
@@ -933,7 +943,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -973,7 +983,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -1016,7 +1026,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -1161,7 +1171,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -1242,7 +1252,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b build/src/server/beebium-model-b-romram
+        run: chmod +x build/src/server/beebium-model-b*
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1343,7 +1353,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -1390,7 +1400,7 @@ jobs:
           path: build
 
       - name: Make servers executable
-        run: chmod +x build/src/server/beebium-model-b
+        run: chmod +x build/src/server/beebium-model-b*
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
