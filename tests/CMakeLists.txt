@@ -779,6 +779,14 @@ add_executable(test_sn76489_sample_playback test_sn76489_sample_playback.cpp)
 target_link_libraries(test_sn76489_sample_playback PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_sn76489_sample_playback)
 
+# SN76489 output sample rate per emulated second (#126)
+add_executable(test_sn76489_sample_rate test_sn76489_sample_rate.cpp)
+target_link_libraries(test_sn76489_sample_rate PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_sn76489_sample_rate PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_sn76489_sample_rate)
+
 # AudioBuffer drop-detection tests (issue #82)
 add_executable(test_audio_buffer test_audio_buffer.cpp)
 target_link_libraries(test_audio_buffer PRIVATE beebium_core Catch2::Catch2WithMain)

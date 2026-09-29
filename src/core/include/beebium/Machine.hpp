@@ -288,7 +288,8 @@ public:
             }
         }
 
-        // Tick sound chip at 2 MHz if audio output is enabled
+        // Tick sound chip at 2 MHz if audio output is enabled (stretch cycles
+        // tick it in tick_stretch_cycle)
         if (state_.memory.audio_buffer) {
             state_.memory.sound_chip.tick(state_.memory.audio_buffer.value());
         }
@@ -945,6 +946,15 @@ private:
             } else {
                 state_.memory.serial_socket.tick_falling();
             }
+        }
+
+        // The sound chip is clocked from the 4MHz crystal, not the CPU, so it
+        // runs through bus stretch cycles like any other: one tick per 2MHz
+        // cycle keeps its output at exactly the declared sample rate per
+        // emulated second, however much of the time the CPU spends on the 1MHz
+        // bus (#126).
+        if (state_.memory.audio_buffer) {
+            state_.memory.sound_chip.tick(state_.memory.audio_buffer.value());
         }
 
         // The disc controller runs on the 1MHz bus and must be ticked during
