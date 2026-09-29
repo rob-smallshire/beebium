@@ -55,6 +55,8 @@ ELITE_BANNER = "6502 Second Processor ELITE"
 # that budget rather than being trimmed -- running unpaced already makes the
 # settle nearly free in wall-clock, so there is nothing to gain by shortening it.
 _NO_BOOT_SETTLE_SECONDS = 25.0
+# Emulated seconds per chunk of a negative settle (checked once, at the end).
+_SETTLE_CHUNK_SECONDS = 5.0
 
 
 @contextlib.contextmanager
@@ -96,15 +98,17 @@ def _run_until(bbc: Beebium, predicate, *, emulated_seconds: float,
 def _booted_within(bbc: Beebium, landmark: str, *, settle_seconds: float) -> bool:
     """Run a settle period, then report whether `landmark` is on screen.
 
-    Used for the negative auto-boot cases. It runs the whole settle window as a
-    single chunk and checks once at the end, rather than recognising the screen
-    every emulated second: nothing needs to be observed *during* a non-event, so
-    the per-second glyph recognition would be pure cost.
+    Used for the negative auto-boot cases. It runs the settle window in
+    5-second chunks, each far inside its (scaled) wall-clock deadline, and
+    checks the screen once at the end rather than recognising it every chunk:
+    nothing needs to be observed *during* a non-event, so the glyph
+    recognition would be pure cost.
     """
-    return _run_until(
-        bbc, lambda: screen_contains(bbc, landmark),
-        emulated_seconds=settle_seconds, chunk_seconds=settle_seconds,
+    _run_until(
+        bbc, lambda: False,
+        emulated_seconds=settle_seconds, chunk_seconds=_SETTLE_CHUNK_SECONDS,
     )
+    return screen_contains(bbc, landmark)
 
 
 def _find_elite_disc() -> Path | None:

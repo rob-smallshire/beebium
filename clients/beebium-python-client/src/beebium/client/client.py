@@ -30,7 +30,7 @@ from beebium.client.basic import Basic
 from beebium.client.connection import Connection
 from beebium.client.cpu import CPU
 from beebium.client.crtc import Crtc
-from beebium.client.debugger import DEFAULT_TIMEOUT, Debugger
+from beebium.client.debugger import Debugger, wall_timeout_for
 from beebium.client.disc import Disc
 from beebium.client.econet import Econet
 from beebium.client.econet_transport import EconetTransport
@@ -606,20 +606,33 @@ class Beebium:
         unlimited) -- this method does not change it. The machine is stopped on
         entry if running, and is left stopped on return.
 
+        The wall-clock deadline scales with `seconds` and the configured speed
+        (see :func:`~beebium.client.debugger.wall_timeout_for`); if it expires
+        the error says whether the host was slow or the machine made no
+        progress.
+
         Args:
             seconds: Number of emulated BBC-time seconds to run.
         """
         clock_hz = self.system.clock_speed_hz or 2_000_000
         self.debugger.ensure_stopped()
         target_cycles = self.debugger.cycle_count + int(seconds * clock_hz)
-        with self.debugger.breakpoint(
-            0x0000,
-            end_address=0x10000,
-            condition=f"cycles >= {target_cycles}",
-        ):
-            # Running is at real speed, so allow the emulated duration on top
-            # of the usual wall-clock deadline.
-            self.debugger.run_and_wait_for_stop(timeout=DEFAULT_TIMEOUT + 2 * seconds)
+        try:
+            self.debugger.run_to_cycle(
+                target_cycles,
+                clock_hz=clock_hz,
+                wall_timeout=wall_timeout_for(seconds, self._configured_speed_multiplier()),
+            )
+        finally:
+            self.debugger.ensure_stopped()
+
+    def _configured_speed_multiplier(self) -> float:
+        """The server's configured speed multiplier, or 0.0 (unlimited) if
+        it cannot be read; only used to size wall-clock deadlines."""
+        try:
+            return self.system.get_pacing_stats().speed_multiplier
+        except (BeebiumError, grpc.RpcError):
+            return 0.0
 
     def run_until_or_timeout(
         self,
@@ -627,6 +640,7 @@ class Beebium:
         emulated_seconds: float,
         *,
         chunk_seconds: float = 0.1,
+        wall_timeout_per_chunk: float | None = None,
     ) -> bool:
         """Run until predicate() returns True or the emulated time budget expires.
 
@@ -644,31 +658,39 @@ class Beebium:
             chunk_seconds: Emulated time per chunk between predicate checks.
                 Smaller values check the predicate more often but add
                 overhead from stopping and restarting.
+            wall_timeout_per_chunk: Wall-clock deadline in seconds for each
+                chunk. By default it scales with the chunk's emulated length
+                and the configured speed (see
+                :func:`~beebium.client.debugger.wall_timeout_for`), so a slow
+                host does not time out a long chunk.
 
         Returns:
             True if the predicate was satisfied, False on timeout.
+
+        Raises:
+            DebuggerError: If a chunk's wall-clock deadline expires. The
+                message says whether the host was slow (with the emulated
+                progress and throughput) or the machine made no progress.
         """
         clock_hz = self.system.clock_speed_hz or 2_000_000
         total_budget = int(emulated_seconds * clock_hz)
         chunk_cycles = int(chunk_seconds * clock_hz)
         start_cycles = self.debugger.cycle_count
         deadline_cycles = start_cycles + total_budget
+        speed = self._configured_speed_multiplier()
 
         try:
             while self.debugger.cycle_count < deadline_cycles:
-                chunk_target = min(
-                    self.debugger.cycle_count + chunk_cycles,
-                    deadline_cycles,
+                current = self.debugger.cycle_count
+                chunk_target = min(current + chunk_cycles, deadline_cycles)
+                wall_timeout = (
+                    wall_timeout_per_chunk
+                    if wall_timeout_per_chunk is not None
+                    else wall_timeout_for((chunk_target - current) / clock_hz, speed)
                 )
-                with self.debugger.breakpoint(
-                    0x0000,
-                    end_address=0x10000,
-                    condition=f"cycles >= {chunk_target}",
-                ):
-                    # Subscribe before resuming: a short chunk can stop before a
-                    # separate wait_for_stop() would subscribe, and that wait
-                    # would then never see the stop.
-                    self.debugger.run_and_wait_for_stop()
+                self.debugger.run_to_cycle(
+                    chunk_target, clock_hz=clock_hz, wall_timeout=wall_timeout
+                )
 
                 if predicate():
                     return True

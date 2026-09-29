@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beebium.client.debugger import wall_timeout_for
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -92,6 +94,7 @@ class TubeSystem:
         emulated_seconds: float,
         *,
         chunk_seconds: float = 1.0,
+        wall_timeout_per_chunk: float | None = None,
     ) -> bool:
         """Run both processors until predicate returns True or the budget expires.
 
@@ -109,31 +112,44 @@ class TubeSystem:
                 are stopped between chunks.
             emulated_seconds: Maximum emulated BBC-time seconds to run.
             chunk_seconds: Emulated time per chunk between predicate checks.
+            wall_timeout_per_chunk: Wall-clock deadline in seconds for each
+                chunk; by default it scales with the chunk's emulated length
+                and the configured speed, as for
+                :meth:`Beebium.run_until_or_timeout`.
 
         Returns:
             True if the predicate was satisfied, False on timeout.
+
+        Raises:
+            DebuggerError: If a chunk's wall-clock deadline expires, saying
+                whether the host was slow or the machine made no progress.
         """
         clock_hz = self._host.system.clock_speed_hz or 2_000_000
         total_budget = int(emulated_seconds * clock_hz)
         chunk_cycles = int(chunk_seconds * clock_hz)
         start_cycles = self._host.debugger.cycle_count
         deadline_cycles = start_cycles + total_budget
+        speed = self._host._configured_speed_multiplier()
 
         try:
             while self._host.debugger.cycle_count < deadline_cycles:
-                chunk_target = min(
-                    self._host.debugger.cycle_count + chunk_cycles,
-                    deadline_cycles,
+                current = self._host.debugger.cycle_count
+                chunk_target = min(current + chunk_cycles, deadline_cycles)
+                wall_timeout = (
+                    wall_timeout_per_chunk
+                    if wall_timeout_per_chunk is not None
+                    else wall_timeout_for((chunk_target - current) / clock_hz, speed)
                 )
-                with self._host.debugger.breakpoint(
-                    0x0000,
-                    end_address=0x10000,
-                    condition=f"cycles >= {chunk_target}",
+                # Subscribed before both processors resume, so a short chunk
+                # cannot stop unseen.
+                self._host.debugger.run_to_cycle(
+                    chunk_target,
+                    clock_hz=clock_hz,
+                    wall_timeout=wall_timeout,
                     stop_counterpart=True,
-                ):
-                    self.run()
-                    self._host.debugger.wait_for_stop()
-                    self._coprocessor.debugger.ensure_stopped()
+                    resume=self.run,
+                )
+                self._coprocessor.debugger.ensure_stopped()
 
                 if predicate():
                     return True
@@ -155,21 +171,17 @@ class TubeSystem:
         cycle_budget = int(emulated_seconds * clock_hz)
         target_cycles = self._host.debugger.cycle_count + cycle_budget
 
-        bp_id = self._host.debugger.add_breakpoint(
-            0x0000,
-            end_address=0x10000,
-            condition=f"cycles >= {target_cycles}",
-            stop_counterpart=True,
-        )
         try:
-            stream = self._host.debugger.watch_execution_state()
-            next(stream)  # consume initial state
-            self.run()
-            for event in stream:
-                if not event.state.is_running:
-                    break
+            self._host.debugger.run_to_cycle(
+                target_cycles,
+                clock_hz=clock_hz,
+                wall_timeout=wall_timeout_for(
+                    emulated_seconds, self._host._configured_speed_multiplier()
+                ),
+                stop_counterpart=True,
+                resume=self.run,
+            )
         finally:
-            self._host.debugger.remove_breakpoint(bp_id)
             self.stop()
 
     def close(self) -> None:

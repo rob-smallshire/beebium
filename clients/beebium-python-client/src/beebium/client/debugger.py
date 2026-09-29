@@ -14,7 +14,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -24,6 +25,46 @@ from beebium.client._proto import debugger_pb2, debugger_pb2_grpc
 from beebium.client.exceptions import DebuggerError, InvalidConditionError
 
 DEFAULT_TIMEOUT = 30.0  # seconds
+
+# Wall-clock allowance for running a stretch of emulated time.
+#
+# A fixed deadline bounds wall time, but a run is measured in emulated time,
+# and how long that takes depends on the host: an unpaced Tube machine on a
+# slow CI runner emulates at roughly real time, so a 25-emulated-second chunk
+# sat within seconds of a 30 s deadline (#123). The allowance therefore scales
+# with the emulated length: a fixed base for start-up and RPC latency, plus
+# WALL_TIMEOUT_SLOWDOWN wall seconds per emulated second, so a run survives a
+# host managing one fifth of the configured speed (a 25 s chunk at 1x is
+# allowed 10 + 5 * 25 = 135 s). A configured speed below 1x stretches it
+# further; a faster or unlimited speed is not trusted to shorten it, since the
+# host may not keep up, so those are treated as 1x. It never falls below
+# DEFAULT_TIMEOUT.
+WALL_TIMEOUT_BASE_SECONDS = 10.0
+WALL_TIMEOUT_SLOWDOWN = 5.0
+_MIN_SPEED_MULTIPLIER = 0.01
+
+
+def wall_timeout_for(emulated_seconds: float, speed_multiplier: float = 0.0) -> float:
+    """The wall-clock deadline in seconds for running `emulated_seconds`.
+
+    Args:
+        emulated_seconds: The emulated time the run covers.
+        speed_multiplier: The machine's configured speed (0.0 = unlimited).
+
+    Returns:
+        ``max(DEFAULT_TIMEOUT, base + slowdown * emulated_seconds / speed)``,
+        with speeds of 1x and above, and unlimited, counted as 1x.
+    """
+    pace = speed_multiplier if 0.0 < speed_multiplier < 1.0 else 1.0
+    pace = max(pace, _MIN_SPEED_MULTIPLIER)
+    return max(
+        DEFAULT_TIMEOUT,
+        WALL_TIMEOUT_BASE_SECONDS + WALL_TIMEOUT_SLOWDOWN * emulated_seconds / pace,
+    )
+
+
+class ExecutionWaitTimeout(DebuggerError):
+    """A wait for an execution-state event reached its wall-clock deadline."""
 
 
 @dataclass(frozen=True)
@@ -816,7 +857,9 @@ class Debugger:
                 yield _to_execution_state_event(response)
         except grpc.RpcError as e:
             if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-                raise DebuggerError(f"Timed out waiting for execution state event after {timeout}s") from None
+                raise ExecutionWaitTimeout(
+                    f"Timed out waiting for execution state event after {timeout}s"
+                ) from None
             raise
 
     def wait_for_stop(self, *, timeout: float = DEFAULT_TIMEOUT) -> ExecutionStateEvent:
@@ -872,13 +915,79 @@ class Debugger:
             DebuggerError: If the timeout expires or the stream ends without a
                 stop event.
         """
+        return self._resume_and_wait_for_stop(self.ensure_running, timeout)
+
+    def _resume_and_wait_for_stop(
+        self, resume: Callable[[], None], timeout: float
+    ) -> ExecutionStateEvent:
+        """Subscribe, call `resume`, and return the next stop event."""
         stream = self.watch_execution_state(timeout=timeout)
         initial_sequence = next(stream).state.sequence
-        self.ensure_running()
+        resume()
         for event in stream:
             if not event.state.is_running and event.state.sequence > initial_sequence:
                 return event
         raise DebuggerError("Execution state stream ended without a stop event")
+
+    def run_to_cycle(
+        self,
+        target_cycles: int,
+        *,
+        clock_hz: int,
+        wall_timeout: float,
+        stop_counterpart: bool = False,
+        resume: Callable[[], None] | None = None,
+    ) -> ExecutionState:
+        """Run until the cycle count reaches `target_cycles`, then return the stopped state.
+
+        Installs a whole-address-space ``cycles >= N`` breakpoint (removed again
+        on return), so the machine stops at the first instruction boundary at
+        or after the target. The wait is bounded by `wall_timeout`; see
+        :func:`wall_timeout_for` for a deadline scaled to the emulated length.
+
+        On expiry the wait never retries: it reads the cycle count and raises a
+        :class:`DebuggerError` saying which of two things happened -- the host
+        is slow ("slow host: ran X of Y emulated seconds in Z s wall
+        (throughput W x)") or the machine made no progress at all ("no emulated
+        progress in Z s: machine stuck"). The machine is left as it was at the
+        deadline; callers stop it in their own cleanup.
+
+        Args:
+            target_cycles: The cycle count to run to.
+            clock_hz: The CPU clock, for reporting progress in emulated seconds.
+            wall_timeout: Wall-clock deadline in seconds for the wait.
+            stop_counterpart: Also stop the counterpart processor at the target.
+            resume: Starts execution once the wait is subscribed; defaults to
+                resuming this processor.
+
+        Raises:
+            DebuggerError: If the target is not reached within `wall_timeout`.
+        """
+        start_cycles = self.cycle_count
+        started = time.monotonic()
+        with self.breakpoint(
+            0x0000,
+            end_address=0x10000,
+            condition=f"cycles >= {target_cycles}",
+            stop_counterpart=stop_counterpart,
+        ):
+            try:
+                return self._resume_and_wait_for_stop(
+                    resume or self.ensure_running, wall_timeout
+                ).state
+            except ExecutionWaitTimeout:
+                elapsed = time.monotonic() - started
+                ran_seconds = (self.cycle_count - start_cycles) / clock_hz
+                wanted_seconds = (target_cycles - start_cycles) / clock_hz
+                if ran_seconds > 0:
+                    raise DebuggerError(
+                        f"slow host: ran {ran_seconds:.1f} of {wanted_seconds:.1f} emulated "
+                        f"seconds in {elapsed:.0f} s wall "
+                        f"(throughput {ran_seconds / elapsed:.2f}x)"
+                    ) from None
+                raise DebuggerError(
+                    f"no emulated progress in {elapsed:.0f} s: machine stuck"
+                ) from None
 
     # Run-to helper
 
