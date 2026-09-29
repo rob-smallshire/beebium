@@ -178,6 +178,13 @@ struct Beebium_ExecutionState: Sendable {
 
   var sequence: UInt64 = 0
 
+  /// False only while the CPU is part-way through an instruction, which only
+  /// StepCycle leaves it: registers are then not writable (SetCpuState fails
+  /// with FAILED_PRECONDITION) until StepInstruction(1) completes it. Every
+  /// stop reached by running lands on a boundary, and a halted CPU has no
+  /// instruction in flight, so both report true.
+  var atInstructionBoundary: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1168,6 +1175,15 @@ struct Beebium_CrtcState: Sendable {
 
   var displayEnabled: Bool = false
 
+  /// Beam position, with column, row and raster above: which field is being
+  /// drawn and how far into it the beam is. A field starts at a vsync rising
+  /// edge.
+  var oddField: Bool = false
+
+  /// field of an interlaced frame; meaningful
+  /// only when R8 selects interlace
+  var cyclesSinceVsync: UInt64 = 0
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1746,7 +1762,7 @@ extension Beebium_Empty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
 
 extension Beebium_ExecutionState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ExecutionState"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}is_running\0\u{3}cycle_count\0\u{3}halt_reason\0\u{1}sequence\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}is_running\0\u{3}cycle_count\0\u{3}halt_reason\0\u{1}sequence\0\u{3}at_instruction_boundary\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1758,6 +1774,7 @@ extension Beebium_ExecutionState: SwiftProtobuf.Message, SwiftProtobuf._MessageI
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.cycleCount) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.haltReason) }()
       case 4: try { try decoder.decodeSingularUInt64Field(value: &self.sequence) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.atInstructionBoundary) }()
       default: break
       }
     }
@@ -1776,6 +1793,9 @@ extension Beebium_ExecutionState: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if self.sequence != 0 {
       try visitor.visitSingularUInt64Field(value: self.sequence, fieldNumber: 4)
     }
+    if self.atInstructionBoundary != false {
+      try visitor.visitSingularBoolField(value: self.atInstructionBoundary, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1784,6 +1804,7 @@ extension Beebium_ExecutionState: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if lhs.cycleCount != rhs.cycleCount {return false}
     if lhs.haltReason != rhs.haltReason {return false}
     if lhs.sequence != rhs.sequence {return false}
+    if lhs.atInstructionBoundary != rhs.atInstructionBoundary {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3741,7 +3762,7 @@ extension Beebium_GetCrtcStateRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".CrtcState"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}registers\0\u{3}address_register\0\u{1}column\0\u{1}row\0\u{1}raster\0\u{3}char_addr\0\u{3}screen_start\0\u{3}cursor_position\0\u{3}in_hsync\0\u{3}in_vsync\0\u{3}display_enabled\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}registers\0\u{3}address_register\0\u{1}column\0\u{1}row\0\u{1}raster\0\u{3}char_addr\0\u{3}screen_start\0\u{3}cursor_position\0\u{3}in_hsync\0\u{3}in_vsync\0\u{3}display_enabled\0\u{3}odd_field\0\u{3}cycles_since_vsync\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3760,6 +3781,8 @@ extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       case 9: try { try decoder.decodeSingularBoolField(value: &self.inHsync) }()
       case 10: try { try decoder.decodeSingularBoolField(value: &self.inVsync) }()
       case 11: try { try decoder.decodeSingularBoolField(value: &self.displayEnabled) }()
+      case 12: try { try decoder.decodeSingularBoolField(value: &self.oddField) }()
+      case 13: try { try decoder.decodeSingularUInt64Field(value: &self.cyclesSinceVsync) }()
       default: break
       }
     }
@@ -3799,6 +3822,12 @@ extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if self.displayEnabled != false {
       try visitor.visitSingularBoolField(value: self.displayEnabled, fieldNumber: 11)
     }
+    if self.oddField != false {
+      try visitor.visitSingularBoolField(value: self.oddField, fieldNumber: 12)
+    }
+    if self.cyclesSinceVsync != 0 {
+      try visitor.visitSingularUInt64Field(value: self.cyclesSinceVsync, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3814,6 +3843,8 @@ extension Beebium_CrtcState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if lhs.inHsync != rhs.inHsync {return false}
     if lhs.inVsync != rhs.inVsync {return false}
     if lhs.displayEnabled != rhs.displayEnabled {return false}
+    if lhs.oddField != rhs.oddField {return false}
+    if lhs.cyclesSinceVsync != rhs.cyclesSinceVsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

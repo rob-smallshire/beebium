@@ -301,6 +301,24 @@ struct Beebium_SubscribeFramesRequest: Sendable {
   init() {}
 }
 
+struct Beebium_CaptureFrameRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The emulated CPU cycle the frame must have completed at or after
+  /// (Frame.cycle_count >= after_cycle). 0 accepts the current frame.
+  var afterCycle: UInt64 = 0
+
+  /// How long the server waits for such a frame, in wall-clock
+  /// milliseconds. 0 means 5000; values above 60000 are clamped to 60000.
+  var timeoutMs: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 struct Beebium_Frame: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -887,6 +905,41 @@ extension Beebium_SubscribeFramesRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 
   static func ==(lhs: Beebium_SubscribeFramesRequest, rhs: Beebium_SubscribeFramesRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_CaptureFrameRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".CaptureFrameRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}after_cycle\0\u{3}timeout_ms\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.afterCycle) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.timeoutMs) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.afterCycle != 0 {
+      try visitor.visitSingularUInt64Field(value: self.afterCycle, fieldNumber: 1)
+    }
+    if self.timeoutMs != 0 {
+      try visitor.visitSingularUInt32Field(value: self.timeoutMs, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_CaptureFrameRequest, rhs: Beebium_CaptureFrameRequest) -> Bool {
+    if lhs.afterCycle != rhs.afterCycle {return false}
+    if lhs.timeoutMs != rhs.timeoutMs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
