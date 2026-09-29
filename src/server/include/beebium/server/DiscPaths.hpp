@@ -21,16 +21,8 @@
 #include <string>
 #include <string_view>
 
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#elif defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
+#if !defined(__APPLE__) && !defined(_WIN32)
 #include <unistd.h>
-#include <climits>
 #include <pwd.h>
 #include <sys/types.h>
 #endif
@@ -90,7 +82,12 @@ public:
             }
         }
 
-        auto exe_dirpath = get_executable_directory();
+        // Anchor the relative lookups on the executable's real on-disk
+        // directory (symlinks resolved, so a bin/ symlink into an installed
+        // tree still finds that tree's share/). Fall back to the current
+        // directory when the OS cannot report the executable's location.
+        auto exe_dirpath = beebium::platform::executable_directory()
+                               .value_or(std::filesystem::current_path());
 
         {
             auto dir = exe_dirpath;
@@ -239,29 +236,6 @@ private:
         }
 #endif
         return std::filesystem::current_path() / "beebium";
-    }
-
-    static std::filesystem::path get_executable_directory() {
-#ifdef __APPLE__
-        char path[PATH_MAX];
-        uint32_t size = sizeof(path);
-        if (_NSGetExecutablePath(path, &size) == 0) {
-            return std::filesystem::path(path).parent_path();
-        }
-#elif defined(_WIN32)
-        char path[MAX_PATH];
-        if (GetModuleFileNameA(nullptr, path, MAX_PATH) > 0) {
-            return std::filesystem::path(path).parent_path();
-        }
-#else
-        char path[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
-        if (len != -1) {
-            path[len] = '\0';
-            return std::filesystem::path(path).parent_path();
-        }
-#endif
-        return std::filesystem::current_path();
     }
 };
 

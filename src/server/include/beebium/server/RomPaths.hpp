@@ -20,18 +20,6 @@
 #include <stdexcept>
 #include <beebium/PlatformUtils.hpp>
 
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#elif defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
-#include <unistd.h>
-#include <climits>
-#endif
-
 namespace beebium::server {
 
 // ROM path discovery utility.
@@ -79,8 +67,12 @@ public:
             }
         }
 
-        // Get executable directory for relative paths
-        auto exe_dirpath = get_executable_directory();
+        // Anchor the relative lookups on the executable's real on-disk
+        // directory (symlinks resolved, so a bin/ symlink into an installed
+        // tree still finds that tree's share/). Fall back to the current
+        // directory when the OS cannot report the executable's location.
+        auto exe_dirpath = beebium::platform::executable_directory()
+                               .value_or(std::filesystem::current_path());
 
         // 3. Build directory layout: a roms/ directory at or above the
         //    executable's directory. We walk upward (bounded) rather than
@@ -161,31 +153,6 @@ private:
 
     static std::optional<std::string> get_env(const char* name) {
         return beebium::platform::get_env(name);
-    }
-
-    // Get the directory containing the executable
-    static std::filesystem::path get_executable_directory() {
-#ifdef __APPLE__
-        char path[PATH_MAX];
-        uint32_t size = sizeof(path);
-        if (_NSGetExecutablePath(path, &size) == 0) {
-            return std::filesystem::path(path).parent_path();
-        }
-#elif defined(_WIN32)
-        char path[MAX_PATH];
-        if (GetModuleFileNameA(nullptr, path, MAX_PATH) > 0) {
-            return std::filesystem::path(path).parent_path();
-        }
-#else
-        char path[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
-        if (len != -1) {
-            path[len] = '\0';
-            return std::filesystem::path(path).parent_path();
-        }
-#endif
-        // Fallback to current directory
-        return std::filesystem::current_path();
     }
 };
 
