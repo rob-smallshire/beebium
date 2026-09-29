@@ -478,6 +478,50 @@ class TestEventStream:
 
 
 # ============================================================================
+# run_to(skip_current=...)
+# ============================================================================
+
+# LDX #0; .loop: INX; JMP loop  (loop at &0402, INX 2 cycles + JMP 3 cycles)
+COUNTING_LOOP = bytes([0xA2, 0x00, 0xE8, 0x4C, 0x02, 0x04])
+
+
+class TestRunToSkipCurrent:
+    def test_default_stops_at_once_when_already_at_address(self, bbc):
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        bbc.debugger.run_to(0x0402)
+        x_before = bbc.cpu.x
+        cycles_before = bbc.debugger.cycle_count
+        state = bbc.debugger.run_to(0x0402)
+        assert state.cycle_count == cycles_before
+        assert bbc.cpu.x == x_before
+
+    def test_skip_current_runs_to_next_arrival(self, bbc):
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        bbc.debugger.run_to(0x0402)
+        x_before = bbc.cpu.x
+        cycles_before = bbc.debugger.cycle_count
+        state = bbc.debugger.run_to(0x0402, skip_current=True)
+        assert bbc.cpu.pc == 0x0402
+        assert bbc.cpu.x == (x_before + 1) & 0xFF
+        assert state.cycle_count - cycles_before == 5
+        assert len(bbc.debugger.list_breakpoints()) == 0
+
+    def test_skip_current_does_not_step_when_elsewhere(self, bbc):
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        # PC is at &0400 (LDX #0), not at the loop head.
+        bbc.debugger.run_to(0x0402, skip_current=True)
+        assert bbc.cpu.pc == 0x0402
+        assert bbc.cpu.x == 0
+
+    def test_skip_current_steps_each_iteration(self, bbc):
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        bbc.debugger.run_to(0x0402)
+        for expected_x in range(1, 6):
+            bbc.debugger.run_to(0x0402, skip_current=True)
+            assert bbc.cpu.x == expected_x
+
+
+# ============================================================================
 # Full-range breakpoints (cycle budgets, predicates)
 # ============================================================================
 

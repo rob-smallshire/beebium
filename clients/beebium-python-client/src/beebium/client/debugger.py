@@ -196,6 +196,21 @@ class Debugger:
             stub: The gRPC stub for the DebuggerControl service.
         """
         self._stub = stub
+        self._program_counter_name: str | None = None
+
+    def _program_counter(self) -> int:
+        """The CPU's current program counter, located by its register role."""
+        if self._program_counter_name is None:
+            descriptor = self._stub.GetCpuDescriptor(debugger_pb2.Empty())
+            names = [reg.name for reg in descriptor.registers if reg.role == debugger_pb2.PROGRAM_COUNTER]
+            if not names:
+                raise DebuggerError("CPU descriptor names no program counter register")
+            self._program_counter_name = names[0]
+        state = self._stub.GetCpuState(debugger_pb2.Empty())
+        for reg in state.registers:
+            if reg.name == self._program_counter_name:
+                return reg.value
+        raise DebuggerError(f"CPU state has no {self._program_counter_name} register")
 
     # Execution control
 
@@ -842,6 +857,7 @@ class Debugger:
         end_address: int = 0,
         condition: str = "",
         stop_counterpart: bool = False,
+        skip_current: bool = False,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> ExecutionState:
         """Run to a temporary breakpoint, then return the stopped state.
@@ -850,6 +866,15 @@ class Debugger:
         the execution-state stream *before* starting -- so it never misses a
         breakpoint that fires immediately -- runs, and waits for the stop. The
         machine is left stopped at the breakpoint.
+
+        By default, if the PC is already at ``address`` (or within the range up
+        to ``end_address``) the breakpoint fires at once and no cycles run. Pass
+        ``skip_current=True`` to run to the *next* arrival instead: the
+        instruction at the current PC is stepped first, then the breakpoint is
+        armed. This steps a loop one iteration at a time::
+
+            while ...:
+                bbc.debugger.run_to(labels["tick_done"], skip_current=True)
 
         This is debugger control -- it stops at a *PC address* in real time.
         Contrast :meth:`Beebium.run_until_or_timeout`, which fast-forwards
@@ -861,6 +886,9 @@ class Debugger:
             condition: An expression that must be true to stop; see
                 :meth:`add_breakpoint` for the grammar. Empty is unconditional.
             stop_counterpart: Also signal the counterpart processor to stop.
+            skip_current: If the machine is stopped with the PC already at the
+                breakpoint, step one instruction before arming it, so the run
+                stops at the next arrival rather than immediately.
             timeout: Wall-clock deadline in seconds. If the breakpoint is not hit
                 within this time, a :class:`DebuggerError` is raised.
 
@@ -871,6 +899,12 @@ class Debugger:
             DebuggerError: If the breakpoint cannot be set, or if the timeout
                 expires before the breakpoint is hit.
         """
+        # A running CPU has no "current" PC to skip; only a stopped one does.
+        if skip_current and not self.get_state().is_running:
+            pc = self._program_counter()
+            at_breakpoint = address <= pc < end_address if end_address else pc == address
+            if at_breakpoint:
+                self.step(1)
         with self.breakpoint(
             address,
             end_address=end_address,
