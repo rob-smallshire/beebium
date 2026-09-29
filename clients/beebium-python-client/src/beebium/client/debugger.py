@@ -148,6 +148,38 @@ class StepResult:
 
 
 @dataclass(frozen=True)
+class Measurement:
+    """Cycles elapsed between two PCs, from :meth:`Debugger.measure`.
+
+    ``samples`` holds the cycle count of each pass in order. ``cycles`` is the
+    first pass; ``min``, ``max`` and ``mean`` summarise all of them and equal
+    ``cycles`` when there was a single pass.
+    """
+
+    samples: tuple[int, ...]
+
+    @property
+    def cycles(self) -> int:
+        """Cycles elapsed in the first pass."""
+        return self.samples[0]
+
+    @property
+    def min(self) -> int:
+        """Fewest cycles over all passes."""
+        return min(self.samples)
+
+    @property
+    def max(self) -> int:
+        """Most cycles over all passes."""
+        return max(self.samples)
+
+    @property
+    def mean(self) -> float:
+        """Mean cycles over all passes."""
+        return sum(self.samples) / len(self.samples)
+
+
+@dataclass(frozen=True)
 class ExecutionStateEvent:
     """An execution state change event from the server."""
 
@@ -912,3 +944,45 @@ class Debugger:
             stop_counterpart=stop_counterpart,
         ):
             return self.run_and_wait_for_stop(timeout=timeout).state
+
+    def measure(
+        self,
+        start_pc: int,
+        end_pc: int,
+        *,
+        repeat: int = 1,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> Measurement:
+        """Measure the CPU cycles taken to get from ``start_pc`` to ``end_pc``.
+
+        Each pass runs to ``start_pc`` (starting at once if the machine is
+        already stopped there), notes the cycle count, then runs to the next
+        arrival at ``end_pc`` (see ``run_to``'s ``skip_current``). Both stops
+        are at instruction boundaries, so a pass counts the cycles of every
+        instruction from the one at ``start_pc`` up to, but not including, the
+        one at ``end_pc``. With ``start_pc == end_pc`` a pass is one trip round
+        a loop, and repeated passes are consecutive trips. The machine is left
+        stopped at ``end_pc``.
+
+        Args:
+            start_pc: Address of the first instruction measured.
+            end_pc: Address of the instruction that ends the measurement.
+            repeat: Number of passes, each starting at the first arrival at
+                ``start_pc`` from where the previous pass ended.
+            timeout: Wall-clock deadline in seconds for each run to a PC.
+
+        Returns:
+            The cycles elapsed in each pass.
+
+        Raises:
+            ValueError: If ``repeat`` is less than 1.
+            DebuggerError: If a PC is not reached within the timeout.
+        """
+        if repeat < 1:
+            raise ValueError(f"repeat must be at least 1, not {repeat}")
+        samples = []
+        for _ in range(repeat):
+            start = self.run_to(start_pc, timeout=timeout)
+            end = self.run_to(end_pc, skip_current=True, timeout=timeout)
+            samples.append(end.cycle_count - start.cycle_count)
+        return Measurement(samples=tuple(samples))

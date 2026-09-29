@@ -810,3 +810,41 @@ class TestStatusRegister:
         )  # V set
         assert isinstance(regs.status, StatusRegister)
         assert regs.status.overflow and not regs.status.carry
+
+
+# ============================================================================
+# measure()
+# ============================================================================
+
+# &0400 LDX #5; &0402 .loop DEX; &0403 BNE loop; &0405 NOP; &0406 JMP &0406
+COUNTDOWN = bytes([0xA2, 0x05, 0xCA, 0xD0, 0xFD, 0xEA, 0x4C, 0x06, 0x04])
+
+
+class TestMeasure:
+    def test_measures_a_known_loop(self, bbc):
+        # Five DEX (2 cycles each), four taken BNE (3 each) and one
+        # not-taken BNE (2): 10 + 12 + 2 = 24 cycles.
+        plant_and_run_from(bbc, COUNTDOWN)
+        measurement = bbc.debugger.measure(0x0402, 0x0405)
+        assert measurement.cycles == 24
+        assert measurement.samples == (24,)
+        assert bbc.cpu.pc == 0x0405
+        assert len(bbc.debugger.list_breakpoints()) == 0
+
+    def test_starts_at_once_when_already_at_start(self, bbc):
+        # LDX #5 (2 cycles) plus the 24-cycle loop.
+        plant_and_run_from(bbc, COUNTDOWN)
+        assert bbc.debugger.measure(0x0400, 0x0405).cycles == 26
+
+    def test_repeat_summarises_consecutive_loop_trips(self, bbc):
+        # INX (2) + JMP (3) per trip round the counting loop.
+        plant_and_run_from(bbc, COUNTING_LOOP)
+        measurement = bbc.debugger.measure(0x0402, 0x0402, repeat=3)
+        assert measurement.samples == (5, 5, 5)
+        assert (measurement.min, measurement.max, measurement.mean) == (5, 5, 5.0)
+        # LDX #0, then three consecutive trips each increment X once.
+        assert bbc.cpu.x == 3
+
+    def test_repeat_must_be_positive(self, bbc):
+        with pytest.raises(ValueError):
+            bbc.debugger.measure(0x0402, 0x0405, repeat=0)
