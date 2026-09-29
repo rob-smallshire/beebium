@@ -439,7 +439,7 @@ jobs:
           path: cpp.count
           retention-days: 1
 
-      - name: Upload server binaries
+      - name: Upload server binaries and presets
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
         if: always()
@@ -452,6 +452,7 @@ jobs:
             build/src/server/beebium-model-b-atpl-sidewise
             build/src/server/beebium-model-b-watford-rom-ram
             build/src/server/beebium-model-b-integra-b
+            build/src/server/presets/
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.so
             build/lib/libbeebium_extension_ui_proto.so
@@ -540,7 +541,7 @@ jobs:
             echo "::warning::A test failed on its first attempt and passed on rerun (flaky). See the ctest output above and root-cause it; do not rely on the retry."
           fi
 
-      - name: Upload server binaries
+      - name: Upload server binaries and presets
         # Preserve the built binaries even if a step failed, so a re-run of a
         # dependent job can reuse them instead of forcing a full rebuild.
         if: always()
@@ -549,6 +550,7 @@ jobs:
           name: beebium-server-linux-arm64
           path: |
             build/src/server/beebium-model-b
+            build/src/server/presets/
             build/src/server/extensions/
             build/lib/libbeebium_extension_api.so
             build/lib/libbeebium_extension_ui_proto.so
