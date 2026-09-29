@@ -19,6 +19,12 @@ final class BiquadFilterTests: XCTestCase {
 
     private let sampleRate: Float = 48000
 
+    /// A representative low-pass cutoff for exercising the general BiquadFilter
+    /// low-pass mode. The audio chain no longer uses a client low-pass (the
+    /// server band-limits before decimation), but BiquadFilter still offers one
+    /// as a reusable filter, and its Butterworth response is checked here.
+    private let lowpassCutoffHz: Float = 8000
+
     /// Gain in dB of `filter` for a sine at `frequencyHz`, measured after the
     /// filter settles. The window is one second, so an integer frequency
     /// completes a whole number of cycles in it and the RMS of the sampled sine
@@ -44,13 +50,13 @@ final class BiquadFilterTests: XCTestCase {
                           5000, 6300, 7000, 7500, 8000, 8500, 10000, 12500, 16000, 20000]
 
     func testLowpassIsThreeDecibelsDownAtItsCutoff() {
-        let filter = BiquadFilter(lowpassCutoffHz: AudioRenderer.defaultLowpassCutoffHz, sampleRate: sampleRate)
-        let gain = gainDB(filter, atHz: Int(AudioRenderer.defaultLowpassCutoffHz))
+        let filter = BiquadFilter(lowpassCutoffHz: lowpassCutoffHz, sampleRate: sampleRate)
+        let gain = gainDB(filter, atHz: Int(lowpassCutoffHz))
         XCTAssertEqual(gain, -3.01, accuracy: 0.1)
     }
 
     func testLowpassNeverGainsAnywhereInTheBand() {
-        let filter = BiquadFilter(lowpassCutoffHz: AudioRenderer.defaultLowpassCutoffHz, sampleRate: sampleRate)
+        let filter = BiquadFilter(lowpassCutoffHz: lowpassCutoffHz, sampleRate: sampleRate)
         for frequency in bandHz {
             XCTAssertLessThanOrEqual(gainDB(filter, atHz: frequency), 0.01, "low-pass gains at \(frequency) Hz")
         }
@@ -72,7 +78,7 @@ final class BiquadFilterTests: XCTestCase {
     // Reconfiguring an existing filter gives the same response as building one.
     func testReconfiguredFiltersMatchFreshlyBuiltOnes() {
         var lowpass = BiquadFilter(highpassCutoffHz: 100, sampleRate: sampleRate)
-        lowpass.setLowpassCutoff(AudioRenderer.defaultLowpassCutoffHz, sampleRate: sampleRate)
+        lowpass.setLowpassCutoff(lowpassCutoffHz, sampleRate: sampleRate)
         XCTAssertEqual(gainDB(lowpass, atHz: 8000), -3.01, accuracy: 0.1)
 
         var highpass = BiquadFilter(lowpassCutoffHz: 100, sampleRate: sampleRate)

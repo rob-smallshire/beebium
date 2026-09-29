@@ -118,8 +118,8 @@ final class AudioRendererTests: XCTestCase {
         samples.reduce(0) { max($0, abs($1)) }
     }
 
-    func testMixGainIsTheChipWeightingOverTheFiltersWorstCasePeak() {
-        XCTAssertEqual(AudioRenderer.mixGain, 0.17)
+    func testMixGainIsTheChipWeightingOverTheHighpassWorstCasePeak() {
+        XCTAssertEqual(AudioRenderer.mixGain, 0.1848)
     }
 
     // One full-volume channel at 1 kHz: its measured peak per side, recorded
@@ -129,7 +129,7 @@ final class AudioRendererTests: XCTestCase {
         let one = renderSquare(onChannels: [0], frequencyHz: 1000)
         let peakLeft = peak(one.left)
         print("mix gain: one channel at 1 kHz peaks at \(peakLeft) per side")
-        XCTAssertEqual(peakLeft, 0.1397, accuracy: 0.0005)
+        XCTAssertEqual(peakLeft, 0.1362, accuracy: 0.0005)
         XCTAssertEqual(peakLeft, peak(one.right), accuracy: 1e-6)
     }
 
@@ -137,8 +137,8 @@ final class AudioRendererTests: XCTestCase {
     // phase, centre-panned, master 1.0. At each tone frequency the mix stays
     // at or under 0.72 per side, below the limiter's 0.8 knee, so the limiter
     // is the identity: the four-channel output is the linear sum, four times
-    // the one-channel output, sample for sample. 125 Hz is the filters' worst
-    // case; 1 kHz and 6 kHz cover the rest of the range.
+    // the one-channel output, sample for sample. 125 Hz is the high-pass's
+    // worst case; 1 kHz and 6 kHz cover the rest of the range.
     func testFourFullScaleChannelsInPhaseMixLinearlyUnderTheKnee() {
         for frequencyHz in [125, 1000, 6000] {
             let one = renderSquare(onChannels: [0], frequencyHz: frequencyHz)

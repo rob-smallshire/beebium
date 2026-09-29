@@ -23,14 +23,11 @@ import pytest
 
 from client_chain import BUTTERWORTH_Q, KNEE, MIX_GAIN, channel_peak, in_phase_mix
 
-#: The Q the biquads had before #120: alpha = sin(w0) / (2 * sqrt 2).
-RESONANT_Q = math.sqrt(2.0)
 
-
-def test_the_filters_worst_case_is_a_125hz_tone() -> None:
+def test_the_high_pass_worst_case_is_a_125hz_tone() -> None:
     peaks = {f: channel_peak(f) for f in (125, 250, 1000, 6000)}
     assert max(peaks, key=peaks.__getitem__) == 125
-    assert peaks[125] == pytest.approx(1.471, abs=0.002)
+    assert peaks[125] == pytest.approx(1.353, abs=0.002)
 
 
 def test_the_mix_gain_is_quarter_scale_over_the_worst_case_peak() -> None:
@@ -40,7 +37,7 @@ def test_the_mix_gain_is_quarter_scale_over_the_worst_case_peak() -> None:
 def test_one_channel_at_1khz_matches_the_swift_measurement() -> None:
     # AudioRendererTests.testOneFullScaleChannelAt1kHzPeaksAtItsMeasuredLevel
     one_side, _ = in_phase_mix(1000, 1, MIX_GAIN)
-    assert one_side == pytest.approx(0.1397, abs=0.0005)
+    assert one_side == pytest.approx(0.1362, abs=0.0005)
 
 
 @pytest.mark.parametrize("frequency_hz", [125, 1000, 6000])
@@ -49,14 +46,6 @@ def test_four_full_volume_channels_in_phase_stay_under_the_knee(frequency_hz: in
     assert side <= 0.72
     assert side < KNEE
     assert beyond == 0.0
-
-
-def test_the_resonant_filters_before_120_overshot_a_square_by_64_percent() -> None:
-    assert channel_peak(1000, RESONANT_Q) == pytest.approx(1.644, abs=0.002)
-    # ...so at the quarter-scale gain first proposed, four channels hit the limiter.
-    side, beyond = in_phase_mix(1000, 4, 0.25, RESONANT_Q)
-    assert side == pytest.approx(1.1625, abs=0.001)
-    assert beyond > 0.0
 
 
 def test_the_butterworth_q_matches_the_swift_constant() -> None:

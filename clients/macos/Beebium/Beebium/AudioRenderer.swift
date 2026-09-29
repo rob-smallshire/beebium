@@ -18,11 +18,15 @@ import Atomics
 /// Handles the full DSP chain:
 /// 1. Unpack the four SN76489 channels (signed 16-bit, unipolar) from packed frames
 /// 2. High-pass filter to remove DC offset
-/// 3. Low-pass filter for anti-aliasing
-/// 4. Per-channel volume with exponential scaling, and the fixed mix gain
-/// 5. Per-channel stereo panning
-/// 6. Mix to stereo with master volume
-/// 7. Level metering (RMS/peak per channel)
+/// 3. Per-channel volume with exponential scaling, and the fixed mix gain
+/// 4. Per-channel stereo panning
+/// 5. Mix to stereo with master volume
+/// 6. Level metering (RMS/peak per channel)
+///
+/// There is deliberately no client low-pass: the server band-limits the chip
+/// with a 4th-order Butterworth at 7.2 kHz before decimating to 48 kHz, so a
+/// second, gentler client low-pass would only add passband droop and phase
+/// shift with no band-limiting benefit.
 ///
 /// Sample format: the backend emits unipolar signed 16-bit channels across two
 /// source fields. 0 is silence; a channel's full-scale high level is 16384. DC
@@ -43,9 +47,6 @@ final class AudioRenderer: @unchecked Sendable {
     /// int16 channel by this gives a volume-0 square unit AC amplitude.
     static let halfFullScale: Float = 8192.0
 
-    /// Default lowpass cutoff frequency (BBC Microcomputer Service Manual, 1985)
-    static let defaultLowpassCutoffHz: Float = 8000.0
-
     /// Highpass cutoff for DC removal
     static let highpassCutoffHz: Float = 20.0
 
@@ -54,28 +55,27 @@ final class AudioRenderer: @unchecked Sendable {
     /// Two factors. The first is the chip's own weighting: the SN76489 sums its
     /// four equal DACs into one full-scale output, so one channel is a quarter
     /// of it (0.25; beebjit uses the same quarter-scale weighting). The second
-    /// is this chain's filters: a full-volume channel is normalised to unit AC
-    /// amplitude, but a square wave through the high-pass and low-pass below
-    /// peaks above that, worst at 1.47 for a 125 Hz tone, where the 20 Hz
-    /// high-pass tilt dominates. 0.25 / 1.47 = 0.17.
+    /// is this chain's high-pass: a full-volume channel is normalised to unit AC
+    /// amplitude, but a square wave through the 20 Hz DC-removal high-pass peaks
+    /// above that, worst at 1.35 for a 125 Hz tone (the chip's lowest), where the
+    /// high-pass half-cycle tilt is largest. 0.25 / 1.35 = 0.1848.
     ///
     /// With constant-power centre panning (0.707 per side), four full-volume
-    /// channels in phase then reach at most 4 x 0.17 x 1.47 x 0.707 = 0.71 per
-    /// side, under the limiter's 0.8 knee, so the limiter never engages for
-    /// chip output at master volume 1.0. Loudness is made up with the master
-    /// or system volume.
+    /// channels in phase then reach at most 4 x 0.25 x 0.707 = 0.71 per side
+    /// (the gain is defined as 0.25 / peak, so the peak cancels), under the
+    /// limiter's 0.8 knee: the limiter never engages for chip output at master
+    /// volume 1.0. Loudness is made up with the master or system volume.
     ///
-    /// The worst case is set by the filters, so re-derive this whenever they
-    /// change; #121 revisits both of them. tools/audio-analysis/client_chain.py
-    /// models this chain and reports the peak for any gain.
-    static let mixGain: Float = 0.17
+    /// The worst case is set by the high-pass, so re-derive this whenever it
+    /// changes. tools/audio-analysis/client_chain.py models this chain and
+    /// reports the peak for any gain.
+    static let mixGain: Float = 0.1848
 
     /// Sample rate
     let sampleRate: Float
 
     // MARK: - Filters
 
-    private var lowpassFilters: BiquadFilterBank
     private var highpassFilters: BiquadFilterBank
 
     // MARK: - DC Bias Metadata (from GetChannelStates)
@@ -131,11 +131,6 @@ final class AudioRenderer: @unchecked Sendable {
         self.maxFrameCount = maxFrameCount
 
         // Initialize filters
-        lowpassFilters = BiquadFilterBank(
-            channelCount: Self.channelCount,
-            lowpassCutoffHz: Self.defaultLowpassCutoffHz,
-            sampleRate: sampleRate
-        )
         highpassFilters = BiquadFilterBank(
             channelCount: Self.channelCount,
             highpassCutoffHz: Self.highpassCutoffHz,
@@ -218,11 +213,9 @@ final class AudioRenderer: @unchecked Sendable {
                     // removes the volume-dependent DC.
                     var sample = Float(samples[ch]) / Self.halfFullScale
 
-                    // Apply highpass filter (removes the DC bias)
+                    // Apply highpass filter (removes the DC bias). The server has
+                    // already band-limited the chip, so there is no client low-pass.
                     sample = highpassFilters.process(sample, channel: ch)
-
-                    // Apply lowpass filter (anti-aliasing)
-                    sample = lowpassFilters.process(sample, channel: ch)
 
                     // Update meter
                     updateMeter(channel: ch, sample: sample)
@@ -333,7 +326,6 @@ final class AudioRenderer: @unchecked Sendable {
 
     /// Reset all filter states (call on discontinuity)
     func resetFilters() {
-        lowpassFilters.reset()
         highpassFilters.reset()
     }
 

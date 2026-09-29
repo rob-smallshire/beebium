@@ -14,11 +14,13 @@
 
 Reproduces, sample for sample, what the macOS front end does to the SN76489
 channels it receives: normalise each unipolar channel by half full scale, pass
-it through the 20 Hz high-pass and 8 kHz low-pass biquads (Audio EQ Cookbook
+it through the 20 Hz DC-removal high-pass biquad (Audio EQ Cookbook
 coefficients, as in BiquadFilter.swift), apply the per-channel volume and the
 fixed mix gain, pan with constant power, sum, apply the master volume, and soft
-limit. Use it to choose the mix gain (AudioRenderer.mixGain) against the real
-filters rather than an idealised square wave.
+limit. There is no client low-pass: the server band-limits the chip with a
+4th-order Butterworth at 7.2 kHz before decimating to 48 kHz. Use it to choose
+the mix gain (AudioRenderer.mixGain) against the real high-pass rather than an
+idealised square wave.
 
     uv run python client_chain.py sweep --gain 0.17
     uv run python client_chain.py sweep --gain 0.25 --q 1.41421356
@@ -42,14 +44,13 @@ SAMPLE_RATE = 48000
 HALF_FULL_SCALE = 8192.0
 #: A full-volume channel's high level; its low level is 0 (unipolar).
 FULL_SCALE_HIGH = 16384
-LOWPASS_CUTOFF_HZ = 8000.0
 HIGHPASS_CUTOFF_HZ = 20.0
 #: Q of a second-order Butterworth section (BiquadFilter.butterworthQ).
 BUTTERWORTH_Q = 1.0 / math.sqrt(2.0)
 #: The soft limiter's knee: the identity below it.
 KNEE = 0.8
 #: AudioRenderer.mixGain.
-MIX_GAIN = 0.17
+MIX_GAIN = 0.1848
 
 #: The render windows AudioRendererTests uses: settle three 4096-frame chunks,
 #: then measure two.
@@ -86,11 +87,9 @@ def soft_limit(x: np.ndarray) -> np.ndarray:
 
 
 def filter_channel(levels: np.ndarray, q: float = BUTTERWORTH_Q) -> np.ndarray:
-    """One channel's unipolar levels through normalisation, the high-pass and
-    the low-pass."""
+    """One channel's unipolar levels through normalisation and the high-pass."""
     x = np.asarray(levels, dtype=np.float64) / HALF_FULL_SCALE
-    x = lfilter(*biquad_coefficients("highpass", HIGHPASS_CUTOFF_HZ, q), x)
-    return lfilter(*biquad_coefficients("lowpass", LOWPASS_CUTOFF_HZ, q), x)
+    return lfilter(*biquad_coefficients("highpass", HIGHPASS_CUTOFF_HZ, q), x)
 
 
 def render(
@@ -132,7 +131,7 @@ def _settled(signal: np.ndarray) -> np.ndarray:
 
 
 def channel_peak(frequency_hz: int, q: float = BUTTERWORTH_Q) -> float:
-    """Settled peak of one full-volume channel after the filters, before the
+    """Settled peak of one full-volume channel after the high-pass, before the
     mix gain and pan (1.0 would be the ideal unit amplitude)."""
     levels = square(frequency_hz, SETTLE_FRAMES + MEASURE_FRAMES)
     return float(np.max(np.abs(_settled(filter_channel(levels, q)))))
