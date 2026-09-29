@@ -24,6 +24,7 @@
 #include "video.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include <atomic>
 #include <thread>
 #include <chrono>
 #include <fstream>
@@ -167,6 +168,45 @@ TEST_CASE("VideoService frame version increments on VSYNC", "[grpc][video]") {
     REQUIRE(received1);
     REQUIRE(received2);
     CHECK(frame2.frame_number() > frame1.frame_number());
+}
+
+TEST_CASE("VideoService frames carry the cycle at which they completed", "[grpc][video][cycle]") {
+    VideoTestFixture fixture;
+
+    grpc::ClientContext context;
+    beebium::SubscribeFramesRequest request;
+    auto reader = fixture.stub().SubscribeFrames(&context, request);
+
+    std::atomic<bool> running{true};
+    std::atomic<uint64_t> cycles_run{0};
+    std::thread emu_thread([&]() {
+        while (running) {
+            fixture.run_cycles(20000);
+            cycles_run = fixture.machine().cycle_count();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+
+    std::vector<beebium::Frame> frames(4);
+    bool received = true;
+    for (auto& frame : frames) {
+        received = received && reader->Read(&frame);
+    }
+    const uint64_t cycles_after = cycles_run;
+
+    running = false;
+    context.TryCancel();
+    emu_thread.join();
+
+    REQUIRE(received);
+    for (size_t i = 0; i < frames.size(); ++i) {
+        INFO("frame " << i);
+        CHECK(frames[i].cycle_count() != 0);
+        if (i > 0) {
+            CHECK(frames[i].cycle_count() > frames[i - 1].cycle_count());
+        }
+    }
+    CHECK(frames.back().cycle_count() <= cycles_after + 20000);
 }
 
 // Count bright pixels in a frame (BGRA32 format)

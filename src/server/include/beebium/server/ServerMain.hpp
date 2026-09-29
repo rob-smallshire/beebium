@@ -4618,6 +4618,7 @@ public:
             // Create local framebuffer and renderer (no gRPC server needed)
             FrameBuffer frame_buffer;
             FrameRenderer renderer(&frame_buffer);
+            renderer.set_field_cycles(&machine.video_binding().renderer.field_cycles());
             auto& video_output = *machine.state().memory.video_output;
 
             // Helper to drain the video output queue completely.

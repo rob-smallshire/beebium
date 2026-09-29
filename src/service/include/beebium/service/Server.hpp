@@ -170,7 +170,9 @@ private:
         std::thread render_thread;
 
         Impl(MachineType& m, const std::string& addr, uint16_t p)
-            : machine(m), address(addr), port(p) {}
+            : machine(m), address(addr), port(p) {
+            frame_renderer.set_field_cycles(&machine.video_binding().renderer.field_cycles());
+        }
 
         // Background thread that consumes video_output queue and renders to frame_buffer
         void render_loop() {

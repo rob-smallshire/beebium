@@ -114,6 +114,8 @@ public:
         , video_binding_(state_.memory)
         , system_clock_(make_system_clock())
     {
+        // Stamp each vsync edge in the pixel stream with the emulated cycle.
+        video_binding_.renderer.set_cycle_source(&state_.cycle_count);
         setup_callbacks();
         reset();
     }

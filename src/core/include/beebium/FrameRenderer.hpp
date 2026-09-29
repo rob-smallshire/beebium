@@ -125,6 +125,7 @@ public:
 
         // Handle VSYNC rising edge - finalize frame and swap buffers
         if (vsync && !in_vsync_) {
+            edge_cycle_ = take_field_cycle();
             // Capture frame scanline count before reset
             max_frame_scanlines_ = std::max(max_frame_scanlines_, frame_scanline_count_);
             frame_scanline_count_ = 0;
@@ -280,6 +281,13 @@ public:
     size_t x() const { return x_; }
     size_t y() const { return y_; }
 
+    // The vsync-edge stamps published by the producing VideoRenderer
+    // (VideoRenderer::field_cycles()). With them each frame's metadata carries
+    // the emulated cycle at which it completed; without, cycle_count stays 0.
+    // The renderer must consume every batch delivered to the queue it
+    // processes, so that its edges are numbered as the producer's are.
+    void set_field_cycles(OutputQueue<FieldCycle>* field_cycles) { field_cycles_ = field_cycles; }
+
     // Reset renderer state
     void reset() {
         x_ = 0;
@@ -314,6 +322,22 @@ public:
     size_t max_y_written() const { return max_y_written_; }
 
 private:
+    // The stamp for the vsync rising edge being handled, matched by edge
+    // number: older stamps (from edges this renderer never saw a stamp slot
+    // for) are skipped, and a missing one reads as 0.
+    uint64_t take_field_cycle() {
+        const uint64_t edge = next_edge_++;
+        if (!field_cycles_) return 0;
+        while (true) {
+            auto buffers = field_cycles_->get_consumer_buffer();
+            if (buffers.empty()) return 0;
+            const FieldCycle front = buffers.a[0];
+            if (front.edge > edge) return 0;
+            field_cycles_->consume(1);
+            if (front.edge == edge) return front.cycle;
+        }
+    }
+
     // Finalize frame at swap: set logical dimensions and metadata
     void finish_frame() {
         // Capture final line width
@@ -332,6 +356,7 @@ private:
         meta.width = static_cast<uint32_t>(frame_width);
         meta.height = static_cast<uint32_t>(frame_height);
         meta.frame_number = frame_buffer_->version() + 1;
+        meta.cycle_count = edge_cycle_;
         meta.interlaced = in_interlace_mode_;
 
         // display_width is the frame's physical width in 16MHz pixel clocks;
@@ -481,6 +506,9 @@ private:
     size_t x_;  // Current horizontal pixel position
     size_t y_;  // Current scanline
     bool in_vsync_;
+    OutputQueue<FieldCycle>* field_cycles_ = nullptr;
+    uint64_t next_edge_ = 0;     // number of the next vsync rising edge
+    uint64_t edge_cycle_ = 0;    // stamp of the latest vsync rising edge
     bool in_hsync_;
     DisplayTiming timing_;
     int horizontal_offset_;  // Pixels from HSYNC end to display start

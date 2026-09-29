@@ -188,6 +188,15 @@ static_assert(sizeof(PixelBatch) == 24, "PixelBatch with metadata must be 24 byt
 static_assert(sizeof(PixelBatch) == 16, "PixelBatch must be 16 bytes");
 #endif
 
+// The emulated cycle of one vsync rising edge in the pixel stream, numbered by
+// the edges the stream's consumer sees (the first is 0). VideoRenderer
+// publishes one per edge alongside the pixel queue; FrameRenderer stamps each
+// frame with the cycle of the edge that completed it.
+struct FieldCycle {
+    uint64_t edge = 0;
+    uint64_t cycle = 0;
+};
+
 // Standard BBC Micro physical colors (as 4-bit RGB values)
 // The BBC has 8 physical colors: 0-7 map to 3-bit RGB
 namespace bbc_colors {

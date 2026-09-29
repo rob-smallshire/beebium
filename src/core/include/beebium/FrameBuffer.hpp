@@ -52,6 +52,10 @@ struct FrameMetadata {
     uint32_t width = 640;          // Frame width in logical pixels
     uint32_t height = 512;         // Frame height in scanlines
     uint64_t frame_number = 0;     // Incrementing frame counter
+    // Emulated CPU cycle at which the frame completed: the vsync rising edge
+    // that ended its (last) field. 0 when unknown -- no stamp source wired, or
+    // the edge's stamp was lost.
+    uint64_t cycle_count = 0;
     bool interlaced = false;       // True for MODE 7 and custom interlace modes
 
     // Target display resolution after scaling.

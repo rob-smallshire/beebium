@@ -1002,6 +1002,14 @@ add_executable(test_frame_renderer_regions test_frame_renderer_regions.cpp)
 target_link_libraries(test_frame_renderer_regions PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_frame_renderer_regions)
 
+# Frame completion cycle stamps (#111)
+add_executable(test_frame_cycle_stamp test_frame_cycle_stamp.cpp)
+target_link_libraries(test_frame_cycle_stamp PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_frame_cycle_stamp PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_frame_cycle_stamp)
+
 # FrameRenderer physical display width and border tests
 add_executable(test_frame_renderer_display_width test_frame_renderer_display_width.cpp)
 target_link_libraries(test_frame_renderer_display_width PRIVATE beebium_core Catch2::Catch2WithMain)

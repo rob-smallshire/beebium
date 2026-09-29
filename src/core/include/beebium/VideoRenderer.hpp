@@ -19,6 +19,7 @@
 #include "devices/Crtc6845.hpp"
 #include "devices/Ram.hpp"
 #include "devices/VideoUla.hpp"
+#include <cstdint>
 #include <optional>
 
 namespace beebium {
@@ -77,9 +78,17 @@ public:
         batch.set_char_scanlines(char_scanlines());
         batch.set_display_clocks(display_clocks());
 
-        // Push to output queue
-        hardware_.video_output->push(batch);
+        deliver(batch);
     }
+
+    // The machine's cycle counter, read to stamp each vsync rising edge.
+    void set_cycle_source(const uint64_t* cycle_count) { cycle_source_ = cycle_count; }
+
+    // The emulated cycle of each vsync rising edge in the delivered pixel
+    // stream, in order, published before the batch that carries the edge. The
+    // frame renderer consuming the pixel queue pops them to stamp each frame
+    // with the cycle at which it completed (see FrameRenderer::set_field_cycles).
+    OutputQueue<FieldCycle>& field_cycles() { return field_cycles_; }
 
     // Reset renderer state
     void reset() {
@@ -172,7 +181,7 @@ private:
         // same 8 as a 2MHz bitmap batch, which is why MODE 7 stays 640 wide.
         batch.set_display_clocks(8);
 
-        hardware_.video_output->push(batch);
+        deliver(batch);
 
         // Emit second batch (right half of character)
         PixelBatch batch2;
@@ -180,7 +189,7 @@ private:
         batch2.set_flags(flags);
         batch2.set_char_scanlines(char_scanlines());
         batch2.set_display_clocks(8);
-        hardware_.video_output->push(batch2);
+        deliver(batch2);
 
         if (crtc_output.display) {
             ++teletext_column_;
@@ -231,7 +240,38 @@ private:
         }
     }
 
+    // Push a batch to the output queue, dropping it when the queue is full.
+    //
+    // A vsync rising edge is judged over the DELIVERED batches, exactly as the
+    // frame renderer judges it over the batches it receives, so the two agree
+    // edge for edge even when batches are dropped. Its stamp is published
+    // before the batch: the queue has a single consumer, so space seen here
+    // cannot vanish before the push, and the renderer never meets an edge
+    // whose stamp is not yet visible. The edge is counted even if the stamp
+    // ring is full (no renderer is collecting stamps), so the numbering the
+    // renderer matches against stays right.
+    void deliver(const PixelBatch& batch) {
+        auto& queue = *hardware_.video_output;
+        if (queue.available() == 0) return;
+        const bool vsync = batch.vsync();
+        if (vsync && !last_delivered_vsync_) {
+            field_cycles_.push(FieldCycle{next_edge_, cycle_source_ ? *cycle_source_ : 0});
+            ++next_edge_;
+        }
+        queue.push(batch);
+        last_delivered_vsync_ = vsync;
+    }
+
     Hardware& hardware_;
+
+    // Vsync-edge stamps for the frame renderer. Deliberately not reset with
+    // the renderer: they mirror the consumer's view of the stream, which a
+    // machine reset does not reset.
+    static constexpr size_t kFieldCycleCapacity = 1024;
+    const uint64_t* cycle_source_ = nullptr;
+    OutputQueue<FieldCycle> field_cycles_{kFieldCycleCapacity};
+    uint64_t next_edge_ = 0;
+    bool last_delivered_vsync_ = false;
 
     // Teletext state tracking
     bool last_hsync_ = false;

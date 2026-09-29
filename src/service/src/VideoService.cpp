@@ -100,6 +100,7 @@ void to_proto_frame(const FrameMetadata& meta,
                     const std::vector<uint32_t>& pixels,
                     uint32_t stride, Frame* out) {
     out->set_frame_number(meta.frame_number);
+    out->set_cycle_count(meta.cycle_count);
     out->set_width(meta.width);
     out->set_height(meta.height);
 
@@ -455,6 +456,7 @@ grpc::Status VideoServiceImpl::SubscribeFrames(
             // Build frame message
             Frame frame;
             frame.set_frame_number(current_version);
+            frame.set_cycle_count(meta.cycle_count);
             frame.set_width(static_cast<uint32_t>(width));
             frame.set_height(static_cast<uint32_t>(height));
             frame.set_pixels(packed_buffer.data(), packed_size * sizeof(uint32_t));

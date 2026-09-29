@@ -441,6 +441,7 @@ message DisplayRegion {
 
 message Frame {
     uint64 frame_number = 1;
+    uint64 cycle_count = 2;     // Emulated cycle at which the frame completed
     uint32 width = 3;           // Logical width (max across all regions)
     uint32 height = 4;          // Logical height (scanlines)
     bytes pixels = 5;           // BGRA32 at logical resolution
@@ -459,6 +460,19 @@ message Frame {
     repeated DisplayRegion regions = 13;
 }
 ```
+
+`cycle_count` is the emulated CPU cycle of the vsync rising edge that
+completed the frame; an interlaced frame is stamped by its second field's
+edge. The `VideoRenderer` publishes each edge's cycle, numbered, on a small
+ring beside the pixel queue (`VideoRenderer::field_cycles()`), before the
+batch carrying the edge; it judges edges over the batches actually delivered,
+so a dropped batch cannot put producer and consumer out of step. The
+`FrameRenderer` pops the stamp for each edge it sees and stores it in
+`FrameMetadata::cycle_count`. It is 0 only when no stamp is available (a
+renderer not wired to the ring). In MODES 0-6 the MOS leaves the 6845 in
+interlace-sync mode (R8=1), so successive frames are stamped 40,000 cycles
+(312.5 lines of 128 cycles) apart, give or take one; with R8=0 they are
+exactly 39,936 (312 lines) apart.
 
 ### Client-Side Scaling
 
