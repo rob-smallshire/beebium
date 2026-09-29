@@ -28,6 +28,12 @@ fail() { echo "SMOKE FAIL: $*" >&2; exit 1; }
 
 [ -x "${server}" ] || fail "server binary missing or not executable: ${server}"
 
+# Every plugin's library must sit beside its manifest. list-extensions (below)
+# reads only the manifests, so it cannot catch a library installed elsewhere.
+echo "== extension libraries beside their manifests =="
+bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-extension-libraries.sh" "${prefix}" \
+    || fail "an extension's library is not beside its manifest"
+
 echo "== uname: $(uname -m) / $(uname -s) =="
 # A self-contained bundle must NOT pull these in dynamically -- they are
 # statically linked from vcpkg. If any appears, the bundle is not portable.

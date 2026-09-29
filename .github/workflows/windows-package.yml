@@ -127,6 +127,13 @@ jobs:
     needs: build
     runs-on: windows-2022
     steps:
+      # Only scripts/, for the extension-library check below; no sources and
+      # no build tree, so the runner stays a clean one.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+          sparse-checkout-cone-mode: true
+
       - uses: actions/download-artifact@v8
         with:
           name: bundle-windows-x64
@@ -149,3 +156,10 @@ jobs:
           $presets = @(Get-ChildItem "extracted\share\beebium\presets\*.preset.beebium" -ErrorAction SilentlyContinue)
           if ($presets.Count -eq 0) { Write-Host "::error::no presets in the ZIP (share\beebium\presets is empty) -- presets drive --preset machine configs"; exit 1 }
           Write-Host "Windows smoke OK: extracted ZIP runs, discovers all extensions, and ships $($presets.Count) preset(s)"
+
+      # list-extensions above reads only the manifests, so it lists a plugin
+      # whose DLL is missing. Every plugin's DLL must sit beside its manifest in
+      # bin\extensions\<name>, where the server loads it.
+      - name: Check every extension's DLL is beside its manifest
+        shell: bash
+        run: bash scripts/check-extension-libraries.sh extracted .dll

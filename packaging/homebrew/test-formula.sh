@@ -104,6 +104,11 @@ echo "::endgroup::"
 # test this install, not whatever `beebium-model-b` resolves to on PATH.
 echo "::group::bin symlink + discovery check"
 keg_bin_dirpath="$(brew --prefix beebium/formula-test/beebium-server)/bin"
+
+# Every plugin's library must sit beside its manifest in the installed tree;
+# list-extensions reads only the manifests, so it cannot catch one that is not.
+bash "${repo_dirpath}/scripts/check-extension-libraries.sh" \
+    "$(brew --prefix beebium/formula-test/beebium-server)/libexec"
 server_count=0
 for server_filepath in "${keg_bin_dirpath}"/beebium-model-*; do
   [ -L "${server_filepath}" ] || {

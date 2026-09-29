@@ -268,9 +268,10 @@ jobs:
           # origin passes the snippet guard with BEEBIUM_SERVER unset.
           env -u BEEBIUM_SERVER "${PY}" -m pytest "${GITHUB_WORKSPACE}/clients/beebium-python-client/readme/snippets" -q
 
-  # The Windows analogue of the verify matrix. Windows has no bash
-  # smoke-installed-tree.sh, so the console-script shim (which runs the exe and
-  # loads every plugin DLL) plus the full boot in test_smoke.py stand in for it.
+  # The Windows analogue of the verify matrix. smoke-installed-tree.sh does not
+  # run here, so the console-script shim (which runs the exe), a check that each
+  # plugin DLL sits beside its manifest (list-extensions reads only the
+  # manifests), and the full boot in test_smoke.py stand in for it.
   verify-server-wheels-windows:
     name: verify server wheel (win_amd64)
     needs: server-wheels
@@ -319,6 +320,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & "$env:RUNNER_TEMP\vv\Scripts\beebium-model-b.exe" list-extensions
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          $bundle = & "$env:BEEBIUM_PY" -c "import beebium.server as s; print(s.bundle_dirpath())"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          "BEEBIUM_BUNDLE=$bundle" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Check every extension's DLL is beside its manifest in the wheel
+        shell: bash
+        run: bash scripts/check-extension-libraries.sh "$(cygpath -u "${BEEBIUM_BUNDLE}")" .dll
 
       - name: Resolver must choose the wheel (no env, outside the repo)
         shell: pwsh

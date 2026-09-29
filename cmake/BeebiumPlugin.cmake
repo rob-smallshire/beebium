@@ -91,8 +91,16 @@ function(beebium_finalize_plugin)
             set_target_properties(${ARG_TARGET} PROPERTIES
                 INSTALL_RPATH "$ORIGIN/../../../lib")
         endif()
+        # A plugin is a SHARED library. On macOS and Linux its .dylib/.so is a
+        # LIBRARY artifact; on Windows its .dll is a RUNTIME artifact and its
+        # import .lib an ARCHIVE artifact. Both loadable kinds go beside the
+        # manifest, where PluginLoader looks for <library><suffix>. The import
+        # .lib is build-time only: it goes to lib/, which the packages leave
+        # out (make-zip.ps1 zips only bin/ and share/).
         install(TARGETS ${ARG_TARGET}
             LIBRARY DESTINATION bin/extensions/${ARG_NAME}
+            RUNTIME DESTINATION bin/extensions/${ARG_NAME}
+            ARCHIVE DESTINATION lib
         )
         install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/manifest.json
             DESTINATION bin/extensions/${ARG_NAME}
