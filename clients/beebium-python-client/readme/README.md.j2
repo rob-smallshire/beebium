@@ -124,9 +124,26 @@ available with no extra configuration:
 {{ snippet("pytest_plugin") }}
 ```
 
-Companion fixtures: `bbc_shared` (one machine per module), `stopped_bbc` (starts
-paused), and the session-scoped `mos_filepath` / `basic_filepath`. Point the
-plugin at a server or ROMs with `--beebium-server` / `--beebium-rom-dir` (or the
+`bbc` is a bare Model B. To configure it, override the `beebium_preset` fixture
+(or `beebium_extra_args`, for extra server arguments) in a `conftest.py`:
+
+```python
+{{ snippet("pytest_preset") }}
+```
+
+A project-wide default can also come from `--beebium-preset` or a
+`beebium_preset` ini key; a fixture override takes precedence over both. When a
+test needs more than one machine, or a machine configured on the spot, use the
+`launch_bbc` factory the other fixtures are built on:
+
+```python
+{{ snippet("pytest_factory") }}
+```
+
+Companion fixtures: `bbc_shared` (one machine per module, configured like
+`bbc`), `stopped_bbc` (starts paused), `bbc_tube` (a 65C02 second processor),
+and the session-scoped `mos_filepath` / `basic_filepath`. Point the plugin at a
+server or ROMs with `--beebium-server` / `--beebium-rom-dir` (or the
 `BEEBIUM_SERVER` / `BEEBIUM_ROM_DIR` environment variables).
 
 ### Further reading

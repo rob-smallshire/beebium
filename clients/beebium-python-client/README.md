@@ -183,9 +183,49 @@ def test_print(bbc):
     assert bbc.expect("4") == "4"
 ```
 
-Companion fixtures: `bbc_shared` (one machine per module), `stopped_bbc` (starts
-paused), and the session-scoped `mos_filepath` / `basic_filepath`. Point the
-plugin at a server or ROMs with `--beebium-server` / `--beebium-rom-dir` (or the
+`bbc` is a bare Model B. To configure it, override the `beebium_preset` fixture
+(or `beebium_extra_args`, for extra server arguments) in a `conftest.py`:
+
+```python
+# In conftest.py: every `bbc` in scope boots this preset (an id from
+# `list-presets`, or a preset file path) -- here a Model B with a disc system.
+import pytest
+
+
+@pytest.fixture(scope="session")
+def beebium_preset():
+    return "model-b-disc"
+
+
+def test_has_a_disc_filing_system(bbc):
+    bbc.expect("BASIC")
+    bbc.keyboard.type("*HELP")
+    bbc.keyboard.press_return()
+    bbc.expect("DFS")
+```
+
+A project-wide default can also come from `--beebium-preset` or a
+`beebium_preset` ini key; a fixture override takes precedence over both. When a
+test needs more than one machine, or a machine configured on the spot, use the
+`launch_bbc` factory the other fixtures are built on:
+
+```python
+# launch_bbc launches machines on demand -- any variant, any preset, as many
+# as a test needs -- and tears every one of them down when the test ends.
+def test_same_program_on_two_machines(launch_bbc):
+    model_b = launch_bbc(preset="model-b-disc")
+    b_plus = launch_bbc(variant="model-b-plus")
+    for bbc in (model_b, b_plus):
+        bbc.expect("BASIC")
+        bbc.keyboard.type("PRINT 6*7")
+        bbc.keyboard.press_return()
+        assert bbc.expect("42") == "42"
+```
+
+Companion fixtures: `bbc_shared` (one machine per module, configured like
+`bbc`), `stopped_bbc` (starts paused), `bbc_tube` (a 65C02 second processor),
+and the session-scoped `mos_filepath` / `basic_filepath`. Point the plugin at a
+server or ROMs with `--beebium-server` / `--beebium-rom-dir` (or the
 `BEEBIUM_SERVER` / `BEEBIUM_ROM_DIR` environment variables).
 
 ### Further reading
