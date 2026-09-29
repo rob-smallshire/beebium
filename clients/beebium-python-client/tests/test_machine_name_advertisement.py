@@ -173,10 +173,6 @@ def test_renaming_reaches_the_network(
     )
 
 
-@pytest.mark.xfail(
-    reason="MachineDiscovery can resurrect a removed service from cache (#65)",
-    strict=False,
-)
 def test_the_old_name_does_not_linger(
     advertising_bbc: Beebium, discovery: MachineDiscovery
 ) -> None:
@@ -186,13 +182,10 @@ def test_the_old_name_does_not_linger(
     the machine visible twice, and a client avoiding names in use would go on
     avoiding a name nothing holds.
 
-    The server does withdraw it: `dns-sd -B` across this rename shows the old
-    instance removed and the new one added at the same instant, so
-    mDNSResponder -- and the macOS front end browsing through it -- sees this
-    correctly. What fails here is the Python browser, which can re-add a
-    service from cache after having removed it (#65), so this is left as an
-    expected failure rather than deleted: it is the right assertion, made
-    against a browser that cannot yet keep the promise.
+    The server withdraws the old instance as it publishes the new one, and the
+    browser must not bring a withdrawn service back from a resolution or an
+    update that lands after the withdrawal. The ordering that makes that a
+    race here is pinned down deterministically in test_discovery_withdrawal.py.
     """
     uuid = advertising_bbc.system.identity.uuid
     assert _wait_for_name(discovery, uuid, "Peterhouse")

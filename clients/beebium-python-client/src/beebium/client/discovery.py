@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import ipaddress
 import subprocess
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -124,6 +125,20 @@ class MachineDiscovery:
         self._zeroconf = None
         self._browser = None
         self._machines: dict[str, DiscoveredMachine] = {}
+        # A service is resolved (zc.get_service_info) outside any lock, so its
+        # result can land after the service has been withdrawn. Two guards
+        # keep a withdrawn machine from coming back:
+        # - _generations counts removals per name. A resolution records the
+        #   count when it starts and inserts only if no removal happened since.
+        # - _withdrawn names services removed and not added again since. An
+        #   update for such a name (queued before the goodbye, handled after)
+        #   is ignored; only a genuine add_service brings the name back.
+        # The lock orders every insertion and removal, and each callback runs
+        # under it so callbacks arrive in the same order as the changes they
+        # report. It is re-entrant so a callback may read `machines`.
+        self._lock = threading.RLock()
+        self._generations: dict[str, int] = {}
+        self._withdrawn: set[str] = set()
 
     def start(self) -> None:
         """Start discovery. Runs in background thread."""
@@ -146,21 +161,32 @@ class MachineDiscovery:
         if self._zeroconf:
             self._zeroconf.close()
             self._zeroconf = None
-        self._machines.clear()
+        with self._lock:
+            self._machines.clear()
+            self._generations.clear()
+            self._withdrawn.clear()
 
     @property
     def machines(self) -> dict[str, DiscoveredMachine]:
         """Currently known machines (name -> DiscoveredMachine)."""
-        return dict(self._machines)
+        with self._lock:
+            return dict(self._machines)
 
     # ServiceListener interface methods (called by zeroconf)
 
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         """Called when a service is discovered."""
+        instance_name = name.removesuffix("." + type_)
+        with self._lock:
+            self._withdrawn.discard(instance_name)
         self._handle_service_update(zc, type_, name)
 
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         """Called when a service is updated."""
+        instance_name = name.removesuffix("." + type_)
+        with self._lock:
+            if instance_name in self._withdrawn:
+                return
         self._handle_service_update(zc, type_, name)
 
     def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
@@ -168,19 +194,25 @@ class MachineDiscovery:
         # Extract instance name (remove service type suffix)
         instance_name = name.removesuffix("." + type_)
 
-        if instance_name in self._machines:
-            del self._machines[instance_name]
-            if self._on_removed:
-                self._on_removed(instance_name)
+        with self._lock:
+            self._generations[instance_name] = self._generations.get(instance_name, 0) + 1
+            self._withdrawn.add(instance_name)
+            if instance_name in self._machines:
+                del self._machines[instance_name]
+                if self._on_removed:
+                    self._on_removed(instance_name)
 
     def _handle_service_update(self, zc: Zeroconf, type_: str, name: str) -> None:
         """Process a service add or update event."""
+        # Extract instance name
+        instance_name = name.removesuffix("." + type_)
+
+        with self._lock:
+            generation = self._generations.get(instance_name, 0)
+
         info = zc.get_service_info(type_, name)
         if not info:
             return
-
-        # Extract instance name
-        instance_name = name.removesuffix("." + type_)
 
         # Parse TXT records
         txt = {}
@@ -209,11 +241,16 @@ class MachineDiscovery:
             econet_aun_port=int(txt["econet_aun_port"]) if "econet_aun_port" in txt else None,
         )
 
-        is_new = instance_name not in self._machines
-        self._machines[instance_name] = machine
+        with self._lock:
+            if self._generations.get(instance_name, 0) != generation:
+                # Withdrawn while this resolution was in flight: the result
+                # describes a service that is no longer on the network.
+                return
+            is_new = instance_name not in self._machines
+            self._machines[instance_name] = machine
 
-        if is_new and self._on_found:
-            self._on_found(machine)
+            if is_new and self._on_found:
+                self._on_found(machine)
 
 
 def browse(timeout: float = 5.0) -> Iterator[DiscoveredMachine]:
