@@ -234,6 +234,26 @@ class TestServerProcessIntegration:
         process = ServerProcess(server=binary)
         assert "--mos" not in process._build_command()
 
+    def test_preset_omitted_from_command_when_none(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        process = ServerProcess(server=binary)
+        assert "--preset" not in process._build_command()
+
+    def test_preset_id_passed_before_extra_args(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        process = ServerProcess(server=binary, preset="model-b-disc", extra_args=["--fdc", "none"])
+        command = process._build_command()
+        index = command.index("--preset")
+        assert command[index + 1] == "model-b-disc"
+        assert index < command.index("--fdc")
+
+    def test_preset_path_passed_as_string(self, tmp_path: Path) -> None:
+        binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
+        preset_filepath = tmp_path / "game.preset.beebium"
+        process = ServerProcess(server=binary, preset=preset_filepath)
+        command = process._build_command()
+        assert command[command.index("--preset") + 1] == str(preset_filepath)
+
     def test_mos_included_when_given(self, tmp_path: Path) -> None:
         binary = _make_executable(tmp_path / "bin", _exe_name("model-b"))
         mos = tmp_path / "mos.rom"

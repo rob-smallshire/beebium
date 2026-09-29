@@ -93,6 +93,23 @@ beebium-model-b start [options]
 beebium-model-b [options]           # Equivalent (start is default)
 ```
 
+#### Presets
+
+| Option | Description |
+|--------|-------------|
+| `--preset <id\|filepath>` | Load configuration from a preset. CLI options override preset values |
+
+The argument is first tried as a file path. If no such file exists it is resolved as a preset id, the same way as `show-preset`: the system presets directory first, then the user presets directory. `list-presets` shows the ids available. If neither lookup succeeds the server exits with `NOINPUT` (66):
+
+```
+Error: Preset not found: 'x' (no such file, and no system or user preset with that id)
+```
+
+```bash
+beebium-model-b --preset model-b-disc                  # built-in preset by id
+beebium-model-b --preset ./my-game.preset.beebium      # preset file by path
+```
+
 #### ROM Configuration
 
 | Option | Description |

@@ -1234,6 +1234,103 @@ TEST_CASE("parse_start_arguments: --preset with matching model succeeds", "[cli]
     REQUIRE(config.fdc_type == "acorn-1770");
 }
 
+namespace {
+    // Point the system and user preset directories at known locations for the
+    // lifetime of a test, restoring the previous environment afterwards.
+    class ScopedPresetDirs {
+    public:
+        ScopedPresetDirs(const std::filesystem::path& servers_dirpath,
+                         const std::filesystem::path& user_presets_dirpath)
+            : old_servers_(beebium::platform::get_env("BEEBIUM_SERVERS_DIRPATH")),
+              old_user_(beebium::platform::get_env("BEEBIUM_USER_PRESETS_DIRPATH")) {
+            set("BEEBIUM_SERVERS_DIRPATH", servers_dirpath.string());
+            set("BEEBIUM_USER_PRESETS_DIRPATH", user_presets_dirpath.string());
+        }
+        ~ScopedPresetDirs() {
+            restore("BEEBIUM_SERVERS_DIRPATH", old_servers_);
+            restore("BEEBIUM_USER_PRESETS_DIRPATH", old_user_);
+        }
+        ScopedPresetDirs(const ScopedPresetDirs&) = delete;
+        ScopedPresetDirs& operator=(const ScopedPresetDirs&) = delete;
+
+    private:
+        static void set(const char* name, const std::string& value) {
+#ifdef _WIN32
+            _putenv_s(name, value.c_str());
+#else
+            setenv(name, value.c_str(), 1);
+#endif
+        }
+        static void restore(const char* name, const std::optional<std::string>& value) {
+            if (value) {
+                set(name, *value);
+            } else {
+#ifdef _WIN32
+                _putenv_s(name, "");
+#else
+                unsetenv(name);
+#endif
+            }
+        }
+        std::optional<std::string> old_servers_;
+        std::optional<std::string> old_user_;
+    };
+
+    // An empty directory standing in for the user presets directory.
+    std::filesystem::path empty_user_presets_dirpath() {
+        auto dirpath = std::filesystem::temp_directory_path() / "beebium_test_no_user_presets";
+        std::filesystem::create_directories(dirpath);
+        return dirpath;
+    }
+}
+
+TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset", "[cli][parse_start_arguments][preset]") {
+    // BEEBIUM_SERVERS_DIRPATH/presets is the system presets directory, so the
+    // test assets directory supplies "storage" as a system preset id.
+    ScopedPresetDirs dirs{BEEBIUM_TEST_ASSETS_DIR, empty_user_presets_dirpath()};
+    ArgvHelper args{"beebium", "start", "--preset", "storage"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(config.fdc_type == "acorn-1770");
+    REQUIRE(config.preset_filepath.has_value());
+    REQUIRE(config.preset_filepath->filename() == "storage.preset.beebium");
+}
+
+TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset", "[cli][parse_start_arguments][preset]") {
+    auto user_dirpath = std::filesystem::temp_directory_path() / "beebium_test_user_presets_104";
+    std::filesystem::create_directories(user_dirpath);
+    std::filesystem::copy_file(presets_dirpath() / "storage.preset.beebium",
+                               user_dirpath / "my-storage.preset.beebium",
+                               std::filesystem::copy_options::overwrite_existing);
+    ScopedPresetDirs dirs{empty_user_presets_dirpath(), user_dirpath};
+    ArgvHelper args{"beebium", "start", "--preset", "my-storage"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(config.fdc_type == "acorn-1770");
+}
+
+TEST_CASE("parse_start_arguments: --preset with an unknown id names both attempts", "[cli][parse_start_arguments][preset]") {
+    ScopedPresetDirs dirs{BEEBIUM_TEST_ASSETS_DIR, empty_user_presets_dirpath()};
+    ArgvHelper args{"beebium", "start", "--preset", "no-such-preset-id"};
+    ServerConfig<MachineType> config;
+
+    std::ostringstream captured;
+    auto* old_cerr = std::cerr.rdbuf(captured.rdbuf());
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+    std::cerr.rdbuf(old_cerr);
+
+    REQUIRE(result.has_value());
+    REQUIRE(*result == ExitCode::NOINPUT);
+    REQUIRE_THAT(captured.str(), Catch::Matchers::ContainsSubstring(
+        "Preset not found: 'no-such-preset-id' (no such file, and no system or user preset with that id)"));
+}
+
 // ============================================================================
 // describe-preset-schema JSON output tests
 // ============================================================================

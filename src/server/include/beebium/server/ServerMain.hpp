@@ -541,8 +541,9 @@ void print_usage(const char* program_name) {
               << "Machine: " << Memory::MACHINE_DISPLAY_NAME << "\n"
               << "\n"
               << "Optional:\n"
-              << "  --preset <filepath>      Load configuration from preset file\n"
-              << "                           (CLI options override preset values)\n"
+              << "  --preset <id|filepath>   Load configuration from a preset file, or from\n"
+              << "                           a system or user preset by id (see list-presets;\n"
+              << "                           CLI options override preset values)\n"
               << "  --mos <filepath>         MOS ROM filepath (default: " << Memory::DEFAULT_MOS_ROM << ")\n"
               << "  --language-rom <filepath> Language ROM image for this machine's default\n"
               << "                           language slot (slot " << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT)
@@ -935,7 +936,19 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             continue;
         }
         if (arg == "--preset" && i + 1 < argc) {
-            config.preset_filepath = argv[i + 1];
+            // The argument is a preset file path or, failing that, a preset id
+            // resolved like show-preset: system presets, then user presets.
+            std::string preset_arg = argv[i + 1];
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(preset_arg, ec)) {
+                config.preset_filepath = preset_arg;
+            } else if (auto found = PresetPaths::find_preset_filepath(preset_arg)) {
+                config.preset_filepath = *found;
+            } else {
+                std::cerr << "Error: Preset not found: '" << preset_arg
+                          << "' (no such file, and no system or user preset with that id)\n";
+                return ExitCode::NOINPUT;
+            }
             auto result = load_preset(*config.preset_filepath);
             if (!result) {
                 std::cerr << "Error: " << result.error << "\n";

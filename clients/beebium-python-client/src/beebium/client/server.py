@@ -54,6 +54,7 @@ class ServerProcess:
         server_filepath: str | Path | None = None,
         port: int = 0,
         extra_args: list[str] | None = None,
+        preset: str | Path | None = None,
     ):
         """Create a server process manager.
 
@@ -71,6 +72,10 @@ class ServerProcess:
             port: Port to listen on. If 0 (default), a free port is allocated.
             extra_args: Additional command-line arguments to pass to the server
                 (e.g., ["--tube", "65C02-3MHz"]).
+            preset: A preset to configure the machine from, passed as
+                ``--preset``: a preset file path, or the id of a system or user
+                preset as reported by ``list-presets`` (e.g. "model-b-disc").
+                Command-line options, including ``extra_args``, override it.
         """
         if server_filepath is not None:
             if server is not None:
@@ -92,6 +97,7 @@ class ServerProcess:
         self._server_filepath = self._installation.executable_filepath(variant)
         self._port = port if port != 0 else self._find_free_port()
         self._extra_args = extra_args or []
+        self._preset = str(preset) if preset is not None else None
         self._process: subprocess.Popen[bytes] | None = None
         self._provenance_instance_uuid = str(uuid.uuid4())
         # Background reader threads continuously drain the server's stdout and
@@ -173,6 +179,8 @@ class ServerProcess:
                 beebium.__version__,
             ]
         )
+        if self._preset is not None:
+            cmd.extend(["--preset", self._preset])
         cmd.extend(self._extra_args)
         return cmd
 

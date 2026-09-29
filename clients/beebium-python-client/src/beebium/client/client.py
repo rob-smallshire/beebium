@@ -182,6 +182,7 @@ class Beebium:
         startup_timeout: float = 10.0,
         connection_timeout: float = 5.0,
         extra_args: list[str] | None = None,
+        preset: str | Path | None = None,
     ) -> Iterator[Beebium]:
         """Start a beebium-server process and connect to it.
 
@@ -203,6 +204,10 @@ class Beebium:
             connection_timeout: Maximum time to wait for connection (seconds).
             extra_args: Additional command-line arguments to pass to the server
                 (e.g., ["--tube", "65C02-3MHz"]).
+            preset: A preset to configure the machine from, passed as
+                ``--preset``: a preset file path, or the id of a system or user
+                preset as reported by ``list-presets`` (e.g. "model-b-disc").
+                Command-line options, including ``extra_args``, override it.
 
         Yields:
             A connected Beebium client.
@@ -231,6 +236,7 @@ class Beebium:
             variant=variant,
             port=port,
             extra_args=extra_args,
+            preset=preset,
         )
 
         try:
