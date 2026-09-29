@@ -21,6 +21,7 @@ rootdir is a temporary directory outside the checkout.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,39 @@ from beebium.client.installation import ServerInstallation
 from beebium.client.pytest_plugin import PRESET_EXTENSION, resolve_preset
 
 pytest_plugins = ["pytester"]
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Whether a process with this PID is running.
+
+    os.kill(pid, 0) is the probe on POSIX, but on Windows it is not: there it
+    raises OSError (WinError 87), so Windows asks the process for its exit code.
+    """
+    if sys.platform == "win32":
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        error_access_denied = 5
+        still_active = 259
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return kernel32.GetLastError() == error_access_denied
+        try:
+            exit_code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DISC_FILEPATH = REPO_ROOT / "tests" / "assets" / "discs" / "Disc001-CylonAttackAFSTD.ssd"
@@ -181,8 +215,7 @@ def test_launch_bbc_launches_several_machines_and_tears_them_all_down(
     result.assert_outcomes(passed=1)
 
     for pid in map(int, pids_filepath.read_text().split()):
-        with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)
+        assert not _pid_is_alive(pid), f"server {pid} outlived the test"
 
 
 def test_bbc_tube_boots_with_the_coprocessor_running(pytester: pytest.Pytester, inner_args: list[str]) -> None:

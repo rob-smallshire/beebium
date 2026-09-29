@@ -21,18 +21,38 @@ find, and expect the same discovery results as a direct invocation.
 
 They drive the binary with subprocess directly rather than the Beebium client,
 because the client would resolve and launch the real path itself.
+
+On Windows a symlinked server cannot start: the loader resolves an executable's
+side-by-side DLLs (the extension ABI DLL beside the server, and its shared
+dependencies) from the directory it was launched from, the symlink's own empty
+directory, so it exits with STATUS_DLL_NOT_FOUND. That is a Windows loader
+fact, not a discovery defect, and it does not affect users: Scoop launches
+through shim executables that run the real path.
 """
 
 from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import pytest
 
 from beebium.client.pytest_plugin import _find_checkout_server
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason=(
+        "On Windows a symlinked server cannot start: the loader resolves an executable's "
+        "side-by-side DLLs (the extension ABI DLL beside the server, and its shared "
+        "dependencies) from the directory it was launched from, the symlink's own empty "
+        "directory, so it exits with STATUS_DLL_NOT_FOUND. That is a Windows loader fact, "
+        "not a discovery defect, and it does not affect users: Scoop launches through shim "
+        "executables that run the real path."
+    ),
+)
 
 
 @pytest.fixture(scope="module")
