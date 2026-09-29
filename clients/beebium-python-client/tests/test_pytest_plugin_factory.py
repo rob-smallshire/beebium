@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from beebium.client.exceptions import ServerNotFoundError
+from beebium.client.installation import ServerInstallation
 from beebium.client.pytest_plugin import PRESET_EXTENSION, resolve_preset
 
 pytest_plugins = ["pytester"]
@@ -33,10 +35,28 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DISC_FILEPATH = REPO_ROOT / "tests" / "assets" / "discs" / "Disc001-CylonAttackAFSTD.ssd"
 
 
+@pytest.fixture(scope="module")
+def server_installation(beebium_server_filepath: Path | None) -> ServerInstallation:
+    """The server these tests launch, resolved as the plugin resolves it
+    (--beebium-server, BEEBIUM_SERVER, the checkout build, the beebium-server
+    wheel, then PATH). Tests that need one skip where there is none, as in the
+    wheel-only unit-test job."""
+    try:
+        if beebium_server_filepath is not None:
+            return ServerInstallation.coerce(beebium_server_filepath)
+        return ServerInstallation.default()
+    except ServerNotFoundError as e:
+        pytest.skip(f"no server to launch: {e}")
+
+
 @pytest.fixture
-def inner_args(beebium_roms_dirpath: Path, beebium_server_filepath: Path | None) -> list[str]:
+def inner_args(
+    beebium_roms_dirpath: Path,
+    beebium_server_filepath: Path | None,
+    server_installation: ServerInstallation,
+) -> list[str]:
     """Command-line options that point an inner session at this session's
-    server and ROMs."""
+    server and ROMs. Requesting this skips the test where there is no server."""
     args = ["-p", "no:cacheprovider", f"--beebium-rom-dir={beebium_roms_dirpath}"]
     if beebium_server_filepath is not None:
         args.append(f"--beebium-server={beebium_server_filepath}")
@@ -82,9 +102,9 @@ def test_a_preset_file_path_configures_bbc(
     pytester: pytest.Pytester,
     inner_args: list[str],
     disc_filepath: Path,
-    beebium_server_filepath: Path | None,
+    server_installation: ServerInstallation,
 ) -> None:
-    preset_filepath = resolve_preset("model-b-disc", server=beebium_server_filepath)
+    preset_filepath = resolve_preset("model-b-disc", server=server_installation)
     pytester.makeconftest(
         f"import pytest\n@pytest.fixture(scope='session')\ndef beebium_preset():\n    return {str(preset_filepath)!r}\n"
     )
@@ -191,14 +211,27 @@ def test_resolve_preset_returns_an_existing_path_unchanged(tmp_path: Path) -> No
     assert resolve_preset(preset_filepath) == preset_filepath
 
 
-def test_resolve_preset_finds_a_system_preset_by_id(beebium_server_filepath: Path | None) -> None:
-    resolved = resolve_preset("model-b-disc", server=beebium_server_filepath)
+def test_resolve_preset_finds_an_id_in_the_searched_directories(tmp_path: Path) -> None:
+    first = tmp_path / "system"
+    second = tmp_path / "user"
+    first.mkdir()
+    second.mkdir()
+    preset_filepath = second / f"mine{PRESET_EXTENSION}"
+    preset_filepath.write_text("{}")
+    assert resolve_preset("mine", search_dirpaths=[first, second]) == preset_filepath
+
+
+def test_resolve_preset_names_where_it_looked_for_an_unknown_id(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match=r"no-such-preset.*searched: .*system"):
+        resolve_preset("no-such-preset", search_dirpaths=[tmp_path / "system"])
+
+
+def test_resolve_preset_says_when_there_is_no_server_to_search(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="no server was found"):
+        resolve_preset("model-b-disc", server=tmp_path / "no-such-server")
+
+
+def test_resolve_preset_finds_a_system_preset_by_id(server_installation: ServerInstallation) -> None:
+    resolved = resolve_preset("model-b-disc", server=server_installation)
     assert resolved.name == f"model-b-disc{PRESET_EXTENSION}"
     assert resolved.is_file()
-
-
-def test_resolve_preset_names_where_it_looked_for_an_unknown_id(
-    beebium_server_filepath: Path | None,
-) -> None:
-    with pytest.raises(FileNotFoundError, match="no-such-preset.*searched"):
-        resolve_preset("no-such-preset", server=beebium_server_filepath)

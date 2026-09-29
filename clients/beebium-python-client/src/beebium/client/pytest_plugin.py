@@ -138,48 +138,65 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-def _preset_search_dirpaths(executable_filepath: Path, installation: ServerInstallation) -> list[Path]:
-    """Where the server looks for a preset id, in the order it looks.
+def _preset_search_dirpaths(
+    server: ServerInstallation | str | Path | None, variant: str
+) -> tuple[list[Path], list[str]]:
+    """Where the server looks for a preset id, in the order it looks, and a
+    note for each place that could not be searched.
 
     Mirrors the server's own search: the system presets (BEEBIUM_SERVERS_DIRPATH,
     then beside the binary as in a build tree, then the installed
-    ``share/beebium/presets``), then the user presets directory, which the
-    server reports itself so its per-platform rules are not duplicated here.
+    ``share/beebium/presets``), then the user presets directory. Only
+    BEEBIUM_SERVERS_DIRPATH needs no server; the rest are located from the
+    server, and the user directory is the one the server reports, so its
+    per-platform rules are not duplicated here.
     """
-    real_dirpath = executable_filepath.resolve().parent
     candidates: list[Path | None] = []
+    notes: list[str] = []
     servers_dirpath = os.environ.get("BEEBIUM_SERVERS_DIRPATH")
     if servers_dirpath:
         candidates.append(Path(servers_dirpath) / "presets")
-    candidates += [
-        installation.preset_dirpath,
-        real_dirpath / "presets",
-        real_dirpath.parent / "share" / "beebium" / "presets",
-    ]
+
     try:
-        reported = subprocess.run(
-            [str(executable_filepath), "report-presets-dirpath"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        reported = ""
-    if reported:
-        candidates.append(Path(reported.splitlines()[-1]))
+        installation = ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
+        executable_filepath = installation.executable_filepath(variant)
+    except ServerNotFoundError as e:
+        notes.append(f"no server was found ({e}), so neither its presets nor the user presets directory were searched")
+    else:
+        real_dirpath = executable_filepath.resolve().parent
+        candidates += [
+            installation.preset_dirpath,
+            real_dirpath / "presets",
+            real_dirpath.parent / "share" / "beebium" / "presets",
+        ]
+        try:
+            reported = subprocess.run(
+                [str(executable_filepath), "report-presets-dirpath"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            reported = ""
+        if reported:
+            candidates.append(Path(reported.splitlines()[-1]))
+        else:
+            notes.append(f"{executable_filepath.name} did not report a user presets directory")
 
     dirpaths: list[Path] = []
     for candidate in candidates:
         if candidate is not None and candidate.is_dir() and candidate not in dirpaths:
             dirpaths.append(candidate)
-    return dirpaths
+    return dirpaths, notes
 
 
 def resolve_preset(
     preset: str | Path,
     server: ServerInstallation | str | Path | None = None,
     variant: str = DEFAULT_VARIANT,
+    *,
+    search_dirpaths: Sequence[Path] | None = None,
 ) -> Path:
     """Turn a preset id or path into the preset file to pass as ``--preset``.
 
@@ -193,25 +210,31 @@ def resolve_preset(
             will run on; None applies the default resolution.
         variant: The machine variant, which selects the binary within the
             installation.
+        search_dirpaths: Search these directories for the id instead of the
+            server's.
 
     Raises:
-        ServerNotFoundError: If no server can be found to resolve against.
-        FileNotFoundError: If the id names no preset in any searched directory.
+        FileNotFoundError: If the id names no preset in any searched
+            directory; the message names them, and anything that could not be
+            searched (such as when no server is found).
     """
     path = Path(preset)
     if path.is_file():
         return path
 
-    installation = ServerInstallation.default() if server is None else ServerInstallation.coerce(server)
-    executable_filepath = installation.executable_filepath(variant)
     preset_id = str(preset)
-    dirpaths = _preset_search_dirpaths(executable_filepath, installation)
+    notes: list[str] = []
+    if search_dirpaths is None:
+        dirpaths, notes = _preset_search_dirpaths(server, variant)
+    else:
+        dirpaths = list(search_dirpaths)
     for dirpath in dirpaths:
         candidate = dirpath / f"{preset_id}{PRESET_EXTENSION}"
         if candidate.is_file():
             return candidate
     searched = ", ".join(str(d) for d in dirpaths) or "(no preset directories found)"
-    raise FileNotFoundError(f"no preset {preset_id!r} for {executable_filepath.name}; searched: {searched}")
+    unsearched = "".join(f"; {note}" for note in notes)
+    raise FileNotFoundError(f"no preset {preset_id!r}; searched: {searched}{unsearched}")
 
 
 @pytest.fixture(scope="session")
@@ -383,9 +406,15 @@ def _launcher(
         # boots the defaults its own server resolves.
         is_model_b = variant == DEFAULT_VARIANT
         try:
-            preset_filepath = (
-                resolve_preset(preset, server=beebium_server_filepath, variant=variant) if preset is not None else None
-            )
+            preset_filepath = None
+            if preset is not None:
+                # A machine needs a server; without one, skip as launching would.
+                installation = (
+                    ServerInstallation.default()
+                    if beebium_server_filepath is None
+                    else ServerInstallation.coerce(beebium_server_filepath)
+                )
+                preset_filepath = resolve_preset(preset, server=installation, variant=variant)
             return stack.enter_context(
                 Beebium.launch(
                     mos_filepath=mos_filepath if is_model_b else None,
