@@ -53,6 +53,11 @@ jobs:
       # Validate the canonical beebium-gui CASK here (sync-channels.yml runs on
       # ubuntu, where cask audits are not meaningful). Stage it in a throwaway
       # tap -- `brew audit --cask <path>` is disabled -- and run style + audit.
+      # Neither style nor `audit --strict` reports deprecated stanza usage
+      # (e.g. `url ..., verified:`); that only surfaces when the tapped cask is
+      # loaded, as a warning on every user's `brew upgrade`. Loading it here
+      # with HOMEBREW_DEVELOPER=1 turns that warning into an error, so the
+      # next deprecation fails CI instead.
       - name: Style and audit the beebium-gui cask
         run: |
           set -euo pipefail
@@ -61,6 +66,7 @@ jobs:
           mkdir -p "${tap}/Casks"
           cp packaging/homebrew/beebium-gui.rb "${tap}/Casks/beebium-gui.rb"
           brew style "${tap}/Casks/beebium-gui.rb"
-          brew audit --cask beebium/caskcheck/beebium-gui
+          brew audit --cask --strict beebium/caskcheck/beebium-gui
+          HOMEBREW_DEVELOPER=1 brew info --cask beebium/caskcheck/beebium-gui
           rm -rf "${tap}"
-          echo "beebium-gui cask: style + audit clean"
+          echo "beebium-gui cask: style + audit + load clean"

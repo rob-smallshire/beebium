@@ -22,8 +22,7 @@ cask "beebium-gui" do
   sha256 arm:   "0000000000000000000000000000000000000000000000000000000000000000",
          intel: "1111111111111111111111111111111111111111111111111111111111111111"
 
-  url "https://github.com/rob-smallshire/beebium/releases/download/v#{version}/Beebium-#{version}-macos-#{arch}.dmg",
-      verified: "github.com/rob-smallshire/beebium/"
+  url "https://github.com/rob-smallshire/beebium/releases/download/v#{version}/Beebium-#{version}-macos-#{arch}.dmg"
   name "Beebium"
   desc "BBC Micro emulator with a graphical interface"
   homepage "https://github.com/rob-smallshire/beebium"
