@@ -83,6 +83,18 @@ if [ "${CI:-}" = "true" ]; then
   echo "::group::brew update"
   brew update
   echo "::endgroup::"
+
+  # The macOS arm64 runner image ships openssl@1.1 linked, so its bin/openssl
+  # owns the prefix symlink. When the install upgrades the openssl@3 dependency,
+  # brew cannot link it over that symlink and exits 1 even though beebium-server
+  # itself installs. Unlink the old keg first. This is deliberately narrower
+  # than `brew install --overwrite`, which would also paper over link conflicts
+  # of beebium-server's own files -- the very thing the symlink checks below
+  # exist to catch. CI only: a developer's Homebrew is never modified.
+  if brew list --formula openssl@1.1 >/dev/null 2>&1; then
+    echo "Unlinking the runner image's pre-linked openssl@1.1"
+    brew unlink openssl@1.1
+  fi
 fi
 
 echo "::group::brew install --build-from-source"
