@@ -306,3 +306,33 @@ TEST_CASE("WriteMemory on a running machine is serialised against the loop",
     machine.request_shutdown();
     emulation.join();
 }
+
+// The emulation loop's park -- where a --wait=api server waits for its first
+// Run() -- blocks on a condition variable and is released at once by a resume
+// or a shutdown, not at its next periodic re-check (#119).
+TEST_CASE("A parked emulation loop is released promptly by resume and by shutdown",
+          "[pause]") {
+    ModelB machine;
+
+    for (const bool by_shutdown : {false, true}) {
+        machine.pause();
+        std::atomic<bool> parked_returned{false};
+        std::thread loop([&] {
+            machine.wait_if_paused();
+            parked_returned.store(true);
+        });
+        std::this_thread::sleep_for(20ms);  // let the loop park
+        REQUIRE_FALSE(parked_returned.load());
+
+        const auto released = std::chrono::steady_clock::now();
+        if (by_shutdown) {
+            machine.request_shutdown();
+        } else {
+            machine.resume();
+        }
+        REQUIRE(spin_until([&] { return parked_returned.load(); }));
+        loop.join();
+        // Well inside the park's 100 ms re-check interval.
+        CHECK(std::chrono::steady_clock::now() - released < 50ms);
+    }
+}

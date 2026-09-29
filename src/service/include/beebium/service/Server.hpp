@@ -37,6 +37,8 @@
 #include "beebium/FrameRenderer.hpp"
 
 #include <grpcpp/grpcpp.h>
+#include <algorithm>
+#include <chrono>
 #include <memory>
 #include <span>
 #include <string>
@@ -176,6 +178,16 @@ private:
 
         // Background thread that consumes video_output queue and renders to frame_buffer
         void render_loop() {
+            // While the machine runs, batches arrive continuously and the
+            // shortest sleep keeps up. With none arriving (a paused machine,
+            // or one waiting for its first Run()) the sleep doubles, up to
+            // kMaxIdleSleep, so an idle server is not woken thousands of times
+            // a second; the first batch back restores the shortest sleep. The
+            // pixel queue holds far more than kMaxIdleSleep of output, so the
+            // longer sleep drops nothing.
+            constexpr auto kMinIdleSleep = std::chrono::microseconds(100);
+            constexpr auto kMaxIdleSleep = std::chrono::microseconds(10000);
+            auto idle_sleep = kMinIdleSleep;
             while (running) {
                 if (machine.state().memory.video_output) {
                     // Process available pixel batches
@@ -183,8 +195,10 @@ private:
                         machine.state().memory.video_output.value(), 10000);
 
                     if (processed == 0) {
-                        // No work available, brief sleep to avoid busy-waiting
-                        std::this_thread::sleep_for(std::chrono::microseconds(100));
+                        std::this_thread::sleep_for(idle_sleep);
+                        idle_sleep = std::min(idle_sleep * 2, kMaxIdleSleep);
+                    } else {
+                        idle_sleep = kMinIdleSleep;
                     }
                 } else {
                     // Video output not enabled, wait longer

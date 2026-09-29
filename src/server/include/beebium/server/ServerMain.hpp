@@ -1906,6 +1906,21 @@ void run_emulation_loop(MachineType& machine,
     // Reset VSYNC edge counter for frequency measurement
     machine.memory().system_via_peripheral.consume_vsync_rising_edges();
     while (g_running) {
+        // The pacing timer ticks thousands of times a second; while the
+        // debugger holds the machine paused (including --wait=api before the
+        // first Run()) nothing consumes those ticks, so park the timer too and
+        // let the process sit idle. It is restarted, re-anchored to the current
+        // cycle count, once the machine runs again -- on the park release below
+        // or, if a Run() lands before the machine parks, here.
+        if (use_pacing) {
+            if (machine.is_paused()) {
+                pacing_clock.pause();
+            } else if (pacing_clock.is_paused()) {
+                pacing_clock.rebase(machine.cycle_count());
+                pacing_clock.resume();
+            }
+        }
+
         // Advance the machine one chunk through the shared stepper. Pacing is
         // this loop's own concern:
         //  - on_parked rebases the pacing clock when the debugger pause released
@@ -1919,7 +1934,10 @@ void run_emulation_loop(MachineType& machine,
             machine,
             use_pacing ? pacing_clock.speed_multiplier() : 1.0,
             [&] {
-                if (use_pacing) pacing_clock.rebase(machine.cycle_count());
+                if (use_pacing) {
+                    pacing_clock.rebase(machine.cycle_count());
+                    pacing_clock.resume();
+                }
             },
             [&]() -> uint64_t {
                 if (!use_pacing) return cycles_per_frame;

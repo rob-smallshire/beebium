@@ -284,3 +284,37 @@ TEST_CASE("PacingClock drops a long suspend gap instead of catching up",
     // multi-second deficit would otherwise demand.
     REQUIRE(next <= 1500);
 }
+
+// A paused clock's timer thread blocks rather than ticking, so an idle server
+// (a paused machine, or one waiting for its first Run()) is not woken
+// thousands of times a second (#119). Resuming restarts the ticks.
+TEST_CASE("PacingClock does not tick while paused", "[pacing]") {
+    PacingConfig config{2'000'000, 500, 1.0};
+    PacingClock clock(config, std::chrono::microseconds(500), PlatformSleep{});
+    clock.start();
+
+    clock.pause();
+    // Let a tick already in flight land before sampling.
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    const uint64_t paused_ticks = clock.timing_stats().ticks_executed;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(clock.timing_stats().ticks_executed == paused_ticks);
+
+    clock.resume();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(clock.timing_stats().ticks_executed > paused_ticks);
+
+    clock.stop();
+}
+
+TEST_CASE("PacingClock stop releases a paused timer thread promptly", "[pacing]") {
+    PacingConfig config{2'000'000, 500, 1.0};
+    PacingClock clock(config, std::chrono::microseconds(500), PlatformSleep{});
+    clock.start();
+    clock.pause();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    const auto before = std::chrono::steady_clock::now();
+    clock.stop();
+    CHECK(std::chrono::steady_clock::now() - before < std::chrono::milliseconds(50));
+}
