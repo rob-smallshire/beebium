@@ -33,9 +33,7 @@ MHz ratio, printing 3.00 / 4.00; this test guards against that regression.
 
 from __future__ import annotations
 
-import os
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -45,11 +43,6 @@ from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import read_mode7_screen, screen_contains
 
 from tube_test_helpers import dump_diagnostics, run_until_or_timeout
-
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Tube pacing too timing-sensitive for Windows CI runners",
-)
 
 SPEED_DISC_FILENAME = "tube_speed70.ssd"
 
@@ -153,7 +146,6 @@ def bbc_copro(
         pytest.skip(str(e))
 
 
-@_skip_windows_ci
 class TestTubeSpeed:
     """Reproduce issue #70: the coprocessor's effective clock is too fast."""
 

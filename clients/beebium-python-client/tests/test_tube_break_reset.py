@@ -28,7 +28,6 @@ reappears -- evidence that the coprocessor was reset alongside the host.
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 from pathlib import Path
@@ -38,12 +37,6 @@ import pytest
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import dump_screen, read_mode7_screen, screen_contains
-
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Tube pacing too timing-sensitive for Windows CI runners",
-)
-
 
 TUBE_BANNER = "Acorn TUBE 6502 64K"
 BOOT_TIMEOUT_SECONDS = 30.0
@@ -178,7 +171,6 @@ def _diagnostics(bbc: Beebium) -> str:
     return "\n".join(lines)
 
 
-@_skip_windows_ci
 class TestTubeBreakReset:
     """Issue #38: Break and Ctrl-Break must restore the Tube boot banner."""
 

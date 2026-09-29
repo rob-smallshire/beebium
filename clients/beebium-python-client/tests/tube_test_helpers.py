@@ -25,7 +25,7 @@ import grpc
 from beebium.client import Beebium
 from beebium.client.disassemble import disassemble
 from beebium.client.exceptions import BeebiumError
-from beebium.client.screen import dump_screen
+from beebium.client.screen import dump_screen, screen_contains
 
 # DFS ROM for the Acorn 1770 disc controller.
 # DNFS ROMs contain an 8271-only DFS and are NOT compatible with the 1770.
@@ -61,6 +61,23 @@ def run_until_or_timeout(bbc: Beebium, predicate, emulated_seconds: float, chunk
         True if the predicate was satisfied, False on timeout.
     """
     return bbc.run_until_or_timeout(predicate, emulated_seconds, chunk_seconds=chunk_seconds)
+
+
+def wait_for_basic_prompt(bbc: Beebium, emulated_seconds: float = 10.0) -> None:
+    """Run until the BASIC prompt is up, in emulated time, before typing.
+
+    A launched server is already running when the client connects, and typed
+    text is pressed at once, so text typed straight after launch lands at
+    whatever emulated moment the host has reached. Within the first ~0.3
+    emulated seconds the MOS is still resetting and the command is garbled
+    ("Searching / File not found", "Bad command", "Mistake"); a slow or
+    stalled host reaches the type call that early (issues #76, #125). Waiting for the
+    prompt in emulated time makes the boot independent of host speed. The
+    machine is left stopped.
+    """
+    assert bbc.run_until_or_timeout(
+        lambda: screen_contains(bbc, ">"), emulated_seconds, chunk_seconds=0.1
+    ), f"BASIC prompt never appeared within {emulated_seconds:g} emulated seconds"
 
 
 def disassemble_region(memory, start: int, length: int) -> list[str]:

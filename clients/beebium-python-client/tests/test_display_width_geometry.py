@@ -27,17 +27,15 @@ Requirements:
 
 from __future__ import annotations
 
-import os
-import sys
-import time
 from pathlib import Path
 
 import pytest
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
-from beebium.client.screen import screen_contains
 from beebium.client.video import Frame
+
+from tube_test_helpers import wait_for_basic_prompt
 
 ELITE_DISC_FILENAME = "Disc999-EliteSNG45.ssd"
 BOFFIN_DISC_FILENAME = "Disc016-Boffin.ssd"
@@ -78,9 +76,7 @@ class TestStandardModeDisplayWidth:
     def test_bitmap_mode_reports_640(self, bbc: Beebium, mode: int) -> None:
         bbc.debugger.stop()
         # Boot to the BASIC prompt, then switch to the target mode.
-        assert bbc.run_until_or_timeout(
-            lambda: screen_contains(bbc, ">"), emulated_seconds=10.0
-        ), "BASIC prompt never appeared"
+        wait_for_basic_prompt(bbc)
         bbc.keyboard.type(f"MODE {mode}\r")
         bbc.run_for_emulated_seconds(1.0)
 
@@ -93,29 +89,13 @@ class TestStandardModeDisplayWidth:
         # Mode 7 is the power-on default; its two half-character batches per
         # 1MHz character period keep it 640 wide like the bitmap modes.
         bbc.debugger.stop()
-        assert bbc.run_until_or_timeout(
-            lambda: screen_contains(bbc, ">"), emulated_seconds=10.0
-        ), "BASIC prompt never appeared"
+        wait_for_basic_prompt(bbc)
         frame = bbc.video.capture_frame()
         assert frame.display_width == 640, (
             f"MODE 7: display_width {frame.display_width} != 640"
         )
 
 
-# The game-boot display-width tests boot a disc and wait in real time for a
-# game screen to appear. On the shared Windows and macOS CI runners that boot is
-# timing-sensitive and intermittently overruns the wait (Elite through its Tube
-# second processor; Boffin loading its game screen), so the tests flake. Issue
-# #76 tracks diagnosing that. The standard-mode display-width tests below do not
-# boot a game and run everywhere. Linux CI is reliable and keeps the coverage;
-# local runs are unaffected (the guard needs CI=true).
-_skip_game_boot_ci = pytest.mark.skipif(
-    sys.platform in ("win32", "darwin") and os.environ.get("CI") == "true",
-    reason="Game boot too timing-sensitive for Windows/macOS CI runners (issue #76)",
-)
-
-
-@_skip_game_boot_ci
 class TestEliteDisplayWidth:
     """Elite's 32-column split screen reports 512, not the old hardcoded 640."""
 
@@ -148,6 +128,7 @@ class TestEliteDisplayWidth:
                 ],
                 startup_timeout=20.0,
             ) as bbc:
+                wait_for_basic_prompt(bbc)
                 bbc.disc.drive(0).insert(elite_disc_filepath)
                 bbc.keyboard.type("*RUN !BOOT\r")
                 yield bbc
@@ -190,24 +171,58 @@ class TestEliteDisplayWidth:
         )
 
 
-def _wait_for_frame(bbc: Beebium, predicate, timeout: float = 30.0) -> Frame:
-    """Poll captured frames until one satisfies ``predicate`` (machine running)."""
-    deadline = time.monotonic() + timeout
-    frame = bbc.video.capture_frame()
-    while True:
-        if predicate(frame):
-            return frame
-        if time.monotonic() >= deadline:
-            raise TimeoutError(
-                f"no frame matched within {timeout:g}s; last was "
-                f"{frame.width}x{frame.height} display={frame.display_width} "
-                f"field_order={frame.field_order} "
-                f"regions={[r.pixel_width for r in frame.regions]}"
-            )
-        frame = bbc.video.capture_frame()
+def _run_until_screen(bbc: Beebium, *texts: str, emulated_seconds: float = 60.0) -> None:
+    """Run in emulated time until all of ``texts`` are on screen; the machine is
+    left stopped.
+
+    Waiting in emulated time, not wall-clock time, keeps each keypress at the
+    same emulated moment after its prompt appears whatever the host speed. The
+    screen is read by glyph recognition, so text in any display mode is found.
+    """
+
+    def on_screen() -> bool:
+        screen = bbc.video.screen_text().text
+        return all(text in screen for text in texts)
+
+    assert bbc.run_until_or_timeout(on_screen, emulated_seconds, chunk_seconds=0.1), (
+        f"{list(texts)!r} not all on screen within {emulated_seconds:g} emulated "
+        f"seconds; last screen:\n{bbc.video.screen_text().text}"
+    )
 
 
-@_skip_game_boot_ci
+def _press_space_when_listening(bbc: Beebium) -> None:
+    """Press SPACE a settled emulated second after the prompt is drawn.
+
+    A SPACE typed the moment the prompt appears can be ignored: the game is not
+    yet reading the keyboard for it. Settling in emulated time puts the press at
+    the same point in the game however fast the host runs.
+    """
+    bbc.run_for_emulated_seconds(1.0)
+    bbc.keyboard.type(" ")
+
+
+def _run_until_frame(bbc: Beebium, predicate, emulated_seconds: float = 60.0) -> Frame:
+    """Run in emulated time until a captured frame satisfies ``predicate``.
+
+    The machine is left stopped on the matching frame.
+    """
+    frames: list[Frame] = []
+
+    def matched() -> bool:
+        frames.append(bbc.video.capture_frame())
+        return predicate(frames[-1])
+
+    if not bbc.run_until_or_timeout(matched, emulated_seconds, chunk_seconds=0.02):
+        frame = frames[-1]
+        raise AssertionError(
+            f"no frame matched within {emulated_seconds:g} emulated seconds; last was "
+            f"{frame.width}x{frame.height} display={frame.display_width} "
+            f"field_order={frame.field_order} "
+            f"regions={[r.pixel_width for r in frame.regions]}"
+        )
+    return frames[-1]
+
+
 class TestBoffinDisplayWidth:
     """Boffin's 92-column game screen is wider than 640: the opposite of Elite.
 
@@ -239,9 +254,9 @@ class TestBoffinDisplayWidth:
                 ],
                 startup_timeout=20.0,
             ) as bbc:
+                wait_for_basic_prompt(bbc)
                 bbc.disc.drive(0).insert(boffin_disc_filepath)
                 bbc.keyboard.type("*EXEC !BOOT\r")
-                bbc.debugger.ensure_running()
                 yield bbc
         except ServerNotFoundError as e:
             pytest.skip(str(e))
@@ -257,25 +272,25 @@ class TestBoffinDisplayWidth:
             "Points are gained",
             "Use the umbrella",
         ):
-            bbc.expect(heading, timeout=60.0)
-            bbc.keyboard.type(" ")
+            _run_until_screen(bbc, heading, "Press SPACE BAR to continue")
+            _press_space_when_listening(bbc)
 
         # The full-width MODE 1 splash: a plain 320-logical progressive screen
         # that must STAY 640 -- the regression guard for the wide-mode fix.
-        bbc.expect("Game designed and written by", timeout=60.0)
-        splash = _wait_for_frame(bbc, lambda f: f.field_order == 0 and f.height >= 200)
+        _run_until_screen(bbc, "Game designed and written by")
+        splash = _run_until_frame(bbc, lambda f: f.field_order == 0 and f.height >= 200)
         assert splash.display_width == 640, (
             f"Boffin splash display_width {splash.display_width} != 640 "
             f"(width {splash.width})"
         )
 
-        bbc.expect("Brilliant Bouncing Boffins", timeout=60.0)
-        bbc.keyboard.type(" ")
+        _run_until_screen(bbc, "Brilliant Bouncing Boffins")
+        _press_space_when_listening(bbc)
 
         # A brief MODE 7 "CAVE 1" card (interlaced) precedes the game screen.
         # Wait through it, then for the progressive game screen to return.
-        _wait_for_frame(bbc, lambda f: f.field_order != 0, timeout=60.0)
-        _wait_for_frame(bbc, lambda f: f.field_order == 0 and f.width < 640, timeout=60.0)
+        _run_until_frame(bbc, lambda f: f.field_order != 0)
+        _run_until_frame(bbc, lambda f: f.field_order == 0 and f.width < 640)
         bbc.run_for_emulated_seconds(2.0)  # let the game screen settle
 
         game = bbc.video.capture_frame()

@@ -26,8 +26,6 @@ so these run with --tube-65c02.
 from __future__ import annotations
 
 import contextlib
-import os
-import sys
 import time
 from pathlib import Path
 
@@ -38,11 +36,6 @@ from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.screen import screen_contains
 
 from tube_test_helpers import dump_diagnostics, run_until_or_timeout
-
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Tube pacing too timing-sensitive for Windows CI runners",
-)
 
 ELITE_DISC_FILENAME = "Disc999-EliteSNG45.ssd"
 ELITE_BANNER = "6502 Second Processor ELITE"
@@ -164,7 +157,6 @@ def bbc_tube(
         pytest.skip(str(e))
 
 
-@_skip_windows_ci
 def test_boot_disc_autoboots_via_shift_break(
     bbc_tube: Beebium, elite_disc_filepath: Path
 ) -> None:
@@ -183,7 +175,6 @@ def test_boot_disc_autoboots_via_shift_break(
     assert booted, "Shift-Break did not auto-boot the disc's !BOOT"
 
 
-@_skip_windows_ci
 def test_naive_shift_break_without_hold_does_not_autoboot(
     bbc_tube: Beebium, elite_disc_filepath: Path
 ) -> None:
@@ -244,7 +235,6 @@ def tube_launch(
     return _launch
 
 
-@_skip_windows_ci
 def test_auto_boot_link_boots_at_power_on(tube_launch, elite_disc_filepath: Path) -> None:
     """With the auto-boot link set (--auto-boot), the disc boots at power-on."""
     with tube_launch(["--auto-boot", "--floppy", f"0:{elite_disc_filepath}"]) as bbc:
@@ -256,7 +246,6 @@ def test_auto_boot_link_boots_at_power_on(tube_launch, elite_disc_filepath: Path
         assert booted, "auto-boot link did not boot the disc at power-on"
 
 
-@_skip_windows_ci
 def test_auto_boot_link_makes_plain_break_boot(
     tube_launch, elite_disc_filepath: Path
 ) -> None:
@@ -276,7 +265,6 @@ def test_auto_boot_link_makes_plain_break_boot(
         assert booted, "plain BREAK did not boot with the auto-boot link set"
 
 
-@_skip_windows_ci
 def test_auto_boot_link_reverses_shift_break(
     tube_launch, elite_disc_filepath: Path
 ) -> None:
@@ -295,7 +283,6 @@ def test_auto_boot_link_reverses_shift_break(
         assert not booted, "Shift-Break should suppress boot when the link is set"
 
 
-@_skip_windows_ci
 def test_runtime_auto_boot_link_honored_by_hard_reset(
     tube_launch, elite_disc_filepath: Path
 ) -> None:
@@ -320,7 +307,6 @@ def test_runtime_auto_boot_link_honored_by_hard_reset(
         assert booted, "runtime auto-boot link not honoured by a hard reset"
 
 
-@_skip_windows_ci
 def test_runtime_link_change_not_seen_by_soft_break(
     tube_launch, elite_disc_filepath: Path
 ) -> None:
@@ -434,7 +420,6 @@ def _galaforce_booted(bbc: Beebium, emulated_seconds: float = 25.0) -> bool:
         emulated_seconds=emulated_seconds)
 
 
-@_skip_windows_ci
 def test_ctrl_break_honours_runtime_link_change(
     model_b_launch, galaforce_disc_filepath: Path
 ) -> None:
@@ -450,7 +435,6 @@ def test_ctrl_break_honours_runtime_link_change(
         assert _galaforce_booted(bbc), "CTRL-BREAK did not honour the runtime link"
 
 
-@_skip_windows_ci
 def test_ctrl_break_default_link_does_not_boot(
     model_b_launch, galaforce_disc_filepath: Path
 ) -> None:
@@ -475,7 +459,6 @@ def test_ctrl_break_default_link_does_not_boot(
 # the ROM's (osbyte118's SHIFT/CTRL handling), not the emulator's.
 
 
-@_skip_windows_ci
 def test_ctrl_shift_break_default_link_does_not_boot(
     model_b_launch, galaforce_disc_filepath: Path
 ) -> None:
@@ -493,7 +476,6 @@ def test_ctrl_shift_break_default_link_does_not_boot(
             "reset-without-booting gesture)")
 
 
-@_skip_windows_ci
 def test_ctrl_shift_break_autoboot_link_boots(
     model_b_launch, galaforce_disc_filepath: Path
 ) -> None:

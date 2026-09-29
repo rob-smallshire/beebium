@@ -20,7 +20,6 @@ many times and assert the server stays alive.
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 from pathlib import Path
@@ -31,12 +30,6 @@ import pytest
 from beebium.client import Beebium
 from beebium.client.exceptions import BeebiumError, ServerNotFoundError
 from beebium.client.screen import dump_screen, read_mode7_screen, screen_contains
-
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Break stress test is timing-sensitive on CI runners",
-)
-
 
 BREAK_HOLD_SECONDS = 0.05
 BREAK_INTERVAL_EMULATED_SECONDS = 1.0
@@ -186,7 +179,6 @@ def bbc_romram(
         pytest.skip(str(e))
 
 
-@_skip_windows_ci
 class TestBreakSegfaultNoTube:
     """Issue #27: repeated Break must not crash the server (no Tube)."""
 
@@ -242,7 +234,6 @@ def bbc_anfs_tube(
         pytest.skip(str(e))
 
 
-@_skip_windows_ci
 class TestBreakSegfaultWithTube:
     """Issue #39: repeated Break must not crash the server (with Tube)."""
 

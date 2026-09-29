@@ -10,32 +10,20 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Issue #76 canary: a Windows-CI Tube-boot flake recorder, not a gate.
+"""Tube Elite boot with a diagnostic snapshot on failure (issue #76).
 
-The Tube Elite display-width scenario (test_display_width_geometry.py) is
-bimodal on the GitHub Actions Windows lane: it usually reaches Elite's
-256+128 split at emulated frame ~352 in ~11 s, but occasionally streams all
-3000 frames with no multi-band frame at all -- the loader appears not to
-progress. That test is now skipped on Windows CI (issue #76). This canary
-boots Tube Elite exactly as it did, but instead of gating CI it records
-evidence when the boot fails there:
+Boots second-processor Elite on a 6502 second processor and requires it to
+reach its 256+128 split screen, the same scenario as the Elite display-width
+test. When the split never appears it writes a diagnostic snapshot -- to the
+log and to a sidecar file ($BEEBIUM_ARTIFACT_DIR or the CWD) -- capturing host
+and coprocessor cycle counts before and after streaming (so zero emulated
+progress can be told from a stream/transport disruption), the Tube ULA state
+with its transfer counters and interrupts, the screen text, and both CPUs' PCs.
 
-    * On the Windows CI lane it is xfail(strict=False), so a stall is
-      recorded as xfailed (never red) and a normal boot as xpassed.
-    * Everywhere else it is a plain pass.
-
-When it fails it writes a diagnostic snapshot -- to the job log and to a
-sidecar file ($BEEBIUM_ARTIFACT_DIR or the CWD) -- capturing host and
-parasite cycle counts before and after streaming (so zero emulated progress
-can be told from a stream/transport disruption), the Tube ULA state with its
-transfer counters and interrupts, the screen text, and both CPUs' PCs.
-
-Not reproducible by host slowness alone: on the Windows dev machine (Slioch,
-4 cores) 18 streamed attempts from idle (0.63x real) down to 0.04x real under
-CPU load all reached the split at emulated frame 349-353 -- the emulated
-frame count to the split is invariant of host speed, as a correct design
-requires. The remaining suspect is the CI runner's bursty stall profile
-interacting with the harness/transport, which this canary is meant to catch.
+It waits for the boot banner in emulated time before typing. Issue #76 was a
+command typed straight after launch: on a slow or stalled CI host it landed
+within the MOS reset and was garbled, so Elite never loaded (#125 tracks
+making that wait unnecessary).
 
 Requirements:
     - Beebium server executable (auto-detected or via BEEBIUM_SERVER)
@@ -47,7 +35,6 @@ Requirements:
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -65,15 +52,6 @@ from tube_test_helpers import (
 ELITE_DISC_FILENAME = "Disc999-EliteSNG45.ssd"
 MAX_FRAMES = 3000
 DIAG_FILENAME = "tube_boot_canary_76.diag.txt"
-
-_on_windows_ci = sys.platform == "win32" and os.environ.get("CI") == "true"
-
-_xfail_windows_ci = pytest.mark.xfail(
-    _on_windows_ci,
-    strict=False,
-    reason="#76 canary: the Windows-CI Tube boot is bimodal; record evidence, never go red",
-)
-
 
 def _find_elite_disc() -> Path | None:
     repo_root = Path(__file__).parent.parent.parent.parent
@@ -191,7 +169,7 @@ def _delta(before: int | None, after: int | None) -> str:
 
 
 class TestTubeBootCanary76:
-    """Records, without gating, the bimodal Windows-CI Tube-boot failure (#76)."""
+    """Tube Elite boots to its split screen, with diagnostics if it does not (#76)."""
 
     @pytest.fixture
     def bbc_elite(
@@ -228,14 +206,13 @@ class TestTubeBootCanary76:
         except ServerNotFoundError as e:
             pytest.skip(str(e))
 
-    @_xfail_windows_ci
     def test_elite_reaches_its_split(
         self, bbc_elite: Beebium, elite_disc_filepath: Path
     ) -> None:
         """Boot Tube Elite and confirm it reaches the 256+128 split screen.
 
-        The same scenario as the display-width test, but on failure it records
-        a diagnostic snapshot rather than gating CI (issue #76).
+        The same scenario as the display-width test, but on failure it also
+        records a diagnostic snapshot (issue #76).
         """
         bbc = bbc_elite
         assert run_until_or_timeout(

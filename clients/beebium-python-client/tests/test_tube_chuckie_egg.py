@@ -34,8 +34,6 @@ Requirements:
 
 from __future__ import annotations
 
-import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -47,11 +45,6 @@ from beebium.client.screen import read_mode7_screen, screen_contains
 from tube_test_helpers import (
     dump_diagnostics,
     run_until_or_timeout,
-)
-
-_skip_windows_ci = pytest.mark.skipif(
-    sys.platform == "win32" and os.environ.get("CI") == "true",
-    reason="Tube pacing too timing-sensitive for Windows CI runners",
 )
 
 CHUCKIE_EGG_DISC_FILENAME = "chuckieEgg2023.ssd"
@@ -140,7 +133,6 @@ def bbc_tube(
         pytest.skip(str(e))
 
 
-@_skip_windows_ci
 class TestTubeChuckieEggBoot:
     """Test booting Chuckie Egg 2023 (40th Anniversary Edition) via the Tube.
 

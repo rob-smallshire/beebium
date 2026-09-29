@@ -20,6 +20,12 @@ Usage:
         bbc.keyboard.type("PRINT 42")
         bbc.keyboard.press_return()
 
+A test that types soon after launch must first wait for the MOS prompt in
+emulated time, e.g. ``bbc.run_until_or_timeout(lambda: screen_contains(bbc,
+">"), 10.0)``: the machine is already running when the client connects and
+typed keys are pressed at once, so on a slow or stalled host they can land
+within the MOS reset and the command is garbled (issues #76 and #125).
+
 Fixtures:
     launch_bbc: a factory. ``launch_bbc(preset=..., variant=..., extra_args=...,
         startup_timeout=...)`` launches a machine and returns it connected; every
