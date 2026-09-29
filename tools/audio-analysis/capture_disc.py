@@ -22,7 +22,9 @@ overflows, and the wire protocol carries no produced-sample count to detect it
 runs at real time by default, where the gRPC consumer keeps up and no samples
 drop; a shortfall between the samples received and the emulated time elapsed is
 reported as a proxy for any drops. Faster-than-real-time deterministic capture
-would need a server seam (see the issue #82 findings note).
+would need a server seam (see the issue #82 findings note). To measure the
+delivered sample rate against emulated and wall time, use
+measure_sample_rate.py.
 
 Run under the Python client's environment, e.g.::
 
