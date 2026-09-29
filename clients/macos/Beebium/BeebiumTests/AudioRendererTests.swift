@@ -64,6 +64,101 @@ final class AudioRendererTests: XCTestCase {
         XCTAssertGreaterThan(peak, 0.1)
     }
 
+    // MARK: - Mix gain
+
+    // Render a full-scale (volume 0) square at `frequencyHz` on the given
+    // channels, all in phase and centre-panned at master volume 1.0, and return
+    // the output after the 20 Hz high-pass has settled from the onset (which
+    // briefly doubles the AC swing as it removes the unipolar DC).
+    private func renderSquare(onChannels channels: Set<Int>, frequencyHz: Int) -> (left: [Float], right: [Float]) {
+        let sampleRate = 48000
+        let chunk = 4096
+        let settleChunks = 3       // 0.26 s, many time constants of the 20 Hz high-pass
+        let measureChunks = 2
+        let halfPeriod = sampleRate / (2 * frequencyHz)
+        let ring = AudioRingBuffer(capacity: chunk * 2)
+        let renderer = AudioRenderer(ringBuffer: ring, sampleRate: Float(sampleRate), maxFrameCount: chunk)
+
+        var measuredLeft: [Float] = []
+        var measuredRight: [Float] = []
+        var n = 0
+        for chunkIndex in 0..<(settleChunks + measureChunks) {
+            var frames = [UInt64](repeating: 0, count: chunk)
+            for i in 0..<chunk {
+                let high: Int16 = ((n / halfPeriod) % 2 == 0) ? 16384 : 0
+                let tone0 = channels.contains(0) ? high : 0
+                let tone1 = channels.contains(1) ? high : 0
+                let tone2 = channels.contains(2) ? high : 0
+                let noise = channels.contains(3) ? high : 0
+                let source0 = UInt32(UInt16(bitPattern: tone0)) | (UInt32(UInt16(bitPattern: tone1)) << 16)
+                let source1 = UInt32(UInt16(bitPattern: tone2)) | (UInt32(UInt16(bitPattern: noise)) << 16)
+                frames[i] = UInt64(source0) | (UInt64(source1) << 32)
+                n += 1
+            }
+            let written = frames.withUnsafeBufferPointer { ring.write($0.baseAddress!, count: chunk) }
+            XCTAssertEqual(written, chunk)
+
+            var left = [Float](repeating: 0, count: chunk)
+            var right = [Float](repeating: 0, count: chunk)
+            let rendered = left.withUnsafeMutableBufferPointer { lb in
+                right.withUnsafeMutableBufferPointer { rb in
+                    renderer.render(frameCount: chunk, leftBuffer: lb.baseAddress!, rightBuffer: rb.baseAddress!)
+                }
+            }
+            XCTAssertEqual(rendered, chunk)
+            if chunkIndex >= settleChunks {
+                measuredLeft += left
+                measuredRight += right
+            }
+        }
+        return (measuredLeft, measuredRight)
+    }
+
+    private func peak(_ samples: [Float]) -> Float {
+        samples.reduce(0) { max($0, abs($1)) }
+    }
+
+    func testMixGainIsTheChipWeightingOverTheFiltersWorstCasePeak() {
+        XCTAssertEqual(AudioRenderer.mixGain, 0.17)
+    }
+
+    // One full-volume channel at 1 kHz: its measured peak per side, recorded
+    // (not modelled) so a change anywhere in the chain shows up here.
+    // tools/audio-analysis/client_chain.py reproduces this value.
+    func testOneFullScaleChannelAt1kHzPeaksAtItsMeasuredLevel() {
+        let one = renderSquare(onChannels: [0], frequencyHz: 1000)
+        let peakLeft = peak(one.left)
+        print("mix gain: one channel at 1 kHz peaks at \(peakLeft) per side")
+        XCTAssertEqual(peakLeft, 0.1397, accuracy: 0.0005)
+        XCTAssertEqual(peakLeft, peak(one.right), accuracy: 1e-6)
+    }
+
+    // The worst case for chip output: all four channels at full volume, in
+    // phase, centre-panned, master 1.0. At each tone frequency the mix stays
+    // at or under 0.72 per side, below the limiter's 0.8 knee, so the limiter
+    // is the identity: the four-channel output is the linear sum, four times
+    // the one-channel output, sample for sample. 125 Hz is the filters' worst
+    // case; 1 kHz and 6 kHz cover the rest of the range.
+    func testFourFullScaleChannelsInPhaseMixLinearlyUnderTheKnee() {
+        for frequencyHz in [125, 1000, 6000] {
+            let one = renderSquare(onChannels: [0], frequencyHz: frequencyHz)
+            let four = renderSquare(onChannels: [0, 1, 2, 3], frequencyHz: frequencyHz)
+
+            let peakLeft = peak(four.left)
+            let peakRight = peak(four.right)
+            print("mix gain: four channels at \(frequencyHz) Hz peak at \(peakLeft) / \(peakRight) per side")
+            XCTAssertLessThanOrEqual(peakLeft, 0.72, "left peak at \(frequencyHz) Hz")
+            XCTAssertLessThanOrEqual(peakRight, 0.72, "right peak at \(frequencyHz) Hz")
+
+            var worstDeviation: Float = 0
+            for i in 0..<four.left.count {
+                worstDeviation = max(worstDeviation, abs(four.left[i] - 4 * one.left[i]))
+                worstDeviation = max(worstDeviation, abs(four.right[i] - 4 * one.right[i]))
+            }
+            XCTAssertLessThanOrEqual(worstDeviation, 1e-4, "not the linear sum at \(frequencyHz) Hz: the limiter engaged")
+        }
+    }
+
     // MARK: - Mixer channel listing
 
     // The SN76489 is described as two sources sharing one group. The mixer maps

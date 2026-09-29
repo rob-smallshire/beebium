@@ -19,7 +19,7 @@ import Atomics
 /// 1. Unpack the four SN76489 channels (signed 16-bit, unipolar) from packed frames
 /// 2. High-pass filter to remove DC offset
 /// 3. Low-pass filter for anti-aliasing
-/// 4. Per-channel volume with exponential scaling
+/// 4. Per-channel volume with exponential scaling, and the fixed mix gain
 /// 5. Per-channel stereo panning
 /// 6. Mix to stereo with master volume
 /// 7. Level metering (RMS/peak per channel)
@@ -48,6 +48,27 @@ final class AudioRenderer: @unchecked Sendable {
 
     /// Highpass cutoff for DC removal
     static let highpassCutoffHz: Float = 20.0
+
+    /// Fixed gain applied to every channel before pan and master volume.
+    ///
+    /// Two factors. The first is the chip's own weighting: the SN76489 sums its
+    /// four equal DACs into one full-scale output, so one channel is a quarter
+    /// of it (0.25; beebjit uses the same quarter-scale weighting). The second
+    /// is this chain's filters: a full-volume channel is normalised to unit AC
+    /// amplitude, but a square wave through the high-pass and low-pass below
+    /// peaks above that, worst at 1.47 for a 125 Hz tone, where the 20 Hz
+    /// high-pass tilt dominates. 0.25 / 1.47 = 0.17.
+    ///
+    /// With constant-power centre panning (0.707 per side), four full-volume
+    /// channels in phase then reach at most 4 x 0.17 x 1.47 x 0.707 = 0.71 per
+    /// side, under the limiter's 0.8 knee, so the limiter never engages for
+    /// chip output at master volume 1.0. Loudness is made up with the master
+    /// or system volume.
+    ///
+    /// The worst case is set by the filters, so re-derive this whenever they
+    /// change; #121 revisits both of them. tools/audio-analysis/client_chain.py
+    /// models this chain and reports the peak for any gain.
+    static let mixGain: Float = 0.17
 
     /// Sample rate
     let sampleRate: Float
@@ -206,8 +227,8 @@ final class AudioRenderer: @unchecked Sendable {
                     // Update meter
                     updateMeter(channel: ch, sample: sample)
 
-                    // Apply per-channel volume
-                    sample *= channelVolumes[ch]
+                    // Apply per-channel volume and the fixed mix gain
+                    sample *= channelVolumes[ch] * Self.mixGain
 
                     // Apply pan to stereo (constant-power panning)
                     let pan = panPositions[ch]
