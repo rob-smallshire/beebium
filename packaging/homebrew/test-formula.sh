@@ -84,6 +84,25 @@ for cli in host-serial aun scsi-hdd ip232-serial rfc2217-client-serial \
   }
 done
 echo "all expected extensions discovered"
+
+# ROMs, presets and bundled discs are found relative to the binary's real
+# location too; both checks fail if the symlink is not resolved first.
+preset_out="$(beebium-model-b list-presets)"
+for preset in model-b model-b-disc; do
+  echo "${preset_out}" | grep -qE "^ +${preset} " || {
+    echo "MISSING preset: ${preset}" >&2
+    exit 1
+  }
+done
+echo "built-in presets discovered"
+
+shot_filepath="${work_dirpath}/shot.png"
+beebium-model-b capture-screenshot --output "${shot_filepath}" --duration 0.5
+[ -s "${shot_filepath}" ] || {
+  echo "MISSING screenshot: ROM discovery through the bin symlink failed" >&2
+  exit 1
+}
+echo "ROMs discovered (screenshot captured)"
 echo "::endgroup::"
 
 echo "Formula validation PASSED."

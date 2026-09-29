@@ -42,8 +42,10 @@ class BeebiumServer < Formula
     system "cmake", "--install", "build", "--prefix", libexec
 
     # Put the four servers on the user's PATH without dragging the rest of the
-    # tree (notably bin/extensions) onto it. Discovery follows the symlink to
-    # the real binary in libexec, so the relative resource lookups still work.
+    # tree (notably bin/extensions) onto it. Every resource lookup (extensions,
+    # ROMs, presets, bundled discs) is relative to the binary's real on-disk
+    # location, resolved through this symlink, so they all find the libexec
+    # tree. The test block exercises each lookup through the symlink.
     %w[
       beebium-model-b
       beebium-model-b-plus
@@ -55,10 +57,13 @@ class BeebiumServer < Formula
   end
 
   test do
-    # list-extensions exercises the full discovery path: it loads the extension
-    # ABI dylib via RPATH and enumerates both the built-in and the dlopened
-    # plugins. Run it through the PATH symlink so the test also covers the
-    # symlink-resolution that real invocations use.
+    # Every check runs through the bin symlink, as a real invocation does. The
+    # servers find their resources relative to their own on-disk location, so
+    # each lookup below only succeeds if the binary resolves the symlink to its
+    # libexec target first; a lookup relative to bin/ itself finds nothing.
+
+    # list-extensions loads the extension ABI dylib via RPATH and enumerates
+    # both the built-in and the dlopened plugins.
     output = shell_output("#{bin}/beebium-model-b list-extensions")
 
     # The built-in extensions are compiled into the binary.
@@ -68,5 +73,20 @@ class BeebiumServer < Formula
     assert_match "scsi-hdd", output
     # The plugins must resolve out of the installed tree, not a build dir.
     assert_match (libexec/"bin/extensions").to_s, output
+
+    # Preset discovery: the built-in presets live in libexec/share/beebium/
+    # presets. A binary that anchors on the symlink's own directory lists
+    # "(none)" here.
+    presets = shell_output("#{bin}/beebium-model-b list-presets")
+    assert_match(/^\s+model-b\s/, presets)
+    assert_match "model-b-disc", presets
+
+    # ROM discovery: a headless screenshot loads the MOS from libexec/share/
+    # beebium/roms, runs briefly and exits on its own, so no server has to be
+    # backgrounded. A binary that anchors on the symlink's own directory fails
+    # with "Cannot find ROM directory" and produces no image.
+    system bin/"beebium-model-b", "capture-screenshot",
+           "--output", testpath/"shot.png", "--duration", "0.5"
+    assert_path_exists testpath/"shot.png"
   end
 end
