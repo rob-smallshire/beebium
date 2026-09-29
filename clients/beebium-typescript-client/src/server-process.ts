@@ -7,14 +7,10 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 import { ServerStartupError, ServerNotFoundError } from "./exceptions.js";
+import { locateServer } from "./server-locator.js";
 import { VERSION } from "./version.js";
-
-/** Default build directory for the beebium server executables. */
-const DEFAULT_BUILD_DIRPATH = "/Users/rjs/Code/beebium/build/src/server";
 
 /** Map from model name to server executable suffix. */
 const MODEL_SUFFIXES: Record<string, string> = {
@@ -70,25 +66,14 @@ export class ServerProcess {
 
         if (options?.executableFilepath) {
             this.executableFilepath = options.executableFilepath;
-        } else if (process.env["BEEBIUM_SERVER"]) {
-            // Environment variable override (used in CI and when the server
-            // is not in the default build location).
-            this.executableFilepath = process.env["BEEBIUM_SERVER"];
         } else {
             const model = options?.model ?? "B";
             const suffix = MODEL_SUFFIXES[model];
             if (suffix === undefined) {
                 throw new ServerNotFoundError(`Unknown model: ${model}`);
             }
-            const executableName = `beebium-model-b${suffix}`;
-            const filepath = join(DEFAULT_BUILD_DIRPATH, executableName);
-            if (!existsSync(filepath)) {
-                throw new ServerNotFoundError(
-                    `Server executable not found at ${filepath}. ` +
-                    `Set the BEEBIUM_SERVER environment variable to the path of the server executable.`,
-                );
-            }
-            this.executableFilepath = filepath;
+            // BEEBIUM_SERVER, then the checkout build, then PATH.
+            this.executableFilepath = locateServer(`beebium-model-b${suffix}`);
         }
     }
 
