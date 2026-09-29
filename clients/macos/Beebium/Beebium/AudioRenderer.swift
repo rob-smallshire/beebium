@@ -83,6 +83,12 @@ final class AudioRenderer: @unchecked Sendable {
 
     private var highpassFilters: BiquadFilterBank
 
+    // MARK: - Playback pre-roll (jitter buffer policy)
+
+    /// Adaptive pre-roll gating reads from the ring buffer, so an underrun raises
+    /// the buffered latency instead of stuttering repeatedly (#126).
+    private let preRoll: AudioPreRoll
+
     // MARK: - DC Bias Metadata (from GetChannelStates)
 
     /// Per-channel DC bias voltage (atomic for thread-safe access)
@@ -134,6 +140,7 @@ final class AudioRenderer: @unchecked Sendable {
         self.ringBuffer = ringBuffer
         self.sampleRate = sampleRate
         self.maxFrameCount = maxFrameCount
+        self.preRoll = AudioPreRoll(sampleRate: Int(sampleRate))
 
         // Initialize filters
         highpassFilters = BiquadFilterBank(
@@ -182,12 +189,26 @@ final class AudioRenderer: @unchecked Sendable {
     ///   - frameCount: Number of frames to render
     ///   - leftBuffer: Left channel output buffer
     ///   - rightBuffer: Right channel output buffer
-    /// - Returns: Number of frames actually rendered
+    /// - Returns: The number of frames written to the output buffers. This is the
+    ///   whole callback (`min(frameCount, maxFrameCount)`): the buffers are always
+    ///   filled, with silence where the ring buffer had no data or the pre-roll is
+    ///   priming. Underruns are counted on the ring buffer, not inferred from here.
     func render(frameCount: Int, leftBuffer: UnsafeMutablePointer<Float>, rightBuffer: UnsafeMutablePointer<Float>) -> Int {
         let framesToRender = min(frameCount, maxFrameCount)
 
-        // Read from ring buffer
-        let samplesRead = ringBuffer.read(&packedSamples, count: framesToRender)
+        // Read from the ring buffer through the pre-roll. While priming it pulls
+        // nothing (this callback is silence) so the buffer refills to the target;
+        // otherwise it pulls the whole callback. A short read is an underrun: the
+        // ring buffer counts the silent frames, and the pre-roll raises the target
+        // and re-primes so the next stall of the same size rides through.
+        let framesToPull = preRoll.framesToPull(available: ringBuffer.available,
+                                                requested: framesToRender)
+        let samplesRead = framesToPull > 0
+            ? ringBuffer.read(&packedSamples, count: framesToPull)
+            : 0
+        if framesToPull > 0 && samplesRead < framesToPull {
+            preRoll.noteUnderrun()
+        }
 
         // Check mute state
         let isMuted = atomicMuted.load(ordering: .relaxed)
@@ -250,7 +271,9 @@ final class AudioRenderer: @unchecked Sendable {
             rightBuffer[i] = right
         }
 
-        return samplesRead
+        // The whole callback was written (audio then silence); underruns are
+        // accounted on the ring buffer and the pre-roll, not via this count.
+        return framesToRender
     }
 
     // MARK: - Volume Control (called from main thread)
@@ -333,6 +356,15 @@ final class AudioRenderer: @unchecked Sendable {
     func resetFilters() {
         highpassFilters.reset()
     }
+
+    /// Reset the playback pre-roll to its initial target and priming state. Call
+    /// on a fresh connection so buffered latency does not carry over a session.
+    func resetPreRoll() {
+        preRoll.reset()
+    }
+
+    /// The current buffered playback latency in milliseconds (pre-roll target).
+    var playbackLatencyMilliseconds: Int { preRoll.targetFillMilliseconds }
 
     // MARK: - Private Helpers
 

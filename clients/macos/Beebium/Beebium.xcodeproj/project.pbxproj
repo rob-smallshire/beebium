@@ -34,6 +34,7 @@
 		1AE92C3076119A47291BD4D7 /* NewMachineDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */; };
 		1AEDEA9B5B2CA4CC55909B84 /* BBCKeyCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152853E7E4735D1E7994275 /* BBCKeyCache.swift */; };
 		1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */; };
+		1D93F9B8DDEB19B857927731 /* AudioPreRoll.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BC15A775463F7A0F66447C8 /* AudioPreRoll.swift */; };
 		1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E556C71961C889896FAB4BD /* KeyboardSettingsPane.swift */; };
 		2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */; };
 		22DE4363A66E960D161ECD01 /* disc.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44DA8D133CDD247497229CA /* disc.grpc.swift */; };
@@ -226,6 +227,7 @@
 		15311FE0E08476CA352DD0FB /* SelectionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionCoordinator.swift; sourceTree = "<group>"; };
 		16524154FADCB403497AFB1F /* VideoSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsTests.swift; sourceTree = "<group>"; };
 		1B6DCFA44B730E3663D357C1 /* DiscImageDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageDrop.swift; sourceTree = "<group>"; };
+		1BC15A775463F7A0F66447C8 /* AudioPreRoll.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreRoll.swift; sourceTree = "<group>"; };
 		1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCModifierStateTests.swift; sourceTree = "<group>"; };
 		1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPowerMonitor.swift; sourceTree = "<group>"; };
 		1F66DA1B5AF0659B892650E5 /* TransientMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientMessageTests.swift; sourceTree = "<group>"; };
@@ -567,6 +569,7 @@
 				86F2683BAFB4C72B6644F473 /* AudioEngine.swift */,
 				5AC8AB6C51EB3EDA7D26CE6F /* AudioMixerState.swift */,
 				25D1F9F6D43714BB3F5B5CEB /* AudioMixerView.swift */,
+				1BC15A775463F7A0F66447C8 /* AudioPreRoll.swift */,
 				B86FF568406281481A0E0D88 /* AudioRenderer.swift */,
 				E5FAFDF7474D253DDBE042E3 /* AudioRingBuffer.swift */,
 				C152853E7E4735D1E7994275 /* BBCKeyCache.swift */,
@@ -884,6 +887,7 @@
 				02EAA3A16D440CCD12071A3D /* AudioEngine.swift in Sources */,
 				B778FD3CAB76C7B9AE5B7EF9 /* AudioMixerState.swift in Sources */,
 				A577F46504594230B85A9932 /* AudioMixerView.swift in Sources */,
+				1D93F9B8DDEB19B857927731 /* AudioPreRoll.swift in Sources */,
 				6573E0F14063A6C83E3204CA /* AudioRenderer.swift in Sources */,
 				BB411BA73F2726E174FF3054 /* AudioRingBuffer.swift in Sources */,
 				1AEDEA9B5B2CA4CC55909B84 /* BBCKeyCache.swift in Sources */,

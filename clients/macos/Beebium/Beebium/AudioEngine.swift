@@ -116,8 +116,10 @@ final class AudioEngine: @unchecked Sendable {
         try engine.start()
         isRunning = true
 
-        // Reset filters on start to clear any stale state
+        // Reset filters and the playback pre-roll on start to clear any stale
+        // state, so buffered latency does not carry over from a previous session.
         renderer.resetFilters()
+        renderer.resetPreRoll()
     }
 
     /// Stop audio playback.

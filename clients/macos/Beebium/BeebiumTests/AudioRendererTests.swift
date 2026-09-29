@@ -27,12 +27,15 @@ final class AudioRendererTests: XCTestCase {
     // the valid float range, even during the 10 Hz high-pass settling transient
     // where the unipolar DC step pushes the per-channel signal toward full scale.
     func testVolume0OnsetOnAllChannelsStaysInRange() {
-        let ring = AudioRingBuffer(capacity: 8192)
-        let renderer = AudioRenderer(ringBuffer: ring, sampleRate: 48000, maxFrameCount: 4096)
+        let chunk = 4096
+        let chunks = 3   // > the pre-roll's 120 ms (5760 frames) target, so it plays
+        let ring = AudioRingBuffer(capacity: AudioPreRoll.capacityFrames(sampleRate: 48000))
+        let renderer = AudioRenderer(ringBuffer: ring, sampleRate: 48000, maxFrameCount: chunk)
 
         // Volume 0 (max): high level is Sn76489 full scale (16384). A square that
-        // starts from silence is an onset on every channel at once.
-        let count = 4096
+        // starts from silence is an onset on every channel at once. Buffer several
+        // chunks up front so the pre-roll primes and then plays from the onset.
+        let count = chunk * chunks
         var frames = [UInt64](repeating: 0, count: count)
         for i in 0..<count {
             frames[i] = frame(all: (i % 2 == 0) ? 16384 : 0)
@@ -42,23 +45,25 @@ final class AudioRendererTests: XCTestCase {
         }
         XCTAssertEqual(written, count)
 
-        var left = [Float](repeating: 0, count: count)
-        var right = [Float](repeating: 0, count: count)
-        let rendered = left.withUnsafeMutableBufferPointer { lb in
-            right.withUnsafeMutableBufferPointer { rb in
-                renderer.render(frameCount: count,
-                                leftBuffer: lb.baseAddress!,
-                                rightBuffer: rb.baseAddress!)
-            }
-        }
-        XCTAssertEqual(rendered, count)
-
+        // Render the buffered audio one callback at a time and check every sample.
         var peak: Float = 0
-        for v in left + right {
-            XCTAssertTrue(v.isFinite, "non-finite output sample")
-            XCTAssertGreaterThanOrEqual(v, -1.0, "output below -1.0 (hard clip)")
-            XCTAssertLessThanOrEqual(v, 1.0, "output above +1.0 (hard clip)")
-            peak = max(peak, abs(v))
+        for _ in 0..<chunks {
+            var left = [Float](repeating: 0, count: chunk)
+            var right = [Float](repeating: 0, count: chunk)
+            let rendered = left.withUnsafeMutableBufferPointer { lb in
+                right.withUnsafeMutableBufferPointer { rb in
+                    renderer.render(frameCount: chunk,
+                                    leftBuffer: lb.baseAddress!,
+                                    rightBuffer: rb.baseAddress!)
+                }
+            }
+            XCTAssertEqual(rendered, chunk)
+            for v in left + right {
+                XCTAssertTrue(v.isFinite, "non-finite output sample")
+                XCTAssertGreaterThanOrEqual(v, -1.0, "output below -1.0 (hard clip)")
+                XCTAssertLessThanOrEqual(v, 1.0, "output above +1.0 (hard clip)")
+                peak = max(peak, abs(v))
+            }
         }
         // The pipeline should produce real signal, not silence.
         XCTAssertGreaterThan(peak, 0.1)

@@ -129,7 +129,10 @@ final class AudioClient: ObservableObject, Disconnectable {
     // MARK: - Initialization
 
     init() {
-        ringBuffer = AudioRingBuffer()
+        // Size the ring buffer to the pre-roll's 500 ms envelope so the adaptive
+        // target has room to climb to 480 ms under a starving host (#126). The
+        // steady-state latency stays at the pre-roll's 120 ms floor.
+        ringBuffer = AudioRingBuffer(capacity: AudioPreRoll.capacityFrames(sampleRate: 48000))
         renderer = AudioRenderer(ringBuffer: ringBuffer)
     }
 
