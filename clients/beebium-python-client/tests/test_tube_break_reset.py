@@ -28,7 +28,6 @@ reappears -- evidence that the coprocessor was reset alongside the host.
 
 from __future__ import annotations
 
-import sys
 import time
 from pathlib import Path
 
@@ -48,25 +47,13 @@ def bbc_anfs_tube(
     beebium_roms_dirpath: Path,
     mos_filepath: Path,
     basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
 ):
     """Model B with ROM/RAM board, ANFS in slot 9, and a 65C02 Tube.
 
     Boots, waits for the Tube banner, then yields the running emulator.
     Each test gets a fresh emulator instance.
     """
-    repo_root = Path(__file__).parent.parent.parent.parent
-    exe_suffix = ".exe" if sys.platform == "win32" else ""
-    server_filepath = None
-    for candidate in [
-        repo_root / "build-release" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-        repo_root / "build" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-    ]:
-        if candidate.exists():
-            server_filepath = candidate
-            break
-    if server_filepath is None:
-        pytest.skip("beebium-model-b-romram not found")
-
     anfs_filepath = beebium_roms_dirpath / "acorn-anfs_4_18.rom"
     if not anfs_filepath.exists():
         pytest.skip(f"ANFS ROM not found: {anfs_filepath}")
@@ -75,7 +62,8 @@ def bbc_anfs_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-romram",
             extra_args=[
                 "--sideways",
                 f"slot=9:type=rom:image={anfs_filepath}",

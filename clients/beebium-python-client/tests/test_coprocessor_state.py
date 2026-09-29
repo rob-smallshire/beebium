@@ -18,7 +18,6 @@ host and coprocessor report independent CPU registers and memory.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -29,21 +28,13 @@ from beebium.client.screen import screen_contains
 
 
 @pytest.fixture(scope="function")
-def bbc_with_tube(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath: Path | None):
+def bbc_with_tube(
+    beebium_roms_dirpath: Path,
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+):
     """Model B ROM/RAM board with Tube 65C02."""
-    repo_root = Path(__file__).parent.parent.parent.parent
-    exe_suffix = ".exe" if sys.platform == "win32" else ""
-    server = None
-    for c in [
-        repo_root / "build-release" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-        repo_root / "build" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-    ]:
-        if c.exists():
-            server = c
-            break
-    if server is None:
-        pytest.skip("beebium-model-b-romram not found")
-
     anfs = beebium_roms_dirpath / "acorn-anfs_4_18.rom"
     if not anfs.exists():
         pytest.skip(f"ANFS ROM not found: {anfs}")
@@ -52,7 +43,8 @@ def bbc_with_tube(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server,
+            server=beebium_server_filepath,
+            variant="model-b-romram",
             extra_args=[
                 "--sideways",
                 f"slot=9:type=rom:image={anfs}",

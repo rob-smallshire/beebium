@@ -19,7 +19,6 @@ matching interactive use.
 
 from __future__ import annotations
 
-import sys
 import time
 from pathlib import Path
 
@@ -44,21 +43,13 @@ def _wait_for(bbc, text, timeout=60):
 
 
 @pytest.fixture(scope="function")
-def bbc(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath: Path | None):
+def bbc(
+    beebium_roms_dirpath: Path,
+    mos_filepath: Path,
+    basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
+):
     """Model B ROM/RAM board with Tube and ANFS. No coupled stepping."""
-    repo_root = Path(__file__).parent.parent.parent.parent
-    exe_suffix = ".exe" if sys.platform == "win32" else ""
-    server = None
-    for c in [
-        repo_root / "build-release" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-        repo_root / "build" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-    ]:
-        if c.exists():
-            server = c
-            break
-    if server is None:
-        pytest.skip("beebium-model-b-romram not found")
-
     anfs = beebium_roms_dirpath / "acorn-anfs_4_18.rom"
     if not anfs.exists():
         pytest.skip(f"ANFS ROM not found: {anfs}")
@@ -67,7 +58,8 @@ def bbc(beebium_roms_dirpath: Path, mos_filepath: Path, basic_filepath: Path | N
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server,
+            server=beebium_server_filepath,
+            variant="model-b-romram",
             extra_args=[
                 "--sideways",
                 f"slot=9:type=rom:image={anfs}",

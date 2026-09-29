@@ -20,7 +20,6 @@ many times and assert the server stays alive.
 
 from __future__ import annotations
 
-import sys
 import time
 from pathlib import Path
 
@@ -34,18 +33,6 @@ from beebium.client.screen import dump_screen, read_mode7_screen, screen_contain
 BREAK_HOLD_SECONDS = 0.05
 BREAK_INTERVAL_EMULATED_SECONDS = 1.0
 BREAK_CYCLES = 20
-
-
-def _find_romram_server() -> Path | None:
-    repo_root = Path(__file__).parent.parent.parent.parent
-    exe_suffix = ".exe" if sys.platform == "win32" else ""
-    for candidate in [
-        repo_root / "build-release" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-        repo_root / "build" / "src" / "server" / f"beebium-model-b-romram{exe_suffix}",
-    ]:
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def _server_alive(bbc: Beebium) -> bool:
@@ -151,17 +138,15 @@ def _stress_break_cycles(
 def bbc_romram(
     mos_filepath: Path,
     basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
 ):
     """Model B with ROM/RAM board, no extensions, booted to BASIC."""
-    server_filepath = _find_romram_server()
-    if server_filepath is None:
-        pytest.skip("beebium-model-b-romram not found")
-
     try:
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-romram",
             startup_timeout=20.0,
         ) as bbc:
             ok = bbc.run_until_or_timeout(
@@ -197,12 +182,9 @@ def bbc_anfs_tube(
     beebium_roms_dirpath: Path,
     mos_filepath: Path,
     basic_filepath: Path | None,
+    beebium_server_filepath: Path | None,
 ):
     """Model B with ROM/RAM board, ANFS in slot 9, and a 65C02 Tube, booted."""
-    server_filepath = _find_romram_server()
-    if server_filepath is None:
-        pytest.skip("beebium-model-b-romram not found")
-
     anfs_filepath = beebium_roms_dirpath / "acorn-anfs_4_18.rom"
     if not anfs_filepath.exists():
         pytest.skip(f"ANFS ROM not found: {anfs_filepath}")
@@ -211,7 +193,8 @@ def bbc_anfs_tube(
         with Beebium.launch(
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
-            server_filepath=server_filepath,
+            server=beebium_server_filepath,
+            variant="model-b-romram",
             extra_args=[
                 "--sideways",
                 f"slot=9:type=rom:image={anfs_filepath}",
