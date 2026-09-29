@@ -280,6 +280,11 @@ public:
             response->set_in_hsync(crtc.in_hsync());
             response->set_in_vsync(crtc.in_vsync());
             response->set_display_enabled(crtc.display_enabled());
+
+            // Beam position within the field
+            const auto& video = machine_.video_binding();
+            response->set_odd_field(video.field_odd());
+            response->set_cycles_since_vsync(machine_.cycle_count() - video.last_vsync_cycle());
         });
 
         return grpc::Status::OK;

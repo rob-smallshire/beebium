@@ -20,6 +20,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import grpc
+
 from beebium.client._proto import video_pb2, video_pb2_grpc
 from beebium.client.exceptions import TimeoutError
 
@@ -624,20 +626,49 @@ class Video:
         """
         self._stub.ReleaseScreen(video_pb2.ReleaseScreenRequest(hold_id=hold_id))
 
-    def capture_frame(self, timeout: float = 1.0) -> Frame:
+    def capture_frame(self, timeout: float = 1.0, *, after_cycle: int | None = None) -> Frame:
         """Capture a single frame.
 
-        Starts a frame stream, captures one frame, and stops.
+        Without ``after_cycle``, starts a frame stream, captures one frame, and
+        stops.
+
+        With ``after_cycle``, returns the frame the machine completed at or
+        after that emulated cycle (``frame.cycle_count >= after_cycle``): the
+        current frame if it already qualifies, otherwise the next to complete,
+        never one stamped earlier. Only the latest frame is held, so if the
+        current frame qualifies an earlier qualifying one cannot be returned.
+        The machine must be running (or be run) for a later frame to complete;
+        a stopped machine waits out ``timeout``. For example, to see the field
+        the guest was drawing into when it reached a routine::
+
+            reached = bbc.debugger.run_to(labels["tick_done"]).cycle_count
+            bbc.debugger.ensure_running()
+            frame = bbc.video.capture_frame(after_cycle=reached)
 
         Args:
             timeout: Maximum time to wait for a frame (seconds).
+            after_cycle: The emulated cycle the frame must have completed at
+                or after.
 
         Returns:
             The captured frame.
 
         Raises:
-            TimeoutError: If no frame is received within timeout.
+            TimeoutError: If no such frame is received within timeout.
         """
+        if after_cycle is not None:
+            request = video_pb2.CaptureFrameRequest(
+                after_cycle=after_cycle, timeout_ms=max(1, int(timeout * 1000))
+            )
+            try:
+                # The server bounds the wait; the RPC deadline only backs it up.
+                return _frame_from_proto(self._stub.CaptureFrame(request, timeout=timeout + 5.0))
+            except grpc.RpcError as e:
+                if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+                    raise TimeoutError(
+                        f"No frame completed at or after cycle {after_cycle} within {timeout:g}s"
+                    ) from None
+                raise
         for frame in self.stream_frames(max_frames=1):
             return frame
         raise TimeoutError("No frame received")

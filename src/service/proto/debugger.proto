@@ -466,6 +466,14 @@ message CrtcState {
     bool in_hsync = 9;
     bool in_vsync = 10;
     bool display_enabled = 11;
+
+    // Beam position, with column, row and raster above: which field is being
+    // drawn and how far into it the beam is. A field starts at a vsync rising
+    // edge.
+    bool odd_field = 12;            // The field in progress is the odd (first)
+                                    // field of an interlaced frame; meaningful
+                                    // only when R8 selects interlace
+    uint64 cycles_since_vsync = 13; // CPU cycles since the field started
 }
 
 // === Video ULA ===

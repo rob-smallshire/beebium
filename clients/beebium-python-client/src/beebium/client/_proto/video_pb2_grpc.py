@@ -52,6 +52,11 @@ class VideoServiceStub(object):
                 request_serializer=video__pb2.SubscribeFramesRequest.SerializeToString,
                 response_deserializer=video__pb2.Frame.FromString,
                 _registered_method=True)
+        self.CaptureFrame = channel.unary_unary(
+                '/beebium.VideoService/CaptureFrame',
+                request_serializer=video__pb2.CaptureFrameRequest.SerializeToString,
+                response_deserializer=video__pb2.Frame.FromString,
+                _registered_method=True)
         self.GetConfig = channel.unary_unary(
                 '/beebium.VideoService/GetConfig',
                 request_serializer=video__pb2.GetConfigRequest.SerializeToString,
@@ -90,6 +95,22 @@ class VideoServiceServicer(object):
 
     def SubscribeFrames(self, request, context):
         """Stream frames as they complete (at VSYNC)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CaptureFrame(self, request, context):
+        """The frame the machine completed at or after an emulated cycle: for a
+        client that has run to a known cycle and wants the field the guest was
+        drawing into then, not whichever frame happens to be current.
+
+        Returns the earliest frame the server sees whose cycle_count is at least
+        after_cycle: the current frame if it already qualifies (only the latest
+        frame is held, so one that qualified before it cannot be returned),
+        otherwise the next to complete; never one stamped before after_cycle.
+        The machine must run for a later frame to complete. Fails with
+        DEADLINE_EXCEEDED if none arrives within timeout_ms.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -172,6 +193,11 @@ def add_VideoServiceServicer_to_server(servicer, server):
                     request_deserializer=video__pb2.SubscribeFramesRequest.FromString,
                     response_serializer=video__pb2.Frame.SerializeToString,
             ),
+            'CaptureFrame': grpc.unary_unary_rpc_method_handler(
+                    servicer.CaptureFrame,
+                    request_deserializer=video__pb2.CaptureFrameRequest.FromString,
+                    response_serializer=video__pb2.Frame.SerializeToString,
+            ),
             'GetConfig': grpc.unary_unary_rpc_method_handler(
                     servicer.GetConfig,
                     request_deserializer=video__pb2.GetConfigRequest.FromString,
@@ -230,6 +256,33 @@ class VideoService(object):
             target,
             '/beebium.VideoService/SubscribeFrames',
             video__pb2.SubscribeFramesRequest.SerializeToString,
+            video__pb2.Frame.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CaptureFrame(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.VideoService/CaptureFrame',
+            video__pb2.CaptureFrameRequest.SerializeToString,
             video__pb2.Frame.FromString,
             options,
             channel_credentials,

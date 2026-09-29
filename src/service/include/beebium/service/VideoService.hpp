@@ -61,6 +61,11 @@ public:
         const SubscribeFramesRequest* request,
         grpc::ServerWriter<Frame>* writer) override;
 
+    grpc::Status CaptureFrame(
+        grpc::ServerContext* context,
+        const CaptureFrameRequest* request,
+        Frame* response) override;
+
     grpc::Status GetConfig(
         grpc::ServerContext* context,
         const GetConfigRequest* request,

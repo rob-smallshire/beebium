@@ -47,6 +47,11 @@ class CrtcState:
     in_vsync: bool
     display_enabled: bool
 
+    # Beam position within the field (with column, row and raster above). A
+    # field starts at a vsync rising edge.
+    odd_field: bool = True  # The field in progress is the odd (first) field; interlace only
+    cycles_since_vsync: int = 0  # CPU cycles since the field started
+
     # Register name constants
     R0_HTOTAL = 0
     R1_HDISPLAYED = 1
@@ -211,6 +216,8 @@ class Crtc:
             in_hsync=response.in_hsync,
             in_vsync=response.in_vsync,
             display_enabled=response.display_enabled,
+            odd_field=response.odd_field,
+            cycles_since_vsync=response.cycles_since_vsync,
         )
 
     @property

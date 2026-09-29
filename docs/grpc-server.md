@@ -131,6 +131,23 @@ Each frame contains:
 - `frameNumber` - Monotonically increasing frame counter
 - `width`, `height` - Frame dimensions (736×576)
 - `pixels` - BGRA32 pixel data (~1.7MB per frame)
+- `cycleCount` - Emulated CPU cycle at which the frame completed
+
+#### CaptureFrame
+
+Returns the frame the machine completed at or after an emulated cycle
+(`cycleCount >= afterCycle`): the current frame if it already qualifies,
+otherwise the next to complete, never one stamped earlier. Only the latest
+frame is held, so an earlier qualifying frame cannot be returned once a newer
+one has replaced it. The machine must run for a later frame to complete; the
+server waits up to `timeoutMs` (default 5000, at most 60000) and then fails
+with `DEADLINE_EXCEEDED`.
+
+```bash
+grpcurl -plaintext -d '{"afterCycle": 4000000, "timeoutMs": 2000}' \
+  -import-path src/service/proto -proto video.proto \
+  localhost:48875 beebium.VideoService/CaptureFrame
+```
 
 #### GetScreenText
 
@@ -494,7 +511,7 @@ Read-only access to BBC Micro peripheral state. Host-only; parasite returns UNIM
 |-----|---------|-------------|
 | `GetSystemViaState` | `ViaState` | System VIA (IC1): keyboard scanning, sound, timers, interrupts |
 | `GetUserViaState` | `ViaState` | User VIA (IC69): user port, printer, timer interrupts |
-| `GetCrtcState` | `CrtcState` | 6845 CRTC: 18 registers, timing counters, sync state |
+| `GetCrtcState` | `CrtcState` | 6845 CRTC: 18 registers, timing counters, sync state, and the beam's field parity and cycles since the field's vsync |
 | `GetVideoUlaState` | `VideoUlaState` | Video ULA: control register and 16-entry palette |
 | `GetAddressableLatchState` | `AddressableLatchState` | IC32 latch: screen base, LEDs, sound/speech enables |
 | `GetSoundGeneratorState` | `SoundGeneratorState` | SN76489: 4 channels with frequency, volume, LFSR state |

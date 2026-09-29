@@ -1432,6 +1432,8 @@ class CrtcState(_message.Message):
     IN_HSYNC_FIELD_NUMBER: _builtins.int
     IN_VSYNC_FIELD_NUMBER: _builtins.int
     DISPLAY_ENABLED_FIELD_NUMBER: _builtins.int
+    ODD_FIELD_FIELD_NUMBER: _builtins.int
+    CYCLES_SINCE_VSYNC_FIELD_NUMBER: _builtins.int
     address_register: _builtins.int
     """Currently selected register (address register)"""
     column: _builtins.int
@@ -1454,6 +1456,17 @@ class CrtcState(_message.Message):
     """Sync state"""
     in_vsync: _builtins.bool
     display_enabled: _builtins.bool
+    odd_field: _builtins.bool
+    """Beam position, with column, row and raster above: which field is being
+    drawn and how far into it the beam is. A field starts at a vsync rising
+    edge.
+    The field in progress is the odd (first)
+    """
+    cycles_since_vsync: _builtins.int
+    """field of an interlaced frame; meaningful
+    only when R8 selects interlace
+    CPU cycles since the field started
+    """
     @_builtins.property
     def registers(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
         """All 18 registers (R0-R17, includes write-only timing registers)"""
@@ -1472,10 +1485,12 @@ class CrtcState(_message.Message):
         in_hsync: _builtins.bool = ...,
         in_vsync: _builtins.bool = ...,
         display_enabled: _builtins.bool = ...,
+        odd_field: _builtins.bool = ...,
+        cycles_since_vsync: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_register", b"address_register", "char_addr", b"char_addr", "column", b"column", "cursor_position", b"cursor_position", "display_enabled", b"display_enabled", "in_hsync", b"in_hsync", "in_vsync", b"in_vsync", "raster", b"raster", "registers", b"registers", "row", b"row", "screen_start", b"screen_start"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["address_register", b"address_register", "char_addr", b"char_addr", "column", b"column", "cursor_position", b"cursor_position", "cycles_since_vsync", b"cycles_since_vsync", "display_enabled", b"display_enabled", "in_hsync", b"in_hsync", "in_vsync", b"in_vsync", "odd_field", b"odd_field", "raster", b"raster", "registers", b"registers", "row", b"row", "screen_start", b"screen_start"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

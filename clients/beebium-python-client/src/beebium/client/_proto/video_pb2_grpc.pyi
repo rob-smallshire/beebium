@@ -47,6 +47,18 @@ class VideoServiceStub:
     def __new__(cls, channel: _aio.Channel) -> VideoServiceAsyncStub: ...
     SubscribeFrames: _grpc.UnaryStreamMultiCallable[_video_pb2.SubscribeFramesRequest, _video_pb2.Frame]
     """Stream frames as they complete (at VSYNC)"""
+    CaptureFrame: _grpc.UnaryUnaryMultiCallable[_video_pb2.CaptureFrameRequest, _video_pb2.Frame]
+    """The frame the machine completed at or after an emulated cycle: for a
+    client that has run to a known cycle and wants the field the guest was
+    drawing into then, not whichever frame happens to be current.
+
+    Returns the earliest frame the server sees whose cycle_count is at least
+    after_cycle: the current frame if it already qualifies (only the latest
+    frame is held, so one that qualified before it cannot be returned),
+    otherwise the next to complete; never one stamped before after_cycle.
+    The machine must run for a later frame to complete. Fails with
+    DEADLINE_EXCEEDED if none arrives within timeout_ms.
+    """
     GetConfig: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetConfigRequest, _video_pb2.VideoConfig]
     """Get current video configuration"""
     GetTeletextScreen: _grpc.UnaryUnaryMultiCallable[_video_pb2.GetTeletextScreenRequest, _video_pb2.TeletextScreen]
@@ -99,6 +111,18 @@ class VideoServiceAsyncStub(VideoServiceStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     SubscribeFrames: _aio.UnaryStreamMultiCallable[_video_pb2.SubscribeFramesRequest, _video_pb2.Frame]  # type: ignore[assignment]
     """Stream frames as they complete (at VSYNC)"""
+    CaptureFrame: _aio.UnaryUnaryMultiCallable[_video_pb2.CaptureFrameRequest, _video_pb2.Frame]  # type: ignore[assignment]
+    """The frame the machine completed at or after an emulated cycle: for a
+    client that has run to a known cycle and wants the field the guest was
+    drawing into then, not whichever frame happens to be current.
+
+    Returns the earliest frame the server sees whose cycle_count is at least
+    after_cycle: the current frame if it already qualifies (only the latest
+    frame is held, so one that qualified before it cannot be returned),
+    otherwise the next to complete; never one stamped before after_cycle.
+    The machine must run for a later frame to complete. Fails with
+    DEADLINE_EXCEEDED if none arrives within timeout_ms.
+    """
     GetConfig: _aio.UnaryUnaryMultiCallable[_video_pb2.GetConfigRequest, _video_pb2.VideoConfig]  # type: ignore[assignment]
     """Get current video configuration"""
     GetTeletextScreen: _aio.UnaryUnaryMultiCallable[_video_pb2.GetTeletextScreenRequest, _video_pb2.TeletextScreen]  # type: ignore[assignment]
@@ -154,6 +178,24 @@ class VideoServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_abc.Iterator[_video_pb2.Frame], _abc.AsyncIterator[_video_pb2.Frame]]:
         """Stream frames as they complete (at VSYNC)"""
+
+    @_abc_1.abstractmethod
+    def CaptureFrame(
+        self,
+        request: _video_pb2.CaptureFrameRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_video_pb2.Frame, _abc.Awaitable[_video_pb2.Frame]]:
+        """The frame the machine completed at or after an emulated cycle: for a
+        client that has run to a known cycle and wants the field the guest was
+        drawing into then, not whichever frame happens to be current.
+
+        Returns the earliest frame the server sees whose cycle_count is at least
+        after_cycle: the current frame if it already qualifies (only the latest
+        frame is held, so one that qualified before it cannot be returned),
+        otherwise the next to complete; never one stamped before after_cycle.
+        The machine must run for a later frame to complete. Fails with
+        DEADLINE_EXCEEDED if none arrives within timeout_ms.
+        """
 
     @_abc_1.abstractmethod
     def GetConfig(

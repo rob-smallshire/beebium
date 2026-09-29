@@ -16,7 +16,10 @@
 #include "beebium/TeletextText.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -499,6 +502,56 @@ grpc::Status VideoServiceImpl::SubscribeFrames(
     }
 
     return grpc::Status::OK;
+}
+
+grpc::Status VideoServiceImpl::CaptureFrame(
+    grpc::ServerContext* context,
+    const CaptureFrameRequest* request,
+    Frame* response) {
+
+    constexpr uint32_t kDefaultTimeoutMs = 5000;
+    constexpr uint32_t kMaxTimeoutMs = 60000;
+    const uint32_t timeout_ms = request->timeout_ms() == 0
+        ? kDefaultTimeoutMs
+        : std::min(request->timeout_ms(), kMaxTimeoutMs);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+
+    std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
+    const auto stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
+    uint64_t seen_version = 0;
+
+    // Frames complete every 20 ms or so; look every millisecond, so each one
+    // is examined while it is still the current frame.
+    while (!context->IsCancelled()) {
+        const uint64_t version = frame_buffer_.version();
+        if (version != 0 && version != seen_version) {
+            seen_version = version;
+            // Metadata and pixels are read one after the other; retry if a
+            // frame completes between them, so they describe the same frame.
+            FrameMetadata meta;
+            bool coherent = false;
+            for (int attempt = 0; attempt < 8 && !coherent; ++attempt) {
+                const uint64_t before = frame_buffer_.version();
+                meta = frame_buffer_.metadata();
+                frame_buffer_.copy_frame(pixels.data(), pixels.size());
+                coherent = frame_buffer_.version() == before;
+            }
+            if (coherent && meta.cycle_count >= request->after_cycle()) {
+                to_proto_frame(meta, pixels, stride, response);
+                return grpc::Status::OK;
+            }
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return grpc::Status(
+                grpc::StatusCode::DEADLINE_EXCEEDED,
+                "no frame completed at or after cycle " +
+                    std::to_string(request->after_cycle()) + " within " +
+                    std::to_string(timeout_ms) + " ms");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return grpc::Status(grpc::StatusCode::CANCELLED, "client cancelled");
 }
 
 grpc::Status VideoServiceImpl::GetConfig(

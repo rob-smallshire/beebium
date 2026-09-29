@@ -747,3 +747,84 @@ TEST_CASE("VideoService HoldScreen can return the still it captured",
     REQUIRE(read_screen_text(fixture, held, &still_id).ok());
     CHECK(held.frame_number() == frame.frame_number());
 }
+
+TEST_CASE("VideoService CaptureFrame returns a frame completed at or after a cycle",
+          "[grpc][video][cycle]") {
+    VideoTestFixture fixture;
+
+    std::atomic<bool> running{true};
+    std::atomic<uint64_t> cycles_run{0};
+    std::thread emu_thread([&]() {
+        while (running) {
+            fixture.run_cycles(20000);
+            cycles_run = fixture.machine().cycle_count();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+
+    // Ask repeatedly for frames completed after a cycle the machine has not
+    // reached yet: each must be stamped at or after it, never before.
+    bool all_ok = true;
+    std::vector<uint64_t> asked, stamped;
+    for (int i = 0; i < 5; ++i) {
+        const uint64_t after = cycles_run.load() + 50000;
+        grpc::ClientContext ctx;
+        beebium::CaptureFrameRequest req;
+        req.set_after_cycle(after);
+        req.set_timeout_ms(5000);
+        beebium::Frame frame;
+        auto status = fixture.stub().CaptureFrame(&ctx, req, &frame);
+        all_ok = all_ok && status.ok();
+        asked.push_back(after);
+        stamped.push_back(frame.cycle_count());
+    }
+
+    running = false;
+    emu_thread.join();
+
+    REQUIRE(all_ok);
+    for (size_t i = 0; i < asked.size(); ++i) {
+        INFO("capture " << i);
+        CHECK(stamped[i] >= asked[i]);
+        // Frames complete every field (~40,000 cycles, or 80,000 for an
+        // interlaced MODE 7 frame), so the first one at or after the cycle
+        // is well within two frames of it.
+        CHECK(stamped[i] < asked[i] + 2 * 80000 + 20000);
+    }
+}
+
+TEST_CASE("VideoService CaptureFrame gives up at its deadline on a stopped machine",
+          "[grpc][video][cycle]") {
+    VideoTestFixture fixture;
+    fixture.run_cycles(200000);  // some frames, then the machine stands still
+
+    grpc::ClientContext ctx;
+    beebium::CaptureFrameRequest req;
+    req.set_after_cycle(fixture.machine().cycle_count() + 1'000'000);
+    req.set_timeout_ms(200);
+    beebium::Frame frame;
+    const auto start = std::chrono::steady_clock::now();
+    auto status = fixture.stub().CaptureFrame(&ctx, req, &frame);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+
+    CHECK(status.error_code() == grpc::StatusCode::DEADLINE_EXCEEDED);
+    CHECK(elapsed >= std::chrono::milliseconds(200));
+    CHECK(elapsed < std::chrono::milliseconds(2000));
+}
+
+TEST_CASE("VideoService CaptureFrame with after_cycle 0 returns the current frame",
+          "[grpc][video][cycle]") {
+    VideoTestFixture fixture;
+    fixture.run_cycles(200000);
+    // Give the render thread time to consume the batches.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    grpc::ClientContext ctx;
+    beebium::CaptureFrameRequest req;
+    req.set_timeout_ms(1000);
+    beebium::Frame frame;
+    REQUIRE(fixture.stub().CaptureFrame(&ctx, req, &frame).ok());
+    CHECK(frame.cycle_count() != 0);
+    CHECK(frame.cycle_count() <= fixture.machine().cycle_count());
+    CHECK(frame.pixels().size() == static_cast<size_t>(frame.width()) * frame.height() * 4);
+}

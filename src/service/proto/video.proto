@@ -7,6 +7,18 @@ service VideoService {
     // Stream frames as they complete (at VSYNC)
     rpc SubscribeFrames(SubscribeFramesRequest) returns (stream Frame);
 
+    // The frame the machine completed at or after an emulated cycle: for a
+    // client that has run to a known cycle and wants the field the guest was
+    // drawing into then, not whichever frame happens to be current.
+    //
+    // Returns the earliest frame the server sees whose cycle_count is at least
+    // after_cycle: the current frame if it already qualifies (only the latest
+    // frame is held, so one that qualified before it cannot be returned),
+    // otherwise the next to complete; never one stamped before after_cycle.
+    // The machine must run for a later frame to complete. Fails with
+    // DEADLINE_EXCEEDED if none arrives within timeout_ms.
+    rpc CaptureFrame(CaptureFrameRequest) returns (Frame);
+
     // Get current video configuration
     rpc GetConfig(GetConfigRequest) returns (VideoConfig);
 
@@ -55,6 +67,15 @@ service VideoService {
 
 message SubscribeFramesRequest {
     // Future: format preferences, scaling options
+}
+
+message CaptureFrameRequest {
+    // The emulated CPU cycle the frame must have completed at or after
+    // (Frame.cycle_count >= after_cycle). 0 accepts the current frame.
+    uint64 after_cycle = 1;
+    // How long the server waits for such a frame, in wall-clock
+    // milliseconds. 0 means 5000; values above 60000 are clamped to 60000.
+    uint32 timeout_ms = 2;
 }
 
 // Field ordering for interlaced frames.

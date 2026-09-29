@@ -58,6 +58,15 @@ struct VideoBinding {
         // Always update VSYNC for system VIA timing (CA1 line)
         hardware.system_via_peripheral.set_vsync(output.vsync != 0);
 
+        // Note where the beam is: each vsync rising edge starts a field.
+        if (output.vsync && !last_vsync_) {
+            last_vsync_cycle_ = cycle_source_ ? *cycle_source_ : 0;
+            // odd_field toggles at the end of the vertical displayed area, so
+            // at vsync it already names the field that is starting.
+            field_odd_ = output.odd_field != 0;
+        }
+        last_vsync_ = output.vsync != 0;
+
         // Render pixels only if video output enabled
         if (hardware.video_output.has_value()) {
             renderer.render(output);
@@ -67,6 +76,26 @@ struct VideoBinding {
     void reset() {
         renderer.reset();
     }
+
+    // The machine's cycle counter, read to note when each field starts.
+    void set_cycle_source(const uint64_t* cycle_count) {
+        cycle_source_ = cycle_count;
+        renderer.set_cycle_source(cycle_count);
+    }
+
+    // The emulated cycle of the latest vsync rising edge (the start of the
+    // field in progress), or 0 if there has been none.
+    uint64_t last_vsync_cycle() const { return last_vsync_cycle_; }
+
+    // Whether the field in progress is the odd (first) field of an
+    // interlaced frame. Meaningful only when the CRTC interlaces (R8 bit 0).
+    bool field_odd() const { return field_odd_; }
+
+private:
+    const uint64_t* cycle_source_ = nullptr;
+    uint64_t last_vsync_cycle_ = 0;
+    bool last_vsync_ = false;
+    bool field_odd_ = true;
 };
 
 } // namespace beebium

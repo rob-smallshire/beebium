@@ -236,6 +236,34 @@ class SubscribeFramesRequest(_message.Message):
 Global___SubscribeFramesRequest: _TypeAlias = SubscribeFramesRequest  # noqa: Y015
 
 @_typing.final
+class CaptureFrameRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    AFTER_CYCLE_FIELD_NUMBER: _builtins.int
+    TIMEOUT_MS_FIELD_NUMBER: _builtins.int
+    after_cycle: _builtins.int
+    """The emulated CPU cycle the frame must have completed at or after
+    (Frame.cycle_count >= after_cycle). 0 accepts the current frame.
+    """
+    timeout_ms: _builtins.int
+    """How long the server waits for such a frame, in wall-clock
+    milliseconds. 0 means 5000; values above 60000 are clamped to 60000.
+    """
+    def __init__(
+        self,
+        *,
+        after_cycle: _builtins.int = ...,
+        timeout_ms: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["after_cycle", b"after_cycle", "timeout_ms", b"timeout_ms"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___CaptureFrameRequest: _TypeAlias = CaptureFrameRequest  # noqa: Y015
+
+@_typing.final
 class Frame(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

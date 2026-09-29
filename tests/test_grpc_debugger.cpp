@@ -2449,3 +2449,54 @@ TEST_CASE("ExecutionState at a fresh stop is at a boundary", "[grpc][debugger][b
     DebuggerTestFixture fixture;
     CHECK(get_state_via_grpc(fixture).at_instruction_boundary());
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// Beam position in CrtcState (#117)
+//////////////////////////////////////////////////////////////////////////////
+
+TEST_CASE("CrtcState beam position advances within a field and resets at vsync",
+          "[grpc][debugger][crtc][beam]") {
+    DebuggerTestFixture fixture;
+    auto& machine = fixture.machine();
+    machine.run(2'000'000);  // boot into MODE 7, interlaced
+
+    auto crtc_state = [&] {
+        grpc::ClientContext ctx;
+        beebium::GetCrtcStateRequest req;
+        beebium::CrtcState state;
+        REQUIRE(fixture.device_inspection().GetCrtcState(&ctx, req, &state).ok());
+        return state;
+    };
+
+    constexpr uint64_t kStep = 1000;
+    auto previous = crtc_state();
+    int field_starts = 0;
+    std::vector<bool> parities;
+    for (int i = 0; i < 400; ++i) {  // 400,000 cycles: about ten fields
+        const uint64_t before = machine.cycle_count();
+        machine.run(kStep);
+        const uint64_t ran = machine.cycle_count() - before;
+        auto now = crtc_state();
+        if (now.cycles_since_vsync() >= previous.cycles_since_vsync()) {
+            // Same field: advanced by exactly the cycles run, same parity.
+            CHECK(now.cycles_since_vsync() - previous.cycles_since_vsync() == ran);
+            CHECK(now.odd_field() == previous.odd_field());
+        } else {
+            // A new field started during this step.
+            ++field_starts;
+            CHECK(now.cycles_since_vsync() < ran);
+            // The field that ended lasted about 312.5 lines of 128 cycles.
+            const uint64_t field = previous.cycles_since_vsync() + ran - now.cycles_since_vsync();
+            CHECK(field >= 39'900);
+            CHECK(field <= 40'100);
+            parities.push_back(now.odd_field());
+        }
+        previous = now;
+    }
+
+    CHECK(field_starts >= 9);
+    // Interlaced fields alternate odd and even.
+    for (size_t i = 1; i < parities.size(); ++i) {
+        CHECK(parities[i] != parities[i - 1]);
+    }
+}
