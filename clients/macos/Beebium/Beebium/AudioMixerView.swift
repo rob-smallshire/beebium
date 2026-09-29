@@ -23,11 +23,19 @@ struct AudioMixerView: View {
     @ObservedObject var mixerState: AudioMixerState
 
     var body: some View {
-        if !audioClient.isLoaded {
-            loadingView
-        } else {
-            mixerContentView
+        Group {
+            if !audioClient.isLoaded {
+                loadingView
+            } else {
+                mixerContentView
+            }
         }
+        // Drive the meter/buffer-health poll only while the Sound sidebar is
+        // shown. The ring-buffer counters accumulate on the audio thread whether
+        // or not this view exists, so opening the sidebar later still shows the
+        // session's totals; this just publishes them for display.
+        .onAppear { mixerState.startMeterUpdates() }
+        .onDisappear { mixerState.stopMeterUpdates() }
     }
 
     // MARK: - Loading View

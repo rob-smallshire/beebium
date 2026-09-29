@@ -111,7 +111,10 @@ final class AudioMixerState: ObservableObject {
         meterTimer = nil
     }
 
-    private func updateMeterLevels() {
+    /// Poll the audio client for meter levels and buffer health and publish them.
+    /// Called by the meter timer; also invoked directly by tests. Buffer health is
+    /// reassigned only when it changes, so the sidebar redraws only on a glitch.
+    func updateMeterLevels() {
         guard let client = audioClient else { return }
         channelLevels = client.getAllMeterStates()
         let health = client.bufferHealth()
