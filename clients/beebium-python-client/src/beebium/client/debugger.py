@@ -75,6 +75,11 @@ class ExecutionState:
     cycle_count: int
     halt_reason: str
     sequence: int
+    #: False only while the CPU is part-way through an instruction, which only
+    #: :meth:`Debugger.step_cycles` leaves it; registers cannot be written
+    #: until :meth:`Debugger.step` completes it. Every stop reached by running
+    #: is at a boundary, and a halted CPU counts as one.
+    at_instruction_boundary: bool = True
 
 
 @dataclass(frozen=True)
@@ -235,6 +240,7 @@ def _to_execution_state(proto_state) -> ExecutionState:
         cycle_count=proto_state.cycle_count,
         halt_reason=proto_state.halt_reason,
         sequence=proto_state.sequence,
+        at_instruction_boundary=proto_state.at_instruction_boundary,
     )
 
 
@@ -290,12 +296,7 @@ class Debugger:
     def get_state(self) -> ExecutionState:
         """Get current execution state."""
         response = self._stub.GetState(debugger_pb2.Empty())
-        return ExecutionState(
-            is_running=response.is_running,
-            cycle_count=response.cycle_count,
-            halt_reason=response.halt_reason,
-            sequence=response.sequence,
-        )
+        return _to_execution_state(response)
 
     def run(self) -> None:
         """Resume execution.
@@ -316,12 +317,7 @@ class Debugger:
         response = self._stub.Stop(debugger_pb2.Empty())
         if not response.success:
             raise DebuggerError("Failed to stop execution")
-        return ExecutionState(
-            is_running=response.state.is_running,
-            cycle_count=response.state.cycle_count,
-            halt_reason=response.state.halt_reason,
-            sequence=response.state.sequence,
-        )
+        return _to_execution_state(response.state)
 
     def reset(self) -> None:
         """Perform a hard (power-on-equivalent) reset and leave the CPU stopped.
@@ -368,12 +364,7 @@ class Debugger:
             error=response.error,
             instructions_executed=response.instructions_executed,
             cycles_executed=response.cycles_executed,
-            state=ExecutionState(
-                is_running=response.state.is_running,
-                cycle_count=response.state.cycle_count,
-                halt_reason=response.state.halt_reason,
-                sequence=response.state.sequence,
-            ),
+            state=_to_execution_state(response.state),
         )
 
     def step_cycles(self, count: int = 1) -> StepResult:
@@ -399,12 +390,7 @@ class Debugger:
             error=response.error,
             instructions_executed=response.instructions_executed,
             cycles_executed=response.cycles_executed,
-            state=ExecutionState(
-                is_running=response.state.is_running,
-                cycle_count=response.state.cycle_count,
-                halt_reason=response.state.halt_reason,
-                sequence=response.state.sequence,
-            ),
+            state=_to_execution_state(response.state),
         )
 
     # Convenience properties

@@ -224,6 +224,8 @@ private:
     void update_breakpoint_entries();
     void update_watchpoint_entries();
     void enqueue_event(StopReason reason);
+    bool at_instruction_boundary() const;
+    void note_step_end();
     void enqueue_event(StopReason reason, const WatchpointHitInfo& watchpoint_hit);
     void signal_counterpart_stop();
 
@@ -290,6 +292,11 @@ private:
     std::atomic<uint32_t> next_breakpoint_id_{1};
     std::string halt_reason_;
 
+    // The machine sequence number at which a step left the CPU part-way
+    // through an instruction, or kNoMidInstruction. See note_step_end().
+    static constexpr uint64_t kNoMidInstruction = ~uint64_t{0};
+    std::atomic<uint64_t> mid_instruction_sequence_{kNoMidInstruction};
+
     // Watchpoint state
     struct WatchpointRecord {
         uint32_t id;
@@ -323,6 +330,7 @@ private:
         uint64_t cycle_count = 0;
         uint64_t sequence = 0;
         std::string halt_reason;
+        bool at_instruction_boundary = true;
         WatchpointHitInfo watchpoint_hit;
         bool has_watchpoint_hit = false;
     };
@@ -498,6 +506,23 @@ void DebuggerControlServiceImpl::fill_execution_state(ExecutionState* state) {
     state->set_cycle_count(machine_.cycle_count());
     state->set_halt_reason(halt_reason_);
     state->set_sequence(machine_.sequence());
+    state->set_at_instruction_boundary(at_instruction_boundary());
+}
+
+bool DebuggerControlServiceImpl::at_instruction_boundary() const {
+    return mid_instruction_sequence_.load() != machine_.sequence();
+}
+
+void DebuggerControlServiceImpl::note_step_end() {
+    // Only a cycle step leaves the CPU part-way through an instruction: every
+    // stop reached by running lands on a boundary (a watchpoint's instruction
+    // is completed before the machine stops), as do Reset and Stop. Read here,
+    // on the stepping thread with the emulation thread parked, and remembered
+    // by the machine's sequence number, which every later cycle, pause,
+    // resume or register write advances -- so the record lapses by itself as
+    // soon as anything moves the machine on.
+    mid_instruction_sequence_.store(machine_.mid_instruction() ? machine_.sequence()
+                                                               : kNoMidInstruction);
 }
 
 void DebuggerControlServiceImpl::enqueue_event(StopReason reason) {
@@ -507,6 +532,7 @@ void DebuggerControlServiceImpl::enqueue_event(StopReason reason) {
     evt.cycle_count = machine_.cycle_count();
     evt.sequence = machine_.sequence();
     evt.halt_reason = halt_reason_;
+    evt.at_instruction_boundary = at_instruction_boundary();
     event_queue_.enqueue(std::move(evt));
     notify_subscribers();
 }
@@ -572,6 +598,7 @@ grpc::Status DebuggerControlServiceImpl::Run(
         evt.is_running = true;  // explicitly true -- machine is about to resume
         evt.cycle_count = machine_.cycle_count();
         evt.sequence = machine_.sequence();
+        evt.at_instruction_boundary = at_instruction_boundary();
         event_queue_.enqueue(std::move(evt));
         notify_subscribers();
     }
@@ -659,6 +686,7 @@ grpc::Status DebuggerControlServiceImpl::StepInstruction(
         ++instructions;
     }
     machine_.finish_step();  // sync the coprocessor to the stopped host
+    note_step_end();
 
     halt_reason_.clear();
     response->set_success(true);
@@ -696,6 +724,7 @@ grpc::Status DebuggerControlServiceImpl::StepCycle(
         machine_.step();
     }
     machine_.finish_step();  // sync the coprocessor to the stopped host
+    note_step_end();
 
     halt_reason_.clear();
     response->set_success(true);
@@ -1073,6 +1102,7 @@ void DebuggerControlServiceImpl::enqueue_event(
     evt.cycle_count = machine_.cycle_count();
     evt.sequence = machine_.sequence();
     evt.halt_reason = halt_reason_;
+    evt.at_instruction_boundary = at_instruction_boundary();
     evt.watchpoint_hit = watchpoint_hit;
     evt.has_watchpoint_hit = true;
     event_queue_.enqueue(std::move(evt));
@@ -1293,6 +1323,7 @@ grpc::Status DebuggerControlServiceImpl::WatchExecutionState(
             proto_event.mutable_state()->set_cycle_count(evt.cycle_count);
             proto_event.mutable_state()->set_sequence(evt.sequence);
             proto_event.mutable_state()->set_halt_reason(evt.halt_reason);
+            proto_event.mutable_state()->set_at_instruction_boundary(evt.at_instruction_boundary);
             proto_event.set_message(evt.halt_reason);
             if (evt.has_watchpoint_hit) {
                 *proto_event.mutable_watchpoint_hit() = evt.watchpoint_hit;

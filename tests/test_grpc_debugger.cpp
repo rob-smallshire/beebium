@@ -2376,3 +2376,76 @@ TEST_CASE("Stop from a running machine always lands on an instruction boundary",
 
     CHECK(mid_instruction_stops == 0);
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// ExecutionState.at_instruction_boundary (#118)
+//////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+beebium::ExecutionState get_state_via_grpc(DebuggerTestFixture& fixture) {
+    grpc::ClientContext ctx;
+    beebium::Empty req;
+    beebium::ExecutionState state;
+    REQUIRE(fixture.debugger().GetState(&ctx, req, &state).ok());
+    return state;
+}
+
+}  // namespace
+
+TEST_CASE("ExecutionState reports a mid-instruction StepCycle stop", "[grpc][debugger][boundary]") {
+    DebuggerTestFixture fixture;
+    plant_idle_and_routine(fixture);
+
+    auto cycle = step_via_grpc(fixture, true, 1);  // one cycle into the JMP
+    CHECK_FALSE(cycle.state().at_instruction_boundary());
+    CHECK_FALSE(get_state_via_grpc(fixture).at_instruction_boundary());
+
+    {
+        // A new watcher's initial state carries it too.
+        grpc::ClientContext ctx;
+        beebium::WatchExecutionStateRequest req;
+        auto reader = fixture.debugger().WatchExecutionState(&ctx, req);
+        beebium::ExecutionStateEvent initial;
+        REQUIRE(reader->Read(&initial));
+        CHECK_FALSE(initial.state().at_instruction_boundary());
+        ctx.TryCancel();
+    }
+
+    auto instruction = step_via_grpc(fixture, false, 1);  // completes the JMP
+    CHECK(instruction.state().at_instruction_boundary());
+    CHECK(get_state_via_grpc(fixture).at_instruction_boundary());
+}
+
+TEST_CASE("ExecutionState is at a boundary after Stop completes a stepped instruction",
+          "[grpc][debugger][boundary]") {
+    DebuggerTestFixture fixture;
+    plant_idle_and_routine(fixture);
+
+    step_via_grpc(fixture, true, 1);
+    REQUIRE_FALSE(get_state_via_grpc(fixture).at_instruction_boundary());
+
+    grpc::ClientContext ctx;
+    beebium::Empty req;
+    beebium::StopResponse resp;
+    REQUIRE(fixture.debugger().Stop(&ctx, req, &resp).ok());
+    CHECK(resp.state().at_instruction_boundary());
+    CHECK(get_state_via_grpc(fixture).at_instruction_boundary());
+}
+
+TEST_CASE("ExecutionState counts a halted CPU as at a boundary", "[grpc][debugger][boundary]") {
+    DebuggerTestFixture fixture;
+    prepare_for_code(fixture.machine());
+    plant_code(fixture.machine(), 0x0400, {0x02});  // KIL: the NMOS 6502 jams
+    fixture.machine().set_pc(0x0400);
+
+    auto resp = step_via_grpc(fixture, true, 10);
+    REQUIRE(M6502_IsHalted(&fixture.machine().cpu()));
+    CHECK(resp.state().at_instruction_boundary());
+    CHECK(get_state_via_grpc(fixture).at_instruction_boundary());
+}
+
+TEST_CASE("ExecutionState at a fresh stop is at a boundary", "[grpc][debugger][boundary]") {
+    DebuggerTestFixture fixture;
+    CHECK(get_state_via_grpc(fixture).at_instruction_boundary());
+}

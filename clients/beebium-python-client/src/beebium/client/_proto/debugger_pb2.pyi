@@ -122,10 +122,18 @@ class ExecutionState(_message.Message):
     CYCLE_COUNT_FIELD_NUMBER: _builtins.int
     HALT_REASON_FIELD_NUMBER: _builtins.int
     SEQUENCE_FIELD_NUMBER: _builtins.int
+    AT_INSTRUCTION_BOUNDARY_FIELD_NUMBER: _builtins.int
     is_running: _builtins.bool
     cycle_count: _builtins.int
     halt_reason: _builtins.str
     sequence: _builtins.int
+    at_instruction_boundary: _builtins.bool
+    """False only while the CPU is part-way through an instruction, which only
+    StepCycle leaves it: registers are then not writable (SetCpuState fails
+    with FAILED_PRECONDITION) until StepInstruction(1) completes it. Every
+    stop reached by running lands on a boundary, and a halted CPU has no
+    instruction in flight, so both report true.
+    """
     def __init__(
         self,
         *,
@@ -133,10 +141,11 @@ class ExecutionState(_message.Message):
         cycle_count: _builtins.int = ...,
         halt_reason: _builtins.str = ...,
         sequence: _builtins.int = ...,
+        at_instruction_boundary: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["cycle_count", b"cycle_count", "halt_reason", b"halt_reason", "is_running", b"is_running", "sequence", b"sequence"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_instruction_boundary", b"at_instruction_boundary", "cycle_count", b"cycle_count", "halt_reason", b"halt_reason", "is_running", b"is_running", "sequence", b"sequence"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

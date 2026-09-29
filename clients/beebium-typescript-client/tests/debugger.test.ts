@@ -38,6 +38,23 @@ describe("Debugger", () => {
             });
         });
 
+        it("maps atInstructionBoundary", async () => {
+            for (const atInstructionBoundary of [true, false]) {
+                const stub = createMockStub({
+                    getState: () => ({
+                        isRunning: false,
+                        cycleCount: 7,
+                        haltReason: "",
+                        sequence: 3,
+                        atInstructionBoundary,
+                    }),
+                });
+                const dbg = new Debugger(stub as any);
+                const state = await dbg.getState();
+                expect(state.atInstructionBoundary).toBe(atInstructionBoundary);
+            }
+        });
+
         it("maps state with empty haltReason", async () => {
             const stub = createMockStub({
                 getState: () => ({
@@ -218,6 +235,7 @@ describe("Debugger", () => {
                 cycleCount: 0,
                 haltReason: "",
                 sequence: 0,
+                atInstructionBoundary: true,
             });
         });
     });

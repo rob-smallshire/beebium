@@ -21,6 +21,13 @@ export interface ExecutionState {
     cycleCount: number;
     haltReason: string;
     sequence: number;
+    /**
+     * False only while the CPU is part-way through an instruction, which only
+     * stepCycles leaves it; registers cannot be written until step completes
+     * it. Every stop reached by running is at a boundary, and a halted CPU
+     * counts as one.
+     */
+    atInstructionBoundary: boolean;
 }
 
 export interface Breakpoint {
@@ -68,6 +75,7 @@ function toExecutionState(proto: ProtoExecutionState): ExecutionState {
         cycleCount: proto.cycleCount,
         haltReason: proto.haltReason,
         sequence: proto.sequence,
+        atInstructionBoundary: proto.atInstructionBoundary,
     };
 }
 
@@ -79,7 +87,7 @@ function toStepResult(proto: ProtoStepResponse): StepResult {
         cyclesExecuted: proto.cyclesExecuted,
         state: proto.state
             ? toExecutionState(proto.state)
-            : { isRunning: false, cycleCount: 0, haltReason: "", sequence: 0 },
+            : { isRunning: false, cycleCount: 0, haltReason: "", sequence: 0, atInstructionBoundary: true },
     };
 }
 
@@ -100,7 +108,7 @@ function toExecutionStateEvent(proto: ProtoExecutionStateEvent): ExecutionStateE
         reason: proto.reason,
         state: proto.state
             ? toExecutionState(proto.state)
-            : { isRunning: false, cycleCount: 0, haltReason: "", sequence: 0 },
+            : { isRunning: false, cycleCount: 0, haltReason: "", sequence: 0, atInstructionBoundary: true },
         message: proto.message,
     };
 }

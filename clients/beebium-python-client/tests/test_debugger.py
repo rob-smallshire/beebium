@@ -885,6 +885,21 @@ class TestInstructionBoundaryWrites:
         assert bbc.cpu.a == 0x77
         assert bbc.cpu.pc == 0x0502
 
+    def test_execution_state_reports_the_boundary(self, bbc):
+        plant_idle_and_routine(bbc)
+        assert bbc.debugger.get_state().at_instruction_boundary
+        stepped = bbc.debugger.step_cycles(1)  # part-way through the JMP
+        assert not stepped.state.at_instruction_boundary
+        assert not bbc.debugger.get_state().at_instruction_boundary
+        completed = bbc.debugger.step(1)
+        assert completed.state.at_instruction_boundary
+        assert bbc.debugger.get_state().at_instruction_boundary
+
+    def test_stop_reports_a_boundary(self, bbc):
+        plant_idle_and_routine(bbc)
+        bbc.debugger.step_cycles(1)
+        assert bbc.debugger.stop().at_instruction_boundary
+
     def test_run_for_emulated_seconds_stops_at_a_boundary(self, bbc):
         plant_idle_and_routine(bbc)
         start = bbc.debugger.cycle_count

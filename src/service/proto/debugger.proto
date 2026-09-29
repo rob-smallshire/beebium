@@ -104,6 +104,12 @@ message ExecutionState {
     uint64 cycle_count = 2;
     string halt_reason = 3;
     uint64 sequence = 4;
+    // False only while the CPU is part-way through an instruction, which only
+    // StepCycle leaves it: registers are then not writable (SetCpuState fails
+    // with FAILED_PRECONDITION) until StepInstruction(1) completes it. Every
+    // stop reached by running lands on a boundary, and a halted CPU has no
+    // instruction in flight, so both report true.
+    bool at_instruction_boundary = 5;
 }
 
 message RunResponse {
