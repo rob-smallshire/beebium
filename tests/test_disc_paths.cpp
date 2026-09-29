@@ -18,11 +18,14 @@
 
 #include "beebium/server/DiscPaths.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <stdexcept>
 #include <string>
+#include <thread>
 
 using beebium::server::DiscPaths;
 using beebium::server::DiscWorkMode;
@@ -170,6 +173,83 @@ TEST_CASE("prepare_working_image (Scratch) replaces a read-only stale copy",
         "l3fs-v1_26.dat", master, work, DiscWorkMode::Scratch);
     CHECK(read_file(again) == "DATA-A");
 }
+
+TEST_CASE("copy_file_atomically: a failure mid-copy leaves the old copy intact",
+          "[disc][discpaths]") {
+    TmpTree tmp;
+    auto dir = tmp.subdir("work");
+    write_file(dir / "src.dat", std::string(4096, 'N'));
+    write_file(dir / "dst.dat", "OLD-WORKING-COPY");
+
+    // The copier writes half the image, then fails (a full disc, say).
+    auto failing_copy = [](const fs::path& src, const fs::path& dst) {
+        write_file(dst, read_file(src).substr(0, 2048));
+        throw std::runtime_error("simulated failure mid-copy");
+    };
+    CHECK_THROWS_AS(DiscPaths::copy_file_atomically(dir / "src.dat", dir / "dst.dat",
+                                                    failing_copy),
+                    std::runtime_error);
+
+    CHECK(read_file(dir / "dst.dat") == "OLD-WORKING-COPY");
+    // The partial temporary is cleaned up: only the two files remain.
+    size_t entries = 0;
+    for ([[maybe_unused]] const auto& e : fs::directory_iterator(dir)) ++entries;
+    CHECK(entries == 2);
+}
+
+TEST_CASE("copy_file_atomically replaces the destination with a writable copy",
+          "[disc][discpaths]") {
+    TmpTree tmp;
+    auto dir = tmp.subdir("work");
+    write_file(dir / "src.dat", "NEW");
+    fs::permissions(dir / "src.dat", fs::perms::owner_read);
+    write_file(dir / "dst.dat", "OLD");
+    fs::permissions(dir / "dst.dat", fs::perms::owner_read);
+
+    DiscPaths::copy_file_atomically(dir / "src.dat", dir / "dst.dat");
+
+    CHECK(read_file(dir / "dst.dat") == "NEW");
+    auto perms = fs::status(dir / "dst.dat").permissions();
+    CHECK((perms & fs::perms::owner_write) != fs::perms::none);
+}
+
+#ifndef _WIN32
+// Two preparations of the same scratch target racing, as two servers sharing
+// one BEEBIUM_DISC_WORK_DIR do, while a reader repeatedly opens the working
+// image: the reader must only ever see the complete image. (Not on Windows,
+// where replacing a file another process holds open fails by design.)
+TEST_CASE("prepare_working_image (Scratch): a reader never sees a short image",
+          "[disc][discpaths]") {
+    TmpTree tmp;
+    auto master = tmp.subdir("master");
+    auto work = tmp.subdir("work");
+    const std::string image(4 * 1024 * 1024, 'D');
+    make_master(master, image, "DSC");
+    DiscPaths::prepare_working_image("l3fs-v1_26.dat", master, work, DiscWorkMode::Scratch);
+
+    std::atomic<bool> done{false};
+    auto preparer = [&] {
+        while (!done.load()) {
+            DiscPaths::prepare_working_image("l3fs-v1_26.dat", master, work,
+                                             DiscWorkMode::Scratch);
+        }
+    };
+    std::thread first(preparer);
+    std::thread second(preparer);
+
+    int short_or_missing = 0;
+    for (int i = 0; i < 300; ++i) {
+        std::error_code ec;
+        const auto size = fs::file_size(work / "l3fs-v1_26.dat", ec);
+        if (ec || size != image.size()) ++short_or_missing;
+    }
+    done.store(true);
+    first.join();
+    second.join();
+
+    CHECK(short_or_missing == 0);
+}
+#endif
 
 TEST_CASE("prepare_working_image throws when the master is absent",
           "[disc][discpaths]") {
