@@ -83,7 +83,12 @@ void CoprocessorRunner::run_until(uint64_t host_cycle) {
     // have become due. Do this even while paused: the paused interval's ticks
     // are lost, not deferred, so a resumed coprocessor does not catch up.
     const uint64_t due_ticks = clock_.cycles_due(host_cycle);
-    if (paused_) return;
+    if (paused_) {
+        // Paused since the last run_until (a Stop, or a host breakpoint that
+        // stops its counterpart) with an instruction part-way through.
+        finish_instruction();
+        return;
+    }
     tick_budget_ += static_cast<int64_t>(due_ticks);
 
     // Spend the tick budget cycle by cycle, gating each action on affordability.
@@ -102,7 +107,23 @@ void CoprocessorRunner::run_until(uint64_t host_cycle) {
         // overspends by one tick, carried as a deficit into the next run_until.
         if (tick_budget_ < static_cast<int64_t>(timing_.read_cycle_ticks)) break;
         if (!execute_one_cycle()) break;  // paused at the breakpoint PC
+        if (paused_) {
+            // A watchpoint paused on one of this instruction's accesses.
+            finish_instruction();
+            break;
+        }
     }
+}
+
+void CoprocessorRunner::finish_instruction() {
+    if (!mid_instruction()) return;
+    watchpoints_suppressed_ = true;
+    do {
+        // Breakpoints are checked only at an opcode fetch, which the first
+        // cycle here is not, and the loop ends at the next one.
+        execute_one_cycle();
+    } while (mid_instruction());
+    watchpoints_suppressed_ = false;
 }
 
 bool CoprocessorRunner::check_breakpoints() {
@@ -124,7 +145,7 @@ bool CoprocessorRunner::check_breakpoints() {
 
 bool CoprocessorRunner::check_watchpoints() {
     // Watchpoint check (every bus access, after tick).
-    if (watchpoint_entries_.empty()) return false;
+    if (watchpoints_suppressed_ || watchpoint_entries_.empty()) return false;
     const uint16_t addr = cpu_.cpu().abus.w;
     const bool is_write = !cpu_.cpu().read;
     for (const auto& wp : watchpoint_entries_) {
@@ -146,7 +167,10 @@ void CoprocessorRunner::run(uint64_t cycles) {
         if (paused_) return;
         if (check_breakpoints()) return;
         cpu_.tick();
-        if (check_watchpoints()) return;
+        if (check_watchpoints()) {
+            if (paused_) finish_instruction();
+            return;
+        }
     }
 }
 

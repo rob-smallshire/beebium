@@ -375,7 +375,20 @@ public:
         ++sequence_;
     }
 
-    // Execute for the given number of cycles, or until paused (e.g., by breakpoint)
+    // Execute for the given number of cycles, or until paused (e.g., by a
+    // breakpoint, a watchpoint or the debugger's Stop).
+    //
+    // A run always ends at an instruction boundary (or on a halted CPU, which
+    // has none): a debugger never presents a partial instruction (issue #79).
+    // Reaching the cycle target part-way through an instruction runs on to the
+    // end of it, so a run can overshoot its target by up to one instruction; the
+    // pacing loop charges the cycles actually run. A pause part-way through an
+    // instruction -- a Stop, or a watchpoint firing on one of its bus accesses --
+    // completes that instruction with breakpoint and watchpoint callbacks
+    // suppressed, so a stop reports post-instruction state, the access a
+    // watchpoint reports has already happened, and an RMW instruction's second
+    // access cannot fire the watchpoint again. Only single-cycle step() calls
+    // (the debugger's StepCycle) leave the CPU mid-instruction.
     void run(uint64_t cycles) {
         struct RunGuard {
             std::atomic<bool>& flag;
@@ -384,7 +397,8 @@ public:
         } guard{in_run_};
 
         const uint64_t target = state_.cycle_count + cycles;
-        while (state_.cycle_count < target && !paused_.load()) {
+        while (!paused_.load()) {
+            if (state_.cycle_count >= target && !mid_instruction()) break;
             // Breakpoint evaluation. Nothing here runs when no breakpoints are
             // installed, so an unwatched machine pays nothing per cycle.
             if (!breakpoint_entries_.empty()) {
@@ -435,11 +449,33 @@ public:
             step();
         }
 
+        // Paused part-way through an instruction: complete it quietly.
+        finish_instruction();
+
         // The host has stopped (chunk finished, paused, or a breakpoint/
         // watchpoint hit). Sync the coprocessor to the host so a stopped
         // machine presents both processors at the same time to the debugger
         // and to GetTubeState.
         state_.memory.tube_socket.run_coprocessor_until(state_.cycle_count);
+    }
+
+    // True while an instruction is part-way through its cycles: neither about
+    // to fetch an opcode nor halted (a halted CPU has no instruction in flight).
+    bool mid_instruction() const {
+        return !M6502_IsAboutToExecute(&state_.cpu) && !M6502_IsHalted(&state_.cpu);
+    }
+
+    // Complete an instruction left part-way through, with watchpoint callbacks
+    // suppressed (breakpoints are only checked by run(), never here). A no-op at
+    // an instruction boundary or on a halted CPU. Call only from the thread
+    // executing the machine, or with it quiesced.
+    void finish_instruction() {
+        if (!mid_instruction()) return;
+        cpu_binding_.set_watchpoints_suppressed(true);
+        do {
+            step();
+        } while (mid_instruction());
+        cpu_binding_.set_watchpoints_suppressed(false);
     }
 
     // Execute one complete instruction (variable cycles)

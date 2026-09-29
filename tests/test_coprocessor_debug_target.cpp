@@ -48,6 +48,9 @@ TEST_CASE("DebuggerControlServiceImpl drives a CoprocessorRunner through CpuDebu
     auto rom = make_nop_rom();
     CoprocessorRunner runner(tube, rom);
     runner.reset();
+    // Finish the reset sequence: registers are writable only at an
+    // instruction boundary.
+    runner.step_instruction();
 
     // The server sees only the abstract interface.
     CpuDebugTarget& target = runner;
@@ -154,5 +157,101 @@ TEST_CASE("DebuggerControlServiceImpl drives a CoprocessorRunner through CpuDebu
         ListBreakpointsResponse lresp;
         REQUIRE(impl.ListBreakpoints(nullptr, &lreq, &lresp).ok());
         CHECK(lresp.breakpoints_size() == 1);
+    }
+}
+
+TEST_CASE("CoprocessorRunner refuses register writes mid-instruction", "[coprocessor][debugger][boundary]") {
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    CoprocessorRunner runner(tube, rom);
+    runner.reset();
+    CpuDebugTarget& target = runner;
+    service::DebuggerControlServiceImpl impl(target);
+
+    // The reset sequence is an instruction in flight.
+    CHECK(target.mid_instruction());
+    target.step_instruction();
+    REQUIRE_FALSE(target.mid_instruction());
+
+    // One cycle into a NOP leaves it part-way through.
+    target.step();
+    REQUIRE(target.mid_instruction());
+
+    CpuState req;
+    auto* pc = req.add_registers();
+    pc->set_name("PC");
+    pc->set_value(0xF900);
+    CpuState refused;
+    auto status = impl.SetCpuState(nullptr, &req, &refused);
+    CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+
+    // Completing the in-flight instruction reaches a boundary; the write lands.
+    target.step_instruction();
+    REQUIRE_FALSE(target.mid_instruction());
+    CpuState accepted;
+    REQUIRE(impl.SetCpuState(nullptr, &req, &accepted).ok());
+    CHECK(runner.pc() == 0xF900);
+}
+
+TEST_CASE("CoprocessorRunner stops land on instruction boundaries", "[coprocessor][debugger][boundary]") {
+    TubeUla tube;
+    auto rom = make_nop_rom();
+    CoprocessorRunner runner(tube, rom);
+    runner.reset();
+    runner.step_instruction();
+    CpuDebugTarget& target = runner;
+    service::DebuggerControlServiceImpl impl(target);
+
+    SECTION("Stop completes an instruction left part-way through") {
+        target.step();  // one cycle into a NOP
+        REQUIRE(target.mid_instruction());
+        Empty req;
+        StopResponse resp;
+        REQUIRE(impl.Stop(nullptr, &req, &resp).ok());
+        CHECK(target.is_paused());
+        CHECK_FALSE(target.mid_instruction());
+    }
+
+    SECTION("A watchpoint stop in run_until completes the instruction") {
+        // &0400 JSR &0410; &0410 NOP. JSR pushes the return address in two
+        // writes part-way through; a stack-page write watchpoint fires on the
+        // first, and the second, made while completing the JSR, must not fire.
+        WriteMemoryRequest code;
+        code.set_address(0x0400);
+        code.set_data(std::string("\x20\x10\x04", 3));
+        WriteMemoryResponse code_resp;
+        REQUIRE(impl.WriteMemory(nullptr, &code, &code_resp).ok());
+        WriteMemoryRequest nop;
+        nop.set_address(0x0410);
+        nop.set_data(std::string("\xEA\xEA", 2));
+        WriteMemoryResponse nop_resp;
+        REQUIRE(impl.WriteMemory(nullptr, &nop, &nop_resp).ok());
+        CpuState pc_req;
+        auto* pc = pc_req.add_registers();
+        pc->set_name("PC");
+        pc->set_value(0x0400);
+        CpuState pc_resp;
+        REQUIRE(impl.SetCpuState(nullptr, &pc_req, &pc_resp).ok());
+
+        AddWatchpointRequest wreq;
+        wreq.set_start_address(0x0100);
+        wreq.set_end_address(0x0200);
+        wreq.set_type(WATCHPOINT_WRITE);
+        AddWatchpointResponse wresp;
+        REQUIRE(impl.AddWatchpoint(nullptr, &wreq, &wresp).ok());
+        REQUIRE(wresp.success());
+
+        runner.run_until(0);  // establish the time origin at host cycle 0
+        runner.run_until(1000);
+
+        REQUIRE(target.is_paused());
+        CHECK_FALSE(target.mid_instruction());
+        CHECK(runner.pc() == 0x0410);
+
+        Empty lreq;
+        ListWatchpointsResponse lresp;
+        REQUIRE(impl.ListWatchpoints(nullptr, &lreq, &lresp).ok());
+        REQUIRE(lresp.watchpoints_size() == 1);
+        CHECK(lresp.watchpoints(0).hit_count() == 1);
     }
 }

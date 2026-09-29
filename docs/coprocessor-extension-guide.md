@@ -220,8 +220,17 @@ execution control (`cycle_count`, `sequence`, `step`, `step_instruction`,
 (`read`, `peek`, `write` with 32-bit addresses; narrow inside if your
 address space is smaller), the region model (`get_memory_regions`,
 `peek_region`, `read_region`, `write_region`, `machine_type`), and the
-breakpoint and watchpoint entries and hit callbacks. `CoprocessorRunner` is
-the reference implementation; the 6502 helper in
+breakpoint and watchpoint entries and hit callbacks.
+
+A debugger never presents a partial instruction, so if your `step()` executes
+single cycles, also override `mid_instruction()` (true while an instruction is
+part-way through, false while halted) and `finish_instruction()` (complete
+that instruction with breakpoint and watchpoint callbacks suppressed). Call
+`finish_instruction()` yourself when a watchpoint pauses you part-way through
+an instruction, and when you find yourself paused on entry to your execution
+loop; the debugger calls it on `Stop` and refuses register writes while
+`mid_instruction()` holds. The defaults suit a `step()` that executes whole
+instructions. `CoprocessorRunner` is the reference implementation; the 6502 helper in
 `beebium/Cpu6502Descriptor.hpp` shows how a family shares one descriptor
 between the host and coprocessor implementations.
 

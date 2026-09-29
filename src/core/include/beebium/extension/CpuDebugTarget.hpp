@@ -66,6 +66,17 @@ public:
     virtual void reset() = 0;
     virtual void step() = 0;
     virtual uint64_t step_instruction() = 0;
+    // True while an instruction is part-way through its cycles, which only
+    // single-cycle step()s leave behind. The debugger refuses register writes
+    // then: the in-flight instruction would fetch its remaining operands from,
+    // or overwrite, the written state. A halted CPU has no instruction in
+    // flight. The default suits a target whose step() runs whole instructions.
+    virtual bool mid_instruction() const { return false; }
+    // Complete an instruction left part-way through, with breakpoint and
+    // watchpoint callbacks suppressed, so a stopped CPU is presented at an
+    // instruction boundary. The debugger calls it with execution stopped. The
+    // default suits a target that never stops part-way through an instruction.
+    virtual void finish_instruction() {}
     virtual void prepare_for_step() = 0;
     virtual void wait_until_idle() = 0;
     // Run fn with this CPU's execution halted and the executing thread idle, then

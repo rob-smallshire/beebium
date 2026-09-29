@@ -87,6 +87,16 @@ public:
 
     // Execute one complete instruction. Returns the number of cycles taken.
     uint64_t step_instruction() override;
+    bool mid_instruction() const override {
+        const M6502& cpu = cpu_.cpu();
+        return !M6502_IsAboutToExecute(&cpu) && !M6502_IsHalted(&cpu);
+    }
+    // Complete an instruction left part-way through on the same execution path
+    // as run_until (so the board timing is charged, possibly into a deficit),
+    // with watchpoints suppressed. run_until() calls it on a pause, and the
+    // debugger's Stop calls it with execution stopped, so a stopped coprocessor
+    // is presented at an instruction boundary.
+    void finish_instruction() override;
 
     // Cycle counter (CPU cycles executed; a refresh hold executes none).
     uint64_t cycle_count() const override { return cpu_.cycle_count(); }
@@ -320,6 +330,9 @@ private:
 
     // Debugger pause state (plain bool, single-threaded)
     bool paused_ = false;
+
+    // Set by finish_instruction() so the completing cycles fire no watchpoint.
+    bool watchpoints_suppressed_ = false;
 
     // Sequence counter
     uint64_t sequence_ = 0;

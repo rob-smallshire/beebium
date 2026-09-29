@@ -586,9 +586,17 @@ grpc::Status DebuggerControlServiceImpl::Stop(
     StopResponse* response) {
 
     std::lock_guard<std::mutex> ctrl(control_mutex_);
-    std::lock_guard<std::mutex> lock(mutex_);
 
+    // Present the stopped CPU at an instruction boundary. The host's run()
+    // completes any instruction it was part-way through as it stops; a
+    // coprocessor paused between its host's chunks may still be mid-instruction,
+    // so complete it with execution stopped. The halt and wait-for-idle happen
+    // before mutex_ is taken, as in Reset, so a hit callback (which takes
+    // mutex_) cannot deadlock the wait.
     machine_.pause();
+    machine_.with_execution_stopped([&] { machine_.finish_instruction(); });
+
+    std::lock_guard<std::mutex> lock(mutex_);
     halt_reason_ = "stopped by debugger";
     enqueue_event(STOP_REASON_MANUAL);
     response->set_success(true);
@@ -1377,6 +1385,16 @@ grpc::Status DebuggerControlServiceImpl::SetCpuState(
         if (!unknown.empty()) {
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                 "unknown register(s): " + unknown);
+        }
+
+        // A write between the cycles of an instruction corrupts it: it fetches
+        // its remaining operands from the new PC, or its final register write
+        // overwrites the new value. Refuse rather than defer, so the caller
+        // never sees a state that is not the one it will get.
+        if (machine_.mid_instruction()) {
+            return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                                "CPU is mid-instruction after StepCycle; call StepInstruction(1) "
+                                "to reach the next instruction boundary before writing registers");
         }
 
         // Apply the given subset by name.

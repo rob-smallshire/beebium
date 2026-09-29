@@ -25,8 +25,10 @@
 #include <grpcpp/grpcpp.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <fstream>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -508,6 +510,9 @@ TEST_CASE("DebuggerControl GetCpuState returns CPU registers", "[grpc][debugger]
 
 TEST_CASE("DebuggerControl SetCpuState sets individual registers", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
+    // Finish the reset sequence: registers are writable only at an
+    // instruction boundary.
+    fixture.machine().step_instruction();
 
     grpc::ClientContext context;
     beebium::CpuState request;
@@ -530,6 +535,9 @@ TEST_CASE("DebuggerControl SetCpuState sets individual registers", "[grpc][debug
 
 TEST_CASE("DebuggerControl SetCpuState can set PC", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
+    // Finish the reset sequence: registers are writable only at an
+    // instruction boundary.
+    fixture.machine().step_instruction();
 
     grpc::ClientContext context;
     beebium::CpuState request;
@@ -629,6 +637,9 @@ TEST_CASE("Sequence counter increments on step", "[grpc][debugger]") {
 
 TEST_CASE("Sequence counter increments on register write", "[grpc][debugger]") {
     DebuggerTestFixture fixture;
+    // Finish the reset sequence: registers are writable only at an
+    // instruction boundary.
+    fixture.machine().step_instruction();
 
     // Get initial sequence
     uint64_t seq1;
@@ -2183,4 +2194,185 @@ TEST_CASE("WatchExecutionState delivers events without waiting for its poll time
 
     watch_context.TryCancel();
     reader->Finish();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Register writes only at instruction boundaries (#106)
+//////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+beebium::StepResponse step_via_grpc(DebuggerTestFixture& fixture, bool cycles, uint32_t count) {
+    grpc::ClientContext ctx;
+    beebium::StepRequest req;
+    req.set_count(count);
+    beebium::StepResponse resp;
+    auto status = cycles ? fixture.debugger().StepCycle(&ctx, req, &resp)
+                         : fixture.debugger().StepInstruction(&ctx, req, &resp);
+    REQUIRE(status.ok());
+    REQUIRE(resp.success());
+    return resp;
+}
+
+grpc::Status set_pc_via_grpc(DebuggerTestFixture& fixture, uint16_t pc) {
+    grpc::ClientContext ctx;
+    beebium::CpuState req;
+    set_reg(req, "PC", pc);
+    beebium::CpuState resp;
+    return fixture.debugger().SetCpuState(&ctx, req, &resp);
+}
+
+// &0400 .idle JMP idle; &0500 .routine LDA #$77, then JMP routine.
+void plant_idle_and_routine(DebuggerTestFixture& fixture) {
+    prepare_for_code(fixture.machine());
+    plant_code(fixture.machine(), 0x0400, {0x4C, 0x00, 0x04});
+    plant_code(fixture.machine(), 0x0500, {0xA9, 0x77, 0x4C, 0x00, 0x05});
+    fixture.machine().set_pc(0x0400);
+}
+
+}  // namespace
+
+TEST_CASE("SetCpuState refuses a register write mid-instruction", "[grpc][debugger][boundary]") {
+    DebuggerTestFixture fixture;
+    plant_idle_and_routine(fixture);
+
+    // One cycle into the JMP: the opcode is fetched, the operand is not.
+    step_via_grpc(fixture, true, 1);
+    auto status = set_pc_via_grpc(fixture, 0x0500);
+
+    CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+    CHECK(status.error_message() ==
+          "CPU is mid-instruction after StepCycle; call StepInstruction(1) to reach "
+          "the next instruction boundary before writing registers");
+    // The refused write left the in-flight JMP untouched.
+    step_via_grpc(fixture, false, 1);
+    CHECK(fixture.machine().pc() == 0x0400);
+}
+
+TEST_CASE("SetCpuState after StepInstruction completes the in-flight instruction takes effect",
+          "[grpc][debugger][boundary]") {
+    DebuggerTestFixture fixture;
+    plant_idle_and_routine(fixture);
+
+    step_via_grpc(fixture, true, 1);
+    REQUIRE_FALSE(set_pc_via_grpc(fixture, 0x0500).ok());
+
+    // StepInstruction(1) finishes the JMP and stops at the next boundary.
+    step_via_grpc(fixture, false, 1);
+    REQUIRE(fixture.machine().pc() == 0x0400);
+    REQUIRE(set_pc_via_grpc(fixture, 0x0500).ok());
+
+    // The next instruction executed is LDA #$77 at the new PC.
+    step_via_grpc(fixture, false, 1);
+    CHECK(fixture.machine().a() == 0x77);
+    CHECK(fixture.machine().pc() == 0x0502);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Stops land on instruction boundaries (#106, the #79 rule)
+//////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+beebium::WatchpointInfo only_watchpoint(DebuggerTestFixture& fixture) {
+    grpc::ClientContext ctx;
+    beebium::Empty req;
+    beebium::ListWatchpointsResponse resp;
+    REQUIRE(fixture.debugger().ListWatchpoints(&ctx, req, &resp).ok());
+    REQUIRE(resp.watchpoints_size() == 1);
+    return resp.watchpoints(0);
+}
+
+}  // namespace
+
+TEST_CASE("A watchpoint stop completes the instruction and fires once for RMW",
+          "[grpc][debugger][watchpoint][boundary][6502]") {
+    DebuggerTestFixture fixture;
+    prepare_for_code(fixture.machine());
+
+    // INC $0500 writes twice (the unmodified value, then the result); NOP.
+    plant_code(fixture.machine(), 0x0400, {0xEE, 0x00, 0x05, 0xEA});
+    fixture.machine().set_pc(0x0400);
+
+    {
+        grpc::ClientContext ctx;
+        beebium::AddWatchpointRequest req;
+        req.set_start_address(0x0500);
+        req.set_end_address(0x0501);
+        req.set_type(beebium::WATCHPOINT_WRITE);
+        beebium::AddWatchpointResponse resp;
+        fixture.debugger().AddWatchpoint(&ctx, req, &resp);
+        REQUIRE(resp.success());
+    }
+
+    fixture.machine().resume();
+    fixture.machine().run(100);
+
+    REQUIRE(fixture.machine().is_paused());
+    // Stopped at the boundary after INC, with its result written...
+    CHECK_FALSE(fixture.machine().mid_instruction());
+    CHECK(fixture.machine().pc() == 0x0403);
+    CHECK(fixture.machine().peek(0x0500) == 0x01);
+    // ...and the second write, made while completing it, did not fire again.
+    CHECK(only_watchpoint(fixture).hit_count() == 1);
+}
+
+TEST_CASE("Stop from a running machine always lands on an instruction boundary",
+          "[grpc][debugger][boundary][6502]") {
+    DebuggerTestFixture fixture;
+    auto& machine = fixture.machine();
+    prepare_for_code(machine);
+
+    // A loop mixing 2- to 7-cycle instructions, so stops fall at every phase:
+    //   .loop INC $0500 (6); LDX #3 (2); ASL $0501,X (7); LDA ($70),Y (5);
+    //         JMP loop (3)
+    plant_code(machine, 0x0400, {
+        0xEE, 0x00, 0x05,
+        0xA2, 0x03,
+        0x1E, 0x01, 0x05,
+        0xB1, 0x70,
+        0x4C, 0x00, 0x04,
+    });
+    machine.set_pc(0x0400);
+
+    // The emulation thread, as step_emulation drives it: park while paused,
+    // otherwise run a chunk under the busy scope.
+    std::atomic<bool> done{false};
+    std::thread emulation([&] {
+        while (!done.load()) {
+            machine.wait_if_paused();
+            if (done.load()) break;
+            beebium::ModelB::EmulationBusyScope busy(machine);
+            if (!busy.active()) continue;
+            machine.run(997);  // not a multiple of the loop's 23 cycles
+        }
+    });
+
+    auto rpc_run = [&] {
+        grpc::ClientContext ctx;
+        beebium::Empty req;
+        beebium::RunResponse resp;
+        REQUIRE(fixture.debugger().Run(&ctx, req, &resp).ok());
+    };
+    auto rpc_stop = [&] {
+        grpc::ClientContext ctx;
+        beebium::Empty req;
+        beebium::StopResponse resp;
+        REQUIRE(fixture.debugger().Stop(&ctx, req, &resp).ok());
+    };
+
+    machine.resume();
+    int mid_instruction_stops = 0;
+    for (int i = 0; i < 200; ++i) {
+        std::this_thread::sleep_for(std::chrono::microseconds(50 + (i * 37) % 400));
+        rpc_stop();
+        if (machine.mid_instruction()) ++mid_instruction_stops;
+        rpc_run();
+    }
+
+    done.store(true);
+    machine.request_shutdown();
+    emulation.join();
+
+    CHECK(mid_instruction_stops == 0);
 }

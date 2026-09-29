@@ -19,6 +19,7 @@ Each test gets a fresh BBC Micro instance via the ``bbc`` fixture.
 
 from __future__ import annotations
 
+import grpc
 import pytest
 
 from beebium.client import Beebium
@@ -848,3 +849,50 @@ class TestMeasure:
     def test_repeat_must_be_positive(self, bbc):
         with pytest.raises(ValueError):
             bbc.debugger.measure(0x0402, 0x0405, repeat=0)
+
+
+# ============================================================================
+# Register writes only at instruction boundaries (#106)
+# ============================================================================
+
+# &0400 .idle JMP idle; &0500 .routine LDA #$77, then JMP routine.
+IDLE = bytes([0x4C, 0x00, 0x04])
+ROUTINE = bytes([0xA9, 0x77, 0x4C, 0x00, 0x05])
+
+
+def plant_idle_and_routine(bbc: Beebium) -> None:
+    plant_and_run_from(bbc, IDLE)
+    for i, byte in enumerate(ROUTINE):
+        bbc.memory.address.bus[0x0500 + i] = byte
+
+
+class TestInstructionBoundaryWrites:
+    def test_register_write_mid_instruction_is_refused(self, bbc):
+        plant_idle_and_routine(bbc)
+        bbc.debugger.step_cycles(1)  # part-way through the JMP
+        with pytest.raises(grpc.RpcError) as excinfo:
+            bbc.cpu.pc = 0x0500
+        assert excinfo.value.code() == grpc.StatusCode.FAILED_PRECONDITION
+        assert "StepInstruction(1)" in excinfo.value.details()
+
+    def test_step_completes_instruction_then_write_takes_effect(self, bbc):
+        plant_idle_and_routine(bbc)
+        bbc.debugger.step_cycles(1)
+        bbc.debugger.step(1)  # completes the in-flight JMP only
+        assert bbc.cpu.pc == 0x0400
+        bbc.cpu.pc = 0x0500
+        bbc.debugger.step(1)
+        assert bbc.cpu.a == 0x77
+        assert bbc.cpu.pc == 0x0502
+
+    def test_run_for_emulated_seconds_stops_at_a_boundary(self, bbc):
+        plant_idle_and_routine(bbc)
+        start = bbc.debugger.cycle_count
+        # 20,000 cycles is not a whole number of 3-cycle JMPs, so a plain
+        # cycle step would stop part-way through one.
+        bbc.run_for_emulated_seconds(0.01)
+        assert bbc.debugger.cycle_count >= start + 20_000
+        bbc.cpu.pc = 0x0500
+        bbc.debugger.step(1)
+        assert bbc.cpu.a == 0x77
+        assert bbc.cpu.pc == 0x0502

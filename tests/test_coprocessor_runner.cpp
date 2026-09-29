@@ -220,6 +220,11 @@ TEST_CASE("CoprocessorRunner run_until while paused advances time but runs no cy
     runner.reset();
 
     runner.run_until(0);   // establish origin at host time 0
+    // Run the reset sequence (7 cycles) and one NOP (2): 9 cycles, exactly the
+    // ticks due by host time 6, leaving the CPU at an instruction boundary. A
+    // pause part-way through an instruction would complete it first.
+    runner.run_until(6);
+    REQUIRE_FALSE(runner.mid_instruction());
     const uint64_t base = runner.cycle_count();
 
     runner.pause();

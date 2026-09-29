@@ -335,7 +335,11 @@ Execution control, breakpoints, watchpoints, memory access, and CPU state for 65
 | `Stop` | Stop execution. Returns `StopResponse` with the state at stop. |
 | `Reset` | Reset the machine (leaves it stopped at cycle 7). |
 | `StepInstruction` | Execute N instructions (count in `StepRequest`). Returns cycles/instructions executed. |
-| `StepCycle` | Execute N cycles (count in `StepRequest`). Returns cycles/instructions executed. |
+| `StepCycle` | Execute N cycles (count in `StepRequest`). Returns cycles/instructions executed. May stop part-way through an instruction. |
+
+**Register writes need an instruction boundary.** `StepCycle` can leave the CPU between the cycles of an instruction. A register write there would corrupt the in-flight instruction (it would fetch its remaining operands from a new PC, or overwrite the written value with its own result), so `SetCpuState` refuses it with `FAILED_PRECONDITION`: "CPU is mid-instruction after StepCycle; call StepInstruction(1) to reach the next instruction boundary before writing registers". `StepInstruction(1)` from that state completes only the in-flight instruction. A freshly reset CPU is in its reset sequence and is refused the same way; `Reset` itself leaves the machine at a boundary. A halted CPU has no instruction in flight and accepts writes. The rule applies to `CoprocessorDebuggerControl` too.
+
+**Stops land on instruction boundaries.** A running CPU only ever stops at an instruction boundary (or while halted, which has none), so `StepCycle` is the only way to reach a mid-instruction state. A breakpoint stops before the instruction at its address. A `Stop`, or a watchpoint that fires on one of an instruction's bus accesses, completes that instruction first, with breakpoint and watchpoint callbacks suppressed, so the stop reports post-instruction state. The access a watchpoint reports has therefore already happened, and a read-modify-write instruction's second access does not fire the watchpoint again. `Stop` returns once the CPU has stopped.
 
 ```bash
 # Get current execution state
@@ -444,7 +448,7 @@ Watchpoints fire when a memory address within a range is read, written, or eithe
 | `condition` | Optional expression. Same syntax as breakpoint conditions. |
 | `stop_counterpart` | Signal the other processor to stop. |
 
-When a watchpoint fires, the `ExecutionStateEvent` includes a `WatchpointHitInfo` with the watchpoint ID, the accessed address, the value, and whether it was a write.
+When a watchpoint fires, the `ExecutionStateEvent` includes a `WatchpointHitInfo` with the watchpoint ID, the accessed address, the value, and whether it was a write. The machine stops at the end of the accessing instruction (see "Stops land on instruction boundaries" above).
 
 #### Memory Access
 

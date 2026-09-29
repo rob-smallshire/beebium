@@ -65,6 +65,8 @@ public:
     void reset() override { machine_.reset(); }
     void step() override { machine_.step(); }
     uint64_t step_instruction() override { return machine_.step_instruction(); }
+    bool mid_instruction() const override { return machine_.mid_instruction(); }
+    void finish_instruction() override { machine_.finish_instruction(); }
     void prepare_for_step() override { machine_.prepare_for_step(); }
     void wait_until_idle() override { machine_.wait_until_idle(); }
     void finish_step() override { machine_.finish_step(); }

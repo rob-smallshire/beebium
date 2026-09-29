@@ -75,10 +75,13 @@ TEST_CASE("Machine step and run", "[machine][execution]") {
     // Total should be 7 + 2 + 2 = 11
     REQUIRE(machine.cycle_count() == 11);
 
-    // Run for a few more cycles
+    // Run for a few more cycles. A run ends at the first instruction boundary
+    // at or after its target: the third NOP (2 cycles), then the BRK at &0403
+    // (unwritten RAM) that starts inside the 4-cycle budget runs to its end.
     uint64_t before = machine.cycle_count();
     machine.run(4);
-    REQUIRE(machine.cycle_count() == before + 4);
+    REQUIRE(machine.cycle_count() == before + 2 + 7);
+    REQUIRE_FALSE(machine.mid_instruction());
 }
 
 TEST_CASE("Machine memory access", "[machine][memory]") {

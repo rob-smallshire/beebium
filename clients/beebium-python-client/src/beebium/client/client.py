@@ -30,7 +30,7 @@ from beebium.client.basic import Basic
 from beebium.client.connection import Connection
 from beebium.client.cpu import CPU
 from beebium.client.crtc import Crtc
-from beebium.client.debugger import Debugger
+from beebium.client.debugger import DEFAULT_TIMEOUT, Debugger
 from beebium.client.disc import Disc
 from beebium.client.econet import Econet
 from beebium.client.econet_transport import EconetTransport
@@ -594,17 +594,32 @@ class Beebium:
     def run_for_emulated_seconds(self, seconds: float) -> None:
         """Run the emulator for the specified number of emulated seconds.
 
-        Computes the cycle count from the clock speed and steps that many
-        cycles synchronously. The emulator must be stopped on entry and
-        is left stopped on return.
+        Runs the machine at its configured speed to a server-side
+        ``cycles >= N`` breakpoint -- the same mechanism as
+        :meth:`run_until_or_timeout` -- and stops at the first instruction
+        boundary at or after the target, never inside an instruction, so
+        registers may be written straight afterwards. Because the machine
+        really runs, everything that advances with emulated time (disc drives,
+        video, sound) advances too. At the default 1x speed an emulated second
+        takes a wall-clock second; a caller wanting to fast-forward can raise
+        the speed itself with ``system.set_speed_multiplier()`` (0.0 is
+        unlimited) -- this method does not change it. The machine is stopped on
+        entry if running, and is left stopped on return.
 
         Args:
             seconds: Number of emulated BBC-time seconds to run.
         """
         clock_hz = self.system.clock_speed_hz or 2_000_000
-        cycles = int(seconds * clock_hz)
         self.debugger.ensure_stopped()
-        self.debugger.step_cycles(cycles)
+        target_cycles = self.debugger.cycle_count + int(seconds * clock_hz)
+        with self.debugger.breakpoint(
+            0x0000,
+            end_address=0x10000,
+            condition=f"cycles >= {target_cycles}",
+        ):
+            # Running is at real speed, so allow the emulated duration on top
+            # of the usual wall-clock deadline.
+            self.debugger.run_and_wait_for_stop(timeout=DEFAULT_TIMEOUT + 2 * seconds)
 
     def run_until_or_timeout(
         self,
@@ -616,7 +631,8 @@ class Beebium:
         """Run until predicate() returns True or the emulated time budget expires.
 
         Execution proceeds in chunks of emulated time. At the end of each
-        chunk, the machine stops (via a server-side cycle-budget breakpoint),
+        chunk, the machine stops (via a server-side cycle-budget breakpoint,
+        so at the first instruction boundary at or after the chunk's target),
         the predicate is evaluated via peek, and if false, the next chunk
         starts. No wall-clock polling -- all timing is in emulated time.
 

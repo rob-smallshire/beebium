@@ -119,10 +119,16 @@ public:
         on_watchpoint_hit_ = cb;
     }
 
+    // While set, watchpoints are not checked. Machine sets it while completing
+    // an instruction after a stop, so that instruction's remaining accesses (an
+    // RMW's second access, say) cannot fire a watchpoint again.
+    void set_watchpoints_suppressed(bool suppressed) { watchpoints_suppressed_ = suppressed; }
+
 private:
     CpuInstructionCallback instruction_callback_;
     const std::vector<WatchpointEntry>* watchpoint_entries_ = nullptr;
     const CpuWatchpointHitCallback* on_watchpoint_hit_ = nullptr;
+    bool watchpoints_suppressed_ = false;
     bool needs_stretch_ = false;
     uint8_t via_pre_tick_mask_ = kPreTickNone;
     uint8_t stretch_count_ = 0;
@@ -222,7 +228,7 @@ private:
         }
 
         // Inline debugger watchpoint check (sorted by start, early-exit)
-        if (watchpoint_entries_ && !watchpoint_entries_->empty()) {
+        if (!watchpoints_suppressed_ && watchpoint_entries_ && !watchpoint_entries_->empty()) {
             const bool is_write = !cpu.read;
             for (const auto& wp : *watchpoint_entries_) {
                 if (wp.start > addr) break;
