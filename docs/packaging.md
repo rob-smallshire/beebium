@@ -277,9 +277,9 @@ Server and client version numbers need not match across the wire.
 
 ### Keg layout
 
-The formula installs the whole relocatable tree under `libexec` and symlinks the
-four servers into `bin`, so only the servers land on the user's `PATH` (not
-`bin/extensions/`):
+The formula installs the whole relocatable tree under `libexec` and symlinks
+every server (`libexec/bin/beebium-model-*`, one per machine variant) into
+`bin`, so only the servers land on the user's `PATH` (not `bin/extensions/`):
 
 ```
 <keg>/
@@ -288,13 +288,17 @@ four servers into `bin`, so only the servers land on the user's `PATH` (not
     ├── bin/{beebium-model-b, ...}        # the real binaries
     ├── bin/extensions/<name>/{<plugin>.dylib, manifest.json}
     ├── lib/{libbeebium_extension_api.dylib, libbeebium_extension_ui_proto.dylib}
-    └── share/beebium/{roms,presets}/
+    └── share/beebium/{roms,presets,discs}/
 ```
 
 Discovery follows the `bin` symlink to the real binary's on-disk location (via
 `_NSGetExecutablePath`), then resolves extensions, the ABI dylibs (via the
 `@loader_path/../lib` install RPATH), ROMs and presets relative to it — the same
 mechanism the Linux `/usr/bin` symlinks rely on.
+
+`list-presets` is per model: each server lists only its own machine's presets,
+so a variant's built-in presets show up only through that variant's binary (for
+example, `model-b-integra-b-disc` via `beebium-model-b-integra-b list-presets`).
 
 ### Files and validation
 
@@ -319,8 +323,8 @@ then let the release drive it live.
 The tap (`rob-smallshire/homebrew-beebium`) is **live and synced to `v0.1.0`**:
 the formula's `url` points at the `v0.1.0` source tarball with the real pinned
 `sha256` (`packaging/homebrew/sync-tap.sh`), so the **stable
-`brew install beebium-server`** path works today — it builds from source, puts the
-four servers on `PATH`, and discovers all extensions. This is validated
+`brew install beebium-server`** path works today — it builds from source, puts
+every server on `PATH`, and discovers all extensions. This is validated
 end-to-end on a clean runner by the macOS leg of `release-smoke.yml`. (The
 `--HEAD` build-from-`master` path also works, via the formula's `head` URL.)
 

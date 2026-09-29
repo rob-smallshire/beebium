@@ -10,7 +10,7 @@
 # is no duplicate-runtime hazard and no need to static-link gRPC the way the
 # Linux bundle does.
 class BeebiumServer < Formula
-  desc "Headless BBC Micro emulator servers for Model B, B+, B+ 128K and ROM/RAM"
+  desc "Headless BBC Micro emulator servers"
   homepage "https://github.com/rob-smallshire/beebium"
   url "https://github.com/rob-smallshire/beebium/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000" # placeholder; pinned by sync-tap.sh
@@ -34,26 +34,20 @@ class BeebiumServer < Formula
            "-DBEEBIUM_BUILD_TESTS=OFF"
     system "cmake", "--build", "build", "--target", "beebium-servers"
 
-    # Install the whole relocatable tree under libexec: the four server
-    # binaries (libexec/bin), the extension ABI dylibs (libexec/lib), the
-    # dlopened plugins (libexec/bin/extensions/<name>) and the ROMs/presets
-    # (libexec/share/beebium). The binaries resolve all of these relative to
-    # their own on-disk location, so the tree relocates intact.
+    # Install the whole relocatable tree under libexec: one server binary per
+    # machine variant (libexec/bin/beebium-model-*), the extension ABI dylibs
+    # (libexec/lib), the dlopened plugins (libexec/bin/extensions/<name>) and
+    # the ROMs, presets and bundled discs (libexec/share/beebium). The binaries
+    # resolve all of these relative to their own on-disk location, so the tree
+    # relocates intact.
     system "cmake", "--install", "build", "--prefix", libexec
 
-    # Put the four servers on the user's PATH without dragging the rest of the
-    # tree (notably bin/extensions) onto it. Every resource lookup (extensions,
-    # ROMs, presets, bundled discs) is relative to the binary's real on-disk
-    # location, resolved through this symlink, so they all find the libexec
-    # tree. The test block exercises each lookup through the symlink.
-    %w[
-      beebium-model-b
-      beebium-model-b-plus
-      beebium-model-b-plus-128k
-      beebium-model-b-romram
-    ].each do |server|
-      bin.install_symlink libexec/"bin"/server
-    end
+    # Put every server on the user's PATH without dragging the rest of the tree
+    # (notably bin/extensions) onto it. Every resource lookup (extensions, ROMs,
+    # presets, bundled discs) is relative to the binary's real on-disk location,
+    # resolved through this symlink, so they all find the libexec tree. The
+    # test block exercises each lookup through the symlink.
+    bin.install_symlink (libexec/"bin").glob("beebium-model-*")
   end
 
   test do
@@ -73,6 +67,17 @@ class BeebiumServer < Formula
     assert_match "scsi-hdd", output
     # The plugins must resolve out of the installed tree, not a build dir.
     assert_match (libexec/"bin/extensions").to_s, output
+
+    # Every machine variant is on PATH and resolves its plugins out of the keg
+    # through its own symlink.
+    servers = bin.glob("beebium-model-*")
+    refute_empty servers
+    assert_includes servers.map { |s| s.basename.to_s }, "beebium-model-b"
+    servers.each do |server|
+      assert_predicate server, :symlink?
+      assert_match (libexec/"bin/extensions").to_s,
+                   shell_output("#{server} list-extensions")
+    end
 
     # Preset discovery: the built-in presets live in libexec/share/beebium/
     # presets. A binary that anchors on the symlink's own directory lists

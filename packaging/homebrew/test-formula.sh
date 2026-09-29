@@ -71,9 +71,29 @@ echo "::group::brew audit --strict"
 brew audit --strict beebium/formula-test/beebium-server
 echo "::endgroup::"
 
-# The four servers must be on PATH via the keg's bin symlinks, and discovery
-# must resolve plugins out of the installed libexec tree.
+# Every server variant must be on PATH via the keg's bin symlinks, and
+# discovery must resolve plugins out of the installed libexec tree.
 echo "::group::PATH + discovery check"
+keg_bin_dirpath="$(brew --prefix beebium/formula-test/beebium-server)/bin"
+server_count=0
+for server_filepath in "${keg_bin_dirpath}"/beebium-model-*; do
+  [ -L "${server_filepath}" ] || {
+    echo "NOT A SYMLINK: ${server_filepath}" >&2
+    exit 1
+  }
+  "${server_filepath}" list-extensions | grep -q "/libexec/bin/extensions" || {
+    echo "PLUGINS NOT RESOLVED from the keg: ${server_filepath}" >&2
+    exit 1
+  }
+  echo "  $(basename "${server_filepath}"): extensions resolved from the keg"
+  server_count=$((server_count + 1))
+done
+[ "${server_count}" -gt 0 ] || {
+  echo "NO beebium-model-* symlinks in ${keg_bin_dirpath}" >&2
+  exit 1
+}
+echo "${server_count} servers on PATH"
+
 ext_out="$(beebium-model-b list-extensions)"
 for cli in host-serial aun scsi-hdd ip232-serial rfc2217-client-serial \
            rfc2217-server-serial rpc-serial loopback-serial piconet \
