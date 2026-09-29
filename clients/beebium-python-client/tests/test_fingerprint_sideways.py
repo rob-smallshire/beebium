@@ -30,8 +30,9 @@ write-through actually delivered the image. That second step is the load-bearing
 assertion; the "Installed" banner alone is just the game's own optimism.
 
 The menu wants the bank as a single hex nibble, so bank 15 is entered as ``F``
-(typing "15" yields "Invalid hex"). Navigation polls the screen-text API rather
-than blind-timing keypresses, following the Firetrack auto-boot tests.
+(typing "15" yields "Invalid hex"). Navigation runs the machine in emulated time
+until each screen landmark appears, then presses its key, so it does not depend
+on the host's speed.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ from pathlib import Path
 import pytest
 
 from beebium.client import Beebium
-from beebium.client.exceptions import ScreenExpectTimeout, ServerNotFoundError
+from beebium.client.exceptions import ServerNotFoundError
 
 # Dabs Press Fingerprint (David Spencer / Dabs Press, 1987), from the issue #72
 # report (stardot download file id 121282). Committed space-free, consistent
@@ -55,6 +56,7 @@ FINGERPRINT_DISC_SHA256 = "baeccaf6b0cf6135818c7f6aeddd0448bd27eb1534412f828d870
 
 # Menu landmarks (Fingerprint Menu V2.0, drawn in MODE 1).
 MENU_OPTION_1 = "Install full Sideways RAM"
+MENU_LAST_OPTION = "7 Exit"
 BANK_PROMPT = "Which sideways RAM bank"
 INSTALLED_BANNER = "Installed. *HELP FI. for commands"
 
@@ -119,53 +121,84 @@ def bbc_fingerprint(
         pytest.skip(str(e))
 
 
-def _drive(bbc: Beebium, keys: str, landmark: str, *, timeout: float = 20.0, attempts: int = 4) -> None:
-    """Type `keys`, wait for `landmark`; re-drive if the press was dropped.
-
-    A press dropped on a slow host leaves the screen on the prior landmark, so
-    the wait times out and the keys are re-sent. The wait returns the instant
-    the landmark appears, so a press that did register is never doubled.
-    """
-    deadline = time.monotonic() + timeout
-    last_error: ScreenExpectTimeout | None = None
-    for _ in range(attempts):
-        bbc.keyboard.type(keys)
-        remaining = max(3.0, deadline - time.monotonic())
-        try:
-            bbc.expect(landmark, timeout=remaining)
-            return
-        except ScreenExpectTimeout as error:
-            last_error = error
-            if time.monotonic() >= deadline:
-                break
-    assert last_error is not None
-    raise last_error
-
-
 def test_fingerprint_installs_into_slot15_sideways_ram(bbc_fingerprint: Beebium) -> None:
     """Install Fingerprint into bank 15 and prove the service ROM answers *HELP."""
     bbc = bbc_fingerprint
 
+    # Every wait is in emulated time, so each key lands at the same point in the
+    # guest however fast the host runs: a wall-clock wait read the screen
+    # mid-listing on a slow host (#125). Each prompt is given an emulated
+    # moment to settle before its key is pressed.
+    bbc.debugger.ensure_stopped()
+
     # !BOOT chains INTRO, which draws its menu (self-correcting PAGE first).
-    bbc.expect(MENU_OPTION_1, timeout=30.0)
+    _run_until_screen(bbc, lambda text: MENU_LAST_OPTION in text, "the menu", emulated_seconds=60.0)
+    _press_when_settled(bbc, "1\r")
 
     # Option 1: install the full sideways-RAM build.
-    _drive(bbc, "1\r", BANK_PROMPT, timeout=15.0)
+    _run_until_screen(bbc, lambda text: BANK_PROMPT in text, "the bank prompt")
 
     # Bank 15 == hex 'F'. The install performs *LOAD SMON FFFF8000 with BASIC
     # paged in; on the ATPL board the write-through routes it to slot-15 RAM.
-    _drive(bbc, f"{BANK_15_KEY}\r", INSTALLED_BANNER, timeout=20.0)
+    _press_when_settled(bbc, f"{BANK_15_KEY}\r")
 
-    # Criterion 1: the game reports the install completed.
-    assert INSTALLED_BANNER in bbc.video.screen_text().text
+    # Criterion 1: the game reports the install completed, and BASIC's prompt
+    # is back after the banner.
+    _run_until_screen(bbc, _prompt_is_back, "the install banner and BASIC prompt")
 
     # Criterion 2 (load-bearing): the MOS scans slot 15 as a service ROM and
     # Fingerprint answers *HELP FI. with its command listing -- only possible
     # if the write-through actually delivered the ROM image into slot-15 RAM.
-    _drive(bbc, "*HELP FI.\r", HELP_BANNER, timeout=15.0)
+    # Read the listing only once it has finished and the prompt has returned.
+    bbc.keyboard.type("*HELP FI.\r")
+    _run_until_screen(bbc, _help_listing_finished, "the *HELP FI. listing to finish")
+    # Compare with the line breaks removed: the command is echoed after the
+    # banner's own prompt and wraps at 40 columns, which must not matter.
     help_text = bbc.video.screen_text().text
-    assert HELP_BANNER in help_text, help_text
-    assert HELP_COMMAND in help_text, help_text
+    unwrapped = "".join(help_text.splitlines())
+    assert HELP_BANNER in unwrapped, help_text
+    assert HELP_COMMAND in unwrapped, help_text
+
+
+def _is_prompt(line: str) -> bool:
+    """A screen line ending in BASIC's prompt (the cursor may show as ``_``)."""
+    return line.rstrip().rstrip("_").endswith(">")
+
+
+def _prompt_is_back(text: str) -> bool:
+    """The install banner's line ends in BASIC's prompt: the machine is listening.
+
+    The program prints the banner without a newline, so the prompt follows it on
+    the same line. Fingerprint's screen keeps decoration rows below the text,
+    so the prompt is not the last line.
+    """
+    return any(INSTALLED_BANNER in line and _is_prompt(line) for line in text.splitlines())
+
+
+def _help_listing_finished(text: str) -> bool:
+    """The listing is on screen and BASIC's prompt has returned after it."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if HELP_BANNER in line:
+            return any(_is_prompt(after) and after.strip().rstrip("_") == ">" for after in lines[index + 1:])
+    return False
+
+
+def _press_when_settled(bbc: Beebium, keys: str) -> None:
+    """Type ``keys`` half an emulated second after the prompt appeared.
+
+    A key pressed the instant a prompt is drawn can arrive before the program
+    reads the keyboard; settling in emulated time avoids that at any host speed.
+    """
+    bbc.run_for_emulated_seconds(0.5)
+    bbc.keyboard.type(keys)
+
+
+def _run_until_screen(bbc: Beebium, predicate, what: str, emulated_seconds: float = 20.0) -> None:
+    """Run in emulated time until ``predicate(screen text)`` holds; left stopped."""
+    assert bbc.run_until_or_timeout(
+        lambda: predicate(bbc.video.screen_text().text), emulated_seconds, chunk_seconds=0.1
+    ), f"timed out after {emulated_seconds:g} emulated seconds waiting for {what}:\n{bbc.video.screen_text().text}"
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +306,14 @@ def test_service_rom_install_into_empty_bank_wedges_guest_not_server(
 
     # Boot the disc (Shift-Break) and install the full build into bank 0, which
     # has no RAM behind it on a plain Model B.
+    # The menu is driven in emulated time, as in the install test above.
     bbc.keyboard.shift_break()
-    bbc.expect(MENU_OPTION_1, timeout=30.0)
-    _drive(bbc, "1\r", BANK_PROMPT, timeout=15.0)
-    _drive(bbc, "0\r", INSTALLED_BANNER, timeout=25.0)
+    bbc.debugger.ensure_stopped()
+    _run_until_screen(bbc, lambda text: MENU_LAST_OPTION in text, "the menu", emulated_seconds=60.0)
+    _press_when_settled(bbc, "1\r")
+    _run_until_screen(bbc, lambda text: BANK_PROMPT in text, "the bank prompt")
+    _press_when_settled(bbc, "0\r")
+    _run_until_screen(bbc, _prompt_is_back, "the install banner and BASIC prompt")
 
     # The install advertised a ROM in the empty bank: type entry 0 == 0xFF.
     assert _peek_byte(bbc, _ROM_TYPE_TABLE) == 0xFF
@@ -284,6 +321,7 @@ def test_service_rom_install_into_empty_bank_wedges_guest_not_server(
     # A * command triggers the paged-ROM service scan that jumps into the bogus
     # bank. Poll until the guest is wandering in RAM (PC below the sideways-ROM
     # window on several consecutive reads) -- the faithful wedge.
+    bbc.debugger.ensure_running()
     bbc.keyboard.type("*HELP\r")
     deadline = time.monotonic() + 20.0
     consecutive_in_ram = 0
