@@ -258,7 +258,11 @@ TEST_CASE("AUN mDNS e2e: cross-net discovery routes via local_net translation",
     // translated to 0 (because A is not on B's local net).
     CHECK(received->src_net == 3);
     CHECK(received->src_stn == stn_a);
-    CHECK(received->dest_net == 5);
+    // dest_net is always delivered as 0: a BBC cannot learn its own net
+    // number, so net 0 is the only form in which NFS recognises a frame as
+    // its own (an absolute dest_net makes NFS discard every inbound frame
+    // when --aun net= is non-zero -- see AunBackend::receive_frame).
+    CHECK(received->dest_net == 0);
     CHECK(received->dest_stn == stn_b);
 }
 
@@ -334,4 +338,109 @@ TEST_CASE("AUN mDNS e2e: late subscriber discovers an already-present peer",
     }
 
     REQUIRE(b_sees_a);
+}
+
+namespace {
+
+// Poll until pred() holds or the mDNS deadline passes.
+template <typename Pred>
+bool wait_until(Pred pred) {
+    auto deadline = std::chrono::steady_clock::now() + MDNS_TIMEOUT;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (pred()) return true;
+        std::this_thread::sleep_for(POLL_INTERVAL);
+    }
+    return pred();
+}
+
+bool has_peer(const AunBackend& backend, uint8_t net, uint8_t stn,
+              uint16_t port) {
+    for (const auto& p : backend.list_peers()) {
+        if (p.net == net && p.stn == stn && p.port == port) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+// Mark Moxon's field scenario (#68): a file server, an incumbent client, and a
+// newcomer that starts on the incumbent's station number then changes it. After
+// the fix all three coexist -- the server keeps the original client and gains
+// the newcomer's new station, and the newcomer's stale advertisement orphans
+// nobody.
+TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new number",
+          "[aun][discovery][e2e][.mdns]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    const std::string svc_type = unique_service_type();
+    constexpr uint8_t stn_server = 254;
+    constexpr uint8_t stn_incumbent = 80;
+    constexpr uint8_t stn_new = 81;
+
+    // Server S and incumbent client A come up and find each other.
+    AunBackend backend_s(0, stn_server, 0);
+    AunBackend backend_a(0, stn_incumbent, 0);
+    REQUIRE(backend_s.is_connected());
+    REQUIRE(backend_a.is_connected());
+    AunDiscoveryAnnouncer ann_s(0, stn_server, backend_s.local_port(),
+                                "beebium-test", "1.0", "");
+    AunDiscoveryAnnouncer ann_a(0, stn_incumbent, backend_a.local_port(),
+                                "beebium-test", "1.0", "");
+    ann_s.set_service_type(svc_type);
+    ann_a.set_service_type(svc_type);
+    REQUIRE(ann_s.start());
+    REQUIRE(ann_a.start());
+    AunDiscoverySubscriber sub_s(backend_s, stn_server);
+    AunDiscoverySubscriber sub_a(backend_a, stn_incumbent);
+    sub_s.set_service_type(svc_type);
+    sub_a.set_service_type(svc_type);
+    REQUIRE(sub_s.start());
+    REQUIRE(sub_a.start());
+
+    REQUIRE(wait_until([&] {
+        return has_peer(backend_s, 0, stn_incumbent, backend_a.local_port());
+    }));
+
+    // The newcomer B comes up ALSO as station 80 -- the collision.
+    AunBackend backend_b(0, stn_incumbent, 0);
+    REQUIRE(backend_b.is_connected());
+    AunDiscoveryAnnouncer ann_b(0, stn_incumbent, backend_b.local_port(),
+                                "beebium-test", "1.0", "");
+    ann_b.set_service_type(svc_type);
+    REQUIRE(ann_b.start());
+    AunDiscoverySubscriber sub_b(backend_b, stn_incumbent);
+    sub_b.set_service_type(svc_type);
+    REQUIRE(sub_b.start());
+
+    // S refuses B's 80 and keeps A's: first live station wins.
+    REQUIRE(wait_until([&] {
+        return backend_s.station_collisions().count >= 1;
+    }));
+    {
+        auto ep = backend_s.peer_endpoint(0, stn_incumbent);
+        REQUIRE(ep.has_value());
+        CHECK(ep->second == backend_a.local_port());  // still A, not B
+    }
+
+    // B changes its station to 81: re-announce and re-filter, exactly as the
+    // transport extension's station-changed callback does.
+    ann_b.set_local_station(stn_new);
+    REQUIRE(ann_b.start());
+    sub_b.set_local_station(stn_new);
+    backend_b.on_station_id_changed(stn_new);
+
+    // S now sees B at 0.81, and A's 0.80 survived untouched.
+    REQUIRE(wait_until([&] {
+        return has_peer(backend_s, 0, stn_new, backend_b.local_port());
+    }));
+    {
+        auto ep = backend_s.peer_endpoint(0, stn_incumbent);
+        REQUIRE(ep.has_value());
+        CHECK(ep->second == backend_a.local_port());  // A untouched
+    }
+    // All three reachable: B has the server too.
+    REQUIRE(wait_until([&] {
+        return has_peer(backend_b, 0, stn_server, backend_s.local_port());
+    }));
 }
