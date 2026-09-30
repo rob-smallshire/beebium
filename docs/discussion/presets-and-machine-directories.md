@@ -17,9 +17,15 @@ Three things, kept distinct:
 | **Machine directory** | The backing store of one machine instance, `<name>.beebium-machine/`: its identity, its configuration, its working media, its battery-backed state. An extracted preset plus state. | Mutable; owned by exactly one running server at a time. | A temporary directory (transient machine) or wherever the user saved it. |
 | **Machine** | A running server process on a machine directory. | Live. | A process. |
 
-A **snapshot** (#107, full CPU/RAM/device state for resumption) is a fourth
-thing and is out of scope here. Opening a machine directory is a power-on of
-that machine, not a resumption.
+**A machine directory is not a saved machine state.** It holds exactly
+what a real machine keeps when powered off: its configuration, its media,
+and its non-volatile memory (battery-backed RAM, CMOS, the RTC offset).
+Opening it is a power-on of that machine. It never contains volatile RAM,
+CPU registers, device registers or anything else that a power cycle
+discards. A **snapshot** of the running state for later resumption (#107)
+is a different animal with a different suffix, `.beebium-snapshot`, and is
+out of scope here; a snapshot would reference the machine directory it
+was taken from, not replace it.
 
 The relationships:
 
@@ -175,8 +181,9 @@ Elite Server.beebium-machine/
                         plus state)
   discs/                working copies of hard-disc and floppy images the
                         configuration references
-  state/                battery-backed state: board RAM, CMOS, RTC offset,
-                        one file per hardware unit
+  nvram/                non-volatile state a real machine keeps when powered
+                        off: board RAM, CMOS, RTC offset, one file per
+                        hardware unit (never volatile RAM or CPU state)
   lock                  held by the running server (section 4.4)
 ```
 
@@ -222,7 +229,7 @@ the directory lives and whether the server removes it at exit.
 
 ### 4.3 What the server writes, and when
 
-- `state/`: on graceful shutdown, and on Save. Atomic write-and-rename per
+- `nvram/`: on graceful shutdown, and on Save. Atomic write-and-rename per
   file. A crash loses changes since the last write, which #103 accepts. A
   periodic write is an optional later improvement and needs no format change.
 - `discs/`: continuously, as the guest writes (the existing disc write-back
@@ -235,13 +242,13 @@ Master 128 CMOS) exposes a serialise/restore pair that names its file and
 its layout version; the server calls them all. A restore whose layout
 version or hardware configuration no longer matches (IBOS 1.20 versus 1.26,
 RAM fitted to a different socket pair) is refused with a warning and the
-unit starts from its seed, and the stale file is kept under `state/stale/`
+unit starts from its seed, and the stale file is kept under `nvram/stale/`
 so nothing is silently discarded. This answers questions 5, 6 and 10 in
 #103: no attempt at faithfully replaying stale data across a hardware
 change; the seed is the "kill memory" jumper.
 
 `reset-battery` (CLI subcommand on a machine directory that is not running;
-a gRPC action and a menu item on a running machine) deletes `state/` and
+a gRPC action and a menu item on a running machine) deletes `nvram/` and
 returns every unit to its seed. That is question 7.
 
 ### 4.4 Concurrency and determinism
@@ -361,7 +368,7 @@ launching a second server, matching the existing one-window-per-target rule.
 | `create-machine --preset <id\|file> --output <dir>` | Instantiate without running (scripts, tests, packaging a ready-made machine). |
 | `import-preset <path>` | Import a `.beebium-preset` archive, a directory laid out like one, or a lone `preset.json`; the store holds the archive. |
 | `export-preset <id> --output <path> [--unpack]` | Write the archive, or the directory form for editing. |
-| `reset-battery <dir>` | Delete `state/` of a machine that is not running. |
+| `reset-battery <dir>` | Delete `nvram/` of a machine that is not running. |
 | `SystemService.SaveMachine`, `ResetBattery` (gRPC) | The same on a running machine; the app's File > Save... and a menu action. |
 
 Pre-launch configuration stays on the CLI; only operations on a running
