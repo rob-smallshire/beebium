@@ -107,7 +107,35 @@ if [ "${CI:-}" = "true" ]; then
       brew install --overwrite openssl@3 \
         || echo "brew install openssl@3 reported a failure; linking it explicitly"
     fi
+    # The image is inconsistent the other way too: Homebrew may already
+    # record openssl@3 as linked, which makes `brew link` a no-op ("Already
+    # linked"). Unlinking first resets that record so the link really runs.
+    brew unlink openssl@3 || true
     brew link --overwrite openssl@3
+    if [[ "$(readlink "${openssl_linkpath}")" == *openssl@1.1* ]]; then
+      # Last resort: remove the orphaned openssl@1.1 symlinks that stand where
+      # openssl@3 links -- each prefix path the openssl@3 keg links, or a
+      # directory above it, that is a symlink into openssl@1.1 -- then link
+      # again. Nothing else in the prefix is touched.
+      echo "bin/openssl still points into openssl@1.1; removing the conflicting symlinks"
+      brew_prefix_dirpath="$(brew --prefix)"
+      keg_dirpath="$(cd "$(brew --prefix openssl@3)" && pwd -P)"
+      while IFS= read -r relpath; do
+        candidate_relpath="${relpath}"
+        while [ "${candidate_relpath}" != "." ]; do
+          candidate_path="${brew_prefix_dirpath}/${candidate_relpath}"
+          if [ -L "${candidate_path}" ] \
+             && [[ "$(readlink "${candidate_path}")" == *openssl@1.1* ]]; then
+            echo "  removing ${candidate_path} -> $(readlink "${candidate_path}")"
+            rm "${candidate_path}"
+          fi
+          candidate_relpath="$(dirname "${candidate_relpath}")"
+        done
+      done < <(cd "${keg_dirpath}" \
+               && find bin sbin include lib share etc \( -type f -o -type l \) 2>/dev/null)
+      brew unlink openssl@3 || true
+      brew link --overwrite openssl@3
+    fi
     if [[ "$(readlink "${openssl_linkpath}")" == *openssl@1.1* ]]; then
       echo "${openssl_linkpath} still points into openssl@1.1 after linking openssl@3" >&2
       exit 1
