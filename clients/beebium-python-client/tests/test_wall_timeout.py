@@ -23,7 +23,7 @@ import time
 import pytest
 
 from beebium.client import Beebium
-from beebium.client.debugger import DEFAULT_TIMEOUT, wall_timeout_for
+from beebium.client.debugger import DEFAULT_TIMEOUT, ExecutionWaitTimeout, wall_timeout_for
 from beebium.client.exceptions import DebuggerError
 
 
@@ -91,3 +91,76 @@ def test_explicit_wall_timeout_per_chunk_is_honoured(bbc: Beebium) -> None:
             lambda: False, 60.0, chunk_seconds=60.0, wall_timeout_per_chunk=2.0
         )
     assert bbc.debugger.is_stopped
+
+
+def _record_watch_timeouts(bbc: Beebium, monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Record the timeout of every execution-state stream the debugger opens."""
+    real = bbc.debugger.watch_execution_state
+    timeouts: list[float] = []
+
+    def recording(*, timeout: float):
+        timeouts.append(timeout)
+        return real(timeout=timeout)
+
+    monkeypatch.setattr(bbc.debugger, "watch_execution_state", recording)
+    return timeouts
+
+
+def test_the_deadline_passed_to_grpc_is_the_scaled_one(
+    bbc: Beebium, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    timeouts = _record_watch_timeouts(bbc, monkeypatch)
+    bbc.debugger.ensure_stopped()
+    bbc.run_until_or_timeout(lambda: False, 0.5, chunk_seconds=0.5)
+    assert len(timeouts) == 1
+    assert DEFAULT_TIMEOUT - 1.0 < timeouts[0] <= DEFAULT_TIMEOUT
+
+    # A 25 s chunk, run unpaced so it is quick, gets 10 + 5 x 25 = 135 s.
+    timeouts.clear()
+    bbc.system.set_speed_multiplier(0.0)
+    try:
+        bbc.run_until_or_timeout(lambda: False, 25.0, chunk_seconds=25.0)
+    finally:
+        bbc.system.set_speed_multiplier(1.0)
+    assert len(timeouts) == 1
+    assert 134.0 < timeouts[0] <= 135.0
+
+
+@pytest.mark.parametrize("before_initial_event", [False, True])
+def test_a_grpc_deadline_expiring_early_does_not_end_the_wait(
+    bbc: Beebium, monkeypatch: pytest.MonkeyPatch, before_initial_event: bool
+) -> None:
+    # gRPC keeps a call's deadline on the wall clock, which can step. Simulate
+    # its deadline expiring long before ours, either before the stream's first
+    # event or after it: the wait subscribes again and still reaches the target.
+    real = bbc.debugger.watch_execution_state
+    calls: list[float] = []
+
+    def expires_early_once(*, timeout: float):
+        calls.append(timeout)
+        stream = real(timeout=timeout)
+        if len(calls) == 1:
+            if not before_initial_event:
+                yield next(stream)
+            stream.close()
+            raise ExecutionWaitTimeout("simulated early deadline")
+        yield from stream
+
+    monkeypatch.setattr(bbc.debugger, "watch_execution_state", expires_early_once)
+    bbc.debugger.ensure_stopped()
+    target = bbc.debugger.cycle_count + 400_000  # 0.2 emulated seconds
+    state = bbc.debugger.run_to_cycle(target, clock_hz=2_000_000, wall_timeout=30.0)
+    assert state.cycle_count >= target
+    assert not state.is_running
+    assert len(calls) == 2
+    assert calls[1] < calls[0]  # the second wait has only the remaining time
+
+
+def test_an_expired_deadline_still_reports_a_slow_host(bbc: Beebium) -> None:
+    bbc.debugger.ensure_stopped()
+    target = bbc.debugger.cycle_count + 60 * 2_000_000
+    try:
+        with pytest.raises(DebuggerError, match="slow host"):
+            bbc.debugger.run_to_cycle(target, clock_hz=2_000_000, wall_timeout=1.0)
+    finally:
+        bbc.debugger.ensure_stopped()

@@ -931,6 +931,13 @@ class Debugger:
         or after the target. The wait is bounded by `wall_timeout`; see
         :func:`wall_timeout_for` for a deadline scaled to the emulated length.
 
+        The deadline is kept on the monotonic clock. gRPC keeps a call's deadline
+        on the wall clock, so it can expire early (the system clock stepping
+        forward, say); if the stream reports its deadline before this one has
+        passed, the wait subscribes again for the time that remains -- without
+        resuming anything, and returning at once if the machine has already
+        stopped.
+
         On expiry the wait never retries: it reads the cycle count and raises a
         :class:`DebuggerError` saying which of two things happened -- the host
         is slow ("slow host: ran X of Y emulated seconds in Z s wall
@@ -951,17 +958,34 @@ class Debugger:
         """
         start_cycles = self.cycle_count
         started = time.monotonic()
+        deadline = started + wall_timeout
+        resume = resume or self.ensure_running
+        resumed = False
         with self.breakpoint(
             0x0000,
             end_address=0x10000,
             condition=f"cycles >= {target_cycles}",
             stop_counterpart=stop_counterpart,
         ):
-            try:
-                return self._resume_and_wait_for_stop(
-                    resume or self.ensure_running, wall_timeout
-                ).state
-            except ExecutionWaitTimeout:
+            while True:
+                try:
+                    stream = self.watch_execution_state(
+                        timeout=max(deadline - time.monotonic(), 0.001)
+                    )
+                    initial = next(stream).state
+                    if not resumed:
+                        resume()
+                        resumed = True
+                    elif not initial.is_running:
+                        # Stopped while this wait was re-subscribing.
+                        return initial
+                    for event in stream:
+                        if not event.state.is_running and event.state.sequence > initial.sequence:
+                            return event.state
+                    raise DebuggerError("Execution state stream ended without a stop event")
+                except ExecutionWaitTimeout:
+                    if time.monotonic() < deadline:
+                        continue  # gRPC's wall-clock deadline expired early
                 elapsed = time.monotonic() - started
                 ran_seconds = (self.cycle_count - start_cycles) / clock_hz
                 wanted_seconds = (target_cycles - start_cycles) / clock_hz
