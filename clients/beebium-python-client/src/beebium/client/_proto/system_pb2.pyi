@@ -791,7 +791,8 @@ class PacingStats(_message.Message):
     """Current adaptive safety margin"""
     controller_drift: _builtins.float
     """PI controller state
-    Current drift in cycles (+ = ahead)
+    Current deficit in cycles: target minus actual, positive when the
+    machine is BEHIND its target.
     """
     controller_integral: _builtins.float
     """Accumulated drift (time debt)"""

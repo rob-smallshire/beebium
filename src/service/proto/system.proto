@@ -345,7 +345,9 @@ message PacingStats {
     double safety_margin_us = 6;       // Current adaptive safety margin
 
     // PI controller state
-    double controller_drift = 7;       // Current drift in cycles (+ = ahead)
+    // Current deficit in cycles: target minus actual, positive when the
+    // machine is BEHIND its target.
+    double controller_drift = 7;
     double controller_integral = 8;    // Accumulated drift (time debt)
 
     // Speed control and headroom, sampled over the pacing window (~5s).
