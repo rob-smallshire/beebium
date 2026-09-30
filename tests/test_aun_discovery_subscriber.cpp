@@ -62,7 +62,8 @@ private:
 
 DiscoveredService make_service(const std::string& name,
                                uint8_t net, uint8_t stn, uint16_t port,
-                               uint32_t ip = htonl(INADDR_LOOPBACK)) {
+                               uint32_t ip = htonl(INADDR_LOOPBACK),
+                               const std::string& impl_identity = "") {
     DiscoveredService svc;
     svc.instance_name = name;
     svc.hostname = "fake.local.";
@@ -72,6 +73,9 @@ DiscoveredService make_service(const std::string& name,
     svc.txt_records["net"] = std::to_string(net);
     svc.txt_records["station"] = std::to_string(stn);
     svc.txt_records["port"] = std::to_string(port);
+    if (!impl_identity.empty()) {
+        svc.txt_records["impl-identity"] = impl_identity;
+    }
     return svc;
 }
 
@@ -139,11 +143,17 @@ TEST_CASE("AunDiscoverySubscriber: skips own announcement",
           "[aun][discovery][subscriber]") {
     AunBackend backend(/*local_net=*/3, /*local_stn=*/254, 0);
     AunDiscoverySubscriber subscriber(backend, /*local_stn=*/254,
-                                      std::make_unique<FakeBrowser>());
+                                      std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
 
-    subscriber.inject_added(make_service("Beebium 3.254", 3, 254, 32768));
+    // Our own announcement, reflected back by Bonjour (possibly under a renamed
+    // instance name), carries our impl-identity -- recognised as ourselves.
+    subscriber.inject_added(
+        make_service("Beebium 3.254 (2)", 3, 254, 32768,
+                     htonl(INADDR_LOOPBACK), "our-uuid"));
 
     CHECK(backend.peer_count() == 0);
+    CHECK(backend.station_collisions().count == 0);  // not a collision -- it's us
 }
 
 TEST_CASE("AunDiscoverySubscriber: operator entry blocks discovered overwrite",
@@ -509,18 +519,34 @@ TEST_CASE("AunDiscoverySubscriber: a different instance claiming our own station
           "[aun][discovery][subscriber][collision]") {
     AunBackend backend(0, 80, 0);  // this machine is 0.80
     AunDiscoverySubscriber subscriber(backend, 80,
-                                      std::make_unique<FakeBrowser>());
+                                      std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
 
-    // Our own announcement ("Beebium 0.80") is skipped silently.
-    subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40000, nonlocal_ip()));
+    // Our own announcement -- even reflected back under a Bonjour-renamed
+    // instance name -- is recognised by our impl-identity and skipped silently.
+    subscriber.inject_added(make_service("Beebium 0.80 (2)", 0, 80, 40000,
+                                         nonlocal_ip(), "our-uuid"));
     CHECK(backend.peer_count() == 0);
     CHECK(backend.station_collisions().count == 0);
 
-    // A DIFFERENT instance claiming 0.80 is flagged as a collision, and never
-    // adopted -- we do not yield our own number.
-    subscriber.inject_added(make_service("Beebium 0.80 (2)", 0, 80, 50000, nonlocal_ip()));
+    // A DIFFERENT instance (a different identity) claiming 0.80 is flagged as a
+    // collision, and never adopted -- we do not yield our own number.
+    subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 50000,
+                                         nonlocal_ip(), "other-uuid"));
     CHECK(backend.peer_count() == 0);
     auto report = backend.station_collisions();
     CHECK(report.count == 1);
     CHECK(report.last.find("this machine") != std::string::npos);
+}
+
+TEST_CASE("AunDiscoverySubscriber: with no identity, our number is skipped silently",
+          "[aun][discovery][subscriber][collision]") {
+    // A subscriber with no own identity cannot tell its reflection from another
+    // machine, so it falls back to the conservative silent self-filter.
+    AunBackend backend(0, 80, 0);
+    AunDiscoverySubscriber subscriber(backend, 80,
+                                      std::make_unique<FakeBrowser>());
+    subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40000, nonlocal_ip()));
+    CHECK(backend.peer_count() == 0);
+    CHECK(backend.station_collisions().count == 0);
 }

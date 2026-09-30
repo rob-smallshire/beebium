@@ -49,9 +49,16 @@ public:
     // backend must outlive the subscriber. browser is the platform
     // browser to drive; tests inject a fake. If browser is null, the
     // constructor allocates a discovery::create_browser() default.
+    // own_identity is this machine's UUID (the same value the announcer
+    // publishes as the impl-identity TXT record); it lets the subscriber
+    // recognise its own announcement reflected back by Bonjour even when
+    // Bonjour has renamed the instance. Empty when no identity was injected,
+    // in which case our-number advertisements are skipped silently (we cannot
+    // tell our own reflection from another machine).
     AunDiscoverySubscriber(AunBackend& backend,
                            std::uint8_t local_stn,
-                           std::unique_ptr<discovery::Browser> browser = nullptr);
+                           std::unique_ptr<discovery::Browser> browser = nullptr,
+                           std::string own_identity = {});
 
     ~AunDiscoverySubscriber();
 
@@ -124,6 +131,7 @@ private:
     AunBackend& backend_;
     std::atomic<std::uint8_t> local_stn_;
     std::unique_ptr<discovery::Browser> browser_;
+    std::string own_identity_;  // our impl-identity (machine UUID), for self-recognition
     std::string service_type_ = "_aun._udp";
     bool trace_ = false;  // BEEBIUM_AUN_TRACE: log collisions to stderr
 

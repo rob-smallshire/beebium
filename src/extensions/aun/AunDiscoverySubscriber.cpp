@@ -52,10 +52,12 @@ bool parse_byte(const std::string& s, std::uint8_t& out) {
 AunDiscoverySubscriber::AunDiscoverySubscriber(
         AunBackend& backend,
         std::uint8_t local_stn,
-        std::unique_ptr<discovery::Browser> browser)
+        std::unique_ptr<discovery::Browser> browser,
+        std::string own_identity)
     : backend_(backend)
     , local_stn_(local_stn)
     , browser_(browser ? std::move(browser) : discovery::create_browser())
+    , own_identity_(std::move(own_identity))
     , trace_(std::getenv("BEEBIUM_AUN_TRACE") != nullptr) {}
 
 AunDiscoverySubscriber::~AunDiscoverySubscriber() {
@@ -145,16 +147,22 @@ void AunDiscoverySubscriber::handle_added(
     const std::uint8_t our_net = backend_.local_net();
     const std::uint8_t our_stn = local_stn_.load(std::memory_order_relaxed);
 
-    // An advertisement for OUR own (net, stn). Our own announcement (Bonjour
-    // reflects it back to us) carries the instance name our announcer
-    // publishes, "Beebium <net>.<stn>" -- skip that silently. But a DIFFERENT
-    // instance claiming our number is a collision the operator should see: we
-    // never yield our own number, so there is nothing to adopt, only to report.
+    // An advertisement for OUR own (net, stn). Recognise our own announcement
+    // (Bonjour reflects it back, and may RENAME the instance if our number was
+    // already taken -- so the instance name is unreliable) by its impl-identity
+    // TXT record, which our announcer publishes from this machine's UUID. An
+    // advertisement carrying our identity is us -- skip it silently, whatever
+    // Bonjour called it. A DIFFERENT instance (a different identity, or none:
+    // no other implementation carries our UUID) on our number is a collision
+    // the operator should see; there is nothing to adopt -- we never yield our
+    // own number. With no identity of our own we cannot tell our reflection
+    // from another machine, so fall back to skipping our number silently.
     if (net == our_net && stn == our_stn) {
-        const std::string own_name =
-            "Beebium " + std::to_string(static_cast<unsigned>(our_net)) + "." +
-            std::to_string(static_cast<unsigned>(our_stn));
-        if (svc.instance_name == own_name) {
+        if (own_identity_.empty()) {
+            return;  // no identity to disambiguate -- conservative silent skip
+        }
+        auto id_it = svc.txt_records.find("impl-identity");
+        if (id_it != svc.txt_records.end() && id_it->second == own_identity_) {
             return;  // our own announcement
         }
         std::string description =
