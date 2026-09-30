@@ -88,6 +88,14 @@ This means **Beebium-to-Beebium AUN works with no `map=` configuration on the sa
 
 The TXT record schema, the rationale for the vendor-neutral service type, and the choice of `net=` as a mandatory field are documented in [`docs/discussion/aun-mdns-peer-discovery.md`](discussion/aun-mdns-peer-discovery.md). Other AUN implementations (BeebEm, PiEconetBridge, real Acorn hardware) are explicitly invited to adopt the same schema; nothing in it is Beebium-specific.
 
+#### Changing the station number at runtime
+
+The station number can be changed while the machine runs (the Network sidebar's pencil edit, or `EconetService::SetStationId`). The guest only re-reads the number from `&FE18` on the next Break, so the change takes effect a Break later; but the AUN transport reacts immediately, because its advertised and self-filtered identity would otherwise stay fixed at the value it bound with. On a station change the transport re-publishes its `_aun._udp` announcement with the new station (the announcement's instance name embeds the station, so this withdraws the old name and publishes the new one) and updates the subscriber's self-filter so this machine now treats its *old* station number as just another peer. Without this, a machine whose station was changed in the sidebar would advertise a station nobody can route to and ignore its former number — the defect in issue #68.
+
+#### Station-number collisions (first live station wins)
+
+Two stations must not share a number. If a discovered announcement claims an `(net, stn)` that a **different, still-live** station already holds, Beebium refuses it rather than repointing the routing table at the newcomer: the incumbent keeps the number, the newcomer is not adopted, and the collision is recorded. A withdrawal of the refused announcement removes nothing (it never owned the entry), so the incumbent is never orphaned. A re-advertisement from the *same* station (an interface change, or a new ephemeral port) is not a collision and updates its endpoint in place. Collisions are logged under `BEEBIUM_AUN_TRACE` (with both endpoints) and surfaced on `EconetService` status as `aun_station_collision_count` / `aun_last_station_collision`, which `WatchEconetStatus` streams. The preventive half — a machine choosing a free station number from what mDNS already shows, rather than colliding in the first place — is tracked as issue #67.
+
 **Platform support today:**
 
 - macOS — full support via Bonjour (`dns_sd.h`): both advertises and browses.
