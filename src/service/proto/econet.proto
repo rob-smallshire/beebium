@@ -111,6 +111,16 @@ message GetEconetStatusResponse {
     bool requires_real_time = 26;
     bool gated_by_speed = 27;
 
+    // AUN station-number collisions: a discovered peer advertised a (net, stn)
+    // already held by a different, still-live station and was refused rather
+    // than allowed to displace the incumbent (first live station wins; see
+    // docs/networking.md "Station-number collisions"). aun_station_collision_count
+    // counts them since the transport came up; aun_last_station_collision
+    // describes the most recent one for display. Zero / empty for non-AUN
+    // transports and when no collision has occurred.
+    uint32 aun_station_collision_count = 28;
+    string aun_last_station_collision = 29;
+
     // Field 25 (piconet) was removed; Piconet status now lives on
     // PiconetService.GetStatus (in src/extensions/piconet/piconet_service.proto).
     reserved 25;

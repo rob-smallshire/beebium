@@ -431,6 +431,9 @@ private:
 
             if (econet.backend()) {
                 response.set_connected(econet.backend()->is_connected());
+                auto collisions = econet.backend()->station_collisions();
+                response.set_aun_station_collision_count(collisions.count);
+                response.set_aun_last_station_collision(collisions.last);
             }
 
             if (auto* adlc = econet.adlc()) {
