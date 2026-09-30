@@ -19,10 +19,12 @@ must say whether the host was slow or the machine made no progress.
 from __future__ import annotations
 
 import time
+import types
 
 import pytest
 
 from beebium.client import Beebium
+from beebium.client import debugger as debugger_module
 from beebium.client.debugger import DEFAULT_TIMEOUT, ExecutionWaitTimeout, wall_timeout_for
 from beebium.client.exceptions import DebuggerError
 
@@ -126,13 +128,28 @@ def test_the_deadline_passed_to_grpc_is_the_scaled_one(
     assert 134.0 < timeouts[0] <= 135.0
 
 
+# Monotonic time the fake clock skips when the early expiry is injected: the
+# deadline must then have that much less to run.
+_EARLY_EXPIRY_SECONDS = 1.5
+
+
 @pytest.mark.parametrize("before_initial_event", [False, True])
 def test_a_grpc_deadline_expiring_early_does_not_end_the_wait(
     bbc: Beebium, monkeypatch: pytest.MonkeyPatch, before_initial_event: bool
 ) -> None:
     # gRPC keeps a call's deadline on the wall clock, which can step. Simulate
     # its deadline expiring long before ours, either before the stream's first
-    # event or after it: the wait subscribes again and still reaches the target.
+    # event or after it: the wait subscribes again, with only the time that
+    # remains, and still reaches the target. The debugger's monotonic clock is
+    # a fake that jumps by a fixed amount at the injected expiry, so the
+    # remaining time does not depend on the host clock's resolution (a coarse
+    # one measures no time passing at all).
+    offset = [0.0]
+    fake_time = types.SimpleNamespace(
+        monotonic=lambda: time.monotonic() + offset[0], time=time.time, sleep=time.sleep
+    )
+    monkeypatch.setattr(debugger_module, "time", fake_time)
+
     real = bbc.debugger.watch_execution_state
     calls: list[float] = []
 
@@ -143,6 +160,7 @@ def test_a_grpc_deadline_expiring_early_does_not_end_the_wait(
             if not before_initial_event:
                 yield next(stream)
             stream.close()
+            offset[0] += _EARLY_EXPIRY_SECONDS
             raise ExecutionWaitTimeout("simulated early deadline")
         yield from stream
 
@@ -153,7 +171,8 @@ def test_a_grpc_deadline_expiring_early_does_not_end_the_wait(
     assert state.cycle_count >= target
     assert not state.is_running
     assert len(calls) == 2
-    assert calls[1] < calls[0]  # the second wait has only the remaining time
+    # The second wait has the original deadline less the time that passed.
+    assert calls[1] == pytest.approx(calls[0] - _EARLY_EXPIRY_SECONDS, abs=0.5)
 
 
 def test_an_expired_deadline_still_reports_a_slow_host(bbc: Beebium) -> None:
