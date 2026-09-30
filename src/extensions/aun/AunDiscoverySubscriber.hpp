@@ -125,6 +125,7 @@ private:
     std::atomic<std::uint8_t> local_stn_;
     std::unique_ptr<discovery::Browser> browser_;
     std::string service_type_ = "_aun._udp";
+    bool trace_ = false;  // BEEBIUM_AUN_TRACE: log collisions to stderr
 
     // Interval between same-host liveness sweeps on the production thread.
     static constexpr std::chrono::milliseconds kSweepInterval{2500};

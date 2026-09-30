@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -151,6 +152,24 @@ public:
     // Enumerate all configured peers.
     std::vector<PeerInfo> list_peers() const;
 
+    // The current UDP endpoint (network-order ip, host-order port) mapped to
+    // (net, stn), or nullopt if that station is not in the peer table. Used by
+    // the discovery subscriber to describe a collision (which endpoint holds
+    // the station a newcomer tried to claim).
+    std::optional<std::pair<uint32_t, uint16_t>>
+    peer_endpoint(uint8_t net, uint8_t stn) const;
+
+    // Record a rejected station-number collision (a discovered peer advertised
+    // a station already held by a different, still-live endpoint). Increments
+    // the count, stores the description as the most recent, and bumps the
+    // status sequence so WatchEconetStatus re-reads. Called by the subscriber
+    // on the browser thread.
+    void note_station_collision(std::string description);
+
+    // Collisions observed so far (count + most-recent description). Overrides
+    // NetworkBackend so EconetService can surface it on the Econet status.
+    StationCollisionReport station_collisions() const override;
+
     // Every IPv4 address of the local host (network byte order), across all
     // interfaces (Wi-Fi, Ethernet, bridges, loopback). add_peer uses this to
     // recognise a same-host peer and route it over loopback; also useful for
@@ -223,6 +242,13 @@ private:
     std::unordered_map<uint64_t, std::pair<uint8_t, uint8_t>> reverse_map_;
     std::unordered_set<uint16_t> operator_configured_keys_;
     mutable std::mutex peer_table_mutex_;
+
+    // Station-number collisions the discovery subscriber rejected (a peer
+    // advertised a station already held by a different, still-live endpoint).
+    // Surfaced on the Econet status. Guarded separately from the peer table.
+    mutable std::mutex collision_mutex_;
+    uint32_t collision_count_ = 0;
+    std::string last_collision_;
 
     // Packet trace flag -- set once at construction from BEEBIUM_AUN_TRACE env var.
     bool trace_ = false;

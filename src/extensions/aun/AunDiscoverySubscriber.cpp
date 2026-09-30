@@ -16,12 +16,25 @@
 
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <utility>
 #include <vector>
 
 namespace beebium {
 
 namespace {
+
+// Format a network-byte-order IPv4 + host-order port as "a.b.c.d:port", using
+// only the raw bytes so this needs no socket headers.
+std::string format_endpoint(std::uint32_t ip_net_order, std::uint16_t port) {
+    unsigned char b[4];
+    std::memcpy(b, &ip_net_order, sizeof(b));
+    return std::to_string(b[0]) + "." + std::to_string(b[1]) + "." +
+           std::to_string(b[2]) + "." + std::to_string(b[3]) + ":" +
+           std::to_string(port);
+}
 
 bool parse_byte(const std::string& s, std::uint8_t& out) {
     if (s.empty()) return false;
@@ -42,7 +55,8 @@ AunDiscoverySubscriber::AunDiscoverySubscriber(
         std::unique_ptr<discovery::Browser> browser)
     : backend_(backend)
     , local_stn_(local_stn)
-    , browser_(browser ? std::move(browser) : discovery::create_browser()) {}
+    , browser_(browser ? std::move(browser) : discovery::create_browser())
+    , trace_(std::getenv("BEEBIUM_AUN_TRACE") != nullptr) {}
 
 AunDiscoverySubscriber::~AunDiscoverySubscriber() {
     stop();
@@ -147,6 +161,41 @@ void AunDiscoverySubscriber::handle_added(
     bool operator_pinned =
         backend_.is_operator_configured(net, stn);
 
+    // First live station wins: if this (net, stn) is already held by a
+    // DIFFERENT discovered instance, do NOT displace the incumbent -- that is
+    // the "orphaned station" half of #68. A re-advertisement from the SAME
+    // instance (a NIC change, or an ephemeral-port change) is not a collision
+    // and updates in place below. name_to_peer_ holds only discovered owners,
+    // so this scan naturally ignores operator-configured entries (which
+    // add_peer already protects).
+    bool collision = false;
+    {
+        std::lock_guard lock(name_map_mutex_);
+        for (const auto& [name, ref] : name_to_peer_) {
+            if (ref.net == net && ref.stn == stn &&
+                name != svc.instance_name) {
+                collision = true;
+                break;
+            }
+        }
+    }
+    if (collision) {
+        std::string held = "?";
+        if (auto ep = backend_.peer_endpoint(net, stn)) {
+            held = format_endpoint(ep->first, ep->second);
+        }
+        std::string description =
+            "station " + std::to_string(static_cast<unsigned>(net)) + "." +
+            std::to_string(static_cast<unsigned>(stn)) + " already held by " +
+            held + "; rejected advertisement from " +
+            format_endpoint(svc.ipv4_addr_net_byte_order, svc.port);
+        if (trace_) {
+            std::cerr << "AUN RX: " << description << "\n";
+        }
+        backend_.note_station_collision(std::move(description));
+        return;  // incumbent kept; newcomer not adopted
+    }
+
     // Same-host? The peer advertised one of THIS host's own IPs, so add_peer
     // will reroute it to loopback. Such a peer's lifetime is governed by the
     // liveness sweep, not by mDNS removal (a NIC change withdraws its
@@ -195,6 +244,14 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
     // discovered shadow went away -- that would surprise an operator
     // who set the peer manually after the discovery added it.
     if (backend_.is_operator_configured(ref.net, ref.stn)) return;
+
+    // Only drop the backend entry if it still belongs to THIS instance's
+    // endpoint. A rejected collider was never recorded, so it never reaches
+    // here; but if a different, still-live station now holds this (net, stn),
+    // removing on the collider's withdrawal would orphan the incumbent. The
+    // port discriminates instances (the loopback rewrite preserves it).
+    auto endpoint = backend_.peer_endpoint(ref.net, ref.stn);
+    if (!endpoint || endpoint->second != ref.port) return;
 
     backend_.remove_peer(ref.net, ref.stn);
     notify_peers_changed();

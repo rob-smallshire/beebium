@@ -592,6 +592,28 @@ void AunBackend::set_station_changed_callback(
     station_changed_callback_ = std::move(callback);
 }
 
+std::optional<std::pair<uint32_t, uint16_t>>
+AunBackend::peer_endpoint(uint8_t net, uint8_t stn) const {
+    std::lock_guard lock(peer_table_mutex_);
+    auto it = forward_map_.find(make_forward_key(net, stn));
+    if (it == forward_map_.end()) return std::nullopt;
+    return it->second;
+}
+
+void AunBackend::note_station_collision(std::string description) {
+    {
+        std::lock_guard lock(collision_mutex_);
+        ++collision_count_;
+        last_collision_ = std::move(description);
+    }
+    bump_backend_status_sequence();  // wake WatchEconetStatus to re-read
+}
+
+NetworkBackend::StationCollisionReport AunBackend::station_collisions() const {
+    std::lock_guard lock(collision_mutex_);
+    return StationCollisionReport{collision_count_, last_collision_};
+}
+
 std::vector<PeerInfo> AunBackend::list_peers() const {
     std::lock_guard lock(peer_table_mutex_);
     std::vector<PeerInfo> result;

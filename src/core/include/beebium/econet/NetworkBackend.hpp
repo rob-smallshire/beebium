@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace beebium {
@@ -122,6 +123,18 @@ public:
     // (PiconetBackend, where the Piconet device must be told via SET_STATION)
     // override to propagate.
     virtual void on_station_id_changed(uint8_t /*new_station_id*/) {}
+
+    // A station-number collision observed by a discovery-capable transport: a
+    // peer advertised a (net, stn) already held by a different, still-live
+    // endpoint, and was refused rather than allowed to displace the incumbent
+    // (first live station wins). Surfaced through EconetStatus so an operator
+    // can see why a newcomer was not adopted. Transports without discovery
+    // report none (the default).
+    struct StationCollisionReport {
+        uint32_t count = 0;   // collisions observed since the transport came up
+        std::string last;     // human-readable description of the most recent
+    };
+    virtual StationCollisionReport station_collisions() const { return {}; }
 
     // Monotonic counter bumped by the backend whenever status visible on
     // EconetStatus changes (connection toggle, port change, etc.). Read by

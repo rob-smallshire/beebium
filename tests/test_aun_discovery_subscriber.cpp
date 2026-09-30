@@ -368,3 +368,75 @@ TEST_CASE("AunDiscoverySubscriber: same-host re-add after removal reconciles in 
         make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
     CHECK(backend.peer_count() == 1);
 }
+
+// =============================================================================
+// Station-number collisions: first live station wins. A discovered
+// advertisement for a (net, stn) already held by a different, still-live
+// instance must not displace the incumbent (see #68).
+// =============================================================================
+
+TEST_CASE("AunDiscoverySubscriber: a colliding station is rejected and reported",
+          "[aun][discovery][subscriber][collision]") {
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    // Incumbent: station 0.254 from machine A (remote endpoint).
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(backend.peer_endpoint(0, 254).has_value());
+    CHECK(backend.peer_endpoint(0, 254)->second == 40001);
+
+    // Newcomer B advertises the same 0.254 at a different endpoint -> collision.
+    subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
+                                         htonl(0xCB007102u)));
+
+    // Incumbent A is kept; B is not adopted; the collision is reported.
+    CHECK(backend.peer_count() == 1);
+    REQUIRE(backend.peer_endpoint(0, 254).has_value());
+    CHECK(backend.peer_endpoint(0, 254)->second == 40001);
+    auto report = backend.station_collisions();
+    CHECK(report.count == 1);
+    CHECK(report.last.find("0.254") != std::string::npos);
+}
+
+TEST_CASE("AunDiscoverySubscriber: withdrawing a colliding advertisement leaves the incumbent",
+          "[aun][discovery][subscriber][collision]") {
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
+                                         htonl(0xCB007102u)));
+    REQUIRE(backend.peer_count() == 1);
+
+    // B (the rejected collider) is withdrawn -- it never owned the entry, so
+    // this must remove nothing.
+    subscriber.inject_removed("B 0.254");
+    CHECK(backend.peer_count() == 1);
+    REQUIRE(backend.peer_endpoint(0, 254).has_value());
+    CHECK(backend.peer_endpoint(0, 254)->second == 40001);  // still A
+
+    // A's own withdrawal removes A.
+    subscriber.inject_removed("A 0.254");
+    CHECK(backend.peer_count() == 0);
+}
+
+TEST_CASE("AunDiscoverySubscriber: same-instance re-advertisement updates in place",
+          "[aun][discovery][subscriber][collision]") {
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    REQUIRE(backend.peer_count() == 1);
+
+    // The SAME instance re-advertises at a new port (an ephemeral-port change):
+    // not a collision; the endpoint updates in place with no duplicate.
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40009, nonlocal_ip()));
+    CHECK(backend.peer_count() == 1);
+    REQUIRE(backend.peer_endpoint(0, 254).has_value());
+    CHECK(backend.peer_endpoint(0, 254)->second == 40009);
+    CHECK(backend.station_collisions().count == 0);
+}
