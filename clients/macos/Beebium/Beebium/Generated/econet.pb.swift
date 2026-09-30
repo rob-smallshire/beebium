@@ -217,6 +217,23 @@ struct Beebium_GetEconetStatusResponse: @unchecked Sendable {
     set {_uniqueStorage()._gatedBySpeed = newValue}
   }
 
+  /// AUN station-number collisions: a discovered peer advertised a (net, stn)
+  /// already held by a different, still-live station and was refused rather
+  /// than allowed to displace the incumbent (first live station wins; see
+  /// docs/networking.md "Station-number collisions"). aun_station_collision_count
+  /// counts them since the transport came up; aun_last_station_collision
+  /// describes the most recent one for display. Zero / empty for non-AUN
+  /// transports and when no collision has occurred.
+  var aunStationCollisionCount: UInt32 {
+    get {return _storage._aunStationCollisionCount}
+    set {_uniqueStorage()._aunStationCollisionCount = newValue}
+  }
+
+  var aunLastStationCollision: String {
+    get {return _storage._aunLastStationCollision}
+    set {_uniqueStorage()._aunLastStationCollision = newValue}
+  }
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -523,7 +540,7 @@ extension Beebium_GetEconetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetEconetStatusResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_econet_socket\0\u{1}enabled\0\u{3}station_id\0\u{3}aun_mode\0\u{1}connected\0\u{2}\u{5}adlc\0\u{1}handshake\0\u{3}tick_count\0\u{3}cr1_0x82_write_count\0\u{3}rx_frames_received_count\0\u{3}rx_blocked_by_reset_count\0\u{3}scout_ack_generated_count\0\u{3}tx_frames_from_beeb_count\0\u{3}unexpected_tx_reset_count\0\u{3}tx_from_idle_count\0\u{3}max_handshake_timer_seen\0\u{3}watchdog_timeout_count\0\u{3}send_stage_log\0\u{3}ticks_with_timer_active\0\u{4}\u{3}requires_real_time\0\u{3}gated_by_speed\0\u{b}aun_port\0\u{b}peer_count\0\u{b}read_stretch_coprocessor_ticks\0\u{b}piconet\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}\u{c}\u{18}\u{1}\u{c}\u{19}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_econet_socket\0\u{1}enabled\0\u{3}station_id\0\u{3}aun_mode\0\u{1}connected\0\u{2}\u{5}adlc\0\u{1}handshake\0\u{3}tick_count\0\u{3}cr1_0x82_write_count\0\u{3}rx_frames_received_count\0\u{3}rx_blocked_by_reset_count\0\u{3}scout_ack_generated_count\0\u{3}tx_frames_from_beeb_count\0\u{3}unexpected_tx_reset_count\0\u{3}tx_from_idle_count\0\u{3}max_handshake_timer_seen\0\u{3}watchdog_timeout_count\0\u{3}send_stage_log\0\u{3}ticks_with_timer_active\0\u{4}\u{3}requires_real_time\0\u{3}gated_by_speed\0\u{3}aun_station_collision_count\0\u{3}aun_last_station_collision\0\u{b}aun_port\0\u{b}peer_count\0\u{b}read_stretch_coprocessor_ticks\0\u{b}piconet\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}\u{c}\u{18}\u{1}\u{c}\u{19}\u{1}")
 
   fileprivate class _StorageClass {
     var _hasEconetSocket_p: Bool = false
@@ -547,6 +564,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
     var _ticksWithTimerActive: UInt64 = 0
     var _requiresRealTime: Bool = false
     var _gatedBySpeed: Bool = false
+    var _aunStationCollisionCount: UInt32 = 0
+    var _aunLastStationCollision: String = String()
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -578,6 +597,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
       _ticksWithTimerActive = source._ticksWithTimerActive
       _requiresRealTime = source._requiresRealTime
       _gatedBySpeed = source._gatedBySpeed
+      _aunStationCollisionCount = source._aunStationCollisionCount
+      _aunLastStationCollision = source._aunLastStationCollision
     }
   }
 
@@ -617,6 +638,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
         case 23: try { try decoder.decodeSingularUInt64Field(value: &_storage._ticksWithTimerActive) }()
         case 26: try { try decoder.decodeSingularBoolField(value: &_storage._requiresRealTime) }()
         case 27: try { try decoder.decodeSingularBoolField(value: &_storage._gatedBySpeed) }()
+        case 28: try { try decoder.decodeSingularUInt32Field(value: &_storage._aunStationCollisionCount) }()
+        case 29: try { try decoder.decodeSingularStringField(value: &_storage._aunLastStationCollision) }()
         default: break
         }
       }
@@ -692,6 +715,12 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
       if _storage._gatedBySpeed != false {
         try visitor.visitSingularBoolField(value: _storage._gatedBySpeed, fieldNumber: 27)
       }
+      if _storage._aunStationCollisionCount != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._aunStationCollisionCount, fieldNumber: 28)
+      }
+      if !_storage._aunLastStationCollision.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._aunLastStationCollision, fieldNumber: 29)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -722,6 +751,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
         if _storage._ticksWithTimerActive != rhs_storage._ticksWithTimerActive {return false}
         if _storage._requiresRealTime != rhs_storage._requiresRealTime {return false}
         if _storage._gatedBySpeed != rhs_storage._gatedBySpeed {return false}
+        if _storage._aunStationCollisionCount != rhs_storage._aunStationCollisionCount {return false}
+        if _storage._aunLastStationCollision != rhs_storage._aunLastStationCollision {return false}
         return true
       }
       if !storagesAreEqual {return false}
