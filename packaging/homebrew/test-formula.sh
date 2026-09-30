@@ -84,16 +84,36 @@ if [ "${CI:-}" = "true" ]; then
   brew update
   echo "::endgroup::"
 
-  # The macOS arm64 runner image ships openssl@1.1 linked, so its bin/openssl
-  # owns the prefix symlink. When the install upgrades the openssl@3 dependency,
-  # brew cannot link it over that symlink and exits 1 even though beebium-server
-  # itself installs. Unlink the old keg first. This is deliberately narrower
-  # than `brew install --overwrite`, which would also paper over link conflicts
-  # of beebium-server's own files -- the very thing the symlink checks below
-  # exist to catch. CI only: a developer's Homebrew is never modified.
-  if brew list --formula openssl@1.1 >/dev/null 2>&1; then
-    echo "Unlinking the runner image's pre-linked openssl@1.1"
-    brew unlink openssl@1.1
+  # The macOS arm64 runner image leaves <prefix>/bin/openssl pointing into
+  # openssl@1.1 without Homebrew holding a linked-keg record for it, so
+  # `brew unlink openssl@1.1` is a no-op ("0 symlinks removed"). When the
+  # formula install then upgrades its openssl@3 dependency, brew cannot link
+  # it over that orphaned symlink and exits 1 even though beebium-server
+  # itself installs. So bring openssl@3 up to date and link it first, with
+  # --overwrite scoped to that one formula; the dry run logs exactly which
+  # files are replaced. beebium-server's own install below stays WITHOUT
+  # --overwrite: a link conflict of its own files is what the bin-symlink
+  # checks exist to catch. CI only: a developer's Homebrew is never modified.
+  openssl_linkpath="$(brew --prefix)/bin/openssl"
+  if [ -L "${openssl_linkpath}" ] \
+     && [[ "$(readlink "${openssl_linkpath}")" == *openssl@1.1* ]]; then
+    echo "::group::link openssl@3 over the orphaned openssl@1.1 symlink"
+    echo "${openssl_linkpath} -> $(readlink "${openssl_linkpath}")"
+    brew link --overwrite --dry-run openssl@3 || true
+    if ! brew list --formula openssl@3 >/dev/null 2>&1 \
+       || brew outdated --formula --quiet | grep -qx 'openssl@3'; then
+      # A failure here that is only the link step is settled by the link
+      # below, which itself fails if no openssl@3 keg was installed.
+      brew install --overwrite openssl@3 \
+        || echo "brew install openssl@3 reported a failure; linking it explicitly"
+    fi
+    brew link --overwrite openssl@3
+    if [[ "$(readlink "${openssl_linkpath}")" == *openssl@1.1* ]]; then
+      echo "${openssl_linkpath} still points into openssl@1.1 after linking openssl@3" >&2
+      exit 1
+    fi
+    echo "${openssl_linkpath} -> $(readlink "${openssl_linkpath}")"
+    echo "::endgroup::"
   fi
 fi
 
