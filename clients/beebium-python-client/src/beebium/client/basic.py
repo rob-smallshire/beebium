@@ -227,7 +227,8 @@ class Basic:
         """Send a BREAK keypress.
 
         Args:
-            hold_time: How long to hold the BREAK key (seconds).
+            hold_time: How long to hold the BREAK key, in emulated seconds.
+                The machine must be running.
         """
         self._client.keyboard.press_break(hold_time=hold_time)
 

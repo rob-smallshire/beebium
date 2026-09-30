@@ -167,7 +167,15 @@ bbc.keyboard.break_up()        # Release Break (triggers soft reset)
 bbc.keyboard.is_break_held()   # Check if Break is currently held
 bbc.keyboard.press_break()     # Convenience: down + up
 bbc.keyboard.ctrl_break()      # Convenience: Ctrl-Break sequence
+bbc.keyboard.shift_break()     # Convenience: Shift-Break (auto-boot)
 ```
+
+The convenience methods hold keys for **emulated** time (`hold_time`, and
+`shift_break`'s `shift_hold_after`, are emulated seconds): they poll the cycle
+count while the machine runs, so the machine sees the same press however fast
+the host runs it. They need a running machine and raise `DebuggerError` on a
+stopped one. To press Break on a stopped machine, use `break_down()` and
+`break_up()` and advance time yourself.
 
 ## Summary
 

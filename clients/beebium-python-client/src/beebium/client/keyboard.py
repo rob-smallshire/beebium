@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 from beebium.client._proto import keyboard_pb2, keyboard_pb2_grpc
+from beebium.client.exceptions import DebuggerError
 from beebium.client.keyboard_map import (
     CTRL_KEY,
     SHIFT_KEY,
@@ -58,6 +59,19 @@ _LOCK_TAP_POLL_CHUNK_CYCLES = 5_000
 # Without this settle, a back-to-back tap of the same key can look like
 # a continuous press and fail to re-trigger the toggle.
 _LOCK_TAP_RELEASE_SETTLE_CYCLES = 100_000
+
+# Key holds are measured in emulated time: the machine sees a hold of the same
+# length however fast the host runs it (#125). A modifier is held this many
+# cycles before Break goes down, and after Break comes up before it is
+# released, so the two are not simultaneous.
+_MODIFIER_SETTLE_CYCLES = 4_000
+
+# How often an emulated-time hold polls the cycle count, in wall seconds.
+_HOLD_POLL_SECONDS = 0.002
+
+# A hold whose machine makes no emulated progress for this long, in wall
+# seconds, is reported rather than waited on for ever.
+_HOLD_STALL_SECONDS = 10.0
 
 
 @dataclass
@@ -370,19 +384,57 @@ class Keyboard:
         )
 
     def _wait_emulated_cycles(self, cycles: int) -> None:
-        """Block until the running emulator has advanced ``cycles`` cycles.
+        """Block while the running machine advances ``cycles`` CPU cycles.
 
-        Assumes the emulator is running; the call sites that require
-        cycle-paced waits already enforce that precondition.
+        Polls the cycle count in wall time without stopping the machine, so
+        the wait lasts the same emulated time on a fast host or a slow one.
+        It has no wall-clock deadline of its own; it raises
+        :class:`DebuggerError` only if the machine stops, or makes no emulated
+        progress for ``_HOLD_STALL_SECONDS``.
         """
-        client = self._require_client("tap")
-        target = client.debugger.cycle_count + cycles
-        # 2 MHz host clock; sleep approximately the equivalent wall-clock
-        # time, then top up by polling. Small enough not to overshoot but
-        # large enough to keep gRPC chatter low.
-        sleep_seconds = max(0.005, cycles / 2_000_000 / 2)
-        while client.debugger.cycle_count < target:
-            time.sleep(sleep_seconds)
+        if cycles <= 0:
+            return
+        debugger = self._require_client("an emulated-time key hold").debugger
+        start = debugger.cycle_count
+        target = start + cycles
+        last_cycles = start
+        last_progress = time.monotonic()
+        while True:
+            now_cycles = debugger.cycle_count
+            if now_cycles >= target:
+                return
+            now = time.monotonic()
+            if now_cycles != last_cycles:
+                last_cycles = now_cycles
+                last_progress = now
+            elif now - last_progress > 0.5 and not debugger.is_running:
+                raise DebuggerError(
+                    "machine is stopped; key holds are measured in emulated time and "
+                    "need a running machine (call bbc.debugger.ensure_running() first)"
+                )
+            elif now - last_progress > _HOLD_STALL_SECONDS:
+                raise DebuggerError(
+                    f"no emulated progress in {now - last_progress:.0f} s: machine stuck "
+                    f"after {now_cycles - start} of {cycles} cycles of a key hold"
+                )
+            time.sleep(_HOLD_POLL_SECONDS)
+
+    def _hold_cycles(self, seconds: float) -> int:
+        """An emulated-time hold in seconds, as CPU cycles."""
+        client = self._require_client("an emulated-time key hold")
+        clock_hz = client.system.clock_speed_hz or 2_000_000
+        return int(seconds * clock_hz)
+
+    def _require_running_for_hold(self, what: str) -> None:
+        """Refuse a timed key sequence on a stopped machine before any key
+        goes down, so a refusal never leaves a key held."""
+        client = self._require_client(what)
+        if not client.debugger.is_running:
+            raise DebuggerError(
+                f"machine is stopped; {what} holds keys for emulated time and needs "
+                f"a running machine (call bbc.debugger.ensure_running() first, or use "
+                f"break_down()/break_up() and advance time yourself)"
+            )
 
     @contextlib.contextmanager
     def text_input(self) -> Iterator[None]:
@@ -691,18 +743,27 @@ class Keyboard:
     def press_break(self, hold_time: float = 0.02) -> bool:
         """Press and release the Break key (perform soft reset).
 
-        This is a convenience method that calls break_down(), waits
-        briefly, then calls break_up().
+        This is a convenience method that calls break_down(), holds Break for
+        ``hold_time`` emulated seconds, then calls break_up(). Holds are in
+        emulated time, so the machine sees the same press on a slow host as on
+        a fast one; the machine must be running.
 
         Args:
-            hold_time: How long to hold Break (seconds).
+            hold_time: How long to hold Break, in emulated seconds.
 
         Returns:
             True if both operations succeeded.
+
+        Raises:
+            DebuggerError: If the machine is stopped, or makes no progress.
         """
+        self._require_running_for_hold("press_break")
+        hold_cycles = self._hold_cycles(hold_time)
         down_ok = self.break_down()
-        time.sleep(hold_time)
-        up_ok = self.break_up()
+        try:
+            self._wait_emulated_cycles(hold_cycles)
+        finally:
+            up_ok = self.break_up()
         return down_ok and up_ok
 
     def ctrl_break(self, hold_time: float = 0.02) -> bool:
@@ -715,19 +776,31 @@ class Keyboard:
         the keyboard matrix during its reset routine and clears the
         VIA configuration if Ctrl is held, simulating a hard reset.
 
+        Holds are in emulated time, so the machine sees the same press on a
+        slow host as on a fast one; the machine must be running.
+
         Args:
-            hold_time: How long to hold Break (seconds).
+            hold_time: How long to hold Break, in emulated seconds.
 
         Returns:
             True if all operations succeeded.
+
+        Raises:
+            DebuggerError: If the machine is stopped, or makes no progress.
         """
+        self._require_running_for_hold("ctrl_break")
+        hold_cycles = self._hold_cycles(hold_time)
         self.ctrl_down()
-        time.sleep(0.01)  # Brief delay to ensure Ctrl is registered
-        down_ok = self.break_down()
-        time.sleep(hold_time)
-        up_ok = self.break_up()
-        time.sleep(0.01)  # Brief delay before releasing Ctrl
-        self.ctrl_up()
+        try:
+            self._wait_emulated_cycles(_MODIFIER_SETTLE_CYCLES)
+            down_ok = self.break_down()
+            try:
+                self._wait_emulated_cycles(hold_cycles)
+            finally:
+                up_ok = self.break_up()
+            self._wait_emulated_cycles(_MODIFIER_SETTLE_CYCLES)
+        finally:
+            self.ctrl_up()
         return down_ok and up_ok
 
     def shift_break(self, hold_time: float = 0.02,
@@ -741,20 +814,35 @@ class Keyboard:
         and no auto-boot happens. shift_hold_after keeps Shift down past that
         read; the default is comfortably longer than DFS needs.
 
+        Holds are in emulated time, so DFS sees the same press on a slow host as
+        on a fast one; the machine must be running.
+
         Args:
-            hold_time: How long to hold Break (seconds).
-            shift_hold_after: How long to keep Shift held after releasing Break.
+            hold_time: How long to hold Break, in emulated seconds.
+            shift_hold_after: How long to keep Shift held after releasing
+                Break, in emulated seconds.
 
         Returns:
             True if the Break down/up operations succeeded.
+
+        Raises:
+            DebuggerError: If the machine is stopped, or makes no progress.
         """
+        self._require_running_for_hold("shift_break")
+        hold_cycles = self._hold_cycles(hold_time)
+        after_cycles = self._hold_cycles(shift_hold_after)
         self.shift_down()
-        time.sleep(0.01)  # Brief delay to ensure Shift is registered
-        down_ok = self.break_down()
-        time.sleep(hold_time)
-        up_ok = self.break_up()
-        time.sleep(shift_hold_after)  # DFS reads Shift during the reset routine
-        self.shift_up()
+        try:
+            self._wait_emulated_cycles(_MODIFIER_SETTLE_CYCLES)
+            down_ok = self.break_down()
+            try:
+                self._wait_emulated_cycles(hold_cycles)
+            finally:
+                up_ok = self.break_up()
+            # DFS reads Shift during the reset routine
+            self._wait_emulated_cycles(after_cycles)
+        finally:
+            self.shift_up()
         return down_ok and up_ok
 
     # =========================================================================

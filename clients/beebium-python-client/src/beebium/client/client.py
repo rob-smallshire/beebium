@@ -536,9 +536,9 @@ class Beebium:
         Args:
             disc_filepath: Path to the disc image to boot.
             drive: Drive number to mount into (default 0).
-            hold_time: How long to hold Break.
+            hold_time: How long to hold Break, in emulated seconds.
             shift_hold_after: How long to keep Shift held after Break so DFS
-                reads it during the reset routine.
+                reads it during the reset routine, in emulated seconds.
         """
         self.disc.drive(drive).insert(disc_filepath)
         # DFS reads Shift while executing the reset routine, so the CPU must be
