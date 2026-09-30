@@ -132,7 +132,8 @@ void AunDiscoverySubscriber::handle_added(
     // (We compare net to backend_.local_net() so a Beebium that
     // changes its local_net at runtime correctly stops self-filtering
     // its old announcement -- though that's not currently possible.)
-    if (net == backend_.local_net() && stn == local_stn_) {
+    if (net == backend_.local_net() &&
+        stn == local_stn_.load(std::memory_order_relaxed)) {
         return;
     }
 

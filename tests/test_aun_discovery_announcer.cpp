@@ -93,6 +93,27 @@ TEST_CASE("AunDiscoveryAnnouncer: build_service_info populates schema",
           == "11111111-2222-3333-4444-555555555555");
 }
 
+TEST_CASE("AunDiscoveryAnnouncer: set_local_station re-announces with the new station",
+          "[aun][discovery][announcer]") {
+    FakeState s;
+    AunDiscoveryAnnouncer announcer(/*net=*/0, /*stn=*/80, /*port=*/32768,
+                                    "beebium", "1.2.3", "",
+                                    std::make_unique<FakeAdvertiser>(&s));
+    REQUIRE(announcer.start());
+    CHECK(s.last_info.instance_name == "Beebium 0.80");
+    CHECK(s.last_info.txt_records.at("station") == "80");
+
+    // The guest's station changed to 81: update, then re-publish. start() is
+    // idempotent -- it withdraws the old station's announcement first.
+    announcer.set_local_station(81);
+    REQUIRE(announcer.start());
+    CHECK(s.last_info.instance_name == "Beebium 0.81");
+    CHECK(s.last_info.txt_records.at("station") == "81");
+    // Re-published (the Advertiser::start contract withdraws the old name and
+    // publishes the new one).
+    CHECK(s.start_count == 2);
+}
+
 TEST_CASE("AunDiscoveryAnnouncer: omits empty optional TXT entries",
           "[aun][discovery][announcer]") {
     FakeState s;

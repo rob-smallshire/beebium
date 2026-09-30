@@ -273,6 +273,29 @@ TEST_CASE("AunDiscoverySubscriber: on_peers_changed not invoked for self",
     CHECK(call_count == 0);
 }
 
+TEST_CASE("AunDiscoverySubscriber: set_local_station updates the self-filter",
+          "[aun][discovery][subscriber]") {
+    // We are station 0.80. Use remote (non-local) endpoints so the same-host
+    // sweep does not enter into it.
+    AunBackend backend(0, 80, 0);
+    AunDiscoverySubscriber subscriber(backend, 80,
+                                      std::make_unique<FakeBrowser>());
+
+    // An advertisement for 0.80 is us -> self-filtered.
+    subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40001, nonlocal_ip()));
+    CHECK(backend.peer_count() == 0);
+
+    // The guest's station changes to 81. Now 0.80 is a different machine and
+    // must be accepted as a peer, while 0.81 is us and must be filtered.
+    subscriber.set_local_station(81);
+
+    subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40001, nonlocal_ip()));
+    CHECK(backend.peer_count() == 1);
+
+    subscriber.inject_added(make_service("Beebium 0.81", 0, 81, 40002, nonlocal_ip()));
+    CHECK(backend.peer_count() == 1);  // 0.81 is now us -> still filtered
+}
+
 // =============================================================================
 // Same-host (loopback) peer lifetime: governed by the bind-probe liveness
 // sweep, not by mDNS removal. Survives a NIC toggle (mDNS withdrawal while the

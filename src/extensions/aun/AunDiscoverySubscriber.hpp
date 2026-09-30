@@ -29,6 +29,7 @@
 
 #include <beebium/discovery/Browser.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -109,9 +110,19 @@ public:
     // call whether or not start() has run.
     void sweep_once();
 
+    // Update the station this subscriber self-filters. After the guest's
+    // station changes at runtime (EconetService::SetStationId), an
+    // advertisement carrying the OLD station is no longer us and must be
+    // accepted as a peer, while one carrying the NEW station is now us and must
+    // be skipped. Callable from the gRPC thread while handle_added runs on the
+    // browser thread, so the field is atomic.
+    void set_local_station(std::uint8_t local_stn) {
+        local_stn_.store(local_stn, std::memory_order_relaxed);
+    }
+
 private:
     AunBackend& backend_;
-    std::uint8_t local_stn_;
+    std::atomic<std::uint8_t> local_stn_;
     std::unique_ptr<discovery::Browser> browser_;
     std::string service_type_ = "_aun._udp";
 

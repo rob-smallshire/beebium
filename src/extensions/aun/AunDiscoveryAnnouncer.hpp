@@ -88,6 +88,14 @@ public:
     // stop(); also called by the destructor.
     void stop();
 
+    // Update the station this announcer advertises. Does NOT re-publish on its
+    // own: the caller follows with start() (idempotent) to withdraw the old
+    // station's announcement and publish the new one. Used when the guest's
+    // station number is changed at runtime (EconetService::SetStationId), so
+    // peers stop seeing the stale station. The instance name embeds the
+    // station, so this changes the DNS-SD name as well as the TXT record.
+    void set_local_station(std::uint8_t local_stn) { local_stn_ = local_stn; }
+
     // True between a successful start() and a stop() / destruction.
     // Reflects the platform advertiser's view, which may take a few
     // tens of milliseconds to update on macOS Bonjour.

@@ -241,6 +241,35 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
                      "peer discovery disabled\n";
     }
 
+    // React to a runtime station change (EconetService::SetStationId, on a gRPC
+    // thread): re-announce with the new station so peers stop seeing the stale
+    // one, and update the subscriber's self-filter so this machine now accepts
+    // the old station number as a peer. The announcer's start() is idempotent
+    // (it withdraws the old station's announcement and publishes the new one).
+    //
+    // The callback captures a weak liveness token rather than requiring the
+    // extension to detach it at teardown: destruction order between this
+    // extension and the backend differs between production (machine outlives
+    // the transport registry) and the unit tests (the returned backend is a
+    // local destroyed first). If the token has expired the extension is gone
+    // and the callback does nothing. The gRPC server is stopped before either
+    // is destroyed, so no callback is ever in flight during teardown.
+    callback_alive_ = std::make_shared<bool>(true);
+    std::weak_ptr<bool> alive = callback_alive_;
+    backend_->set_station_changed_callback(
+        [this, alive](std::uint8_t new_station) {
+            auto keep_alive = alive.lock();
+            if (!keep_alive) return;
+            std::lock_guard<std::mutex> lock(discovery_mutex_);
+            if (announcer_) {
+                announcer_->set_local_station(new_station);
+                announcer_->start();
+            }
+            if (subscriber_) {
+                subscriber_->set_local_station(new_station);
+            }
+        });
+
     return backend;
 }
 

@@ -24,6 +24,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -86,6 +87,20 @@ public:
     // answer matches what a send would actually do.
     bool is_reachable(uint8_t net, uint8_t stn) const override;
 
+    // The guest's station number changed at runtime (EconetService::SetStationId
+    // on a gRPC thread). Updates local_stn_ (which labels dest_stn on received
+    // frames) and invokes the station-changed callback so the AUN transport can
+    // re-announce and update its discovery self-filter. Takes effect for
+    // received-frame addressing immediately; the guest re-reads the new station
+    // from &FE18 on the next Break, per the EconetSocket contract.
+    void on_station_id_changed(uint8_t new_station_id) override;
+
+    // Register a callback invoked (outside the backend's locks) whenever the
+    // station changes via on_station_id_changed. The AUN transport extension
+    // registers this to re-announce and update the subscriber's self-filter;
+    // it clears the callback (passes nullptr) before the backend is destroyed.
+    void set_station_changed_callback(std::function<void(uint8_t)> callback);
+
     // --- Peer management ---
     //
     // The peer table is the only AunBackend state that has multiple
@@ -127,6 +142,11 @@ public:
 
     // The local network number for this station.
     uint8_t local_net() const;
+
+    // The local station number (updated by on_station_id_changed).
+    uint8_t local_station() const {
+        return local_stn_.load(std::memory_order_relaxed);
+    }
 
     // Enumerate all configured peers.
     std::vector<PeerInfo> list_peers() const;
@@ -178,8 +198,14 @@ private:
     std::string bind_error_;  // non-empty iff the socket failed to come up
     uint16_t local_port_;
     uint8_t local_net_;
-    uint8_t local_stn_;
+    std::atomic<uint8_t> local_stn_;  // labels dest_stn on received frames
     std::atomic<bool> connected_ = false;
+
+    // Invoked (outside the locks) by on_station_id_changed. Registered by the
+    // AUN transport extension to re-announce and update the discovery
+    // self-filter; guarded because SetStationId runs on a gRPC thread.
+    std::mutex station_callback_mutex_;
+    std::function<void(uint8_t)> station_changed_callback_;
 
     // Handle generation: incremented by 4 for each outgoing request.
     // For Ack/ImmReply, the handle from the most recently received packet is echoed.

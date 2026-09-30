@@ -453,7 +453,7 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
     result.frame.src_net = (peer_net == local_net_) ? 0 : peer_net;
     result.frame.src_stn = sender_addr_econet.second;
     result.frame.dest_net = 0;
-    result.frame.dest_stn = local_stn_;
+    result.frame.dest_stn = local_stn_.load(std::memory_order_relaxed);
 
     result.frame.handle = result.handle;
     last_received_handle_ = result.handle;
@@ -570,6 +570,26 @@ uint16_t AunBackend::local_port() const {
 
 uint8_t AunBackend::local_net() const {
     return local_net_;
+}
+
+void AunBackend::on_station_id_changed(uint8_t new_station_id) {
+    local_stn_.store(new_station_id, std::memory_order_relaxed);
+    // Copy the callback under the lock, invoke it outside: it re-enters the AUN
+    // transport (announcer/subscriber), which must not run under our lock.
+    std::function<void(uint8_t)> callback;
+    {
+        std::lock_guard<std::mutex> lock(station_callback_mutex_);
+        callback = station_changed_callback_;
+    }
+    if (callback) {
+        callback(new_station_id);
+    }
+}
+
+void AunBackend::set_station_changed_callback(
+        std::function<void(uint8_t)> callback) {
+    std::lock_guard<std::mutex> lock(station_callback_mutex_);
+    station_changed_callback_ = std::move(callback);
 }
 
 std::vector<PeerInfo> AunBackend::list_peers() const {

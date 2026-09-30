@@ -88,6 +88,31 @@ TEST_CASE("AunBackend: construction with OS-assigned port succeeds", "[econet][a
     CHECK(backend.local_port() != 0);
 }
 
+TEST_CASE("AunBackend: on_station_id_changed updates the station and fires the callback",
+          "[econet][aun][backend]") {
+    AunBackend backend(0, 80, 0);
+    REQUIRE(backend.local_station() == 80);
+
+    int calls = 0;
+    std::uint8_t seen = 0;
+    backend.set_station_changed_callback([&](std::uint8_t s) {
+        ++calls;
+        seen = s;
+    });
+
+    backend.on_station_id_changed(81);
+    CHECK(backend.local_station() == 81);
+    CHECK(calls == 1);
+    CHECK(seen == 81);
+
+    // Clearing the callback stops further invocations; the station still updates
+    // (this is how the transport extension detaches before teardown).
+    backend.set_station_changed_callback(nullptr);
+    backend.on_station_id_changed(82);
+    CHECK(backend.local_station() == 82);
+    CHECK(calls == 1);
+}
+
 TEST_CASE("AunBackend: duplicate port binding fails gracefully", "[econet][aun][backend]") {
     // Bind the first backend to an OS-chosen port, then attempt a second
     // bind on that same port. SO_REUSEADDR makes this platform-dependent

@@ -41,6 +41,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -138,7 +139,17 @@ private:
     // Subscribes to peer announcements and feeds them into the
     // backend. Same lifetime model as announcer_.
     std::unique_ptr<AunDiscoverySubscriber> subscriber_;
+    // Serialises the station-change re-announce (which runs on a gRPC thread
+    // via the backend's station-changed callback) against itself; setup in
+    // create_backend runs single-threaded before any gRPC call.
+    std::mutex discovery_mutex_;
     AunUi ui_{*this};
+    // Liveness token for the backend's station-changed callback. Declared last
+    // so it is destroyed first: a callback that fires during teardown sees the
+    // weak_ptr expired and does nothing, so the backend's stored callback never
+    // dereferences a half-destroyed extension -- and the extension needs no
+    // custom destructor to detach it (see create_backend).
+    std::shared_ptr<bool> callback_alive_;
 };
 
 }  // namespace beebium
