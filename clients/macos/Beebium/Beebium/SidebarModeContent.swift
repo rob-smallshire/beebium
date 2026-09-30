@@ -366,6 +366,15 @@ struct NetworkModeView: View {
         }
     }
 
+    /// The station-collision warning text: the server's description of the last
+    /// collision, with the running count appended once it exceeds one.
+    private var stationCollisionText: String {
+        let base = "Station collision: \(econetClient.lastStationCollision)"
+        return econetClient.stationCollisionCount > 1
+            ? "\(base) (\(econetClient.stationCollisionCount))"
+            : base
+    }
+
     // MARK: - Loading State
 
     private var loadingView: some View {
@@ -522,6 +531,26 @@ struct NetworkModeView: View {
                         isPresented: $showStationIdPopover
                     )
                 }
+            }
+
+            // A station-number collision is a transient warning, not a
+            // permanent counter: another station on the network is advertising
+            // this machine's number (#68). Shown only while the server reports
+            // one, with the running count appended once it has happened more
+            // than once.
+            if econetClient.stationCollisionCount > 0 {
+                HStack(alignment: .top, spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text(stationCollisionText)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+                .help("Another station on the network is advertising this "
+                      + "machine's station number; give the machines distinct "
+                      + "numbers.")
             }
 
             // The Connect/Disconnect button + AUN Port row lived
