@@ -13,8 +13,8 @@ Three things, kept distinct:
 
 | Term | What it is | Mutability | Lives |
 |------|------------|------------|-------|
-| **Preset** | A template for a machine: model, ROMs, storage, Econet, extensions. Stored as one zip file, `<id>.beebiumpreset`, holding `preset.json` and the resources it references (hard-disc images, floppy images, ROM images, a thumbnail). | Immutable. Authored as files, stored as an archive. | System presets directory, or the user presets directory. |
-| **Machine directory** | The backing store of one machine instance, `<name>.beebiummachine/`: its identity, its configuration, its working media, its battery-backed state. An extracted preset plus state. | Mutable; owned by exactly one running server at a time. | A temporary directory (transient machine) or wherever the user saved it. |
+| **Preset** | A template for a machine: model, ROMs, storage, Econet, extensions. Stored as one zip file, `<id>.beebium-preset`, holding `preset.json` and the resources it references (hard-disc images, floppy images, ROM images, a thumbnail). | Immutable. Authored as files, stored as an archive. | System presets directory, or the user presets directory. |
+| **Machine directory** | The backing store of one machine instance, `<name>.beebium-machine/`: its identity, its configuration, its working media, its battery-backed state. An extracted preset plus state. | Mutable; owned by exactly one running server at a time. | A temporary directory (transient machine) or wherever the user saved it. |
 | **Machine** | A running server process on a machine directory. | Live. | A process. |
 
 A **snapshot** (#107, full CPU/RAM/device state for resumption) is a fourth
@@ -69,11 +69,11 @@ or copied. That is decided by who owns it (section 4).
 ### 3.1 Stored form: a preset is a zip file
 
 Every stored preset, system or user, is a single zip file with the suffix
-`.beebiumpreset`, holding one `preset.json` and whatever resources the
+`.beebium-preset`, holding one `preset.json` and whatever resources the
 preset references. There is no bare-file and no directory stored form.
 
 ```
-elite-client-80.beebiumpreset        (a zip archive)
+elite-client-80.beebium-preset        (a zip archive)
   preset.json                        the one preset
   thumbnail.png
   elite.ssd
@@ -96,7 +96,7 @@ equivalent on Windows or Linux. Today's `<id>.preset.beebium` plus
 convention; the archive makes that grouping real.
 
 **Input forms.** Authoring and hand-editing happen on files, so the loader
-and the importer accept three inputs: a `.beebiumpreset` zip, a directory
+and the importer accept three inputs: a `.beebium-preset` zip, a directory
 laid out like the archive, or a lone `preset.json`. `--preset <path>` loads
 any of them in place; `import-preset <path>` stores a zip in the user
 presets directory, archiving a directory or wrapping a lone file.
@@ -107,7 +107,7 @@ directory for editing. Only zips live in the store.
 no backward compatibility, so the change is made once: CMake generates
 system presets through `create-preset`, which now writes zips, and on
 first listing of the user presets directory each `<id>.preset.beebium` is
-archived to `<id>.beebiumpreset` with its thumbnail inside. The migration
+archived to `<id>.beebium-preset` with its thumbnail inside. The migration
 ships in one release and is then removed.
 
 **Disc images compress.** A hard-disc image is mostly empty: the L3FS
@@ -127,7 +127,7 @@ which is the copy that would have happened anyway.
 **Machine directories stay directories** (section 4): they are live, with
 images written continuously, a lock and state written at shutdown. A
 preset is a zipped machine template; a machine is its extracted, live copy.
-The `.beebiummachine` suffix is chosen now so that registering it as a
+The `.beebium-machine` suffix is chosen now so that registering it as a
 macOS document package later needs no rename.
 
 ### 3.2 Resources and resolution
@@ -145,7 +145,7 @@ exact template of a machine directory (section 4): a machine directory is
 an extracted preset plus mutable state.
 
 **Packs.** Mark's Elite-over-Econet pack is three presets sharing two disc
-images. It ships as three `.beebiumpreset` files, imported together (the
+images. It ships as three `.beebium-preset` files, imported together (the
 macOS Import panel accepts several, #134) or dropped into the user presets
 directory. The shared images are either duplicated into each archive
 (simple, costs disc space, compresses well) or placed once in the per-user
@@ -165,7 +165,7 @@ Every machine, transient or saved, runs on a machine directory. This section
 takes the refinement in #103 and makes it concrete enough to build.
 
 ```
-Elite Server.beebiummachine/
+Elite Server.beebium-machine/
   machine.json          identity: uuid, name, model, created, source preset
   thumbnail.png         last screen, captured on Save and graceful shutdown
   preset.json           the machine's own configuration (the preset, extracted
@@ -272,9 +272,9 @@ does not touch the machine (question 2).
 
 ```
 ~/Library/Application Support/Beebium/       (%APPDATA%\Beebium, ~/.config/beebium)
-  presets/                user presets, one .beebiumpreset zip each
-    my-preset.beebiumpreset
-    elite-client-80.beebiumpreset
+  presets/                user presets, one .beebium-preset zip each
+    my-preset.beebium-preset
+    elite-client-80.beebium-preset
   discs/                  user-supplied disc images referenced by bare name
   roms/                   user-supplied ROM images referenced by bare name
   machines/               transient machine directories (cleaned at exit)
@@ -282,7 +282,7 @@ does not touch the machine (question 2).
 
 Saved machines live wherever the user put them; the app remembers recent
 ones (Welcome window, File > Open Recent). The macOS app can register the
-`.beebiummachine` directory as a document package later; the preset
+`.beebium-machine` directory as a document package later; the preset
 archive is an ordinary document type and needs nothing.
 
 ### 4.7 Behaviour change to flag
@@ -327,7 +327,7 @@ Behaviour:
   "a new machine from a template or a custom configuration"; it never lists
   instances.
 - **File > Open...** (Cmd-O) is a plain open panel filtered to machine
-  directories (`.beebiummachine`; a document package once registered). It
+  directories (`.beebium-machine`; a document package once registered). It
   does not go through the Welcome window.
 - **File > Open Recent...** is a single item that opens the Welcome window
   on the Machines page. The page shows each machine with a preview, so it
@@ -359,7 +359,7 @@ launching a second server, matching the existing one-window-per-target rule.
 | `start --preset <id\|file>` | Instantiate a transient machine and run it (as now). |
 | `start --machine <dir>` | Open a saved machine directory and run it. |
 | `create-machine --preset <id\|file> --output <dir>` | Instantiate without running (scripts, tests, packaging a ready-made machine). |
-| `import-preset <path>` | Import a `.beebiumpreset` archive, a directory laid out like one, or a lone `preset.json`; the store holds the archive. |
+| `import-preset <path>` | Import a `.beebium-preset` archive, a directory laid out like one, or a lone `preset.json`; the store holds the archive. |
 | `export-preset <id> --output <path> [--unpack]` | Write the archive, or the directory form for editing. |
 | `reset-battery <dir>` | Delete `state/` of a machine that is not running. |
 | `SystemService.SaveMachine`, `ResetBattery` (gRPC) | The same on a running machine; the app's File > Save... and a menu action. |
