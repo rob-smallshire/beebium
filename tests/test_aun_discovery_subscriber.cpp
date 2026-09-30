@@ -504,3 +504,23 @@ TEST_CASE("AunDiscoverySubscriber: a parked collider withdrawn before the incumb
     subscriber.inject_removed("A 0.254");
     CHECK(backend.peer_count() == 0);
 }
+
+TEST_CASE("AunDiscoverySubscriber: a different instance claiming our own station is reported",
+          "[aun][discovery][subscriber][collision]") {
+    AunBackend backend(0, 80, 0);  // this machine is 0.80
+    AunDiscoverySubscriber subscriber(backend, 80,
+                                      std::make_unique<FakeBrowser>());
+
+    // Our own announcement ("Beebium 0.80") is skipped silently.
+    subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40000, nonlocal_ip()));
+    CHECK(backend.peer_count() == 0);
+    CHECK(backend.station_collisions().count == 0);
+
+    // A DIFFERENT instance claiming 0.80 is flagged as a collision, and never
+    // adopted -- we do not yield our own number.
+    subscriber.inject_added(make_service("Beebium 0.80 (2)", 0, 80, 50000, nonlocal_ip()));
+    CHECK(backend.peer_count() == 0);
+    auto report = backend.station_collisions();
+    CHECK(report.count == 1);
+    CHECK(report.last.find("this machine") != std::string::npos);
+}

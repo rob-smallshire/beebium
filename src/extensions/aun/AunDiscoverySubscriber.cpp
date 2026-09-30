@@ -142,12 +142,30 @@ void AunDiscoverySubscriber::handle_added(
         return;  // Schema invalid -- safer to ignore than to guess.
     }
 
-    // Skip our own announcement: same (net, stn) means it's us.
-    // (We compare net to backend_.local_net() so a Beebium that
-    // changes its local_net at runtime correctly stops self-filtering
-    // its old announcement -- though that's not currently possible.)
-    if (net == backend_.local_net() &&
-        stn == local_stn_.load(std::memory_order_relaxed)) {
+    const std::uint8_t our_net = backend_.local_net();
+    const std::uint8_t our_stn = local_stn_.load(std::memory_order_relaxed);
+
+    // An advertisement for OUR own (net, stn). Our own announcement (Bonjour
+    // reflects it back to us) carries the instance name our announcer
+    // publishes, "Beebium <net>.<stn>" -- skip that silently. But a DIFFERENT
+    // instance claiming our number is a collision the operator should see: we
+    // never yield our own number, so there is nothing to adopt, only to report.
+    if (net == our_net && stn == our_stn) {
+        const std::string own_name =
+            "Beebium " + std::to_string(static_cast<unsigned>(our_net)) + "." +
+            std::to_string(static_cast<unsigned>(our_stn));
+        if (svc.instance_name == own_name) {
+            return;  // our own announcement
+        }
+        std::string description =
+            "station " + std::to_string(static_cast<unsigned>(net)) + "." +
+            std::to_string(static_cast<unsigned>(stn)) +
+            " is this machine; rejected advertisement from " +
+            format_endpoint(svc.ipv4_addr_net_byte_order, svc.port);
+        if (trace_) {
+            std::cerr << "AUN RX: " << description << "\n";
+        }
+        backend_.note_station_collision(std::move(description));
         return;
     }
 
