@@ -42,30 +42,84 @@ def _achieved_rate(bbc: Beebium, seconds: float) -> float:
     return (bbc.debugger.cycle_count - start_cycles) / (time.monotonic() - start)
 
 
-# 0.3x stands in for a heavily loaded host: the property is relative, so it
-# must hold however fast the host manages to run the machine.
+# How long the machine stays stopped. Un-anchored pacing would owe the whole
+# interval afterwards: STOP_SECONDS x the rate in cycles of deficit.
+STOP_SECONDS = 3.0
+# How long after the resume the pacing accounting is watched.
+WATCH_SECONDS = 2.0
+# Slack for the pacing controller's tick granularity, in seconds of emulated
+# time at the configured rate: it runs up to a few ticks ahead of its target
+# while on time, and a sample can land just after a tick.
+TICK_SLACK_SECONDS = 0.05
+
+
+# 0.3x stands in for a slow host; the heavy-load behaviour this test was
+# written against (#137) was reproduced with the server reniced below a CPU
+# load that came and went.
 @pytest.mark.parametrize("speed", [1.0, 0.3])
-def test_pacing_after_a_stop_matches_the_rate_before_it(bbc: Beebium, speed: float) -> None:
-    # The pacing clock is re-anchored when the machine runs again, so after a
-    # stop it neither races to catch up the stopped interval (a burst) nor
-    # crawls. Compare the rate after the resume with the rate before the stop
-    # on the same host, rather than with wall-clock real time, which a shared
-    # CI runner cannot guarantee (#123).
+def test_pacing_is_re_anchored_after_a_stop(bbc: Beebium, speed: float) -> None:
+    """After a stop the pacing neither bursts to catch up nor crawls (#119).
+
+    The property is checked against the server's own pacing accounting, not
+    against wall-clock throughput: on a loaded host the rate over any short
+    window swings both ways with the load (0.55x to 1.95x has been measured
+    across a stop with nothing wrong), because a machine that falls behind
+    catches up afterwards, as pacing should. What a pacing fault changes is
+    the accounting itself:
+
+    - a burst carries the stopped interval's owed time past the resume, so the
+      controller's deficit (target minus actual cycles, positive when behind)
+      starts out near STOP_SECONDS of cycles instead of near zero;
+    - a crawl comes from the controller believing the machine is ahead of its
+      target, a strongly negative deficit, or from the pacing timer not
+      running again, so its tick count stands still;
+    - neither pacing fault can make the machine run more cycles than real time
+      allows since the resume.
+    """
+    rate = 2_000_000 * speed
+    slack_cycles = TICK_SLACK_SECONDS * rate
     bbc.system.set_speed_multiplier(speed)
     bbc.debugger.ensure_running()
-    time.sleep(0.5)  # let pacing settle at the new speed
     before = _achieved_rate(bbc, 2.0)
 
     bbc.debugger.ensure_stopped()
-    time.sleep(2.0)  # a missed re-anchor would try to catch this up
+    time.sleep(STOP_SECONDS)
+    stopped = bbc.system.get_pacing_stats()
+    stopped_cycles = bbc.debugger.cycle_count
+
+    resumed_at = time.monotonic()
     bbc.debugger.ensure_running()
+    first_drift = None
+    drifts = []
+    last_ticks = stopped.ticks_executed
+    while time.monotonic() - resumed_at < WATCH_SECONDS:
+        stats = bbc.system.get_pacing_stats()
+        # Samples from before the pacing timer ticked again still show the
+        # accounting from before the stop.
+        if stats.ticks_executed > stopped.ticks_executed:
+            if first_drift is None:
+                first_drift = stats.controller_drift
+            drifts.append(stats.controller_drift)
+        last_ticks = stats.ticks_executed
+        time.sleep(0.02)
+    cycles_run = bbc.debugger.cycle_count - stopped_cycles
+    elapsed = time.monotonic() - resumed_at
     after = _achieved_rate(bbc, 2.0)
 
-    print(f"\nspeed x{speed:g}: {before:,.0f} cycles/s before the stop, "
-          f"{after:,.0f} cycles/s after the resume")
-    assert before > 200_000, (
-        f"slow host: the machine ran at {before:,.0f} cycles/s "
-        f"(throughput {before / 2_000_000:.2f}x) before the stop")
-    ratio = after / before
-    assert ratio < 1.3, f"catch-up burst after the resume: {ratio:.2f}x the rate before the stop"
-    assert ratio > 0.7, f"crawl after the resume: {ratio:.2f}x the rate before the stop"
+    # Wall-clock rates are only diagnostics: on a loaded host they swing.
+    print(f"\nspeed x{speed:g}: {before:,.0f} cycles/s before the stop, {after:,.0f} after; "
+          f"deficit before the stop {stopped.controller_drift:,.0f}, first after the resume "
+          f"{first_drift}, range {min(drifts, default=0):,.0f} to {max(drifts, default=0):,.0f}")
+
+    assert last_ticks - stopped.ticks_executed > 100, (
+        "crawl: the pacing timer did not run again after the resume")
+    assert first_drift is not None
+    assert first_drift < 0.25 * STOP_SECONDS * rate, (
+        f"burst: the pacing deficit right after the resume was {first_drift:,.0f} cycles, "
+        f"close to the {STOP_SECONDS * rate:,.0f} owed for the stop; it was not re-anchored")
+    assert min(drifts) > -slack_cycles, (
+        f"crawl: the pacing controller believed the machine {-min(drifts):,.0f} cycles ahead "
+        f"of its target after the resume, and throttled it")
+    assert cycles_run <= rate * elapsed + slack_cycles, (
+        f"burst: {cycles_run:,} cycles ran in the {elapsed:.2f} s after the resume, more than "
+        f"real time at x{speed:g} allows ({rate * elapsed:,.0f})")
