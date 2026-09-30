@@ -74,23 +74,27 @@ def _boot_to_basic(bbc: Beebium) -> None:
     bbc.expect(">", timeout=10.0)
 
 
-def _settled_leds(bbc: Beebium, *, timeout: float = 5.0) -> tuple[int, int]:
-    """Poll the lock LEDs in real time until both are definitive (0 or 255).
+def _settled_leds(bbc: Beebium, caps_lock: bool, shift_lock: bool, *,
+                  timeout: float = 5.0) -> tuple[int, int]:
+    """Poll the lock LEDs in real time until they show the given latch state.
 
-    The LED brightness is a wall-clock duty-cycle filter of the lock latch, so
-    it only reads a clean 0/255 once the machine has run in real time for a
-    filter window; this waits for that rather than trusting a transient.
+    The LED brightness is a duty-cycle filter of the lock latch over a 100 ms
+    window of wall-clock time, so just after a lock tap it can still read the
+    definitive value from before the tap. Waiting for any definitive 0/255
+    would accept that stale value on a slow host; this waits for the values
+    the latch implies instead. A genuine disagreement persists, so on timeout
+    the last reading is returned for the caller to report.
     """
     bbc.debugger.ensure_running()
+    expected = (255 if caps_lock else 0, 255 if shift_lock else 0)
     deadline = time.monotonic() + timeout
     caps = shift = -1
-    while time.monotonic() < deadline:
+    while True:
         caps = bbc.indicators.get("caps-lock-led")
         shift = bbc.indicators.get("shift-lock-led")
-        if caps in (0, 255) and shift in (0, 255):
-            break
-        time.sleep(0.1)
-    return caps, shift
+        if (caps, shift) == expected or time.monotonic() >= deadline:
+            return caps, shift
+        time.sleep(0.05)
 
 
 def _typed_letter_is_upper(bbc: Beebium) -> bool:
@@ -125,7 +129,7 @@ def _assert_self_consistent(bbc: Beebium, context: str) -> None:
     typed lower, which is the divergence #73 describes.
     """
     latch = bbc.keyboard.get_lock_state()
-    caps_led, shift_led = _settled_leds(bbc)
+    caps_led, shift_led = _settled_leds(bbc, latch.caps_lock, latch.shift_lock)
     typed_upper = _typed_letter_is_upper(bbc)
 
     assert caps_led == (255 if latch.caps_lock else 0), (
