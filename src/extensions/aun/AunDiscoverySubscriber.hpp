@@ -148,6 +148,21 @@ private:
     mutable std::mutex name_map_mutex_;
     std::map<std::string, PeerRef> name_to_peer_;
 
+    // A discovered advertisement refused as a collision (its (net, stn) was
+    // held by a different live station), kept so it can be adopted once that
+    // number frees. seq orders them: on adoption the most recent for a given
+    // (net, stn) wins. Dropped when the advertisement's own name is withdrawn.
+    struct PendingRef {
+        std::uint8_t net;
+        std::uint8_t stn;
+        std::uint32_t ip;        // network byte order, as advertised
+        std::uint16_t port;
+        bool same_host;
+        std::uint64_t seq;
+    };
+    std::map<std::string, PendingRef> pending_;  // guarded by name_map_mutex_
+    std::uint64_t pending_seq_ = 0;               // guarded by name_map_mutex_
+
     // Same-host liveness sweep thread (started by start(), joined by stop()).
     std::thread sweep_thread_;
     std::mutex sweep_mutex_;
@@ -163,6 +178,11 @@ private:
     void handle_removed(const std::string& instance_name);
     void notify_peers_changed();
     void sweep_loop();  // body of sweep_thread_
+
+    // A station just freed up (its holder was removed or reaped): adopt the
+    // most recent pending advertisement for that (net, stn), if any, through
+    // the normal add path.
+    void adopt_pending(std::uint8_t net, std::uint8_t stn);
 };
 
 }  // namespace beebium

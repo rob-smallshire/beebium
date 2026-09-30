@@ -161,6 +161,18 @@ void AunDiscoverySubscriber::handle_added(
     bool operator_pinned =
         backend_.is_operator_configured(net, stn);
 
+    // Same-host? The peer advertised one of THIS host's own IPs, so add_peer
+    // will reroute it to loopback. Such a peer's lifetime is governed by the
+    // liveness sweep, not by mDNS removal (a NIC change withdraws its
+    // advertisement while loopback stays reachable).
+    bool same_host = false;
+    for (std::uint32_t addr : AunBackend::local_host_ipv4_addresses()) {
+        if (addr == svc.ipv4_addr_net_byte_order) {
+            same_host = true;
+            break;
+        }
+    }
+
     // First live station wins: if this (net, stn) is already held by a
     // DIFFERENT discovered instance, do NOT displace the incumbent -- that is
     // the "orphaned station" half of #68. A re-advertisement from the SAME
@@ -178,6 +190,13 @@ void AunDiscoverySubscriber::handle_added(
                 break;
             }
         }
+        if (collision) {
+            // Keep the refused advertisement so it can be adopted once the
+            // number frees (the incumbent leaving, or its port being reaped).
+            pending_[svc.instance_name] =
+                PendingRef{net, stn, svc.ipv4_addr_net_byte_order, svc.port,
+                           same_host, ++pending_seq_};
+        }
     }
     if (collision) {
         std::string held = "?";
@@ -193,19 +212,7 @@ void AunDiscoverySubscriber::handle_added(
             std::cerr << "AUN RX: " << description << "\n";
         }
         backend_.note_station_collision(std::move(description));
-        return;  // incumbent kept; newcomer not adopted
-    }
-
-    // Same-host? The peer advertised one of THIS host's own IPs, so add_peer
-    // will reroute it to loopback. Such a peer's lifetime is governed by the
-    // liveness sweep, not by mDNS removal (a NIC change withdraws its
-    // advertisement while loopback stays reachable).
-    bool same_host = false;
-    for (std::uint32_t addr : AunBackend::local_host_ipv4_addresses()) {
-        if (addr == svc.ipv4_addr_net_byte_order) {
-            same_host = true;
-            break;
-        }
+        return;  // incumbent kept; newcomer parked as pending
     }
 
     backend_.add_peer(net, stn, svc.ipv4_addr_net_byte_order, svc.port,
@@ -215,8 +222,10 @@ void AunDiscoverySubscriber::handle_added(
         std::lock_guard lock(name_map_mutex_);
         // Reconciles in place on a re-add (same instance name -> same key),
         // so a Wi-Fi-return re-advertisement updates the entry rather than
-        // creating a duplicate.
+        // creating a duplicate. If this name had been parked as pending, it is
+        // now an owner, so drop the pending record.
         name_to_peer_[svc.instance_name] = PeerRef{net, stn, same_host, svc.port};
+        pending_.erase(svc.instance_name);
     }
 
     if (!operator_pinned) {
@@ -228,6 +237,10 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
     PeerRef ref{};
     {
         std::lock_guard lock(name_map_mutex_);
+        // A parked (refused) advertisement being withdrawn owns nothing: drop
+        // it so it is never adopted later.
+        if (pending_.erase(instance_name) > 0) return;
+
         auto it = name_to_peer_.find(instance_name);
         if (it == name_to_peer_.end()) return;
         ref = it->second;
@@ -246,8 +259,7 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
     if (backend_.is_operator_configured(ref.net, ref.stn)) return;
 
     // Only drop the backend entry if it still belongs to THIS instance's
-    // endpoint. A rejected collider was never recorded, so it never reaches
-    // here; but if a different, still-live station now holds this (net, stn),
+    // endpoint. If a different, still-live station now holds this (net, stn),
     // removing on the collider's withdrawal would orphan the incumbent. The
     // port discriminates instances (the loopback rewrite preserves it).
     auto endpoint = backend_.peer_endpoint(ref.net, ref.stn);
@@ -255,6 +267,11 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
 
     backend_.remove_peer(ref.net, ref.stn);
     notify_peers_changed();
+
+    // The number just freed: adopt the most recent advertisement we parked for
+    // it, if any (e.g. a relaunched station that had been refused as a
+    // collision while the old registration lingered).
+    adopt_pending(ref.net, ref.stn);
 }
 
 void AunDiscoverySubscriber::sweep_once() {
@@ -277,6 +294,7 @@ void AunDiscoverySubscriber::sweep_once() {
     }
 
     bool changed = false;
+    std::vector<std::pair<std::uint8_t, std::uint8_t>> reaped;
     for (const auto& c : candidates) {
         if (AunBackend::is_udp_port_in_use(c.port)) {
             // Still held -> peer alive -> keep (survives a NIC toggle).
@@ -295,11 +313,53 @@ void AunDiscoverySubscriber::sweep_once() {
             backend_.remove_peer(c.net, c.stn);
             changed = true;
         }
-        std::lock_guard lock(name_map_mutex_);
-        name_to_peer_.erase(c.name);
+        {
+            std::lock_guard lock(name_map_mutex_);
+            name_to_peer_.erase(c.name);
+        }
+        reaped.push_back({c.net, c.stn});
     }
 
     if (changed) notify_peers_changed();
+
+    // Each reaped station's number is now free: adopt a parked advertisement
+    // for it if one is waiting (e.g. a relaunched same-host station that was
+    // refused while the crashed one's port lingered).
+    for (const auto& [net, stn] : reaped) {
+        adopt_pending(net, stn);
+    }
+}
+
+void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
+    std::string name;
+    PendingRef ref{};
+    bool found = false;
+    {
+        std::lock_guard lock(name_map_mutex_);
+        for (const auto& [candidate_name, candidate] : pending_) {
+            if (candidate.net == net && candidate.stn == stn &&
+                (!found || candidate.seq > ref.seq)) {
+                name = candidate_name;
+                ref = candidate;
+                found = true;
+            }
+        }
+        if (found) pending_.erase(name);
+    }
+    if (!found) return;
+
+    backend_.add_peer(net, stn, ref.ip, ref.port, PeerSource::Discovered);
+    {
+        std::lock_guard lock(name_map_mutex_);
+        name_to_peer_[name] = PeerRef{net, stn, ref.same_host, ref.port};
+    }
+    if (trace_) {
+        std::cerr << "AUN RX: adopted pending station "
+                  << static_cast<unsigned>(net) << "."
+                  << static_cast<unsigned>(stn) << " from "
+                  << format_endpoint(ref.ip, ref.port) << "\n";
+    }
+    notify_peers_changed();
 }
 
 void AunDiscoverySubscriber::sweep_loop() {

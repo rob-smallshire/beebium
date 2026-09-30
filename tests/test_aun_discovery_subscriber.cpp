@@ -440,3 +440,67 @@ TEST_CASE("AunDiscoverySubscriber: same-instance re-advertisement updates in pla
     CHECK(backend.peer_endpoint(0, 254)->second == 40009);
     CHECK(backend.station_collisions().count == 0);
 }
+
+TEST_CASE("AunDiscoverySubscriber: a parked collider is adopted when the incumbent leaves",
+          "[aun][discovery][subscriber][collision]") {
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
+                                         htonl(0xCB007102u)));  // refused -> parked
+    REQUIRE(backend.peer_count() == 1);
+    CHECK(backend.peer_endpoint(0, 254)->second == 40001);  // A holds it
+
+    // A leaves -> the parked newcomer B is adopted for 0.254.
+    subscriber.inject_removed("A 0.254");
+    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(backend.peer_endpoint(0, 254).has_value());
+    CHECK(backend.peer_endpoint(0, 254)->second == 50002);  // now B
+}
+
+TEST_CASE("AunDiscoverySubscriber: a parked collider is adopted after the incumbent is reaped",
+          "[aun][discovery][subscriber][collision]") {
+    // Incumbent A is a real same-host backend so the sweep can probe its port.
+    auto peer_a = std::make_unique<AunBackend>(0, 254, 0);
+    REQUIRE(peer_a->is_connected());
+    const uint16_t port_a = peer_a->local_port();
+    // Newcomer B: a second live same-host port.
+    auto peer_b = std::make_unique<AunBackend>(0, 99, 0);
+    REQUIRE(peer_b->is_connected());
+    const uint16_t port_b = peer_b->local_port();
+
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, port_a, loopback_ip()));
+    REQUIRE(backend.peer_count() == 1);
+    subscriber.inject_added(make_service("B 0.254", 0, 254, port_b, loopback_ip()));
+    REQUIRE(backend.peer_count() == 1);
+    CHECK(backend.peer_endpoint(0, 254)->second == port_a);  // still A
+
+    // A's server exits (free its port); the sweep reaps A and adopts B.
+    peer_a.reset();
+    subscriber.sweep_once();
+    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(backend.peer_endpoint(0, 254).has_value());
+    CHECK(backend.peer_endpoint(0, 254)->second == port_b);  // now B
+}
+
+TEST_CASE("AunDiscoverySubscriber: a parked collider withdrawn before the incumbent leaves is not adopted",
+          "[aun][discovery][subscriber][collision]") {
+    AunBackend backend(0, 1, 0);
+    AunDiscoverySubscriber subscriber(backend, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
+                                         htonl(0xCB007102u)));  // parked
+    subscriber.inject_removed("B 0.254");                       // withdrawn
+
+    // A leaves: nothing is waiting to be adopted.
+    subscriber.inject_removed("A 0.254");
+    CHECK(backend.peer_count() == 0);
+}
