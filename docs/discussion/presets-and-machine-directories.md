@@ -83,8 +83,14 @@ elite-client-80.beebium-preset        (a zip archive)
   preset.json                        the one preset
   thumbnail.png
   elite.ssd
+  extensions/<name>/<id>/            data owned by one extension instance
   README.md
 ```
+
+Only `preset.json` is required and only `preset.json`, `thumbnail.png` and
+`extensions/` have meaning to the core. Everything else in the archive is
+the author's, referenced from `preset.json` by relative path or bare name
+and carried into the machine directory unchanged.
 
 The preset's id is the file name without the suffix. The archive carries
 the type, so the inner file is plain JSON with a plain name, which editors
@@ -173,46 +179,57 @@ takes the refinement in #103 and makes it concrete enough to build.
 ```
 Elite Server.beebium-machine/
   machine.json          identity: uuid, name, model, created, source preset
-  thumbnail.png         last screen, captured on Save and graceful shutdown
   preset.json           the machine's own configuration (the preset, extracted
                         at instantiation, editable thereafter; this is what
                         the server actually loads; same name as inside the
                         archive, so a machine directory IS an extracted preset
                         plus state)
-  discs/                working copies of hard-disc and floppy images the
-                        configuration references
-  nvram/                non-volatile state a real machine keeps when powered
-                        off: board RAM, CMOS, RTC offset, one file per
-                        hardware unit (never volatile RAM or CPU state)
+  thumbnail.png         last screen, captured on Save and graceful shutdown
+  nvram/                non-volatile state of core hardware a real machine
+                        keeps when powered off: board RAM, CMOS, RTC offset,
+                        one file per hardware unit (never volatile RAM or
+                        CPU state)
+  extensions/<name>/<id>/ data owned by one extension instance (section 4.9)
   lock                  held by the running server (section 4.4)
+  ...                   everything else the preset archive contained, at the
+                        same relative paths (disc images, ROM images, notes)
 ```
+
+The core defines the meaning of `machine.json`, `preset.json`,
+`thumbnail.png`, `nvram/`, `extensions/` and `lock`, and nothing else. It
+does not prescribe a `discs/` or `roms/` layout: a preset author decides
+where resources sit in the archive, extraction preserves that, and the
+path rule of section 2 finds them. A directory is not a schema.
 
 ### 4.1 Instantiation
 
 `start --preset <id|path>` (as now) creates a transient machine directory
 under the per-user `machines/` area (or the platform temp directory),
-extracts the preset into it, resolves every media reference the
-preset makes, copies each **writable** resource into `discs/` and rewrites
-the configuration to point at the copy, and launches on that directory.
+extracts the preset into it, pins an instance id in `preset.json` for
+every extension instance that has none (ids are otherwise generated fresh
+on each launch, which a persistent directory cannot be keyed by; pinned
+ids are ordinals, `1`, `2`, unless the author named one), and launches on
+that directory.
 
-Which resources are copied:
+What the machine then owns, and what it only refers to:
 
-- **Hard-disc images**: always copied. The guest writes to them.
-- **Floppy images referenced by the preset**: copied. A pack's
-  `elite.ssd` is a template; the guest saving a commander must not modify
-  the pack.
-- **ROM images**: never copied; opened read-only from where they resolve.
-  A sideways RAM `image_uri` preload is read once.
+- **Everything in the archive** is extracted, so every disc image, ROM
+  image or data file a preset ships is the machine's own copy. The guest
+  writing to a shipped floppy or hard disc changes the machine, never the
+  preset.
+- **Resources resolved outside the archive** by bare name (section 2) are
+  treated by kind: a disc image is copied into the machine directory,
+  because the guest writes to it and the template rule applies; a ROM
+  image is opened read-only from where it resolves and never copied.
 - **Media the user inserts at runtime** (Insert Disc from the app, or the
   gRPC disc service): opened in place, as today. The user chose a file of
   their own, and expects writes to land in it.
 
 This keeps today's behaviour for user-owned media and applies the template
-rule only to media a template names.
-
-Copying is the same copy-then-rename `DiscPaths` already does; only the
-destination changes from a per-user directory keyed by image name to the
-machine directory.
+rule only to media a template names. Copying a bare-name disc image into
+the machine directory is the same copy-then-rename `DiscPaths` already
+does; only the destination changes from a per-user directory keyed by
+image name to the machine directory.
 
 ### 4.2 Transient and saved
 
@@ -232,8 +249,8 @@ the directory lives and whether the server removes it at exit.
 - `nvram/`: on graceful shutdown, and on Save. Atomic write-and-rename per
   file. A crash loses changes since the last write, which #103 accepts. A
   periodic write is an optional later improvement and needs no format change.
-- `discs/`: continuously, as the guest writes (the existing disc write-back
-  behaviour), because these are the machine's own files.
+- Media files: continuously, as the guest writes (the existing disc
+  write-back behaviour), because these are the machine's own files.
 - `machine.json`: on rename (`SetMachineName` already exists) and on Save.
 
 Each hardware unit with battery-backed state (Integra-B board RAM and
@@ -358,6 +375,47 @@ window is open opens a new machine window, as now.
 A saved machine that is already running (locked, section 4.4) is shown in
 Machines with its state; choosing it brings its window forward rather than
 launching a second server, matching the existing one-window-per-target rule.
+
+### 4.9 Extension-owned data
+
+The core must not limit what a machine directory contains, because it does
+not know what every extension needs. A 256 KB battery-backed paged RAM
+board on the 1 MHz bus, implemented as an extension, has non-volatile
+contents to keep exactly as the Integra-B does, and the core has no idea
+of its layout.
+
+So each extension instance owns a subdirectory,
+`extensions/<extension name>/<instance id>/`, in both the preset archive
+and the machine directory. The extension name makes the directory
+readable (`extensions/scsi-hard-disc/`, `extensions/paged-ram-1mhz/`);
+the instance id is needed because one preset can fit two instances of the
+same extension (two SCSI discs on one adapter). Ids an author does not
+choose are pinned at instantiation as ordinals, so the common case reads
+`extensions/scsi-hard-disc/1/` and an author-named one
+`extensions/scsi-hard-disc/boot-disc/`.
+
+- **In a preset**, it holds whatever the author ships for that instance
+  (a pre-loaded RAM image, a configuration file). The core extracts it
+  with the rest of the archive and never reads it.
+- **In a machine directory**, the framework hands the instance its
+  directory path at initialisation (a `persistent_dirpath` alongside the
+  existing config map), created on first use. The instance reads and
+  writes there as it likes, subject to the same rules as `nvram/`: write
+  atomically, write on graceful shutdown and on Save, keep a layout version
+  of its own and refuse (keeping the stale file) rather than misread.
+- **`reset-battery`** applies to extensions too: the framework asks each
+  instance to reset its persistent data, and an instance that has none
+  does nothing.
+
+Instance ids are pinned in the machine's `preset.json` at instantiation
+(section 4.1), so an instance finds the same directory on every open. A
+preset author who ships `extensions/<name>/<id>/` data pins the id in the
+preset so the shipped directory matches.
+
+Core-owned non-volatile state stays in `nvram/` rather than moving under
+`extensions/`, because the core hardware units (an Integra-B board, a
+Master 128 CMOS) are not extension instances and have no instance id.
+The same serialise/restore surface serves both.
 
 ## 5. CLI surface
 
