@@ -39,9 +39,10 @@ final class EconetClient: ObservableObject, Disconnectable {
     @Published private(set) var requiresRealTime: Bool = false
     /// The transport is currently severed because the emulation speed is not 1x.
     @Published private(set) var gatedBySpeed: Bool = false
-    /// AUN station-number collisions seen since the transport came up, and a
-    /// description of the most recent one -- a transient diagnostic (#68): another
-    /// station on the network is advertising this machine's station number.
+    /// AUN station-number collisions the server observed on the network since the
+    /// transport came up, and a description of the most recent one -- a transient
+    /// diagnostic (#68): two stations claimed the same number and the first live
+    /// one kept it.
     @Published private(set) var stationCollisionCount: UInt32 = 0
     @Published private(set) var lastStationCollision: String = ""
     @Published private(set) var isLoaded: Bool = false

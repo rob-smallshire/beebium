@@ -534,10 +534,10 @@ struct NetworkModeView: View {
             }
 
             // A station-number collision is a transient warning, not a
-            // permanent counter: another station on the network is advertising
-            // this machine's number (#68). Shown only while the server reports
-            // one, with the running count appended once it has happened more
-            // than once.
+            // permanent counter: the server observed two stations on the
+            // network claiming the same number (#68). Shown only while the
+            // server reports one, with the running count appended once it has
+            // happened more than once.
             if econetClient.stationCollisionCount > 0 {
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -548,9 +548,9 @@ struct NetworkModeView: View {
                     Spacer(minLength: 0)
                 }
                 .font(.caption)
-                .help("Another station on the network is advertising this "
-                      + "machine's station number; give the machines distinct "
-                      + "numbers.")
+                .help("Two stations on the network claim the same number; the "
+                      + "first live one keeps it. Give the machines distinct "
+                      + "station numbers.")
             }
 
             // The Connect/Disconnect button + AUN Port row lived
