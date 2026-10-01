@@ -177,6 +177,123 @@ TEST_CASE("merge_preset_sideways_configs: CLI --sideways overrides preset for sa
 }
 
 // ============================================================================
+// merge_preset_econet_transport() - CLI --aun/--piconet overrides preset (#150)
+// ============================================================================
+
+namespace {
+
+// Give `config` a resolver that recognises "aun" and "piconet" as transports.
+// The manifests are static because add_source() stores pointers into them and
+// the resolver outlives this call.
+void install_transport_manifests(ServerConfig<MachineType>& config) {
+    static const std::vector<beebium::ExtensionManifest> manifests = [] {
+        auto transport = [](std::string name) {
+            beebium::ExtensionManifest m;
+            m.name = name;
+            m.cli_name = name;
+            m.extension_kind = "econet-transport";
+            return m;
+        };
+        return std::vector<beebium::ExtensionManifest>{transport("aun"),
+                                                       transport("piconet")};
+    }();
+    config.extension_resolver.add_source("test", manifests);
+}
+
+using Inst = ServerConfig<MachineType>::ExtensionInstance;
+
+}  // namespace
+
+TEST_CASE("merge_preset_econet_transport: a CLI --aun merges over the preset's aun",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    // Preset aun carries the net; the CLI aun overrides the port and adds keys.
+    config.extension_instances.push_back(
+        Inst{"aun", {{"net", "0"}, {"port", "32768"}}, {}, /*from_preset=*/true});
+    config.extension_instances.push_back(
+        Inst{"aun", {{"port", "0"}, {"map-file", "none"}}, {}, false});
+
+    merge_preset_econet_transport(config);
+
+    // One transport survives: the CLI instance, with the preset's net kept and
+    // the CLI's port and map-file winning.
+    REQUIRE(config.extension_instances.size() == 1);
+    const auto& inst = config.extension_instances[0];
+    CHECK(inst.name == "aun");
+    CHECK_FALSE(inst.from_preset);
+    CHECK(inst.config.at("net") == "0");         // from the preset
+    CHECK(inst.config.at("port") == "0");        // CLI wins
+    CHECK(inst.config.at("map-file") == "none"); // CLI adds
+}
+
+TEST_CASE("merge_preset_econet_transport: a different CLI transport replaces the preset's",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    config.extension_instances.push_back(
+        Inst{"aun", {{"net", "0"}}, {}, /*from_preset=*/true});
+    config.extension_instances.push_back(
+        Inst{"piconet", {{"device_path", "/dev/ttyUSB0"}}, {}, false});
+
+    merge_preset_econet_transport(config);
+
+    REQUIRE(config.extension_instances.size() == 1);
+    CHECK(config.extension_instances[0].name == "piconet");  // preset aun dropped
+}
+
+TEST_CASE("merge_preset_econet_transport: a preset transport alone is left in place",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    config.extension_instances.push_back(
+        Inst{"aun", {{"net", "0"}}, {}, /*from_preset=*/true});
+
+    merge_preset_econet_transport(config);
+
+    REQUIRE(config.extension_instances.size() == 1);
+    CHECK(config.extension_instances[0].name == "aun");
+    CHECK(config.extension_instances[0].from_preset);
+}
+
+TEST_CASE("merge_preset_econet_transport: list parameters follow the CLI per key",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    Inst preset{"aun", {}, {}, /*from_preset=*/true};
+    preset.list_config["map"] = {"0.254@10.0.0.1@32768"};
+    preset.list_config["subnet"] = {"128@192.168.5.0/24"};
+    Inst cli{"aun", {}, {}, false};
+    cli.list_config["map"] = {"0.80@127.0.0.1@40001"};  // CLI sets map
+    config.extension_instances.push_back(std::move(preset));
+    config.extension_instances.push_back(std::move(cli));
+
+    merge_preset_econet_transport(config);
+
+    REQUIRE(config.extension_instances.size() == 1);
+    const auto& inst = config.extension_instances[0];
+    // The CLI's map list wins outright; the preset's subnet (a key the CLI did
+    // not set) is kept.
+    REQUIRE(inst.list_config.at("map").size() == 1);
+    CHECK(inst.list_config.at("map")[0] == "0.80@127.0.0.1@40001");
+    CHECK(inst.list_config.at("subnet")[0] == "128@192.168.5.0/24");
+}
+
+TEST_CASE("merge_preset_econet_transport: two CLI transports are left for the one-transport check",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    config.extension_instances.push_back(Inst{"aun", {}, {}, false});
+    config.extension_instances.push_back(Inst{"piconet", {}, {}, false});
+
+    merge_preset_econet_transport(config);
+
+    // No preset transport to reconcile: both stay, so install_econet still
+    // reports "got 2".
+    CHECK(config.extension_instances.size() == 2);
+}
+
+// ============================================================================
 // load_roms() tests
 // ============================================================================
 

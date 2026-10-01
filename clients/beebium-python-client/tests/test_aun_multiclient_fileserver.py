@@ -26,7 +26,6 @@ retransmission memory holds handles without their sender, so it acknowledges
 
 from __future__ import annotations
 
-import json
 import socket
 from pathlib import Path
 
@@ -92,19 +91,6 @@ def _command(bbc: Beebium, text: str) -> str:
     return "\n".join(_screen_lines(bbc))
 
 
-def _file_server_preset_without_transport(server_filepath: Path | None, scratch_dirpath: Path) -> Path:
-    """The L3FS preset with its AUN transport removed.
-
-    The transport comes from --aun instead; a preset transport and a CLI
-    transport together are two transports, which a BBC machine refuses.
-    """
-    preset = json.loads(resolve_preset("model-b-l3fs-aun", server=server_filepath).read_text())
-    del preset["econet"]["transport"]
-    preset_filepath = scratch_dirpath / "l3fs-aun-no-transport.preset.beebium"
-    preset_filepath.write_text(json.dumps(preset))
-    return preset_filepath
-
-
 @pytest.mark.parametrize("nfs_rom_filename", ["acorn-anfs_4_18.rom", "acorn-nfs_3_34.rom"])
 def test_second_station_logs_on_to_file_server(
     launch_bbc: LaunchBbc,
@@ -123,8 +109,11 @@ def test_second_station_logs_on_to_file_server(
 
     ports = {station: _free_udp_port() for station in (FILE_SERVER_STATION, *CLIENT_STATIONS)}
 
+    # The shipped L3FS preset carries econet.transport; the CLI --aun now
+    # overrides it rather than counting as a second transport (#150), so the
+    # preset is used as-is with no copy workaround.
     file_server = launch_bbc(
-        preset=_file_server_preset_without_transport(beebium_server_filepath, tmp_path),
+        preset=resolve_preset("model-b-l3fs-aun", server=beebium_server_filepath),
         extra_args=[
             "--aun",
             _aun_args(ports[FILE_SERVER_STATION], {s: ports[s] for s in CLIENT_STATIONS}),

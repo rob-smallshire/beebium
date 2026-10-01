@@ -532,6 +532,7 @@ struct ServerConfig {
         std::string name;                                               // canonical extension name
         std::map<std::string, std::string> config;                      // parsed KV pairs (scalar params)
         std::map<std::string, std::vector<std::string>> list_config;    // list params (is_list=true)
+        bool from_preset = false;                                       // supplied by a preset, overridable by the CLI
     };
     std::vector<ExtensionInstance> extension_instances;
 };
@@ -774,6 +775,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
             inst.name = econet.transport->name;
             inst.config = econet.transport->parameters;
             inst.list_config = econet.transport->list_parameters;
+            inst.from_preset = true;
             config.extension_instances.push_back(std::move(inst));
         }
     }
@@ -784,6 +786,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
         inst.name = ext.name;
         inst.config = ext.config;
         inst.list_config = ext.list_config;
+        inst.from_preset = true;
         config.extension_instances.push_back(std::move(inst));
     }
 }
@@ -831,6 +834,57 @@ void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
             config.rom_slots[preset_slot.slot] = RAM_SLOT_MARKER;
         }
     }
+}
+
+// Reconcile a preset's econet.transport with a --aun / --piconet on the command
+// line. Everywhere else the rule is CLI-overrides-preset (sideways, station,
+// disc); the transport follows it rather than counting as a second transport
+// (#150). A CLI transport of the SAME name as the preset's merges parameters,
+// the CLI winning per key, so `--aun port=0:map-file=none` on a preset that set
+// net=0 keeps the net and adds the CLI's keys. A CLI transport of a DIFFERENT
+// name replaces the preset's outright. Either way the preset's transport
+// instance is dropped, leaving one. Two transports both from the CLI are left
+// alone so the one-transport check still reports that as an error.
+//
+// Runs after CLI parsing (the resolver is populated, so extension_kind is
+// known) and before the transport registry is built.
+template<typename MachineType>
+void merge_preset_econet_transport(ServerConfig<MachineType>& config) {
+    auto& insts = config.extension_instances;
+    auto is_transport = [&](const typename ServerConfig<MachineType>::
+                                ExtensionInstance& inst) {
+        const auto* m = config.extension_resolver.find_by_name(inst.name);
+        return m && m->extension_kind == "econet-transport";
+    };
+
+    int preset_idx = -1;
+    int cli_idx = -1;
+    for (int i = 0; i < static_cast<int>(insts.size()); ++i) {
+        if (!is_transport(insts[i])) continue;
+        if (insts[i].from_preset) {
+            preset_idx = i;
+        } else {
+            cli_idx = i;
+        }
+    }
+    if (preset_idx < 0 || cli_idx < 0) {
+        return;  // no preset/CLI transport pair to reconcile
+    }
+
+    if (insts[cli_idx].name == insts[preset_idx].name) {
+        // Same transport: the preset's parameters are a baseline the CLI
+        // overrides per key. emplace() inserts only keys the CLI did not set.
+        auto& cli = insts[cli_idx];
+        const auto& preset = insts[preset_idx];
+        for (const auto& [key, value] : preset.config) {
+            cli.config.emplace(key, value);
+        }
+        for (const auto& [key, values] : preset.list_config) {
+            cli.list_config.emplace(key, values);
+        }
+    }
+    // A different name replaces the preset outright; either way drop the preset.
+    insts.erase(insts.begin() + preset_idx);
 }
 
 // Parse command-line arguments for the 'start' subcommand into a ServerConfig struct.
@@ -1197,6 +1251,11 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
     // Fold preset-supplied sideways slots in as a baseline now that all CLI
     // --sideways flags have been parsed (CLI wins per slot).
     merge_preset_sideways_configs(config);
+
+    // Reconcile a preset's econet.transport with a CLI --aun / --piconet, so
+    // the CLI overrides the preset rather than counting as a second transport
+    // (#150). Runs after the resolver is populated and all CLI args are parsed.
+    merge_preset_econet_transport(config);
 
     return std::nullopt;  // Success, continue execution
 }

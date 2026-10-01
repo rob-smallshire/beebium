@@ -110,6 +110,13 @@ beebium-model-b --preset model-b-disc                  # built-in preset by id
 beebium-model-b --preset ./my-game.preset.beebium      # preset file by path
 ```
 
+CLI-overrides-preset applies to the Econet transport too. A `--aun` (or
+`--piconet`) on the command line overrides the preset's `econet.transport`
+rather than counting as a second transport: the same transport name merges
+parameters with the CLI winning per key (so `--preset model-b-l3fs-aun --aun
+port=0:map-file=none` keeps the preset's net and takes the CLI's port and
+map-file), and a different transport name replaces the preset's outright.
+
 #### ROM Configuration
 
 | Option | Description |
