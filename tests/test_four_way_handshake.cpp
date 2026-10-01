@@ -1601,6 +1601,31 @@ TEST_CASE("FourWayHandshake: a retransmission arriving mid-transaction is droppe
     CHECK(backend.sent_network_frames().size() == sent_before);
 }
 
+TEST_CASE("FourWayHandshake: a different sender's frame mid-transaction is not dropped",
+          "[econet][handshake][duplicate]") {
+    // The in-flight check is keyed by sender too (#149): a handshake is in
+    // flight for 254 on handle H, and a DIFFERENT sender (80) reuses H. That is
+    // not 254's retransmission, so it must be handled per the stage rules (held
+    // for later), not silently dropped as a duplicate would be.
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+
+    backend.inject_rx_network_frame(make_unicast_with_handle(16404));  // src 254
+    auto scout = drain_until_frame(hs, 200);
+    REQUIRE(scout.has_value());
+    REQUIRE(hs.stage() == FourWayHandshake::Stage::ScoutReceived);
+
+    NetworkFrame from_80 = make_unicast_with_handle(16404);
+    from_80.src_stn = 80;
+    backend.inject_rx_network_frame(from_80);
+    // Pull it through the receive path so the handshake actually routes it; a
+    // stage that cannot use it holds it rather than destroying it.
+    (void)drain_until_frame(hs, 100);
+
+    CHECK(hs.held_frame_count() >= 1);              // queued, not dropped
+    CHECK(hs.duplicate_frames_acked_count() == 0);  // not treated as a duplicate
+}
+
 TEST_CASE("FourWayHandshake: handle memory is bounded",
           "[econet][handshake][duplicate]") {
     TestBackend backend;

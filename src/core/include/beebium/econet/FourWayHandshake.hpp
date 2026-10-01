@@ -563,16 +563,23 @@ private:
         // A retransmission is recognised before anything else, because what
         // to do about it does not depend on the stage.
         //
-        // Only the handle can tell one apart from a peer legitimately sending
-        // the same thing twice; matching on content would swallow real
-        // traffic. Handle 0 means the transport has no such concept, so
-        // nothing can be concluded.
+        // Only the handle (with its sender) can tell one apart from a peer
+        // legitimately sending the same thing twice; matching on content would
+        // swallow real traffic. Handle 0 means the transport has no such
+        // concept, so nothing can be concluded. Both checks are keyed by the
+        // sender as well as the handle, because AUN handles are unique only per
+        // sender (#149).
         if (packet.type == FrameType::Unicast && packet.handle != 0) {
-            if (packet.handle == in_flight_handle_ && stage_ != Stage::Idle) {
-                // The guest is still working through the original. There is
-                // nothing to say yet: acknowledging would claim a delivery it
-                // has not made, and delivering again would start a second
-                // handshake for one frame.
+            if (packet.handle == in_flight_handle_ && stage_ != Stage::Idle &&
+                packet.src_net == saved_src_net_ &&
+                packet.src_stn == saved_src_stn_) {
+                // The same sender's retransmission while the guest is still
+                // working through the original. There is nothing to say yet:
+                // acknowledging would claim a delivery it has not made, and
+                // delivering again would start a second handshake for one
+                // frame. A DIFFERENT sender reusing the in-flight handle is not
+                // this -- it falls through to the stage rules and is handled or
+                // queued, not silently dropped.
                 return true;
             }
             if (has_acked_handle(packet.src_net, packet.src_stn,
