@@ -10,11 +10,13 @@
 // You should have received a copy of the GNU General Public License along with Beebium.
 // If not, see <https://www.gnu.org/licenses/>.
 
-// Direct (non-gRPC) tests for AunUi: view-building for each state and
-// event-dispatch for the map-file edit affordances (Add/Edit/Remove peer,
-// Add/Edit/Remove subnet, Save-to-map-file, Reload). Drives a real
-// AunEconetTransportExtension on an ephemeral port with a hermetic temp map
-// file, so no test touches the real per-user aun-map.json.
+// Direct (non-gRPC) tests for AunUi after the #144 rebuild: the panel is a
+// Connect button, a UDP-port label, an EditableList of peers, an EditableList
+// of subnet rules, a FileReference for the map file, and -- on a bad edit --
+// one error Indicator. Tests drive a real AunEconetTransportExtension on an
+// ephemeral port with a hermetic temp map file, so no test touches the real
+// per-user aun-map.json. Dispatch goes straight into handle_event with the
+// EditableListEvent / file_action_id payloads the framework would deliver.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -38,6 +40,7 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -64,7 +67,6 @@ public:
     }
     const std::filesystem::path& map_filepath() const { return map_filepath_; }
 
-    // Build the current view and return it.
     beebium::View view() {
         beebium::View v;
         ext_->ui()->build_view(&v);
@@ -85,43 +87,57 @@ uint32_t make_ip(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
     return addr.s_addr;
 }
 
-// Recursively locate a control by id anywhere in the view tree, descending
-// into Groups and into a ModalEditor's anchor and editor subtree.
+// Locate a top-level control by id (controls are direct or nested Group
+// children of the root).
 const beebium::Control* find_control(const beebium::Control& root,
                                      const std::string& id) {
     if (root.id() == id) return &root;
     if (root.control_case() == beebium::Control::kGroup) {
-        for (int i = 0; i < root.group().controls_size(); ++i) {
-            if (auto* hit = find_control(root.group().controls(i), id)) {
-                return hit;
-            }
-        }
-    } else if (root.control_case() == beebium::Control::kModalEditor) {
-        const auto& modal = root.modal_editor();
-        if (modal.has_anchor()) {
-            if (auto* hit = find_control(modal.anchor(), id)) return hit;
-        }
-        if (modal.has_editor()) {
-            if (auto* hit = find_control(modal.editor(), id)) return hit;
+        for (const auto& child : root.group().controls()) {
+            if (auto* hit = find_control(child, id)) return hit;
         }
     }
     return nullptr;
 }
 
-// A DispatchRequest for a plain Button control.
-beebium::DispatchRequest button_event(const std::string& control_id) {
-    beebium::DispatchRequest req;
-    req.set_control_id(control_id);
-    return req;
+// The EditableList control named `id`, or nullptr.
+const beebium::EditableList* list_of(const beebium::View& view,
+                                     const std::string& id) {
+    const auto* c = find_control(view.root(), id);
+    if (!c || c->control_case() != beebium::Control::kEditableList) return nullptr;
+    return &c->editable_list();
 }
 
-// A DispatchRequest for a ModalEditor commit, with field_id/value pairs.
-beebium::DispatchRequest commit_event(
-    const std::string& control_id,
+// The item with this id in a list, or nullptr.
+const beebium::EditableListItem* item_of(const beebium::EditableList& list,
+                                         const std::string& item_id) {
+    for (const auto& item : list.items()) {
+        if (item.id() == item_id) return &item;
+    }
+    return nullptr;
+}
+
+// The value of an editor field by id, searching an editor Control's group.
+std::string editor_field(const beebium::Control& editor,
+                         const std::string& field_id) {
+    for (const auto& child : editor.group().controls()) {
+        if (child.id() == field_id) return child.text_input().value();
+    }
+    return "<missing>";
+}
+
+// Build an EditableListEvent dispatch with editor field values.
+beebium::DispatchRequest list_event(
+    const std::string& control_id, beebium::EditableListEvent::Kind kind,
+    const std::string& item_id, const std::string& action_id,
     const std::vector<std::pair<std::string, std::string>>& fields) {
     beebium::DispatchRequest req;
     req.set_control_id(control_id);
-    auto* commit = req.mutable_editor_commit();
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(kind);
+    if (!item_id.empty()) event->set_item_id(item_id);
+    if (!action_id.empty()) event->set_action_id(action_id);
+    auto* commit = event->mutable_commit();
     for (const auto& [field_id, value] : fields) {
         auto* f = commit->add_fields();
         f->set_field_id(field_id);
@@ -130,145 +146,186 @@ beebium::DispatchRequest commit_event(
     return req;
 }
 
+beebium::DispatchRequest file_action(const std::string& control_id,
+                                     const std::string& action_id) {
+    beebium::DispatchRequest req;
+    req.set_control_id(control_id);
+    req.set_file_action_id(action_id);
+    return req;
+}
+
+beebium::DispatchRequest button_event(const std::string& control_id) {
+    beebium::DispatchRequest req;
+    req.set_control_id(control_id);
+    return req;
+}
+
 }  // namespace
 
 using beebium::Control;
+using beebium::EditableListEvent;
 
-TEST_CASE("AunUi: empty state shows placeholders and the add/reload affordances",
+TEST_CASE("AunUi: empty state is two lists, a file reference and no errors",
           "[aun][ui]") {
     AunUiFixture fixture;
     auto view = fixture.view();
     const auto& root = view.root();
     REQUIRE(root.group().label() == "AUN");
 
-    CHECK(find_control(root, "no_peers") != nullptr);
-    CHECK(find_control(root, "add_peer") != nullptr);       // Add-peer form
-    CHECK(find_control(root, "add_subnet") != nullptr);     // Add-subnet form
-    CHECK(find_control(root, "subnets_group") != nullptr);
-    CHECK(find_control(root, "reload_map") != nullptr);
-    const auto* path = find_control(root, "map_path");
-    REQUIRE(path != nullptr);
-    CHECK(path->label().text().find(fixture.map_filepath().string()) !=
+    CHECK(find_control(root, "connect_action") != nullptr);
+    CHECK(find_control(root, "udp_port") != nullptr);
+    CHECK(find_control(root, "edit_error") == nullptr);
+
+    const auto* peers = list_of(view, "peers");
+    REQUIRE(peers != nullptr);
+    CHECK(peers->title() == "Peers");
+    CHECK(peers->can_add());
+    CHECK(peers->items_size() == 0);
+    CHECK(peers->empty_text().empty() == false);
+    // The add editor carries net.stn/host/port/label fields.
+    CHECK(editor_field(peers->add_editor(), "net_stn") == "");
+    CHECK(editor_field(peers->add_editor(), "port") == "32768");
+
+    const auto* subnets = list_of(view, "subnets");
+    REQUIRE(subnets != nullptr);
+    CHECK(subnets->title() == "Subnet rules");
+    CHECK(subnets->can_add());
+
+    const auto* file = find_control(root, "map_file");
+    REQUIRE(file != nullptr);
+    REQUIRE(file->control_case() == Control::kFileReference);
+    CHECK(file->file_reference().display_name() == "aun-map.json");
+    CHECK(file->file_reference().path().find(fixture.map_filepath().string()) !=
           std::string::npos);
-    // The add-peer form is a ModalEditor with the net.stn/host/port/label fields.
-    const auto* add = find_control(root, "add_peer");
-    REQUIRE(add->control_case() == Control::kModalEditor);
-    CHECK(find_control(root, "add_peer.net_stn") != nullptr);
-    CHECK(find_control(root, "add_peer.host") != nullptr);
-    CHECK(find_control(root, "add_peer.port") != nullptr);
+    CHECK(file->file_reference().state() == beebium::Indicator::OK);
+    CHECK(file->file_reference().state_text() == "0 peers, 0 subnets");
+    REQUIRE(file->file_reference().actions_size() == 1);
+    CHECK(file->file_reference().actions(0).id() == "reload");
 }
 
-TEST_CASE("AunUi: a map-file peer shows its label with Edit and Remove",
+TEST_CASE("AunUi: a map-file peer is an editable, removable item",
           "[aun][ui]") {
     AunUiFixture fixture;
     REQUIRE(fixture.extension()
                 .add_map_peer(0, 254, "127.0.0.1", 32768, "file server")
                 .error.empty());
     auto view = fixture.view();
-    const auto& root = view.root();
-
-    const auto* label = find_control(root, "peer.0.254.label");
-    REQUIRE(label != nullptr);
-    CHECK(label->label().text().find("file server") != std::string::npos);
-    CHECK(label->label().secondary_text() == "map file");
-    CHECK(find_control(root, "edit_peer.0.254") != nullptr);
-    CHECK(find_control(root, "remove_peer.0.254") != nullptr);
-    // A map-file peer has no Save-to-map-file button.
-    CHECK(find_control(root, "save_peer.0.254") == nullptr);
+    const auto* peers = list_of(view, "peers");
+    REQUIRE(peers != nullptr);
+    const auto* item = item_of(*peers, "0.254");
+    REQUIRE(item != nullptr);
+    CHECK(item->secondary() == "map file");
+    CHECK(item->subtitle() == "file server");
+    CHECK(item->editable());
+    CHECK(item->removable());
+    CHECK(item->actions_size() == 0);  // no "Save" on a map-file row
+    CHECK(editor_field(item->editor(), "host") == "127.0.0.1");
+    CHECK(editor_field(item->editor(), "label") == "file server");
+    // The file reference now counts it.
+    CHECK(find_control(view.root(), "map_file")->file_reference().state_text() ==
+          "1 peer, 0 subnets");
 }
 
-TEST_CASE("AunUi: a non-map-file peer offers Save to map file",
+TEST_CASE("AunUi: a non-map-file peer is read-only with a Save action",
           "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().peer_set().set_peer(0, 100, make_ip(10, 0, 0, 1), 40001,
                                             beebium::AunPeerProvenance::Launch);
     auto view = fixture.view();
-    const auto& root = view.root();
-    CHECK(find_control(root, "save_peer.0.100") != nullptr);
-    CHECK(find_control(root, "edit_peer.0.100") == nullptr);
-    CHECK(find_control(root, "remove_peer.0.100") == nullptr);
+    const auto* item = item_of(*list_of(view, "peers"), "0.100");
+    REQUIRE(item != nullptr);
+    CHECK(item->secondary() == "launch");
+    CHECK_FALSE(item->editable());
+    CHECK_FALSE(item->removable());
+    REQUIRE(item->actions_size() == 1);
+    CHECK(item->actions(0).id() == "save_to_map");
+    CHECK(item->note().empty());  // no ephemeral note for a launch peer
 }
 
-TEST_CASE("AunUi: a discovered peer's Save warns about the ephemeral port",
+TEST_CASE("AunUi: a discovered peer's Save carries the ephemeral-port note",
           "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().peer_set().set_peer(
         0, 101, make_ip(10, 0, 0, 2), 40002,
         beebium::AunPeerProvenance::Discovered);
     auto view = fixture.view();
-    const auto& root = view.root();
-    CHECK(find_control(root, "save_peer.0.101") != nullptr);
-    const auto* warning = find_control(root, "save_peer.0.101.warning");
-    REQUIRE(warning != nullptr);
-    CHECK(warning->label().text().find("ephemeral") != std::string::npos);
+    const auto* item = item_of(*list_of(view, "peers"), "0.101");
+    REQUIRE(item != nullptr);
+    CHECK(item->secondary() == "mDNS");
+    REQUIRE(item->actions_size() == 1);
+    CHECK(item->actions(0).id() == "save_to_map");
+    CHECK(item->note().find("ephemeral") != std::string::npos);
 }
 
-TEST_CASE("AunUi: subnet rules list with Edit and Remove", "[aun][ui]") {
+TEST_CASE("AunUi: subnet rules appear as editable, removable items",
+          "[aun][ui]") {
     AunUiFixture fixture;
     REQUIRE(fixture.extension()
                 .add_map_subnet(128, "192.168.5.0/24", "risc os")
                 .error.empty());
     auto view = fixture.view();
-    const auto& root = view.root();
-    const auto* label = find_control(root, "subnet.128.label");
-    REQUIRE(label != nullptr);
-    CHECK(label->label().text().find("192.168.5.0/24") != std::string::npos);
-    CHECK(label->label().secondary_text() == "risc os");
-    CHECK(find_control(root, "edit_subnet.128") != nullptr);
-    CHECK(find_control(root, "remove_subnet.128") != nullptr);
+    const auto* item = item_of(*list_of(view, "subnets"), "128");
+    REQUIRE(item != nullptr);
+    CHECK(item->primary().find("192.168.5.0/24") != std::string::npos);
+    CHECK(item->subtitle() == "risc os");
+    CHECK(item->editable());
+    CHECK(item->removable());
+    CHECK(editor_field(item->editor(), "subnet") == "192.168.5.0/24");
 }
 
-TEST_CASE("AunUi: a map-file load error is shown", "[aun][ui]") {
+TEST_CASE("AunUi: a map-file load error shows on the file reference",
+          "[aun][ui]") {
     AunUiFixture fixture;
     std::ofstream(fixture.map_filepath(), std::ios::binary | std::ios::trunc)
         << R"({"peers": [}})";
     fixture.extension().reload_map_file();
     auto view = fixture.view();
-    const auto* err = find_control(view.root(), "map_load_error");
-    REQUIRE(err != nullptr);
-    CHECK(err->label().text().find("Map file error") != std::string::npos);
+    const auto* file = find_control(view.root(), "map_file");
+    REQUIRE(file != nullptr);
+    CHECK(file->file_reference().state() == beebium::Indicator::ERROR);
+    CHECK(file->file_reference().state_text().find("JSON") != std::string::npos);
 }
 
-TEST_CASE("AunUi: Add-peer commit writes the map file", "[aun][ui]") {
+TEST_CASE("AunUi: ADD peer commit writes the map file", "[aun][ui]") {
     AunUiFixture fixture;
-    auto req = commit_event("add_peer", {{"add_peer.net_stn", "0.254"},
-                                         {"add_peer.host", "192.168.1.10"},
-                                         {"add_peer.port", "32768"},
-                                         {"add_peer.label", "fs"}});
-    fixture.extension().ui()->handle_event(req);
-
+    fixture.extension().ui()->handle_event(
+        list_event("peers", EditableListEvent::ADD, "", "",
+                   {{"net_stn", "0.254"},
+                    {"host", "192.168.1.10"},
+                    {"port", "32768"},
+                    {"label", "fs"}}));
     auto peers = fixture.extension().map_peers();
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].stn == 254);
     CHECK(peers[0].host == "192.168.1.10");
     CHECK(peers[0].label == "fs");
-    // No edit error after a valid submit.
     CHECK(find_control(fixture.view().root(), "edit_error") == nullptr);
 }
 
-TEST_CASE("AunUi: an invalid Add-peer commit shows a field-named error",
+TEST_CASE("AunUi: an invalid ADD peer shows a field-named error Indicator",
           "[aun][ui]") {
     AunUiFixture fixture;
-    auto req = commit_event("add_peer", {{"add_peer.net_stn", "0.999"},
-                                         {"add_peer.host", "192.168.1.10"},
-                                         {"add_peer.port", "32768"}});
-    fixture.extension().ui()->handle_event(req);
-
-    CHECK(fixture.extension().map_peers().empty());  // nothing written
+    fixture.extension().ui()->handle_event(
+        list_event("peers", EditableListEvent::ADD, "", "",
+                   {{"net_stn", "0.999"}, {"host", "192.168.1.10"},
+                    {"port", "32768"}}));
+    CHECK(fixture.extension().map_peers().empty());
     auto view = fixture.view();
     const auto* err = find_control(view.root(), "edit_error");
     REQUIRE(err != nullptr);
-    CHECK(err->label().text().find("net.stn") != std::string::npos);
+    REQUIRE(err->control_case() == Control::kIndicator);
+    CHECK(err->indicator().state() == beebium::Indicator::ERROR);
+    CHECK(err->indicator().text().find("net.stn") != std::string::npos);
 }
 
-TEST_CASE("AunUi: Edit-peer commit replaces the endpoint", "[aun][ui]") {
+TEST_CASE("AunUi: EDIT peer replaces the endpoint", "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().add_map_peer(0, 254, "192.168.1.10", 32768, "fs");
-    auto req = commit_event("edit_peer.0.254", {{"edit_peer.0.254.host", "192.168.1.99"},
-                                                {"edit_peer.0.254.port", "40000"},
-                                                {"edit_peer.0.254.label", "moved"}});
-    fixture.extension().ui()->handle_event(req);
-
+    fixture.extension().ui()->handle_event(
+        list_event("peers", EditableListEvent::EDIT, "0.254", "",
+                   {{"host", "192.168.1.99"},
+                    {"port", "40000"},
+                    {"label", "moved"}}));
     auto peers = fixture.extension().map_peers();
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].host == "192.168.1.99");
@@ -276,20 +333,23 @@ TEST_CASE("AunUi: Edit-peer commit replaces the endpoint", "[aun][ui]") {
     CHECK(peers[0].label == "moved");
 }
 
-TEST_CASE("AunUi: Remove-peer deletes the entry", "[aun][ui]") {
+TEST_CASE("AunUi: REMOVE peer deletes the entry", "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().add_map_peer(0, 254, "192.168.1.10", 32768, "");
     REQUIRE(fixture.extension().map_peers().size() == 1);
-    fixture.extension().ui()->handle_event(button_event("remove_peer.0.254"));
+    fixture.extension().ui()->handle_event(
+        list_event("peers", EditableListEvent::REMOVE, "0.254", "", {}));
     CHECK(fixture.extension().map_peers().empty());
 }
 
-TEST_CASE("AunUi: Save-to-map-file copies a live peer into the file",
+TEST_CASE("AunUi: the Save action copies a live peer into the map file",
           "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().peer_set().set_peer(0, 100, make_ip(10, 0, 0, 1), 40001,
                                             beebium::AunPeerProvenance::Launch);
-    fixture.extension().ui()->handle_event(button_event("save_peer.0.100"));
+    fixture.extension().ui()->handle_event(
+        list_event("peers", EditableListEvent::ACTION, "0.100", "save_to_map",
+                   {}));
     auto peers = fixture.extension().map_peers();
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].net == 0);
@@ -298,58 +358,52 @@ TEST_CASE("AunUi: Save-to-map-file copies a live peer into the file",
     CHECK(peers[0].port == 40001);
 }
 
-TEST_CASE("AunUi: Add-subnet and Remove-subnet", "[aun][ui]") {
+TEST_CASE("AunUi: ADD and REMOVE subnet", "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().ui()->handle_event(
-        commit_event("add_subnet", {{"add_subnet.net", "128"},
-                                    {"add_subnet.subnet", "192.168.5.0/24"},
-                                    {"add_subnet.label", "risc"}}));
+        list_event("subnets", EditableListEvent::ADD, "", "",
+                   {{"net", "128"},
+                    {"subnet", "192.168.5.0/24"},
+                    {"label", "risc"}}));
     REQUIRE(fixture.extension().map_subnets().size() == 1);
     CHECK(fixture.extension().map_subnets()[0].net == 128);
 
-    fixture.extension().ui()->handle_event(button_event("remove_subnet.128"));
+    fixture.extension().ui()->handle_event(
+        list_event("subnets", EditableListEvent::REMOVE, "128", "", {}));
     CHECK(fixture.extension().map_subnets().empty());
 }
 
-TEST_CASE("AunUi: an invalid Add-subnet shows a field-named error",
+TEST_CASE("AunUi: an invalid ADD subnet shows a field-named error Indicator",
           "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().ui()->handle_event(
-        commit_event("add_subnet", {{"add_subnet.net", "1"},
-                                    {"add_subnet.subnet", "192.168.5.0/16"}}));
+        list_event("subnets", EditableListEvent::ADD, "", "",
+                   {{"net", "1"}, {"subnet", "192.168.5.0/16"}}));
     CHECK(fixture.extension().map_subnets().empty());
     auto view = fixture.view();
     const auto* err = find_control(view.root(), "edit_error");
     REQUIRE(err != nullptr);
-    CHECK(err->label().text().find("subnet") != std::string::npos);
+    CHECK(err->indicator().text().find("subnet") != std::string::npos);
 }
 
-TEST_CASE("AunUi: Reload picks up an external edit", "[aun][ui]") {
+TEST_CASE("AunUi: the Reload file action picks up an external edit",
+          "[aun][ui]") {
     AunUiFixture fixture;
     std::ofstream(fixture.map_filepath(), std::ios::binary | std::ios::trunc)
         << R"({"peers":[{"net":0,"station":1,"host":"10.0.0.1","port":32768}]})";
-    fixture.extension().ui()->handle_event(button_event("reload_map"));
+    fixture.extension().ui()->handle_event(file_action("map_file", "reload"));
     auto peers = fixture.extension().map_peers();
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].stn == 1);
 }
 
-TEST_CASE("AunUi: connect button + UDP port when the backend is live",
-          "[aun][ui]") {
+TEST_CASE("AunUi: the Connect button flips is_connected", "[aun][ui]") {
     AunUiFixture fixture;
+    REQUIRE(fixture.backend().is_connected());
     auto view = fixture.view();
     const auto* button = find_control(view.root(), "connect_action");
     REQUIRE(button != nullptr);
     REQUIRE(button->button().label() == "Disconnect");
-    const auto* port = find_control(view.root(), "udp_port");
-    REQUIRE(port != nullptr);
-    CHECK(port->label().text().find("Listening on UDP port") !=
-          std::string::npos);
-}
-
-TEST_CASE("AunUi: connect_action dispatch flips is_connected", "[aun][ui]") {
-    AunUiFixture fixture;
-    REQUIRE(fixture.backend().is_connected());
     fixture.extension().ui()->handle_event(button_event("connect_action"));
     CHECK_FALSE(fixture.backend().is_connected());
 }
@@ -366,4 +420,5 @@ TEST_CASE("AunUi: no backend reports unavailable", "[aun][ui]") {
     REQUIRE(no_peers != nullptr);
     CHECK(no_peers->label().text() == "AUN backend unavailable");
     CHECK(find_control(view.root(), "connect_action") == nullptr);
+    CHECK(find_control(view.root(), "peers") == nullptr);
 }
