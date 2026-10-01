@@ -359,19 +359,35 @@ class TextInput(_message.Message):
     LABEL_FIELD_NUMBER: _builtins.int
     VALUE_FIELD_NUMBER: _builtins.int
     PLACEHOLDER_FIELD_NUMBER: _builtins.int
+    HELP_FIELD_NUMBER: _builtins.int
+    NOTE_FIELD_NUMBER: _builtins.int
     label: _builtins.str
     value: _builtins.str
     placeholder: _builtins.str
+    help: _builtins.str
+    """Explains what the field is, for someone who does not already know the
+    domain. Rendered as an information affordance (a popover or tooltip on
+    a help glyph), never inline, so it does not clutter the form. Empty /
+    absent means no help.
+    """
+    note: _builtins.str
+    """A contextual message for this instance of the field, rendered inline
+    beneath it -- e.g. a warning that saving pins an ephemeral port.
+    Distinct from `help` (which describes the field in general): `note` is
+    about this particular value or situation. Empty / absent means none.
+    """
     def __init__(
         self,
         *,
         label: _builtins.str = ...,
         value: _builtins.str = ...,
         placeholder: _builtins.str = ...,
+        help: _builtins.str = ...,
+        note: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["label", b"label", "placeholder", b"placeholder", "value", b"value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["help", b"help", "label", b"label", "note", b"note", "placeholder", b"placeholder", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -574,12 +590,18 @@ class EditableList(_message.Message):
     CAN_ADD_FIELD_NUMBER: _builtins.int
     ADD_EDITOR_FIELD_NUMBER: _builtins.int
     EMPTY_TEXT_FIELD_NUMBER: _builtins.int
+    HELP_FIELD_NUMBER: _builtins.int
     title: _builtins.str
     """"Peers", "Subnet rules" """
     can_add: _builtins.bool
     """shows the platform's "+" affordance"""
     empty_text: _builtins.str
     """shown when items is empty: "No peers" """
+    help: _builtins.str
+    """Explains what the list is, for someone new to the domain. Rendered as
+    an information affordance beside the title, like TextInput.help. The
+    title itself carries any count, e.g. "Peers (3)". Empty means no help.
+    """
     @_builtins.property
     def items(self) -> _containers.RepeatedCompositeFieldContainer[Global___EditableListItem]: ...
     @_builtins.property
@@ -597,10 +619,11 @@ class EditableList(_message.Message):
         can_add: _builtins.bool = ...,
         add_editor: Global___Control | None = ...,
         empty_text: _builtins.str = ...,
+        help: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["add_editor", b"add_editor"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["add_editor", b"add_editor", "can_add", b"can_add", "empty_text", b"empty_text", "items", b"items", "title", b"title"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["add_editor", b"add_editor", "can_add", b"can_add", "empty_text", b"empty_text", "help", b"help", "items", b"items", "title", b"title"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -683,19 +706,33 @@ class EditableListAction(_message.Message):
     ID_FIELD_NUMBER: _builtins.int
     TITLE_FIELD_NUMBER: _builtins.int
     WARNING_FIELD_NUMBER: _builtins.int
+    EDITOR_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     title: _builtins.str
     warning: _builtins.str
+    @_builtins.property
+    def editor(self) -> Global___Control:
+        """When set, the action opens this editor prefilled (an ADD-style sheet
+        the user can adjust and confirm) rather than firing directly, and the
+        dispatched ACTION carries the edited values in EditableListEvent.commit
+        -- e.g. "Save to map file" presenting the same sheet as "+", seeded
+        with the row's endpoint. By convention a Group of TextInput / Choice
+        leaves, like add_editor. When unset the action fires directly (with its
+        `warning` confirmation, if any). An action with an editor should not
+        also set `warning`: the sheet, not a confirm dialog, is the gate.
+        """
+
     def __init__(
         self,
         *,
         id: _builtins.str = ...,
         title: _builtins.str = ...,
         warning: _builtins.str = ...,
+        editor: Global___Control | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["editor", b"editor"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["id", b"id", "title", b"title", "warning", b"warning"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["editor", b"editor", "id", b"id", "title", b"title", "warning", b"warning"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

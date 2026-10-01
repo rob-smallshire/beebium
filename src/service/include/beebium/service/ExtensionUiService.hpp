@@ -276,6 +276,12 @@ inline bool validate_editable_list_event(
         case Kind::ACTION:
             for (const auto& action : item->actions()) {
                 if (action.id() == event.action_id()) {
+                    // An action that opens an editor dispatches ACTION with a
+                    // commit, which must validate against that editor.
+                    if (action.has_editor()) {
+                        return validate_commit_fields(event.commit(),
+                                                      action.editor(), error);
+                    }
                     return true;
                 }
             }

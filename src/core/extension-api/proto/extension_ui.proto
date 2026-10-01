@@ -157,6 +157,18 @@ message TextInput {
     string label = 1;
     string value = 2;
     string placeholder = 3;
+
+    // Explains what the field is, for someone who does not already know the
+    // domain. Rendered as an information affordance (a popover or tooltip on
+    // a help glyph), never inline, so it does not clutter the form. Empty /
+    // absent means no help.
+    string help = 4;
+
+    // A contextual message for this instance of the field, rendered inline
+    // beneath it -- e.g. a warning that saving pins an ephemeral port.
+    // Distinct from `help` (which describes the field in general): `note` is
+    // about this particular value or situation. Empty / absent means none.
+    string note = 5;
 }
 
 // Open-ended choice: pick from a fixed list of options OR type a custom
@@ -260,6 +272,10 @@ message EditableList {
     // mirroring a ModalEditor's editor tree. Committed as an ADD event.
     Control add_editor = 4;
     string empty_text = 5;            // shown when items is empty: "No peers"
+    // Explains what the list is, for someone new to the domain. Rendered as
+    // an information affordance beside the title, like TextInput.help. The
+    // title itself carries any count, e.g. "Peers (3)". Empty means no help.
+    string help = 6;
 }
 
 // One row of an EditableList.
@@ -286,6 +302,15 @@ message EditableListAction {
     string id = 1;
     string title = 2;
     string warning = 3;
+    // When set, the action opens this editor prefilled (an ADD-style sheet
+    // the user can adjust and confirm) rather than firing directly, and the
+    // dispatched ACTION carries the edited values in EditableListEvent.commit
+    // -- e.g. "Save to map file" presenting the same sheet as "+", seeded
+    // with the row's endpoint. By convention a Group of TextInput / Choice
+    // leaves, like add_editor. When unset the action fires directly (with its
+    // `warning` confirmation, if any). An action with an editor should not
+    // also set `warning`: the sheet, not a confirm dialog, is the gate.
+    Control editor = 4;
 }
 
 // Reference primitive: a file on the server's host, shown as a small
