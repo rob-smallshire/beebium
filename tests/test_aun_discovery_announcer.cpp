@@ -91,6 +91,28 @@ TEST_CASE("AunDiscoveryAnnouncer: build_service_info populates schema",
     CHECK(info.txt_records.at("impl-version") == "1.2.3");
     CHECK(info.txt_records.at("impl-identity")
           == "11111111-2222-3333-4444-555555555555");
+    // since is the bind-time stamp (#147): present, a non-negative integer.
+    REQUIRE(info.txt_records.count("since") == 1);
+    CHECK(info.txt_records.at("since").find_first_not_of("0123456789") ==
+          std::string::npos);
+    CHECK(std::stoll(info.txt_records.at("since")) > 0);
+}
+
+TEST_CASE("AunDiscoveryAnnouncer: set_since overrides the advertised since; "
+          "set_local_station is a fresh claim the transport restamps",
+          "[aun][discovery][announcer]") {
+    FakeState s;
+    AunDiscoveryAnnouncer announcer(/*net=*/0, /*stn=*/80, /*port=*/32768,
+                                    "beebium", "1.2.3", "",
+                                    std::make_unique<FakeAdvertiser>(&s));
+    announcer.set_since(1000);
+    CHECK(announcer.since() == 1000);
+    CHECK(announcer.build_service_info().txt_records.at("since") == "1000");
+    // A station change is a fresh claim: the transport stamps a new since and
+    // the announcer advertises it.
+    announcer.set_since(2000);
+    announcer.set_local_station(81);
+    CHECK(announcer.build_service_info().txt_records.at("since") == "2000");
 }
 
 TEST_CASE("AunDiscoveryAnnouncer: set_local_station re-announces with the new station",

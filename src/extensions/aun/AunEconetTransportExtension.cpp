@@ -370,6 +370,11 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     if (!discovery_service_type_.empty()) {
         subscriber_->set_service_type(discovery_service_type_);
     }
+    // Share the announcer's bind-time "since" so both halves agree which of two
+    // instances racing for one number is the incumbent (#147). The announcer
+    // stamped it at construction (this bind); the subscriber compares a
+    // claimant's advertised "since" against it.
+    subscriber_->set_own_since(announcer_->since());
     // Discovery callbacks fire on the browser's background thread.
     // mark_dirty is atomic; the View is then re-built (and re-pushed
     // to gRPC subscribers) on the ExtensionUiService poll thread,
@@ -402,11 +407,20 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
             auto keep_alive = alive.lock();
             if (!keep_alive) return;
             std::lock_guard<std::mutex> lock(discovery_mutex_);
+            // A station change is a fresh claim, so stamp a new "since" and
+            // give both halves the same value, re-running the incumbent-vs-
+            // newcomer decision from this moment (#147).
+            const std::int64_t since_now =
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                    .count();
             if (announcer_) {
+                announcer_->set_since(since_now);
                 announcer_->set_local_station(new_station);
                 announcer_->start();
             }
             if (subscriber_) {
+                subscriber_->set_own_since(since_now);
                 subscriber_->set_local_station(new_station);
             }
         });

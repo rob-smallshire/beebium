@@ -17,10 +17,12 @@
 #include <beebium/econet/AunBackend.hpp>
 
 #include <charconv>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -61,6 +63,9 @@ AunDiscoverySubscriber::AunDiscoverySubscriber(
     , local_stn_(local_stn)
     , browser_(browser ? std::move(browser) : discovery::create_browser())
     , own_identity_(std::move(own_identity))
+    , own_since_(std::chrono::duration_cast<std::chrono::seconds>(
+                     std::chrono::system_clock::now().time_since_epoch())
+                     .count())
     , trace_(std::getenv("BEEBIUM_AUN_TRACE") != nullptr) {}
 
 AunDiscoverySubscriber::~AunDiscoverySubscriber() {
@@ -172,11 +177,54 @@ void AunDiscoverySubscriber::handle_added(
         if (id_it != svc.txt_records.end() && id_it->second == own_identity_) {
             return;  // our own announcement
         }
-        std::string description =
-            "station " + std::to_string(static_cast<unsigned>(net)) + "." +
-            std::to_string(static_cast<unsigned>(stn)) +
-            " is this machine; rejected advertisement from " +
+        // First live station wins, so the two machines are in different
+        // situations and must be told different things (#147). Decide which of
+        // us claimed the number first from the bind-time "since" each
+        // advertises: the earlier `since` is the incumbent; a tie (same second)
+        // breaks on the impl-identity UUIDs so both sides reach the same
+        // verdict; a claimant with no `since` (another implementation) counts
+        // as the incumbent, so we are the newcomer.
+        std::optional<std::int64_t> peer_since;
+        if (auto it = svc.txt_records.find("since");
+            it != svc.txt_records.end()) {
+            std::int64_t v = 0;
+            const char* first = it->second.data();
+            const char* last = first + it->second.size();
+            auto [ptr, ec] = std::from_chars(first, last, v);
+            if (ec == std::errc{} && ptr == last) {
+                peer_since = v;
+            }
+        }
+        std::string peer_identity;
+        if (auto it = svc.txt_records.find("impl-identity");
+            it != svc.txt_records.end()) {
+            peer_identity = it->second;
+        }
+        const std::int64_t our_since = own_since_.load(std::memory_order_relaxed);
+        bool we_are_newcomer;
+        if (!peer_since.has_value()) {
+            we_are_newcomer = true;
+        } else if (*peer_since != our_since) {
+            we_are_newcomer = *peer_since < our_since;
+        } else {
+            // Same second: the smaller impl-identity is the incumbent, so we
+            // are the newcomer when ours is the larger. Both machines compare
+            // the same two strings and so agree on opposite roles.
+            we_are_newcomer = own_identity_ > peer_identity;
+        }
+
+        const std::string endpoint =
             format_endpoint(svc.ipv4_addr_net_byte_order, svc.port);
+        const std::string ns = std::to_string(static_cast<unsigned>(net)) + "." +
+                               std::to_string(static_cast<unsigned>(stn));
+        std::string description =
+            we_are_newcomer
+                ? ("Station " + ns + " is already in use by " + endpoint +
+                   ". Change this machine's station number (the Station field "
+                   "above, or --station at launch); the new number takes effect "
+                   "at the next Break.")
+                : ("Another machine at " + endpoint + " tried to claim station " +
+                   ns + " and was rejected.");
         if (trace_) {
             std::cerr << "AUN RX: raised collision: " << description << "\n";
         }

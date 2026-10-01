@@ -479,6 +479,80 @@ TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new
     CHECK(peers_s.station_collisions().last.empty());
 }
 
+// #147: when two instances claim the same number, each is told something
+// different based on which bound first (the `since` stamp). The incumbent (A,
+// earlier since) is told a claim was rejected; the newcomer (B, later since) is
+// told the number is in use and to change its own. A third machine (S) watching
+// both keeps the peer-vs-peer wording.
+TEST_CASE("AUN mDNS e2e: own-number collision tells incumbent and newcomer apart",
+          "[aun][discovery][e2e][.mdns]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    const std::string svc_type = unique_service_type();
+    constexpr uint8_t stn_server = 254;
+    constexpr uint8_t stn = 80;
+
+    AunBackend backend_s(0, stn_server, 0);
+    AunBackend backend_a(0, stn, 0);
+    AunBackend backend_b(0, stn, 0);
+    REQUIRE(backend_s.is_connected());
+    REQUIRE(backend_a.is_connected());
+    REQUIRE(backend_b.is_connected());
+    AunPeerSet peers_s, peers_a, peers_b;
+    peers_s.attach(&backend_s);
+    peers_a.attach(&backend_a);
+    peers_b.attach(&backend_b);
+
+    // A bound first (since 1000) -> incumbent; B bound later (2000) -> newcomer.
+    AunDiscoveryAnnouncer ann_s(0, stn_server, backend_s.local_port(),
+                                "beebium-test", "1.0", "uuid-s");
+    AunDiscoveryAnnouncer ann_a(0, stn, backend_a.local_port(),
+                                "beebium-test", "1.0", "uuid-a");
+    AunDiscoveryAnnouncer ann_b(0, stn, backend_b.local_port(),
+                                "beebium-test", "1.0", "uuid-b");
+    ann_a.set_since(1000);
+    ann_b.set_since(2000);
+    for (auto* a : {&ann_s, &ann_a, &ann_b}) a->set_service_type(svc_type);
+    REQUIRE(ann_s.start());
+    REQUIRE(ann_a.start());
+    REQUIRE(ann_b.start());
+
+    AunDiscoverySubscriber sub_s(peers_s, stn_server, nullptr, "uuid-s");
+    AunDiscoverySubscriber sub_a(peers_a, stn, nullptr, "uuid-a");
+    AunDiscoverySubscriber sub_b(peers_b, stn, nullptr, "uuid-b");
+    sub_a.set_own_since(1000);
+    sub_b.set_own_since(2000);
+    for (auto* s : {&sub_s, &sub_a, &sub_b}) s->set_service_type(svc_type);
+    REQUIRE(sub_s.start());
+    REQUIRE(sub_a.start());
+    REQUIRE(sub_b.start());
+
+    // A sees B claim its number and, being the incumbent, reports a rejection.
+    REQUIRE(wait_until([&] {
+        return peers_a.station_collisions().count >= 1;
+    }));
+    CHECK(peers_a.station_collisions().last.find(
+              "tried to claim station 0.80 and was rejected") !=
+          std::string::npos);
+
+    // B sees A hold the number and, being the newcomer, is told to renumber.
+    REQUIRE(wait_until([&] {
+        return peers_b.station_collisions().count >= 1;
+    }));
+    CHECK(peers_b.station_collisions().last.find(
+              "Station 0.80 is already in use by") != std::string::npos);
+    CHECK(peers_b.station_collisions().last.find("the next Break") !=
+          std::string::npos);
+
+    // The third machine watching two 0.80s keeps the peer-vs-peer wording.
+    REQUIRE(wait_until([&] {
+        return peers_s.station_collisions().count >= 1;
+    }));
+    CHECK(peers_s.station_collisions().last.find("rejected advertisement from") !=
+          std::string::npos);
+}
+
 // #139: a map-file entry and discovery coexist. When the file pins a station
 // to a different endpoint than the one a peer announces over mDNS, the file
 // wins the routing and the disagreement is reported through the live collision

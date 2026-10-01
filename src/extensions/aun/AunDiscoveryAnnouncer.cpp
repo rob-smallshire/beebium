@@ -12,9 +12,20 @@
 
 #include "AunDiscoveryAnnouncer.hpp"
 
+#include <chrono>
 #include <utility>
 
 namespace beebium {
+
+namespace {
+
+std::int64_t now_unix_seconds() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+}  // namespace
 
 AunDiscoveryAnnouncer::AunDiscoveryAnnouncer(
         std::uint8_t local_net,
@@ -30,6 +41,7 @@ AunDiscoveryAnnouncer::AunDiscoveryAnnouncer(
     , impl_(std::move(impl))
     , impl_version_(std::move(impl_version))
     , impl_identity_(std::move(impl_identity))
+    , since_(now_unix_seconds())
     , advertiser_(advertiser ? std::move(advertiser)
                              : discovery::create_advertiser()) {}
 
@@ -75,6 +87,7 @@ discovery::ServiceInfo AunDiscoveryAnnouncer::build_service_info() const {
     if (!impl_identity_.empty()) {
         info.txt_records["impl-identity"] = impl_identity_;
     }
+    info.txt_records["since"] = std::to_string(since_);
     return info;
 }
 

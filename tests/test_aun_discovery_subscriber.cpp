@@ -537,7 +537,92 @@ TEST_CASE("AunDiscoverySubscriber: a different instance claiming our own station
     CHECK(peers.peer_count() == 0);
     auto report = peers.station_collisions();
     CHECK(report.count == 1);
-    CHECK(report.last.find("this machine") != std::string::npos);
+    // The claimant carries no `since`, so it is treated as the incumbent and we
+    // are the newcomer (#147).
+    CHECK(report.last.find("already in use") != std::string::npos);
+}
+
+// #147: an own-number collision tells the newcomer (we bound later) the number
+// is taken and the incumbent (we bound first) that a claim was rejected. The
+// role is decided by comparing the bind-time `since` each side advertises.
+TEST_CASE("AunDiscoverySubscriber: own-number collision -- we are the newcomer",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80, std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+    subscriber.set_own_since(2000);  // we bound later
+    auto svc = make_service("Beebium 0.80", 0, 80, 50000, nonlocal_ip(),
+                            "other-uuid");
+    svc.txt_records["since"] = "1000";  // claimant bound first -> incumbent
+    subscriber.inject_added(svc);
+    auto report = peers.station_collisions();
+    REQUIRE(report.count == 1);
+    CHECK(report.last.find("Station 0.80 is already in use by") !=
+          std::string::npos);
+    CHECK(report.last.find("the next Break") != std::string::npos);
+}
+
+TEST_CASE("AunDiscoverySubscriber: own-number collision -- we are the incumbent",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80, std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+    subscriber.set_own_since(1000);  // we bound first
+    auto svc = make_service("Beebium 0.80", 0, 80, 50000, nonlocal_ip(),
+                            "other-uuid");
+    svc.txt_records["since"] = "2000";  // claimant bound later -> newcomer
+    subscriber.inject_added(svc);
+    auto report = peers.station_collisions();
+    REQUIRE(report.count == 1);
+    CHECK(report.last.find("tried to claim station 0.80 and was rejected") !=
+          std::string::npos);
+}
+
+TEST_CASE("AunDiscoverySubscriber: own-number collision -- a tie breaks on identity",
+          "[aun][discovery][subscriber][collision]") {
+    // Same `since`: the smaller impl-identity is the incumbent. Both machines
+    // compare the same two strings and so reach opposite, agreeing roles.
+    SECTION("our identity is the smaller -> we are the incumbent") {
+        AunPeerSet peers;
+        AunDiscoverySubscriber subscriber(peers, 80,
+                                          std::make_unique<FakeBrowser>(),
+                                          /*own_identity=*/"aaa");
+        subscriber.set_own_since(1000);
+        auto svc = make_service("Beebium 0.80", 0, 80, 50000, nonlocal_ip(),
+                                "zzz");
+        svc.txt_records["since"] = "1000";
+        subscriber.inject_added(svc);
+        CHECK(peers.station_collisions().last.find("was rejected") !=
+              std::string::npos);
+    }
+    SECTION("our identity is the larger -> we are the newcomer") {
+        AunPeerSet peers;
+        AunDiscoverySubscriber subscriber(peers, 80,
+                                          std::make_unique<FakeBrowser>(),
+                                          /*own_identity=*/"zzz");
+        subscriber.set_own_since(1000);
+        auto svc = make_service("Beebium 0.80", 0, 80, 50000, nonlocal_ip(),
+                                "aaa");
+        svc.txt_records["since"] = "1000";
+        subscriber.inject_added(svc);
+        CHECK(peers.station_collisions().last.find("already in use") !=
+              std::string::npos);
+    }
+}
+
+TEST_CASE("AunDiscoverySubscriber: own-number collision -- a claimant with no since is the incumbent",
+          "[aun][discovery][subscriber][collision]") {
+    // Another implementation that does not publish `since` counts as the
+    // incumbent, so we (even having bound first by wall clock) are told we are
+    // the newcomer -- we cannot prove we were first to a peer that is silent.
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80, std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+    subscriber.set_own_since(1000);
+    subscriber.inject_added(make_service("Other 0.80", 0, 80, 50000,
+                                         nonlocal_ip(), "other-uuid"));
+    CHECK(peers.station_collisions().last.find("already in use") !=
+          std::string::npos);
 }
 
 TEST_CASE("AunDiscoverySubscriber: with no identity, our number is skipped silently",
@@ -607,7 +692,7 @@ TEST_CASE("AunDiscoverySubscriber: an own-number collision clears when the claim
     subscriber.inject_added(make_service("X 0.80", 0, 80, 50000,
                                          nonlocal_ip(), "other-uuid"));
     CHECK(peers.station_collisions().count == 1);
-    CHECK(peers.station_collisions().last.find("this machine") !=
+    CHECK(peers.station_collisions().last.find("already in use") !=
           std::string::npos);
 
     // The claimant leaves: our number is no longer contested.

@@ -38,6 +38,15 @@
 //                                two announcements; another vendor
 //                                might use a hostname, a hash, or
 //                                nothing at all.)
+//   since         "<unix secs>" (optional; when this station bound its
+//                                socket -- i.e. first claimed this
+//                                number. Two instances racing for one
+//                                number compare it to decide which is
+//                                the incumbent: the earlier `since`
+//                                wins, ties break on impl-identity, and
+//                                a peer with no `since` counts as
+//                                earlier. A station change refreshes it,
+//                                because it is a fresh claim. See #147.)
 //
 // Lifetime is RAII-shaped: construction stores parameters, start()
 // publishes the announcement (using a real platform Advertiser unless
@@ -96,6 +105,16 @@ public:
     // station, so this changes the DNS-SD name as well as the TXT record.
     void set_local_station(std::uint8_t local_stn) { local_stn_ = local_stn; }
 
+    // Set the bind-time "since" published in the TXT record (unix seconds).
+    // The transport sets this to the moment it bound the socket, and refreshes
+    // it on a station change (a fresh claim). The same value is given to the
+    // subscriber, so both halves agree on who is the incumbent in a race for a
+    // number (see #147). Defaults to construction time if never set.
+    void set_since(std::int64_t since_unix_seconds) {
+        since_ = since_unix_seconds;
+    }
+    std::int64_t since() const { return since_; }
+
     // True between a successful start() and a stop() / destruction.
     // Reflects the platform advertiser's view, which may take a few
     // tens of milliseconds to update on macOS Bonjour.
@@ -123,6 +142,7 @@ private:
     std::string impl_;
     std::string impl_version_;
     std::string impl_identity_;
+    std::int64_t since_;  // unix seconds the socket was bound (this claim)
     std::string service_type_ = "_aun._udp";
     std::unique_ptr<discovery::Advertiser> advertiser_;
 };

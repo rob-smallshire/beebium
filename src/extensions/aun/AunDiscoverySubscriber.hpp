@@ -103,6 +103,17 @@ public:
         service_type_ = std::move(service_type);
     }
 
+    // Set this machine's bind-time "since" (unix seconds) -- the same value the
+    // announcer publishes -- so an own-number collision can tell whether we
+    // bound before or after the claimant. The earlier `since` is the incumbent;
+    // ties break on impl-identity; a claimant with no `since` is treated as the
+    // incumbent (so we are the newcomer). The transport sets it at bind time
+    // and refreshes it on a station change. Atomic: set from the gRPC thread
+    // while handle_added reads it on the browser thread. See #147.
+    void set_own_since(std::int64_t since_unix_seconds) {
+        own_since_.store(since_unix_seconds, std::memory_order_relaxed);
+    }
+
     // Test-only: parse a TXT record set into the (net, stn) pair the
     // subscriber would derive. Returns nullopt if the schema is
     // missing or invalid (so the subscriber can't safely act on it).
@@ -146,6 +157,9 @@ private:
     std::atomic<std::uint8_t> local_stn_;
     std::unique_ptr<discovery::Browser> browser_;
     std::string own_identity_;  // our impl-identity (machine UUID), for self-recognition
+    // This machine's bind-time "since" (unix seconds), mirroring the announcer's,
+    // for incumbent-vs-newcomer resolution on an own-number collision (#147).
+    std::atomic<std::int64_t> own_since_;
     std::string service_type_ = "_aun._udp";
     bool trace_ = false;  // BEEBIUM_AUN_TRACE: log collisions to stderr
 
