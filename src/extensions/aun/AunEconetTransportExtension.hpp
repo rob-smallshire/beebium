@@ -35,6 +35,7 @@
 //                                   '.' (inside net.stn and IPv4) or ':'
 //                                   (the top-level arg separator).
 
+#include "AunMapFile.hpp"
 #include "AunPeerSet.hpp"
 #include "AunUi.hpp"
 #include "beebium/econet/AunBackend.hpp"
@@ -119,6 +120,30 @@ public:
     bool set_desired_connected(bool connected);
     bool desired_connected() const { return desired_connected_; }
 
+    // --- Map file (aun-map.json) ---
+
+    struct ReloadResult {
+        bool reloaded = false;  // false only when the map file is disabled
+        std::string error;      // parse error, if the file was present but bad
+    };
+
+    // Re-read the map file now, replacing the MapFile peer layer and the MapFile
+    // subnet rules (Api, Launch and Discovered are untouched). Runs hostname
+    // resolution, so it must be called off the emulation thread. Safe before a
+    // backend exists -- the peer set absorbs it.
+    ReloadResult reload_map_file();
+
+    // The resolved map-file path on this host (empty when map-file=none), its
+    // entry count from the last load, and the last load error (empty on
+    // success or an absent file). For AunService.GetStatus.
+    std::string map_file_path() const;
+    std::uint32_t map_file_entry_count() const;
+    std::string map_file_error() const;
+
+    // Map peers whose host did not resolve on the last load: kept for display
+    // as unreachable rather than routed. Copied out under the lock.
+    std::vector<AunMapPeer> unreachable_map_peers() const;
+
     // When there is no working backend, the specific reason -- captured from
     // the failed AunBackend construction, naming the port and the OS cause
     // (e.g. "could not bind UDP port 32768 (Address already in use)"). Empty
@@ -164,6 +189,20 @@ private:
     // Desired cable state, applied to the backend when one exists. AUN comes up
     // connected; SetConnected before the backend is up records the wish here.
     bool desired_connected_ = true;
+
+    // Map-file state, guarded because AunService.GetStatus reads it on a gRPC
+    // thread while a reload runs on create_backend / the sweep thread.
+    mutable std::mutex map_file_mutex_;
+    bool map_file_enabled_ = true;            // false when map-file=none
+    std::string map_file_filepath_;           // resolved path (empty if disabled)
+    std::uint32_t map_file_entry_count_ = 0;
+    std::string map_file_error_;
+    std::vector<AunMapPeer> unreachable_map_peers_;
+
+    // Resolve the effective map-file path from --aun map-file= / the
+    // BEEBIUM_AUN_MAP_FILEPATH env / the shared per-user default, and whether it
+    // is enabled (map-file=none disables). Called once in create_backend.
+    void resolve_map_file_path();
 
     std::unique_ptr<AunDispatcher> dispatcher_;  // lazily constructed
     // Owned by the extension so its lifetime ends with the extension.

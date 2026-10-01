@@ -103,6 +103,10 @@ public:
                     // before a backend exists (peers added ahead of Enable).
                     resp.set_peer_count(static_cast<std::uint32_t>(
                         extension_.peer_set().peer_count()));
+                    resp.set_map_file_path(extension_.map_file_path());
+                    resp.set_map_file_entry_count(
+                        extension_.map_file_entry_count());
+                    resp.set_map_file_error(extension_.map_file_error());
                     auto* backend = extension_.backend();
                     if (!backend) {
                         // No socket yet -> no link, whatever cable state a
@@ -112,6 +116,14 @@ public:
                     }
                     resp.set_connected(backend->is_connected());
                     resp.set_local_port(backend->local_port());
+                });
+        }
+        if (method == "ReloadMap") {
+            return handle<AunReloadMapRequest, AunReloadMapResponse>(
+                method, request, response, [&](const auto&, auto& resp) {
+                    auto result = extension_.reload_map_file();
+                    resp.set_reloaded(result.reloaded);
+                    resp.set_error(result.error);
                 });
         }
         return RpcStatus::error(

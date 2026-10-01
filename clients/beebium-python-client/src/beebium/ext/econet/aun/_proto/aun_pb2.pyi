@@ -113,26 +113,90 @@ class AunGetStatusResponse(_message.Message):
     CONNECTED_FIELD_NUMBER: _builtins.int
     LOCAL_PORT_FIELD_NUMBER: _builtins.int
     PEER_COUNT_FIELD_NUMBER: _builtins.int
+    MAP_FILE_PATH_FIELD_NUMBER: _builtins.int
+    MAP_FILE_ENTRY_COUNT_FIELD_NUMBER: _builtins.int
+    MAP_FILE_ERROR_FIELD_NUMBER: _builtins.int
     connected: _builtins.bool
     """True if the AUN UDP socket is bound and the cable is connected."""
     local_port: _builtins.int
     """The local UDP port the AUN backend is bound to (0 if none)."""
     peer_count: _builtins.int
     """Number of peers configured in the peer table."""
+    map_file_path: _builtins.str
+    """The per-user aun-map.json path on the server's host (empty when the map
+    file is disabled with map-file=none).
+    """
+    map_file_entry_count: _builtins.int
+    """Number of entries (peers + subnets) read from the map file on the last
+    load.
+    """
+    map_file_error: _builtins.str
+    """The last map-file load error, or empty when the last load succeeded (or
+    the file is absent, which is not an error).
+    """
     def __init__(
         self,
         *,
         connected: _builtins.bool = ...,
         local_port: _builtins.int = ...,
         peer_count: _builtins.int = ...,
+        map_file_path: _builtins.str = ...,
+        map_file_entry_count: _builtins.int = ...,
+        map_file_error: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["connected", b"connected", "local_port", b"local_port", "peer_count", b"peer_count"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["connected", b"connected", "local_port", b"local_port", "map_file_entry_count", b"map_file_entry_count", "map_file_error", b"map_file_error", "map_file_path", b"map_file_path", "peer_count", b"peer_count"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___AunGetStatusResponse: _TypeAlias = AunGetStatusResponse  # noqa: Y015
+
+@_typing.final
+class AunReloadMapRequest(_message.Message):
+    """--- Map file reload ---
+
+    Empty.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunReloadMapRequest: _TypeAlias = AunReloadMapRequest  # noqa: Y015
+
+@_typing.final
+class AunReloadMapResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RELOADED_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    reloaded: _builtins.bool
+    """True if the reload ran (even if the file was absent); false only when the
+    map file is disabled (map-file=none).
+    """
+    error: _builtins.str
+    """The load error, if the file was present but could not be parsed."""
+    def __init__(
+        self,
+        *,
+        reloaded: _builtins.bool = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "reloaded", b"reloaded"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunReloadMapResponse: _TypeAlias = AunReloadMapResponse  # noqa: Y015
 
 @_typing.final
 class AunSetConnectedRequest(_message.Message):

@@ -11,6 +11,8 @@ import {
     AunAddPeerResponse,
     AunRemovePeerRequest,
     AunRemovePeerResponse,
+    AunReloadMapRequest,
+    AunReloadMapResponse,
     AunPeerSource,
 } from "../src/generated/aun.js";
 
@@ -69,6 +71,43 @@ describe("Aun", () => {
             expect(status.connected).toBe(false);
             expect(status.localPort).toBe(0);
             expect(status.peerCount).toBe(0);
+        });
+
+        it("maps the map-file fields", async () => {
+            const { channel } = fakeChannel({
+                GetStatus: ok(AunGetStatusResponse, {
+                    connected: true,
+                    localPort: 32768,
+                    peerCount: 2,
+                    mapFilePath: "/home/u/.config/beebium/aun-map.json",
+                    mapFileEntryCount: 2,
+                    mapFileError: "",
+                }),
+            });
+            const status = await new Aun(channel).getStatus();
+            expect(status.mapFilePath).toBe("/home/u/.config/beebium/aun-map.json");
+            expect(status.mapFileEntryCount).toBe(2);
+            expect(status.mapFileError).toBe("");
+        });
+    });
+
+    describe("reloadMap", () => {
+        it("invokes ReloadMap and resolves on success", async () => {
+            const { channel, request } = fakeChannel({
+                ReloadMap: ok(AunReloadMapResponse, { reloaded: true, error: "" }),
+            });
+            await new Aun(channel).reloadMap();
+            request("ReloadMap", AunReloadMapRequest);  // throws if not invoked
+        });
+
+        it("throws when the map file could not be parsed", async () => {
+            const { channel } = fakeChannel({
+                ReloadMap: ok(AunReloadMapResponse, {
+                    reloaded: true,
+                    error: "aun-map.json: invalid JSON at byte 11",
+                }),
+            });
+            await expect(new Aun(channel).reloadMap()).rejects.toThrow(EconetError);
         });
     });
 

@@ -24,6 +24,8 @@
 #define BEEBIUM_VERSION "unknown"
 #endif
 
+#include "beebium/PlatformUtils.hpp"
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -31,13 +33,19 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #endif
 
 #include <charconv>
+#include <chrono>
+#include <future>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string_view>
+#include <thread>
+#include <tuple>
 
 namespace beebium {
 
@@ -64,6 +72,43 @@ std::vector<std::string> split_on(std::string_view s, char delim) {
 bool parse_uint(std::string_view s, unsigned long& out) {
     auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), out);
     return ec == std::errc{} && ptr == s.data() + s.size();
+}
+
+// Resolve a host (IPv4 literal or DNS name) to an IPv4 address in network byte
+// order. A literal returns at once. A name runs getaddrinfo on a detached
+// thread bounded by `timeout`: if it does not answer in time the host is
+// treated as unresolved for this pass (the detached lookup finishes and its
+// result is discarded through the shared promise), so a slow resolver never
+// stalls the caller -- which runs on create_backend or the sweep thread, never
+// the emulation thread.
+std::optional<std::uint32_t> resolve_host_bounded(
+        const std::string& host, std::chrono::milliseconds timeout) {
+    in_addr literal{};
+    if (inet_pton(AF_INET, host.c_str(), &literal) == 1) {
+        return literal.s_addr;
+    }
+    auto promise =
+        std::make_shared<std::promise<std::optional<std::uint32_t>>>();
+    auto future = promise->get_future();
+    std::thread([host, promise]() {
+        std::optional<std::uint32_t> result;
+        addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        addrinfo* res = nullptr;
+        if (::getaddrinfo(host.c_str(), nullptr, &hints, &res) == 0 &&
+            res != nullptr) {
+            result = reinterpret_cast<sockaddr_in*>(res->ai_addr)->sin_addr.s_addr;
+        }
+        if (res != nullptr) {
+            ::freeaddrinfo(res);
+        }
+        promise->set_value(result);
+    }).detach();
+    if (future.wait_for(timeout) == std::future_status::ready) {
+        return future.get();
+    }
+    return std::nullopt;  // did not resolve in time; retried on the next reload
 }
 
 }  // namespace
@@ -167,6 +212,53 @@ AunEconetTransportExtension::parse_map(std::span<const std::string> entries) {
     return peers;
 }
 
+namespace {
+
+struct SubnetSpec {
+    std::uint8_t net;
+    std::uint32_t base_ip;  // network byte order, /24 network address
+};
+
+// Parse --aun subnet= entries of the form "net@a.b.c.0/24". Only /24 is
+// supported. Malformed entries are dropped with a warning to stderr.
+std::vector<SubnetSpec> parse_subnet_specs(
+        std::span<const std::string> entries) {
+    std::vector<SubnetSpec> specs;
+    for (const auto& entry : entries) {
+        if (entry.empty()) continue;
+        auto fields = split_on(entry, '@');
+        if (fields.size() != 2) {
+            std::cerr << "AUN extension: malformed subnet entry '" << entry
+                      << "' (expected net@a.b.c.0/24) -- skipping\n";
+            continue;
+        }
+        unsigned long net = 0;
+        if (!parse_uint(fields[0], net) || net > 255) {
+            std::cerr << "AUN extension: invalid net '" << fields[0]
+                      << "' in subnet entry -- skipping\n";
+            continue;
+        }
+        auto slash = fields[1].find('/');
+        if (slash == std::string::npos || fields[1].substr(slash + 1) != "24") {
+            std::cerr << "AUN extension: subnet '" << fields[1]
+                      << "' must be a /24 -- skipping\n";
+            continue;
+        }
+        in_addr addr{};
+        if (inet_pton(AF_INET, fields[1].substr(0, slash).c_str(), &addr) != 1) {
+            std::cerr << "AUN extension: invalid subnet address '" << fields[1]
+                      << "' -- skipping\n";
+            continue;
+        }
+        specs.push_back(
+            SubnetSpec{static_cast<std::uint8_t>(net),
+                       addr.s_addr & htonl(0xFFFFFF00u)});
+    }
+    return specs;
+}
+
+}  // namespace
+
 std::unique_ptr<NetworkBackend>
 AunEconetTransportExtension::create_backend(std::uint8_t station) {
     auto port_value = config_value("port");
@@ -199,12 +291,27 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     peer_set_.set_local_net(local_net);
     peer_set_.clear_provenance(AunPeerProvenance::Launch);
     peer_set_.clear_provenance(AunPeerProvenance::Discovered);
+    peer_set_.clear_provenance(AunPeerProvenance::Subnet);
+    peer_set_.clear_subnet_rules(AunPeerProvenance::Launch);
     auto map_entries = config_list("map");
     auto peers = parse_map(map_entries ? *map_entries : std::span<const std::string>{});
     for (const auto& p : peers) {
         peer_set_.set_peer(p.net, p.stn, p.ip_addr_net_byte_order, p.port,
                            AunPeerProvenance::Launch);
     }
+    // --aun subnet= gives a subnet rule for this launch (Launch provenance).
+    auto subnet_entries = config_list("subnet");
+    for (const auto& s : parse_subnet_specs(
+             subnet_entries ? *subnet_entries
+                            : std::span<const std::string>{})) {
+        peer_set_.set_subnet_rule(s.net, s.base_ip, AunPeerProvenance::Launch);
+    }
+
+    // Load the per-user map file (MapFile peers + subnet rules). Resolution runs
+    // here, off the emulation thread. A malformed or missing file is reported
+    // but never stops the transport coming up.
+    resolve_map_file_path();
+    reload_map_file();
 
     backend_ = backend.get();  // non-owning; ownership goes to EconetSocket
 
@@ -336,6 +443,115 @@ bool AunEconetTransportExtension::set_desired_connected(bool connected) {
         return true;
     }
     return false;  // remembered; applied at the next create_backend
+}
+
+void AunEconetTransportExtension::resolve_map_file_path() {
+    // Precedence: --aun map-file= > BEEBIUM_AUN_MAP_FILEPATH > the shared
+    // per-user default. "none" (from the CLI) disables the map file entirely.
+    bool enabled = true;
+    std::string path;
+    if (auto cfg = config_value("map-file")) {
+        std::string value(*cfg);
+        if (value == "none") {
+            enabled = false;
+        } else if (!value.empty()) {
+            path = value;
+        }
+    }
+    if (enabled && path.empty()) {
+        if (auto env = beebium::platform::get_env("BEEBIUM_AUN_MAP_FILEPATH");
+            env && !env->empty()) {
+            path = *env;
+        }
+    }
+    if (enabled && path.empty()) {
+        path = (beebium::platform::user_state_base_dirpath() / "aun-map.json")
+                   .string();
+    }
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    map_file_enabled_ = enabled;
+    map_file_filepath_ = enabled ? path : std::string{};
+}
+
+AunEconetTransportExtension::ReloadResult
+AunEconetTransportExtension::reload_map_file() {
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) {
+            return {false, ""};
+        }
+        path = map_file_filepath_;
+    }
+
+    AunMapLoadResult loaded = load_aun_map(path);
+    if (!loaded.map.has_value()) {
+        // Present but malformed: keep the previous MapFile entries so a bad edit
+        // does not drop a working table, and report the error.
+        std::cerr << "AUN extension: map file error: " << loaded.error << "\n";
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        map_file_error_ = loaded.error;
+        return {true, loaded.error};
+    }
+
+    // Resolve hostnames off any lock (bounded, so a slow resolver cannot stall
+    // the sweep). Unresolved hosts are kept for display rather than routed.
+    std::vector<std::tuple<std::uint8_t, std::uint8_t, std::uint32_t,
+                           std::uint16_t>>
+        resolved;
+    std::vector<AunMapPeer> unreachable;
+    for (const auto& peer : loaded.map->peers) {
+        if (auto ip = resolve_host_bounded(peer.host, std::chrono::seconds(3))) {
+            resolved.emplace_back(peer.net, peer.stn, *ip, peer.port);
+        } else {
+            unreachable.push_back(peer);
+        }
+    }
+
+    // Replace only the MapFile peer layer and the MapFile and Subnet rules;
+    // Api, Launch and Discovered are untouched. Materialised Subnet peers are
+    // cleared too, since the rules may have changed; they re-materialise.
+    peer_set_.clear_provenance(AunPeerProvenance::MapFile);
+    peer_set_.clear_provenance(AunPeerProvenance::Subnet);
+    peer_set_.clear_subnet_rules(AunPeerProvenance::MapFile);
+    for (const auto& [net, stn, ip, port] : resolved) {
+        peer_set_.set_peer(net, stn, ip, port, AunPeerProvenance::MapFile);
+    }
+    for (const auto& subnet : loaded.map->subnets) {
+        peer_set_.set_subnet_rule(subnet.net, subnet.base_ip,
+                                  AunPeerProvenance::MapFile);
+    }
+
+    std::uint32_t entry_count =
+        static_cast<std::uint32_t>(resolved.size() + unreachable.size() +
+                                   loaded.map->subnets.size());
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        map_file_error_.clear();
+        map_file_entry_count_ = entry_count;
+        unreachable_map_peers_ = std::move(unreachable);
+    }
+    return {true, ""};
+}
+
+std::string AunEconetTransportExtension::map_file_path() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return map_file_filepath_;
+}
+
+std::uint32_t AunEconetTransportExtension::map_file_entry_count() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return map_file_entry_count_;
+}
+
+std::string AunEconetTransportExtension::map_file_error() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return map_file_error_;
+}
+
+std::vector<AunMapPeer> AunEconetTransportExtension::unreachable_map_peers() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return unreachable_map_peers_;
 }
 
 std::vector<ExtensionRpcDispatcher*> AunEconetTransportExtension::rpc_dispatchers() {

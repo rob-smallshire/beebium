@@ -29,10 +29,37 @@
 #include <netinet/in.h>
 #endif
 
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <random>
+#include <string>
+
 using namespace beebium;
 
 namespace {
 uint32_t loopback_ip() { return htonl(INADDR_LOOPBACK); }
+
+// A unique temp path for a hermetic map file.
+std::filesystem::path temp_map_filepath() {
+    std::random_device rd;
+    auto name = "beebium-aun-map-" + std::to_string(rd()) + ".json";
+    return std::filesystem::temp_directory_path() / name;
+}
+
+void write_file(const std::filesystem::path& filepath, const std::string& text) {
+    std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
+    out << text;
+}
+
+// Find a resolved peer by (net, stn) in the peer set's listing.
+std::optional<AunPeerEntry> find_peer(const AunPeerSet& peers, uint8_t net,
+                                      uint8_t stn) {
+    for (const auto& p : peers.list_peers()) {
+        if (p.net == net && p.stn == stn) return p;
+    }
+    return std::nullopt;
+}
 }  // namespace
 
 TEST_CASE("AUN transport: AddPeer works before the backend exists and survives Enable",
@@ -139,4 +166,116 @@ TEST_CASE("AUN transport: SetConnected before the backend exists applies when it
     // And a later SetConnected(true) now applies immediately (backend present).
     CHECK(ext.set_desired_connected(true));
     CHECK(ext.backend()->is_connected());
+}
+
+TEST_CASE("AUN transport: a map file is loaded as MapFile peers and subnet rules",
+          "[aun][transport][extension][map-file]") {
+    auto map_filepath = temp_map_filepath();
+    write_file(map_filepath, R"({
+      "peers": [
+        {"net": 0, "station": 254, "host": "192.168.1.10", "port": 32768},
+        {"net": 0, "station": 40, "host": "192.168.1.40", "port": 32769},
+        {"net": 0, "station": 41, "host": "nonexistent.invalid", "port": 32768}
+      ],
+      "subnets": [{"net": 128, "subnet": "192.168.5.0/24"}]
+    })");
+
+    AunEconetTransportExtension ext;
+    ext.set_config({{"port", "0"}, {"map-file", map_filepath.string()}});
+    auto backend_owner = ext.create_backend(/*station=*/1);
+    REQUIRE(backend_owner != nullptr);
+    auto* backend = static_cast<AunBackend*>(backend_owner.get());
+
+    CHECK(ext.map_file_path() == map_filepath.string());
+    CHECK(ext.map_file_error().empty());
+    CHECK(ext.map_file_entry_count() == 4);  // 3 peers + 1 subnet
+
+    auto fs = find_peer(ext.peer_set(), 0, 254);
+    REQUIRE(fs.has_value());
+    CHECK(fs->provenance == AunPeerProvenance::MapFile);
+    CHECK(fs->port == 32768);
+    auto a5000 = find_peer(ext.peer_set(), 0, 40);
+    REQUIRE(a5000.has_value());
+    CHECK(a5000->port == 32769);
+
+    // The subnet rule is applied: a station in net 128 is reachable by the
+    // convention even with no explicit peer.
+    CHECK(backend->is_reachable(128, 50));
+
+    // The unresolvable host is kept for display as unreachable, not routed.
+    CHECK_FALSE(find_peer(ext.peer_set(), 0, 41).has_value());
+    auto unreachable = ext.unreachable_map_peers();
+    REQUIRE(unreachable.size() == 1);
+    CHECK(unreachable[0].stn == 41);
+    CHECK(unreachable[0].host == "nonexistent.invalid");
+
+    std::filesystem::remove(map_filepath);
+}
+
+TEST_CASE("AUN transport: ReloadMap re-reads an edited map file without restart",
+          "[aun][transport][extension][map-file]") {
+    auto map_filepath = temp_map_filepath();
+    write_file(map_filepath,
+               R"({"peers":[{"net":0,"station":254,"host":"192.168.1.10","port":32768}]})");
+
+    AunEconetTransportExtension ext;
+    ext.set_config({{"port", "0"}, {"map-file", map_filepath.string()}});
+    auto backend_owner = ext.create_backend(/*station=*/1);
+    REQUIRE(backend_owner != nullptr);
+    REQUIRE(find_peer(ext.peer_set(), 0, 254).has_value());
+    CHECK(ext.map_file_entry_count() == 1);
+
+    // Edit the file: drop 254, add 200. A reload replaces the MapFile layer.
+    write_file(map_filepath,
+               R"({"peers":[{"net":0,"station":200,"host":"192.168.1.99","port":32768}]})");
+    auto result = ext.reload_map_file();
+    CHECK(result.reloaded);
+    CHECK(result.error.empty());
+
+    CHECK_FALSE(find_peer(ext.peer_set(), 0, 254).has_value());
+    auto added = find_peer(ext.peer_set(), 0, 200);
+    REQUIRE(added.has_value());
+    CHECK(added->provenance == AunPeerProvenance::MapFile);
+
+    // A file that disappears clears the MapFile layer.
+    std::filesystem::remove(map_filepath);
+    result = ext.reload_map_file();
+    CHECK(result.reloaded);
+    CHECK_FALSE(find_peer(ext.peer_set(), 0, 200).has_value());
+    CHECK(ext.map_file_entry_count() == 0);
+}
+
+TEST_CASE("AUN transport: map-file=none disables the map file",
+          "[aun][transport][extension][map-file]") {
+    AunEconetTransportExtension ext;
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
+    auto backend_owner = ext.create_backend(/*station=*/1);
+    REQUIRE(backend_owner != nullptr);
+    CHECK(ext.map_file_path().empty());
+    auto result = ext.reload_map_file();
+    CHECK_FALSE(result.reloaded);  // disabled
+}
+
+TEST_CASE("AUN transport: a malformed map file is reported and keeps prior entries",
+          "[aun][transport][extension][map-file]") {
+    auto map_filepath = temp_map_filepath();
+    write_file(map_filepath,
+               R"({"peers":[{"net":0,"station":254,"host":"192.168.1.10","port":32768}]})");
+
+    AunEconetTransportExtension ext;
+    ext.set_config({{"port", "0"}, {"map-file", map_filepath.string()}});
+    auto backend_owner = ext.create_backend(/*station=*/1);
+    REQUIRE(backend_owner != nullptr);
+    REQUIRE(find_peer(ext.peer_set(), 0, 254).has_value());
+
+    // Corrupt the file, then reload: the error is reported and the prior entry
+    // is kept (a bad edit does not drop a working table).
+    write_file(map_filepath, R"({"peers":[}})");
+    auto result = ext.reload_map_file();
+    CHECK(result.reloaded);
+    CHECK_FALSE(result.error.empty());
+    CHECK_FALSE(ext.map_file_error().empty());
+    CHECK(find_peer(ext.peer_set(), 0, 254).has_value());  // prior entry kept
+
+    std::filesystem::remove(map_filepath);
 }

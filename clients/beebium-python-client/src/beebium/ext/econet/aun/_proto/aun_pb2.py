@@ -36,37 +36,41 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\taun.proto\x12\x07\x62\x65\x65\x62ium\"\x15\n\x13\x41unGetStatusRequest\"Q\n\x14\x41unGetStatusResponse\x12\x11\n\tconnected\x18\x01 \x01(\x08\x12\x12\n\nlocal_port\x18\x02 \x01(\r\x12\x12\n\npeer_count\x18\x03 \x01(\r\"+\n\x16\x41unSetConnectedRequest\x12\x11\n\tconnected\x18\x01 \x01(\x08\"9\n\x17\x41unSetConnectedResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"O\n\x11\x41unAddPeerRequest\x12\x0b\n\x03net\x18\x01 \x01(\r\x12\x0b\n\x03stn\x18\x02 \x01(\r\x12\x12\n\nip_address\x18\x03 \x01(\t\x12\x0c\n\x04port\x18\x04 \x01(\r\"4\n\x12\x41unAddPeerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"0\n\x14\x41unRemovePeerRequest\x12\x0b\n\x03net\x18\x01 \x01(\r\x12\x0b\n\x03stn\x18\x02 \x01(\r\"7\n\x15\x41unRemovePeerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x15\n\x13\x41unListPeersRequest\"7\n\x14\x41unListPeersResponse\x12\x1f\n\x05peers\x18\x01 \x03(\x0b\x32\x10.beebium.AunPeer\"m\n\x07\x41unPeer\x12\x0b\n\x03net\x18\x01 \x01(\r\x12\x0b\n\x03stn\x18\x02 \x01(\r\x12\x12\n\nip_address\x18\x03 \x01(\t\x12\x0c\n\x04port\x18\x04 \x01(\r\x12&\n\x06source\x18\x05 \x01(\x0e\x32\x16.beebium.AunPeerSource*\xbf\x01\n\rAunPeerSource\x12\x1f\n\x1b\x41UN_PEER_SOURCE_UNSPECIFIED\x10\x00\x12\x1a\n\x16\x41UN_PEER_SOURCE_LAUNCH\x10\x01\x12\x17\n\x13\x41UN_PEER_SOURCE_API\x10\x02\x12\x1c\n\x18\x41UN_PEER_SOURCE_MAP_FILE\x10\x03\x12\x1e\n\x1a\x41UN_PEER_SOURCE_DISCOVERED\x10\x04\x12\x1a\n\x16\x41UN_PEER_SOURCE_SUBNET\x10\x05\x32\x84\x03\n\nAunService\x12Q\n\x0cSetConnected\x12\x1f.beebium.AunSetConnectedRequest\x1a .beebium.AunSetConnectedResponse\x12\x42\n\x07\x41\x64\x64Peer\x12\x1a.beebium.AunAddPeerRequest\x1a\x1b.beebium.AunAddPeerResponse\x12K\n\nRemovePeer\x12\x1d.beebium.AunRemovePeerRequest\x1a\x1e.beebium.AunRemovePeerResponse\x12H\n\tListPeers\x12\x1c.beebium.AunListPeersRequest\x1a\x1d.beebium.AunListPeersResponse\x12H\n\tGetStatus\x12\x1c.beebium.AunGetStatusRequest\x1a\x1d.beebium.AunGetStatusResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\taun.proto\x12\x07\x62\x65\x65\x62ium\"\x15\n\x13\x41unGetStatusRequest\"\x9e\x01\n\x14\x41unGetStatusResponse\x12\x11\n\tconnected\x18\x01 \x01(\x08\x12\x12\n\nlocal_port\x18\x02 \x01(\r\x12\x12\n\npeer_count\x18\x03 \x01(\r\x12\x15\n\rmap_file_path\x18\x04 \x01(\t\x12\x1c\n\x14map_file_entry_count\x18\x05 \x01(\r\x12\x16\n\x0emap_file_error\x18\x06 \x01(\t\"\x15\n\x13\x41unReloadMapRequest\"7\n\x14\x41unReloadMapResponse\x12\x10\n\x08reloaded\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"+\n\x16\x41unSetConnectedRequest\x12\x11\n\tconnected\x18\x01 \x01(\x08\"9\n\x17\x41unSetConnectedResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"O\n\x11\x41unAddPeerRequest\x12\x0b\n\x03net\x18\x01 \x01(\r\x12\x0b\n\x03stn\x18\x02 \x01(\r\x12\x12\n\nip_address\x18\x03 \x01(\t\x12\x0c\n\x04port\x18\x04 \x01(\r\"4\n\x12\x41unAddPeerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"0\n\x14\x41unRemovePeerRequest\x12\x0b\n\x03net\x18\x01 \x01(\r\x12\x0b\n\x03stn\x18\x02 \x01(\r\"7\n\x15\x41unRemovePeerResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x15\n\x13\x41unListPeersRequest\"7\n\x14\x41unListPeersResponse\x12\x1f\n\x05peers\x18\x01 \x03(\x0b\x32\x10.beebium.AunPeer\"m\n\x07\x41unPeer\x12\x0b\n\x03net\x18\x01 \x01(\r\x12\x0b\n\x03stn\x18\x02 \x01(\r\x12\x12\n\nip_address\x18\x03 \x01(\t\x12\x0c\n\x04port\x18\x04 \x01(\r\x12&\n\x06source\x18\x05 \x01(\x0e\x32\x16.beebium.AunPeerSource*\xbf\x01\n\rAunPeerSource\x12\x1f\n\x1b\x41UN_PEER_SOURCE_UNSPECIFIED\x10\x00\x12\x1a\n\x16\x41UN_PEER_SOURCE_LAUNCH\x10\x01\x12\x17\n\x13\x41UN_PEER_SOURCE_API\x10\x02\x12\x1c\n\x18\x41UN_PEER_SOURCE_MAP_FILE\x10\x03\x12\x1e\n\x1a\x41UN_PEER_SOURCE_DISCOVERED\x10\x04\x12\x1a\n\x16\x41UN_PEER_SOURCE_SUBNET\x10\x05\x32\xce\x03\n\nAunService\x12Q\n\x0cSetConnected\x12\x1f.beebium.AunSetConnectedRequest\x1a .beebium.AunSetConnectedResponse\x12\x42\n\x07\x41\x64\x64Peer\x12\x1a.beebium.AunAddPeerRequest\x1a\x1b.beebium.AunAddPeerResponse\x12K\n\nRemovePeer\x12\x1d.beebium.AunRemovePeerRequest\x1a\x1e.beebium.AunRemovePeerResponse\x12H\n\tListPeers\x12\x1c.beebium.AunListPeersRequest\x1a\x1d.beebium.AunListPeersResponse\x12H\n\tGetStatus\x12\x1c.beebium.AunGetStatusRequest\x1a\x1d.beebium.AunGetStatusResponse\x12H\n\tReloadMap\x12\x1c.beebium.AunReloadMapRequest\x1a\x1d.beebium.AunReloadMapResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'aun_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_AUNPEERSOURCE']._serialized_start=666
-  _globals['_AUNPEERSOURCE']._serialized_end=857
+  _globals['_AUNPEERSOURCE']._serialized_start=824
+  _globals['_AUNPEERSOURCE']._serialized_end=1015
   _globals['_AUNGETSTATUSREQUEST']._serialized_start=22
   _globals['_AUNGETSTATUSREQUEST']._serialized_end=43
-  _globals['_AUNGETSTATUSRESPONSE']._serialized_start=45
-  _globals['_AUNGETSTATUSRESPONSE']._serialized_end=126
-  _globals['_AUNSETCONNECTEDREQUEST']._serialized_start=128
-  _globals['_AUNSETCONNECTEDREQUEST']._serialized_end=171
-  _globals['_AUNSETCONNECTEDRESPONSE']._serialized_start=173
-  _globals['_AUNSETCONNECTEDRESPONSE']._serialized_end=230
-  _globals['_AUNADDPEERREQUEST']._serialized_start=232
-  _globals['_AUNADDPEERREQUEST']._serialized_end=311
-  _globals['_AUNADDPEERRESPONSE']._serialized_start=313
-  _globals['_AUNADDPEERRESPONSE']._serialized_end=365
-  _globals['_AUNREMOVEPEERREQUEST']._serialized_start=367
-  _globals['_AUNREMOVEPEERREQUEST']._serialized_end=415
-  _globals['_AUNREMOVEPEERRESPONSE']._serialized_start=417
-  _globals['_AUNREMOVEPEERRESPONSE']._serialized_end=472
-  _globals['_AUNLISTPEERSREQUEST']._serialized_start=474
-  _globals['_AUNLISTPEERSREQUEST']._serialized_end=495
-  _globals['_AUNLISTPEERSRESPONSE']._serialized_start=497
-  _globals['_AUNLISTPEERSRESPONSE']._serialized_end=552
-  _globals['_AUNPEER']._serialized_start=554
-  _globals['_AUNPEER']._serialized_end=663
-  _globals['_AUNSERVICE']._serialized_start=860
-  _globals['_AUNSERVICE']._serialized_end=1248
+  _globals['_AUNGETSTATUSRESPONSE']._serialized_start=46
+  _globals['_AUNGETSTATUSRESPONSE']._serialized_end=204
+  _globals['_AUNRELOADMAPREQUEST']._serialized_start=206
+  _globals['_AUNRELOADMAPREQUEST']._serialized_end=227
+  _globals['_AUNRELOADMAPRESPONSE']._serialized_start=229
+  _globals['_AUNRELOADMAPRESPONSE']._serialized_end=284
+  _globals['_AUNSETCONNECTEDREQUEST']._serialized_start=286
+  _globals['_AUNSETCONNECTEDREQUEST']._serialized_end=329
+  _globals['_AUNSETCONNECTEDRESPONSE']._serialized_start=331
+  _globals['_AUNSETCONNECTEDRESPONSE']._serialized_end=388
+  _globals['_AUNADDPEERREQUEST']._serialized_start=390
+  _globals['_AUNADDPEERREQUEST']._serialized_end=469
+  _globals['_AUNADDPEERRESPONSE']._serialized_start=471
+  _globals['_AUNADDPEERRESPONSE']._serialized_end=523
+  _globals['_AUNREMOVEPEERREQUEST']._serialized_start=525
+  _globals['_AUNREMOVEPEERREQUEST']._serialized_end=573
+  _globals['_AUNREMOVEPEERRESPONSE']._serialized_start=575
+  _globals['_AUNREMOVEPEERRESPONSE']._serialized_end=630
+  _globals['_AUNLISTPEERSREQUEST']._serialized_start=632
+  _globals['_AUNLISTPEERSREQUEST']._serialized_end=653
+  _globals['_AUNLISTPEERSRESPONSE']._serialized_start=655
+  _globals['_AUNLISTPEERSRESPONSE']._serialized_end=710
+  _globals['_AUNPEER']._serialized_start=712
+  _globals['_AUNPEER']._serialized_end=821
+  _globals['_AUNSERVICE']._serialized_start=1018
+  _globals['_AUNSERVICE']._serialized_end=1480
 # @@protoc_insertion_point(module_scope)

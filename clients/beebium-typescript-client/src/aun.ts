@@ -22,6 +22,8 @@ import {
     AunAddPeerResponse,
     AunRemovePeerRequest,
     AunRemovePeerResponse,
+    AunReloadMapRequest,
+    AunReloadMapResponse,
     AunPeerSource as ProtoAunPeerSource,
 } from "./generated/aun.js";
 import type { ExtensionChannel } from "./extension_rpc.js";
@@ -34,6 +36,12 @@ export interface AunStatus {
     connected: boolean;
     localPort: number;
     peerCount: number;
+    /** The per-user aun-map.json path on the server's host (empty if disabled). */
+    mapFilePath: string;
+    /** Entry count (peers + subnets) from the last map-file load. */
+    mapFileEntryCount: number;
+    /** The last map-file load error, empty on success or an absent file. */
+    mapFileError: string;
 }
 
 /**
@@ -108,6 +116,9 @@ export class Aun {
             connected: response.connected,
             localPort: response.localPort,
             peerCount: response.peerCount,
+            mapFilePath: response.mapFilePath,
+            mapFileEntryCount: response.mapFileEntryCount,
+            mapFileError: response.mapFileError,
         };
     }
 
@@ -182,6 +193,25 @@ export class Aun {
         const reply = await this.channel.invoke(SERVICE, "RemovePeer", payload);
         const response = AunRemovePeerResponse.decode(reply);
         if (!response.success) {
+            throw new EconetError(response.error);
+        }
+    }
+
+    /**
+     * Re-read the per-user aun-map.json on the server now, replacing only the
+     * map file's contributions (`MapFile` peers and the subnet rules); `Api`,
+     * `Launch` and `Discovered` entries are untouched. A modification is
+     * normally picked up automatically on the poll; this forces it.
+     *
+     * @throws {EconetError} If the file was present but could not be parsed.
+     */
+    async reloadMap(): Promise<void> {
+        const payload = AunReloadMapRequest.encode(
+            AunReloadMapRequest.fromPartial({}),
+        ).finish();
+        const reply = await this.channel.invoke(SERVICE, "ReloadMap", payload);
+        const response = AunReloadMapResponse.decode(reply);
+        if (response.error) {
             throw new EconetError(response.error);
         }
     }

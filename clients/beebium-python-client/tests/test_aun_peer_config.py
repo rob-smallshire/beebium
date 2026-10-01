@@ -19,6 +19,7 @@ before the backend is up; entries survive the backend being brought up).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from beebium.client import Beebium
@@ -111,3 +112,43 @@ def test_api_peer_survives_disable_and_reenable(
         peers = {p.stn for p in aun.peers}
         assert {100, 101} <= peers
         assert all(p.source == PeerSource.API for p in aun.peers)
+
+
+def test_map_file_peers_listed_with_provenance_and_reloaded(
+    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+) -> None:
+    # #139: launch with a map file; its peers are listed with "map file"
+    # provenance, and an edit is picked up by ReloadMap without a restart.
+    map_filepath = tmp_path / "aun-map.json"
+    map_filepath.write_text(
+        json.dumps(
+            {"peers": [{"net": 0, "station": 100, "host": "127.0.0.1", "port": 40100}]}
+        )
+    )
+
+    with Beebium.launch(
+        server=beebium_server_filepath,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", f"map-file={map_filepath}"],
+    ) as bbc:
+        bbc.econet.enable(station_id=2, aun_port=32768)
+        aun = bbc.transport[Aun]
+
+        peers = {p.stn: p for p in aun.peers}
+        assert 100 in peers
+        assert peers[100].source == PeerSource.MAP_FILE
+        status = aun.status
+        assert status.map_file_path == str(map_filepath)
+        assert status.map_file_entry_count == 1
+
+        # Edit the file on disk: drop 100, add 101. ReloadMap applies it.
+        map_filepath.write_text(
+            json.dumps(
+                {"peers": [{"net": 0, "station": 101, "host": "127.0.0.1", "port": 40101}]}
+            )
+        )
+        aun.reload_map()
+
+        stations = {p.stn for p in aun.peers}
+        assert 101 in stations
+        assert 100 not in stations

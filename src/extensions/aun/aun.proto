@@ -27,6 +27,11 @@ service AunService {
 
     // Read the current AUN backend status (port, peer count, link state).
     rpc GetStatus(AunGetStatusRequest) returns (AunGetStatusResponse);
+
+    // Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+    // state (Api, Launch and Discovered are untouched). Normally a modification
+    // is picked up automatically on the poll; this forces it.
+    rpc ReloadMap(AunReloadMapRequest) returns (AunReloadMapResponse);
 }
 
 // --- Status ---
@@ -44,6 +49,33 @@ message AunGetStatusResponse {
 
     // Number of peers configured in the peer table.
     uint32 peer_count = 3;
+
+    // The per-user aun-map.json path on the server's host (empty when the map
+    // file is disabled with map-file=none).
+    string map_file_path = 4;
+
+    // Number of entries (peers + subnets) read from the map file on the last
+    // load.
+    uint32 map_file_entry_count = 5;
+
+    // The last map-file load error, or empty when the last load succeeded (or
+    // the file is absent, which is not an error).
+    string map_file_error = 6;
+}
+
+// --- Map file reload ---
+
+message AunReloadMapRequest {
+    // Empty.
+}
+
+message AunReloadMapResponse {
+    // True if the reload ran (even if the file was absent); false only when the
+    // map file is disabled (map-file=none).
+    bool reloaded = 1;
+
+    // The load error, if the file was present but could not be parsed.
+    string error = 2;
 }
 
 // --- Cable plug ---

@@ -80,6 +80,11 @@ class AunServiceStub(object):
                 request_serializer=aun__pb2.AunGetStatusRequest.SerializeToString,
                 response_deserializer=aun__pb2.AunGetStatusResponse.FromString,
                 _registered_method=True)
+        self.ReloadMap = channel.unary_unary(
+                '/beebium.AunService/ReloadMap',
+                request_serializer=aun__pb2.AunReloadMapRequest.SerializeToString,
+                response_deserializer=aun__pb2.AunReloadMapResponse.FromString,
+                _registered_method=True)
 
 
 class AunServiceServicer(object):
@@ -130,6 +135,15 @@ class AunServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ReloadMap(self, request, context):
+        """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+        state (Api, Launch and Discovered are untouched). Normally a modification
+        is picked up automatically on the poll; this forces it.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AunServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -157,6 +171,11 @@ def add_AunServiceServicer_to_server(servicer, server):
                     servicer.GetStatus,
                     request_deserializer=aun__pb2.AunGetStatusRequest.FromString,
                     response_serializer=aun__pb2.AunGetStatusResponse.SerializeToString,
+            ),
+            'ReloadMap': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReloadMap,
+                    request_deserializer=aun__pb2.AunReloadMapRequest.FromString,
+                    response_serializer=aun__pb2.AunReloadMapResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -303,6 +322,33 @@ class AunService(object):
             '/beebium.AunService/GetStatus',
             aun__pb2.AunGetStatusRequest.SerializeToString,
             aun__pb2.AunGetStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReloadMap(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.AunService/ReloadMap',
+            aun__pb2.AunReloadMapRequest.SerializeToString,
+            aun__pb2.AunReloadMapResponse.FromString,
             options,
             channel_credentials,
             insecure,

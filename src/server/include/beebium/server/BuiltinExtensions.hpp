@@ -76,6 +76,14 @@ inline std::vector<Entry> make_entries() {
             {"map", "string",
              "Peer entry 'net.stn@ip@port' (repeatable)",
              -1, false, /*is_list=*/true, ""});
+        m.parameters.push_back(
+            {"map-file", "string",
+             "Path to the per-user aun-map.json, or 'none' to disable it",
+             -1, false, false, ""});
+        m.parameters.push_back(
+            {"subnet", "string",
+             "Subnet rule 'net@a.b.c.0/24' (RISC OS convention; repeatable)",
+             -1, false, /*is_list=*/true, ""});
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new AunEconetTransportExtension()); }});

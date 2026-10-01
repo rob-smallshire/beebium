@@ -66,6 +66,11 @@ class AunServiceStub:
     """Enumerate all configured peers."""
     GetStatus: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunGetStatusRequest, _aun_pb2.AunGetStatusResponse]
     """Read the current AUN backend status (port, peer count, link state)."""
+    ReloadMap: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunReloadMapRequest, _aun_pb2.AunReloadMapResponse]
+    """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+    state (Api, Launch and Discovered are untouched). Normally a modification
+    is picked up automatically on the poll; this forces it.
+    """
 
 @_typing.type_check_only
 class AunServiceAsyncStub(AunServiceStub):
@@ -93,6 +98,11 @@ class AunServiceAsyncStub(AunServiceStub):
     """Enumerate all configured peers."""
     GetStatus: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunGetStatusRequest, _aun_pb2.AunGetStatusResponse]  # type: ignore[assignment]
     """Read the current AUN backend status (port, peer count, link state)."""
+    ReloadMap: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunReloadMapRequest, _aun_pb2.AunReloadMapResponse]  # type: ignore[assignment]
+    """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+    state (Api, Launch and Discovered are untouched). Normally a modification
+    is picked up automatically on the poll; this forces it.
+    """
 
 class AunServiceServicer(metaclass=_abc_1.ABCMeta):
     """AUN-specific service. Lives alongside the AunEconetTransportExtension
@@ -147,5 +157,16 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunGetStatusResponse, _abc.Awaitable[_aun_pb2.AunGetStatusResponse]]:
         """Read the current AUN backend status (port, peer count, link state)."""
+
+    @_abc_1.abstractmethod
+    def ReloadMap(
+        self,
+        request: _aun_pb2.AunReloadMapRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_aun_pb2.AunReloadMapResponse, _abc.Awaitable[_aun_pb2.AunReloadMapResponse]]:
+        """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+        state (Api, Launch and Discovered are untouched). Normally a modification
+        is picked up automatically on the poll; this forces it.
+        """
 
 def add_AunServiceServicer_to_server(servicer: AunServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

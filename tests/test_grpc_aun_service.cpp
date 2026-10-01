@@ -268,6 +268,26 @@ TEST_CASE("AunService SetConnected toggles backend state",
     }
 }
 
+TEST_CASE("AunService GetStatus reports the map-file path and ReloadMap runs",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+
+    beebium::AunGetStatusRequest status_req;
+    beebium::AunGetStatusResponse status_resp;
+    REQUIRE(fixture.invoke("GetStatus", status_req, &status_resp).ok());
+    // With no map-file override the default per-user path is reported, and the
+    // file is absent, so entry count is zero and there is no error.
+    CHECK_FALSE(status_resp.map_file_path().empty());
+    CHECK(status_resp.map_file_entry_count() == 0);
+    CHECK(status_resp.map_file_error().empty());
+
+    beebium::AunReloadMapRequest reload_req;
+    beebium::AunReloadMapResponse reload_resp;
+    REQUIRE(fixture.invoke("ReloadMap", reload_req, &reload_resp).ok());
+    CHECK(reload_resp.reloaded());  // enabled (default path), absent file is fine
+    CHECK(reload_resp.error().empty());
+}
+
 TEST_CASE("AunService AddPeer rejects invalid IP", "[grpc][aun][extension-rpc]") {
     AunServiceFixture fixture;
 

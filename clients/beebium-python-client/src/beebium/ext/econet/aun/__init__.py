@@ -58,6 +58,12 @@ class AunStatus:
     connected: bool
     local_port: int
     peer_count: int
+    # The per-user aun-map.json path on the server's host (empty when disabled
+    # with map-file=none), its entry count from the last load, and the last
+    # load error (empty on success or an absent file).
+    map_file_path: str = ""
+    map_file_entry_count: int = 0
+    map_file_error: str = ""
 
 
 @dataclass(frozen=True)
@@ -109,6 +115,9 @@ class Aun(EconetTransportAdapter):
             connected=response.connected,
             local_port=response.local_port,
             peer_count=response.peer_count,
+            map_file_path=response.map_file_path,
+            map_file_entry_count=response.map_file_entry_count,
+            map_file_error=response.map_file_error,
         )
 
     @property
@@ -177,4 +186,20 @@ class Aun(EconetTransportAdapter):
         request = aun_pb2.AunRemovePeerRequest(net=net, stn=stn)
         response = self._invoke("RemovePeer", request, aun_pb2.AunRemovePeerResponse())
         if not response.success:
+            raise EconetError(response.error)
+
+    def reload_map(self) -> None:
+        """Re-read the per-user ``aun-map.json`` on the server now.
+
+        Replaces only the map file's contributions (``MAP_FILE`` peers and the
+        subnet rules); ``API``, ``LAUNCH`` and ``DISCOVERED`` entries are
+        untouched. A modification is normally picked up automatically on the
+        poll; this forces it.
+
+        Raises:
+            EconetError: If the file was present but could not be parsed.
+        """
+        request = aun_pb2.AunReloadMapRequest()
+        response = self._invoke("ReloadMap", request, aun_pb2.AunReloadMapResponse())
+        if response.error:
             raise EconetError(response.error)
