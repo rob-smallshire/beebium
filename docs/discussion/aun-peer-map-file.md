@@ -48,7 +48,9 @@ The directory is the one `PresetPaths` and `DiscPaths` already agree on;
 the private `user_state_base()` helper in `DiscPaths` becomes shared.
 Overrides: `BEEBIUM_AUN_MAP_FILEPATH=<path>` for the environment, and
 `--aun map-file=<path>` or `--aun map-file=none` for one launch (tests and
-hermetic runs use `none`).
+hermetic runs use `none`). For parity with `map=`, a subnet rule can be
+given for one launch as `--aun subnet=128@192.168.1.0/24` (`Launch`
+provenance). No other options: the file holds the standing configuration.
 
 ### 2.2 Format
 
@@ -77,8 +79,14 @@ Rules:
   or a DNS name), `port` (1..65535), optional `label`. One entry per
   `(net, station)`; a duplicate is a load error naming both entries.
 - `subnets[]`: the RISC OS `!Internet` `AUNMap` rule, "net N is this /24,
-  station is the last octet, port 32768". It is the only form of net-level
-  entry that can work (section 4). Optional; most files will have none.
+  station is the last octet, port 32768". An entry means the whole
+  convention, as the same line does on RISC OS: inbound, a packet from an
+  unknown sender inside the subnet on port 32768 is accepted as net N
+  station x; outbound, a frame for N.x with no explicit entry goes to the
+  subnet's .x:32768, logged in the trace as a guess. There are no switches
+  to take one half without the other; a user who wants explicit control
+  writes `peers` and no `subnets`. It is the only form of net-level entry
+  that can work (section 4). Optional; most files will have none.
 - A DNS name is resolved when the file is loaded and on every reload. A
   name that does not resolve keeps its entry in the table as unreachable,
   shown as such, rather than being dropped.
@@ -96,20 +104,24 @@ over.
 
 ### 2.3 Provenance and precedence
 
-`PeerSource` grows from two values to four, and the sidebar names each:
+Provenance has five values (four landed with #55; `Subnet` arrives with
+the file), and the sidebar names each:
 
-| `PeerSource` | Meaning | Sidebar |
-|--------------|---------|---------|
-| `Launch` | `--aun map=` or the preset's `map` for this launch | `launch` |
+| Provenance | Meaning | Sidebar |
+|------------|---------|---------|
 | `Api` | `AunService.AddPeer` at runtime | `API` |
+| `Launch` | `--aun map=` / `subnet=` or the preset's equivalents, for this launch | `launch` |
 | `MapFile` | the per-user `aun-map.json` | `map file` |
 | `Discovered` | `_aun._udp` mDNS | `mDNS` |
+| `Subnet` | derived from a `subnets` rule (inbound identification or an outbound guess) | `subnet` |
 
-Precedence, highest first: `Api`, `Launch`, `MapFile`, `Discovered`. An
-explicit instruction for this process beats one for this launch, which
-beats the standing file, which beats what the network says. Today's
-"operator always wins over discovered" is preserved: the first three are
-all operator sources.
+Precedence, highest first, in that order. An explicit instruction for this
+process beats one for this launch, which beats the standing file, which
+beats what the network says, which beats a convention. `Discovered` must
+outrank `Subnet`: a Beebium at 192.168.1.40 advertising station 40 on port
+40001 must not be sent packets at the convention's port 32768. "Operator
+always wins over discovered" is preserved: the first three are operator
+sources.
 
 The one collision worth a rule: a discovered announcement for a
 `(net, stn)` the file maps to a different endpoint. The file wins (the
@@ -134,9 +146,17 @@ instance that now runs on another port.
 - `AunService.ReloadMap` forces a reload; `GetStatus` reports the file path,
   its entry count, and the last load error if any.
 
-### 2.5 Management surface: CLI subcommands
+### 2.5 Management surface: RPCs, CLI subcommands, a converter
 
-Following `list-presets` / `create-preset` / `import-preset` /
+The server owns the file and is the only writer, through one library used
+by every route below. The front end never touches the file: the server
+may be on another machine, so a sidebar edit is an `AunService` RPC
+(`AddMapPeer`, `RemoveMapPeer`, `AddMapSubnet`, `RemoveMapSubnet`,
+`ListMap`, `ReloadMap`) and the server writes its own file. `GetStatus`
+reports the file path on the server's host, its entry count and the last
+load error.
+
+For scripts and hand setup, following `list-presets` / `create-preset` /
 `report-presets-dirpath`, any server executable offers:
 
 | Subcommand | Does |
@@ -146,12 +166,21 @@ Following `list-presets` / `create-preset` / `import-preset` /
 | `show-aun-map` | prints the parsed table with labels, resolution results, and any unknown keys |
 | `add-aun-peer <net.stn> <host> <port> [--label <text>]` | adds or replaces the entry for that station |
 | `remove-aun-peer <net.stn>` | removes that entry |
-| `convert-beebem-econet-cfg <Econet.cfg> [<AUNMap>] [--output <path>]` | one-time conversion: the four-field host lines become `peers`, `ADDMAP` lines become `subnets`, every keyword line is listed as not carried over; writes a new map file or merges into the existing one, reporting each entry taken |
+| `add-aun-subnet <net> <a.b.c.0/24> [--label <text>]`, `remove-aun-subnet <net>` | the same for subnet rules |
 
 Writes are atomic (write a temporary, rename over) and preserve entry
 order and unknown keys, so a hand-maintained file is not reshuffled by a
 GUI edit. The map is model-independent, so it does not matter which
 executable runs the subcommand.
+
+**The BeebEm converter is not part of the server.** Beebium's core carries
+no BeebEm dependency, even an implicit one in a file parser. The one-time
+conversion is a standalone Python script, `tools/aun/convert_beebem_econet_cfg.py`
+(run with `uv run`), that reads a BeebEm `Econet.cfg` and optionally its
+`AUNMap`, turns the four-field host lines into `peers` and `ADDMAP` lines
+into `subnets`, lists every keyword line it did not carry over, and writes
+or merges an `aun-map.json`. BeebEm's shipped sample files are its test
+fixtures.
 
 ### 2.6 GUI affordances (macOS, then any front end)
 
@@ -160,16 +189,22 @@ ExtensionRpc), so the affordances are built once in the extension:
 
 - Each peer line gains its provenance text and label; `map file` entries
   gain Edit and Remove; an Add button opens the form that `AunUi` deferred
-  ("Slice 3"). Edit, Remove and Add dispatch to the CLI subcommands above
-  through the app (the rule that GUIs invoke subcommands), then the file
-  poll picks up the change.
+  ("Slice 3"). Edit, Remove and Add are `AunService` RPCs handled in the
+  extension, which writes the file on the server's host; the running
+  instance applies the change at once and other instances pick it up from
+  the file poll. (The pre-launch-via-CLI rule does not apply: the machine
+  is running, and the server may be remote.)
+- Subnet rules list in their own small group under the peers ("net 128 =
+  192.168.1.0/24, station = last octet, port 32768") with the same Add,
+  Edit and Remove, since they live in the same file.
 - Entries from other provenances are read-only there: a `launch` entry is
   changed by relaunching, an `API` entry by whoever added it, an `mDNS`
-  entry by the network.
-- A "Save to map file" action on a `launch`, `API` or `mDNS` entry copies it
-  into the file: the way to pin a peer you can see working. (For an mDNS
-  Beebium peer this pins an ephemeral port, which is why it is a deliberate
-  action and not automatic; the sidebar warns.)
+  entry by the network, a `subnet` entry by its rule.
+- A "Save to map file" action on a `launch`, `API`, `mDNS` or `subnet`
+  entry copies it into the file as an explicit peer: the way to pin a peer
+  you can see working, and the natural way to graduate a guess into a
+  record. (For an mDNS Beebium peer this pins an ephemeral port, which is
+  why it is a deliberate action and not automatic; the sidebar warns.)
 
 ## 3. What this is not
 
@@ -234,15 +269,16 @@ needs no AUN map at all and is tested on the physical bridge.
 1. `PeerSource` to four values, provenance text in the sidebar, and the
    doc fixes in section 7. Small; no proto change if the `AunPeerSource`
    enum in `aun.proto` is extended (ExtensionRpc, not the fingerprint).
-2. File reader, `MapFile` provenance and precedence, mtime poll and reload,
+2. File reader, `MapFile` and `Subnet` provenances and precedence, subnet
+   rules (both halves), `subnet=` launch parity, mtime poll and reload,
    `map-file=` overrides, hostname resolution, `ReloadMap` and the status
    fields. Unit tests on the parser (BeebEm sample files as fixtures) and
    on precedence; the three-machine `[.mdns]` test extended with a file
    entry.
-3. CLI subcommands including the BeebEm converter, with the shipped BeebEm
-   `Econet.cfg` and `AUNMap` samples as conversion fixtures.
-4. `AunUi` Add/Edit/Remove/Save-to-file, dispatched through the app to the
-   subcommands.
+3. The map RPCs and CLI subcommands over the shared file-writing library;
+   the standalone Python converter under `tools/aun/` with BeebEm's sample
+   files as fixtures.
+4. `AunUi` Add/Edit/Remove/Save-to-file over the map RPCs.
 5. The containerised bridge acceptance test on the Linux lane.
 
 Steps 1 to 3 are server-only and self-contained; step 2 alone answers
@@ -275,7 +311,6 @@ All four were addressed with step 1 (#55), which moved the peer table into
 - IPv6: AUN is IPv4 in every implementation we interoperate with; the file
   format allows a name that resolves to IPv6, which the backend would
   reject today. Defer with the rest of IPv6.
-- Whether `ADDMAP` nets should also drive outbound guessing for stations
-  not listed (BeebEm's `AUNSTRICT`), or only inbound identification. Both
-  are what RISC OS does; start with both and report each guess in the
-  trace.
+- (Resolved 2026-10-01: a `subnets` entry drives both inbound
+  identification and outbound guessing, as on RISC OS, with no switches;
+  see 2.2.)
