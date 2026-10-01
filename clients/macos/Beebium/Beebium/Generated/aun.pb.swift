@@ -20,30 +20,32 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
-/// Where a peer entry came from. Operator-configured entries always
-/// take precedence over discovered ones in the routing table; a
-/// discovered announcement that claims an (net, stn) already pinned
-/// by the operator is silently ignored. Named AunPeerSource (rather
-/// than the more obvious PeerSource) so the proto-generated C++
-/// symbol doesn't collide with the AunBackend's internal
-/// beebium::PeerSource enum class -- they carry the same semantics
-/// but live in different layers and need distinct names at the C++
-/// level.
+/// Where a peer entry came from, mirroring the AunPeerProvenance the AUN
+/// transport resolves by. The three operator sources (Launch, Api, MapFile)
+/// all take precedence over Discovered, in the order Api > Launch > MapFile;
+/// a discovered announcement that claims a (net, stn) an operator source
+/// already holds is shadowed rather than displacing it. Named AunPeerSource
+/// so the proto-generated C++ symbol does not collide with the transport's
+/// beebium::AunPeerProvenance enum class.
 enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   typealias RawValue = Int
 
-  /// Default for older clients / uninitialised messages. Treat as
-  /// OPERATOR_CONFIGURED for compatibility -- pre-discovery clients
-  /// only knew about operator-configured entries.
+  /// Default for uninitialised messages; no source should emit it.
   case unspecified // = 0
 
-  /// Added via --aun map=, the preset's econet.transport.parameters,
-  /// or AunService::AddPeer.
-  case operatorConfigured // = 1
+  /// Added via --aun map= or the preset's econet.transport.parameters
+  /// for this launch.
+  case launch // = 1
+
+  /// Added at runtime via AunService::AddPeer.
+  case api // = 2
+
+  /// Read from the per-user aun-map.json (reserved for the map-file step).
+  case mapFile // = 3
 
   /// Added by the AUN extension's mDNS subscriber from a
   /// _aun._udp announcement on the LAN.
-  case discovered // = 2
+  case discovered // = 4
   case UNRECOGNIZED(Int)
 
   init() {
@@ -53,8 +55,10 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   init?(rawValue: Int) {
     switch rawValue {
     case 0: self = .unspecified
-    case 1: self = .operatorConfigured
-    case 2: self = .discovered
+    case 1: self = .launch
+    case 2: self = .api
+    case 3: self = .mapFile
+    case 4: self = .discovered
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -62,8 +66,10 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   var rawValue: Int {
     switch self {
     case .unspecified: return 0
-    case .operatorConfigured: return 1
-    case .discovered: return 2
+    case .launch: return 1
+    case .api: return 2
+    case .mapFile: return 3
+    case .discovered: return 4
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -71,7 +77,9 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   // The compiler won't synthesize support with the UNRECOGNIZED case.
   static let allCases: [Beebium_AunPeerSource] = [
     .unspecified,
-    .operatorConfigured,
+    .launch,
+    .api,
+    .mapFile,
     .discovered,
   ]
 
@@ -234,10 +242,9 @@ struct Beebium_AunPeer: Sendable {
 
   var port: UInt32 = 0
 
-  /// Provenance of this entry. Surfaces the same OperatorConfigured
-  /// / Discovered split that AunBackend's PeerSource enum uses
-  /// internally; clients can present discovered peers differently
-  /// (e.g. the AUN extension panel labels them with secondary text).
+  /// Provenance of this resolved entry (the source it won from). Clients
+  /// present it in the AUN panel's secondary text: "launch", "API",
+  /// "map file" or "mDNS".
   var source: Beebium_AunPeerSource = .unspecified
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -250,7 +257,7 @@ struct Beebium_AunPeer: Sendable {
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_AunPeerSource: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0AUN_PEER_SOURCE_UNSPECIFIED\0\u{1}AUN_PEER_SOURCE_OPERATOR_CONFIGURED\0\u{1}AUN_PEER_SOURCE_DISCOVERED\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0AUN_PEER_SOURCE_UNSPECIFIED\0\u{1}AUN_PEER_SOURCE_LAUNCH\0\u{1}AUN_PEER_SOURCE_API\0\u{1}AUN_PEER_SOURCE_MAP_FILE\0\u{1}AUN_PEER_SOURCE_DISCOVERED\0")
 }
 
 extension Beebium_AunGetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
