@@ -144,6 +144,29 @@ public:
     // peers; the backend itself no longer ranks sources.
     void replace_peers(std::span<const PeerRoute> routes);
 
+    // A subnet rule: net N is this /24 (base_ip network byte order, last octet
+    // cleared), its station the last octet, its port AUN_DEFAULT_PORT (the RISC
+    // OS AUNMap convention). Both halves derive from it: an unknown sender
+    // inside the /24 on that port is accepted as net N station x (receive_frame),
+    // and a frame for N.x with no explicit peer is sent to the /24's x:port
+    // (send_frame). A materialised peer is reported through the observed
+    // callback so the transport records it as a Subnet peer.
+    struct SubnetRule {
+        uint8_t net;
+        uint32_t base_ip;  // network byte order, /24 network address
+    };
+
+    // Replace the subnet rules, atomically under the peer table lock. Applied by
+    // the AUN transport's peer set alongside replace_peers.
+    void set_subnet_rules(std::span<const SubnetRule> rules);
+
+    // Register a callback invoked (outside the peer-table lock) whenever a
+    // subnet rule materialises a peer -- an inbound sender identified or an
+    // outbound guess -- with (net, stn, ip network byte order, port host byte
+    // order). The AUN transport records it as a Subnet peer for the sidebar.
+    void set_subnet_peer_observed_callback(
+        std::function<void(uint8_t, uint8_t, uint32_t, uint16_t)> callback);
+
     // Number of peers in the routing view.
     size_t peer_count() const;
 
@@ -258,7 +281,15 @@ private:
     // Reverse: (ip_addr << 16 | port) -> (net, stn)
     std::unordered_map<uint16_t, std::pair<uint32_t, uint16_t>> forward_map_;
     std::unordered_map<uint64_t, std::pair<uint8_t, uint8_t>> reverse_map_;
+    // Subnet rules (the RISC OS /24 convention), guarded by peer_table_mutex_.
+    // Consulted by send_frame/receive_frame when there is no explicit peer.
+    std::vector<SubnetRule> subnet_rules_;
     mutable std::mutex peer_table_mutex_;
+
+    // Invoked outside peer_table_mutex_ when a subnet rule materialises a peer.
+    std::mutex subnet_callback_mutex_;
+    std::function<void(uint8_t, uint8_t, uint32_t, uint16_t)>
+        subnet_peer_observed_callback_;
 
     // The station-collision report currently in effect, pushed by the AUN
     // transport's peer set (collisions in effect, not a running total).
@@ -288,6 +319,12 @@ private:
     void drain_socket();
 
     void close_socket();
+
+    // Invoke the subnet-peer-observed callback (if set) with a materialised
+    // peer. Must be called with peer_table_mutex_ NOT held: the callback
+    // re-enters the AUN transport, which applies back into this backend.
+    void notify_subnet_peer_observed(uint8_t net, uint8_t stn, uint32_t ip,
+                                     uint16_t port);
 };
 
 }  // namespace beebium

@@ -48,6 +48,7 @@ export enum PeerSource {
     Api = "api",
     MapFile = "map-file",
     Discovered = "discovered",
+    Subnet = "subnet",
 }
 
 export interface PeerInfo {
@@ -58,9 +59,9 @@ export interface PeerInfo {
     /**
      * The source this resolved entry won from: `Launch` (`--aun map=` /
      * preset), `Api` (a runtime `addPeer`), `MapFile` (the per-user map
-     * file), or `Discovered` (the AUN extension's mDNS subscriber). The
-     * operator sources (`Api`, `Launch`, `MapFile`) take precedence over
-     * `Discovered` in the routing table, in that order.
+     * file), `Discovered` (the AUN extension's mDNS subscriber), or `Subnet`
+     * (derived from the map file's subnet convention). Precedence, highest
+     * first: `Api`, `Launch`, `MapFile`, `Discovered`, `Subnet`.
      */
     source: PeerSource;
 }
@@ -73,6 +74,8 @@ function peerSourceFromProto(source: ProtoAunPeerSource): PeerSource {
             return PeerSource.MapFile;
         case ProtoAunPeerSource.AUN_PEER_SOURCE_DISCOVERED:
             return PeerSource.Discovered;
+        case ProtoAunPeerSource.AUN_PEER_SOURCE_SUBNET:
+            return PeerSource.Subnet;
         default:
             // LAUNCH and the unspecified default both read as launch config.
             return PeerSource.Launch;

@@ -51,6 +51,10 @@ class _AunPeerSourceEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_AunPeer
     """Added by the AUN extension's mDNS subscriber from a
     _aun._udp announcement on the LAN.
     """
+    AUN_PEER_SOURCE_SUBNET: _AunPeerSource.ValueType  # 5
+    """Materialised from a subnets rule in the map file (an inbound sender
+    identified, or an outbound guess). Lowest precedence; Discovered wins.
+    """
 
 class AunPeerSource(_AunPeerSource, metaclass=_AunPeerSourceEnumTypeWrapper):
     """Where a peer entry came from, mirroring the AunPeerProvenance the AUN
@@ -75,6 +79,10 @@ AUN_PEER_SOURCE_MAP_FILE: AunPeerSource.ValueType  # 3
 AUN_PEER_SOURCE_DISCOVERED: AunPeerSource.ValueType  # 4
 """Added by the AUN extension's mDNS subscriber from a
 _aun._udp announcement on the LAN.
+"""
+AUN_PEER_SOURCE_SUBNET: AunPeerSource.ValueType  # 5
+"""Materialised from a subnets rule in the map file (an inbound sender
+identified, or an outbound guess). Lowest precedence; Discovered wins.
 """
 Global___AunPeerSource: _TypeAlias = AunPeerSource  # noqa: Y015
 

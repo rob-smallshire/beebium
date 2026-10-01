@@ -174,6 +174,7 @@ private:
             case AunPeerProvenance::Api:        return AUN_PEER_SOURCE_API;
             case AunPeerProvenance::MapFile:    return AUN_PEER_SOURCE_MAP_FILE;
             case AunPeerProvenance::Discovered: return AUN_PEER_SOURCE_DISCOVERED;
+            case AunPeerProvenance::Subnet:     return AUN_PEER_SOURCE_SUBNET;
         }
         return AUN_PEER_SOURCE_UNSPECIFIED;
     }

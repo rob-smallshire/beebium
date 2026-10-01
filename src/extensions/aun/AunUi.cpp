@@ -74,6 +74,7 @@ std::string format_peer_secondary(const AunPeerEntry& peer) {
         case AunPeerProvenance::Api:        return "API";
         case AunPeerProvenance::MapFile:    return "map file";
         case AunPeerProvenance::Discovered: return "mDNS";
+        case AunPeerProvenance::Subnet:     return "subnet";
     }
     return "";
 }

@@ -76,6 +76,31 @@ bool AunPeerSet::remove_peer(std::uint8_t net, std::uint8_t stn,
     return changed;
 }
 
+void AunPeerSet::set_subnet_rule(std::uint8_t net, std::uint32_t base_ip,
+                                 AunPeerProvenance provenance) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    subnet_rules_[net][provenance] = base_ip;
+    apply_to_backend_locked();
+}
+
+void AunPeerSet::clear_subnet_rules(AunPeerProvenance provenance) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    bool changed = false;
+    for (auto it = subnet_rules_.begin(); it != subnet_rules_.end();) {
+        if (it->second.erase(provenance) > 0) {
+            changed = true;
+        }
+        if (it->second.empty()) {
+            it = subnet_rules_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (changed) {
+        apply_to_backend_locked();
+    }
+}
+
 void AunPeerSet::clear_provenance(AunPeerProvenance provenance) {
     std::lock_guard<std::mutex> lock(mutex_);
     bool changed = false;
@@ -215,6 +240,15 @@ void AunPeerSet::apply_to_backend_locked() {
         });
     }
     backend_->replace_peers(routes);
+
+    // Push the resolved subnet rules (the winning rule per net) too.
+    std::vector<AunBackend::SubnetRule> subnet_rules;
+    subnet_rules.reserve(subnet_rules_.size());
+    for (const auto& [net, inner] : subnet_rules_) {
+        if (inner.empty()) continue;
+        subnet_rules.push_back(AunBackend::SubnetRule{net, inner.begin()->second});
+    }
+    backend_->set_subnet_rules(subnet_rules);
 }
 
 }  // namespace beebium

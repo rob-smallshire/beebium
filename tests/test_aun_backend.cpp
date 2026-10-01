@@ -25,6 +25,7 @@
 #include <set>
 #include <span>
 #include <thread>
+#include <tuple>
 
 using namespace beebium;
 
@@ -824,6 +825,99 @@ TEST_CASE("AunBackend: replace_peers installs the whole routing view atomically"
     // An empty replacement clears the table.
     backend.replace_peers(std::span<const AunBackend::PeerRoute>{});
     CHECK(backend.peer_count() == 0);
+}
+
+// =============================================================================
+// Subnet rules (the RISC OS /24 convention): both halves.
+// =============================================================================
+
+namespace {
+uint32_t ipv4(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+    return htonl((static_cast<uint32_t>(a) << 24) | (b << 16) | (c << 8) | d);
+}
+}  // namespace
+
+TEST_CASE("AunBackend: outbound subnet guess routes to the /24's x:32768 and reports it",
+          "[econet][aun][backend][subnet]") {
+    AunBackend backend(/*local_net=*/0, /*local_stn=*/1, 0);
+    REQUIRE(backend.is_connected());
+
+    std::array<AunBackend::SubnetRule, 1> rules{{{/*net=*/1, ipv4(192, 168, 9, 0)}}};
+    backend.set_subnet_rules(rules);
+
+    // A station in net 1 with no explicit peer is reachable by the convention.
+    CHECK(backend.is_reachable(1, 42));
+
+    std::vector<std::tuple<uint8_t, uint8_t, uint32_t, uint16_t>> observed;
+    backend.set_subnet_peer_observed_callback(
+        [&](uint8_t net, uint8_t stn, uint32_t ip, uint16_t port) {
+            observed.emplace_back(net, stn, ip, port);
+        });
+
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.dest_net = 1;
+    frame.dest_stn = 42;
+    frame.data = {0xAA};
+    backend.send_frame(frame);  // no listener; we only assert the guess + report
+
+    REQUIRE(observed.size() == 1);
+    CHECK(std::get<0>(observed[0]) == 1);
+    CHECK(std::get<1>(observed[0]) == 42);
+    CHECK(std::get<2>(observed[0]) == ipv4(192, 168, 9, 42));  // base | station
+    CHECK(std::get<3>(observed[0]) == 32768);
+}
+
+TEST_CASE("AunBackend: no subnet rule means an unknown station stays unreachable",
+          "[econet][aun][backend][subnet]") {
+    AunBackend backend(0, 1, 0);
+    REQUIRE(backend.is_connected());
+    CHECK_FALSE(backend.is_reachable(1, 42));  // no rules -> not reachable
+}
+
+TEST_CASE("AunBackend: inbound subnet rule identifies an unknown sender in the /24",
+          "[econet][aun][backend][subnet]") {
+    // A "RISC OS machine" sends from a loopback address on the convention port
+    // 32768. The receiver binds an ephemeral port, so the 32768 sender is not a
+    // self-loopback and the subnet rule identifies it.
+    auto sender = std::make_unique<AunBackend>(0, 99, 32768);
+    if (!sender->is_connected()) {
+        SKIP("UDP port 32768 unavailable for the subnet sender");
+    }
+    AunBackend receiver(/*local_net=*/0, /*local_stn=*/5, 0);
+    REQUIRE(receiver.is_connected());
+    REQUIRE(receiver.local_port() != 32768);
+
+    // net 1 is the loopback /24 so the sender at 127.0.0.1 is inside it.
+    std::array<AunBackend::SubnetRule, 1> rules{{{/*net=*/1, ipv4(127, 0, 0, 0)}}};
+    receiver.set_subnet_rules(rules);
+
+    std::vector<std::tuple<uint8_t, uint8_t, uint32_t, uint16_t>> observed;
+    receiver.set_subnet_peer_observed_callback(
+        [&](uint8_t net, uint8_t stn, uint32_t ip, uint16_t port) {
+            observed.emplace_back(net, stn, ip, port);
+        });
+
+    // The sender must know the receiver to address it.
+    sender->add_peer(0, 5, loopback_ip(), receiver.local_port());
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.dest_net = 0;
+    frame.dest_stn = 5;
+    frame.src_net = 0;
+    frame.src_stn = 99;
+    frame.data = {0x2A};
+    sender->send_frame(frame);
+    brief_pause();
+
+    auto received = receive_with_timeout(receiver);
+    REQUIRE(received.has_value());
+    // Identified as net 1 (the subnet's net), station 1 (last octet of 127.0.0.1).
+    CHECK(received->src_net == 1);
+    CHECK(received->src_stn == 1);
+    REQUIRE(observed.size() == 1);
+    CHECK(std::get<0>(observed[0]) == 1);
+    CHECK(std::get<1>(observed[0]) == 1);
 }
 
 TEST_CASE("AunBackend: local_port returns specified port when non-zero",

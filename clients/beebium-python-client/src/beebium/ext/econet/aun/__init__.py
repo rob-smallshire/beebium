@@ -36,10 +36,11 @@ class PeerSource(IntEnum):
     """Where an AUN peer entry came from.
 
     Resolved by precedence, highest first: ``API``, ``LAUNCH``,
-    ``MAP_FILE``, ``DISCOVERED``. The three operator sources (a runtime
-    :meth:`Aun.add_peer`, the CLI ``--aun map=`` / preset for this launch,
-    and the per-user map file) all take precedence over discovered peers
-    in the routing table.
+    ``MAP_FILE``, ``DISCOVERED``, ``SUBNET``. The three operator sources (a
+    runtime :meth:`Aun.add_peer`, the CLI ``--aun map=`` / preset for this
+    launch, and the per-user map file) take precedence over discovered
+    peers, which in turn beat a ``SUBNET`` entry derived from the map file's
+    subnet convention.
     """
 
     UNSPECIFIED = aun_pb2.AUN_PEER_SOURCE_UNSPECIFIED
@@ -47,6 +48,7 @@ class PeerSource(IntEnum):
     API = aun_pb2.AUN_PEER_SOURCE_API
     MAP_FILE = aun_pb2.AUN_PEER_SOURCE_MAP_FILE
     DISCOVERED = aun_pb2.AUN_PEER_SOURCE_DISCOVERED
+    SUBNET = aun_pb2.AUN_PEER_SOURCE_SUBNET
 
 
 @dataclass(frozen=True)

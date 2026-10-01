@@ -52,9 +52,10 @@ class AunBackend;
 // Discovered), preserving the old "operator always wins" rule.
 enum class AunPeerProvenance : std::uint8_t {
     Api = 0,         // AunService.AddPeer at runtime
-    Launch = 1,      // --aun map= on the command line, or a preset's map
-    MapFile = 2,     // the per-user aun-map.json (reserved for step 2)
+    Launch = 1,      // --aun map= / subnet= on the command line, or a preset's
+    MapFile = 2,     // the per-user aun-map.json
     Discovered = 3,  // an _aun._udp mDNS announcement
+    Subnet = 4,      // derived from a subnets rule (inbound id or outbound guess)
 };
 
 // A resolved peer: the winning entry for a (net, stn), with the provenance it
@@ -96,8 +97,20 @@ public:
 
     // Drop every entry of one provenance across all stations. Used when a
     // backend is (re)created to re-seed the Launch and Discovered layers from
-    // scratch while the Api (and later MapFile) layers persist.
+    // scratch while the Api and MapFile layers persist, and on a map-file
+    // reload to replace the MapFile layer.
     void clear_provenance(AunPeerProvenance provenance);
+
+    // Add or replace the subnet rule for `net` at `provenance` (one /24 per net
+    // per source; resolved by the same precedence as peers). base_ip is the
+    // network byte order /24 network address. A subnet rule drives both halves
+    // of the RISC OS convention when the backend applies it.
+    void set_subnet_rule(std::uint8_t net, std::uint32_t base_ip,
+                         AunPeerProvenance provenance);
+
+    // Drop every subnet rule of one provenance. Used to replace the MapFile
+    // rules on reload while Launch rules persist.
+    void clear_subnet_rules(AunPeerProvenance provenance);
 
     // True if (net, stn) has an operator entry (Api, Launch or MapFile) --
     // i.e. a Discovered add would be shadowed. Preserves the old
@@ -165,6 +178,12 @@ private:
     // (net<<8|stn) -> provenance -> endpoint. The inner map is ordered by
     // AunPeerProvenance, so begin() is the highest-precedence (winning) entry.
     std::map<std::uint16_t, std::map<AunPeerProvenance, Endpoint>> layers_;
+
+    // net -> provenance -> /24 network address (network byte order). Resolved
+    // by the same precedence as peers; the winning rule per net is pushed to
+    // the backend, which applies both halves of the subnet convention.
+    std::map<std::uint8_t, std::map<AunPeerProvenance, std::uint32_t>>
+        subnet_rules_;
 
     std::uint8_t local_net_ = 0;
 

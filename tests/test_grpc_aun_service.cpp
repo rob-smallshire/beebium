@@ -172,6 +172,24 @@ TEST_CASE("AunService ListPeers reports source for discovered entries",
     CHECK(peer.source() == beebium::AUN_PEER_SOURCE_DISCOVERED);
 }
 
+TEST_CASE("AunService ListPeers reports a subnet-derived peer's source",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+
+    // Mimic a materialised subnet peer (an inbound identification or outbound
+    // guess the backend would record via the observed callback).
+    fixture.extension().peer_set().set_peer(
+        128, 44, htonl(0xC0A8012Cu), 32768, beebium::AunPeerProvenance::Subnet);
+
+    beebium::AunListPeersRequest request;
+    beebium::AunListPeersResponse response;
+    REQUIRE(fixture.invoke("ListPeers", request, &response).ok());
+    REQUIRE(response.peers_size() == 1);
+    CHECK(response.peers(0).net() == 128);
+    CHECK(response.peers(0).stn() == 44);
+    CHECK(response.peers(0).source() == beebium::AUN_PEER_SOURCE_SUBNET);
+}
+
 TEST_CASE("AunService AddPeer with default port (0) substitutes AUN_DEFAULT_PORT",
           "[grpc][aun][extension-rpc]") {
     AunServiceFixture fixture;

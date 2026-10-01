@@ -32,6 +32,16 @@ namespace beebium {
 
 namespace {
 
+// Net-number ranges, kept in one place. Explicit peers are 0..127 (the high
+// bit of an Econet net byte is reserved by the Acorn bridge protocol). The
+// subnet range is separate and deliberately wider: the RISC OS AUNMap
+// convention uses high net numbers (e.g. 128) for IP-mapped subnets. The exact
+// subnet upper bound is under review; changing it is a one-line edit here.
+constexpr long kPeerNetMin = 0;
+constexpr long kPeerNetMax = 127;
+constexpr long kSubnetNetMin = 1;
+constexpr long kSubnetNetMax = 254;
+
 // Pull an integer field in [lo, hi] from a JSON object, or set `error`.
 bool get_int_field(const nlohmann::json& obj, const char* key, long lo, long hi,
                    const std::string& where, long& out, std::string& error) {
@@ -146,7 +156,7 @@ AunMapLoadResult parse_aun_map(std::string_view json_text,
             }
             long net = 0, stn = 0, port = 0;
             std::string host, label;
-            if (!get_int_field(entry, "net", 0, 127, where, net, result.error) ||
+            if (!get_int_field(entry, "net", kPeerNetMin, kPeerNetMax, where, net, result.error) ||
                 !get_int_field(entry, "station", 1, 254, where, stn,
                                result.error) ||
                 !get_string_field(entry, "host", where, true, host,
@@ -194,7 +204,7 @@ AunMapLoadResult parse_aun_map(std::string_view json_text,
             // A subnet maps a whole net to a /24; the RISC OS AUNMap convention
             // uses high net numbers (e.g. 128) for these IP-mapped nets, so the
             // 0..127 cap that applies to explicit peers does not apply here.
-            if (!get_int_field(entry, "net", 1, 254, where, net, result.error) ||
+            if (!get_int_field(entry, "net", kSubnetNetMin, kSubnetNetMax, where, net, result.error) ||
                 !get_string_field(entry, "subnet", where, true, subnet_text,
                                   result.error) ||
                 !get_string_field(entry, "label", where, false, label,

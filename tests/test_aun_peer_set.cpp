@@ -84,6 +84,29 @@ TEST_CASE("AunPeerSet: precedence Api > Launch > MapFile > Discovered",
     CHECK(list[0].port == 4);
 }
 
+TEST_CASE("AunPeerSet: Discovered beats Subnet, Subnet is the floor",
+          "[aun][peer-set][precedence]") {
+    AunPeerSet peers;
+    // A subnet-derived peer is the lowest precedence.
+    CHECK(peers.set_peer(0, 40, ip(192, 168, 1, 40), 32768,
+                         AunPeerProvenance::Subnet));
+    CHECK(peers.resolve(0, 40)->port == 32768);
+
+    // A Beebium discovered on a non-convention port must beat the subnet guess,
+    // so packets go to the advertised 40001, not the convention's 32768.
+    CHECK(peers.set_peer(0, 40, ip(192, 168, 1, 40), 40001,
+                         AunPeerProvenance::Discovered));
+    CHECK(peers.resolve(0, 40)->port == 40001);
+    auto list = peers.list_peers();
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].provenance == AunPeerProvenance::Discovered);
+
+    // Remove the discovered one and the subnet guess resurfaces.
+    CHECK(peers.remove_peer(0, 40, AunPeerProvenance::Discovered));
+    CHECK(peers.resolve(0, 40)->port == 32768);
+    CHECK(peers.list_peers()[0].provenance == AunPeerProvenance::Subnet);
+}
+
 TEST_CASE("AunPeerSet: a lower-precedence add behind a winner does not change it",
           "[aun][peer-set][precedence]") {
     AunPeerSet peers;

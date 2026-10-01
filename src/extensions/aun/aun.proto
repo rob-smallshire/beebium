@@ -121,6 +121,10 @@ enum AunPeerSource {
     // Added by the AUN extension's mDNS subscriber from a
     // _aun._udp announcement on the LAN.
     AUN_PEER_SOURCE_DISCOVERED = 4;
+
+    // Materialised from a subnets rule in the map file (an inbound sender
+    // identified, or an outbound guess). Lowest precedence; Discovered wins.
+    AUN_PEER_SOURCE_SUBNET = 5;
 }
 
 message AunPeer {

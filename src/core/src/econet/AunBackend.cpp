@@ -139,6 +139,19 @@ bool is_local_ipv4(uint32_t ip_net_order) {
     return std::find(locals.begin(), locals.end(), ip_net_order) != locals.end();
 }
 
+// The endpoint IP (network byte order) for `stn` within a /24 whose network
+// address is `base_ip_net_order` (last octet cleared): the last octet becomes
+// the station number, per the RISC OS AUNMap convention.
+uint32_t subnet_station_ip(uint32_t base_ip_net_order, uint8_t stn) {
+    return htonl((ntohl(base_ip_net_order) & 0xFFFFFF00u) | stn);
+}
+
+// True if `sender_ip_net_order` is inside the /24 at `base_ip_net_order`.
+bool ip_in_subnet(uint32_t sender_ip_net_order, uint32_t base_ip_net_order) {
+    return (ntohl(sender_ip_net_order) & 0xFFFFFF00u) ==
+           (ntohl(base_ip_net_order) & 0xFFFFFF00u);
+}
+
 // Format a network-byte-order IPv4 + port as "a.b.c.d:port" (trace only).
 std::string format_endpoint(uint32_t ip_net_order, uint16_t port) {
     in_addr addr{};
@@ -318,14 +331,45 @@ void AunBackend::send_frame(const NetworkFrame& frame) {
     uint8_t lookup_net = (frame.dest_net == 0) ? local_net_ : frame.dest_net;
     auto forward_key = make_forward_key(lookup_net, frame.dest_stn);
     std::pair<uint32_t, uint16_t> endpoint;
+    bool subnet_guess = false;
     {
         std::lock_guard lock(peer_table_mutex_);
         auto it = forward_map_.find(forward_key);
-        if (it == forward_map_.end()) {
-            // Unknown peer -- drop silently.
-            return;
+        if (it != forward_map_.end()) {
+            endpoint = it->second;
+        } else {
+            // No explicit peer. The outbound half of the subnet convention: if a
+            // rule maps this net, guess the /24's x:32768. Discovered and all
+            // higher sources already sit in forward_map_, so reaching here means
+            // nothing outranks the guess.
+            bool matched = false;
+            for (const auto& rule : subnet_rules_) {
+                if (rule.net == lookup_net && frame.dest_stn >= 1 &&
+                    frame.dest_stn <= 254) {
+                    endpoint = {subnet_station_ip(rule.base_ip, frame.dest_stn),
+                                AUN_DEFAULT_PORT};
+                    matched = true;
+                    subnet_guess = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                // Unknown peer -- drop silently.
+                return;
+            }
         }
-        endpoint = it->second;
+    }
+
+    if (subnet_guess) {
+        if (trace_) {
+            std::cerr << "AUN TX: subnet guess " << static_cast<int>(lookup_net)
+                      << "." << static_cast<int>(frame.dest_stn) << " -> "
+                      << format_endpoint(endpoint.first, endpoint.second) << "\n";
+        }
+        // Record the guess as a Subnet peer so it shows in the sidebar and
+        // future frames resolve it directly. Fired outside peer_table_mutex_.
+        notify_subnet_peer_observed(lookup_net, frame.dest_stn, endpoint.first,
+                                    endpoint.second);
     }
 
     sockaddr_in dest_addr{};
@@ -422,19 +466,44 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
         }
     }
 
-    if (sender_port == local_port_ && !sender_known) {
-        // Unknown sender on our port -- likely a self-send loop, not a
-        // real peer. Drop quietly.
-        return std::nullopt;
-    }
-
     auto result = aun_packet::decode(
         std::span<const uint8_t>(recv_buffer_.data(), static_cast<size_t>(received)));
     if (!result.valid) {
         return std::nullopt;
     }
 
+    // Did a subnet rule identify an otherwise-unknown sender? Remembered so the
+    // materialised peer can be recorded for the sidebar after the frame is
+    // built (the callback runs outside peer_table_mutex_).
+    bool from_subnet = false;
     if (!sender_known) {
+        // Inbound half of the subnet convention: an unknown sender inside a
+        // mapped /24 on AUN_DEFAULT_PORT is identified as net N station x. A
+        // frame from one of this host's own addresses on our own bound port is
+        // our own send looping back, never a subnet peer, so it is excluded; a
+        // same-host peer on a different port is a genuine peer. Only runs when
+        // subnet rules exist.
+        bool self_loopback = is_local_ipv4(sender_ip) && sender_port == local_port_;
+        if (sender_port == AUN_DEFAULT_PORT && !self_loopback) {
+            std::lock_guard lock(peer_table_mutex_);
+            for (const auto& rule : subnet_rules_) {
+                if (!ip_in_subnet(sender_ip, rule.base_ip)) continue;
+                uint8_t stn = static_cast<uint8_t>(ntohl(sender_ip) & 0xFFu);
+                if (stn >= 1 && stn <= 254) {
+                    sender_addr_econet = {rule.net, stn};
+                    sender_known = true;
+                    from_subnet = true;
+                }
+                break;
+            }
+        }
+    }
+
+    if (!sender_known) {
+        if (sender_port == local_port_) {
+            // Unknown sender on our port -- a self-send loop, not a real peer.
+            return std::nullopt;
+        }
         if (trace_) {
             // The prime multi-homed symptom: a frame arrives from a source IP
             // that is not in reverse_map_ (the OS picked a different egress
@@ -480,7 +549,44 @@ std::optional<NetworkFrame> AunBackend::receive_frame() {
                   << " data=" << result.frame.data.size() << "B\n";
     }
 
+    if (from_subnet) {
+        if (trace_) {
+            std::cerr << "AUN RX: subnet accepted "
+                      << static_cast<int>(sender_addr_econet.first) << "."
+                      << static_cast<int>(sender_addr_econet.second) << " from "
+                      << format_endpoint(sender_ip, sender_port) << "\n";
+        }
+        // Record the identified sender as a Subnet peer (sidebar + so the reply
+        // and future frames resolve directly). Fired outside peer_table_mutex_.
+        notify_subnet_peer_observed(sender_addr_econet.first,
+                                    sender_addr_econet.second, sender_ip,
+                                    sender_port);
+    }
+
     return std::move(result.frame);
+}
+
+void AunBackend::set_subnet_rules(std::span<const SubnetRule> rules) {
+    std::lock_guard lock(peer_table_mutex_);
+    subnet_rules_.assign(rules.begin(), rules.end());
+}
+
+void AunBackend::set_subnet_peer_observed_callback(
+        std::function<void(uint8_t, uint8_t, uint32_t, uint16_t)> callback) {
+    std::lock_guard<std::mutex> lock(subnet_callback_mutex_);
+    subnet_peer_observed_callback_ = std::move(callback);
+}
+
+void AunBackend::notify_subnet_peer_observed(uint8_t net, uint8_t stn,
+                                             uint32_t ip, uint16_t port) {
+    std::function<void(uint8_t, uint8_t, uint32_t, uint16_t)> callback;
+    {
+        std::lock_guard<std::mutex> lock(subnet_callback_mutex_);
+        callback = subnet_peer_observed_callback_;
+    }
+    if (callback) {
+        callback(net, stn, ip, port);
+    }
 }
 
 bool AunBackend::is_reachable(uint8_t net, uint8_t stn) const {
@@ -489,7 +595,17 @@ bool AunBackend::is_reachable(uint8_t net, uint8_t stn) const {
     if (stn == 0xFF) return peer_count() > 0;
     uint8_t lookup_net = (net == 0) ? local_net_ : net;
     std::lock_guard lock(peer_table_mutex_);
-    return forward_map_.count(make_forward_key(lookup_net, stn)) == 1;
+    if (forward_map_.count(make_forward_key(lookup_net, stn)) == 1) {
+        return true;
+    }
+    // A station with no explicit peer is still reachable if a subnet rule maps
+    // its net: the outbound half guesses the /24's x:32768 (see send_frame).
+    for (const auto& rule : subnet_rules_) {
+        if (rule.net == lookup_net) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool AunBackend::is_connected() const {

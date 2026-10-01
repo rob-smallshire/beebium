@@ -175,8 +175,8 @@ class TestPeers:
         assert peers[1].port == 9999
         assert peers[1].source == PeerSource.DISCOVERED
 
-    def test_peers_reports_launch_and_map_file_sources(self, channel, aun):
-        # The remaining two provenances round-trip as themselves.
+    def test_peers_reports_launch_map_file_and_subnet_sources(self, channel, aun):
+        # The remaining provenances round-trip as themselves.
         channel.set_response(
             "ListPeers",
             aun_pb2.AunListPeersResponse(
@@ -195,9 +195,17 @@ class TestPeers:
                         port=32768,
                         source=aun_pb2.AUN_PEER_SOURCE_MAP_FILE,
                     ),
+                    aun_pb2.AunPeer(
+                        net=128,
+                        stn=44,
+                        ip_address="192.168.1.44",
+                        port=32768,
+                        source=aun_pb2.AUN_PEER_SOURCE_SUBNET,
+                    ),
                 ]
             ),
         )
         peers = aun.peers
         assert peers[0].source == PeerSource.LAUNCH
         assert peers[1].source == PeerSource.MAP_FILE
+        assert peers[2].source == PeerSource.SUBNET

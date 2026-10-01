@@ -133,12 +133,20 @@ describe("Aun", () => {
                             port: 32768,
                             source: AunPeerSource.AUN_PEER_SOURCE_MAP_FILE,
                         },
+                        {
+                            net: 128,
+                            stn: 44,
+                            ipAddress: "192.168.1.44",
+                            port: 32768,
+                            source: AunPeerSource.AUN_PEER_SOURCE_SUBNET,
+                        },
                     ],
                 }),
             });
             const peers = await new Aun(channel).listPeers();
             expect(peers[0]!.source).toBe(PeerSource.Launch);
             expect(peers[1]!.source).toBe(PeerSource.MapFile);
+            expect(peers[2]!.source).toBe(PeerSource.Subnet);
         });
 
         it("maps UNSPECIFIED source to Launch", async () => {
