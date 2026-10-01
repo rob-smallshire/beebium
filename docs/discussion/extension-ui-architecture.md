@@ -613,8 +613,9 @@ message FileReferenceAction {
 Dispatch payload: `string file_action_id`.
 
 Renderer contract: a small document icon and the display name, the path
-as a tooltip, the state indicator beside it, and a pull-down (shortcut)
-menu holding the server's actions plus the renderer's own: "Reveal in
+as a tooltip, the state indicator beside the name, the state text (when
+non-empty) on its own line beneath in caption style, and a pull-down
+(shortcut) menu holding the server's actions plus the renderer's own: "Reveal in
 Finder" (or the platform equivalent) only when the server shares this
 host's filesystem (the existing host-fingerprint gating; see
 docs/frontend-local-server-gating.md), and "Copy Path" always.
