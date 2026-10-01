@@ -266,6 +266,8 @@ needs no AUN map at all and is tested on the physical bridge.
 
 ## 6. Sequencing
 
+Issues: #139 (reader), #141 (RPCs and subcommands), #140 (converter), #142 (sidebar), #143 (bridge test).
+
 1. `PeerSource` to four values, provenance text in the sidebar, and the
    doc fixes in section 7. Small; no proto change if the `AunPeerSource`
    enum in `aun.proto` is extended (ExtensionRpc, not the fingerprint).
