@@ -97,28 +97,30 @@ message AunListPeersResponse {
     repeated AunPeer peers = 1;
 }
 
-// Where a peer entry came from. Operator-configured entries always
-// take precedence over discovered ones in the routing table; a
-// discovered announcement that claims an (net, stn) already pinned
-// by the operator is silently ignored. Named AunPeerSource (rather
-// than the more obvious PeerSource) so the proto-generated C++
-// symbol doesn't collide with the AunBackend's internal
-// beebium::PeerSource enum class -- they carry the same semantics
-// but live in different layers and need distinct names at the C++
-// level.
+// Where a peer entry came from, mirroring the AunPeerProvenance the AUN
+// transport resolves by. The three operator sources (Launch, Api, MapFile)
+// all take precedence over Discovered, in the order Api > Launch > MapFile;
+// a discovered announcement that claims a (net, stn) an operator source
+// already holds is shadowed rather than displacing it. Named AunPeerSource
+// so the proto-generated C++ symbol does not collide with the transport's
+// beebium::AunPeerProvenance enum class.
 enum AunPeerSource {
-    // Default for older clients / uninitialised messages. Treat as
-    // OPERATOR_CONFIGURED for compatibility -- pre-discovery clients
-    // only knew about operator-configured entries.
+    // Default for uninitialised messages; no source should emit it.
     AUN_PEER_SOURCE_UNSPECIFIED = 0;
 
-    // Added via --aun map=, the preset's econet.transport.parameters,
-    // or AunService::AddPeer.
-    AUN_PEER_SOURCE_OPERATOR_CONFIGURED = 1;
+    // Added via --aun map= or the preset's econet.transport.parameters
+    // for this launch.
+    AUN_PEER_SOURCE_LAUNCH = 1;
+
+    // Added at runtime via AunService::AddPeer.
+    AUN_PEER_SOURCE_API = 2;
+
+    // Read from the per-user aun-map.json (reserved for the map-file step).
+    AUN_PEER_SOURCE_MAP_FILE = 3;
 
     // Added by the AUN extension's mDNS subscriber from a
     // _aun._udp announcement on the LAN.
-    AUN_PEER_SOURCE_DISCOVERED = 2;
+    AUN_PEER_SOURCE_DISCOVERED = 4;
 }
 
 message AunPeer {
@@ -126,9 +128,8 @@ message AunPeer {
     uint32 stn = 2;
     string ip_address = 3;
     uint32 port = 4;
-    // Provenance of this entry. Surfaces the same OperatorConfigured
-    // / Discovered split that AunBackend's PeerSource enum uses
-    // internally; clients can present discovered peers differently
-    // (e.g. the AUN extension panel labels them with secondary text).
+    // Provenance of this resolved entry (the source it won from). Clients
+    // present it in the AUN panel's secondary text: "launch", "API",
+    // "map file" or "mDNS".
     AunPeerSource source = 5;
 }

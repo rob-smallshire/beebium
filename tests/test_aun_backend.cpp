@@ -20,8 +20,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #endif
+#include <array>
 #include <chrono>
 #include <set>
+#include <span>
 #include <thread>
 
 using namespace beebium;
@@ -187,7 +189,7 @@ TEST_CASE("AunBackend: add_peer routes a same-host peer over loopback",
     }
     AunBackend backend(0, 1, 0);
     REQUIRE(backend.is_connected());
-    backend.add_peer(0, 254, local, 32768, PeerSource::Discovered);
+    backend.add_peer(0, 254, local, 32768);
 
     auto peers = backend.list_peers();
     REQUIRE(peers.size() == 1);
@@ -197,7 +199,7 @@ TEST_CASE("AunBackend: add_peer routes a same-host peer over loopback",
     // Re-discovery (e.g. mDNS re-advertising a local IP after a NIC change)
     // must re-converge to loopback, not latch a LAN IP -- add_peer re-queries
     // the local address set on every call.
-    backend.add_peer(0, 254, local, 32768, PeerSource::Discovered);
+    backend.add_peer(0, 254, local, 32768);
     auto peers2 = backend.list_peers();
     REQUIRE(peers2.size() == 1);
     CHECK(peers2[0].ip_addr == htonl(INADDR_LOOPBACK));
@@ -222,8 +224,8 @@ TEST_CASE("AunBackend: same-host peers discovered on a LAN address still deliver
     // Peer each other by the LAN address, exactly as mDNS discovery would;
     // the rewrite sends both over loopback so delivery does not depend on any
     // physical interface being up.
-    a.add_peer(0, 254, local, b.local_port(), PeerSource::Discovered);
-    b.add_peer(0, 1, local, a.local_port(), PeerSource::Discovered);
+    a.add_peer(0, 254, local, b.local_port());
+    b.add_peer(0, 1, local, a.local_port());
 
     NetworkFrame frame;
     frame.type = FrameType::Unicast;
@@ -779,89 +781,49 @@ TEST_CASE("AunBackend: local_net accessor reflects construction",
     CHECK(max_valid.local_net() == 127);
 }
 
-// =============================================================================
-// Peer source precedence (operator-configured vs discovered)
-// =============================================================================
+// Peer source precedence moved to the AUN transport's AunPeerSet; see
+// test_aun_peer_set.cpp. The backend keeps only the resolved routing view
+// (last writer wins, no provenance).
 
-TEST_CASE("AunBackend: operator-configured entry blocks Discovered overwrite",
-          "[econet][aun][backend][peer-source]") {
+TEST_CASE("AunBackend: re-adding a peer replaces its endpoint",
+          "[econet][aun][backend]") {
     AunBackend backend(0, 1, 0);
     REQUIRE(backend.is_connected());
 
-    backend.add_peer(0, 254, loopback_ip(), 40001,
-                     PeerSource::OperatorConfigured);
-    REQUIRE(backend.is_operator_configured(0, 254));
-
-    // Discovered call must be a no-op against an operator entry.
-    backend.add_peer(0, 254, loopback_ip(), 40002, PeerSource::Discovered);
-    auto peers = backend.list_peers();
-    REQUIRE(peers.size() == 1);
-    CHECK(peers[0].port == 40001);   // unchanged
-    CHECK(backend.is_operator_configured(0, 254));
-}
-
-TEST_CASE("AunBackend: discovered entry can be replaced by another discovered call",
-          "[econet][aun][backend][peer-source]") {
-    AunBackend backend(0, 1, 0);
-    REQUIRE(backend.is_connected());
-
-    backend.add_peer(0, 254, loopback_ip(), 40001, PeerSource::Discovered);
-    REQUIRE_FALSE(backend.is_operator_configured(0, 254));
-
-    // Discovered re-add updates the endpoint.
-    backend.add_peer(0, 254, loopback_ip(), 40099, PeerSource::Discovered);
+    backend.add_peer(0, 254, loopback_ip(), 40001);
+    backend.add_peer(0, 254, loopback_ip(), 40099);
     auto peers = backend.list_peers();
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].port == 40099);
-    CHECK_FALSE(backend.is_operator_configured(0, 254));
 }
 
-TEST_CASE("AunBackend: operator entry can replace a discovered one",
-          "[econet][aun][backend][peer-source]") {
+TEST_CASE("AunBackend: replace_peers installs the whole routing view atomically",
+          "[econet][aun][backend]") {
     AunBackend backend(0, 1, 0);
     REQUIRE(backend.is_connected());
 
-    backend.add_peer(0, 254, loopback_ip(), 40001, PeerSource::Discovered);
-    backend.add_peer(0, 254, loopback_ip(), 40002,
-                     PeerSource::OperatorConfigured);
-    auto peers = backend.list_peers();
-    REQUIRE(peers.size() == 1);
-    CHECK(peers[0].port == 40002);
-    CHECK(backend.is_operator_configured(0, 254));
-}
+    backend.add_peer(0, 254, loopback_ip(), 40001);  // will be replaced
 
-TEST_CASE("AunBackend: remove_peer clears operator-configured flag",
-          "[econet][aun][backend][peer-source]") {
-    AunBackend backend(0, 1, 0);
-    backend.add_peer(0, 254, loopback_ip(), 40001,
-                     PeerSource::OperatorConfigured);
-    backend.remove_peer(0, 254);
-    CHECK_FALSE(backend.is_operator_configured(0, 254));
-    CHECK(backend.peer_count() == 0);
-    // After removal, a discovered add succeeds.
-    backend.add_peer(0, 254, loopback_ip(), 40050, PeerSource::Discovered);
-    CHECK(backend.peer_count() == 1);
-    CHECK_FALSE(backend.is_operator_configured(0, 254));
-}
-
-TEST_CASE("AunBackend: list_peers reports each entry's source",
-          "[econet][aun][backend][peer-source]") {
-    AunBackend backend(0, 1, 0);
-    backend.add_peer(0, 100, loopback_ip(), 40001,
-                     PeerSource::OperatorConfigured);
-    backend.add_peer(0, 200, loopback_ip(), 40002, PeerSource::Discovered);
+    std::array<AunBackend::PeerRoute, 2> routes{{
+        {0, 100, loopback_ip(), 50001},
+        {0, 200, loopback_ip(), 50002},
+    }};
+    backend.replace_peers(routes);
 
     auto peers = backend.list_peers();
     REQUIRE(peers.size() == 2);
-
-    PeerSource op_source = PeerSource::Discovered;
-    PeerSource disc_source = PeerSource::OperatorConfigured;
+    bool saw_100 = false, saw_200 = false;
     for (const auto& p : peers) {
-        if (p.stn == 100) op_source = p.source;
-        else if (p.stn == 200) disc_source = p.source;
+        if (p.stn == 100) { saw_100 = true; CHECK(p.port == 50001); }
+        if (p.stn == 200) { saw_200 = true; CHECK(p.port == 50002); }
     }
-    CHECK(op_source == PeerSource::OperatorConfigured);
-    CHECK(disc_source == PeerSource::Discovered);
+    CHECK(saw_100);
+    CHECK(saw_200);
+    CHECK(backend.peer_endpoint(0, 254) == std::nullopt);  // old entry gone
+
+    // An empty replacement clears the table.
+    backend.replace_peers(std::span<const AunBackend::PeerRoute>{});
+    CHECK(backend.peer_count() == 0);
 }
 
 TEST_CASE("AunBackend: local_port returns specified port when non-zero",

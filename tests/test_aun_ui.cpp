@@ -23,6 +23,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AunEconetTransportExtension.hpp"
+#include "AunPeerSet.hpp"
 #include "AunUi.hpp"
 #include "beebium/econet/AunBackend.hpp"
 #include "beebium/extension/ExtensionUi.hpp"
@@ -114,7 +115,8 @@ TEST_CASE("AunUi build_view (no peers) emits the empty placeholder",
 TEST_CASE("AunUi build_view (one peer) emits one labelled row",
           "[aun][ui]") {
     AunUiFixture fixture;
-    fixture.backend().add_peer(0, 254, make_ip(127, 0, 0, 1), 32768);
+    fixture.extension().peer_set().set_peer(
+        0, 254, make_ip(127, 0, 0, 1), 32768, beebium::AunPeerProvenance::Launch);
 
     auto* ui = fixture.extension().ui();
     beebium::View view;
@@ -128,16 +130,16 @@ TEST_CASE("AunUi build_view (one peer) emits one labelled row",
     REQUIRE(peer.id() == "peer.0.254");
     REQUIRE(peer.control_case() == beebium::Control::kLabel);
     REQUIRE(peer.label().text() == "0.254  127.0.0.1:32768");
-    // Operator-configured peers carry no secondary caption -- the
-    // empty-string default communicates "no provenance marker".
-    CHECK(peer.label().secondary_text().empty());
+    // Every provenance now carries a caption; a launch entry names "launch".
+    CHECK(peer.label().secondary_text() == "launch");
 }
 
 TEST_CASE("AunUi build_view marks discovered peers via secondary_text",
           "[aun][ui]") {
     AunUiFixture fixture;
-    fixture.backend().add_peer(0, 254, make_ip(127, 0, 0, 1), 32768,
-                               beebium::PeerSource::Discovered);
+    fixture.extension().peer_set().set_peer(
+        0, 254, make_ip(127, 0, 0, 1), 32768,
+        beebium::AunPeerProvenance::Discovered);
 
     auto* ui = fixture.extension().ui();
     beebium::View view;
@@ -157,8 +159,12 @@ TEST_CASE("AunUi build_view marks discovered peers via secondary_text",
 TEST_CASE("AunUi build_view (multiple peers) emits one row per peer",
           "[aun][ui]") {
     AunUiFixture fixture;
-    fixture.backend().add_peer(0, 253, make_ip(192, 168, 1, 5), 32769);
-    fixture.backend().add_peer(0, 254, make_ip(127, 0, 0, 1), 32768);
+    fixture.extension().peer_set().set_peer(
+        0, 253, make_ip(192, 168, 1, 5), 32769,
+        beebium::AunPeerProvenance::Launch);
+    fixture.extension().peer_set().set_peer(
+        0, 254, make_ip(127, 0, 0, 1), 32768,
+        beebium::AunPeerProvenance::Launch);
 
     auto* ui = fixture.extension().ui();
     beebium::View view;
@@ -168,7 +174,7 @@ TEST_CASE("AunUi build_view (multiple peers) emits one row per peer",
     REQUIRE(peers != nullptr);
     REQUIRE(peers->group().controls_size() == 2);
 
-    // Order is whatever AunBackend::list_peers() returns -- we don't
+    // Order is whatever AunPeerSet::list_peers() returns -- we don't
     // promise a sort order, but each id and label must match its peer.
     bool saw_253 = false;
     bool saw_254 = false;

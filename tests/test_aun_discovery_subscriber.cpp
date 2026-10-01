@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AunDiscoverySubscriber.hpp"
+#include "AunPeerSet.hpp"
 
 #include <beebium/discovery/Browser.hpp>
 #include <beebium/econet/AunBackend.hpp>
@@ -124,25 +125,25 @@ TEST_CASE("AunDiscoverySubscriber::parse_txt: rejects out-of-range bytes",
 
 TEST_CASE("AunDiscoverySubscriber: adds peer on inject_added",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(/*local_net=*/0, /*local_stn=*/1, 0);
-    REQUIRE(backend.is_connected());
-    AunDiscoverySubscriber subscriber(backend, /*local_stn=*/1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, /*local_stn=*/1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("Beebium 0.254", 0, 254, 32768));
 
-    auto peers = backend.list_peers();
-    REQUIRE(peers.size() == 1);
-    CHECK(peers[0].net == 0);
-    CHECK(peers[0].stn == 254);
-    CHECK(peers[0].port == 32768);
-    CHECK_FALSE(backend.is_operator_configured(0, 254));
+    auto list = peers.list_peers();
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].net == 0);
+    CHECK(list[0].stn == 254);
+    CHECK(list[0].port == 32768);
+    CHECK_FALSE(peers.is_operator_configured(0, 254));
 }
 
 TEST_CASE("AunDiscoverySubscriber: skips own announcement",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(/*local_net=*/3, /*local_stn=*/254, 0);
-    AunDiscoverySubscriber subscriber(backend, /*local_stn=*/254,
+    AunPeerSet peers;
+    peers.set_local_net(3);
+    AunDiscoverySubscriber subscriber(peers, /*local_stn=*/254,
                                       std::make_unique<FakeBrowser>(),
                                       /*own_identity=*/"our-uuid");
 
@@ -152,49 +153,49 @@ TEST_CASE("AunDiscoverySubscriber: skips own announcement",
         make_service("Beebium 3.254 (2)", 3, 254, 32768,
                      htonl(INADDR_LOOPBACK), "our-uuid"));
 
-    CHECK(backend.peer_count() == 0);
-    CHECK(backend.station_collisions().count == 0);  // not a collision -- it's us
+    CHECK(peers.peer_count() == 0);
+    CHECK(peers.station_collisions().count == 0);  // not a collision -- it's us
 }
 
 TEST_CASE("AunDiscoverySubscriber: operator entry blocks discovered overwrite",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(0, 1, 0);
-    backend.add_peer(0, 254, loopback_ip(), 40001,
-                     PeerSource::OperatorConfigured);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    peers.set_peer(0, 254, loopback_ip(), 40001,
+                     AunPeerProvenance::Launch);
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("Beebium 0.254", 0, 254, 50001));
 
-    auto peers = backend.list_peers();
-    REQUIRE(peers.size() == 1);
+    auto list = peers.list_peers();
+    REQUIRE(list.size() == 1);
     // Operator's port stays.
-    CHECK(peers[0].port == 40001);
-    CHECK(backend.is_operator_configured(0, 254));
+    CHECK(list[0].port == 40001);
+    CHECK(peers.is_operator_configured(0, 254));
 }
 
 TEST_CASE("AunDiscoverySubscriber: removed event drops the discovered peer",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     // A REMOTE peer (non-local IP): mDNS removal drops it, as ever.
     subscriber.inject_added(
         make_service("Beebium 0.254", 0, 254, 32768, nonlocal_ip()));
-    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(peers.peer_count() == 1);
 
     subscriber.inject_removed("Beebium 0.254");
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: removed event leaves operator peer alone",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(0, 1, 0);
-    backend.add_peer(0, 254, loopback_ip(), 40001,
-                     PeerSource::OperatorConfigured);
+    AunPeerSet peers;
+    peers.set_peer(0, 254, loopback_ip(), 40001,
+                     AunPeerProvenance::Launch);
 
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     // Pretend discovery saw the peer (operator entry blocks the add,
@@ -203,15 +204,15 @@ TEST_CASE("AunDiscoverySubscriber: removed event leaves operator peer alone",
     // the operator-survives behaviour: an injected remove for an
     // unknown name is harmless.)
     subscriber.inject_removed("Beebium 0.254");
-    auto peers = backend.list_peers();
-    REQUIRE(peers.size() == 1);
-    CHECK(peers[0].port == 40001);
+    auto list = peers.list_peers();
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].port == 40001);
 }
 
 TEST_CASE("AunDiscoverySubscriber: malformed TXT does nothing",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     DiscoveredService svc;
@@ -221,24 +222,24 @@ TEST_CASE("AunDiscoverySubscriber: malformed TXT does nothing",
     // No TXT records -- parse_txt rejects.
     subscriber.inject_added(svc);
 
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: missing IPv4 address is skipped",
           "[aun][discovery][subscriber]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     auto svc = make_service("v6only", 0, 254, 32768, /*ip=*/0);
     subscriber.inject_added(svc);
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: on_peers_changed fires on add and remove",
           "[aun][discovery][subscriber][callback]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     int call_count = 0;
@@ -257,11 +258,11 @@ TEST_CASE("AunDiscoverySubscriber: on_peers_changed skipped when operator pinned
           "[aun][discovery][subscriber][callback]") {
     // Operator already pinned this peer, so add_peer is a no-op --
     // and the UI dirty-bump would be misleading (nothing changed).
-    AunBackend backend(0, 1, 0);
-    backend.add_peer(0, 254, loopback_ip(), 40001,
-                     PeerSource::OperatorConfigured);
+    AunPeerSet peers;
+    peers.set_peer(0, 254, loopback_ip(), 40001,
+                     AunPeerProvenance::Launch);
 
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
     int call_count = 0;
     subscriber.set_on_peers_changed([&] { ++call_count; });
@@ -272,13 +273,13 @@ TEST_CASE("AunDiscoverySubscriber: on_peers_changed skipped when operator pinned
 
 TEST_CASE("AunDiscoverySubscriber: on_peers_changed not invoked for self",
           "[aun][discovery][subscriber][callback]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
     int call_count = 0;
     subscriber.set_on_peers_changed([&] { ++call_count; });
 
-    // Our own announcement: same (net, stn) as backend.
+    // Our own announcement: same (net, stn) as the peer set's local station.
     subscriber.inject_added(make_service("Beebium 0.1", 0, 1, 32768));
     CHECK(call_count == 0);
 }
@@ -287,23 +288,23 @@ TEST_CASE("AunDiscoverySubscriber: set_local_station updates the self-filter",
           "[aun][discovery][subscriber]") {
     // We are station 0.80. Use remote (non-local) endpoints so the same-host
     // sweep does not enter into it.
-    AunBackend backend(0, 80, 0);
-    AunDiscoverySubscriber subscriber(backend, 80,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80,
                                       std::make_unique<FakeBrowser>());
 
     // An advertisement for 0.80 is us -> self-filtered.
     subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40001, nonlocal_ip()));
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 
     // The guest's station changes to 81. Now 0.80 is a different machine and
     // must be accepted as a peer, while 0.81 is us and must be filtered.
     subscriber.set_local_station(81);
 
     subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40001, nonlocal_ip()));
-    CHECK(backend.peer_count() == 1);
+    CHECK(peers.peer_count() == 1);
 
     subscriber.inject_added(make_service("Beebium 0.81", 0, 81, 40002, nonlocal_ip()));
-    CHECK(backend.peer_count() == 1);  // 0.81 is now us -> still filtered
+    CHECK(peers.peer_count() == 1);  // 0.81 is now us -> still filtered
 }
 
 // =============================================================================
@@ -319,23 +320,23 @@ TEST_CASE("AunDiscoverySubscriber: same-host peer survives mDNS removal (NIC tog
     REQUIRE(peer->is_connected());
     const uint16_t peer_port = peer->local_port();
 
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     // Discovered on loopback (same-host) -> add_peer reroutes to 127.0.0.1.
     subscriber.inject_added(
         make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
-    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(peers.peer_count() == 1);
 
     // mDNS withdraws the advertisement (Wi-Fi/Ethernet toggle). The peer is
     // still up on loopback, so it must be KEPT, not dropped.
     subscriber.inject_removed("Beebium 0.254");
-    CHECK(backend.peer_count() == 1);
+    CHECK(peers.peer_count() == 1);
 
     // A liveness sweep while the peer is still bound leaves it in place.
     subscriber.sweep_once();
-    CHECK(backend.peer_count() == 1);
+    CHECK(peers.peer_count() == 1);
 }
 
 TEST_CASE("AunDiscoverySubscriber: same-host peer reaped when its server exits",
@@ -344,17 +345,17 @@ TEST_CASE("AunDiscoverySubscriber: same-host peer reaped when its server exits",
     REQUIRE(peer->is_connected());
     const uint16_t peer_port = peer->local_port();
 
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
     subscriber.inject_added(
         make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
-    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(peers.peer_count() == 1);
 
     // Peer's server exits -> its loopback port frees. The sweep must reap it.
     peer.reset();
     subscriber.sweep_once();
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: same-host re-add after removal reconciles in place",
@@ -363,20 +364,20 @@ TEST_CASE("AunDiscoverySubscriber: same-host re-add after removal reconciles in 
     REQUIRE(peer->is_connected());
     const uint16_t peer_port = peer->local_port();
 
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(
         make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
     subscriber.inject_removed("Beebium 0.254");        // kept (same-host)
-    CHECK(backend.peer_count() == 1);
+    CHECK(peers.peer_count() == 1);
 
     // Wi-Fi returns -> mDNS re-adds the same instance. Must update in place,
     // not create a duplicate peer row.
     subscriber.inject_added(
         make_service("Beebium 0.254", 0, 254, peer_port, loopback_ip()));
-    CHECK(backend.peer_count() == 1);
+    CHECK(peers.peer_count() == 1);
 }
 
 // =============================================================================
@@ -387,87 +388,87 @@ TEST_CASE("AunDiscoverySubscriber: same-host re-add after removal reconciles in 
 
 TEST_CASE("AunDiscoverySubscriber: a colliding station is rejected and reported",
           "[aun][discovery][subscriber][collision]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     // Incumbent: station 0.254 from machine A (remote endpoint).
     subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
-    REQUIRE(backend.peer_count() == 1);
-    REQUIRE(backend.peer_endpoint(0, 254).has_value());
-    CHECK(backend.peer_endpoint(0, 254)->second == 40001);
+    REQUIRE(peers.peer_count() == 1);
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == 40001);
 
     // Newcomer B advertises the same 0.254 at a different endpoint -> collision.
     subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
                                          htonl(0xCB007102u)));
 
     // Incumbent A is kept; B is not adopted; the collision is reported.
-    CHECK(backend.peer_count() == 1);
-    REQUIRE(backend.peer_endpoint(0, 254).has_value());
-    CHECK(backend.peer_endpoint(0, 254)->second == 40001);
-    auto report = backend.station_collisions();
+    CHECK(peers.peer_count() == 1);
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == 40001);
+    auto report = peers.station_collisions();
     CHECK(report.count == 1);
     CHECK(report.last.find("0.254") != std::string::npos);
 }
 
 TEST_CASE("AunDiscoverySubscriber: withdrawing a colliding advertisement leaves the incumbent",
           "[aun][discovery][subscriber][collision]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
     subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
                                          htonl(0xCB007102u)));
-    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(peers.peer_count() == 1);
 
     // B (the rejected collider) is withdrawn -- it never owned the entry, so
     // this must remove nothing.
     subscriber.inject_removed("B 0.254");
-    CHECK(backend.peer_count() == 1);
-    REQUIRE(backend.peer_endpoint(0, 254).has_value());
-    CHECK(backend.peer_endpoint(0, 254)->second == 40001);  // still A
+    CHECK(peers.peer_count() == 1);
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == 40001);  // still A
 
     // A's own withdrawal removes A.
     subscriber.inject_removed("A 0.254");
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: same-instance re-advertisement updates in place",
           "[aun][discovery][subscriber][collision]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
-    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(peers.peer_count() == 1);
 
     // The SAME instance re-advertises at a new port (an ephemeral-port change):
     // not a collision; the endpoint updates in place with no duplicate.
     subscriber.inject_added(make_service("A 0.254", 0, 254, 40009, nonlocal_ip()));
-    CHECK(backend.peer_count() == 1);
-    REQUIRE(backend.peer_endpoint(0, 254).has_value());
-    CHECK(backend.peer_endpoint(0, 254)->second == 40009);
-    CHECK(backend.station_collisions().count == 0);
+    CHECK(peers.peer_count() == 1);
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == 40009);
+    CHECK(peers.station_collisions().count == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: a parked collider is adopted when the incumbent leaves",
           "[aun][discovery][subscriber][collision]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
     subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
                                          htonl(0xCB007102u)));  // refused -> parked
-    REQUIRE(backend.peer_count() == 1);
-    CHECK(backend.peer_endpoint(0, 254)->second == 40001);  // A holds it
+    REQUIRE(peers.peer_count() == 1);
+    CHECK(peers.resolve(0, 254)->port == 40001);  // A holds it
 
     // A leaves -> the parked newcomer B is adopted for 0.254.
     subscriber.inject_removed("A 0.254");
-    REQUIRE(backend.peer_count() == 1);
-    REQUIRE(backend.peer_endpoint(0, 254).has_value());
-    CHECK(backend.peer_endpoint(0, 254)->second == 50002);  // now B
+    REQUIRE(peers.peer_count() == 1);
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == 50002);  // now B
 }
 
 TEST_CASE("AunDiscoverySubscriber: a parked collider is adopted after the incumbent is reaped",
@@ -481,28 +482,28 @@ TEST_CASE("AunDiscoverySubscriber: a parked collider is adopted after the incumb
     REQUIRE(peer_b->is_connected());
     const uint16_t port_b = peer_b->local_port();
 
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("A 0.254", 0, 254, port_a, loopback_ip()));
-    REQUIRE(backend.peer_count() == 1);
+    REQUIRE(peers.peer_count() == 1);
     subscriber.inject_added(make_service("B 0.254", 0, 254, port_b, loopback_ip()));
-    REQUIRE(backend.peer_count() == 1);
-    CHECK(backend.peer_endpoint(0, 254)->second == port_a);  // still A
+    REQUIRE(peers.peer_count() == 1);
+    CHECK(peers.resolve(0, 254)->port == port_a);  // still A
 
     // A's server exits (free its port); the sweep reaps A and adopts B.
     peer_a.reset();
     subscriber.sweep_once();
-    REQUIRE(backend.peer_count() == 1);
-    REQUIRE(backend.peer_endpoint(0, 254).has_value());
-    CHECK(backend.peer_endpoint(0, 254)->second == port_b);  // now B
+    REQUIRE(peers.peer_count() == 1);
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == port_b);  // now B
 }
 
 TEST_CASE("AunDiscoverySubscriber: a parked collider withdrawn before the incumbent leaves is not adopted",
           "[aun][discovery][subscriber][collision]") {
-    AunBackend backend(0, 1, 0);
-    AunDiscoverySubscriber subscriber(backend, 1,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
                                       std::make_unique<FakeBrowser>());
 
     subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
@@ -512,13 +513,13 @@ TEST_CASE("AunDiscoverySubscriber: a parked collider withdrawn before the incumb
 
     // A leaves: nothing is waiting to be adopted.
     subscriber.inject_removed("A 0.254");
-    CHECK(backend.peer_count() == 0);
+    CHECK(peers.peer_count() == 0);
 }
 
 TEST_CASE("AunDiscoverySubscriber: a different instance claiming our own station is reported",
           "[aun][discovery][subscriber][collision]") {
-    AunBackend backend(0, 80, 0);  // this machine is 0.80
-    AunDiscoverySubscriber subscriber(backend, 80,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80,
                                       std::make_unique<FakeBrowser>(),
                                       /*own_identity=*/"our-uuid");
 
@@ -526,15 +527,15 @@ TEST_CASE("AunDiscoverySubscriber: a different instance claiming our own station
     // instance name -- is recognised by our impl-identity and skipped silently.
     subscriber.inject_added(make_service("Beebium 0.80 (2)", 0, 80, 40000,
                                          nonlocal_ip(), "our-uuid"));
-    CHECK(backend.peer_count() == 0);
-    CHECK(backend.station_collisions().count == 0);
+    CHECK(peers.peer_count() == 0);
+    CHECK(peers.station_collisions().count == 0);
 
     // A DIFFERENT instance (a different identity) claiming 0.80 is flagged as a
     // collision, and never adopted -- we do not yield our own number.
     subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 50000,
                                          nonlocal_ip(), "other-uuid"));
-    CHECK(backend.peer_count() == 0);
-    auto report = backend.station_collisions();
+    CHECK(peers.peer_count() == 0);
+    auto report = peers.station_collisions();
     CHECK(report.count == 1);
     CHECK(report.last.find("this machine") != std::string::npos);
 }
@@ -543,10 +544,10 @@ TEST_CASE("AunDiscoverySubscriber: with no identity, our number is skipped silen
           "[aun][discovery][subscriber][collision]") {
     // A subscriber with no own identity cannot tell its reflection from another
     // machine, so it falls back to the conservative silent self-filter.
-    AunBackend backend(0, 80, 0);
-    AunDiscoverySubscriber subscriber(backend, 80,
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80,
                                       std::make_unique<FakeBrowser>());
     subscriber.inject_added(make_service("Beebium 0.80", 0, 80, 40000, nonlocal_ip()));
-    CHECK(backend.peer_count() == 0);
-    CHECK(backend.station_collisions().count == 0);
+    CHECK(peers.peer_count() == 0);
+    CHECK(peers.station_collisions().count == 0);
 }

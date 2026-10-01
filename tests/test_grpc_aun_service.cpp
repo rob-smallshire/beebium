@@ -149,7 +149,7 @@ TEST_CASE("AunService AddPeer then ListPeers", "[grpc][aun][extension-rpc]") {
         REQUIRE(peer.stn() == 254);
         REQUIRE(peer.ip_address() == "127.0.0.1");
         REQUIRE(peer.port() == 40001);
-        CHECK(peer.source() == beebium::AUN_PEER_SOURCE_OPERATOR_CONFIGURED);
+        CHECK(peer.source() == beebium::AUN_PEER_SOURCE_API);
     }
 }
 
@@ -157,12 +157,11 @@ TEST_CASE("AunService ListPeers reports source for discovered entries",
           "[grpc][aun][extension-rpc]") {
     AunServiceFixture fixture;
 
-    // Inject a discovered peer directly through the backend, mimicking what
+    // Inject a discovered peer through the transport's peer set, mimicking what
     // AunDiscoverySubscriber would do on receipt of an mDNS announcement.
-    auto* backend = fixture.extension().backend();
-    REQUIRE(backend != nullptr);
-    backend->add_peer(0, 200, htonl(INADDR_LOOPBACK), 50001,
-                      beebium::PeerSource::Discovered);
+    fixture.extension().peer_set().set_peer(
+        0, 200, htonl(INADDR_LOOPBACK), 50001,
+        beebium::AunPeerProvenance::Discovered);
 
     beebium::AunListPeersRequest request;
     beebium::AunListPeersResponse response;

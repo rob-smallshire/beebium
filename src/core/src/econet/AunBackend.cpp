@@ -484,7 +484,7 @@ bool AunBackend::is_connected() const {
 }
 
 void AunBackend::add_peer(uint8_t net, uint8_t stn, uint32_t ip_addr,
-                          uint16_t port, PeerSource source) {
+                          uint16_t port) {
     // Same-host peer -> route over loopback. On a multi-homed host (e.g. Wi-Fi
     // + Ethernet on one subnet) the OS may choose an egress source IP that
     // differs from the peer's advertised address, so an inbound packet's
@@ -515,13 +515,6 @@ void AunBackend::add_peer(uint8_t net, uint8_t stn, uint32_t ip_addr,
     auto fwd_key = make_forward_key(net, stn);
     std::lock_guard lock(peer_table_mutex_);
 
-    // Operator entries always win: a Discovered call must not
-    // overwrite an existing operator-configured entry.
-    if (source == PeerSource::Discovered
-            && operator_configured_keys_.count(fwd_key) == 1) {
-        return;
-    }
-
     // If we're replacing an existing entry, clear its reverse-map
     // mapping first so a stale (ip, port) doesn't keep resolving to
     // this (net, stn) pair after the endpoint changes.
@@ -535,10 +528,6 @@ void AunBackend::add_peer(uint8_t net, uint8_t stn, uint32_t ip_addr,
     forward_map_[fwd_key] = {ip_addr, port};
     auto rev_key = make_reverse_key(ip_addr, port);
     reverse_map_[rev_key] = {net, stn};
-
-    if (source == PeerSource::OperatorConfigured) {
-        operator_configured_keys_.insert(fwd_key);
-    }
 }
 
 void AunBackend::remove_peer(uint8_t net, uint8_t stn) {
@@ -549,7 +538,6 @@ void AunBackend::remove_peer(uint8_t net, uint8_t stn) {
         auto rev_key = make_reverse_key(it->second.first, it->second.second);
         reverse_map_.erase(rev_key);
         forward_map_.erase(it);
-        operator_configured_keys_.erase(fwd_key);
     }
 }
 
@@ -557,7 +545,6 @@ void AunBackend::replace_peers(std::span<const PeerRoute> routes) {
     std::lock_guard lock(peer_table_mutex_);
     forward_map_.clear();
     reverse_map_.clear();
-    operator_configured_keys_.clear();
     for (const auto& route : routes) {
         uint32_t ip_addr = route.ip_addr;
         // Same-host peer -> route over loopback, matching add_peer's rewrite so
@@ -578,12 +565,6 @@ void AunBackend::replace_peers(std::span<const PeerRoute> routes) {
         reverse_map_[make_reverse_key(ip_addr, route.port)] = {route.net,
                                                                route.stn};
     }
-}
-
-bool AunBackend::is_operator_configured(uint8_t net, uint8_t stn) const {
-    auto fwd_key = make_forward_key(net, stn);
-    std::lock_guard lock(peer_table_mutex_);
-    return operator_configured_keys_.count(fwd_key) == 1;
 }
 
 size_t AunBackend::peer_count() const {
@@ -646,15 +627,11 @@ std::vector<PeerInfo> AunBackend::list_peers() const {
     std::vector<PeerInfo> result;
     result.reserve(forward_map_.size());
     for (const auto& [key, endpoint] : forward_map_) {
-        PeerSource source = (operator_configured_keys_.count(key) == 1)
-            ? PeerSource::OperatorConfigured
-            : PeerSource::Discovered;
         result.push_back({
             static_cast<uint8_t>(key >> 8),
             static_cast<uint8_t>(key & 0xFF),
             endpoint.first,
             endpoint.second,
-            source,
         });
     }
     return result;

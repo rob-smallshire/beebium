@@ -35,6 +35,7 @@
 //                                   '.' (inside net.stn and IPv4) or ':'
 //                                   (the top-level arg separator).
 
+#include "AunPeerSet.hpp"
 #include "AunUi.hpp"
 #include "beebium/econet/AunBackend.hpp"
 #include "beebium/extension/EconetTransportExtension.hpp"
@@ -86,10 +87,37 @@ public:
 
     // Non-owning pointer to the AunBackend we constructed. Returns
     // nullptr before create_backend has run or if construction failed
-    // (port=none, bind error). AunService consults this to find its
-    // backend on each RPC; AunUi reads from it to populate the View.
+    // (port=none, bind error). AunUi consults this to decide whether to show
+    // the Connect button and UDP-port line; the peer table itself lives in
+    // peer_set().
     AunBackend* backend() { return backend_; }
     const AunBackend* backend() const { return backend_; }
+
+    // The desired peer world, owned here so it outlives any backend: entries
+    // added before the socket is up survive until create_backend applies them,
+    // and persist across backend recreation (the #55 ownership change). AunUi
+    // and the dispatcher read it; the discovery subscriber writes Discovered
+    // entries to it.
+    AunPeerSet& peer_set() { return peer_set_; }
+    const AunPeerSet& peer_set() const { return peer_set_; }
+
+    // Add or replace an AunService.AddPeer (Api-provenance) entry. Works whether
+    // or not a backend is up: with one, the resolved routing view is applied;
+    // without, the entry waits in the peer set for the next create_backend.
+    void add_api_peer(std::uint8_t net, std::uint8_t stn,
+                      std::uint32_t ip_addr_net_byte_order, std::uint16_t port);
+
+    // Remove the Api-provenance entry for (net, stn). If a lower-precedence
+    // source (a discovered peer, say) also names it, that one becomes the
+    // winner -- removal falls back rather than dropping the station.
+    void remove_api_peer(std::uint8_t net, std::uint8_t stn);
+
+    // Record the desired cable state (AunService.SetConnected). Applied to the
+    // backend immediately when one exists; otherwise remembered and applied at
+    // the next create_backend. Returns true if a backend was present to apply
+    // it to (so the dispatcher can note a deferred request).
+    bool set_desired_connected(bool connected);
+    bool desired_connected() const { return desired_connected_; }
 
     // When there is no working backend, the specific reason -- captured from
     // the failed AunBackend construction, naming the port and the OS cause
@@ -126,6 +154,17 @@ public:
 private:
     AunBackend* backend_ = nullptr;  // non-owning; lives in EconetSocket
     std::string unavailable_reason_;  // why there is no backend (bind failure)
+
+    // The desired peer world. Declared before announcer_/subscriber_ so it is
+    // destroyed AFTER them: the subscriber holds a reference to it and runs
+    // callbacks on the mDNS browser thread, so it must stop before the peer set
+    // goes away (the same reverse-destruction-order argument the backend ref
+    // relies on). Survives backend recreation, carrying Api-provenance entries.
+    AunPeerSet peer_set_;
+    // Desired cable state, applied to the backend when one exists. AUN comes up
+    // connected; SetConnected before the backend is up records the wish here.
+    bool desired_connected_ = true;
+
     std::unique_ptr<AunDispatcher> dispatcher_;  // lazily constructed
     // Owned by the extension so its lifetime ends with the extension.
     // The backend lives inside EconetSocket and outlives us: ServerMain

@@ -191,13 +191,28 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     }
     unavailable_reason_.clear();  // a working backend clears any prior reason
 
+    // Re-seed the launch-scoped layers from the current config: Launch from
+    // --aun map= / the preset, and clear Discovered so a fresh subscriber
+    // repopulates it. The Api (and later MapFile) layers persist across backend
+    // recreation -- a peer added via AunService.AddPeer before the socket came
+    // up, or before a reconnect, survives and is applied here.
+    peer_set_.set_local_net(local_net);
+    peer_set_.clear_provenance(AunPeerProvenance::Launch);
+    peer_set_.clear_provenance(AunPeerProvenance::Discovered);
     auto map_entries = config_list("map");
     auto peers = parse_map(map_entries ? *map_entries : std::span<const std::string>{});
     for (const auto& p : peers) {
-        backend->add_peer(p.net, p.stn, p.ip_addr_net_byte_order, p.port);
+        peer_set_.set_peer(p.net, p.stn, p.ip_addr_net_byte_order, p.port,
+                           AunPeerProvenance::Launch);
     }
 
     backend_ = backend.get();  // non-owning; ownership goes to EconetSocket
+
+    // Bind the peer set to the live socket and push the whole resolved routing
+    // view (Launch + any Api/MapFile already present) to it, then apply the
+    // desired cable state recorded by any SetConnected that arrived early.
+    peer_set_.attach(backend_);
+    backend_->set_connected(desired_connected_);
 
     // Publish a DNS-SD announcement so other AUN-capable peers can
     // discover us without an explicit --aun map= entry. Failure to
@@ -229,7 +244,7 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     // AunService::AddPeer) take precedence over discovered ones --
     // see AunBackend::add_peer's PeerSource handling.
     subscriber_ = std::make_unique<AunDiscoverySubscriber>(
-        *backend, station, nullptr, std::move(machine_uuid));
+        peer_set_, station, nullptr, std::move(machine_uuid));
     // Discovery callbacks fire on the browser's background thread.
     // mark_dirty is atomic; the View is then re-built (and re-pushed
     // to gRPC subscribers) on the ExtensionUiService poll thread,
@@ -276,6 +291,29 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
 
 AunEconetTransportExtension::AunEconetTransportExtension() = default;
 AunEconetTransportExtension::~AunEconetTransportExtension() = default;
+
+void AunEconetTransportExtension::add_api_peer(
+        std::uint8_t net, std::uint8_t stn,
+        std::uint32_t ip_addr_net_byte_order, std::uint16_t port) {
+    // Edits the Api layer of the peer set regardless of whether a backend is
+    // up; if one is attached the resolved routing view is applied immediately.
+    peer_set_.set_peer(net, stn, ip_addr_net_byte_order, port,
+                       AunPeerProvenance::Api);
+}
+
+void AunEconetTransportExtension::remove_api_peer(std::uint8_t net,
+                                                  std::uint8_t stn) {
+    peer_set_.remove_peer(net, stn, AunPeerProvenance::Api);
+}
+
+bool AunEconetTransportExtension::set_desired_connected(bool connected) {
+    desired_connected_ = connected;
+    if (backend_ != nullptr) {
+        backend_->set_connected(connected);
+        return true;
+    }
+    return false;  // remembered; applied at the next create_backend
+}
 
 std::vector<ExtensionRpcDispatcher*> AunEconetTransportExtension::rpc_dispatchers() {
 #ifdef BEEBIUM_BUILD_SERVICE

@@ -12,6 +12,8 @@
 
 #include "AunDiscoverySubscriber.hpp"
 
+#include "AunPeerSet.hpp"
+
 #include <beebium/econet/AunBackend.hpp>
 
 #include <charconv>
@@ -50,11 +52,11 @@ bool parse_byte(const std::string& s, std::uint8_t& out) {
 }  // namespace
 
 AunDiscoverySubscriber::AunDiscoverySubscriber(
-        AunBackend& backend,
+        AunPeerSet& peers,
         std::uint8_t local_stn,
         std::unique_ptr<discovery::Browser> browser,
         std::string own_identity)
-    : backend_(backend)
+    : peers_(peers)
     , local_stn_(local_stn)
     , browser_(browser ? std::move(browser) : discovery::create_browser())
     , own_identity_(std::move(own_identity))
@@ -144,7 +146,7 @@ void AunDiscoverySubscriber::handle_added(
         return;  // Schema invalid -- safer to ignore than to guess.
     }
 
-    const std::uint8_t our_net = backend_.local_net();
+    const std::uint8_t our_net = peers_.local_net();
     const std::uint8_t our_stn = local_stn_.load(std::memory_order_relaxed);
 
     // An advertisement for OUR own (net, stn). Recognise our own announcement
@@ -173,7 +175,7 @@ void AunDiscoverySubscriber::handle_added(
         if (trace_) {
             std::cerr << "AUN RX: " << description << "\n";
         }
-        backend_.note_station_collision(std::move(description));
+        peers_.note_station_collision(std::move(description));
         return;
     }
 
@@ -181,11 +183,11 @@ void AunDiscoverySubscriber::handle_added(
         return;  // No usable endpoint yet (e.g. IPv6-only peer).
     }
 
-    // Skip the change-callback if the operator already pinned this
-    // (net, stn) -- add_peer will refuse to overwrite, so the peer
-    // table didn't actually change.
-    bool operator_pinned =
-        backend_.is_operator_configured(net, stn);
+    // Note whether an operator source already holds this (net, stn): the
+    // discovered entry is still recorded (so it can surface by fall-back if the
+    // operator entry is later removed), but it is shadowed, so the resolved view
+    // does not change and the UI need not be re-rendered.
+    bool operator_pinned = peers_.is_operator_configured(net, stn);
 
     // Same-host? The peer advertised one of THIS host's own IPs, so add_peer
     // will reroute it to loopback. Such a peer's lifetime is governed by the
@@ -226,8 +228,8 @@ void AunDiscoverySubscriber::handle_added(
     }
     if (collision) {
         std::string held = "?";
-        if (auto ep = backend_.peer_endpoint(net, stn)) {
-            held = format_endpoint(ep->first, ep->second);
+        if (auto ep = peers_.resolve(net, stn)) {
+            held = format_endpoint(ep->ip_addr, ep->port);
         }
         std::string description =
             "station " + std::to_string(static_cast<unsigned>(net)) + "." +
@@ -237,12 +239,12 @@ void AunDiscoverySubscriber::handle_added(
         if (trace_) {
             std::cerr << "AUN RX: " << description << "\n";
         }
-        backend_.note_station_collision(std::move(description));
+        peers_.note_station_collision(std::move(description));
         return;  // incumbent kept; newcomer parked as pending
     }
 
-    backend_.add_peer(net, stn, svc.ipv4_addr_net_byte_order, svc.port,
-                      PeerSource::Discovered);
+    peers_.set_peer(net, stn, svc.ipv4_addr_net_byte_order, svc.port,
+                    AunPeerProvenance::Discovered);
 
     {
         std::lock_guard lock(name_map_mutex_);
@@ -279,19 +281,20 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
         name_to_peer_.erase(it);
     }
 
-    // Don't yank an operator-configured entry just because the
-    // discovered shadow went away -- that would surprise an operator
-    // who set the peer manually after the discovery added it.
-    if (backend_.is_operator_configured(ref.net, ref.stn)) return;
+    // Only drop OUR discovered entry, and only if it is still the one we added:
+    // if a different, still-live station now holds this (net, stn)'s Discovered
+    // layer, removing on the collider's withdrawal would orphan the incumbent.
+    // The port discriminates instances (the loopback rewrite preserves it).
+    // Removing the Discovered layer leaves any operator source untouched -- and
+    // if one shadows this station, remove_peer reports no change, so the UI is
+    // not re-rendered and no parked collider is adopted.
+    auto disc = peers_.endpoint_in(ref.net, ref.stn,
+                                   AunPeerProvenance::Discovered);
+    if (!disc || disc->port != ref.port) return;
 
-    // Only drop the backend entry if it still belongs to THIS instance's
-    // endpoint. If a different, still-live station now holds this (net, stn),
-    // removing on the collider's withdrawal would orphan the incumbent. The
-    // port discriminates instances (the loopback rewrite preserves it).
-    auto endpoint = backend_.peer_endpoint(ref.net, ref.stn);
-    if (!endpoint || endpoint->second != ref.port) return;
-
-    backend_.remove_peer(ref.net, ref.stn);
+    bool changed = peers_.remove_peer(ref.net, ref.stn,
+                                      AunPeerProvenance::Discovered);
+    if (!changed) return;  // shadowed by an operator source; nothing surfaced
     notify_peers_changed();
 
     // The number just freed: adopt the most recent advertisement we parked for
@@ -332,11 +335,13 @@ void AunDiscoverySubscriber::sweep_once() {
             // over-engineering (e.g. a protocol ping) to close.
             continue;
         }
-        // Port is free -> the same-host peer's server has exited. Reap it.
-        // (Take peer_table_ via remove_peer BEFORE re-taking name_map_, matching
-        //  handle_added's lock order; the two locks are never held together.)
-        if (!backend_.is_operator_configured(c.net, c.stn)) {
-            backend_.remove_peer(c.net, c.stn);
+        // Port is free -> the same-host peer's server has exited. Reap its
+        // Discovered entry. (Take the peer set's lock via remove_peer BEFORE
+        // re-taking name_map_, matching handle_added's lock order; the two are
+        // never held together.) remove_peer touches only the Discovered layer,
+        // so an operator source for this station survives; it reports whether
+        // the resolved winner changed.
+        if (peers_.remove_peer(c.net, c.stn, AunPeerProvenance::Discovered)) {
             changed = true;
         }
         {
@@ -374,7 +379,7 @@ void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
     }
     if (!found) return;
 
-    backend_.add_peer(net, stn, ref.ip, ref.port, PeerSource::Discovered);
+    peers_.set_peer(net, stn, ref.ip, ref.port, AunPeerProvenance::Discovered);
     {
         std::lock_guard lock(name_map_mutex_);
         name_to_peer_[name] = PeerRef{net, stn, ref.same_host, ref.port};

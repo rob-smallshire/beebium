@@ -34,9 +34,9 @@ constexpr const char* CONTROL_UDP_PORT       = "udp_port";
 constexpr const char* CONTROL_PEERS_GROUP    = "peers_group";
 constexpr const char* CONTROL_NO_PEERS       = "no_peers";
 
-// Format an IPv4 address (in network byte order, as carried in PeerInfo)
-// to dotted-quad. Mirrors the helper in EconetService.hpp's anonymous
-// namespace; reproduced here so AunUi doesn't depend on the service
+// Format an IPv4 address (in network byte order, as carried in an
+// AunPeerEntry) to dotted-quad. Mirrors the helper in EconetService.hpp's
+// anonymous namespace; reproduced here so AunUi doesn't depend on the service
 // layer.
 std::string format_ip(uint32_t ip_addr) {
     char buf[INET_ADDRSTRLEN];
@@ -50,11 +50,10 @@ std::string format_ip(uint32_t ip_addr) {
 
 // Compose the per-peer primary label, e.g. "0.254  127.0.0.1:32768".
 // Two spaces between the Econet address and the IP endpoint matches
-// the hardcoded SwiftUI it replaces. Provenance (operator vs mDNS)
-// is carried separately on Label::secondary_text so the renderer can
-// style it as a muted caption rather than blending it into the
-// primary text.
-std::string format_peer_primary(const PeerInfo& peer) {
+// the hardcoded SwiftUI it replaces. Provenance is carried separately
+// on Label::secondary_text so the renderer can style it as a muted
+// caption rather than blending it into the primary text.
+std::string format_peer_primary(const AunPeerEntry& peer) {
     std::string out;
     out += std::to_string(static_cast<unsigned>(peer.net));
     out += '.';
@@ -66,13 +65,16 @@ std::string format_peer_primary(const PeerInfo& peer) {
     return out;
 }
 
-// Caption for the source of a peer. Operator-configured peers get
-// no caption (they're the implicit default); discovered peers carry
-// "mDNS" so the operator can tell at a glance which entries came
-// from auto-discovery vs --aun map= without having to consult the
-// typed AunService::ListPeers RPC.
-std::string format_peer_secondary(const PeerInfo& peer) {
-    if (peer.source == PeerSource::Discovered) return "mDNS";
+// Caption naming where a peer came from, so the operator can tell at a glance
+// which entries are launch config, runtime API adds, the map file, or
+// auto-discovery, without consulting the typed AunService::ListPeers RPC.
+std::string format_peer_secondary(const AunPeerEntry& peer) {
+    switch (peer.provenance) {
+        case AunPeerProvenance::Launch:     return "launch";
+        case AunPeerProvenance::Api:        return "API";
+        case AunPeerProvenance::MapFile:    return "map file";
+        case AunPeerProvenance::Discovered: return "mDNS";
+    }
     return "";
 }
 
@@ -133,7 +135,7 @@ void AunUi::build_view(View* out) const {
         return;
     }
 
-    auto peers = backend->list_peers();
+    auto peers = ext_.peer_set().list_peers();
     if (peers.empty()) {
         auto* no_peers = peers_group->add_controls();
         no_peers->set_id(CONTROL_NO_PEERS);

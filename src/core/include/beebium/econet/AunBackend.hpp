@@ -36,27 +36,22 @@
 
 namespace beebium {
 
-// Where a peer entry came from. Used by the discovery subscriber to
-// avoid overwriting an operator-configured entry with a discovered
-// one (operator config wins -- see docs/discussion/aun-mdns-peer-discovery.md).
-enum class PeerSource {
-    OperatorConfigured,
-    Discovered,
-};
-
-// Information about a configured peer in the AUN peer table.
+// Information about a peer in the AUN routing table. Provenance lives in the
+// AUN transport's AunPeerSet, not here -- the backend holds only the resolved
+// routing view.
 struct PeerInfo {
     uint8_t net;
     uint8_t stn;
     uint32_t ip_addr;   // Network byte order
     uint16_t port;      // Host byte order
-    PeerSource source = PeerSource::OperatorConfigured;
 };
 
 // UDP transport backend implementing the AUN (Acorn Universal Networking) protocol.
 //
-// Sends and receives AUN-formatted UDP datagrams. Peer addresses are configured
-// explicitly via add_peer() — there is no auto-discovery in this implementation.
+// Sends and receives AUN-formatted UDP datagrams. Its routing view is set by
+// the AUN transport extension's AunPeerSet via replace_peers() (and add_peer()
+// for direct callers and tests); peer discovery and source precedence live in
+// that peer set, above the backend.
 //
 // The constructor creates and binds a UDP socket to the specified local port.
 // If socket creation or binding fails, the backend enters a disconnected state
@@ -113,15 +108,12 @@ public:
     // is uncontended in steady-state (peer changes are rare); the
     // tax buys us correctness for the multi-writer case.
 
-    // Add a peer mapping: Econet address (net, stn) <-> UDP endpoint (ip_addr, port).
-    // ip_addr is in network byte order. port is in host byte order.
-    //
-    // If the (net, stn) pair already has an OperatorConfigured entry
-    // and the caller is a Discovered source, the request is silently
-    // dropped: operator config always wins. Re-adding an entry from
-    // the same source updates its endpoint.
-    void add_peer(uint8_t net, uint8_t stn, uint32_t ip_addr, uint16_t port,
-                  PeerSource source = PeerSource::OperatorConfigured);
+    // Add or replace a single peer mapping: Econet address (net, stn) <-> UDP
+    // endpoint (ip_addr network byte order, port host byte order). A same-host
+    // endpoint is rewritten to loopback. Re-adding (net, stn) updates its
+    // endpoint (last writer wins). Direct callers and tests use this; the AUN
+    // transport applies its resolved set through replace_peers instead.
+    void add_peer(uint8_t net, uint8_t stn, uint32_t ip_addr, uint16_t port);
 
     // Remove a peer mapping by Econet address.
     void remove_peer(uint8_t net, uint8_t stn);
@@ -142,11 +134,7 @@ public:
     // peers; the backend itself no longer ranks sources.
     void replace_peers(std::span<const PeerRoute> routes);
 
-    // True if (net, stn) has an OperatorConfigured entry. Used by
-    // the discovery subscriber to skip peers it must not overwrite.
-    bool is_operator_configured(uint8_t net, uint8_t stn) const;
-
-    // Number of configured peers.
+    // Number of peers in the routing view.
     size_t peer_count() const;
 
     // The local UDP port this backend is bound to.
@@ -248,16 +236,12 @@ private:
     uint32_t next_handle_ = 0;
     uint32_t last_received_handle_ = 0;
 
-    // Peer table: bidirectional mapping between Econet addresses and UDP endpoints.
+    // Peer table: bidirectional mapping between Econet addresses and UDP
+    // endpoints -- the resolved routing view, set by the AUN transport.
     // Forward: (net << 8 | stn) -> (ip_addr, port)
     // Reverse: (ip_addr << 16 | port) -> (net, stn)
-    // operator_configured_keys_: forward keys whose entries came from
-    //   the operator (CLI / preset / AunService::AddPeer); discovered
-    //   entries don't appear here. Used by the source-precedence rule
-    //   in add_peer.
     std::unordered_map<uint16_t, std::pair<uint32_t, uint16_t>> forward_map_;
     std::unordered_map<uint64_t, std::pair<uint8_t, uint8_t>> reverse_map_;
-    std::unordered_set<uint16_t> operator_configured_keys_;
     mutable std::mutex peer_table_mutex_;
 
     // Station-number collisions the discovery subscriber rejected (a peer

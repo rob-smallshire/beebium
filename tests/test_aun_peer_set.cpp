@@ -19,6 +19,8 @@
 
 #include "AunPeerSet.hpp"
 
+#include <beebium/econet/AunBackend.hpp>
+
 #ifdef _WIN32
 #include <winsock2.h>
 #else
@@ -226,6 +228,40 @@ TEST_CASE("AunPeerSet: local_net round-trips", "[aun][peer-set]") {
     CHECK(peers.local_net() == 0);
     peers.set_local_net(3);
     CHECK(peers.local_net() == 3);
+}
+
+TEST_CASE("AunPeerSet: attach applies the resolved view to the backend",
+          "[aun][peer-set][attach]") {
+    AunPeerSet peers;
+    peers.set_peer(0, 100, ip(127, 0, 0, 1), 41000, AunPeerProvenance::Api);
+
+    AunBackend backend(0, 1, 0);
+    REQUIRE(backend.is_connected());
+    peers.attach(&backend);
+    CHECK(backend.peer_count() == 1);
+    CHECK(backend.is_reachable(0, 100));
+
+    // A later change is pushed through without re-attaching.
+    peers.set_peer(0, 200, ip(127, 0, 0, 1), 42000, AunPeerProvenance::Launch);
+    CHECK(backend.is_reachable(0, 200));
+    peers.remove_peer(0, 100, AunPeerProvenance::Api);
+    CHECK_FALSE(backend.is_reachable(0, 100));
+}
+
+TEST_CASE("AunPeerSet: re-attaching to a new backend re-applies the whole set",
+          "[aun][peer-set][attach]") {
+    // The backend-recreation path (#55): the peer set outlives a backend, and
+    // attaching to a fresh one re-applies every resolved entry.
+    AunPeerSet peers;
+    peers.set_peer(0, 100, ip(127, 0, 0, 1), 41000, AunPeerProvenance::Api);
+
+    AunBackend first(0, 1, 0);
+    peers.attach(&first);
+    CHECK(first.is_reachable(0, 100));
+
+    AunBackend second(0, 1, 0);
+    peers.attach(&second);
+    CHECK(second.is_reachable(0, 100));  // re-applied to the new backend
 }
 
 TEST_CASE("AunPeerSet: station collisions are counted and the last kept",

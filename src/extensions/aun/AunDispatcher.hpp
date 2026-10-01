@@ -60,12 +60,18 @@ public:
         if (method == "SetConnected") {
             return handle<AunSetConnectedRequest, AunSetConnectedResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
-                    auto* backend = extension_.backend();
-                    if (!backend) {
-                        return fail(resp, "AUN backend is not active");
-                    }
-                    backend->set_connected(req.connected());
+                    // Works whether or not the socket is up: the desired state
+                    // is recorded and applied when the backend comes up. Always
+                    // succeeds; the error field notes a deferred request so a
+                    // caller can tell it took effect now versus later.
+                    bool applied = extension_.set_desired_connected(
+                        req.connected());
                     resp.set_success(true);
+                    if (!applied) {
+                        resp.set_error(
+                            "AUN transport not yet active; connection state "
+                            "will apply when it comes up");
+                    }
                 });
         }
         if (method == "AddPeer") {
@@ -77,12 +83,10 @@ public:
         if (method == "RemovePeer") {
             return handle<AunRemovePeerRequest, AunRemovePeerResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
-                    auto* backend = extension_.backend();
-                    if (!backend) {
-                        return fail(resp, "AUN backend is not active");
-                    }
-                    backend->remove_peer(static_cast<std::uint8_t>(req.net()),
-                                         static_cast<std::uint8_t>(req.stn()));
+                    // Edits the desired peer set whether or not a backend is up.
+                    extension_.remove_api_peer(
+                        static_cast<std::uint8_t>(req.net()),
+                        static_cast<std::uint8_t>(req.stn()));
                     resp.set_success(true);
                 });
         }
@@ -95,14 +99,17 @@ public:
         if (method == "GetStatus") {
             return handle<AunGetStatusRequest, AunGetStatusResponse>(
                 method, request, response, [&](const auto&, auto& resp) {
+                    // peer_count comes from the peer set, so it is reported even
+                    // before a backend exists (peers added ahead of Enable).
+                    resp.set_peer_count(static_cast<std::uint32_t>(
+                        extension_.peer_set().peer_count()));
                     auto* backend = extension_.backend();
                     if (!backend) {
-                        return;  // all-zero defaults
+                        resp.set_connected(extension_.desired_connected());
+                        return;  // local_port stays 0 until the socket is up
                     }
                     resp.set_connected(backend->is_connected());
                     resp.set_local_port(backend->local_port());
-                    resp.set_peer_count(
-                        static_cast<std::uint32_t>(backend->peer_count()));
                 });
         }
         return RpcStatus::error(
@@ -137,12 +144,11 @@ private:
     }
 
     void add_peer(const AunAddPeerRequest& req, AunAddPeerResponse& resp) {
-        auto* backend = extension_.backend();
-        if (!backend) {
-            return fail(resp, "AUN backend is not active");
-        }
-        if (req.net() > 0xFF) {
-            return fail(resp, "net must be 0-255");
+        // Validate against the documented range (net 0..127: the high bit of an
+        // Econet net byte is reserved by the Acorn bridge protocol). Edits the
+        // desired peer set whether or not a backend is up.
+        if (req.net() > 127) {
+            return fail(resp, "net must be 0-127");
         }
         if (req.stn() < 1 || req.stn() > 254) {
             return fail(resp, "stn must be 1-254");
@@ -154,26 +160,30 @@ private:
         std::uint16_t port = (req.port() == 0)
             ? AUN_DEFAULT_PORT
             : static_cast<std::uint16_t>(req.port());
-        backend->add_peer(static_cast<std::uint8_t>(req.net()),
-                          static_cast<std::uint8_t>(req.stn()),
-                          addr.s_addr, port);
+        extension_.add_api_peer(static_cast<std::uint8_t>(req.net()),
+                                static_cast<std::uint8_t>(req.stn()),
+                                addr.s_addr, port);
         resp.set_success(true);
     }
 
-    void list_peers(AunListPeersResponse& resp) {
-        auto* backend = extension_.backend();
-        if (!backend) {
-            return;  // empty list when no backend
+    static AunPeerSource to_proto_source(AunPeerProvenance provenance) {
+        switch (provenance) {
+            case AunPeerProvenance::Launch:     return AUN_PEER_SOURCE_LAUNCH;
+            case AunPeerProvenance::Api:        return AUN_PEER_SOURCE_API;
+            case AunPeerProvenance::MapFile:    return AUN_PEER_SOURCE_MAP_FILE;
+            case AunPeerProvenance::Discovered: return AUN_PEER_SOURCE_DISCOVERED;
         }
-        for (const auto& info : backend->list_peers()) {
+        return AUN_PEER_SOURCE_UNSPECIFIED;
+    }
+
+    void list_peers(AunListPeersResponse& resp) {
+        for (const auto& info : extension_.peer_set().list_peers()) {
             auto* peer = resp.add_peers();
             peer->set_net(info.net);
             peer->set_stn(info.stn);
             peer->set_ip_address(ip_to_dotted(info.ip_addr));
             peer->set_port(info.port);
-            peer->set_source(info.source == PeerSource::Discovered
-                             ? AUN_PEER_SOURCE_DISCOVERED
-                             : AUN_PEER_SOURCE_OPERATOR_CONFIGURED);
+            peer->set_source(to_proto_source(info.provenance));
         }
     }
 

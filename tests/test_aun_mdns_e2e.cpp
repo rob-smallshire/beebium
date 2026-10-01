@@ -27,6 +27,8 @@
 
 #include <beebium/discovery/Advertiser.hpp>
 #include <beebium/discovery/Browser.hpp>
+#include "AunPeerSet.hpp"
+
 #include <beebium/econet/AunBackend.hpp>
 
 #ifdef _WIN32
@@ -99,6 +101,13 @@ TEST_CASE("AUN mDNS e2e: peers discover each other on the same net, no map=",
     REQUIRE(backend_a.is_connected());
     REQUIRE(backend_b.is_connected());
 
+    // The peer set is the discovery target and the routing authority; attaching
+    // it applies its resolution to the live backend so real traffic routes.
+    AunPeerSet peers_a;
+    AunPeerSet peers_b;
+    peers_a.attach(&backend_a);
+    peers_b.attach(&backend_b);
+
     AunDiscoveryAnnouncer announce_a(0, stn_a, backend_a.local_port(),
                                      "beebium-test", "1.0", "");
     AunDiscoveryAnnouncer announce_b(0, stn_b, backend_b.local_port(),
@@ -109,8 +118,8 @@ TEST_CASE("AUN mDNS e2e: peers discover each other on the same net, no map=",
     REQUIRE(announce_a.start());
     REQUIRE(announce_b.start());
 
-    AunDiscoverySubscriber sub_a(backend_a, stn_a);
-    AunDiscoverySubscriber sub_b(backend_b, stn_b);
+    AunDiscoverySubscriber sub_a(peers_a, stn_a);
+    AunDiscoverySubscriber sub_b(peers_b, stn_b);
     sub_a.set_service_type(svc_type);
     sub_b.set_service_type(svc_type);
     REQUIRE(sub_a.start());
@@ -124,7 +133,7 @@ TEST_CASE("AUN mDNS e2e: peers discover each other on the same net, no map=",
     bool b_sees_a = false;
     while (std::chrono::steady_clock::now() < deadline) {
         if (!a_sees_b) {
-            for (const auto& p : backend_a.list_peers()) {
+            for (const auto& p : peers_a.list_peers()) {
                 if (p.net == 0 && p.stn == stn_b
                         && p.port == backend_b.local_port()) {
                     a_sees_b = true;
@@ -133,7 +142,7 @@ TEST_CASE("AUN mDNS e2e: peers discover each other on the same net, no map=",
             }
         }
         if (!b_sees_a) {
-            for (const auto& p : backend_b.list_peers()) {
+            for (const auto& p : peers_b.list_peers()) {
                 if (p.net == 0 && p.stn == stn_a
                         && p.port == backend_a.local_port()) {
                     b_sees_a = true;
@@ -149,8 +158,8 @@ TEST_CASE("AUN mDNS e2e: peers discover each other on the same net, no map=",
     REQUIRE(b_sees_a);
 
     // Discovery must mark them as Discovered, not OperatorConfigured.
-    CHECK_FALSE(backend_a.is_operator_configured(0, stn_b));
-    CHECK_FALSE(backend_b.is_operator_configured(0, stn_a));
+    CHECK_FALSE(peers_a.is_operator_configured(0, stn_b));
+    CHECK_FALSE(peers_b.is_operator_configured(0, stn_a));
 
     // Now drive real AUN traffic across the discovered route. The
     // BBC view sets dest_net=0; the backend translates to local_net
@@ -201,6 +210,13 @@ TEST_CASE("AUN mDNS e2e: cross-net discovery routes via local_net translation",
     REQUIRE(backend_a.is_connected());
     REQUIRE(backend_b.is_connected());
 
+    AunPeerSet peers_a;
+    AunPeerSet peers_b;
+    peers_a.set_local_net(3);
+    peers_b.set_local_net(5);
+    peers_a.attach(&backend_a);
+    peers_b.attach(&backend_b);
+
     AunDiscoveryAnnouncer announce_a(3, stn_a, backend_a.local_port(),
                                      "beebium-test", "1.0", "");
     AunDiscoveryAnnouncer announce_b(5, stn_b, backend_b.local_port(),
@@ -211,8 +227,8 @@ TEST_CASE("AUN mDNS e2e: cross-net discovery routes via local_net translation",
     REQUIRE(announce_a.start());
     REQUIRE(announce_b.start());
 
-    AunDiscoverySubscriber sub_a(backend_a, stn_a);
-    AunDiscoverySubscriber sub_b(backend_b, stn_b);
+    AunDiscoverySubscriber sub_a(peers_a, stn_a);
+    AunDiscoverySubscriber sub_b(peers_b, stn_b);
     sub_a.set_service_type(svc_type);
     sub_b.set_service_type(svc_type);
     REQUIRE(sub_a.start());
@@ -221,10 +237,10 @@ TEST_CASE("AUN mDNS e2e: cross-net discovery routes via local_net translation",
     auto deadline = std::chrono::steady_clock::now() + MDNS_TIMEOUT;
     bool a_sees_b = false, b_sees_a = false;
     while (std::chrono::steady_clock::now() < deadline) {
-        for (const auto& p : backend_a.list_peers()) {
+        for (const auto& p : peers_a.list_peers()) {
             if (p.net == 5 && p.stn == stn_b) { a_sees_b = true; break; }
         }
-        for (const auto& p : backend_b.list_peers()) {
+        for (const auto& p : peers_b.list_peers()) {
             if (p.net == 3 && p.stn == stn_a) { b_sees_a = true; break; }
         }
         if (a_sees_b && b_sees_a) break;
@@ -299,11 +315,13 @@ TEST_CASE("AUN mDNS e2e: late subscriber discovers an already-present peer",
     // Peer A comes up first and is already advertising + browsing.
     AunBackend backend_a(/*local_net=*/0, /*local_stn=*/stn_a, 0);
     REQUIRE(backend_a.is_connected());
+    AunPeerSet peers_a;
+    peers_a.attach(&backend_a);
     AunDiscoveryAnnouncer announce_a(0, stn_a, backend_a.local_port(),
                                      "beebium-test", "1.0", "");
     announce_a.set_service_type(svc_type);
     REQUIRE(announce_a.start());
-    AunDiscoverySubscriber sub_a(backend_a, stn_a);
+    AunDiscoverySubscriber sub_a(peers_a, stn_a);
     sub_a.set_service_type(svc_type);
     REQUIRE(sub_a.start());
 
@@ -315,18 +333,20 @@ TEST_CASE("AUN mDNS e2e: late subscriber discovers an already-present peer",
     // Peer B starts second: it must discover the already-present A.
     AunBackend backend_b(/*local_net=*/0, /*local_stn=*/stn_b, 0);
     REQUIRE(backend_b.is_connected());
+    AunPeerSet peers_b;
+    peers_b.attach(&backend_b);
     AunDiscoveryAnnouncer announce_b(0, stn_b, backend_b.local_port(),
                                      "beebium-test", "1.0", "");
     announce_b.set_service_type(svc_type);
     REQUIRE(announce_b.start());
-    AunDiscoverySubscriber sub_b(backend_b, stn_b);
+    AunDiscoverySubscriber sub_b(peers_b, stn_b);
     sub_b.set_service_type(svc_type);
     REQUIRE(sub_b.start());
 
     auto deadline = std::chrono::steady_clock::now() + MDNS_TIMEOUT;
     bool b_sees_a = false;
     while (std::chrono::steady_clock::now() < deadline) {
-        for (const auto& p : backend_b.list_peers()) {
+        for (const auto& p : peers_b.list_peers()) {
             if (p.net == 0 && p.stn == stn_a
                     && p.port == backend_a.local_port()) {
                 b_sees_a = true;
@@ -353,9 +373,9 @@ bool wait_until(Pred pred) {
     return pred();
 }
 
-bool has_peer(const AunBackend& backend, uint8_t net, uint8_t stn,
+bool has_peer(const AunPeerSet& peers, uint8_t net, uint8_t stn,
               uint16_t port) {
-    for (const auto& p : backend.list_peers()) {
+    for (const auto& p : peers.list_peers()) {
         if (p.net == net && p.stn == stn && p.port == port) return true;
     }
     return false;
@@ -383,6 +403,10 @@ TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new
     AunBackend backend_a(0, stn_incumbent, 0);
     REQUIRE(backend_s.is_connected());
     REQUIRE(backend_a.is_connected());
+    AunPeerSet peers_s;
+    AunPeerSet peers_a;
+    peers_s.attach(&backend_s);
+    peers_a.attach(&backend_a);
     AunDiscoveryAnnouncer ann_s(0, stn_server, backend_s.local_port(),
                                 "beebium-test", "1.0", "");
     AunDiscoveryAnnouncer ann_a(0, stn_incumbent, backend_a.local_port(),
@@ -391,36 +415,38 @@ TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new
     ann_a.set_service_type(svc_type);
     REQUIRE(ann_s.start());
     REQUIRE(ann_a.start());
-    AunDiscoverySubscriber sub_s(backend_s, stn_server);
-    AunDiscoverySubscriber sub_a(backend_a, stn_incumbent);
+    AunDiscoverySubscriber sub_s(peers_s, stn_server);
+    AunDiscoverySubscriber sub_a(peers_a, stn_incumbent);
     sub_s.set_service_type(svc_type);
     sub_a.set_service_type(svc_type);
     REQUIRE(sub_s.start());
     REQUIRE(sub_a.start());
 
     REQUIRE(wait_until([&] {
-        return has_peer(backend_s, 0, stn_incumbent, backend_a.local_port());
+        return has_peer(peers_s, 0, stn_incumbent, backend_a.local_port());
     }));
 
     // The newcomer B comes up ALSO as station 80 -- the collision.
     AunBackend backend_b(0, stn_incumbent, 0);
     REQUIRE(backend_b.is_connected());
+    AunPeerSet peers_b;
+    peers_b.attach(&backend_b);
     AunDiscoveryAnnouncer ann_b(0, stn_incumbent, backend_b.local_port(),
                                 "beebium-test", "1.0", "");
     ann_b.set_service_type(svc_type);
     REQUIRE(ann_b.start());
-    AunDiscoverySubscriber sub_b(backend_b, stn_incumbent);
+    AunDiscoverySubscriber sub_b(peers_b, stn_incumbent);
     sub_b.set_service_type(svc_type);
     REQUIRE(sub_b.start());
 
     // S refuses B's 80 and keeps A's: first live station wins.
     REQUIRE(wait_until([&] {
-        return backend_s.station_collisions().count >= 1;
+        return peers_s.station_collisions().count >= 1;
     }));
     {
-        auto ep = backend_s.peer_endpoint(0, stn_incumbent);
+        auto ep = peers_s.resolve(0, stn_incumbent);
         REQUIRE(ep.has_value());
-        CHECK(ep->second == backend_a.local_port());  // still A, not B
+        CHECK(ep->port == backend_a.local_port());  // still A, not B
     }
 
     // B changes its station to 81: re-announce and re-filter, exactly as the
@@ -432,15 +458,15 @@ TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new
 
     // S now sees B at 0.81, and A's 0.80 survived untouched.
     REQUIRE(wait_until([&] {
-        return has_peer(backend_s, 0, stn_new, backend_b.local_port());
+        return has_peer(peers_s, 0, stn_new, backend_b.local_port());
     }));
     {
-        auto ep = backend_s.peer_endpoint(0, stn_incumbent);
+        auto ep = peers_s.resolve(0, stn_incumbent);
         REQUIRE(ep.has_value());
-        CHECK(ep->second == backend_a.local_port());  // A untouched
+        CHECK(ep->port == backend_a.local_port());  // A untouched
     }
     // All three reachable: B has the server too.
     REQUIRE(wait_until([&] {
-        return has_peer(backend_b, 0, stn_server, backend_s.local_port());
+        return has_peer(peers_b, 0, stn_server, backend_s.local_port());
     }));
 }

@@ -14,14 +14,15 @@
 #define BEEBIUM_ECONET_AUN_DISCOVERY_SUBSCRIBER_HPP
 
 // Subscribes to "_aun._udp" DNS-SD announcements and feeds the
-// resulting peers into AunBackend's peer table as Discovered entries.
+// resulting peers into the AUN transport's AunPeerSet as Discovered entries.
 //
 // Filtering rules (see docs/discussion/aun-mdns-peer-discovery.md):
 //   1. Skip our own announcement -- match by the (net, station) pair
-//      from the TXT record against the backend's local (net, stn).
-//   2. Operator-configured entries always win; the subscriber relies
-//      on AunBackend::add_peer's PeerSource precedence (a Discovered
-//      add against an existing operator entry is dropped silently).
+//      from the TXT record against the peer set's local (net, stn).
+//   2. Operator sources (Api, Launch, MapFile) win over Discovered; the
+//      subscriber records a discovered peer whether or not an operator source
+//      shadows it, so removing the operator entry later reveals it again, but
+//      only notifies when the resolved winner actually changes.
 //
 // Lifetime is RAII-shaped, mirroring AunDiscoveryAnnouncer:
 // construction captures the dependencies, start() begins browsing,
@@ -42,20 +43,20 @@
 
 namespace beebium {
 
-class AunBackend;
+class AunPeerSet;
 
 class AunDiscoverySubscriber {
 public:
-    // backend must outlive the subscriber. browser is the platform
-    // browser to drive; tests inject a fake. If browser is null, the
-    // constructor allocates a discovery::create_browser() default.
+    // peers (the AUN transport's peer set) must outlive the subscriber. browser
+    // is the platform browser to drive; tests inject a fake. If browser is null,
+    // the constructor allocates a discovery::create_browser() default.
     // own_identity is this machine's UUID (the same value the announcer
     // publishes as the impl-identity TXT record); it lets the subscriber
     // recognise its own announcement reflected back by Bonjour even when
     // Bonjour has renamed the instance. Empty when no identity was injected,
     // in which case our-number advertisements are skipped silently (we cannot
     // tell our own reflection from another machine).
-    AunDiscoverySubscriber(AunBackend& backend,
+    AunDiscoverySubscriber(AunPeerSet& peers,
                            std::uint8_t local_stn,
                            std::unique_ptr<discovery::Browser> browser = nullptr,
                            std::string own_identity = {});
@@ -128,7 +129,7 @@ public:
     }
 
 private:
-    AunBackend& backend_;
+    AunPeerSet& peers_;
     std::atomic<std::uint8_t> local_stn_;
     std::unique_ptr<discovery::Browser> browser_;
     std::string own_identity_;  // our impl-identity (machine UUID), for self-recognition
