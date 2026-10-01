@@ -469,4 +469,12 @@ TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new
     REQUIRE(wait_until([&] {
         return has_peer(peers_b, 0, stn_server, backend_s.local_port());
     }));
+
+    // #138: the collision warning on the server clears once B's colliding 0.80
+    // advertisement is withdrawn (B re-announced as 0.81). The report tracks
+    // collisions IN EFFECT, so S's count returns to 0 on its own.
+    REQUIRE(wait_until([&] {
+        return peers_s.station_collisions().count == 0;
+    }));
+    CHECK(peers_s.station_collisions().last.empty());
 }

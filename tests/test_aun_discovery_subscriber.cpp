@@ -551,3 +551,83 @@ TEST_CASE("AunDiscoverySubscriber: with no identity, our number is skipped silen
     CHECK(peers.peer_count() == 0);
     CHECK(peers.station_collisions().count == 0);
 }
+
+// =============================================================================
+// Collision report clears when the collision is no longer in effect (#138).
+// The count is the set currently in effect, not a running total.
+// =============================================================================
+
+TEST_CASE("AunDiscoverySubscriber: a peer-vs-peer collision clears when the collider is withdrawn",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
+                                         htonl(0xCB007102u)));  // parked -> collision
+    CHECK(peers.station_collisions().count == 1);
+
+    // The collider leaves: the collision is no longer in effect.
+    subscriber.inject_removed("B 0.254");
+    CHECK(peers.station_collisions().count == 0);
+    CHECK(peers.station_collisions().last.empty());
+}
+
+TEST_CASE("AunDiscoverySubscriber: a collision clears when the collider re-announces under a new number",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    subscriber.inject_added(make_service("A 0.254", 0, 254, 40001, nonlocal_ip()));
+    subscriber.inject_added(make_service("B 0.254", 0, 254, 50002,
+                                         htonl(0xCB007102u)));
+    CHECK(peers.station_collisions().count == 1);
+
+    // B picks a new number: mDNS withdraws its old (station-embedding) name and
+    // announces a new one. The withdrawal clears the collision; the new name is
+    // an ordinary, non-colliding peer.
+    subscriber.inject_removed("B 0.254");
+    CHECK(peers.station_collisions().count == 0);
+    subscriber.inject_added(make_service("B 0.253", 0, 253, 50002,
+                                         htonl(0xCB007102u)));
+    CHECK(peers.station_collisions().count == 0);
+    CHECK(peers.peer_count() == 2);  // A at 254 and B at 253
+}
+
+TEST_CASE("AunDiscoverySubscriber: an own-number collision clears when the claimant leaves",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80,
+                                      std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+
+    // A different instance claims our station 0.80.
+    subscriber.inject_added(make_service("X 0.80", 0, 80, 50000,
+                                         nonlocal_ip(), "other-uuid"));
+    CHECK(peers.station_collisions().count == 1);
+    CHECK(peers.station_collisions().last.find("this machine") !=
+          std::string::npos);
+
+    // The claimant leaves: our number is no longer contested.
+    subscriber.inject_removed("X 0.80");
+    CHECK(peers.station_collisions().count == 0);
+    CHECK(peers.station_collisions().last.empty());
+}
+
+TEST_CASE("AunDiscoverySubscriber: an own-number collision clears when this machine changes its number",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80,
+                                      std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+
+    subscriber.inject_added(make_service("X 0.80", 0, 80, 50000,
+                                         nonlocal_ip(), "other-uuid"));
+    CHECK(peers.station_collisions().count == 1);
+
+    // We move to 81: the claimant of our former 80 no longer collides with us.
+    subscriber.set_local_station(81);
+    CHECK(peers.station_collisions().count == 0);
+}

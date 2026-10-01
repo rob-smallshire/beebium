@@ -123,10 +123,10 @@ public:
     // advertisement carrying the OLD station is no longer us and must be
     // accepted as a peer, while one carrying the NEW station is now us and must
     // be skipped. Callable from the gRPC thread while handle_added runs on the
-    // browser thread, so the field is atomic.
-    void set_local_station(std::uint8_t local_stn) {
-        local_stn_.store(local_stn, std::memory_order_relaxed);
-    }
+    // browser thread, so the field is atomic. Also clears any own-number
+    // collisions in effect -- a claimant of our FORMER number is no longer
+    // claiming ours -- and republishes the report.
+    void set_local_station(std::uint8_t local_stn);
 
 private:
     AunPeerSet& peers_;
@@ -161,6 +161,10 @@ private:
     // held by a different live station), kept so it can be adopted once that
     // number frees. seq orders them: on adoption the most recent for a given
     // (net, stn) wins. Dropped when the advertisement's own name is withdrawn.
+    // Each parked entry is also a peer-vs-peer collision currently in effect;
+    // description is the line the status report shows. seq also orders the live
+    // collision set (pending_ and own_collisions_ share pending_seq_), so the
+    // "most recent in effect" is the entry with the highest seq.
     struct PendingRef {
         std::uint8_t net;
         std::uint8_t stn;
@@ -168,9 +172,22 @@ private:
         std::uint16_t port;
         bool same_host;
         std::uint64_t seq;
+        std::string description;
     };
     std::map<std::string, PendingRef> pending_;  // guarded by name_map_mutex_
     std::uint64_t pending_seq_ = 0;               // guarded by name_map_mutex_
+
+    // Own-number collisions currently in effect: a DIFFERENT instance (by its
+    // impl-identity) advertising THIS machine's (net, stn). Keyed by the
+    // claimant's DNS-SD instance name, so one clears when that name is withdrawn
+    // (handle_removed) or when this machine's own station changes
+    // (set_local_station). Unlike a parked peer there is nothing to adopt -- we
+    // never yield our own number. Guarded by name_map_mutex_.
+    struct OwnNumberCollision {
+        std::uint64_t seq;
+        std::string description;
+    };
+    std::map<std::string, OwnNumberCollision> own_collisions_;  // name_map_mutex_
 
     // Same-host liveness sweep thread (started by start(), joined by stop()).
     std::thread sweep_thread_;
@@ -192,6 +209,12 @@ private:
     // most recent pending advertisement for that (net, stn), if any, through
     // the normal add path.
     void adopt_pending(std::uint8_t net, std::uint8_t stn);
+
+    // Recompute the station-collision report (pending_ + own_collisions_) and
+    // push it to the peer set, which forwards it to the backend. Call after any
+    // change to the live collision set. Snapshots under name_map_mutex_ and
+    // publishes after releasing it.
+    void publish_collision_report();
 };
 
 }  // namespace beebium

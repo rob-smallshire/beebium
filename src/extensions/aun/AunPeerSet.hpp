@@ -127,13 +127,17 @@ public:
     void set_local_net(std::uint8_t net);
     std::uint8_t local_net() const;
 
-    // Record a station-number collision the discovery subscriber rejected.
-    // Increments the count and stores the description as the most recent. When
-    // a backend is attached, also forwards to it so the Econet status (read via
-    // NetworkBackend::station_collisions) and WatchEconetStatus see it.
-    void note_station_collision(std::string description);
+    // Set the station-collision report to the collisions CURRENTLY IN EFFECT
+    // (count + description of the most recent still in effect; count 0 and an
+    // empty description when none). The discovery subscriber recomputes and
+    // pushes this from its own state whenever the set changes. When a backend
+    // is attached, forwards it so the Econet status (read via
+    // NetworkBackend::station_collisions) and WatchEconetStatus see the
+    // clearance too.
+    void set_collision_report(std::uint32_t count, std::string last);
 
-    // Collisions observed so far (count + most-recent description).
+    // The station collisions currently in effect (count + most-recent
+    // description).
     NetworkBackend::StationCollisionReport station_collisions() const;
 
     // Bind this set to a live backend: apply the current resolution to it now,

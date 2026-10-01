@@ -626,13 +626,17 @@ AunBackend::peer_endpoint(uint8_t net, uint8_t stn) const {
     return it->second;
 }
 
-void AunBackend::note_station_collision(std::string description) {
+void AunBackend::set_station_collision_report(uint32_t count, std::string last) {
+    bool changed;
     {
         std::lock_guard lock(collision_mutex_);
-        ++collision_count_;
-        last_collision_ = std::move(description);
+        changed = count != collision_count_ || last != last_collision_;
+        collision_count_ = count;
+        last_collision_ = std::move(last);
     }
-    bump_backend_status_sequence();  // wake WatchEconetStatus to re-read
+    if (changed) {
+        bump_backend_status_sequence();  // wake WatchEconetStatus to re-read
+    }
 }
 
 NetworkBackend::StationCollisionReport AunBackend::station_collisions() const {

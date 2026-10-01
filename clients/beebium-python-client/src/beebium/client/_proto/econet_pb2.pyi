@@ -138,13 +138,16 @@ class GetEconetStatusResponse(_message.Message):
     """
     gated_by_speed: _builtins.bool
     aun_station_collision_count: _builtins.int
-    """AUN station-number collisions: a discovered peer advertised a (net, stn)
-    already held by a different, still-live station and was refused rather
-    than allowed to displace the incumbent (first live station wins; see
-    docs/networking.md "Station-number collisions"). aun_station_collision_count
-    counts them since the transport came up; aun_last_station_collision
-    describes the most recent one for display. Zero / empty for non-AUN
-    transports and when no collision has occurred.
+    """AUN station-number collisions CURRENTLY IN EFFECT: a discovered peer
+    advertising a (net, stn) already held by a different, still-live station
+    and refused rather than allowed to displace the incumbent (first live
+    station wins; see docs/networking.md "Station-number collisions").
+    aun_station_collision_count is the number in effect right now, NOT a
+    running total: it drops back as collisions clear (the collider renames,
+    leaves, is adopted, or this machine changes its own number), so a client
+    can show the warning exactly while at least one is live.
+    aun_last_station_collision describes the most recent one still in effect,
+    empty when none. Zero / empty for non-AUN transports.
     """
     aun_last_station_collision: _builtins.str
     @_builtins.property

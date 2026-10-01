@@ -264,14 +264,22 @@ TEST_CASE("AunPeerSet: re-attaching to a new backend re-applies the whole set",
     CHECK(second.is_reachable(0, 100));  // re-applied to the new backend
 }
 
-TEST_CASE("AunPeerSet: station collisions are counted and the last kept",
+TEST_CASE("AunPeerSet: the collision report reflects what is set, not a running total",
           "[aun][peer-set][collision]") {
     AunPeerSet peers;
     CHECK(peers.station_collisions().count == 0);
 
-    peers.note_station_collision("first");
-    peers.note_station_collision("second 0.254");
+    peers.set_collision_report(2, "two 0.254");
     auto report = peers.station_collisions();
     CHECK(report.count == 2);
-    CHECK(report.last == "second 0.254");
+    CHECK(report.last == "two 0.254");
+
+    // A later report of fewer (or zero) replaces it -- it does not accumulate.
+    peers.set_collision_report(1, "one 0.80");
+    CHECK(peers.station_collisions().count == 1);
+    CHECK(peers.station_collisions().last == "one 0.80");
+
+    peers.set_collision_report(0, "");
+    CHECK(peers.station_collisions().count == 0);
+    CHECK(peers.station_collisions().last.empty());
 }

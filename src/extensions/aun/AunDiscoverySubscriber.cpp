@@ -173,9 +173,17 @@ void AunDiscoverySubscriber::handle_added(
             " is this machine; rejected advertisement from " +
             format_endpoint(svc.ipv4_addr_net_byte_order, svc.port);
         if (trace_) {
-            std::cerr << "AUN RX: " << description << "\n";
+            std::cerr << "AUN RX: raised collision: " << description << "\n";
         }
-        peers_.note_station_collision(std::move(description));
+        {
+            std::lock_guard lock(name_map_mutex_);
+            // Keyed by the claimant's name so it clears when that name is
+            // withdrawn; a re-advertisement from the same claimant updates in
+            // place (same key) rather than double-counting.
+            own_collisions_[svc.instance_name] =
+                OwnNumberCollision{++pending_seq_, std::move(description)};
+        }
+        publish_collision_report();
         return;
     }
 
@@ -218,13 +226,6 @@ void AunDiscoverySubscriber::handle_added(
                 break;
             }
         }
-        if (collision) {
-            // Keep the refused advertisement so it can be adopted once the
-            // number frees (the incumbent leaving, or its port being reaped).
-            pending_[svc.instance_name] =
-                PendingRef{net, stn, svc.ipv4_addr_net_byte_order, svc.port,
-                           same_host, ++pending_seq_};
-        }
     }
     if (collision) {
         std::string held = "?";
@@ -237,9 +238,18 @@ void AunDiscoverySubscriber::handle_added(
             held + "; rejected advertisement from " +
             format_endpoint(svc.ipv4_addr_net_byte_order, svc.port);
         if (trace_) {
-            std::cerr << "AUN RX: " << description << "\n";
+            std::cerr << "AUN RX: raised collision: " << description << "\n";
         }
-        peers_.note_station_collision(std::move(description));
+        {
+            // Keep the refused advertisement so it can be adopted once the
+            // number frees (the incumbent leaving, or its port being reaped).
+            // Parking it is also the peer-vs-peer collision now in effect.
+            std::lock_guard lock(name_map_mutex_);
+            pending_[svc.instance_name] =
+                PendingRef{net, stn, svc.ipv4_addr_net_byte_order, svc.port,
+                           same_host, ++pending_seq_, std::move(description)};
+        }
+        publish_collision_report();
         return;  // incumbent kept; newcomer parked as pending
     }
 
@@ -263,23 +273,43 @@ void AunDiscoverySubscriber::handle_added(
 
 void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
     PeerRef ref{};
+    bool have_peer = false;
+    bool cleared_collision = false;
     {
         std::lock_guard lock(name_map_mutex_);
-        // A parked (refused) advertisement being withdrawn owns nothing: drop
-        // it so it is never adopted later.
-        if (pending_.erase(instance_name) > 0) return;
+        // A withdrawn advertisement that was only a collision (a parked peer or
+        // an own-number claimant) owns no peer: clear it from the live
+        // collision set. A parked peer is also dropped so it is never adopted.
+        cleared_collision = pending_.erase(instance_name) > 0;
+        cleared_collision =
+            own_collisions_.erase(instance_name) > 0 || cleared_collision;
 
-        auto it = name_to_peer_.find(instance_name);
-        if (it == name_to_peer_.end()) return;
-        ref = it->second;
-        // SAME-HOST peer: KEEP it. mDNS withdrew the advertisement (typically
-        // a Wi-Fi/Ethernet toggle), but the peer is still reachable over
-        // loopback. Its removal is the liveness sweep's job, which reaps it
-        // only when its server has actually exited. Leave the name mapping so
-        // the sweep can still find it.
-        if (ref.same_host) return;
-        name_to_peer_.erase(it);
+        if (!cleared_collision) {
+            auto it = name_to_peer_.find(instance_name);
+            if (it != name_to_peer_.end()) {
+                ref = it->second;
+                // SAME-HOST peer: KEEP it. mDNS withdrew the advertisement
+                // (typically a Wi-Fi/Ethernet toggle), but the peer is still
+                // reachable over loopback. Its removal is the liveness sweep's
+                // job, which reaps it only when its server has actually exited.
+                // Leave the name mapping so the sweep can still find it.
+                if (!ref.same_host) {
+                    name_to_peer_.erase(it);
+                    have_peer = true;
+                }
+            }
+        }
     }
+
+    if (cleared_collision) {
+        if (trace_) {
+            std::cerr << "AUN RX: cleared collision (withdrawn "
+                      << instance_name << ")\n";
+        }
+        publish_collision_report();
+        return;
+    }
+    if (!have_peer) return;  // unknown name, or a same-host peer we kept
 
     // Only drop OUR discovered entry, and only if it is still the one we added:
     // if a different, still-live station now holds this (net, stn)'s Discovered
@@ -355,10 +385,16 @@ void AunDiscoverySubscriber::sweep_once() {
 
     // Each reaped station's number is now free: adopt a parked advertisement
     // for it if one is waiting (e.g. a relaunched same-host station that was
-    // refused while the crashed one's port lingered).
+    // refused while the crashed one's port lingered). adopt_pending republishes
+    // the collision report when it clears a parked entry.
     for (const auto& [net, stn] : reaped) {
         adopt_pending(net, stn);
     }
+
+    // Re-evaluate the collision report on every sweep (the issue's "periodic"
+    // re-evaluation), so a set that drifted for any reason settles within one
+    // sweep interval even when nothing was adopted.
+    publish_collision_report();
 }
 
 void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
@@ -388,9 +424,57 @@ void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
         std::cerr << "AUN RX: adopted pending station "
                   << static_cast<unsigned>(net) << "."
                   << static_cast<unsigned>(stn) << " from "
-                  << format_endpoint(ref.ip, ref.port) << "\n";
+                  << format_endpoint(ref.ip, ref.port)
+                  << " (collision cleared)\n";
     }
     notify_peers_changed();
+    // Adopting cleared this parked peer-vs-peer collision.
+    publish_collision_report();
+}
+
+void AunDiscoverySubscriber::set_local_station(std::uint8_t local_stn) {
+    local_stn_.store(local_stn, std::memory_order_relaxed);
+    // Our number changed, so any own-number collision (a claimant of our FORMER
+    // number) no longer collides with us: clear them all and republish.
+    bool cleared = false;
+    {
+        std::lock_guard lock(name_map_mutex_);
+        if (!own_collisions_.empty()) {
+            own_collisions_.clear();
+            cleared = true;
+        }
+    }
+    if (cleared) {
+        if (trace_) {
+            std::cerr << "AUN RX: cleared own-number collisions "
+                         "(this machine's station changed)\n";
+        }
+        publish_collision_report();
+    }
+}
+
+void AunDiscoverySubscriber::publish_collision_report() {
+    std::uint32_t count = 0;
+    std::string last;
+    {
+        std::lock_guard lock(name_map_mutex_);
+        count = static_cast<std::uint32_t>(pending_.size() +
+                                           own_collisions_.size());
+        std::uint64_t best_seq = 0;
+        for (const auto& [name, ref] : pending_) {
+            if (ref.seq > best_seq) {
+                best_seq = ref.seq;
+                last = ref.description;
+            }
+        }
+        for (const auto& [name, collision] : own_collisions_) {
+            if (collision.seq > best_seq) {
+                best_seq = collision.seq;
+                last = collision.description;
+            }
+        }
+    }
+    peers_.set_collision_report(count, std::move(last));
 }
 
 void AunDiscoverySubscriber::sweep_loop() {

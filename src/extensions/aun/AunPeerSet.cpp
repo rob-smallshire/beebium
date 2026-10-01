@@ -170,18 +170,14 @@ std::uint8_t AunPeerSet::local_net() const {
     return local_net_;
 }
 
-void AunPeerSet::note_station_collision(std::string description) {
-    AunBackend* backend = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ++collision_count_;
-        last_collision_ = description;
-        backend = backend_;
-    }
-    // Forward to the live backend outside mutex_ so the Econet status
-    // (NetworkBackend::station_collisions) and WatchEconetStatus observe it too.
-    if (backend != nullptr) {
-        backend->note_station_collision(std::move(description));
+void AunPeerSet::set_collision_report(std::uint32_t count, std::string last) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    collision_count_ = count;
+    last_collision_ = std::move(last);
+    // Forward to the live backend (its own lock) so the Econet status and
+    // WatchEconetStatus see the current set, including a drop back to zero.
+    if (backend_ != nullptr) {
+        backend_->set_station_collision_report(collision_count_, last_collision_);
     }
 }
 
@@ -195,6 +191,11 @@ void AunPeerSet::attach(AunBackend* backend) {
     std::lock_guard<std::mutex> lock(mutex_);
     backend_ = backend;
     apply_to_backend_locked();
+    if (backend_ != nullptr) {
+        // A freshly (re)attached backend starts with no report; restore the
+        // collisions currently in effect so its status is not stale-empty.
+        backend_->set_station_collision_report(collision_count_, last_collision_);
+    }
 }
 
 void AunPeerSet::apply_to_backend_locked() {

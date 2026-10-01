@@ -174,12 +174,13 @@ public:
     std::optional<std::pair<uint32_t, uint16_t>>
     peer_endpoint(uint8_t net, uint8_t stn) const;
 
-    // Record a rejected station-number collision (a discovered peer advertised
-    // a station already held by a different, still-live endpoint). Increments
-    // the count, stores the description as the most recent, and bumps the
-    // status sequence so WatchEconetStatus re-reads. Called by the subscriber
-    // on the browser thread.
-    void note_station_collision(std::string description);
+    // Set the station-collision report to the set of collisions CURRENTLY IN
+    // EFFECT (count + description of the most recent still in effect), replacing
+    // any previous one. The AUN transport's peer set pushes this whenever that
+    // set changes -- it is not a running total, so a report of 0 clears the
+    // sidebar warning. Bumps the status sequence on a change so
+    // WatchEconetStatus streams the clearance.
+    void set_station_collision_report(uint32_t count, std::string last);
 
     // Collisions observed so far (count + most-recent description). Overrides
     // NetworkBackend so EconetService can surface it on the Econet status.
@@ -259,8 +260,8 @@ private:
     std::unordered_map<uint64_t, std::pair<uint8_t, uint8_t>> reverse_map_;
     mutable std::mutex peer_table_mutex_;
 
-    // Station-number collisions the discovery subscriber rejected (a peer
-    // advertised a station already held by a different, still-live endpoint).
+    // The station-collision report currently in effect, pushed by the AUN
+    // transport's peer set (collisions in effect, not a running total).
     // Surfaced on the Econet status. Guarded separately from the peer table.
     mutable std::mutex collision_mutex_;
     uint32_t collision_count_ = 0;
