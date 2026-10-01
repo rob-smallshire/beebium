@@ -671,3 +671,43 @@ validates both (item/action ids and commit fields for a list, the action id
 for a file reference) so `handle_event` sees only well-formed events. The AUN
 panel is rebuilt on them as described above, and the macOS renderer draws the
 two controls natively. Field names and numbers are exactly as specified here.
+
+### Refinement after first acceptance (2026-10-01)
+
+The first rendering of the AUN panel on these primitives drew three
+corrections from the user, each of which is a gap in the vocabulary rather
+than in the panel:
+
+1. **An action may open a prefilled editor.** "Save to map file" on an
+   mDNS or subnet row should present the same editor the "+" button
+   presents, prefilled with that row's endpoint, so the user can adjust
+   and confirm, and so a warning about pinning an ephemeral port sits
+   against the port field at the moment it matters, not on every row by
+   default. `EditableListAction` gains `Control editor = 4`: when set, the
+   renderer opens it as an ADD-style sheet and dispatches `ACTION` with
+   the `commit` filled; when unset, the action fires directly (with its
+   `warning` confirmation if any). The per-item `note` stays for genuine
+   row-level conditions (unreachable), not for advice.
+
+2. **Fields explain themselves.** People who do not already know Econet
+   and AUN cannot act on "net.stn", "host", "port". `TextInput` gains
+   `string help = N` (what the field is, rendered as an information
+   affordance with a popover or tooltip, never inline) and
+   `string note = N+1` (a contextual message for this instance of the
+   field, rendered inline beneath it, e.g. the ephemeral-port warning).
+   `EditableList` gains `string help` for the list as a whole.
+   Labels are written for a newcomer: "Econet net and station (net.stn)",
+   "AUN host (IP address or name)", "AUN UDP port", "Remark"; the help on
+   the net.stn field says that net 0 means this machine's own net.
+
+3. **Counts belong beside their lists, not on the file.** The
+   `FileReference` state_text is short ("loaded", or the load error) and
+   the renderer gives the display name layout priority so it is never
+   truncated by the state; each `EditableList` title carries its count
+   ("Peers (3)"), set by the server, since only the server knows what the
+   list holds beyond what is shown.
+
+Field numbers: `EditableListAction.editor = 4`; `TextInput.help` and
+`TextInput.note` take the next free numbers in that message;
+`EditableList.help = 6`. Additive; renderers that predate them ignore
+them.
