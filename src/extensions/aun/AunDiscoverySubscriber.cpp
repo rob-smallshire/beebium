@@ -227,9 +227,8 @@ void AunDiscoverySubscriber::handle_added(
         std::string description =
             we_are_newcomer
                 ? ("Station " + ns + " is already in use by " + endpoint +
-                   ". Change this machine's station number (the Station field "
-                   "above, or --station at launch); the new number takes effect "
-                   "at the next Break.")
+                   ". Change this machine's station number in the Station field "
+                   "above; the new number takes effect at the next Break.")
                 : ("Another machine at " + endpoint + " tried to claim station " +
                    ns + " and was rejected.");
         if (trace_) {
