@@ -16,6 +16,7 @@
 #include "AunDiscoverySubscriber.hpp"
 #include "AunMapWriter.hpp"
 #include "beebium/econet/AunPacket.hpp"
+#include "beebium/net/SocketPlatform.hpp"
 
 #ifdef BEEBIUM_BUILD_SERVICE
 #include "AunDispatcher.hpp"
@@ -92,6 +93,11 @@ std::optional<std::uint32_t> resolve_host_bounded(
         std::make_shared<std::promise<std::optional<std::uint32_t>>>();
     auto future = promise->get_future();
     std::thread([host, promise]() {
+        // getaddrinfo needs Winsock initialised on Windows. The normal server
+        // path binds an AunBackend first (which does it), but the aun-map
+        // subcommands and a reload resolve here with no bound backend, so do it
+        // ourselves -- idempotent and refcounted (#149 Windows verification).
+        beebium::net::ensure_winsock_initialized();
         std::optional<std::uint32_t> result;
         addrinfo hints{};
         hints.ai_family = AF_INET;

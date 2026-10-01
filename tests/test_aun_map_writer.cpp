@@ -181,3 +181,20 @@ TEST_CASE("AunMapDocument: a malformed file is a load error with a position",
     CHECK(load.error.find("byte") != std::string::npos);
     std::filesystem::remove(filepath);
 }
+
+TEST_CASE("resolve_map_host: a dotted quad is returned unchanged",
+          "[aun][map-writer]") {
+    CHECK(resolve_map_host("127.0.0.1") == "127.0.0.1");
+}
+
+TEST_CASE("resolve_map_host: a name resolves (getaddrinfo needs Winsock on Windows)",
+          "[aun][map-writer]") {
+    // This runs with no bound AunBackend -- exactly the aun-map subcommand path
+    // -- so the resolver must initialise Winsock itself on Windows, or
+    // getaddrinfo fails with WSANOTINITIALISED and localhost comes back
+    // unresolved (#149 Windows verification). localhost maps to the IPv4
+    // loopback.
+    auto resolved = resolve_map_host("localhost");
+    REQUIRE(resolved.has_value());
+    CHECK(*resolved == "127.0.0.1");
+}

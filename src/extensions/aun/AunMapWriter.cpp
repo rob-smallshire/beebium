@@ -12,6 +12,8 @@
 
 #include "AunMapWriter.hpp"
 
+#include "beebium/net/SocketPlatform.hpp"
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -75,6 +77,10 @@ std::optional<std::string> resolve_map_host(const std::string& host) {
     if (inet_pton(AF_INET, host.c_str(), &literal) == 1) {
         return host;  // already a dotted quad
     }
+    // getaddrinfo needs Winsock initialised on Windows; the aun-map subcommands
+    // resolve here with no bound AunBackend to have done it (#149 Windows
+    // verification). Idempotent and refcounted.
+    beebium::net::ensure_winsock_initialized();
     addrinfo hints{};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
