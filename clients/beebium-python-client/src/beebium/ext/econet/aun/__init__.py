@@ -35,13 +35,17 @@ _SERVICE = "AunService"
 class PeerSource(IntEnum):
     """Where an AUN peer entry came from.
 
-    Operator-configured peers (CLI ``--aun map=``, the preset's
-    ``econet.transport.parameters``, or :meth:`Aun.add_peer`) always
-    take precedence over discovered peers in the routing table.
+    Resolved by precedence, highest first: ``API``, ``LAUNCH``,
+    ``MAP_FILE``, ``DISCOVERED``. The three operator sources (a runtime
+    :meth:`Aun.add_peer`, the CLI ``--aun map=`` / preset for this launch,
+    and the per-user map file) all take precedence over discovered peers
+    in the routing table.
     """
 
     UNSPECIFIED = aun_pb2.AUN_PEER_SOURCE_UNSPECIFIED
-    OPERATOR_CONFIGURED = aun_pb2.AUN_PEER_SOURCE_OPERATOR_CONFIGURED
+    LAUNCH = aun_pb2.AUN_PEER_SOURCE_LAUNCH
+    API = aun_pb2.AUN_PEER_SOURCE_API
+    MAP_FILE = aun_pb2.AUN_PEER_SOURCE_MAP_FILE
     DISCOVERED = aun_pb2.AUN_PEER_SOURCE_DISCOVERED
 
 
@@ -62,12 +66,10 @@ class PeerInfo:
     stn: int
     ip_address: str
     port: int
-    # OPERATOR_CONFIGURED for entries added via --aun map= / preset /
-    # AddPeer; DISCOVERED for entries auto-populated by the AUN
-    # extension's mDNS subscriber. Older servers default this to
-    # OPERATOR_CONFIGURED via the proto's UNSPECIFIED -> operator
-    # fallback in :meth:`Aun.peers`.
-    source: PeerSource = PeerSource.OPERATOR_CONFIGURED
+    # The source this resolved entry won from: LAUNCH (--aun map= / preset),
+    # API (a runtime add_peer), MAP_FILE (the per-user map file), or
+    # DISCOVERED (the AUN extension's mDNS subscriber).
+    source: PeerSource = PeerSource.LAUNCH
 
 
 class Aun(EconetTransportAdapter):
@@ -118,16 +120,7 @@ class Aun(EconetTransportAdapter):
                 stn=p.stn,
                 ip_address=p.ip_address,
                 port=p.port,
-                # UNSPECIFIED collapses to OPERATOR_CONFIGURED so a
-                # newer client reading an older server's response
-                # behaves the same as it always has -- pre-discovery
-                # servers only ever published operator-configured
-                # peers.
-                source=(
-                    PeerSource.DISCOVERED
-                    if p.source == aun_pb2.AUN_PEER_SOURCE_DISCOVERED
-                    else PeerSource.OPERATOR_CONFIGURED
-                ),
+                source=PeerSource(p.source),
             )
             for p in response.peers
         ]

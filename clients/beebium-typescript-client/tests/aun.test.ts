@@ -89,7 +89,7 @@ describe("Aun", () => {
                             stn: 254,
                             ipAddress: "192.168.1.10",
                             port: 32768,
-                            source: AunPeerSource.AUN_PEER_SOURCE_OPERATOR_CONFIGURED,
+                            source: AunPeerSource.AUN_PEER_SOURCE_API,
                         },
                         {
                             net: 0,
@@ -108,14 +108,40 @@ describe("Aun", () => {
                 stn: 254,
                 ipAddress: "192.168.1.10",
                 port: 32768,
-                source: PeerSource.OperatorConfigured,
+                source: PeerSource.Api,
             });
             expect(peers[1]!.stn).toBe(100);
             expect(peers[1]!.ipAddress).toBe("10.0.0.1");
             expect(peers[1]!.source).toBe(PeerSource.Discovered);
         });
 
-        it("falls back to OperatorConfigured for UNSPECIFIED source", async () => {
+        it("maps launch and map-file sources to their provenance", async () => {
+            const { channel } = fakeChannel({
+                ListPeers: ok(AunListPeersResponse, {
+                    peers: [
+                        {
+                            net: 0,
+                            stn: 254,
+                            ipAddress: "192.168.1.10",
+                            port: 32768,
+                            source: AunPeerSource.AUN_PEER_SOURCE_LAUNCH,
+                        },
+                        {
+                            net: 0,
+                            stn: 253,
+                            ipAddress: "192.168.1.11",
+                            port: 32768,
+                            source: AunPeerSource.AUN_PEER_SOURCE_MAP_FILE,
+                        },
+                    ],
+                }),
+            });
+            const peers = await new Aun(channel).listPeers();
+            expect(peers[0]!.source).toBe(PeerSource.Launch);
+            expect(peers[1]!.source).toBe(PeerSource.MapFile);
+        });
+
+        it("maps UNSPECIFIED source to Launch", async () => {
             const { channel } = fakeChannel({
                 ListPeers: ok(AunListPeersResponse, {
                     peers: [
@@ -130,7 +156,7 @@ describe("Aun", () => {
                 }),
             });
             const peers = await new Aun(channel).listPeers();
-            expect(peers[0]!.source).toBe(PeerSource.OperatorConfigured);
+            expect(peers[0]!.source).toBe(PeerSource.Launch);
         });
     });
 

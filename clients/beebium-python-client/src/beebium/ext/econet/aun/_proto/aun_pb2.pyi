@@ -38,41 +38,41 @@ class _AunPeerSource:
 class _AunPeerSourceEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_AunPeerSource.ValueType], _builtins.type):
     DESCRIPTOR: _descriptor.EnumDescriptor
     AUN_PEER_SOURCE_UNSPECIFIED: _AunPeerSource.ValueType  # 0
-    """Default for older clients / uninitialised messages. Treat as
-    OPERATOR_CONFIGURED for compatibility -- pre-discovery clients
-    only knew about operator-configured entries.
+    """Default for uninitialised messages; no source should emit it."""
+    AUN_PEER_SOURCE_LAUNCH: _AunPeerSource.ValueType  # 1
+    """Added via --aun map= or the preset's econet.transport.parameters
+    for this launch.
     """
-    AUN_PEER_SOURCE_OPERATOR_CONFIGURED: _AunPeerSource.ValueType  # 1
-    """Added via --aun map=, the preset's econet.transport.parameters,
-    or AunService::AddPeer.
-    """
-    AUN_PEER_SOURCE_DISCOVERED: _AunPeerSource.ValueType  # 2
+    AUN_PEER_SOURCE_API: _AunPeerSource.ValueType  # 2
+    """Added at runtime via AunService::AddPeer."""
+    AUN_PEER_SOURCE_MAP_FILE: _AunPeerSource.ValueType  # 3
+    """Read from the per-user aun-map.json (reserved for the map-file step)."""
+    AUN_PEER_SOURCE_DISCOVERED: _AunPeerSource.ValueType  # 4
     """Added by the AUN extension's mDNS subscriber from a
     _aun._udp announcement on the LAN.
     """
 
 class AunPeerSource(_AunPeerSource, metaclass=_AunPeerSourceEnumTypeWrapper):
-    """Where a peer entry came from. Operator-configured entries always
-    take precedence over discovered ones in the routing table; a
-    discovered announcement that claims an (net, stn) already pinned
-    by the operator is silently ignored. Named AunPeerSource (rather
-    than the more obvious PeerSource) so the proto-generated C++
-    symbol doesn't collide with the AunBackend's internal
-    beebium::PeerSource enum class -- they carry the same semantics
-    but live in different layers and need distinct names at the C++
-    level.
+    """Where a peer entry came from, mirroring the AunPeerProvenance the AUN
+    transport resolves by. The three operator sources (Launch, Api, MapFile)
+    all take precedence over Discovered, in the order Api > Launch > MapFile;
+    a discovered announcement that claims a (net, stn) an operator source
+    already holds is shadowed rather than displacing it. Named AunPeerSource
+    so the proto-generated C++ symbol does not collide with the transport's
+    beebium::AunPeerProvenance enum class.
     """
 
 AUN_PEER_SOURCE_UNSPECIFIED: AunPeerSource.ValueType  # 0
-"""Default for older clients / uninitialised messages. Treat as
-OPERATOR_CONFIGURED for compatibility -- pre-discovery clients
-only knew about operator-configured entries.
+"""Default for uninitialised messages; no source should emit it."""
+AUN_PEER_SOURCE_LAUNCH: AunPeerSource.ValueType  # 1
+"""Added via --aun map= or the preset's econet.transport.parameters
+for this launch.
 """
-AUN_PEER_SOURCE_OPERATOR_CONFIGURED: AunPeerSource.ValueType  # 1
-"""Added via --aun map=, the preset's econet.transport.parameters,
-or AunService::AddPeer.
-"""
-AUN_PEER_SOURCE_DISCOVERED: AunPeerSource.ValueType  # 2
+AUN_PEER_SOURCE_API: AunPeerSource.ValueType  # 2
+"""Added at runtime via AunService::AddPeer."""
+AUN_PEER_SOURCE_MAP_FILE: AunPeerSource.ValueType  # 3
+"""Read from the per-user aun-map.json (reserved for the map-file step)."""
+AUN_PEER_SOURCE_DISCOVERED: AunPeerSource.ValueType  # 4
 """Added by the AUN extension's mDNS subscriber from a
 _aun._udp announcement on the LAN.
 """
@@ -321,10 +321,9 @@ class AunPeer(_message.Message):
     ip_address: _builtins.str
     port: _builtins.int
     source: Global___AunPeerSource.ValueType
-    """Provenance of this entry. Surfaces the same OperatorConfigured
-    / Discovered split that AunBackend's PeerSource enum uses
-    internally; clients can present discovered peers differently
-    (e.g. the AUN extension panel labels them with secondary text).
+    """Provenance of this resolved entry (the source it won from). Clients
+    present it in the AUN panel's secondary text: "launch", "API",
+    "map file" or "mDNS".
     """
     def __init__(
         self,

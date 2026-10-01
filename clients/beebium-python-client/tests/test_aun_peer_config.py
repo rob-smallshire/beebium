@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from beebium.client import Beebium
-from beebium.ext.econet.aun import Aun
+from beebium.ext.econet.aun import Aun, PeerSource
 
 
 def test_enable_with_port_binds_the_aun_transport(
@@ -44,3 +44,34 @@ def test_enable_with_port_binds_the_aun_transport(
         status = bbc.transport[Aun].status
         assert status.local_port == 32768
         assert status.connected is True
+
+
+def test_add_peer_before_enable_survives_and_is_listed(
+    mos_filepath: Path, beebium_server_filepath: Path | None
+) -> None:
+    # #55: the peer table lives in the transport, not the backend, so AddPeer
+    # works before the socket is up and the entry survives Enable bringing it
+    # up. Previously this failed with "AUN backend is not active".
+    with Beebium.launch(
+        server=beebium_server_filepath,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", "net=1"],
+    ) as bbc:
+        aun = bbc.transport[Aun]
+
+        # No backend yet, but AddPeer still takes the entry.
+        aun.add_peer(net=1, stn=254, ip_address="127.0.0.1", port=40001)
+        peers = aun.peers
+        assert len(peers) == 1
+        assert peers[0].stn == 254
+        assert peers[0].port == 40001
+        assert peers[0].source == PeerSource.API
+
+        # Bring the transport up; the entry survives and is now routable.
+        bbc.econet.enable(station_id=200, aun_port=32768)
+        assert bbc.transport[Aun].status.local_port == 32768
+
+        peers = aun.peers
+        assert len(peers) == 1
+        assert peers[0].stn == 254
+        assert peers[0].source == PeerSource.API

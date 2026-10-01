@@ -105,7 +105,9 @@ public:
                         extension_.peer_set().peer_count()));
                     auto* backend = extension_.backend();
                     if (!backend) {
-                        resp.set_connected(extension_.desired_connected());
+                        // No socket yet -> no link, whatever cable state a
+                        // SetConnected has recorded for when it comes up.
+                        resp.set_connected(false);
                         return;  // local_port stays 0 until the socket is up
                     }
                     resp.set_connected(backend->is_connected());

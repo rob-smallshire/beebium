@@ -44,7 +44,9 @@ export interface AunStatus {
  * over discovered peers in the routing table.
  */
 export enum PeerSource {
-    OperatorConfigured = "operator-configured",
+    Launch = "launch",
+    Api = "api",
+    MapFile = "map-file",
     Discovered = "discovered",
 }
 
@@ -54,13 +56,27 @@ export interface PeerInfo {
     ipAddress: string;
     port: number;
     /**
-     * Provenance of this entry. `OperatorConfigured` for entries
-     * added via `--aun map=` / preset / `addPeer`; `Discovered` for
-     * entries auto-populated by the AUN extension's mDNS subscriber.
-     * Older servers that don't carry the proto field default to
-     * `OperatorConfigured` (the only kind they had).
+     * The source this resolved entry won from: `Launch` (`--aun map=` /
+     * preset), `Api` (a runtime `addPeer`), `MapFile` (the per-user map
+     * file), or `Discovered` (the AUN extension's mDNS subscriber). The
+     * operator sources (`Api`, `Launch`, `MapFile`) take precedence over
+     * `Discovered` in the routing table, in that order.
      */
     source: PeerSource;
+}
+
+function peerSourceFromProto(source: ProtoAunPeerSource): PeerSource {
+    switch (source) {
+        case ProtoAunPeerSource.AUN_PEER_SOURCE_API:
+            return PeerSource.Api;
+        case ProtoAunPeerSource.AUN_PEER_SOURCE_MAP_FILE:
+            return PeerSource.MapFile;
+        case ProtoAunPeerSource.AUN_PEER_SOURCE_DISCOVERED:
+            return PeerSource.Discovered;
+        default:
+            // LAUNCH and the unspecified default both read as launch config.
+            return PeerSource.Launch;
+    }
 }
 
 /**
@@ -104,13 +120,7 @@ export class Aun {
             stn: p.stn,
             ipAddress: p.ipAddress,
             port: p.port,
-            // UNSPECIFIED collapses to OperatorConfigured so a newer
-            // client reading an older server's response behaves the
-            // same way it always has -- pre-discovery servers only
-            // ever published operator-configured peers.
-            source: p.source === ProtoAunPeerSource.AUN_PEER_SOURCE_DISCOVERED
-                ? PeerSource.Discovered
-                : PeerSource.OperatorConfigured,
+            source: peerSourceFromProto(p.source),
         }));
     }
 

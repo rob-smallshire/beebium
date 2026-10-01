@@ -154,7 +154,7 @@ class TestPeers:
                         stn=1,
                         ip_address="192.168.1.1",
                         port=32768,
-                        source=aun_pb2.AUN_PEER_SOURCE_OPERATOR_CONFIGURED,
+                        source=aun_pb2.AUN_PEER_SOURCE_API,
                     ),
                     aun_pb2.AunPeer(
                         net=1,
@@ -171,15 +171,12 @@ class TestPeers:
         assert isinstance(peers[0], PeerInfo)
         assert peers[0].net == 0
         assert peers[0].ip_address == "192.168.1.1"
-        assert peers[0].source == PeerSource.OPERATOR_CONFIGURED
+        assert peers[0].source == PeerSource.API
         assert peers[1].port == 9999
         assert peers[1].source == PeerSource.DISCOVERED
 
-    def test_peers_unspecified_source_falls_back_to_operator(self, channel, aun):
-        # Older servers leave source unset (UNSPECIFIED is the proto default).
-        # The wrapper collapses that to OPERATOR_CONFIGURED because
-        # pre-discovery servers only ever published operator entries -- treating
-        # UNSPECIFIED as DISCOVERED would mis-label everything from those servers.
+    def test_peers_reports_launch_and_map_file_sources(self, channel, aun):
+        # The remaining two provenances round-trip as themselves.
         channel.set_response(
             "ListPeers",
             aun_pb2.AunListPeersResponse(
@@ -189,10 +186,18 @@ class TestPeers:
                         stn=1,
                         ip_address="192.168.1.1",
                         port=32768,
-                        source=aun_pb2.AUN_PEER_SOURCE_UNSPECIFIED,
+                        source=aun_pb2.AUN_PEER_SOURCE_LAUNCH,
+                    ),
+                    aun_pb2.AunPeer(
+                        net=0,
+                        stn=2,
+                        ip_address="192.168.1.2",
+                        port=32768,
+                        source=aun_pb2.AUN_PEER_SOURCE_MAP_FILE,
                     ),
                 ]
             ),
         )
         peers = aun.peers
-        assert peers[0].source == PeerSource.OPERATOR_CONFIGURED
+        assert peers[0].source == PeerSource.LAUNCH
+        assert peers[1].source == PeerSource.MAP_FILE
