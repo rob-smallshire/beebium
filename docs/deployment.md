@@ -156,11 +156,13 @@ signed/sealed macOS app bundle) from ever being modified.
 
 Working copies live in the per-user Beebium state directory, a sibling of the
 user presets directory (all Beebium per-user state co-locates, so a future move
-to an XDG data location would move it all together):
+to an XDG data location would move it all together). That one directory holds
+`presets/`, the disc working copies in `discs/`, and the shared AUN peer map
+`aun-map.json` (see `docs/networking.md`):
 
-- macOS: `~/Library/Application Support/Beebium/discs/`
-- Windows: `%APPDATA%\Beebium\discs\`
-- Linux: `$XDG_CONFIG_HOME/beebium/discs/` (or `~/.config/beebium/discs/`)
+- macOS: `~/Library/Application Support/Beebium/` (`presets/`, `discs/`, `aun-map.json`)
+- Windows: `%APPDATA%\Beebium\` (`presets\`, `discs\`, `aun-map.json`)
+- Linux: `$XDG_CONFIG_HOME/beebium/` (or `~/.config/beebium/`) (`presets/`, `discs/`, `aun-map.json`)
 
 **Reset a disc to its shipped state**: delete its working copy; the next boot
 re-copies the pristine master.

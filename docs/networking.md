@@ -23,7 +23,7 @@ Beebium decouples the emulated ADLC from the underlying transport via the `Netwo
 
 | Backend | CLI flag | Transport | Use case |
 |---|---|---|---|
-| `AunBackend` (built-in `aun` extension) | `--aun [port=<n>][:net=<n>][:map=<net.stn@ip@port>]...` (default `port=32768:net=0`) | UDP/IP, AUN-encapsulated | Talk to other Beebium instances, BeebEm, PiEconetBridge, or any AUN-speaking peer over IP. Auto-discovers other `_aun._udp` peers on the LAN; manual `map=` is no longer required between Beebium instances on the same network. |
+| `AunBackend` (built-in `aun` extension) | `--aun [port=<n>][:net=<n>][:map=<net.stn@ip@port>][:map-file=<path>|none][:subnet=<net>@<a.b.c.0/24>]...` (default `port=32768:net=0`) | UDP/IP, AUN-encapsulated | Talk to other Beebium instances, BeebEm, PiEconetBridge, or any AUN-speaking peer over IP. Auto-discovers other `_aun._udp` peers on the LAN; manual `map=` is no longer required between Beebium instances on the same network. |
 | `PiconetBackend` (`piconet` plugin extension) | `--piconet device_path=<path>` | USB-CDC serial to a Piconet board | Talk to real BBCs / Acorn fileservers / printers over a real Econet wire (POSIX-only) |
 | `TestBackend` | selected automatically by `--aun port=none` or by passing `--station <n>` with no transport flag | In-process; no I/O | Hardware fitted, no transport — NFS ROM sees "No Clock". Also the test double for unit tests. |
 
@@ -1654,7 +1654,7 @@ Item 4 (Pi Econet Bridge) is **implemented and tested**, though not as a dedicat
 
 1. **Command-line options** — **Done**:
    - `--station <n>` - Enable Econet hardware and set station number (no flag = no Econet)
-   - `--aun [port=<n>][:map=<net.stn@ip@port>]...` - AUN UDP transport with explicit station-to-IP mappings
+   - `--aun [port=<n>][:map=<net.stn@ip@port>][:map-file=<path>|none][:subnet=<net>@<a.b.c.0/24>]...` - AUN UDP transport with explicit station-to-IP mappings, a shared map file, and /24 subnet rules
    - `--piconet device_path=<path>` - Piconet USB-CDC bridge to a real Econet wire
    - The legacy `--aun-port`, `--aun-map`, and bare `--piconet <path>` flags have been removed; both transports flow through the generic extension dispatch (see "Econet Transport Extensions" above).
 
