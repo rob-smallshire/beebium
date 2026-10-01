@@ -32,15 +32,14 @@ namespace beebium {
 
 namespace {
 
-// Net-number ranges, kept in one place. Explicit peers are 0..127 (the high
-// bit of an Econet net byte is reserved by the Acorn bridge protocol). The
-// subnet range is separate and deliberately wider: the RISC OS AUNMap
-// convention uses high net numbers (e.g. 128) for IP-mapped subnets. The exact
-// subnet upper bound is under review; changing it is a one-line edit here.
+// Net-number ranges, kept in one place. A net is the full Econet net byte
+// (0..255), which a guest can address; the RISC OS AUNMap convention uses high
+// net numbers (e.g. 128) for IP-mapped subnets. The dest_net=0 -> local-net
+// translation is unchanged, so a guest addressing net 128 goes through as 128.
 constexpr long kPeerNetMin = 0;
-constexpr long kPeerNetMax = 127;
-constexpr long kSubnetNetMin = 1;
-constexpr long kSubnetNetMax = 254;
+constexpr long kPeerNetMax = 255;
+constexpr long kSubnetNetMin = 0;
+constexpr long kSubnetNetMax = 255;
 
 // Pull an integer field in [lo, hi] from a JSON object, or set `error`.
 bool get_int_field(const nlohmann::json& obj, const char* key, long lo, long hi,

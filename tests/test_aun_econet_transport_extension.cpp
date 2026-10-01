@@ -75,16 +75,20 @@ TEST_CASE("AunEconetTransportExtension::parse_net: typical non-zero",
     CHECK(AunEconetTransportExtension::parse_net("42") == 42);
 }
 
-TEST_CASE("AunEconetTransportExtension::parse_net: upper bound",
+TEST_CASE("AunEconetTransportExtension::parse_net: full 0..255 byte",
           "[econet][aun][extension]") {
+    // A net is the full Econet net byte; high nets (the RISC OS AUNMap
+    // convention) are first-class, not rejected or offset.
     CHECK(AunEconetTransportExtension::parse_net("127") == 127);
+    CHECK(AunEconetTransportExtension::parse_net("128") == 128);
+    CHECK(AunEconetTransportExtension::parse_net("200") == 200);
+    CHECK(AunEconetTransportExtension::parse_net("255") == 255);
 }
 
-TEST_CASE("AunEconetTransportExtension::parse_net: rejects 128 and above",
+TEST_CASE("AunEconetTransportExtension::parse_net: rejects above 255",
           "[econet][aun][extension]") {
-    // High bit reserved by the Acorn bridge protocol -- fall back to 0.
-    CHECK(AunEconetTransportExtension::parse_net("128") == 0);
-    CHECK(AunEconetTransportExtension::parse_net("255") == 0);
+    CHECK(AunEconetTransportExtension::parse_net("256") == 0);
+    CHECK(AunEconetTransportExtension::parse_net("9999") == 0);
 }
 
 TEST_CASE("AunEconetTransportExtension::parse_net: non-numeric falls back to 0",

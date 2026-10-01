@@ -678,7 +678,8 @@ TEST_CASE("AunBackend: inbound dest_net is 0 for every local_net",
     // the guest reported "No reply".
     //
     // See docs/discussion/aun-robustness.md defect 8.
-    for (uint8_t net : {uint8_t{0}, uint8_t{1}, uint8_t{3}, uint8_t{127}}) {
+    for (uint8_t net : {uint8_t{0}, uint8_t{1}, uint8_t{3}, uint8_t{127},
+                        uint8_t{130}, uint8_t{200}, uint8_t{255}}) {
         CAPTURE(net);
         auto sender = std::make_unique<AunBackend>(/*local_net=*/net,
                                                    /*local_stn=*/1, 0);
@@ -866,6 +867,32 @@ TEST_CASE("AunBackend: outbound subnet guess routes to the /24's x:32768 and rep
     CHECK(std::get<1>(observed[0]) == 42);
     CHECK(std::get<2>(observed[0]) == ipv4(192, 168, 9, 42));  // base | station
     CHECK(std::get<3>(observed[0]) == 32768);
+}
+
+TEST_CASE("AunBackend: a subnet rule on a high net (128) works end to end",
+          "[econet][aun][backend][subnet]") {
+    // The RISC OS AUNMap convention uses high net numbers for IP-mapped
+    // subnets; net 128 must be a first-class net, not rejected or offset.
+    AunBackend backend(0, 1, 0);
+    REQUIRE(backend.is_connected());
+    std::array<AunBackend::SubnetRule, 1> rules{{{/*net=*/128, ipv4(10, 0, 5, 0)}}};
+    backend.set_subnet_rules(rules);
+    CHECK(backend.is_reachable(128, 60));
+
+    std::vector<std::tuple<uint8_t, uint8_t, uint32_t, uint16_t>> observed;
+    backend.set_subnet_peer_observed_callback(
+        [&](uint8_t net, uint8_t stn, uint32_t ip, uint16_t port) {
+            observed.emplace_back(net, stn, ip, port);
+        });
+    NetworkFrame frame;
+    frame.type = FrameType::Unicast;
+    frame.dest_net = 128;
+    frame.dest_stn = 60;
+    frame.data = {0x01};
+    backend.send_frame(frame);
+    REQUIRE(observed.size() == 1);
+    CHECK(std::get<0>(observed[0]) == 128);
+    CHECK(std::get<2>(observed[0]) == ipv4(10, 0, 5, 60));
 }
 
 TEST_CASE("AunBackend: no subnet rule means an unknown station stays unreachable",

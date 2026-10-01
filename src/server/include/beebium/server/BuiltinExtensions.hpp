@@ -70,7 +70,7 @@ inline std::vector<Entry> make_entries() {
              -1, false, false, "32768"});
         m.parameters.push_back(
             {"net", "string",
-             "Local Econet net number this station belongs to (0..127)",
+             "Local Econet net number this station belongs to (0..255)",
              -1, false, false, "0"});
         m.parameters.push_back(
             {"map", "string",

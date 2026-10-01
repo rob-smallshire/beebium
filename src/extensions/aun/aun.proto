@@ -93,7 +93,7 @@ message AunSetConnectedResponse {
 // --- Peer table ---
 
 message AunAddPeerRequest {
-    // Econet network number (0-127).
+    // Econet network number (0-255, the full Econet net byte).
     uint32 net = 1;
 
     // Econet station number (1-254).

@@ -253,7 +253,7 @@ class AunAddPeerRequest(_message.Message):
     IP_ADDRESS_FIELD_NUMBER: _builtins.int
     PORT_FIELD_NUMBER: _builtins.int
     net: _builtins.int
-    """Econet network number (0-127)."""
+    """Econet network number (0-255, the full Econet net byte)."""
     stn: _builtins.int
     """Econet station number (1-254)."""
     ip_address: _builtins.str

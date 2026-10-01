@@ -158,11 +158,11 @@ private:
     }
 
     void add_peer(const AunAddPeerRequest& req, AunAddPeerResponse& resp) {
-        // Validate against the documented range (net 0..127: the high bit of an
-        // Econet net byte is reserved by the Acorn bridge protocol). Edits the
-        // desired peer set whether or not a backend is up.
-        if (req.net() > 127) {
-            return fail(resp, "net must be 0-127");
+        // Validate against the documented range (net 0..255: the full Econet
+        // net byte, which a guest can address). Edits the desired peer set
+        // whether or not a backend is up.
+        if (req.net() > 255) {
+            return fail(resp, "net must be 0-255");
         }
         if (req.stn() < 1 || req.stn() > 254) {
             return fail(resp, "stn must be 1-254");

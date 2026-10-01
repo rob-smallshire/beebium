@@ -159,7 +159,7 @@ export class Aun {
     /**
      * Add an Econet address to UDP endpoint peer mapping.
      *
-     * @param net - Econet network number (0-127).
+     * @param net - Econet network number (0-255).
      * @param stn - Econet station number (1-254).
      * @param ipAddress - Dotted-quad IP address.
      * @param port - UDP port (0 = use AUN default 32768).

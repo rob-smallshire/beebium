@@ -135,9 +135,9 @@ std::uint8_t AunEconetTransportExtension::parse_net(const std::string& value) {
         return 0;
     }
     unsigned long parsed = 0;
-    if (!parse_uint(value, parsed) || parsed > 127) {
+    if (!parse_uint(value, parsed) || parsed > 255) {
         std::cerr << "AUN extension: invalid net '" << value
-                  << "' (expected 0..127) -- using default 0\n";
+                  << "' (expected 0..255) -- using default 0\n";
         return 0;
     }
     return static_cast<std::uint8_t>(parsed);

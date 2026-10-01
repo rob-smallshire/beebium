@@ -126,6 +126,17 @@ TEST_CASE("AunMapFile: a subnet host octet is masked to the /24 network",
     CHECK(result.map->subnets[0].base_ip == ip("10.20.30.0"));
 }
 
+TEST_CASE("AunMapFile: a peer net uses the full 0..255 byte", "[aun][map-file]") {
+    auto result = parse_aun_map(
+        R"({"peers":[{"net":200,"station":40,"host":"10.0.0.40","port":32768},
+                     {"net":255,"station":1,"host":"10.0.0.1","port":32768}]})",
+        "test");
+    REQUIRE(result.map.has_value());
+    REQUIRE(result.map->peers.size() == 2);
+    CHECK(result.map->peers[0].net == 200);
+    CHECK(result.map->peers[1].net == 255);
+}
+
 TEST_CASE("AunMapFile: top level must be an object", "[aun][map-file]") {
     auto result = parse_aun_map("[1, 2, 3]", "test");
     CHECK_FALSE(result.map.has_value());

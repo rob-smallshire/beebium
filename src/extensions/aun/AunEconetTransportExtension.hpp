@@ -165,10 +165,9 @@ public:
     static std::optional<std::uint16_t> parse_port(const std::string& value);
 
     // Parse the "net" config value. Empty or missing -> 0 (matches the
-    // historical default before this parameter existed). Otherwise
-    // parsed as decimal in the range 0..127 -- the high bit of an
-    // Econet net byte is reserved by the Acorn bridge protocol. Invalid
-    // input falls back to 0 with a warning to stderr.
+    // historical default before this parameter existed). Otherwise parsed as
+    // decimal in the range 0..255 -- the full Econet net byte, which a guest
+    // can address. Invalid input falls back to 0 with a warning to stderr.
     static std::uint8_t parse_net(const std::string& value);
 
     // Parse a list of "map" entries. Each element is one peer of the

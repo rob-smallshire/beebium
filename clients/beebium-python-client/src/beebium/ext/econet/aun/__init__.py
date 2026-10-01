@@ -159,7 +159,7 @@ class Aun(EconetTransportAdapter):
         """Add an Econet address to UDP endpoint peer mapping.
 
         Args:
-            net: Econet network number (0-127).
+            net: Econet network number (0-255).
             stn: Econet station number (1-254).
             ip_address: Dotted-quad IP address.
             port: UDP port (0 = use AUN default 32768).
