@@ -139,6 +139,41 @@ All three backends operate behind the `FourWayHandshake` decorator (`aun_mode = 
 - **A real BBC, Acorn fileserver, or other Econet peripheral:** `PiconetBackend` with a Piconet device on the wire. The wire's clock generator and termination must be present (the Piconet is a participant, not a clock source).
 - **Testing only:** `TestBackend` (or the test fakes `MockPiconetSerial`, `FakePiconetDevice`, `FakePiconetDeviceOnPty`, `AunBridgePiconetDevice` in `tests/piconet/`). The Piconet integration's test stack is described in `docs/discussion/piconet-feasibility.md` ("Testing Strategy" section).
 
+### Connecting to a PiEconetBridge
+
+[PiEconetBridge](https://github.com/cr12925/PiEconetBridge) speaks AUN, so a Beebium station reaches a bridge, and the fileservers and wire stations behind it, through `AunBackend`. This is the arrangement the opt-in `PiEconetBridge recipe` workflow runs against a real bridge (`integration_tests/pieb-aun/tests/test_bridge_recipe.py`): a fileserver on 1.254 behind the bridge, and Beebium as station 80 on net 2.
+
+**Every net number in a PiEconetBridge configuration must be non-zero.** The bridge decides for itself when to present net 0 to a given medium. So the bridge knows the Beebium segment by a non-zero net (2 here), and Beebium declares the same net with `--aun net=2`; inbound frames for net 2 are presented to the guest as net 0, its own segment.
+
+On the bridge, in `econet-hpbridge.cfg`, map Beebium's station to the host and port Beebium listens on, and expose the fileserver over AUN:
+
+```
+FILESERVER ON 1.254 PATH /path/to/filestore
+AUN MAP HOST 2.80 ON <beebium-host> PORT 32768 NONE
+EXPOSE HOST 1.254 ON PORT *:32768
+```
+
+`EXPOSE` lines must come last; upstream's parser requires it. `NONE` leaves acknowledgement to Beebium; upstream's `AUTOACK` has the bridge acknowledge Beebium's data frames itself.
+
+On the Beebium side, declare the net and station the bridge expects, and map the fileserver to the bridge:
+
+```bash
+beebium-model-b --station 80 \
+    --aun net=2:port=32768:map=1.254@<bridge-host>@32768 \
+    --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom
+```
+
+Then, at the BBC prompt, `*NET` and `*I AM 1.254 SYST` log in, and `*CAT` lists the fileserver's disc. If the map entry is missing, the login fails with the filing system's no-reply error: "No reply" from NFS 3.34, "Station 1.254 not present" from ANFS 4.18.
+
+The bridge matches Beebium's datagrams against its `AUN MAP HOST` line by source address and port, so the path between them must not rewrite either. Two consequences:
+
+- **Bridge and Beebium on one host** cannot both bind 32768. Give Beebium another port (`--aun port=40080`) and put the same port in the bridge's `AUN MAP HOST` line; the bridge stays on 32768.
+- **A bridge in a container** must share a network with Beebium without a port forwarder between them: host networking (`--network host`) on a Linux host, or, under Docker Desktop, Beebium running in a Linux container on the same host network. Docker Desktop's port forwarder rewrites UDP source endpoints, so a native macOS or Windows Beebium reaching a containerised bridge through a published port matches no static map entry; `integration_tests/pieb-aun/` works around that with a `DYNAMIC` net, at the cost of a bridge-assigned station number.
+
+`docker/pieconetbridge/run-recipe.sh` builds a wire-free bridge image (no Pi, HAT or kernel module; pinned upstream commit) and starts it with this configuration, taking Beebium's host and port from `BEEBIUM_HOST` and `BEEBIUM_AUN_PORT`. Its `render` command prints the configuration for a bridge you run yourself.
+
+When the AUN peer map file (#139) lands, the `map=` entry above becomes one `peers` entry in `aun-map.json`, shared by every Beebium instance on the host; this paragraph will then give that form.
+
 ### Background: known gaps
 
 `PiconetBackend` does not support **inbound immediate operations other than MachinePeek** — the firmware's host-driven REPLY path was abandoned upstream and Piconet handles MachinePeek inline with a canned response. Standard fileserver and printer traffic is unaffected. Documented in detail in `docs/discussion/piconet-feasibility.md` ("Immediate Operations Limitation").

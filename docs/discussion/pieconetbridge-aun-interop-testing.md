@@ -308,10 +308,17 @@ unpinned bridge turns every upstream change into a mystery CI failure. Bumping
 the pin should be a deliberate commit, and a good moment to re-read the
 upstream changelog for protocol-affecting changes.
 
-Whether the bridge needs to run as root without the wire is unverified — the
-upstream install path makes it setuid for GPIO access, which we do not use, and
-its AUN ports are all above 1024. Assume unprivileged, confirm during the
-first spike, and record the answer here.
+The pinned commit is `57243a151184f9d570de7d40c98c61a2779c3053` (upstream
+`v2.1-release`, "Apply for for no reply errors on putbytes()"), the revision the
+Piconet wire investigation used, so findings from the two stay comparable. It
+builds from scratch with only `gcc`, `make` and `libssl-dev`; upstream's
+`chgrp econet` step fails without the `econet` group, and its own Makefile
+ignores the failure.
+
+The bridge does not need root without the wire. The upstream install path makes
+it setuid for GPIO access, which we do not use, and its AUN ports are all above
+1024: run natively as an ordinary user on Linux (arm64), it served the recipe
+test (#143) unprivileged.
 
 ## CI
 

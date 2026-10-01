@@ -246,23 +246,50 @@ mph1708's setup, and the recipe the Stardot answer needs. Bridge config
 
 ```
 FILESERVER ON 1.254 PATH /path/to/fs
-EXPOSE HOST 1.254 ON PORT *:32768
 AUN MAP HOST 2.80 ON <beebium-host> PORT 32768 NONE
+EXPOSE HOST 1.254 ON PORT *:32768
 ```
 
-Beebium side, once: `add-aun-peer 1.254 <bridge-host> 32768 --label "PiEconetBridge FS"`
-(one `peers` entry in `aun-map.json`),
-then launch the Station 80 AUN preset with `--aun net=2`. `*I AM 1.254 SYST`
-works, and every other instance on the host sees the same entry.
+`EXPOSE` lines must come last: upstream's config parser requires it.
+
+Beebium side, today, by `--aun map=`: `--station 80 --aun
+net=2:port=32768:map=1.254@<bridge-host>@32768` with an NFS or ANFS ROM in a
+sideways slot. `*NET`, `*I AM 1.254 SYST` and `*CAT` then complete. Once the
+map file lands: `add-aun-peer 1.254 <bridge-host> 32768 --label
+"PiEconetBridge FS"` (one `peers` entry in `aun-map.json`), then launch the
+Station 80 AUN preset with `--aun net=2`, and every other instance on the host
+sees the same entry.
 
 The bridge's userspace daemon runs with no Pi and no kernel module when
 the config has no wire net line (see
-`pieconetbridge-aun-interop-testing.md`), Linux-only, so the automated
-test runs the daemon in a container on the Linux lane and a Beebium
-instance mapping it by file completes a file-server transaction through it.
-The same harness validates the published recipe. The Piconet half of the
-question (Station 81 over a real Piconet adapter into the bridge's wire)
-needs no AUN map at all and is tested on the physical bridge.
+`pieconetbridge-aun-interop-testing.md`), Linux-only. The acceptance test is
+`integration_tests/pieb-aun/tests/test_bridge_recipe.py`, run by the opt-in
+`PiEconetBridge recipe` workflow (`.github/workflows/pieb-bridge-recipe.yml`):
+`docker/pieconetbridge/run-recipe.sh` starts the daemon in a container with
+host networking, rendered from the config above, and a Model B mapped by
+`--aun map=` completes the login and the catalogue; a negative control with
+the map entry removed fails with the filing system's no-reply error. When the
+map file lands, the same test maps the bridge by file instead.
+
+What the test ran differs from the recipe in two ways, both forced by running
+both ends on one Linux host rather than on two:
+
+- **Ports.** The bridge and Beebium cannot both bind 32768 on one host, so
+  Beebium binds another port (40080 in the workflow) and the bridge's `AUN MAP
+  HOST 2.80` line points at it. On separate hosts the recipe's 32768 on both
+  sides stands.
+- **No NAT.** The bridge matches Beebium's datagrams against its `AUN MAP HOST`
+  line by source address and port, so the container uses host networking.
+  Docker Desktop's port forwarder rewrites UDP source endpoints, so a native
+  macOS or Windows Beebium cannot reach a containerised bridge with the recipe
+  as written; a Linux Beebium in a container on the same host network can (the
+  test passed that way under Docker Desktop on macOS, with the v0.5.0 Linux
+  server).
+
+The no-reply error is worded by the filing system ROM: "No reply" from NFS
+3.34, "Station 1.254 not present" from ANFS 4.18, which the test uses. The
+Piconet half of the question (Station 81 over a real Piconet adapter into the
+bridge's wire) needs no AUN map at all and is tested on the physical bridge.
 
 ## 6. Sequencing
 
