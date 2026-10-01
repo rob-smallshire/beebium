@@ -163,7 +163,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: port=0 binds an ephemera
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}});  // OS-chosen
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});  // OS-chosen port
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
     REQUIRE(backend->is_connected());
@@ -176,7 +176,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: applies map peers",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}});
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
     ext.set_list_config({{"map", {"0.254@127.0.0.1@32768",
                                   "0.253@127.0.0.1@32769"}}});
     auto backend = ext.create_backend(/*station=*/32);
@@ -190,7 +190,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: defaults local_net to 0"
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}});
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
     auto* aun = dynamic_cast<AunBackend*>(backend.get());
@@ -202,7 +202,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: honours net config",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}, {"net", "5"}});
+    ext.set_config({{"port", "0"}, {"net", "5"}, {"map-file", "none"}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
     auto* aun = dynamic_cast<AunBackend*>(backend.get());

@@ -80,7 +80,7 @@ TEST_CASE("AUN transport: AddPeer works before the backend exists and survives E
 
     // Bring the backend up (as Enable does). The recorded Api peer is applied to
     // the live routing view, so the station is immediately routable.
-    ext.set_config({{"port", "0"}});
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
     auto* backend = static_cast<AunBackend*>(backend_owner.get());
@@ -95,7 +95,7 @@ TEST_CASE("AUN transport: RemovePeer of an Api entry falls back to a discovered 
           "[aun][transport][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}});
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
 
@@ -123,7 +123,7 @@ TEST_CASE("AUN transport: a peer edit after the backend is freed is safe; Api su
     // pointer first. (Run under -DBEEBIUM_ENABLE_SANITIZERS=ON to prove it.)
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}});
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
 
@@ -161,7 +161,7 @@ TEST_CASE("AUN transport: SetConnected before the backend exists applies when it
     CHECK_FALSE(ext.set_desired_connected(false));
     CHECK_FALSE(ext.desired_connected());
 
-    ext.set_config({{"port", "0"}});
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
     // The recorded desired state is applied: the freshly-bound socket comes up

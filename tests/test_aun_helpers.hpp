@@ -27,19 +27,41 @@
 // create_backend.
 
 #include <atomic>
-#include <chrono>
 #include <string>
 
-// A fresh "_bbt...._udp" service type each call, unique within this process and
-// unlikely to collide across processes. The service-name label is capped at 15
-// characters, which "_bbt" + a time suffix + a counter stays within.
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
+// A fresh "_b<base36>._udp" service type each call, unique within this process
+// (a counter) AND across processes (the pid). Cross-process uniqueness matters
+// because ctest -j runs several AUN test binaries at once: a type built from a
+// process-shared clock could collide between them, so two suites would browse
+// the same type and discover each other's announcer -- the very contamination
+// this isolates against. The pid cannot collide between concurrent live
+// processes, so it carries the cross-process guarantee. The DNS-SD service
+// name is capped at 15 characters; "_b" + base36(pid) + base36(counter) stays
+// well within that.
 inline std::string aun_unique_service_type() {
     static std::atomic<unsigned> counter{0};
     unsigned n = counter.fetch_add(1, std::memory_order_relaxed);
-    auto t = std::chrono::steady_clock::now().time_since_epoch().count();
-    return "_bbt" +
-           std::to_string(static_cast<unsigned long long>(t) % 100000ULL) +
-           std::to_string(n) + "._udp";
+#ifdef _WIN32
+    unsigned long long pid = static_cast<unsigned long long>(_getpid());
+#else
+    unsigned long long pid = static_cast<unsigned long long>(getpid());
+#endif
+    auto base36 = [](unsigned long long v) {
+        static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+        std::string s;
+        do {
+            s.insert(s.begin(), digits[v % 36]);
+            v /= 36;
+        } while (v != 0);
+        return s;
+    };
+    return "_b" + base36(pid) + "z" + base36(n) + "._udp";
 }
 
 #endif  // BEEBIUM_TESTS_TEST_AUN_HELPERS_HPP
