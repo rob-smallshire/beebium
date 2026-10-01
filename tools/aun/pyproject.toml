@@ -1,0 +1,15 @@
+[project]
+name = "beebium-aun-tools"
+version = "0.1.0"
+description = "Tools for Beebium's AUN peer map: converting BeebEm's Econet.cfg and AUNMap to aun-map.json (issue #140)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
