@@ -324,7 +324,9 @@ TEST_CASE("AunUi: a map-file load error shows on the file reference",
     auto view = fixture.view();
     const auto* file = find_control(view.root(), "map_file");
     REQUIRE(file != nullptr);
-    CHECK(file->file_reference().state() == beebium::Indicator::ERROR);
+    // Global enum constant, not beebium::Indicator::ERROR: on Windows <wingdi.h>
+    // defines ERROR as a macro, which breaks the scoped-enum spelling.
+    CHECK(file->file_reference().state() == beebium::Indicator_State_ERROR);
     CHECK(file->file_reference().state_text().find("JSON") != std::string::npos);
 }
 
@@ -356,7 +358,7 @@ TEST_CASE("AunUi: an invalid ADD peer shows a field-named error Indicator",
     const auto* err = find_control(view.root(), "edit_error");
     REQUIRE(err != nullptr);
     REQUIRE(err->control_case() == Control::kIndicator);
-    CHECK(err->indicator().state() == beebium::Indicator::ERROR);
+    CHECK(err->indicator().state() == beebium::Indicator_State_ERROR);  // ERROR is a Windows macro
     CHECK(err->indicator().text().find("net.stn") != std::string::npos);
 }
 
