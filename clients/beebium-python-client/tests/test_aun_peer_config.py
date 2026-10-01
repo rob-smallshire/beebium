@@ -21,11 +21,83 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 import time
 from pathlib import Path
 
 from beebium.client import Beebium
+from beebium.client._proto import extension_ui_pb2
 from beebium.ext.econet.aun import Aun, PeerSource
+
+
+def _peers_has_map_file_row(view_proto: extension_ui_pb2.View, item_id: str) -> bool:
+    """True if the pushed view's "peers" EditableList holds `item_id` with the
+    "map file" provenance. The EditableList/FileReference primitives are not
+    modelled by the dataclass client wrapper yet, so tests read the raw proto
+    the sidebar receives."""
+
+    def walk(control: extension_ui_pb2.Control) -> bool:
+        case = control.WhichOneof("control")
+        if case == "editable_list" and control.id == "peers":
+            for item in control.editable_list.items:
+                if item.id == item_id and item.secondary == "map file":
+                    return True
+        if case == "group":
+            return any(walk(child) for child in control.group.controls)
+        return False
+
+    return walk(view_proto.root)
+
+
+class _ViewStream:
+    """Collects pushed AUN panel Views on a background thread, cancellable.
+
+    Subscribes to the ExtensionUi SubscribeView stream the sidebar uses (raw
+    proto, so EditableList items are visible) and appends every pushed View.
+    """
+
+    def __init__(self, bbc: Beebium, extension_id: str):
+        request = extension_ui_pb2.SubscribeViewRequest(extension_id=extension_id)
+        self._call = bbc.extension_ui._stub.SubscribeView(request)
+        self._lock = threading.Lock()
+        self._views: list[extension_ui_pb2.View] = []
+        self._thread = threading.Thread(target=self._read, daemon=True)
+        self._thread.start()
+
+    def _read(self) -> None:
+        try:
+            for view in self._call:
+                with self._lock:
+                    self._views.append(view)
+        except Exception:
+            pass  # the stream was cancelled, or the server went away
+
+    def wait_initial(self, timeout: float = 5.0) -> extension_ui_pb2.View:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self._views:
+                    return self._views[0]
+            time.sleep(0.05)
+        raise AssertionError("no initial view was pushed on subscription")
+
+    def wait_for_map_file_row(self, item_id: str, timeout: float = 15.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._lock:
+                views = list(self._views)
+            if any(_peers_has_map_file_row(v, item_id) for v in views):
+                return True
+            time.sleep(0.1)
+        return False
+
+    def any_has_map_file_row(self, item_id: str) -> bool:
+        with self._lock:
+            return any(_peers_has_map_file_row(v, item_id) for v in self._views)
+
+    def close(self) -> None:
+        self._call.cancel()
+        self._thread.join(timeout=2.0)
 
 
 def test_enable_with_port_binds_the_aun_transport(
@@ -251,3 +323,102 @@ def test_running_instance_sees_a_subcommand_write_via_the_poll(
             time.sleep(0.25)
         else:
             raise AssertionError("the subcommand's write was not polled in")
+
+
+def test_poll_driven_reload_repushes_the_sidebar_view(
+    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+) -> None:
+    # #146: a map-file change seen by the sweep poll must re-push the AUN panel
+    # view, not just update the peer table. We subscribe to the panel's
+    # SubscribeView stream (what the sidebar uses), then edit the file from
+    # outside by subcommand -- no RPC on this instance -- and require a pushed
+    # view to gain the "map file" row on its own. Station 111 is chosen so no
+    # real announcer on the host or LAN supplies it via discovery; the only
+    # source is the map file.
+    if beebium_server_filepath is None:
+        import pytest
+
+        pytest.skip("no server executable to run the subcommand with")
+
+    map_filepath = tmp_path / "aun-map.json"
+
+    with Beebium.launch(
+        server=beebium_server_filepath,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", f"map-file={map_filepath}"],
+    ) as bbc:
+        bbc.econet.enable(station_id=2, aun_port=32768)
+        ext_id = bbc.transport.active.id
+        assert ext_id, "no active AUN transport to subscribe to"
+
+        stream = _ViewStream(bbc, ext_id)
+        try:
+            stream.wait_initial()
+            # Baseline: nothing has supplied station 111 yet.
+            assert not stream.any_has_map_file_row("0.111")
+
+            # A separate process edits the shared file -- no RPC on this server.
+            completed = subprocess.run(
+                [
+                    str(beebium_server_filepath),
+                    "add-aun-peer",
+                    "0.111",
+                    "127.0.0.1",
+                    "40111",
+                    "--map-file",
+                    str(map_filepath),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert completed.returncode == 0, completed.stderr
+
+            # The poll reloads the file and must re-push the view on its own.
+            assert stream.wait_for_map_file_row("0.111"), (
+                "the poll-driven reload updated the peer table but did not "
+                "re-push the sidebar view (#146)"
+            )
+        finally:
+            stream.close()
+
+
+def test_add_map_peer_in_one_instance_updates_a_second_instances_sidebar(
+    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+) -> None:
+    # #146, two-instance variant: instance A adds a peer through AddMapPeer,
+    # writing the shared map file; instance B, subscribed to its own panel
+    # view, gains the row from its poll with no interaction. Distinct AUN ports
+    # so both can bind on this host; station 111 again avoids real discovery.
+    if beebium_server_filepath is None:
+        import pytest
+
+        pytest.skip("no server executable to run a second instance")
+
+    map_filepath = tmp_path / "aun-map.json"
+    launch_args = {
+        "server": beebium_server_filepath,
+        "mos_filepath": mos_filepath,
+        "extra_args": ["--aun", f"map-file={map_filepath}"],
+    }
+
+    with Beebium.launch(**launch_args) as bbc_a, Beebium.launch(**launch_args) as bbc_b:
+        bbc_a.econet.enable(station_id=20, aun_port=32768)
+        bbc_b.econet.enable(station_id=21, aun_port=32769)
+        ext_id_b = bbc_b.transport.active.id
+        assert ext_id_b, "no active AUN transport on instance B"
+
+        stream = _ViewStream(bbc_b, ext_id_b)
+        try:
+            stream.wait_initial()
+            assert not stream.any_has_map_file_row("0.111")
+
+            # Instance A edits the shared file through the RPC the sidebar uses.
+            bbc_a.transport[Aun].add_map_peer(0, 111, "127.0.0.1", 40111)
+
+            assert stream.wait_for_map_file_row("0.111"), (
+                "instance B's sidebar view did not update after instance A "
+                "added a map-file peer (#146)"
+            )
+        finally:
+            stream.close()

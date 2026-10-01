@@ -517,8 +517,13 @@ AunEconetTransportExtension::reload_map_file() {
         // Present but malformed: keep the previous MapFile entries so a bad edit
         // does not drop a working table, and report the error.
         std::cerr << "AUN extension: map file error: " << loaded.error << "\n";
-        std::lock_guard<std::mutex> lock(map_file_mutex_);
-        map_file_error_ = loaded.error;
+        {
+            std::lock_guard<std::mutex> lock(map_file_mutex_);
+            map_file_error_ = loaded.error;
+        }
+        // The load error is new state the sidebar shows (the FileReference goes
+        // ERROR), so re-push the view even though the peer table is unchanged.
+        ui_.mark_dirty();
         return {true, loaded.error};
     }
 
@@ -575,6 +580,14 @@ AunEconetTransportExtension::reload_map_file() {
     if (subscriber_) {
         subscriber_->revalidate_file_disagreements();
     }
+    // Re-push the AUN panel. A reload is the single funnel for every map-file
+    // change -- the sweep poll, ReloadMap, each edit RPC, a subcommand write
+    // another instance made, a host that resolves on a later pass -- and
+    // before this the view was only re-pushed when discovery changed, so a
+    // poll-driven reload left a second instance's sidebar stale until its own
+    // Reload (issue #146). The peer rows, the list-title counts and the
+    // FileReference state all rebuild from this on the next ExtensionUi poll.
+    ui_.mark_dirty();
     return {true, ""};
 }
 
