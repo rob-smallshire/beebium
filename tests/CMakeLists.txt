@@ -216,6 +216,11 @@ target_link_libraries(test_aun_map_file PRIVATE beebium_ext_aun Catch2::Catch2Wi
 target_compile_definitions(test_aun_map_file PRIVATE BEEBIUM_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 catch_discover_tests(test_aun_map_file)
 
+# aun-map.json writer (atomic write, order + unknown keys preserved).
+add_executable(test_aun_map_writer test_aun_map_writer.cpp)
+target_link_libraries(test_aun_map_writer PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
+catch_discover_tests(test_aun_map_writer)
+
 # End-to-end mDNS test: paired announcers / subscribers with real
 # platform mDNS. Tagged [.mdns] so it's skipped by default in
 # environments without a working responder.

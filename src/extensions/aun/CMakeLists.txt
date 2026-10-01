@@ -21,6 +21,7 @@ set(AUN_SOURCES
     AunDiscoveryAnnouncer.cpp
     AunDiscoverySubscriber.cpp
     AunMapFile.cpp
+    AunMapWriter.cpp
     AunPeerSet.cpp
     AunUi.cpp
 )
