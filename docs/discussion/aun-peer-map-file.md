@@ -296,7 +296,7 @@ All four were addressed with step 1 (#55), which moved the peer table into
   discovered one take over; `remove_peer` removes outright and the
   discovered peer returns only when re-announced.~~ Done: `AunPeerSet` keeps
   one entry per source, so removing the `Api` winner now falls back to a
-  `Discovered` entry still present — code and doc agree.
+  `Discovered` entry still present; code and doc agree.
 - ~~`AunService.AddPeer` documents `net` as 0..127 but accepts up to 255.~~
   Done: the dispatcher now rejects `net > 127`.
 - ~~`econet-integration.md` says `AunService` is contributed through
