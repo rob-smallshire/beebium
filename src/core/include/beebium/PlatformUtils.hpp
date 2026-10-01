@@ -34,6 +34,7 @@
 #else
 #include <fcntl.h>
 #include <fstream>
+#include <pwd.h>
 #include <unistd.h>
 #endif
 
@@ -65,6 +66,37 @@ inline std::optional<std::string> get_env(const char* name) {
     }
     return std::nullopt;
 #endif
+}
+
+// The per-user Beebium state directory: the base under which presets, discs and
+// the AUN map file live. One helper so PresetPaths, DiscPaths and the AUN
+// transport agree on the location without copying the platform logic.
+//   macOS:   ~/Library/Application Support/Beebium
+//   Windows: %APPDATA%\Beebium
+//   Linux:   $XDG_CONFIG_HOME/beebium, else ~/.config/beebium
+// Falls back to ./beebium only when the home/APPDATA cannot be determined.
+inline std::filesystem::path user_state_base_dirpath() {
+#ifdef __APPLE__
+    if (auto home = get_env("HOME")) {
+        return std::filesystem::path(*home) / "Library" / "Application Support" /
+               "Beebium";
+    }
+#elif defined(_WIN32)
+    if (auto appdata = get_env("APPDATA")) {
+        return std::filesystem::path(*appdata) / "Beebium";
+    }
+#else
+    if (auto xdg_config = get_env("XDG_CONFIG_HOME")) {
+        return std::filesystem::path(*xdg_config) / "beebium";
+    }
+    if (auto home = get_env("HOME")) {
+        return std::filesystem::path(*home) / ".config" / "beebium";
+    }
+    if (struct passwd* pw = getpwuid(getuid())) {
+        return std::filesystem::path(pw->pw_dir) / ".config" / "beebium";
+    }
+#endif
+    return std::filesystem::current_path() / "beebium";
 }
 
 // Cross-platform path to the running executable itself.

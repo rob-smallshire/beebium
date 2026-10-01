@@ -265,27 +265,10 @@ private:
 
     // Base directory for per-user Beebium state (the parent of the user
     // presets "presets" dir; see PresetPaths, kept deliberately in step).
+    // Delegates to the shared platform helper so all three users -- PresetPaths,
+    // DiscPaths and the AUN transport -- agree without copying the logic.
     static std::filesystem::path user_state_base() {
-#ifdef __APPLE__
-        if (const char* home = std::getenv("HOME")) {
-            return std::filesystem::path(home) / "Library" / "Application Support" / "Beebium";
-        }
-#elif defined(_WIN32)
-        if (auto appdata = beebium::platform::get_env("APPDATA")) {
-            return std::filesystem::path(*appdata) / "Beebium";
-        }
-#else
-        if (auto xdg_config = beebium::platform::get_env("XDG_CONFIG_HOME")) {
-            return std::filesystem::path(*xdg_config) / "beebium";
-        }
-        if (const char* home = std::getenv("HOME")) {
-            return std::filesystem::path(home) / ".config" / "beebium";
-        }
-        if (struct passwd* pw = getpwuid(getuid())) {
-            return std::filesystem::path(pw->pw_dir) / ".config" / "beebium";
-        }
-#endif
-        return std::filesystem::current_path() / "beebium";
+        return beebium::platform::user_state_base_dirpath();
     }
 };
 

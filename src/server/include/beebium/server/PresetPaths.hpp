@@ -242,34 +242,11 @@ public:
     }
 
 private:
-    // Get platform-specific user presets directory
+    // Get platform-specific user presets directory: the shared per-user state
+    // base with a "presets" subdirectory, so this stays in step with DiscPaths
+    // and the AUN transport without copying the platform logic.
     static std::filesystem::path get_platform_user_presets_dirpath() {
-#ifdef __APPLE__
-        // macOS: ~/Library/Application Support/Beebium/presets/
-        if (const char* home = std::getenv("HOME")) {
-            return std::filesystem::path(home) / "Library" / "Application Support" / "Beebium" / "presets";
-        }
-#elif defined(_WIN32)
-        // Windows: %APPDATA%/Beebium/presets/
-        if (auto appdata = platform::get_env("APPDATA")) {
-            return std::filesystem::path(*appdata) / "Beebium" / "presets";
-        }
-#else
-        // Linux/Unix: ~/.config/beebium/presets/
-        // Respect XDG_CONFIG_HOME if set
-        if (auto xdg_config = platform::get_env("XDG_CONFIG_HOME")) {
-            return std::filesystem::path(*xdg_config) / "beebium" / "presets";
-        }
-        if (const char* home = std::getenv("HOME")) {
-            return std::filesystem::path(home) / ".config" / "beebium" / "presets";
-        }
-        // Last resort: use passwd entry
-        if (struct passwd* pw = getpwuid(getuid())) {
-            return std::filesystem::path(pw->pw_dir) / ".config" / "beebium" / "presets";
-        }
-#endif
-        // Ultimate fallback: current directory
-        return std::filesystem::current_path() / "beebium_presets";
+        return beebium::platform::user_state_base_dirpath() / "presets";
     }
 };
 
