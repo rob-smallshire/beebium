@@ -1,0 +1,127 @@
+# The published PiEconetBridge recipe, run against a real bridge (#143).
+#
+# Starts a wire-free PiEconetBridge in a container (docker/pieconetbridge,
+# pinned upstream commit) with a fileserver on 1.254 and Beebium mapped as
+# station 2.80, then runs integration_tests/pieb-aun/tests/test_bridge_recipe.py:
+# a Model B with --aun net=2, --station 80 and --aun map=1.254@... logs in with
+# *I AM 1.254 SYST and catalogues the fileserver, and the same station with no
+# map entry gets the no-reply error. See docs/networking.md, "Connecting to a
+# PiEconetBridge".
+#
+# Opt-in for now: run by hand or weekly, not wired into ci.yml. Linux only,
+# because the bridge uses host networking (Docker Desktop's port forwarder
+# rewrites UDP source endpoints, which the bridge's static AUN MAP HOST entry
+# cannot match). The server is not rebuilt: the job reuses the
+# beebium-server-linux artifact of a ci.yml run, as python-integration-reuse.yml
+# does.
+name: PiEconetBridge recipe
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_run_id:
+        description: "ci.yml run id whose beebium-server-linux artifact to use (default: the latest successful master run)"
+        required: false
+        type: string
+        default: ""
+  schedule:
+    # Weekly, Monday 05:17 UTC.
+    - cron: "17 5 * * 1"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  bridge-recipe:
+    name: PiEconetBridge recipe (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The bridge listens on 32768; Beebium binds its own port, which the
+      # bridge's AUN MAP HOST 2.80 line points at.
+      BRIDGE_AUN_PORT: "32768"
+      BEEBIUM_AUN_PORT: "40080"
+      CONTAINER_NAME: beebium-pieb-recipe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Choose the server build
+        id: server
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED: ${{ inputs.server_run_id }}
+        run: |
+          run_id="$REQUESTED"
+          if [ -z "$run_id" ]; then
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+              --branch master --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId')"
+          fi
+          if [ -z "$run_id" ]; then
+            echo "::error::no successful ci.yml run on master to take the server from"
+            exit 1
+          fi
+          echo "Using the server built by ci.yml run $run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Install gRPC runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgrpc++-dev libavahi-client3
+
+      # Extracted at build/ so the RPATH layout matches the CI build.
+      - name: Download server binary
+        uses: actions/download-artifact@v8
+        with:
+          name: beebium-server-linux
+          path: build
+          run-id: ${{ steps.server.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Make servers executable
+        run: chmod +x build/src/server/beebium-model-b*
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          version: "0.12.3"
+
+      - name: Build and start the bridge
+        run: |
+          docker/pieconetbridge/run-recipe.sh render
+          docker/pieconetbridge/run-recipe.sh start
+
+      - name: Run the recipe test
+        working-directory: integration_tests/pieb-aun
+        env:
+          BEEBIUM_SERVER: ${{ github.workspace }}/build/src/server/beebium-model-b
+          BEEBIUM_ROM_DIR: ${{ github.workspace }}/roms
+          BEEBIUM_PIEB_RECIPE_BRIDGE: 127.0.0.1:${{ env.BRIDGE_AUN_PORT }}
+          BEEBIUM_PIEB_RECIPE_AUN_PORT: ${{ env.BEEBIUM_AUN_PORT }}
+        run: |
+          uv run pytest tests/test_bridge_recipe.py -m slow -v -rs \
+            --junitxml="$RUNNER_TEMP/pieb-recipe-junit.xml"
+
+      - name: Collect the bridge log
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/pieb-logs"
+          docker logs "$CONTAINER_NAME" > "$RUNNER_TEMP/pieb-logs/bridge.log" 2>&1 || true
+          cp "$RUNNER_TEMP/pieb-recipe-junit.xml" "$RUNNER_TEMP/pieb-logs/" 2>/dev/null || true
+          docker stop -t 5 "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pieb-bridge-recipe-logs
+          path: ${{ runner.temp }}/pieb-logs
+          if-no-files-found: warn
