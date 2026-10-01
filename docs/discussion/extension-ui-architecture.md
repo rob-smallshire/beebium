@@ -598,9 +598,9 @@ client-side ones.
 ```
 message FileReference {
     string path = 1;                  // absolute, on the server's host
-    string display_name = 2;          // "aun-map.json"; defaults to the path's file name
+    string display_name = 2;          // a human title ("Shared AUN map"); defaults to the path's file name
     Indicator.State state = 3;        // OK = loaded; WARN = missing; ERROR = load error
-    string state_text = 4;            // "12 peers, 1 subnet" or the load error
+    string state_text = 4;            // empty when OK; "not found" or the load error otherwise
     repeated FileReferenceAction actions = 5;  // server actions: "Reload"
 }
 
