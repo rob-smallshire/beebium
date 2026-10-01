@@ -658,3 +658,16 @@ the protocol fingerprint is decided by `scripts/sync_protocol_fingerprint.py`'s
 input set, and the implementer confirms either way. New primitives are
 additive: an older renderer ignores an unknown control (the `none` case),
 so the panel degrades to its remaining Labels rather than breaking.
+
+### Status (2026-10-01): built
+
+Both primitives are implemented (#144). `extension_ui.proto` turned out to
+be in the fingerprint input set (the canonical contract is the core service
+protos plus `extension_ui`), so adding them moved the protocol fingerprint
+and took a minor-version bump. `EditableList` added one Control oneof field
+and the `EditableListEvent` dispatch payload; `FileReference` added the other
+Control field and the `string file_action_id` payload. The Dispatch gauntlet
+validates both (item/action ids and commit fields for a list, the action id
+for a file reference) so `handle_event` sees only well-formed events. The AUN
+panel is rebuilt on them as described above, and the macOS renderer draws the
+two controls natively. Field names and numbers are exactly as specified here.
