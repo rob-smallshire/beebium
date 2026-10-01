@@ -553,6 +553,33 @@ void AunBackend::remove_peer(uint8_t net, uint8_t stn) {
     }
 }
 
+void AunBackend::replace_peers(std::span<const PeerRoute> routes) {
+    std::lock_guard lock(peer_table_mutex_);
+    forward_map_.clear();
+    reverse_map_.clear();
+    operator_configured_keys_.clear();
+    for (const auto& route : routes) {
+        uint32_t ip_addr = route.ip_addr;
+        // Same-host peer -> route over loopback, matching add_peer's rewrite so
+        // a multi-homed egress-source-IP mismatch cannot drop its packets. The
+        // local-address set is re-queried here (never cached), so a NIC change
+        // re-converges to loopback on the next apply.
+        if (ip_addr != 0 && is_local_ipv4(ip_addr)) {
+            if (trace_) {
+                std::cerr << "AUN peer " << static_cast<int>(route.net) << "."
+                          << static_cast<int>(route.stn) << " advertised "
+                          << format_endpoint(ip_addr, route.port)
+                          << " is same-host -> routing over 127.0.0.1\n";
+            }
+            ip_addr = htonl(INADDR_LOOPBACK);
+        }
+        auto fwd_key = make_forward_key(route.net, route.stn);
+        forward_map_[fwd_key] = {ip_addr, route.port};
+        reverse_map_[make_reverse_key(ip_addr, route.port)] = {route.net,
+                                                               route.stn};
+    }
+}
+
 bool AunBackend::is_operator_configured(uint8_t net, uint8_t stn) const {
     auto fwd_key = make_forward_key(net, stn);
     std::lock_guard lock(peer_table_mutex_);

@@ -27,6 +27,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -124,6 +125,22 @@ public:
 
     // Remove a peer mapping by Econet address.
     void remove_peer(uint8_t net, uint8_t stn);
+
+    // A resolved route to install: an Econet (net, stn) mapped to a UDP
+    // endpoint (ip_addr network byte order, port host byte order).
+    struct PeerRoute {
+        uint8_t net;
+        uint8_t stn;
+        uint32_t ip_addr;
+        uint16_t port;
+    };
+
+    // Replace the entire routing view with `routes`, atomically under the peer
+    // table lock, so a concurrent send_frame never observes a half-built table.
+    // Each same-host endpoint is rewritten to loopback exactly as add_peer
+    // does. This is how the AUN transport's peer set applies its resolved
+    // peers; the backend itself no longer ranks sources.
+    void replace_peers(std::span<const PeerRoute> routes);
 
     // True if (net, stn) has an OperatorConfigured entry. Used by
     // the discovery subscriber to skip peers it must not overwrite.

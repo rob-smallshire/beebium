@@ -20,6 +20,7 @@ set(AUN_SOURCES
     AunEconetTransportExtension.cpp
     AunDiscoveryAnnouncer.cpp
     AunDiscoverySubscriber.cpp
+    AunPeerSet.cpp
     AunUi.cpp
 )
 

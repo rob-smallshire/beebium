@@ -199,6 +199,11 @@ add_executable(test_aun_discovery_subscriber test_aun_discovery_subscriber.cpp)
 target_link_libraries(test_aun_discovery_subscriber PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
 catch_discover_tests(test_aun_discovery_subscriber)
 
+# AunPeerSet: the provenance/precedence peer authority owned by the extension
+add_executable(test_aun_peer_set test_aun_peer_set.cpp)
+target_link_libraries(test_aun_peer_set PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
+catch_discover_tests(test_aun_peer_set)
+
 # End-to-end mDNS test: paired announcers / subscribers with real
 # platform mDNS. Tagged [.mdns] so it's skipped by default in
 # environments without a working responder.
