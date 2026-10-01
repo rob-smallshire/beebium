@@ -1,0 +1,9 @@
+{
+  "version": 99,
+  "comment": "a key a newer Beebium might add",
+  "peers": [
+    {"net": 0, "station": 254, "host": "192.168.1.10", "port": 32768,
+     "label": "fs", "future_field": true}
+  ],
+  "subnets": []
+}

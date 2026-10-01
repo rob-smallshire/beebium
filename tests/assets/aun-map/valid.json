@@ -1,0 +1,13 @@
+{
+  "peers": [
+    {"net": 0, "station": 254, "host": "192.168.1.10", "port": 32768,
+     "label": "PiEconetBridge file server"},
+    {"net": 0, "station": 40, "host": "192.168.1.40", "port": 32769,
+     "label": "Archimedes A5000"},
+    {"net": 0, "station": 41, "host": "risc-pc.local", "port": 32768}
+  ],
+  "subnets": [
+    {"net": 128, "subnet": "192.168.5.0/24",
+     "label": "RISC OS convention"}
+  ]
+}
