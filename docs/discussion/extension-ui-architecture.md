@@ -600,7 +600,7 @@ message FileReference {
     string path = 1;                  // absolute, on the server's host
     string display_name = 2;          // a human title ("Shared AUN map"); defaults to the path's file name
     Indicator.State state = 3;        // OK = loaded; WARN = missing; ERROR = load error
-    string state_text = 4;            // empty when OK; "not found" or the load error otherwise
+    string state_text = 4;            // "loaded", "not found", or the load error; beneath the title
     repeated FileReferenceAction actions = 5;  // server actions: "Reload"
 }
 
@@ -613,8 +613,8 @@ message FileReferenceAction {
 Dispatch payload: `string file_action_id`.
 
 Renderer contract: a small document icon and the display name, the path
-as a tooltip, the state indicator beside the name, the state text (when
-non-empty) on its own line beneath in caption style, and a pull-down
+as a tooltip, the state indicator beside the name, the state text on its
+own line beneath in caption style, and a pull-down
 (shortcut) menu holding the server's actions plus the renderer's own: "Reveal in
 Finder" (or the platform equivalent) only when the server shares this
 host's filesystem (the existing host-fingerprint gating; see
