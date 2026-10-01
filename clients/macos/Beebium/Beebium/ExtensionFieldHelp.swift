@@ -27,13 +27,18 @@ struct ExtensionFieldHelpButton: View {
                 .foregroundColor(.secondary)
         }
         .buttonStyle(.plain)
-        .help(help)
-        .popover(isPresented: $isShowing) {
+        // No .help() tooltip here: the popover is the affordance, and a tooltip
+        // with the same text on the same icon is noise. The popover body is
+        // self-sizing -- an explicit width and fixedSize vertical -- because an
+        // unconstrained macOS popover inherits a huge proposed height and centres
+        // the text in it.
+        .popover(isPresented: $isShowing, arrowEdge: .bottom) {
             Text(help)
                 .font(.callout)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
-                .frame(maxWidth: 280)
+                .padding()
+                .frame(width: 280)
         }
     }
 }
