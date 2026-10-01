@@ -144,6 +144,12 @@ public:
     // as unreachable rather than routed. Copied out under the lock.
     std::vector<AunMapPeer> unreachable_map_peers() const;
 
+    // The map file's peers and subnets (with their labels) as of the last load,
+    // cached so the sidebar can show labels and the subnet-rules group without
+    // re-reading or re-resolving the file on every view build.
+    std::vector<AunMapPeer> map_peers() const;
+    std::vector<AunMapSubnet> map_subnets() const;
+
     // The result of a map-file edit RPC: an empty error means success, and
     // `removed` reports whether a remove found an entry.
     struct MapEdit {
@@ -243,6 +249,8 @@ private:
     std::uint32_t map_file_entry_count_ = 0;
     std::string map_file_error_;
     std::vector<AunMapPeer> unreachable_map_peers_;
+    std::vector<AunMapPeer> map_peers_;      // the file's peers (with labels)
+    std::vector<AunMapSubnet> map_subnets_;  // the file's subnets (with labels)
     // The map file's modification time at the last load, so the sweep poll can
     // detect a change. file_time_type::min() stands for an absent file.
     std::filesystem::file_time_type map_file_mtime_ =

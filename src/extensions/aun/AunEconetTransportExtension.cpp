@@ -556,6 +556,11 @@ AunEconetTransportExtension::reload_map_file() {
         map_file_error_.clear();
         map_file_entry_count_ = entry_count;
         unreachable_map_peers_ = std::move(unreachable);
+        // Cache the file's peers (with labels) and subnets so the sidebar can
+        // show labels and the subnet-rules group cheaply, without re-reading or
+        // re-resolving on every build_view.
+        map_peers_ = loaded.map->peers;
+        map_subnets_ = loaded.map->subnets;
         map_file_mtime_ =
             ec ? std::filesystem::file_time_type::min() : mtime;
     }
@@ -602,6 +607,16 @@ std::string AunEconetTransportExtension::map_file_error() const {
 std::vector<AunMapPeer> AunEconetTransportExtension::unreachable_map_peers() const {
     std::lock_guard<std::mutex> lock(map_file_mutex_);
     return unreachable_map_peers_;
+}
+
+std::vector<AunMapPeer> AunEconetTransportExtension::map_peers() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return map_peers_;
+}
+
+std::vector<AunMapSubnet> AunEconetTransportExtension::map_subnets() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return map_subnets_;
 }
 
 AunEconetTransportExtension::MapEdit AunEconetTransportExtension::add_map_peer(
