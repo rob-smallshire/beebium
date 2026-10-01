@@ -53,6 +53,8 @@ The extension argument parser tokenises `--<extension> a:b:c` on `:`, which conf
 
 `@` is chosen because it is shell-safe across bash, zsh, fish, cmd.exe, and PowerShell -- no quoting is required -- and collides with neither `.` (used inside `net.stn` and IPv4 addresses) nor `:` (the top-level argument separator). The `is_list` parser plumbing now preserves repeated tokens as an opaque vector, so each extension is free to pick whatever inner separator reads best for its data; `@` is a convention for AUN, not a framework rule.
 
+One embedded colon is rejoined automatically: a Windows drive letter in a value, such as `map-file=C:\Users\me\aun-map.json` (or with forward slashes). The parser tears it at the drive colon and then puts it back when a `key=value`'s value is a single letter and the next token begins with `\` or `/` -- so a map file path on Windows needs no quoting. Any *other* value that must contain a `:` (a URL, say) still has to be double-quoted, e.g. `key="scheme://host:port"`; a `//` continuation is treated as a split URL, not a drive path.
+
 In preset files, `map` accepts either a single string or a JSON array of strings:
 
 ```json

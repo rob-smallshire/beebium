@@ -120,6 +120,33 @@ bool looks_like_split_url(std::string_view token) {
     return token.size() >= 2 && token[0] == '/' && token[1] == '/';
 }
 
+// A Windows drive letter is the one unquoted colon we rejoin automatically:
+// split_colon_args tore `map-file=C:\Users\...` into `map-file=C` and
+// `\Users\...`. True when `cur` is a `key=value` whose value is a single ASCII
+// letter (the drive) and `next` begins with a path separator -- the shape a
+// torn `C:\path` or `C:/path` leaves, and nothing else legitimate does. A URL
+// (`scheme://host`) does not match: its scheme is more than one letter, and its
+// continuation begins `//`, which the split-URL guidance above catches instead.
+bool is_drive_letter_split(const std::string& cur, const std::string& next) {
+    if (next.empty() || (next[0] != '\\' && next[0] != '/')) {
+        return false;
+    }
+    // A '//' continuation is a split URL, not a drive path; leave it for the
+    // split-URL guidance.
+    if (next[0] == '/' && next.size() >= 2 && next[1] == '/') {
+        return false;
+    }
+    auto eq = cur.find('=');
+    if (eq == std::string::npos) {
+        return false;
+    }
+    std::string_view value(cur);
+    value.remove_prefix(eq + 1);
+    return value.size() == 1 &&
+           ((value[0] >= 'A' && value[0] <= 'Z') ||
+            (value[0] >= 'a' && value[0] <= 'z'));
+}
+
 }  // namespace
 
 ParseResult parse_extension_args(
@@ -153,6 +180,27 @@ ParseResult parse_extension_args(
 
     // Split the argument string
     auto tokens = split_colon_args(arg_string);
+
+    // Rejoin a Windows drive letter the split tore off a value: `map-file=C`
+    // followed by `\Users\...` becomes `map-file=C:\Users\...` again. Only this
+    // narrow shape is rejoined; a value with any other embedded colon must be
+    // quoted (and a split URL is surfaced below). Keep absorbing while the rule
+    // still applies, which for a real drive path is a single step.
+    {
+        std::vector<std::string> coalesced;
+        coalesced.reserve(tokens.size());
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            std::string tok = std::move(tokens[i]);
+            while (i + 1 < tokens.size() &&
+                   is_drive_letter_split(tok, tokens[i + 1])) {
+                tok += ':';
+                tok += tokens[i + 1];
+                ++i;
+            }
+            coalesced.push_back(std::move(tok));
+        }
+        tokens = std::move(coalesced);
+    }
 
     // Remove empty tokens (e.g. from trailing colon)
     tokens.erase(std::remove_if(tokens.begin(), tokens.end(),

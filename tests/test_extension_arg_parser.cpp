@@ -445,3 +445,65 @@ TEST_CASE("normalise_list_params: list_config form wins when both present",
     REQUIRE(config.count("map") == 0);
     REQUIRE(list_config.at("map") == std::vector<std::string>{"from-list"});
 }
+
+// ---------------------------------------------------------------------------
+// Windows drive-letter rejoin (#150 Windows CI): split_colon_args tears
+// `map-file=C:\path` at the drive colon; the parser puts it back together.
+// ---------------------------------------------------------------------------
+
+namespace {
+// net/port scalars, a map-file filepath, and a repeatable map list.
+const std::vector<ParameterSchema> kAunLikeSchema = {
+    {"net", "string", "Econet net", -1, false, false, "0"},
+    {"port", "string", "UDP port", -1, false, false, ""},
+    {"map-file", "filepath", "Shared map file path", -1, false, false, ""},
+    {"map", "string", "Peer mapping", -1, false, true, ""},
+};
+}  // namespace
+
+TEST_CASE("parse rejoins a backslash Windows drive path in a value",
+          "[extension][arg-parser]") {
+    auto result = parse_extension_args(
+        "aun", "net=0:port=0:map-file=C:\\Users\\x\\aun-map.json", kAunLikeSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config["map-file"] == "C:\\Users\\x\\aun-map.json");
+    CHECK(result.config["net"] == "0");
+    CHECK(result.config["port"] == "0");
+}
+
+TEST_CASE("parse rejoins a forward-slash Windows drive path in a value",
+          "[extension][arg-parser]") {
+    auto result = parse_extension_args(
+        "aun", "map-file=C:/Users/x/aun-map.json", kAunLikeSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config["map-file"] == "C:/Users/x/aun-map.json");
+}
+
+TEST_CASE("parse does not rejoin a single-letter value before a non-slash token",
+          "[extension][arg-parser]") {
+    // value 'a' is a single letter, but 'port=0' is not a path continuation:
+    // the colon still splits, so map-file is 'a', not 'a:port=0'.
+    auto result = parse_extension_args("aun", "map-file=a:port=0", kAunLikeSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config["map-file"] == "a");
+    CHECK(result.config["port"] == "0");
+}
+
+TEST_CASE("parse still splits an ordinary colon-separated list value",
+          "[extension][arg-parser]") {
+    auto result = parse_extension_args(
+        "aun", "map=0.1@host@1:map=0.2@host@2", kAunLikeSchema);
+    REQUIRE(result.ok);
+    REQUIRE(result.list_config["map"].size() == 2);
+    CHECK(result.list_config["map"][0] == "0.1@host@1");
+    CHECK(result.list_config["map"][1] == "0.2@host@2");
+}
+
+TEST_CASE("parse leaves a single-letter-scheme URL for the split-URL guidance",
+          "[extension][arg-parser]") {
+    // A '//' continuation is a URL, not a drive path: it must not be absorbed,
+    // so the split-URL guidance still fires.
+    auto result = parse_extension_args("aun", "map-file=s://host", kAunLikeSchema);
+    CHECK_FALSE(result.ok);
+    REQUIRE_THAT(result.error, ContainsSubstring("URL"));
+}
