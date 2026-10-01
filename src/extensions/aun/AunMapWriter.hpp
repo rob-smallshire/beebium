@@ -31,12 +31,18 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace beebium {
 
 // The outcome of loading the map file as an editable document (defined in full
 // after AunMapDocument, since it holds one by value).
 struct AunMapDocumentLoad;
+
+// Resolve a host (IPv4 literal or DNS name) to a dotted-quad IPv4 string, or
+// nullopt if it does not resolve. For show-aun-map's resolution column; a
+// literal returns at once, a name goes through getaddrinfo.
+std::optional<std::string> resolve_map_host(const std::string& host);
 
 class AunMapDocument {
 public:
@@ -65,6 +71,10 @@ public:
 
     // Remove the subnets[] entry for net. Returns true if one was removed.
     bool remove_subnet(std::uint8_t net);
+
+    // Top-level keys other than "peers" and "subnets" -- preserved on write and
+    // worth showing so an operator knows a newer Beebium's keys are intact.
+    std::vector<std::string> unknown_top_level_keys() const;
 
     // Serialize to canonical JSON text: known keys in their documented order,
     // unknown keys and entry order preserved, two-space indent, trailing

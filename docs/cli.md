@@ -613,6 +613,66 @@ beebium-model-b export-preset <id> --output <filepath>
 
 Copies the preset file to the specified location. Works with both system and user presets.
 
+### AUN Map Subcommands
+
+These subcommands edit the per-user `aun-map.json` (the standing AUN peer map; see [networking.md](networking.md) "The AUN map file"). They are model-independent and write the file through the same library the running server uses, so a write is picked up by any running instance on its poll. Every one honours the `BEEBIUM_AUN_MAP_FILEPATH` environment variable and a `--map-file <path>` option (which wins over the environment); without either, the shared per-user path is used. GUIs that talk to a running (possibly remote) server use the `AunService` map RPCs instead; these subcommands are for scripts and hand setup.
+
+#### report-aun-map-filepath
+
+```bash
+beebium-model-b report-aun-map-filepath [--map-file <path>]
+```
+
+Outputs the resolved `aun-map.json` path (after `--map-file` and `BEEBIUM_AUN_MAP_FILEPATH`).
+
+#### create-aun-map
+
+```bash
+beebium-model-b create-aun-map [--map-file <path>]
+```
+
+Writes a template `aun-map.json` with one example peer and one example subnet, whose labels explain the PiEconetBridge and RISC OS cases. Refuses to overwrite an existing file (exits `78`, configuration error).
+
+#### show-aun-map
+
+```bash
+beebium-model-b [--format pretty|tsv|jsonl] show-aun-map [--map-file <path>]
+```
+
+Shows the parsed peers and subnets with their labels and host-resolution state, in the global output format. `pretty` is a human table; `tsv` and `jsonl` are machine-readable. Unknown top-level keys in the file are reported (and always preserved on a write).
+
+#### add-aun-peer
+
+```bash
+beebium-model-b add-aun-peer <net.stn> <host> <port> [--label <text>] [--map-file <path>]
+```
+
+Adds or replaces the `peers` entry for `net.stn` (net 0-255, station 1-254). `host` is an IPv4 literal or a DNS name. Entry order and unknown keys in the file are preserved.
+
+#### remove-aun-peer
+
+```bash
+beebium-model-b remove-aun-peer <net.stn> [--map-file <path>]
+```
+
+Removes the `peers` entry for `net.stn`. Exits `0` whether or not an entry was present, reporting which.
+
+#### add-aun-subnet
+
+```bash
+beebium-model-b add-aun-subnet <net> <a.b.c.0/24> [--label <text>] [--map-file <path>]
+```
+
+Adds or replaces the `subnets` entry for `net` (the RISC OS convention: station is the last octet, port 32768). Only `/24` is supported.
+
+#### remove-aun-subnet
+
+```bash
+beebium-model-b remove-aun-subnet <net> [--map-file <path>]
+```
+
+Removes the `subnets` entry for `net`.
+
 ### capture-screenshot
 
 Run the emulator headlessly for a short time and write the framebuffer to a PNG

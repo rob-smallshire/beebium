@@ -19,6 +19,7 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #endif
 
@@ -26,6 +27,7 @@
 #include <random>
 #include <sstream>
 #include <system_error>
+#include <vector>
 
 namespace beebium {
 
@@ -67,6 +69,29 @@ ordered_json canonical_entry(const ordered_json& entry,
 }
 
 }  // namespace
+
+std::optional<std::string> resolve_map_host(const std::string& host) {
+    in_addr literal{};
+    if (inet_pton(AF_INET, host.c_str(), &literal) == 1) {
+        return host;  // already a dotted quad
+    }
+    addrinfo hints{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    addrinfo* res = nullptr;
+    std::optional<std::string> result;
+    if (::getaddrinfo(host.c_str(), nullptr, &hints, &res) == 0 && res != nullptr) {
+        char buf[INET_ADDRSTRLEN] = {0};
+        auto* addr = reinterpret_cast<sockaddr_in*>(res->ai_addr);
+        if (inet_ntop(AF_INET, &addr->sin_addr, buf, sizeof(buf))) {
+            result = buf;
+        }
+    }
+    if (res != nullptr) {
+        ::freeaddrinfo(res);
+    }
+    return result;
+}
 
 AunMapDocument AunMapDocument::empty() {
     ordered_json doc = ordered_json::object();
@@ -207,6 +232,16 @@ bool AunMapDocument::remove_subnet(std::uint8_t net) {
         }
     }
     return false;
+}
+
+std::vector<std::string> AunMapDocument::unknown_top_level_keys() const {
+    std::vector<std::string> keys;
+    for (const auto& [key, value] : doc_.items()) {
+        if (key != "peers" && key != "subnets") {
+            keys.push_back(key);
+        }
+    }
+    return keys;
 }
 
 std::string AunMapDocument::to_json() const {

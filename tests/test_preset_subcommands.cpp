@@ -1258,3 +1258,107 @@ TEST_CASE("describe-disc-image --help returns OK",
     REQUIRE(result.stderr_output.find("Usage:") != std::string::npos);
 }
 #endif  // BEEBIUM_DISCS_DIR
+
+// ============================================================================
+// AUN map file subcommands (share this harness; model-independent)
+// ============================================================================
+
+namespace {
+// A unique temp aun-map.json path for a hermetic subcommand test.
+std::filesystem::path temp_aun_map_filepath() {
+    return std::filesystem::temp_directory_path() /
+           ("beebium-aun-map-sub-" + std::to_string(std::rand()) + ".json");
+}
+}  // namespace
+
+TEST_CASE("report-aun-map-filepath honours BEEBIUM_AUN_MAP_FILEPATH",
+          "[integration][aun-map][report-aun-map-filepath]") {
+    auto path = temp_aun_map_filepath();
+    auto result = run_command(EXECUTABLE + " report-aun-map-filepath",
+                              {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stdout_output.find(path.string()) != std::string::npos);
+}
+
+TEST_CASE("report-aun-map-filepath honours --map-file over the env",
+          "[integration][aun-map][report-aun-map-filepath]") {
+    auto path = temp_aun_map_filepath();
+    auto result = run_command(
+        EXECUTABLE + " report-aun-map-filepath --map-file " + path.string(),
+        {{"BEEBIUM_AUN_MAP_FILEPATH", "/some/other/place.json"}});
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stdout_output.find(path.string()) != std::string::npos);
+    REQUIRE(result.stdout_output.find("/some/other/place.json") ==
+            std::string::npos);
+}
+
+TEST_CASE("create-aun-map writes a template and refuses to overwrite",
+          "[integration][aun-map][create-aun-map]") {
+    auto path = temp_aun_map_filepath();
+    remove_quietly(path);
+    auto created = run_command(EXECUTABLE + " create-aun-map",
+                               {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(created.exit_code == 0);
+    REQUIRE(std::filesystem::exists(path));
+
+    auto again = run_command(EXECUTABLE + " create-aun-map",
+                             {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(again.exit_code == 78);  // EX_CONFIG -- refuses to overwrite
+    remove_quietly(path);
+}
+
+TEST_CASE("add-aun-peer then show-aun-map round-trips via the file",
+          "[integration][aun-map][add-aun-peer]") {
+    auto path = temp_aun_map_filepath();
+    remove_quietly(path);
+    auto added = run_command(
+        EXECUTABLE + " add-aun-peer 0.254 192.168.1.50 32768 --label fs",
+        {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(added.exit_code == 0);
+
+    auto shown = run_command(EXECUTABLE + " --format tsv show-aun-map",
+                             {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(shown.exit_code == 0);
+    REQUIRE(shown.stdout_output.find("192.168.1.50") != std::string::npos);
+    REQUIRE(shown.stdout_output.find("fs") != std::string::npos);
+    remove_quietly(path);
+}
+
+TEST_CASE("add-aun-peer with a bad net.stn returns USAGE",
+          "[integration][aun-map][add-aun-peer]") {
+    auto path = temp_aun_map_filepath();
+    auto result = run_command(
+        EXECUTABLE + " add-aun-peer 0.999 192.168.1.50 32768",
+        {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(result.exit_code == 64);  // EX_USAGE
+    remove_quietly(path);
+}
+
+TEST_CASE("remove-aun-peer reports when nothing was removed",
+          "[integration][aun-map][remove-aun-peer]") {
+    auto path = temp_aun_map_filepath();
+    remove_quietly(path);
+    // Removing from an absent file is harmless and exits OK.
+    auto result = run_command(EXECUTABLE + " remove-aun-peer 0.254",
+                              {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(result.stdout_output.find("No entry") != std::string::npos);
+    remove_quietly(path);
+}
+
+TEST_CASE("add-aun-subnet then remove-aun-subnet",
+          "[integration][aun-map][add-aun-subnet]") {
+    auto path = temp_aun_map_filepath();
+    remove_quietly(path);
+    auto added = run_command(EXECUTABLE + " add-aun-subnet 128 192.168.5.0/24",
+                             {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(added.exit_code == 0);
+    auto bad = run_command(EXECUTABLE + " add-aun-subnet 1 192.168.5.0/16",
+                           {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(bad.exit_code == 64);  // not a /24
+    auto removed = run_command(EXECUTABLE + " remove-aun-subnet 128",
+                               {{"BEEBIUM_AUN_MAP_FILEPATH", path.string()}});
+    REQUIRE(removed.exit_code == 0);
+    REQUIRE(removed.stdout_output.find("Removed") != std::string::npos);
+    remove_quietly(path);
+}
