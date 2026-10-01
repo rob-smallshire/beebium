@@ -105,11 +105,6 @@ def _file_server_preset_without_transport(server_filepath: Path | None, scratch_
     return preset_filepath
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#149: retransmission memory matches handles without their sender, "
-    "so a second station's first request is acknowledged but never delivered",
-)
 @pytest.mark.parametrize("nfs_rom_filename", ["acorn-anfs_4_18.rom", "acorn-nfs_3_34.rom"])
 def test_second_station_logs_on_to_file_server(
     launch_bbc: LaunchBbc,

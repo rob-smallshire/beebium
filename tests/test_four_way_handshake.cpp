@@ -1481,7 +1481,60 @@ void complete_inbound_transaction(FourWayHandshake& hs) {
     hs.send_frame(make_raw_frame({1, 0, 254, 0, 0x00}));   // guest's final ack
 }
 
+// As above but for an inbound transaction whose sender is `src_stn` (the
+// default helper assumes 254); the guest's acks echo that station.
+void complete_inbound_transaction_from(FourWayHandshake& hs,
+                                       std::uint8_t src_stn) {
+    auto scout = drain_until_frame(hs, 200);
+    REQUIRE(scout.has_value());
+    hs.send_frame(make_raw_frame({1, 0, src_stn, 0, 0x00}));
+    tick_n(hs, FourWayHandshake::SCOUT_ACK_TIMEOUT);
+    auto data = drain_until_frame(hs, 200);
+    REQUIRE(data.has_value());
+    hs.send_frame(make_raw_frame({1, 0, src_stn, 0, 0x00}));
+}
+
 }  // namespace
+
+TEST_CASE("FourWayHandshake: two senders reusing one handle are both delivered",
+          "[econet][handshake][duplicate]") {
+    // AUN handles are unique only per sender and every station starts numbering
+    // from the same place, so two clients' requests routinely share a handle.
+    // The retransmission memory must be keyed by sender, or a second client's
+    // first request collides with a handle the first used and is acked in 0 ms
+    // without ever reaching the guest -- Mark Moxon's "No reply" (#149).
+    TestBackend backend;
+    FourWayHandshake hs(backend);
+    const std::uint32_t handle = 16404;
+
+    // Sender 254 completes an inbound transaction on this handle.
+    backend.inject_rx_network_frame(make_unicast_with_handle(handle));  // src 254
+    complete_inbound_transaction(hs);
+    REQUIRE(hs.duplicate_frames_acked_count() == 0);
+
+    // A DIFFERENT sender (80) using the SAME handle is a distinct request, not a
+    // retransmission: it must be delivered to the guest, not auto-acked.
+    tick_n(hs, FourWayHandshake::IDLE_COOLDOWN + 10);
+    NetworkFrame from_80 = make_unicast_with_handle(handle);
+    from_80.src_stn = 80;
+    backend.inject_rx_network_frame(from_80);
+    // complete_inbound_transaction_from REQUIREs a scout reaches the guest,
+    // which is the delivery this test is about; the duplicate counter staying
+    // 0 proves it was not auto-acked as a retransmission.
+    complete_inbound_transaction_from(hs, 80);
+    CHECK(hs.duplicate_frames_acked_count() == 0);
+
+    // A true retransmission from 254 (same sender, same handle) is still
+    // recognised: suppressed and acked without the guest.
+    tick_n(hs, FourWayHandshake::IDLE_COOLDOWN + 10);
+    const auto sent_before = backend.sent_network_frames().size();
+    backend.inject_rx_network_frame(make_unicast_with_handle(handle));  // src 254
+    auto redelivered = drain_until_frame(hs, 400);
+    CHECK_FALSE(redelivered.has_value());
+    CHECK(hs.duplicate_frames_acked_count() == 1);
+    REQUIRE(backend.sent_network_frames().size() == sent_before + 1);
+    CHECK(backend.sent_network_frames().back().type == FrameType::Ack);
+}
 
 TEST_CASE("FourWayHandshake: a retransmitted data frame is acknowledged, not redelivered",
           "[econet][handshake][duplicate]") {

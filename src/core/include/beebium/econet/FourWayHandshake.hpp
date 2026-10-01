@@ -92,6 +92,13 @@ public:
     // both bounded and sufficient; no timer is involved.
     static constexpr int MAX_REMEMBERED_HANDLES = 32;
 
+    // Keying the memory per sender means several senders can each hold up to
+    // MAX_REMEMBERED_HANDLES; cap the total so a busy network cannot grow it
+    // without bound. A sender over its own cap evicts its own oldest entry
+    // first, so one chatty peer never pushes another's recent handles out.
+    static constexpr int MAX_REMEMBERED_HANDLES_TOTAL =
+        MAX_REMEMBERED_HANDLES * 8;
+
     // Econet frame byte offsets
     static constexpr int FRAME_DEST_STN = 0;
     static constexpr int FRAME_DEST_NET = 1;
@@ -518,7 +525,10 @@ private:
         nf.src_stn = saved_dest_stn_;   // FROM us (we were the original destination)
         nf.src_net = saved_dest_net_;
         backend_.send_frame(nf);
-        remember_acked_handle(in_flight_handle_);
+        // Remember it against the station that sent it (the original requester,
+        // saved_src_*), so only a retransmission from that same sender is later
+        // recognised -- not a different client that happens to reuse the handle.
+        remember_acked_handle(saved_src_net_, saved_src_stn_, in_flight_handle_);
         in_flight_handle_ = 0;
         clear_flag_fill();
         watchdog_timer_ = 0;  // Cancel watchdog -- handshake completed normally
@@ -565,7 +575,8 @@ private:
                 // handshake for one frame.
                 return true;
             }
-            if (has_acked_handle(packet.handle)) {
+            if (has_acked_handle(packet.src_net, packet.src_stn,
+                                 packet.handle)) {
                 // The guest has already consumed this and has no reason to
                 // answer a copy, so answer it ourselves. Otherwise the peer
                 // retransmits for ever and every copy costs a watchdog reset.
@@ -826,19 +837,39 @@ private:
 
     // --- Retransmission memory ---
 
-    bool has_acked_handle(uint32_t handle) const {
-        return std::find(acked_handles_.begin(), acked_handles_.end(), handle)
-               != acked_handles_.end();
+    bool has_acked_handle(uint8_t net, uint8_t stn, uint32_t handle) const {
+        for (const auto& e : acked_handles_) {
+            if (e.handle == handle && e.net == net && e.stn == stn) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    void remember_acked_handle(uint32_t handle) {
+    void remember_acked_handle(uint8_t net, uint8_t stn, uint32_t handle) {
         if (handle == 0) return;
-        if (has_acked_handle(handle)) return;
+        if (has_acked_handle(net, stn, handle)) return;
+        // Bound this sender first: at its cap, drop its own oldest entry, so a
+        // chatty peer evicts only its own handles, never another sender's.
+        std::size_t for_sender = 0;
+        for (const auto& e : acked_handles_) {
+            if (e.net == net && e.stn == stn) ++for_sender;
+        }
+        if (for_sender >= static_cast<std::size_t>(MAX_REMEMBERED_HANDLES)) {
+            for (auto it = acked_handles_.begin(); it != acked_handles_.end();
+                 ++it) {
+                if (it->net == net && it->stn == stn) {
+                    acked_handles_.erase(it);
+                    break;
+                }
+            }
+        }
+        // Then bound the total across all senders.
         if (acked_handles_.size()
-                >= static_cast<size_t>(MAX_REMEMBERED_HANDLES)) {
+                >= static_cast<std::size_t>(MAX_REMEMBERED_HANDLES_TOTAL)) {
             acked_handles_.pop_front();
         }
-        acked_handles_.push_back(handle);
+        acked_handles_.push_back(AckedHandle{net, stn, handle});
     }
 
     // Acknowledge a frame directly, without involving the guest. The
@@ -962,9 +993,19 @@ private:
     uint32_t failed_tx_count_ = 0;
     uint32_t duplicate_frames_acked_count_ = 0;
 
-    // Handles of inbound data frames the guest has acknowledged, most recent
-    // last, and the handle of the one it is working through now.
-    std::deque<uint32_t> acked_handles_;
+    // Inbound data frames the guest has acknowledged, most recent last, so a
+    // retransmission can be recognised and acked without the guest. Keyed by
+    // the SENDER as well as the handle: AUN handles are unique only per sender
+    // and every station starts numbering from the same place, so a bare-handle
+    // memory makes a second client's first request collide with a handle the
+    // first client used -- acked in 0 ms, never delivered (#149). The handle of
+    // the frame the guest is working through now is in_flight_handle_.
+    struct AckedHandle {
+        uint8_t net;
+        uint8_t stn;
+        uint32_t handle;
+    };
+    std::deque<AckedHandle> acked_handles_;
     uint32_t in_flight_handle_ = 0;
 
     uint8_t saved_dest_stn_ = 0;

@@ -662,12 +662,19 @@ again. Three cases, and they differ:
   no handles (Piconet, whose firmware owns the wire handshake), so nothing can
   be concluded and nothing is.
 
-Matching is on the handle alone. Matching on content would swallow a peer
-legitimately sending the same bytes twice. The memory is a fixed window of the
-32 most recent handles: peers retry for as long as they choose — PiEconetBridge
-retries once a second, indefinitely — so what is needed is to outlast a burst
-of traffic rather than a span of time, and handles advance monotonically, so no
-timer is involved.
+Matching is on the handle **and its sender** — `(source net, source station,
+handle)`. Matching on content would swallow a peer legitimately sending the
+same bytes twice; matching on the bare handle swallows a *different* peer's
+request, because AUN handles are unique only per sender and every station
+starts numbering from the same place, so a second client's first request
+collides with a handle the first client used and is acked without ever reaching
+the guest (#149 — Mark Moxon's second-station "No reply"). The memory keeps a
+window of the most recent handles per sender (32), bounded in total across
+senders so a busy network cannot grow it without bound; a sender over its own
+cap evicts only its own oldest entry. Peers retry for as long as they choose —
+PiEconetBridge retries once a second, indefinitely — so what is needed is to
+outlast a burst of traffic rather than a span of time, and handles advance
+monotonically, so no timer is involved.
 
 This is the mirror of upstream's `AUTOACK`, which exists because emulators
 re-send what is really a retry as a fresh packet and the bridge acknowledges on
@@ -698,9 +705,11 @@ could be recognised as stale and discarded on arrival. Left alone for now,
 since inventing more special cases in the receive path is exactly how this area
 became hard to reason about.
 
-**Tests.** Four cases tagged `[duplicate]` in `tests/test_four_way_handshake.cpp`
+**Tests.** Five cases tagged `[duplicate]` in `tests/test_four_way_handshake.cpp`
 (acknowledge a retransmission, do not confuse a fresh transaction carrying the
-same bytes, drop one arriving mid-transaction, bound the memory), two under
+same bytes, drop one arriving mid-transaction, bound the memory, and deliver
+two senders that reuse one handle while still suppressing a true per-sender
+retransmission), two under
 `[holding]` for the reset behaviour, and
 `integration_tests/pieb-aun/tests/test_reordered_reply.py` against a real
 bridge with acks deliberately reordered.

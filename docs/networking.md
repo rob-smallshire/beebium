@@ -15,7 +15,7 @@ AUN (Acorn Universal Networking) encapsulates Econet protocols over TCP/IP, orig
 1. **Emulate the MC68B54 ADLC** at the hardware level — **Done.** Cycle-accurate on the E-clock domain, with PSE, stored/present status, and full register semantics. See `Mc6854.hpp`.
 2. **Support AUN protocol** for network connectivity — **Done.** `AunBackend` handles UDP transport; `FourWayHandshake` bridges AUN's two-way protocol to the four-way handshake that NFS ROMs expect.
 3. **Enable connectivity with real Econet hardware** via the Piconet USB device — **Done.** `PiconetBackend` drives a real Piconet on `/dev/tty.usbmodem*`. Validated against a PiEconetBridge-hosted fileserver over a real Econet wire, and end-to-end against a real BBC Microcomputer talking to a Beebium-hosted Level 3 File Server. See `docs/discussion/piconet-feasibility.md` for the design and `docs/discussion/piconet-upstream-issues.md` for upstream-side findings.
-4. **Support NFS/ANFS ROMs** for file server access — **Done.** NFS 3.34 works correctly, including boot messages, `*I AM`, `*CAT`, `*DATE`, and file operations against a real Acorn Level 3 Fileserver.
+4. **Support NFS/ANFS ROMs** for file server access — **Done.** NFS 3.34 and ANFS 4.18 work correctly, including boot messages, `*I AM`, `*CAT`, `*DATE`, and file operations against a real Acorn Level 3 Fileserver, and more than one client logs on to one file server at once — the retransmission memory is keyed per sender, so a second station's first request is not mistaken for a duplicate of the first's (#149).
 
 ## Network Transport Backends
 
