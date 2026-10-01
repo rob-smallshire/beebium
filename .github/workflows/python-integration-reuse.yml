@@ -49,14 +49,15 @@ jobs:
           sudo apt-get install -y libgrpc++-dev libavahi-client3 avahi-daemon avahi-utils dbus
 
       # The artifact name matches the platform input exactly
-      # (beebium-server-macos-arm64, ...-linux, ...-windows, ...). Windows lands
-      # in build/src/server/Release; the others extract at build/ so the RPATH
-      # layout matches. run-id + github-token pull from the other run.
+      # (beebium-server-macos-arm64, ...-linux, ...-windows, ...). Every
+      # platform extracts at build/, so the RPATH layout matches and the bundled
+      # disc masters land in build/discs/ above the executables. run-id +
+      # github-token pull from the other run.
       - name: Download server binary
         uses: actions/download-artifact@v8
         with:
           name: beebium-server-${{ inputs.platform }}
-          path: ${{ inputs.platform == 'windows' && 'build/src/server/Release' || 'build' }}
+          path: build
           run-id: ${{ inputs.server_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
