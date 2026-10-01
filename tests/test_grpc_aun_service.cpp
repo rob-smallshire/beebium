@@ -21,6 +21,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AunEconetTransportExtension.hpp"
+#include "test_aun_helpers.hpp"
 #include "beebium/Machines.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
 #include "beebium/extension/ExtensionRegistry.hpp"
@@ -64,6 +65,9 @@ public:
         // Build the AUN extension on an OS-assigned ephemeral port and hand its
         // backend to EconetSocket so the dispatcher has something to talk to.
         auto ext = std::make_unique<beebium::AunEconetTransportExtension>();
+        // Unique discovery type so a real _aun._udp announcer on this host or
+        // the LAN cannot be adopted as a peer and fail these tests (#145).
+        ext->set_discovery_service_type(aun_unique_service_type());
         ext->set_config({{"port", "0"}, {"map-file", map_filepath_.string()}});
         auto backend = ext->create_backend(/*station=*/1);
         REQUIRE(backend != nullptr);

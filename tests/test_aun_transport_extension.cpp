@@ -19,6 +19,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AunEconetTransportExtension.hpp"
+#include "test_aun_helpers.hpp"
 #include "AunPeerSet.hpp"
 #include "beebium/econet/AunBackend.hpp"
 
@@ -65,6 +66,7 @@ std::optional<AunPeerEntry> find_peer(const AunPeerSet& peers, uint8_t net,
 TEST_CASE("AUN transport: AddPeer works before the backend exists and survives Enable",
           "[aun][transport][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     // No create_backend yet: the transport is configured but not bound, exactly
     // the state EconetService.Enable with an aun_port finds (issue #54/#55).
     REQUIRE(ext.backend() == nullptr);
@@ -92,6 +94,7 @@ TEST_CASE("AUN transport: AddPeer works before the backend exists and survives E
 TEST_CASE("AUN transport: RemovePeer of an Api entry falls back to a discovered one",
           "[aun][transport][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
@@ -119,6 +122,7 @@ TEST_CASE("AUN transport: a peer edit after the backend is freed is safe; Api su
     // The backend's destruction callback must detach the peer set and drop the
     // pointer first. (Run under -DBEEBIUM_ENABLE_SANITIZERS=ON to prove it.)
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
@@ -152,6 +156,7 @@ TEST_CASE("AUN transport: a peer edit after the backend is freed is safe; Api su
 TEST_CASE("AUN transport: SetConnected before the backend exists applies when it comes up",
           "[aun][transport][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     // No backend yet: SetConnected(false) is remembered, not applied.
     CHECK_FALSE(ext.set_desired_connected(false));
     CHECK_FALSE(ext.desired_connected());
@@ -181,6 +186,7 @@ TEST_CASE("AUN transport: a map file is loaded as MapFile peers and subnet rules
     })");
 
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}, {"map-file", map_filepath.string()}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
@@ -219,6 +225,7 @@ TEST_CASE("AUN transport: ReloadMap re-reads an edited map file without restart"
                R"({"peers":[{"net":0,"station":254,"host":"192.168.1.10","port":32768}]})");
 
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}, {"map-file", map_filepath.string()}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
@@ -248,6 +255,7 @@ TEST_CASE("AUN transport: ReloadMap re-reads an edited map file without restart"
 TEST_CASE("AUN transport: map-file=none disables the map file",
           "[aun][transport][extension][map-file]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}, {"map-file", "none"}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);
@@ -263,6 +271,7 @@ TEST_CASE("AUN transport: a malformed map file is reported and keeps prior entri
                R"({"peers":[{"net":0,"station":254,"host":"192.168.1.10","port":32768}]})");
 
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}, {"map-file", map_filepath.string()}});
     auto backend_owner = ext.create_backend(/*station=*/1);
     REQUIRE(backend_owner != nullptr);

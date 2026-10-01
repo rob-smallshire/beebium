@@ -19,6 +19,7 @@
 
 #include <beebium/econet/AunBackend.hpp>
 #include "AunEconetTransportExtension.hpp"
+#include "test_aun_helpers.hpp"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -152,6 +153,7 @@ TEST_CASE("AunEconetTransportExtension::parse_map: malformed entries are skipped
 TEST_CASE("AunEconetTransportExtension::create_backend: port=none returns nullptr",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "none"}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend == nullptr);
@@ -160,6 +162,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: port=none returns nullpt
 TEST_CASE("AunEconetTransportExtension::create_backend: port=0 binds an ephemeral port",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}});  // OS-chosen
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
@@ -172,6 +175,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: port=0 binds an ephemera
 TEST_CASE("AunEconetTransportExtension::create_backend: applies map peers",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}});
     ext.set_list_config({{"map", {"0.254@127.0.0.1@32768",
                                   "0.253@127.0.0.1@32769"}}});
@@ -185,6 +189,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: applies map peers",
 TEST_CASE("AunEconetTransportExtension::create_backend: defaults local_net to 0",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
@@ -196,6 +201,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: defaults local_net to 0"
 TEST_CASE("AunEconetTransportExtension::create_backend: honours net config",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}, {"net", "5"}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
@@ -218,6 +224,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: bind failure records a "
     const std::uint16_t held = holder.local_port();
 
     AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", std::to_string(held)}});
     auto backend = ext.create_backend(/*station=*/32);
     if (backend == nullptr) {

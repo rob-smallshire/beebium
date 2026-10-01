@@ -21,6 +21,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "AunEconetTransportExtension.hpp"
+#include "test_aun_helpers.hpp"
 #include "AunPeerSet.hpp"
 #include "AunUi.hpp"
 #include "beebium/econet/AunBackend.hpp"
@@ -51,6 +52,9 @@ public:
         map_filepath_ = std::filesystem::temp_directory_path() /
                         ("beebium-aun-ui-map-" + std::to_string(rd()) + ".json");
         ext_ = std::make_unique<beebium::AunEconetTransportExtension>();
+        // Unique discovery type so a real _aun._udp announcer cannot be adopted
+        // into the peer set and perturb the view under test (#145).
+        ext_->set_discovery_service_type(aun_unique_service_type());
         ext_->set_config({{"port", "0"}, {"map-file", map_filepath_.string()}});
         backend_owner_ = ext_->create_backend(/*station=*/1);
         REQUIRE(backend_owner_ != nullptr);
