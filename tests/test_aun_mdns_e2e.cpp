@@ -478,3 +478,56 @@ TEST_CASE("AUN mDNS e2e: a station change keeps the incumbent and adopts the new
     }));
     CHECK(peers_s.station_collisions().last.empty());
 }
+
+// #139: a map-file entry and discovery coexist. When the file pins a station
+// to a different endpoint than the one a peer announces over mDNS, the file
+// wins the routing and the disagreement is reported through the live collision
+// set -- clearing when the announcement withdraws.
+TEST_CASE("AUN mDNS e2e: a map-file entry wins over a discovered one and reports the disagreement",
+          "[aun][discovery][e2e][.mdns]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    auto [stn_a, stn_b] = pick_stations();
+    const std::string svc_type = unique_service_type();
+
+    AunBackend backend_a(/*local_net=*/0, /*local_stn=*/stn_a, 0);
+    AunBackend backend_b(/*local_net=*/0, /*local_stn=*/stn_b, 0);
+    REQUIRE(backend_a.is_connected());
+    REQUIRE(backend_b.is_connected());
+
+    AunPeerSet peers_a;
+    AunPeerSet peers_b;
+    peers_a.attach(&backend_a);
+    peers_b.attach(&backend_b);
+
+    // A's map file pins B's station to a deliberately wrong port (1), so when
+    // B's real announcement arrives it disagrees.
+    peers_a.set_peer(0, stn_b, htonl(INADDR_LOOPBACK), 1,
+                     AunPeerProvenance::MapFile);
+
+    AunDiscoveryAnnouncer announce_b(0, stn_b, backend_b.local_port(),
+                                     "beebium-test", "1.0", "");
+    announce_b.set_service_type(svc_type);
+    REQUIRE(announce_b.start());
+
+    AunDiscoverySubscriber sub_a(peers_a, stn_a);
+    sub_a.set_service_type(svc_type);
+    REQUIRE(sub_a.start());
+
+    // A discovers B and reports the disagreement; the file endpoint (port 1)
+    // still wins the routing.
+    REQUIRE(wait_until([&] {
+        return peers_a.station_collisions().count >= 1;
+    }));
+    CHECK(peers_a.station_collisions().last.find("map file") !=
+          std::string::npos);
+    REQUIRE(peers_a.resolve(0, stn_b).has_value());
+    CHECK(peers_a.resolve(0, stn_b)->port == 1);  // file wins
+
+    // B withdraws (stop announcing): the disagreement clears on its own.
+    announce_b.stop();
+    REQUIRE(wait_until([&] {
+        return peers_a.station_collisions().count == 0;
+    }));
+}

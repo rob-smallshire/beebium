@@ -393,6 +393,16 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
             }
         });
 
+    // Poll the map file for edits on the subscriber's periodic sweep (off the
+    // emulation thread). The weak token makes a sweep during teardown a no-op.
+    if (subscriber_) {
+        subscriber_->set_on_sweep([this, alive]() {
+            auto keep_alive = alive.lock();
+            if (!keep_alive) return;
+            poll_map_file();
+        });
+    }
+
     // React to the backend being freed (EconetService::DisableEconet drops
     // EconetSocket's reference; nothing else notifies us). Drop our raw pointer
     // and detach the peer set FIRST, so any discovery write still in flight
@@ -525,13 +535,41 @@ AunEconetTransportExtension::reload_map_file() {
     std::uint32_t entry_count =
         static_cast<std::uint32_t>(resolved.size() + unreachable.size() +
                                    loaded.map->subnets.size());
+    // Record the file's modification time so the sweep poll can tell when it
+    // next changes; min() stands for an absent file.
+    std::error_code ec;
+    auto mtime = std::filesystem::last_write_time(path, ec);
     {
         std::lock_guard<std::mutex> lock(map_file_mutex_);
         map_file_error_.clear();
         map_file_entry_count_ = entry_count;
         unreachable_map_peers_ = std::move(unreachable);
+        map_file_mtime_ =
+            ec ? std::filesystem::file_time_type::min() : mtime;
+    }
+    // A live subscriber re-checks its discovered peers against the new file so a
+    // file-vs-discovered disagreement raises or clears as the file changes.
+    if (subscriber_) {
+        subscriber_->revalidate_file_disagreements();
     }
     return {true, ""};
+}
+
+void AunEconetTransportExtension::poll_map_file() {
+    std::string path;
+    std::filesystem::file_time_type last;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) return;
+        path = map_file_filepath_;
+        last = map_file_mtime_;
+    }
+    std::error_code ec;
+    auto mtime = std::filesystem::last_write_time(path, ec);
+    auto current = ec ? std::filesystem::file_time_type::min() : mtime;
+    if (current != last) {
+        reload_map_file();  // records the new mtime
+    }
 }
 
 std::string AunEconetTransportExtension::map_file_path() const {

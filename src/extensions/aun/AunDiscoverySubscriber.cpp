@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -67,6 +68,18 @@ AunDiscoverySubscriber::~AunDiscoverySubscriber() {
 }
 
 bool AunDiscoverySubscriber::start() {
+    // Start the periodic sweep thread unconditionally: besides the same-host
+    // liveness sweep (which reaps a same-host peer only when its server exits),
+    // it drives the map-file reload poll, which must run even where mDNS is
+    // unavailable. Browsing is separate and may fail without stopping the poll.
+    {
+        std::lock_guard lock(sweep_mutex_);
+        sweep_stop_ = false;
+    }
+    if (!sweep_thread_.joinable()) {
+        sweep_thread_ = std::thread([this] { sweep_loop(); });
+    }
+
     if (!browser_) return false;
     discovery::BrowserCallbacks cbs;
     cbs.on_added = [this](const discovery::DiscoveredService& svc) {
@@ -75,24 +88,11 @@ bool AunDiscoverySubscriber::start() {
     cbs.on_removed = [this](const std::string& name) {
         handle_removed(name);
     };
-    if (!browser_->start(service_type_, std::move(cbs))) return false;
-
-    // Start the same-host liveness sweep thread. Same-host peers are kept
-    // across mDNS withdrawals (NIC changes) and reaped only when their server
-    // actually exits -- the sweep is what detects that.
-    {
-        std::lock_guard lock(sweep_mutex_);
-        sweep_stop_ = false;
-    }
-    if (!sweep_thread_.joinable()) {
-        sweep_thread_ = std::thread([this] { sweep_loop(); });
-    }
-    return true;
+    return browser_->start(service_type_, std::move(cbs));
 }
 
 void AunDiscoverySubscriber::stop() {
-    if (!browser_) return;
-    browser_->stop();
+    if (browser_) browser_->stop();
 
     {
         std::lock_guard lock(sweep_mutex_);
@@ -113,6 +113,11 @@ bool AunDiscoverySubscriber::is_subscribed() const {
 void AunDiscoverySubscriber::set_on_peers_changed(std::function<void()> cb) {
     std::lock_guard lock(callback_mutex_);
     on_peers_changed_ = std::move(cb);
+}
+
+void AunDiscoverySubscriber::set_on_sweep(std::function<void()> cb) {
+    std::lock_guard lock(callback_mutex_);
+    on_sweep_ = std::move(cb);
 }
 
 bool AunDiscoverySubscriber::parse_txt(
@@ -262,19 +267,59 @@ void AunDiscoverySubscriber::handle_added(
         // so a Wi-Fi-return re-advertisement updates the entry rather than
         // creating a duplicate. If this name had been parked as pending, it is
         // now an owner, so drop the pending record.
-        name_to_peer_[svc.instance_name] = PeerRef{net, stn, same_host, svc.port};
+        name_to_peer_[svc.instance_name] =
+            PeerRef{net, stn, same_host, svc.port, svc.ipv4_addr_net_byte_order};
         pending_.erase(svc.instance_name);
     }
 
+    // The map file wins over discovery; a discovered (net, stn) the file maps
+    // to a DIFFERENT endpoint is a disagreement, surfaced through the live
+    // collision set (and cleared when this announcement withdraws or the file
+    // changes). Evaluated whether or not an operator source shadows this.
+    bool raised_disagreement = note_file_disagreement(
+        svc.instance_name, net, stn, svc.ipv4_addr_net_byte_order, svc.port);
+
+    if (raised_disagreement) {
+        publish_collision_report();
+    }
     if (!operator_pinned) {
         notify_peers_changed();
     }
+}
+
+bool AunDiscoverySubscriber::note_file_disagreement(
+        const std::string& instance_name, std::uint8_t net, std::uint8_t stn,
+        std::uint32_t ip, std::uint16_t port) {
+    auto map_entry = peers_.endpoint_in(net, stn, AunPeerProvenance::MapFile);
+    bool disagrees =
+        map_entry.has_value() &&
+        (map_entry->ip_addr != ip || map_entry->port != port);
+    std::lock_guard lock(name_map_mutex_);
+    if (disagrees) {
+        if (file_disagreements_.count(instance_name)) {
+            return false;  // already recorded; nothing new
+        }
+        std::string description =
+            "station " + std::to_string(static_cast<unsigned>(net)) + "." +
+            std::to_string(static_cast<unsigned>(stn)) +
+            " is pinned by the map file; ignored a discovered advertisement at "
+            + format_endpoint(ip, port);
+        if (trace_) {
+            std::cerr << "AUN RX: raised collision: " << description << "\n";
+        }
+        file_disagreements_[instance_name] =
+            OwnNumberCollision{++pending_seq_, std::move(description)};
+        return true;
+    }
+    // No disagreement now: clear any we had for this name.
+    return file_disagreements_.erase(instance_name) > 0;
 }
 
 void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
     PeerRef ref{};
     bool have_peer = false;
     bool cleared_collision = false;
+    bool had_disagreement = false;
     {
         std::lock_guard lock(name_map_mutex_);
         // A withdrawn advertisement that was only a collision (a parked peer or
@@ -283,6 +328,9 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
         cleared_collision = pending_.erase(instance_name) > 0;
         cleared_collision =
             own_collisions_.erase(instance_name) > 0 || cleared_collision;
+        // A disagreeing discovered peer is a real peer (handled below), but its
+        // map-file disagreement clears when it withdraws.
+        had_disagreement = file_disagreements_.erase(instance_name) > 0;
 
         if (!cleared_collision) {
             auto it = name_to_peer_.find(instance_name);
@@ -301,6 +349,10 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
         }
     }
 
+    if (had_disagreement && trace_) {
+        std::cerr << "AUN RX: cleared map-file disagreement (withdrawn "
+                  << instance_name << ")\n";
+    }
     if (cleared_collision) {
         if (trace_) {
             std::cerr << "AUN RX: cleared collision (withdrawn "
@@ -308,6 +360,11 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
         }
         publish_collision_report();
         return;
+    }
+    // A disagreeing peer is a real peer: publish the cleared disagreement now,
+    // then fall through to drop the peer entry.
+    if (had_disagreement) {
+        publish_collision_report();
     }
     if (!have_peer) return;  // unknown name, or a same-host peer we kept
 
@@ -395,6 +452,15 @@ void AunDiscoverySubscriber::sweep_once() {
     // re-evaluation), so a set that drifted for any reason settles within one
     // sweep interval even when nothing was adopted.
     publish_collision_report();
+
+    // Drive any registered sweep hook (the extension's map-file mtime poll),
+    // outside all locks, on this sweep thread.
+    std::function<void()> on_sweep;
+    {
+        std::lock_guard lock(callback_mutex_);
+        on_sweep = on_sweep_;
+    }
+    if (on_sweep) on_sweep();
 }
 
 void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
@@ -418,7 +484,8 @@ void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
     peers_.set_peer(net, stn, ref.ip, ref.port, AunPeerProvenance::Discovered);
     {
         std::lock_guard lock(name_map_mutex_);
-        name_to_peer_[name] = PeerRef{net, stn, ref.same_host, ref.port};
+        name_to_peer_[name] =
+            PeerRef{net, stn, ref.same_host, ref.port, ref.ip};
     }
     if (trace_) {
         std::cerr << "AUN RX: adopted pending station "
@@ -459,7 +526,8 @@ void AunDiscoverySubscriber::publish_collision_report() {
     {
         std::lock_guard lock(name_map_mutex_);
         count = static_cast<std::uint32_t>(pending_.size() +
-                                           own_collisions_.size());
+                                           own_collisions_.size() +
+                                           file_disagreements_.size());
         std::uint64_t best_seq = 0;
         for (const auto& [name, ref] : pending_) {
             if (ref.seq > best_seq) {
@@ -473,8 +541,48 @@ void AunDiscoverySubscriber::publish_collision_report() {
                 last = collision.description;
             }
         }
+        for (const auto& [name, disagreement] : file_disagreements_) {
+            if (disagreement.seq > best_seq) {
+                best_seq = disagreement.seq;
+                last = disagreement.description;
+            }
+        }
     }
     peers_.set_collision_report(count, std::move(last));
+}
+
+void AunDiscoverySubscriber::revalidate_file_disagreements() {
+    // Snapshot the known discovered peers, then re-check each against the
+    // current map file off the lock (note_file_disagreement takes it per call).
+    std::vector<std::tuple<std::string, std::uint8_t, std::uint8_t,
+                           std::uint32_t, std::uint16_t>>
+        peers;
+    {
+        std::lock_guard lock(name_map_mutex_);
+        for (const auto& [name, ref] : name_to_peer_) {
+            peers.emplace_back(name, ref.net, ref.stn, ref.ip, ref.port);
+        }
+    }
+    bool changed = false;
+    for (const auto& [name, net, stn, ip, port] : peers) {
+        changed = note_file_disagreement(name, net, stn, ip, port) || changed;
+    }
+    // Also drop disagreements whose peer is no longer known at all.
+    {
+        std::lock_guard lock(name_map_mutex_);
+        for (auto it = file_disagreements_.begin();
+             it != file_disagreements_.end();) {
+            if (name_to_peer_.find(it->first) == name_to_peer_.end()) {
+                it = file_disagreements_.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+    }
+    if (changed) {
+        publish_collision_report();
+    }
 }
 
 void AunDiscoverySubscriber::sweep_loop() {

@@ -88,6 +88,13 @@ public:
     // it must arrange their own synchronisation.
     void set_on_peers_changed(std::function<void()> cb);
 
+    // Install a callback fired once at the end of every liveness sweep (the
+    // ~2.5 s cadence), on the sweep thread. The extension wires this to its
+    // map-file mtime poll, so a hand or GUI edit is picked up within a sweep
+    // interval without any platform file-watch code. Runs off the emulation
+    // thread, so the poll may resolve hostnames.
+    void set_on_sweep(std::function<void()> cb);
+
     // Override the DNS-SD service type to browse (default "_aun._udp").
     // Production always uses the default; this exists so real-mDNS tests
     // can run on a per-test-unique type and stay isolated from any stray
@@ -110,6 +117,12 @@ public:
 
     // Test-only counterpart to inject_added.
     void inject_removed(const std::string& instance_name);
+
+    // Re-evaluate every known discovered peer against the current map file: a
+    // discovered (net, stn) the file maps to a different endpoint is a
+    // disagreement, one that now agrees or is no longer in the file clears.
+    // Called by the extension after a map-file reload. Republishes the report.
+    void revalidate_file_disagreements();
 
     // Run one same-host liveness sweep synchronously: for every same-host
     // (loopback) peer, bind-probe its port and reap the ones whose server has
@@ -149,6 +162,8 @@ private:
         std::uint8_t stn;
         bool same_host;
         std::uint16_t port;
+        std::uint32_t ip;  // advertised address (network byte order), for
+                           // re-checking a map-file disagreement on reload
     };
 
     // Maps DNS-SD instance name -> the peer it was registered as, so
@@ -189,6 +204,13 @@ private:
     };
     std::map<std::string, OwnNumberCollision> own_collisions_;  // name_map_mutex_
 
+    // File-vs-discovered disagreements currently in effect (#139): a discovered
+    // (net, stn) the map file maps to a DIFFERENT endpoint. The map file wins
+    // the routing (MapFile outranks Discovered); the disagreement is surfaced
+    // through the same live collision set, keyed by the discovered instance
+    // name, and clears when that announcement withdraws or the file changes.
+    std::map<std::string, OwnNumberCollision> file_disagreements_;  // name_map_mutex_
+
     // Same-host liveness sweep thread (started by start(), joined by stop()).
     std::thread sweep_thread_;
     std::mutex sweep_mutex_;
@@ -199,6 +221,7 @@ private:
     // lock so re-entrant callers can call back into the subscriber.
     mutable std::mutex callback_mutex_;
     std::function<void()> on_peers_changed_;
+    std::function<void()> on_sweep_;
 
     void handle_added(const discovery::DiscoveredService& svc);
     void handle_removed(const std::string& instance_name);
@@ -209,6 +232,13 @@ private:
     // most recent pending advertisement for that (net, stn), if any, through
     // the normal add path.
     void adopt_pending(std::uint8_t net, std::uint8_t stn);
+
+    // Record or clear the map-file disagreement for one discovered peer against
+    // the current map file. Returns true if the live collision set changed.
+    // Takes name_map_mutex_ internally; call without it held.
+    bool note_file_disagreement(const std::string& instance_name,
+                                std::uint8_t net, std::uint8_t stn,
+                                std::uint32_t ip, std::uint16_t port);
 
     // Recompute the station-collision report (pending_ + own_collisions_) and
     // push it to the peer set, which forwards it to the backend. Call after any

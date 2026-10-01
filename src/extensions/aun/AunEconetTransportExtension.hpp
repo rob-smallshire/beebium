@@ -197,11 +197,21 @@ private:
     std::uint32_t map_file_entry_count_ = 0;
     std::string map_file_error_;
     std::vector<AunMapPeer> unreachable_map_peers_;
+    // The map file's modification time at the last load, so the sweep poll can
+    // detect a change. file_time_type::min() stands for an absent file.
+    std::filesystem::file_time_type map_file_mtime_ =
+        std::filesystem::file_time_type::min();
 
     // Resolve the effective map-file path from --aun map-file= / the
     // BEEBIUM_AUN_MAP_FILEPATH env / the shared per-user default, and whether it
     // is enabled (map-file=none disables). Called once in create_backend.
     void resolve_map_file_path();
+
+    // Poll the map file's modification time and reload on a change. Wired to the
+    // subscriber's sweep, so a hand or GUI edit reaches this instance within a
+    // sweep interval with no platform file-watch code. Runs off the emulation
+    // thread.
+    void poll_map_file();
 
     std::unique_ptr<AunDispatcher> dispatcher_;  // lazily constructed
     // Owned by the extension so its lifetime ends with the extension.

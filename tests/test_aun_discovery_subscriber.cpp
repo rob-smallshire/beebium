@@ -631,3 +631,66 @@ TEST_CASE("AunDiscoverySubscriber: an own-number collision clears when this mach
     subscriber.set_local_station(81);
     CHECK(peers.station_collisions().count == 0);
 }
+
+// =============================================================================
+// File-vs-discovered disagreement (#139): the map file wins, and the conflict
+// is reported through the live collision set with a "map file" description.
+// =============================================================================
+
+TEST_CASE("AunDiscoverySubscriber: a file-vs-discovered disagreement is raised and clears on withdrawal",
+          "[aun][discovery][subscriber][map-file]") {
+    AunPeerSet peers;
+    // The map file pins 0.254 at 10.0.0.1:32768.
+    peers.set_peer(0, 254, htonl(0x0A000001u), 32768, AunPeerProvenance::MapFile);
+    AunDiscoverySubscriber subscriber(peers, 1,
+                                      std::make_unique<FakeBrowser>());
+
+    // A discovered announcement for 0.254 at a DIFFERENT endpoint.
+    subscriber.inject_added(make_service("X 0.254", 0, 254, 40001, nonlocal_ip()));
+    CHECK(peers.station_collisions().count == 1);
+    CHECK(peers.station_collisions().last.find("map file") != std::string::npos);
+    // The file still wins the routing.
+    REQUIRE(peers.resolve(0, 254).has_value());
+    CHECK(peers.resolve(0, 254)->port == 32768);
+
+    subscriber.inject_removed("X 0.254");
+    CHECK(peers.station_collisions().count == 0);
+}
+
+TEST_CASE("AunDiscoverySubscriber: a disagreement clears when the file is revalidated to agree",
+          "[aun][discovery][subscriber][map-file]") {
+    AunPeerSet peers;
+    peers.set_peer(0, 254, htonl(0x0A000001u), 32768, AunPeerProvenance::MapFile);
+    AunDiscoverySubscriber subscriber(peers, 1,
+                                      std::make_unique<FakeBrowser>());
+    subscriber.inject_added(make_service("X 0.254", 0, 254, 40001, nonlocal_ip()));
+    CHECK(peers.station_collisions().count == 1);
+
+    // The map file is edited so it no longer pins 0.254; a reload revalidates.
+    peers.remove_peer(0, 254, AunPeerProvenance::MapFile);
+    subscriber.revalidate_file_disagreements();
+    CHECK(peers.station_collisions().count == 0);
+}
+
+TEST_CASE("AunDiscoverySubscriber: no disagreement when the file agrees with the announcement",
+          "[aun][discovery][subscriber][map-file]") {
+    AunPeerSet peers;
+    // The file pins 0.254 at the SAME endpoint the peer advertises.
+    peers.set_peer(0, 254, nonlocal_ip(), 40001, AunPeerProvenance::MapFile);
+    AunDiscoverySubscriber subscriber(peers, 1,
+                                      std::make_unique<FakeBrowser>());
+    subscriber.inject_added(make_service("X 0.254", 0, 254, 40001, nonlocal_ip()));
+    CHECK(peers.station_collisions().count == 0);  // agree -> no conflict
+}
+
+TEST_CASE("AunDiscoverySubscriber: sweep_once fires the on_sweep hook",
+          "[aun][discovery][subscriber]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 1,
+                                      std::make_unique<FakeBrowser>());
+    int sweeps = 0;
+    subscriber.set_on_sweep([&] { ++sweeps; });
+    subscriber.sweep_once();
+    subscriber.sweep_once();
+    CHECK(sweeps == 2);
+}
