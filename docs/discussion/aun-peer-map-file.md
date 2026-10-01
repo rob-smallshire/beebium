@@ -38,11 +38,11 @@ preset subcommands).
 
 ### 2.1 Location and name
 
-`<per-user Beebium directory>/aun-map.cfg`:
+`<per-user Beebium directory>/aun-map.json`:
 
-- macOS: `~/Library/Application Support/Beebium/aun-map.cfg`
-- Windows: `%APPDATA%\Beebium\aun-map.cfg`
-- Linux: `$XDG_CONFIG_HOME/beebium/aun-map.cfg` (or `~/.config/beebium/`)
+- macOS: `~/Library/Application Support/Beebium/aun-map.json`
+- Windows: `%APPDATA%\Beebium\aun-map.json`
+- Linux: `$XDG_CONFIG_HOME/beebium/aun-map.json` (or `~/.config/beebium/`)
 
 The directory is the one `PresetPaths` and `DiscPaths` already agree on;
 the private `user_state_base()` helper in `DiscPaths` becomes shared.
@@ -52,43 +52,47 @@ hermetic runs use `none`).
 
 ### 2.2 Format
 
-The native format is the host-line subset of BeebEm's `Econet.cfg`, so a
-BeebEm user can copy their file in and a Beebium file is readable by
-BeebEm:
+JSON, as presets are, read with the parser the server already has:
 
-```
-# Beebium AUN peer map. One peer per line: net station host port
-# Lines that are not exactly four fields are ignored (BeebEm rule).
-0 254  192.168.1.10   32768   # PiEconetBridge: file server 1.254 exposed as 0.254
-0 40   192.168.1.40   32768   # Archimedes A5000
-0 41   risc-pc.local  32768   # RISC PC (hostname, resolved at load)
+```json
+{
+  "peers": [
+    {"net": 0, "station": 254, "host": "192.168.1.10", "port": 32768,
+     "label": "PiEconetBridge: file server 1.254 exposed as 0.254"},
+    {"net": 0, "station": 40, "host": "192.168.1.40", "port": 32768,
+     "label": "Archimedes A5000"},
+    {"net": 0, "station": 41, "host": "risc-pc.local", "port": 32768,
+     "label": "RISC PC"}
+  ],
+  "subnets": [
+    {"net": 128, "subnet": "192.168.1.0/24",
+     "label": "RISC OS convention: station = last octet, port 32768"}
+  ]
+}
 ```
 
 Rules:
 
-- A line is trimmed; empty lines and lines starting with `#` or `|` are
-  skipped; everything from the first `#` is a comment. (This is BeebEm's
-  rule for both its files, and RISC OS `|` comments come free.)
-- Exactly four whitespace-separated fields make a peer: `net` (0..127),
-  `station` (1..254), `host`, `port` (1..65535). Anything else is kept
-  verbatim and ignored, so a BeebEm `AUNMODE 1` or `LEARN 1` line does no
-  harm. BeebEm-only keywords are reported once at load as ignored, by name.
-- `host` may be an IPv4 literal or a DNS name. A name is resolved when the
-  file is loaded and on every reload; a name that does not resolve keeps the
-  line in the table as unreachable, shown as such, rather than dropping it.
-  (BeebEm takes literals only; a Beebium file using a name is simply an
-  ignored line to BeebEm, since `inet_addr` fails on it. Acceptable: the
-  compatibility that matters is reading BeebEm files, not the reverse.)
-- The trailing comment on a peer line is its **label**. The GUI shows it and
-  writes it back; the file stays the single source of truth.
-- `ADDMAP a.b.c.0 N` lines, BeebEm's reading of the RISC OS `!Internet`
-  `AUNMap` file, are accepted too, from the same file or from an imported
-  `AUNMap`: "net N is the /24 a.b.c.x, station x, port 32768". This is the
-  AUN convention real RISC OS machines use, and it is the only form of
-  net-level entry that can work (section 4).
+- `peers[]`: `net` (0..127), `station` (1..254), `host` (an IPv4 literal
+  or a DNS name), `port` (1..65535), optional `label`. One entry per
+  `(net, station)`; a duplicate is a load error naming both entries.
+- `subnets[]`: the RISC OS `!Internet` `AUNMap` rule, "net N is this /24,
+  station is the last octet, port 32768". It is the only form of net-level
+  entry that can work (section 4). Optional; most files will have none.
+- A DNS name is resolved when the file is loaded and on every reload. A
+  name that does not resolve keeps its entry in the table as unreachable,
+  shown as such, rather than being dropped.
+- Unknown keys are preserved on rewrite and ignored on load, so a newer
+  Beebium's file is not damaged by an older one. The loader reports a
+  malformed file with its position and keeps the transport up.
+- No comments: JSON has none, and the `label` field is where a note goes.
+  A file written by the subcommands is pretty-printed with stable key
+  order so hand edits and tool edits diff cleanly.
 
-Beebium does not read BeebEm's mode and timing keywords and never will:
-they describe BeebEm's emulation, not the network.
+Beebium reads no BeebEm format. A one-time converter (section 2.5) turns a
+BeebEm `Econet.cfg` and `AUNMap` into this file; BeebEm's mode and timing
+keywords describe BeebEm's emulation, not the network, and are not carried
+over.
 
 ### 2.3 Provenance and precedence
 
@@ -98,7 +102,7 @@ they describe BeebEm's emulation, not the network.
 |--------------|---------|---------|
 | `Launch` | `--aun map=` or the preset's `map` for this launch | `launch` |
 | `Api` | `AunService.AddPeer` at runtime | `API` |
-| `MapFile` | the per-user `aun-map.cfg` | `map file` |
+| `MapFile` | the per-user `aun-map.json` | `map file` |
 | `Discovered` | `_aun._udp` mDNS | `mDNS` |
 
 Precedence, highest first: `Api`, `Launch`, `MapFile`, `Discovered`. An
@@ -138,16 +142,16 @@ Following `list-presets` / `create-preset` / `import-preset` /
 | Subcommand | Does |
 |------------|------|
 | `report-aun-map-filepath` | prints the path (after overrides) |
-| `create-aun-map` | writes a commented template at that path if absent (the comment block explains the four fields and the PiEconetBridge and RISC OS cases) |
-| `show-aun-map` | prints the parsed table with line numbers, labels and any ignored lines |
-| `add-aun-peer <net.stn> <host> <port> [--label <text>]` | appends or replaces the line for that station |
-| `remove-aun-peer <net.stn>` | removes that line |
-| `import-aun-map <file>` | merges the host lines of a BeebEm `Econet.cfg` or the `ADDMAP` lines of an `AUNMap`, reporting what was taken and what was ignored |
+| `create-aun-map` | writes a template at that path if absent: an empty `peers` list plus one example entry whose label explains the PiEconetBridge and RISC OS cases |
+| `show-aun-map` | prints the parsed table with labels, resolution results, and any unknown keys |
+| `add-aun-peer <net.stn> <host> <port> [--label <text>]` | adds or replaces the entry for that station |
+| `remove-aun-peer <net.stn>` | removes that entry |
+| `convert-beebem-econet-cfg <Econet.cfg> [<AUNMap>] [--output <path>]` | one-time conversion: the four-field host lines become `peers`, `ADDMAP` lines become `subnets`, every keyword line is listed as not carried over; writes a new map file or merges into the existing one, reporting each entry taken |
 
-Writes are line-based and atomic (write a temporary, rename over): comments,
-ordering and unknown lines are preserved, so a hand-maintained file is not
-flattened by a GUI edit. The map is model-independent, so it does not
-matter which executable runs the subcommand.
+Writes are atomic (write a temporary, rename over) and preserve entry
+order and unknown keys, so a hand-maintained file is not reshuffled by a
+GUI edit. The map is model-independent, so it does not matter which
+executable runs the subcommand.
 
 ### 2.6 GUI affordances (macOS, then any front end)
 
@@ -175,7 +179,8 @@ ExtensionRpc), so the affordances are built once in the extension:
   the preset, or the sidebar, and #67 (choose a free number from what mDNS
   shows) is the automatic alternative. An entry in the file for this
   machine's own station is ignored, as the mDNS self-filter ignores our own
-  announcement, so a BeebEm file that lists every station imports cleanly.
+  announcement, so a converted BeebEm file that lists every station loads
+  cleanly.
 - **Not a per-instance setting.** Anything that differs between two
   instances on one host (their own ports, test-only peers) stays on the
   command line or in the preset. The file is for the machines that are the
@@ -210,7 +215,8 @@ EXPOSE HOST 1.254 ON PORT *:32768
 AUN MAP HOST 2.80 ON <beebium-host> PORT 32768 NONE
 ```
 
-Beebium side, once: `add-aun-peer 1.254 <bridge-host> 32768 --label "PiEconetBridge FS"`,
+Beebium side, once: `add-aun-peer 1.254 <bridge-host> 32768 --label "PiEconetBridge FS"`
+(one `peers` entry in `aun-map.json`),
 then launch the Station 80 AUN preset with `--aun net=2`. `*I AM 1.254 SYST`
 works, and every other instance on the host sees the same entry.
 
@@ -233,8 +239,8 @@ needs no AUN map at all and is tested on the physical bridge.
    fields. Unit tests on the parser (BeebEm sample files as fixtures) and
    on precedence; the three-machine `[.mdns]` test extended with a file
    entry.
-3. CLI subcommands including `import-aun-map`, with the shipped BeebEm
-   `Econet.cfg` and `AUNMap` samples as import fixtures.
+3. CLI subcommands including the BeebEm converter, with the shipped BeebEm
+   `Econet.cfg` and `AUNMap` samples as conversion fixtures.
 4. `AunUi` Add/Edit/Remove/Save-to-file, dispatched through the app to the
    subcommands.
 5. The containerised bridge acceptance test on the Linux lane.
