@@ -50,6 +50,36 @@ internal protocol Beebium_AunServiceClientProtocol: GRPCClient {
     _ request: Beebium_AunGetStatusRequest,
     callOptions: CallOptions?
   ) -> UnaryCall<Beebium_AunGetStatusRequest, Beebium_AunGetStatusResponse>
+
+  func reloadMap(
+    _ request: Beebium_AunReloadMapRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AunReloadMapRequest, Beebium_AunReloadMapResponse>
+
+  func addMapPeer(
+    _ request: Beebium_AunAddMapPeerRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AunAddMapPeerRequest, Beebium_AunAddMapPeerResponse>
+
+  func removeMapPeer(
+    _ request: Beebium_AunRemoveMapPeerRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AunRemoveMapPeerRequest, Beebium_AunRemoveMapPeerResponse>
+
+  func addMapSubnet(
+    _ request: Beebium_AunAddMapSubnetRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AunAddMapSubnetRequest, Beebium_AunAddMapSubnetResponse>
+
+  func removeMapSubnet(
+    _ request: Beebium_AunRemoveMapSubnetRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AunRemoveMapSubnetRequest, Beebium_AunRemoveMapSubnetResponse>
+
+  func listMap(
+    _ request: Beebium_AunListMapRequest,
+    callOptions: CallOptions?
+  ) -> UnaryCall<Beebium_AunListMapRequest, Beebium_AunListMapResponse>
 }
 
 extension Beebium_AunServiceClientProtocol {
@@ -145,6 +175,120 @@ extension Beebium_AunServiceClientProtocol {
       request: request,
       callOptions: callOptions ?? self.defaultCallOptions,
       interceptors: self.interceptors?.makeGetStatusInterceptors() ?? []
+    )
+  }
+
+  /// Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+  /// state (Api, Launch and Discovered are untouched). Normally a modification
+  /// is picked up automatically on the poll; this forces it.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ReloadMap.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func reloadMap(
+    _ request: Beebium_AunReloadMapRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AunReloadMapRequest, Beebium_AunReloadMapResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.reloadMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReloadMapInterceptors() ?? []
+    )
+  }
+
+  /// Edit the per-user aun-map.json. The server owns the file (it may be on
+  /// another host): it writes its own file atomically, preserving entry order
+  /// and unknown keys, then applies the change to its own peer set at once;
+  /// other instances pick it up from their poll. Add is add-or-replace.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to AddMapPeer.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func addMapPeer(
+    _ request: Beebium_AunAddMapPeerRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AunAddMapPeerRequest, Beebium_AunAddMapPeerResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.addMapPeer.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddMapPeerInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to RemoveMapPeer
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to RemoveMapPeer.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func removeMapPeer(
+    _ request: Beebium_AunRemoveMapPeerRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AunRemoveMapPeerRequest, Beebium_AunRemoveMapPeerResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.removeMapPeer.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveMapPeerInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to AddMapSubnet
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to AddMapSubnet.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func addMapSubnet(
+    _ request: Beebium_AunAddMapSubnetRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AunAddMapSubnetRequest, Beebium_AunAddMapSubnetResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.addMapSubnet.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddMapSubnetInterceptors() ?? []
+    )
+  }
+
+  /// Unary call to RemoveMapSubnet
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to RemoveMapSubnet.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func removeMapSubnet(
+    _ request: Beebium_AunRemoveMapSubnetRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AunRemoveMapSubnetRequest, Beebium_AunRemoveMapSubnetResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.removeMapSubnet.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveMapSubnetInterceptors() ?? []
+    )
+  }
+
+  /// List the map file's entries (with labels and host-resolution state),
+  /// distinct from ListPeers which lists the live resolved routing table.
+  ///
+  /// - Parameters:
+  ///   - request: Request to send to ListMap.
+  ///   - callOptions: Call options.
+  /// - Returns: A `UnaryCall` with futures for the metadata, status and response.
+  internal func listMap(
+    _ request: Beebium_AunListMapRequest,
+    callOptions: CallOptions? = nil
+  ) -> UnaryCall<Beebium_AunListMapRequest, Beebium_AunListMapResponse> {
+    return self.makeUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.listMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListMapInterceptors() ?? []
     )
   }
 }
@@ -244,6 +388,36 @@ internal protocol Beebium_AunServiceAsyncClientProtocol: GRPCClient {
     _ request: Beebium_AunGetStatusRequest,
     callOptions: CallOptions?
   ) -> GRPCAsyncUnaryCall<Beebium_AunGetStatusRequest, Beebium_AunGetStatusResponse>
+
+  func makeReloadMapCall(
+    _ request: Beebium_AunReloadMapRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AunReloadMapRequest, Beebium_AunReloadMapResponse>
+
+  func makeAddMapPeerCall(
+    _ request: Beebium_AunAddMapPeerRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AunAddMapPeerRequest, Beebium_AunAddMapPeerResponse>
+
+  func makeRemoveMapPeerCall(
+    _ request: Beebium_AunRemoveMapPeerRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AunRemoveMapPeerRequest, Beebium_AunRemoveMapPeerResponse>
+
+  func makeAddMapSubnetCall(
+    _ request: Beebium_AunAddMapSubnetRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AunAddMapSubnetRequest, Beebium_AunAddMapSubnetResponse>
+
+  func makeRemoveMapSubnetCall(
+    _ request: Beebium_AunRemoveMapSubnetRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AunRemoveMapSubnetRequest, Beebium_AunRemoveMapSubnetResponse>
+
+  func makeListMapCall(
+    _ request: Beebium_AunListMapRequest,
+    callOptions: CallOptions?
+  ) -> GRPCAsyncUnaryCall<Beebium_AunListMapRequest, Beebium_AunListMapResponse>
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -315,6 +489,78 @@ extension Beebium_AunServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetStatusInterceptors() ?? []
     )
   }
+
+  internal func makeReloadMapCall(
+    _ request: Beebium_AunReloadMapRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AunReloadMapRequest, Beebium_AunReloadMapResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.reloadMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReloadMapInterceptors() ?? []
+    )
+  }
+
+  internal func makeAddMapPeerCall(
+    _ request: Beebium_AunAddMapPeerRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AunAddMapPeerRequest, Beebium_AunAddMapPeerResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.addMapPeer.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddMapPeerInterceptors() ?? []
+    )
+  }
+
+  internal func makeRemoveMapPeerCall(
+    _ request: Beebium_AunRemoveMapPeerRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AunRemoveMapPeerRequest, Beebium_AunRemoveMapPeerResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.removeMapPeer.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveMapPeerInterceptors() ?? []
+    )
+  }
+
+  internal func makeAddMapSubnetCall(
+    _ request: Beebium_AunAddMapSubnetRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AunAddMapSubnetRequest, Beebium_AunAddMapSubnetResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.addMapSubnet.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddMapSubnetInterceptors() ?? []
+    )
+  }
+
+  internal func makeRemoveMapSubnetCall(
+    _ request: Beebium_AunRemoveMapSubnetRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AunRemoveMapSubnetRequest, Beebium_AunRemoveMapSubnetResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.removeMapSubnet.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveMapSubnetInterceptors() ?? []
+    )
+  }
+
+  internal func makeListMapCall(
+    _ request: Beebium_AunListMapRequest,
+    callOptions: CallOptions? = nil
+  ) -> GRPCAsyncUnaryCall<Beebium_AunListMapRequest, Beebium_AunListMapResponse> {
+    return self.makeAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.listMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListMapInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -378,6 +624,78 @@ extension Beebium_AunServiceAsyncClientProtocol {
       interceptors: self.interceptors?.makeGetStatusInterceptors() ?? []
     )
   }
+
+  internal func reloadMap(
+    _ request: Beebium_AunReloadMapRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AunReloadMapResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.reloadMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeReloadMapInterceptors() ?? []
+    )
+  }
+
+  internal func addMapPeer(
+    _ request: Beebium_AunAddMapPeerRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AunAddMapPeerResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.addMapPeer.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddMapPeerInterceptors() ?? []
+    )
+  }
+
+  internal func removeMapPeer(
+    _ request: Beebium_AunRemoveMapPeerRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AunRemoveMapPeerResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.removeMapPeer.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveMapPeerInterceptors() ?? []
+    )
+  }
+
+  internal func addMapSubnet(
+    _ request: Beebium_AunAddMapSubnetRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AunAddMapSubnetResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.addMapSubnet.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeAddMapSubnetInterceptors() ?? []
+    )
+  }
+
+  internal func removeMapSubnet(
+    _ request: Beebium_AunRemoveMapSubnetRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AunRemoveMapSubnetResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.removeMapSubnet.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeRemoveMapSubnetInterceptors() ?? []
+    )
+  }
+
+  internal func listMap(
+    _ request: Beebium_AunListMapRequest,
+    callOptions: CallOptions? = nil
+  ) async throws -> Beebium_AunListMapResponse {
+    return try await self.performAsyncUnaryCall(
+      path: Beebium_AunServiceClientMetadata.Methods.listMap.path,
+      request: request,
+      callOptions: callOptions ?? self.defaultCallOptions,
+      interceptors: self.interceptors?.makeListMapInterceptors() ?? []
+    )
+  }
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -413,6 +731,24 @@ internal protocol Beebium_AunServiceClientInterceptorFactoryProtocol: Sendable {
 
   /// - Returns: Interceptors to use when invoking 'getStatus'.
   func makeGetStatusInterceptors() -> [ClientInterceptor<Beebium_AunGetStatusRequest, Beebium_AunGetStatusResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'reloadMap'.
+  func makeReloadMapInterceptors() -> [ClientInterceptor<Beebium_AunReloadMapRequest, Beebium_AunReloadMapResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'addMapPeer'.
+  func makeAddMapPeerInterceptors() -> [ClientInterceptor<Beebium_AunAddMapPeerRequest, Beebium_AunAddMapPeerResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'removeMapPeer'.
+  func makeRemoveMapPeerInterceptors() -> [ClientInterceptor<Beebium_AunRemoveMapPeerRequest, Beebium_AunRemoveMapPeerResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'addMapSubnet'.
+  func makeAddMapSubnetInterceptors() -> [ClientInterceptor<Beebium_AunAddMapSubnetRequest, Beebium_AunAddMapSubnetResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'removeMapSubnet'.
+  func makeRemoveMapSubnetInterceptors() -> [ClientInterceptor<Beebium_AunRemoveMapSubnetRequest, Beebium_AunRemoveMapSubnetResponse>]
+
+  /// - Returns: Interceptors to use when invoking 'listMap'.
+  func makeListMapInterceptors() -> [ClientInterceptor<Beebium_AunListMapRequest, Beebium_AunListMapResponse>]
 }
 
 internal enum Beebium_AunServiceClientMetadata {
@@ -425,6 +761,12 @@ internal enum Beebium_AunServiceClientMetadata {
       Beebium_AunServiceClientMetadata.Methods.removePeer,
       Beebium_AunServiceClientMetadata.Methods.listPeers,
       Beebium_AunServiceClientMetadata.Methods.getStatus,
+      Beebium_AunServiceClientMetadata.Methods.reloadMap,
+      Beebium_AunServiceClientMetadata.Methods.addMapPeer,
+      Beebium_AunServiceClientMetadata.Methods.removeMapPeer,
+      Beebium_AunServiceClientMetadata.Methods.addMapSubnet,
+      Beebium_AunServiceClientMetadata.Methods.removeMapSubnet,
+      Beebium_AunServiceClientMetadata.Methods.listMap,
     ]
   )
 
@@ -456,6 +798,42 @@ internal enum Beebium_AunServiceClientMetadata {
     internal static let getStatus = GRPCMethodDescriptor(
       name: "GetStatus",
       path: "/beebium.AunService/GetStatus",
+      type: GRPCCallType.unary
+    )
+
+    internal static let reloadMap = GRPCMethodDescriptor(
+      name: "ReloadMap",
+      path: "/beebium.AunService/ReloadMap",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addMapPeer = GRPCMethodDescriptor(
+      name: "AddMapPeer",
+      path: "/beebium.AunService/AddMapPeer",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeMapPeer = GRPCMethodDescriptor(
+      name: "RemoveMapPeer",
+      path: "/beebium.AunService/RemoveMapPeer",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addMapSubnet = GRPCMethodDescriptor(
+      name: "AddMapSubnet",
+      path: "/beebium.AunService/AddMapSubnet",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeMapSubnet = GRPCMethodDescriptor(
+      name: "RemoveMapSubnet",
+      path: "/beebium.AunService/RemoveMapSubnet",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listMap = GRPCMethodDescriptor(
+      name: "ListMap",
+      path: "/beebium.AunService/ListMap",
       type: GRPCCallType.unary
     )
   }
@@ -490,6 +868,27 @@ internal protocol Beebium_AunServiceProvider: CallHandlerProvider {
 
   /// Read the current AUN backend status (port, peer count, link state).
   func getStatus(request: Beebium_AunGetStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunGetStatusResponse>
+
+  /// Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+  /// state (Api, Launch and Discovered are untouched). Normally a modification
+  /// is picked up automatically on the poll; this forces it.
+  func reloadMap(request: Beebium_AunReloadMapRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunReloadMapResponse>
+
+  /// Edit the per-user aun-map.json. The server owns the file (it may be on
+  /// another host): it writes its own file atomically, preserving entry order
+  /// and unknown keys, then applies the change to its own peer set at once;
+  /// other instances pick it up from their poll. Add is add-or-replace.
+  func addMapPeer(request: Beebium_AunAddMapPeerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunAddMapPeerResponse>
+
+  func removeMapPeer(request: Beebium_AunRemoveMapPeerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunRemoveMapPeerResponse>
+
+  func addMapSubnet(request: Beebium_AunAddMapSubnetRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunAddMapSubnetResponse>
+
+  func removeMapSubnet(request: Beebium_AunRemoveMapSubnetRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunRemoveMapSubnetResponse>
+
+  /// List the map file's entries (with labels and host-resolution state),
+  /// distinct from ListPeers which lists the live resolved routing table.
+  func listMap(request: Beebium_AunListMapRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunListMapResponse>
 }
 
 extension Beebium_AunServiceProvider {
@@ -549,6 +948,60 @@ extension Beebium_AunServiceProvider {
         userFunction: self.getStatus(request:context:)
       )
 
+    case "ReloadMap":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunReloadMapRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunReloadMapResponse>(),
+        interceptors: self.interceptors?.makeReloadMapInterceptors() ?? [],
+        userFunction: self.reloadMap(request:context:)
+      )
+
+    case "AddMapPeer":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunAddMapPeerRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunAddMapPeerResponse>(),
+        interceptors: self.interceptors?.makeAddMapPeerInterceptors() ?? [],
+        userFunction: self.addMapPeer(request:context:)
+      )
+
+    case "RemoveMapPeer":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunRemoveMapPeerRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunRemoveMapPeerResponse>(),
+        interceptors: self.interceptors?.makeRemoveMapPeerInterceptors() ?? [],
+        userFunction: self.removeMapPeer(request:context:)
+      )
+
+    case "AddMapSubnet":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunAddMapSubnetRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunAddMapSubnetResponse>(),
+        interceptors: self.interceptors?.makeAddMapSubnetInterceptors() ?? [],
+        userFunction: self.addMapSubnet(request:context:)
+      )
+
+    case "RemoveMapSubnet":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunRemoveMapSubnetRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunRemoveMapSubnetResponse>(),
+        interceptors: self.interceptors?.makeRemoveMapSubnetInterceptors() ?? [],
+        userFunction: self.removeMapSubnet(request:context:)
+      )
+
+    case "ListMap":
+      return UnaryServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunListMapRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunListMapResponse>(),
+        interceptors: self.interceptors?.makeListMapInterceptors() ?? [],
+        userFunction: self.listMap(request:context:)
+      )
+
     default:
       return nil
     }
@@ -601,6 +1054,45 @@ internal protocol Beebium_AunServiceAsyncProvider: CallHandlerProvider, Sendable
     request: Beebium_AunGetStatusRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_AunGetStatusResponse
+
+  /// Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
+  /// state (Api, Launch and Discovered are untouched). Normally a modification
+  /// is picked up automatically on the poll; this forces it.
+  func reloadMap(
+    request: Beebium_AunReloadMapRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AunReloadMapResponse
+
+  /// Edit the per-user aun-map.json. The server owns the file (it may be on
+  /// another host): it writes its own file atomically, preserving entry order
+  /// and unknown keys, then applies the change to its own peer set at once;
+  /// other instances pick it up from their poll. Add is add-or-replace.
+  func addMapPeer(
+    request: Beebium_AunAddMapPeerRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AunAddMapPeerResponse
+
+  func removeMapPeer(
+    request: Beebium_AunRemoveMapPeerRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AunRemoveMapPeerResponse
+
+  func addMapSubnet(
+    request: Beebium_AunAddMapSubnetRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AunAddMapSubnetResponse
+
+  func removeMapSubnet(
+    request: Beebium_AunRemoveMapSubnetRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AunRemoveMapSubnetResponse
+
+  /// List the map file's entries (with labels and host-resolution state),
+  /// distinct from ListPeers which lists the live resolved routing table.
+  func listMap(
+    request: Beebium_AunListMapRequest,
+    context: GRPCAsyncServerCallContext
+  ) async throws -> Beebium_AunListMapResponse
 }
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -667,6 +1159,60 @@ extension Beebium_AunServiceAsyncProvider {
         wrapping: { try await self.getStatus(request: $0, context: $1) }
       )
 
+    case "ReloadMap":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunReloadMapRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunReloadMapResponse>(),
+        interceptors: self.interceptors?.makeReloadMapInterceptors() ?? [],
+        wrapping: { try await self.reloadMap(request: $0, context: $1) }
+      )
+
+    case "AddMapPeer":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunAddMapPeerRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunAddMapPeerResponse>(),
+        interceptors: self.interceptors?.makeAddMapPeerInterceptors() ?? [],
+        wrapping: { try await self.addMapPeer(request: $0, context: $1) }
+      )
+
+    case "RemoveMapPeer":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunRemoveMapPeerRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunRemoveMapPeerResponse>(),
+        interceptors: self.interceptors?.makeRemoveMapPeerInterceptors() ?? [],
+        wrapping: { try await self.removeMapPeer(request: $0, context: $1) }
+      )
+
+    case "AddMapSubnet":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunAddMapSubnetRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunAddMapSubnetResponse>(),
+        interceptors: self.interceptors?.makeAddMapSubnetInterceptors() ?? [],
+        wrapping: { try await self.addMapSubnet(request: $0, context: $1) }
+      )
+
+    case "RemoveMapSubnet":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunRemoveMapSubnetRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunRemoveMapSubnetResponse>(),
+        interceptors: self.interceptors?.makeRemoveMapSubnetInterceptors() ?? [],
+        wrapping: { try await self.removeMapSubnet(request: $0, context: $1) }
+      )
+
+    case "ListMap":
+      return GRPCAsyncServerHandler(
+        context: context,
+        requestDeserializer: ProtobufDeserializer<Beebium_AunListMapRequest>(),
+        responseSerializer: ProtobufSerializer<Beebium_AunListMapResponse>(),
+        interceptors: self.interceptors?.makeListMapInterceptors() ?? [],
+        wrapping: { try await self.listMap(request: $0, context: $1) }
+      )
+
     default:
       return nil
     }
@@ -694,6 +1240,30 @@ internal protocol Beebium_AunServiceServerInterceptorFactoryProtocol: Sendable {
   /// - Returns: Interceptors to use when handling 'getStatus'.
   ///   Defaults to calling `self.makeInterceptors()`.
   func makeGetStatusInterceptors() -> [ServerInterceptor<Beebium_AunGetStatusRequest, Beebium_AunGetStatusResponse>]
+
+  /// - Returns: Interceptors to use when handling 'reloadMap'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeReloadMapInterceptors() -> [ServerInterceptor<Beebium_AunReloadMapRequest, Beebium_AunReloadMapResponse>]
+
+  /// - Returns: Interceptors to use when handling 'addMapPeer'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeAddMapPeerInterceptors() -> [ServerInterceptor<Beebium_AunAddMapPeerRequest, Beebium_AunAddMapPeerResponse>]
+
+  /// - Returns: Interceptors to use when handling 'removeMapPeer'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRemoveMapPeerInterceptors() -> [ServerInterceptor<Beebium_AunRemoveMapPeerRequest, Beebium_AunRemoveMapPeerResponse>]
+
+  /// - Returns: Interceptors to use when handling 'addMapSubnet'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeAddMapSubnetInterceptors() -> [ServerInterceptor<Beebium_AunAddMapSubnetRequest, Beebium_AunAddMapSubnetResponse>]
+
+  /// - Returns: Interceptors to use when handling 'removeMapSubnet'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeRemoveMapSubnetInterceptors() -> [ServerInterceptor<Beebium_AunRemoveMapSubnetRequest, Beebium_AunRemoveMapSubnetResponse>]
+
+  /// - Returns: Interceptors to use when handling 'listMap'.
+  ///   Defaults to calling `self.makeInterceptors()`.
+  func makeListMapInterceptors() -> [ServerInterceptor<Beebium_AunListMapRequest, Beebium_AunListMapResponse>]
 }
 
 internal enum Beebium_AunServiceServerMetadata {
@@ -706,6 +1276,12 @@ internal enum Beebium_AunServiceServerMetadata {
       Beebium_AunServiceServerMetadata.Methods.removePeer,
       Beebium_AunServiceServerMetadata.Methods.listPeers,
       Beebium_AunServiceServerMetadata.Methods.getStatus,
+      Beebium_AunServiceServerMetadata.Methods.reloadMap,
+      Beebium_AunServiceServerMetadata.Methods.addMapPeer,
+      Beebium_AunServiceServerMetadata.Methods.removeMapPeer,
+      Beebium_AunServiceServerMetadata.Methods.addMapSubnet,
+      Beebium_AunServiceServerMetadata.Methods.removeMapSubnet,
+      Beebium_AunServiceServerMetadata.Methods.listMap,
     ]
   )
 
@@ -737,6 +1313,42 @@ internal enum Beebium_AunServiceServerMetadata {
     internal static let getStatus = GRPCMethodDescriptor(
       name: "GetStatus",
       path: "/beebium.AunService/GetStatus",
+      type: GRPCCallType.unary
+    )
+
+    internal static let reloadMap = GRPCMethodDescriptor(
+      name: "ReloadMap",
+      path: "/beebium.AunService/ReloadMap",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addMapPeer = GRPCMethodDescriptor(
+      name: "AddMapPeer",
+      path: "/beebium.AunService/AddMapPeer",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeMapPeer = GRPCMethodDescriptor(
+      name: "RemoveMapPeer",
+      path: "/beebium.AunService/RemoveMapPeer",
+      type: GRPCCallType.unary
+    )
+
+    internal static let addMapSubnet = GRPCMethodDescriptor(
+      name: "AddMapSubnet",
+      path: "/beebium.AunService/AddMapSubnet",
+      type: GRPCCallType.unary
+    )
+
+    internal static let removeMapSubnet = GRPCMethodDescriptor(
+      name: "RemoveMapSubnet",
+      path: "/beebium.AunService/RemoveMapSubnet",
+      type: GRPCCallType.unary
+    )
+
+    internal static let listMap = GRPCMethodDescriptor(
+      name: "ListMap",
+      path: "/beebium.AunService/ListMap",
       type: GRPCCallType.unary
     )
   }

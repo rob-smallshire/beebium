@@ -46,6 +46,10 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// Added by the AUN extension's mDNS subscriber from a
   /// _aun._udp announcement on the LAN.
   case discovered // = 4
+
+  /// Materialised from a subnets rule in the map file (an inbound sender
+  /// identified, or an outbound guess). Lowest precedence; Discovered wins.
+  case subnet // = 5
   case UNRECOGNIZED(Int)
 
   init() {
@@ -59,6 +63,7 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 2: self = .api
     case 3: self = .mapFile
     case 4: self = .discovered
+    case 5: self = .subnet
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -70,6 +75,7 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .api: return 2
     case .mapFile: return 3
     case .discovered: return 4
+    case .subnet: return 5
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -81,6 +87,7 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
     .api,
     .mapFile,
     .discovered,
+    .subnet,
   ]
 
 }
@@ -109,6 +116,251 @@ struct Beebium_AunGetStatusResponse: Sendable {
 
   /// Number of peers configured in the peer table.
   var peerCount: UInt32 = 0
+
+  /// The per-user aun-map.json path on the server's host (empty when the map
+  /// file is disabled with map-file=none).
+  var mapFilePath: String = String()
+
+  /// Number of entries (peers + subnets) read from the map file on the last
+  /// load.
+  var mapFileEntryCount: UInt32 = 0
+
+  /// The last map-file load error, or empty when the last load succeeded (or
+  /// the file is absent, which is not an error).
+  var mapFileError: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Empty.
+struct Beebium_AunReloadMapRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunReloadMapResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// True if the reload ran (even if the file was absent); false only when the
+  /// map file is disabled (map-file=none).
+  var reloaded: Bool = false
+
+  /// The load error, if the file was present but could not be parsed.
+  var error: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunAddMapPeerRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 0..255
+  var net: UInt32 = 0
+
+  /// 1..254
+  var stn: UInt32 = 0
+
+  /// IPv4 literal or DNS name
+  var host: String = String()
+
+  /// 1..65535
+  var port: UInt32 = 0
+
+  /// optional note
+  var label: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunAddMapPeerResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  var error: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunRemoveMapPeerRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var net: UInt32 = 0
+
+  var stn: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunRemoveMapPeerResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  var error: String = String()
+
+  /// false if there was no such entry
+  var removed: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunAddMapSubnetRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 0..255
+  var net: UInt32 = 0
+
+  /// a.b.c.0/24
+  var subnet: String = String()
+
+  /// optional note
+  var label: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunAddMapSubnetResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  var error: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunRemoveMapSubnetRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var net: UInt32 = 0
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunRemoveMapSubnetResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var success: Bool = false
+
+  var error: String = String()
+
+  var removed: Bool = false
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Empty.
+struct Beebium_AunListMapRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// One peers[] entry as written in the file, with its host-resolution state.
+struct Beebium_AunMapPeerEntry: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var net: UInt32 = 0
+
+  var stn: UInt32 = 0
+
+  /// as written (IPv4 literal or DNS name)
+  var host: String = String()
+
+  var port: UInt32 = 0
+
+  var label: String = String()
+
+  /// false if the host did not resolve
+  var resolved: Bool = false
+
+  /// dotted-quad when resolved, else empty
+  var resolvedIp: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// One subnets[] entry as written in the file.
+struct Beebium_AunMapSubnetEntry: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var net: UInt32 = 0
+
+  var subnet: String = String()
+
+  var label: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+struct Beebium_AunListMapResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var peers: [Beebium_AunMapPeerEntry] = []
+
+  var subnets: [Beebium_AunMapSubnetEntry] = []
+
+  /// A load error, if the file was present but malformed; the lists are then
+  /// empty.
+  var error: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -147,7 +399,7 @@ struct Beebium_AunAddPeerRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Econet network number (0-127).
+  /// Econet network number (0-255, the full Econet net byte).
   var net: UInt32 = 0
 
   /// Econet station number (1-254).
@@ -257,7 +509,7 @@ struct Beebium_AunPeer: Sendable {
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_AunPeerSource: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0AUN_PEER_SOURCE_UNSPECIFIED\0\u{1}AUN_PEER_SOURCE_LAUNCH\0\u{1}AUN_PEER_SOURCE_API\0\u{1}AUN_PEER_SOURCE_MAP_FILE\0\u{1}AUN_PEER_SOURCE_DISCOVERED\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0AUN_PEER_SOURCE_UNSPECIFIED\0\u{1}AUN_PEER_SOURCE_LAUNCH\0\u{1}AUN_PEER_SOURCE_API\0\u{1}AUN_PEER_SOURCE_MAP_FILE\0\u{1}AUN_PEER_SOURCE_DISCOVERED\0\u{1}AUN_PEER_SOURCE_SUBNET\0")
 }
 
 extension Beebium_AunGetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -281,7 +533,7 @@ extension Beebium_AunGetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".AunGetStatusResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}connected\0\u{3}local_port\0\u{3}peer_count\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}connected\0\u{3}local_port\0\u{3}peer_count\0\u{3}map_file_path\0\u{3}map_file_entry_count\0\u{3}map_file_error\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -292,6 +544,9 @@ extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 1: try { try decoder.decodeSingularBoolField(value: &self.connected) }()
       case 2: try { try decoder.decodeSingularUInt32Field(value: &self.localPort) }()
       case 3: try { try decoder.decodeSingularUInt32Field(value: &self.peerCount) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.mapFilePath) }()
+      case 5: try { try decoder.decodeSingularUInt32Field(value: &self.mapFileEntryCount) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.mapFileError) }()
       default: break
       }
     }
@@ -307,6 +562,15 @@ extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
     if self.peerCount != 0 {
       try visitor.visitSingularUInt32Field(value: self.peerCount, fieldNumber: 3)
     }
+    if !self.mapFilePath.isEmpty {
+      try visitor.visitSingularStringField(value: self.mapFilePath, fieldNumber: 4)
+    }
+    if self.mapFileEntryCount != 0 {
+      try visitor.visitSingularUInt32Field(value: self.mapFileEntryCount, fieldNumber: 5)
+    }
+    if !self.mapFileError.isEmpty {
+      try visitor.visitSingularStringField(value: self.mapFileError, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -314,6 +578,527 @@ extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.connected != rhs.connected {return false}
     if lhs.localPort != rhs.localPort {return false}
     if lhs.peerCount != rhs.peerCount {return false}
+    if lhs.mapFilePath != rhs.mapFilePath {return false}
+    if lhs.mapFileEntryCount != rhs.mapFileEntryCount {return false}
+    if lhs.mapFileError != rhs.mapFileError {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunReloadMapRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunReloadMapRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunReloadMapRequest, rhs: Beebium_AunReloadMapRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunReloadMapResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunReloadMapResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}reloaded\0\u{1}error\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.reloaded) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.reloaded != false {
+      try visitor.visitSingularBoolField(value: self.reloaded, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunReloadMapResponse, rhs: Beebium_AunReloadMapResponse) -> Bool {
+    if lhs.reloaded != rhs.reloaded {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunAddMapPeerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunAddMapPeerRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}net\0\u{1}stn\0\u{1}host\0\u{1}port\0\u{1}label\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.net) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.stn) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.host) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.port) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.net != 0 {
+      try visitor.visitSingularUInt32Field(value: self.net, fieldNumber: 1)
+    }
+    if self.stn != 0 {
+      try visitor.visitSingularUInt32Field(value: self.stn, fieldNumber: 2)
+    }
+    if !self.host.isEmpty {
+      try visitor.visitSingularStringField(value: self.host, fieldNumber: 3)
+    }
+    if self.port != 0 {
+      try visitor.visitSingularUInt32Field(value: self.port, fieldNumber: 4)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunAddMapPeerRequest, rhs: Beebium_AunAddMapPeerRequest) -> Bool {
+    if lhs.net != rhs.net {return false}
+    if lhs.stn != rhs.stn {return false}
+    if lhs.host != rhs.host {return false}
+    if lhs.port != rhs.port {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunAddMapPeerResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunAddMapPeerResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunAddMapPeerResponse, rhs: Beebium_AunAddMapPeerResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunRemoveMapPeerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunRemoveMapPeerRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}net\0\u{1}stn\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.net) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.stn) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.net != 0 {
+      try visitor.visitSingularUInt32Field(value: self.net, fieldNumber: 1)
+    }
+    if self.stn != 0 {
+      try visitor.visitSingularUInt32Field(value: self.stn, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunRemoveMapPeerRequest, rhs: Beebium_AunRemoveMapPeerRequest) -> Bool {
+    if lhs.net != rhs.net {return false}
+    if lhs.stn != rhs.stn {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunRemoveMapPeerResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunRemoveMapPeerResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}removed\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.removed) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if self.removed != false {
+      try visitor.visitSingularBoolField(value: self.removed, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunRemoveMapPeerResponse, rhs: Beebium_AunRemoveMapPeerResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.removed != rhs.removed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunAddMapSubnetRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunAddMapSubnetRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}net\0\u{1}subnet\0\u{1}label\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.net) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.subnet) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.net != 0 {
+      try visitor.visitSingularUInt32Field(value: self.net, fieldNumber: 1)
+    }
+    if !self.subnet.isEmpty {
+      try visitor.visitSingularStringField(value: self.subnet, fieldNumber: 2)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunAddMapSubnetRequest, rhs: Beebium_AunAddMapSubnetRequest) -> Bool {
+    if lhs.net != rhs.net {return false}
+    if lhs.subnet != rhs.subnet {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunAddMapSubnetResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunAddMapSubnetResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunAddMapSubnetResponse, rhs: Beebium_AunAddMapSubnetResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunRemoveMapSubnetRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunRemoveMapSubnetRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}net\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.net) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.net != 0 {
+      try visitor.visitSingularUInt32Field(value: self.net, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunRemoveMapSubnetRequest, rhs: Beebium_AunRemoveMapSubnetRequest) -> Bool {
+    if lhs.net != rhs.net {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunRemoveMapSubnetResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunRemoveMapSubnetResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}removed\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.removed) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if self.removed != false {
+      try visitor.visitSingularBoolField(value: self.removed, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunRemoveMapSubnetResponse, rhs: Beebium_AunRemoveMapSubnetResponse) -> Bool {
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.removed != rhs.removed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunListMapRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunListMapRequest"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunListMapRequest, rhs: Beebium_AunListMapRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunMapPeerEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunMapPeerEntry"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}net\0\u{1}stn\0\u{1}host\0\u{1}port\0\u{1}label\0\u{1}resolved\0\u{3}resolved_ip\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.net) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.stn) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.host) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self.port) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.resolved) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.resolvedIp) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.net != 0 {
+      try visitor.visitSingularUInt32Field(value: self.net, fieldNumber: 1)
+    }
+    if self.stn != 0 {
+      try visitor.visitSingularUInt32Field(value: self.stn, fieldNumber: 2)
+    }
+    if !self.host.isEmpty {
+      try visitor.visitSingularStringField(value: self.host, fieldNumber: 3)
+    }
+    if self.port != 0 {
+      try visitor.visitSingularUInt32Field(value: self.port, fieldNumber: 4)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 5)
+    }
+    if self.resolved != false {
+      try visitor.visitSingularBoolField(value: self.resolved, fieldNumber: 6)
+    }
+    if !self.resolvedIp.isEmpty {
+      try visitor.visitSingularStringField(value: self.resolvedIp, fieldNumber: 7)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunMapPeerEntry, rhs: Beebium_AunMapPeerEntry) -> Bool {
+    if lhs.net != rhs.net {return false}
+    if lhs.stn != rhs.stn {return false}
+    if lhs.host != rhs.host {return false}
+    if lhs.port != rhs.port {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.resolved != rhs.resolved {return false}
+    if lhs.resolvedIp != rhs.resolvedIp {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunMapSubnetEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunMapSubnetEntry"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}net\0\u{1}subnet\0\u{1}label\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.net) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.subnet) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.net != 0 {
+      try visitor.visitSingularUInt32Field(value: self.net, fieldNumber: 1)
+    }
+    if !self.subnet.isEmpty {
+      try visitor.visitSingularStringField(value: self.subnet, fieldNumber: 2)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunMapSubnetEntry, rhs: Beebium_AunMapSubnetEntry) -> Bool {
+    if lhs.net != rhs.net {return false}
+    if lhs.subnet != rhs.subnet {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AunListMapResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AunListMapResponse"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}peers\0\u{1}subnets\0\u{1}error\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.peers) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.subnets) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.peers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.peers, fieldNumber: 1)
+    }
+    if !self.subnets.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.subnets, fieldNumber: 2)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AunListMapResponse, rhs: Beebium_AunListMapResponse) -> Bool {
+    if lhs.peers != rhs.peers {return false}
+    if lhs.subnets != rhs.subnets {return false}
+    if lhs.error != rhs.error {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
