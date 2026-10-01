@@ -28,29 +28,31 @@ struct FileReferenceView: View {
     let dispatch: (String, ExtensionDispatchPayload) -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "doc")
-                .foregroundColor(.secondary)
-            Text(displayName)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                // The name owns the row: when space is short the state text
-                // truncates, never the file name (#144 refinement).
-                .layoutPriority(1)
-            if fileReference.state != .unknown {
-                Image(systemName: "circle.fill")
-                    .font(.system(size: 8))
-                    .foregroundColor(extensionUiIndicatorColor(fileReference.state))
+        VStack(alignment: .leading, spacing: 2) {
+            // Title line: icon, name, state dot, menu. Most of the time (state
+            // OK, empty state_text) this is the whole control.
+            HStack(spacing: 6) {
+                Image(systemName: "doc")
+                    .foregroundColor(.secondary)
+                Text(displayName)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if fileReference.state != .unknown {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(extensionUiIndicatorColor(fileReference.state))
+                }
+                Spacer(minLength: 4)
+                menu
             }
+            // The state text (a load error or "not found") sits on its own line
+            // beneath the title, not inline after the dot (#144 refinement).
             if !fileReference.stateText.isEmpty {
                 Text(fileReference.stateText)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 4)
-            menu
         }
         // The path lives on the server's host; show it on hover rather than
         // spending a line on it (the #142 panel's full-path line is what this
