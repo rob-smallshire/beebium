@@ -286,6 +286,29 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
             }
         });
 
+    // React to the backend being freed (EconetService::DisableEconet drops
+    // EconetSocket's reference; nothing else notifies us). Drop our raw pointer
+    // and detach the peer set FIRST, so any discovery write still in flight
+    // becomes a no-op rather than a use-after-free, then stop announcing and
+    // browsing -- Disable means off the network. The weak token guards against
+    // the extension having been destroyed first (machine teardown), and the
+    // backend-identity check guards against a late, reader-deferred destruction
+    // of an OLD backend clobbering a NEW one created by a re-Enable: we act only
+    // while the backend being destroyed is still the one we hold. A later
+    // create_backend re-seeds Launch/Discovered, re-attaches, and re-announces,
+    // keeping the Api layer (so an added peer is routed again after re-Enable).
+    AunBackend* released = backend_;
+    backend_->set_destroyed_callback([this, alive, released]() {
+        auto keep_alive = alive.lock();
+        if (!keep_alive) return;
+        std::lock_guard<std::mutex> lock(discovery_mutex_);
+        if (backend_ != released) return;  // already replaced by a re-Enable
+        peer_set_.attach(nullptr);  // future applies no-op; closes the UAF
+        backend_ = nullptr;
+        subscriber_.reset();  // stop browsing + join the sweep thread
+        announcer_.reset();   // stop advertising a station with no backend
+    });
+
     return backend;
 }
 

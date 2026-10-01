@@ -98,6 +98,16 @@ public:
     // it clears the callback (passes nullptr) before the backend is destroyed.
     void set_station_changed_callback(std::function<void(uint8_t)> callback);
 
+    // Register a callback invoked once from the destructor, before this
+    // backend's members are torn down. The AUN transport extension registers it
+    // so that when EconetSocket frees the backend on DisableEconet -- nothing
+    // else tells the transport -- it can drop its dangling raw pointer to this
+    // backend (detach its peer set, stop discovery) before any async writer
+    // dereferences freed storage. The callback runs on whatever thread drops
+    // the last reference (the gRPC thread with emulation parked for a prompt
+    // disable, or a gRPC reader that co-owned the backend a moment longer).
+    void set_destroyed_callback(std::function<void()> callback);
+
     // --- Peer management ---
     //
     // The peer table is the only AunBackend state that has multiple
@@ -230,6 +240,11 @@ private:
     // self-filter; guarded because SetStationId runs on a gRPC thread.
     std::mutex station_callback_mutex_;
     std::function<void(uint8_t)> station_changed_callback_;
+
+    // Invoked once from the destructor (see set_destroyed_callback). Guarded
+    // because it is registered from a gRPC thread.
+    std::mutex destroyed_callback_mutex_;
+    std::function<void()> destroyed_callback_;
 
     // Handle generation: incremented by 4 for each outgoing request.
     // For Ack/ImmReply, the handle from the most recently received packet is echoed.

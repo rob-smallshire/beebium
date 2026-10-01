@@ -75,3 +75,39 @@ def test_add_peer_before_enable_survives_and_is_listed(
         assert len(peers) == 1
         assert peers[0].stn == 254
         assert peers[0].source == PeerSource.API
+
+
+def test_api_peer_survives_disable_and_reenable(
+    mos_filepath: Path, beebium_server_filepath: Path | None
+) -> None:
+    # #55: DisableEconet frees the backend. The peer table lives in the
+    # transport, so the Api peer survives, peer edits after Disable are safe
+    # (no use-after-free on the freed backend), and the peer is routed again
+    # after a re-Enable.
+    with Beebium.launch(
+        server=beebium_server_filepath,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", "net=1"],
+    ) as bbc:
+        aun = bbc.transport[Aun]
+
+        bbc.econet.enable(station_id=200, aun_port=32768)
+        aun.add_peer(net=1, stn=100, ip_address="127.0.0.1", port=40001)
+        assert aun.status.local_port == 32768
+        assert len(aun.peers) == 1
+
+        bbc.econet.disable()
+        # No backend now: status reports no link, but peer edits stay safe and
+        # the Api entry is retained in the transport's peer set.
+        assert aun.status.connected is False
+        assert aun.status.local_port == 0
+        aun.add_peer(net=1, stn=101, ip_address="127.0.0.1", port=40002)
+        peers = {p.stn for p in aun.peers}
+        assert {100, 101} <= peers
+
+        # Re-enable: the Api peers are applied to the fresh backend.
+        bbc.econet.enable(station_id=200, aun_port=32768)
+        assert bbc.transport[Aun].status.local_port == 32768
+        peers = {p.stn for p in aun.peers}
+        assert {100, 101} <= peers
+        assert all(p.source == PeerSource.API for p in aun.peers)

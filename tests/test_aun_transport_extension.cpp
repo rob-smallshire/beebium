@@ -84,6 +84,44 @@ TEST_CASE("AUN transport: RemovePeer of an Api entry falls back to a discovered 
     CHECK(ext.backend()->peer_endpoint(0, 254).has_value());
 }
 
+TEST_CASE("AUN transport: a peer edit after the backend is freed is safe; Api survives re-enable",
+          "[aun][transport][extension]") {
+    // DisableEconet frees the AunBackend via EconetSocket; nothing else tells
+    // the transport, so its raw backend pointer (and the peer set's) would
+    // dangle and every later discovery/API write would be a use-after-free.
+    // The backend's destruction callback must detach the peer set and drop the
+    // pointer first. (Run under -DBEEBIUM_ENABLE_SANITIZERS=ON to prove it.)
+    AunEconetTransportExtension ext;
+    ext.set_config({{"port", "0"}});
+    auto backend_owner = ext.create_backend(/*station=*/1);
+    REQUIRE(backend_owner != nullptr);
+
+    ext.add_api_peer(0, 254, loopback_ip(), 40001);
+    REQUIRE(ext.backend() != nullptr);
+    REQUIRE(ext.backend()->is_reachable(0, 254));
+
+    // Free the backend, exactly as EconetSocket::disable() does.
+    backend_owner.reset();
+    CHECK(ext.backend() == nullptr);  // destruction callback cleared it
+
+    // Writes that previously dereferenced the freed backend are now no-ops on
+    // the routing view, but still update the desired peer set: a discovery
+    // write (browser thread) ...
+    ext.peer_set().set_peer(0, 100, loopback_ip(), 50000,
+                            AunPeerProvenance::Discovered);
+    // ... and API edits (gRPC thread). None may touch freed storage.
+    ext.add_api_peer(0, 253, loopback_ip(), 40002);
+    ext.remove_api_peer(0, 253);
+    CHECK(ext.peer_set().resolve(0, 254).has_value());  // Api 0.254 retained
+
+    // Re-enable: a fresh backend re-applies the surviving Api peer (the
+    // Discovered 0.100 was re-seeded away), routable again.
+    auto second = ext.create_backend(/*station=*/1);
+    REQUIRE(second != nullptr);
+    CHECK(ext.backend()->is_reachable(0, 254));
+    CHECK_FALSE(ext.backend()->is_reachable(0, 100));
+}
+
 TEST_CASE("AUN transport: SetConnected before the backend exists applies when it comes up",
           "[aun][transport][extension]") {
     AunEconetTransportExtension ext;
