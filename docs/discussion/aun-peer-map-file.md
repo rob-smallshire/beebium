@@ -75,7 +75,9 @@ JSON, as presets are, read with the parser the server already has:
 
 Rules:
 
-- `peers[]`: `net` (0..127), `station` (1..254), `host` (an IPv4 literal
+- `peers[]`: `net` (0..255, the Econet net byte; AUN convention puts AUN
+  nets at 128 and above, and net 0 means "this machine's local net" as
+  everywhere else in Beebium), `station` (1..254), `host` (an IPv4 literal
   or a DNS name), `port` (1..65535), optional `label`. One entry per
   `(net, station)`; a duplicate is a load error naming both entries.
 - `subnets[]`: the RISC OS `!Internet` `AUNMap` rule, "net N is this /24,
@@ -333,6 +335,12 @@ All four were addressed with step 1 (#55), which moved the peer table into
   describes the `AunDispatcher` over `ExtensionRpc`.
 
 ## 8. Open questions
+
+- (Resolved 2026-10-01: every net field is 0..255. The AUN code capped
+  nets at 127 (`--aun net=`, `map=`, `AddPeer`) with no recorded reason,
+  which made the RISC OS convention's nets of 128 and above unaddressable.
+  Widened as part of #139; the `dest_net=0 -> local net` translation is
+  unchanged.)
 
 - Should `Launch` entries be written to the file on request only, or should
   a preset be able to say "also pin these peers in the map file"? Probably
