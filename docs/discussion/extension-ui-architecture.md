@@ -619,6 +619,30 @@ Finder" (or the platform equivalent) only when the server shares this
 host's filesystem (the existing host-fingerprint gating; see
 docs/frontend-local-server-gating.md), and "Copy Path" always.
 
+### Portability rule for both primitives
+
+The wire shape carries intent, never presentation. A primitive names what
+the user can do (add, edit, remove, run a named action, reveal a file)
+and what state a thing is in (OK, WARN, ERROR); it never names a toolkit
+control, an icon, a colour, a keyboard shortcut or a menu style. Each
+renderer maps intent to its platform's idiom:
+
+| Intent | macOS (SwiftUI/AppKit) | Linux (Qt, expected) | Windows (WinUI, expected) |
+|--------|------------------------|----------------------|---------------------------|
+| list with add/remove | bordered list, gradient "+ -" segmented buttons | QListView with QToolButtons below, or QTableView | ListView with a CommandBar |
+| edit an item | sheet or popover with Cancel/Save | QDialog | ContentDialog |
+| per-item actions | row context menu | context menu | flyout |
+| file reference | document icon, pull-down menu, Reveal in Finder | file icon, menu, "Show in file manager" via QDesktopServices | file icon, menu, "Show in Explorer" |
+| state | SF Symbols indicator | QStyle standard icon | Segoe icon |
+
+What a renderer may add on its own is limited to client-side actions that
+need no server knowledge (reveal, copy path) and the chrome its platform
+expects. What it may never add is an action or a field the view did not
+list, so the three renderers stay interchangeable against one server.
+The same table is the test for any future primitive: if it cannot be
+described in all three columns without inventing server semantics, it
+is not a primitive yet.
+
 ### Effect on the AUN panel
 
 The panel becomes: a FileReference line; an EditableList "Peers" whose
