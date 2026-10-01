@@ -126,6 +126,24 @@ std::string editor_field(const beebium::Control& editor,
     return "<missing>";
 }
 
+// The help text of an editor field by id.
+std::string editor_field_help(const beebium::Control& editor,
+                              const std::string& field_id) {
+    for (const auto& child : editor.group().controls()) {
+        if (child.id() == field_id) return child.text_input().help();
+    }
+    return "<missing>";
+}
+
+// The inline note of an editor field by id.
+std::string editor_field_note(const beebium::Control& editor,
+                              const std::string& field_id) {
+    for (const auto& child : editor.group().controls()) {
+        if (child.id() == field_id) return child.text_input().note();
+    }
+    return "<missing>";
+}
+
 // Build an EditableListEvent dispatch with editor field values.
 beebium::DispatchRequest list_event(
     const std::string& control_id, beebium::EditableListEvent::Kind kind,
@@ -178,17 +196,21 @@ TEST_CASE("AunUi: empty state is two lists, a file reference and no errors",
 
     const auto* peers = list_of(view, "peers");
     REQUIRE(peers != nullptr);
-    CHECK(peers->title() == "Peers");
+    CHECK(peers->title() == "Peers (0)");  // count rides on the title
+    CHECK(peers->help().empty() == false);  // list-level help for a newcomer
     CHECK(peers->can_add());
     CHECK(peers->items_size() == 0);
     CHECK(peers->empty_text().empty() == false);
-    // The add editor carries net.stn/host/port/label fields.
+    // The add editor carries net.stn/host/port/label fields, each with help.
     CHECK(editor_field(peers->add_editor(), "net_stn") == "");
     CHECK(editor_field(peers->add_editor(), "port") == "32768");
+    CHECK(editor_field_help(peers->add_editor(), "net_stn").find("Net 0") !=
+          std::string::npos);
 
     const auto* subnets = list_of(view, "subnets");
     REQUIRE(subnets != nullptr);
-    CHECK(subnets->title() == "Subnet rules");
+    CHECK(subnets->title() == "Subnet rules (0)");
+    CHECK(subnets->help().empty() == false);
     CHECK(subnets->can_add());
 
     const auto* file = find_control(root, "map_file");
@@ -198,7 +220,7 @@ TEST_CASE("AunUi: empty state is two lists, a file reference and no errors",
     CHECK(file->file_reference().path().find(fixture.map_filepath().string()) !=
           std::string::npos);
     CHECK(file->file_reference().state() == beebium::Indicator::OK);
-    CHECK(file->file_reference().state_text() == "0 peers, 0 subnets");
+    CHECK(file->file_reference().state_text() == "loaded");  // short; counts on titles
     REQUIRE(file->file_reference().actions_size() == 1);
     CHECK(file->file_reference().actions(0).id() == "reload");
 }
@@ -221,9 +243,10 @@ TEST_CASE("AunUi: a map-file peer is an editable, removable item",
     CHECK(item->actions_size() == 0);  // no "Save" on a map-file row
     CHECK(editor_field(item->editor(), "host") == "127.0.0.1");
     CHECK(editor_field(item->editor(), "label") == "file server");
-    // The file reference now counts it.
+    // The count now rides on the list title; the file state stays short.
+    CHECK(list_of(view, "peers")->title() == "Peers (1)");
     CHECK(find_control(view.root(), "map_file")->file_reference().state_text() ==
-          "1 peer, 0 subnets");
+          "loaded");
 }
 
 TEST_CASE("AunUi: a non-map-file peer is read-only with a Save action",
@@ -239,7 +262,15 @@ TEST_CASE("AunUi: a non-map-file peer is read-only with a Save action",
     CHECK_FALSE(item->removable());
     REQUIRE(item->actions_size() == 1);
     CHECK(item->actions(0).id() == "save_to_map");
-    CHECK(item->note().empty());  // no ephemeral note for a launch peer
+    // The Save action opens a prefilled ADD-style sheet (same shape as "+"),
+    // seeded with this row's endpoint.
+    REQUIRE(item->actions(0).has_editor());
+    const auto& save_editor = item->actions(0).editor();
+    CHECK(editor_field(save_editor, "net_stn") == "0.100");
+    CHECK(editor_field(save_editor, "host") == "10.0.0.1");
+    CHECK(editor_field(save_editor, "port") == "40001");
+    CHECK(editor_field_note(save_editor, "port").empty());  // no note: not mDNS
+    CHECK(item->note().empty());
 }
 
 TEST_CASE("AunUi: a discovered peer's Save carries the ephemeral-port note",
@@ -254,7 +285,12 @@ TEST_CASE("AunUi: a discovered peer's Save carries the ephemeral-port note",
     CHECK(item->secondary() == "mDNS");
     REQUIRE(item->actions_size() == 1);
     CHECK(item->actions(0).id() == "save_to_map");
-    CHECK(item->note().find("ephemeral") != std::string::npos);
+    // The ephemeral-port warning sits on the Save editor's port field, not on
+    // the row itself.
+    REQUIRE(item->actions(0).has_editor());
+    CHECK(editor_field_note(item->actions(0).editor(), "port").find(
+              "mDNS peer may pick") != std::string::npos);
+    CHECK(item->note().empty());
 }
 
 TEST_CASE("AunUi: subnet rules appear as editable, removable items",
@@ -347,15 +383,21 @@ TEST_CASE("AunUi: the Save action copies a live peer into the map file",
     AunUiFixture fixture;
     fixture.extension().peer_set().set_peer(0, 100, make_ip(10, 0, 0, 1), 40001,
                                             beebium::AunPeerProvenance::Launch);
+    // The action now presents a prefilled sheet and dispatches ACTION with the
+    // committed values (the user may have adjusted them before confirming).
     fixture.extension().ui()->handle_event(
         list_event("peers", EditableListEvent::ACTION, "0.100", "save_to_map",
-                   {}));
+                   {{"net_stn", "0.100"},
+                    {"host", "10.0.0.1"},
+                    {"port", "40001"},
+                    {"label", "kept"}}));
     auto peers = fixture.extension().map_peers();
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].net == 0);
     CHECK(peers[0].stn == 100);
     CHECK(peers[0].host == "10.0.0.1");
     CHECK(peers[0].port == 40001);
+    CHECK(peers[0].label == "kept");
 }
 
 TEST_CASE("AunUi: ADD and REMOVE subnet", "[aun][ui]") {

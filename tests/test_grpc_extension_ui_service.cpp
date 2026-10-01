@@ -213,6 +213,14 @@ public:
             auto* action = item->add_actions();
             action->set_id("save");
             action->set_title("Save to map file");
+            // This action opens a prefilled editor (one "save.host" field),
+            // so its ACTION dispatch carries a commit validated against it.
+            auto* action_editor = action->mutable_editor();
+            action_editor->set_id("b.save_editor");
+            auto* body = action_editor->mutable_group();
+            auto* field = body->add_controls();
+            field->set_id("save.host");
+            field->mutable_text_input()->set_label("host");
         }
 
         auto* file_ctrl = group->add_controls();
@@ -1037,12 +1045,46 @@ TEST_CASE("Dispatch ACTION with a known action id runs handle_event",
     event->set_kind(beebium::EditableListEvent::ACTION);
     event->set_item_id("b");
     event->set_action_id("save");
+    // The "save" action opens an editor, so the ACTION carries a commit that
+    // validates against it.
+    auto* f = event->mutable_commit()->add_fields();
+    f->set_field_id("save.host");
+    f->set_string_value("192.168.1.5");
 
     beebium::DispatchResponse resp;
     REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
     REQUIRE(resp.accepted());
     REQUIRE(fake_ptr->fake_ui().event_count() == 1);
     REQUIRE(fake_ptr->fake_ui().last_list_event().action_id() == "save");
+    REQUIRE(fake_ptr->fake_ui().last_list_event().commit().fields_size() == 1);
+}
+
+TEST_CASE("Dispatch ACTION whose editor commit has an unknown field is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::ACTION);
+    event->set_item_id("b");
+    event->set_action_id("save");
+    auto* f = event->mutable_commit()->add_fields();
+    f->set_field_id("save.nope");  // not a field of the action's editor
+    f->set_string_value("x");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("unknown editor field") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
 }
 
 TEST_CASE("Dispatch ACTION with an unknown action id is rejected",
