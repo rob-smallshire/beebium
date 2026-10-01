@@ -292,6 +292,14 @@ The `source preset` field records which preset the machine
 was instantiated from, as information only. A later change to the preset
 does not touch the machine (question 2).
 
+**Names as templates (proposal, #153).** A machine name may contain
+placeholders the server expands from machine state: `{station}`, `{net}`,
+`{transport}`, `{model}`, `{preset}`, plus `{n}` substituted by the app.
+`machine.json` stores the template; the rendered name is what is shown
+and advertised, and it follows the hardware (a station change shows at the
+next Break). A preset's `machine_name` is a template too; its picker
+title stays literal. Under discussion; see the issue.
+
 ### 4.6 Per-user layout after this design
 
 ```
