@@ -144,6 +144,52 @@ public:
     // as unreachable rather than routed. Copied out under the lock.
     std::vector<AunMapPeer> unreachable_map_peers() const;
 
+    // The result of a map-file edit RPC: an empty error means success, and
+    // `removed` reports whether a remove found an entry.
+    struct MapEdit {
+        std::string error;
+        bool removed = false;
+    };
+
+    // Edit the map file (AunService.AddMapPeer / RemoveMapPeer / AddMapSubnet /
+    // RemoveMapSubnet): write the server's own file atomically, then apply the
+    // change to the peer set at once (a reload). Validation errors name the
+    // field. Must be called off the emulation thread (writes + reload resolve
+    // hostnames). Safe before a backend exists.
+    MapEdit add_map_peer(std::uint8_t net, std::uint8_t stn,
+                         const std::string& host, std::uint16_t port,
+                         const std::string& label);
+    MapEdit remove_map_peer(std::uint8_t net, std::uint8_t stn);
+    MapEdit add_map_subnet(std::uint8_t net, const std::string& subnet_text,
+                           const std::string& label);
+    MapEdit remove_map_subnet(std::uint8_t net);
+
+    // One map-file peer as listed (with its host-resolution state) and one
+    // subnet, for AunService.ListMap.
+    struct ListedMapPeer {
+        std::uint8_t net;
+        std::uint8_t stn;
+        std::string host;
+        std::uint16_t port;
+        std::string label;
+        bool resolved;
+        std::string resolved_ip;  // dotted-quad when resolved, else empty
+    };
+    struct ListedMapSubnet {
+        std::uint8_t net;
+        std::string subnet;
+        std::string label;
+    };
+    struct MapListing {
+        std::vector<ListedMapPeer> peers;
+        std::vector<ListedMapSubnet> subnets;
+        std::string error;  // non-empty if the file was present but malformed
+    };
+
+    // List the map file's entries with labels and host resolution (distinct
+    // from the live routing table that peer_set()/ListPeers report).
+    MapListing list_map();
+
     // When there is no working backend, the specific reason -- captured from
     // the failed AunBackend construction, naming the port and the OS cause
     // (e.g. "could not bind UDP port 32768 (Address already in use)"). Empty

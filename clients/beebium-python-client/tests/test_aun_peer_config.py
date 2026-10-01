@@ -152,3 +152,49 @@ def test_map_file_peers_listed_with_provenance_and_reloaded(
         stations = {p.stn for p in aun.peers}
         assert 101 in stations
         assert 100 not in stations
+
+
+def test_map_edit_rpcs_write_the_file_and_survive_a_hand_edit(
+    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+) -> None:
+    # #141: the map-edit RPCs write the server's own file; a hand edit of the
+    # file between two RPC calls (an unknown key) survives the next write, and
+    # ListMap reflects the file.
+    map_filepath = tmp_path / "aun-map.json"
+
+    with Beebium.launch(
+        server=beebium_server_filepath,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", f"map-file={map_filepath}"],
+    ) as bbc:
+        bbc.econet.enable(station_id=2, aun_port=32768)
+        aun = bbc.transport[Aun]
+
+        aun.add_map_peer(net=0, stn=254, host="192.168.1.10", port=32768, label="fs")
+        aun.add_map_subnet(net=128, subnet="192.168.5.0/24", label="risc os")
+
+        listing = aun.list_map()
+        assert {p.stn for p in listing.peers} == {254}
+        assert listing.peers[0].label == "fs"
+        assert listing.peers[0].resolved is True  # an IPv4 literal resolves
+        assert {s.net for s in listing.subnets} == {128}
+
+        # The write reached the live routing table at once (not only the file).
+        assert any(p.stn == 254 for p in aun.peers)
+
+        # A hand edit adds an unknown top-level key.
+        text = map_filepath.read_text()
+        brace = text.index("{")
+        map_filepath.write_text(text[: brace + 1] + '\n  "schema": 7,' + text[brace + 1 :])
+
+        # The next RPC must preserve the hand-added key.
+        aun.add_map_peer(net=0, stn=200, host="192.168.1.99", port=32768)
+        after = map_filepath.read_text()
+        assert '"schema"' in after
+        assert "192.168.1.10" in after  # first peer kept
+        assert "192.168.1.99" in after  # second peer added
+
+        # RemoveMapPeer reports whether it removed anything.
+        assert aun.remove_map_peer(net=0, stn=254) is True
+        assert aun.remove_map_peer(net=0, stn=111) is False
+        assert {p.stn for p in aun.list_map().peers} == {200}

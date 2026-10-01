@@ -85,6 +85,31 @@ class AunServiceStub(object):
                 request_serializer=aun__pb2.AunReloadMapRequest.SerializeToString,
                 response_deserializer=aun__pb2.AunReloadMapResponse.FromString,
                 _registered_method=True)
+        self.AddMapPeer = channel.unary_unary(
+                '/beebium.AunService/AddMapPeer',
+                request_serializer=aun__pb2.AunAddMapPeerRequest.SerializeToString,
+                response_deserializer=aun__pb2.AunAddMapPeerResponse.FromString,
+                _registered_method=True)
+        self.RemoveMapPeer = channel.unary_unary(
+                '/beebium.AunService/RemoveMapPeer',
+                request_serializer=aun__pb2.AunRemoveMapPeerRequest.SerializeToString,
+                response_deserializer=aun__pb2.AunRemoveMapPeerResponse.FromString,
+                _registered_method=True)
+        self.AddMapSubnet = channel.unary_unary(
+                '/beebium.AunService/AddMapSubnet',
+                request_serializer=aun__pb2.AunAddMapSubnetRequest.SerializeToString,
+                response_deserializer=aun__pb2.AunAddMapSubnetResponse.FromString,
+                _registered_method=True)
+        self.RemoveMapSubnet = channel.unary_unary(
+                '/beebium.AunService/RemoveMapSubnet',
+                request_serializer=aun__pb2.AunRemoveMapSubnetRequest.SerializeToString,
+                response_deserializer=aun__pb2.AunRemoveMapSubnetResponse.FromString,
+                _registered_method=True)
+        self.ListMap = channel.unary_unary(
+                '/beebium.AunService/ListMap',
+                request_serializer=aun__pb2.AunListMapRequest.SerializeToString,
+                response_deserializer=aun__pb2.AunListMapResponse.FromString,
+                _registered_method=True)
 
 
 class AunServiceServicer(object):
@@ -144,6 +169,42 @@ class AunServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AddMapPeer(self, request, context):
+        """Edit the per-user aun-map.json. The server owns the file (it may be on
+        another host): it writes its own file atomically, preserving entry order
+        and unknown keys, then applies the change to its own peer set at once;
+        other instances pick it up from their poll. Add is add-or-replace.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveMapPeer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AddMapSubnet(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveMapSubnet(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListMap(self, request, context):
+        """List the map file's entries (with labels and host-resolution state),
+        distinct from ListPeers which lists the live resolved routing table.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AunServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -176,6 +237,31 @@ def add_AunServiceServicer_to_server(servicer, server):
                     servicer.ReloadMap,
                     request_deserializer=aun__pb2.AunReloadMapRequest.FromString,
                     response_serializer=aun__pb2.AunReloadMapResponse.SerializeToString,
+            ),
+            'AddMapPeer': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddMapPeer,
+                    request_deserializer=aun__pb2.AunAddMapPeerRequest.FromString,
+                    response_serializer=aun__pb2.AunAddMapPeerResponse.SerializeToString,
+            ),
+            'RemoveMapPeer': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveMapPeer,
+                    request_deserializer=aun__pb2.AunRemoveMapPeerRequest.FromString,
+                    response_serializer=aun__pb2.AunRemoveMapPeerResponse.SerializeToString,
+            ),
+            'AddMapSubnet': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddMapSubnet,
+                    request_deserializer=aun__pb2.AunAddMapSubnetRequest.FromString,
+                    response_serializer=aun__pb2.AunAddMapSubnetResponse.SerializeToString,
+            ),
+            'RemoveMapSubnet': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveMapSubnet,
+                    request_deserializer=aun__pb2.AunRemoveMapSubnetRequest.FromString,
+                    response_serializer=aun__pb2.AunRemoveMapSubnetResponse.SerializeToString,
+            ),
+            'ListMap': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListMap,
+                    request_deserializer=aun__pb2.AunListMapRequest.FromString,
+                    response_serializer=aun__pb2.AunListMapResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -349,6 +435,141 @@ class AunService(object):
             '/beebium.AunService/ReloadMap',
             aun__pb2.AunReloadMapRequest.SerializeToString,
             aun__pb2.AunReloadMapResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddMapPeer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.AunService/AddMapPeer',
+            aun__pb2.AunAddMapPeerRequest.SerializeToString,
+            aun__pb2.AunAddMapPeerResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveMapPeer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.AunService/RemoveMapPeer',
+            aun__pb2.AunRemoveMapPeerRequest.SerializeToString,
+            aun__pb2.AunRemoveMapPeerResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddMapSubnet(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.AunService/AddMapSubnet',
+            aun__pb2.AunAddMapSubnetRequest.SerializeToString,
+            aun__pb2.AunAddMapSubnetResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveMapSubnet(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.AunService/RemoveMapSubnet',
+            aun__pb2.AunRemoveMapSubnetRequest.SerializeToString,
+            aun__pb2.AunRemoveMapSubnetResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListMap(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.AunService/ListMap',
+            aun__pb2.AunListMapRequest.SerializeToString,
+            aun__pb2.AunListMapResponse.FromString,
             options,
             channel_credentials,
             insecure,

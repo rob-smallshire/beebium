@@ -32,6 +32,20 @@ service AunService {
     // state (Api, Launch and Discovered are untouched). Normally a modification
     // is picked up automatically on the poll; this forces it.
     rpc ReloadMap(AunReloadMapRequest) returns (AunReloadMapResponse);
+
+    // Edit the per-user aun-map.json. The server owns the file (it may be on
+    // another host): it writes its own file atomically, preserving entry order
+    // and unknown keys, then applies the change to its own peer set at once;
+    // other instances pick it up from their poll. Add is add-or-replace.
+    rpc AddMapPeer(AunAddMapPeerRequest) returns (AunAddMapPeerResponse);
+    rpc RemoveMapPeer(AunRemoveMapPeerRequest) returns (AunRemoveMapPeerResponse);
+    rpc AddMapSubnet(AunAddMapSubnetRequest) returns (AunAddMapSubnetResponse);
+    rpc RemoveMapSubnet(AunRemoveMapSubnetRequest)
+        returns (AunRemoveMapSubnetResponse);
+
+    // List the map file's entries (with labels and host-resolution state),
+    // distinct from ListPeers which lists the live resolved routing table.
+    rpc ListMap(AunListMapRequest) returns (AunListMapResponse);
 }
 
 // --- Status ---
@@ -76,6 +90,79 @@ message AunReloadMapResponse {
 
     // The load error, if the file was present but could not be parsed.
     string error = 2;
+}
+
+// --- Map file editing ---
+
+message AunAddMapPeerRequest {
+    uint32 net = 1;      // 0..255
+    uint32 stn = 2;      // 1..254
+    string host = 3;     // IPv4 literal or DNS name
+    uint32 port = 4;     // 1..65535
+    string label = 5;    // optional note
+}
+message AunAddMapPeerResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message AunRemoveMapPeerRequest {
+    uint32 net = 1;
+    uint32 stn = 2;
+}
+message AunRemoveMapPeerResponse {
+    bool success = 1;
+    string error = 2;
+    bool removed = 3;  // false if there was no such entry
+}
+
+message AunAddMapSubnetRequest {
+    uint32 net = 1;      // 0..255
+    string subnet = 2;   // a.b.c.0/24
+    string label = 3;    // optional note
+}
+message AunAddMapSubnetResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message AunRemoveMapSubnetRequest {
+    uint32 net = 1;
+}
+message AunRemoveMapSubnetResponse {
+    bool success = 1;
+    string error = 2;
+    bool removed = 3;
+}
+
+message AunListMapRequest {
+    // Empty.
+}
+
+// One peers[] entry as written in the file, with its host-resolution state.
+message AunMapPeerEntry {
+    uint32 net = 1;
+    uint32 stn = 2;
+    string host = 3;           // as written (IPv4 literal or DNS name)
+    uint32 port = 4;
+    string label = 5;
+    bool resolved = 6;         // false if the host did not resolve
+    string resolved_ip = 7;    // dotted-quad when resolved, else empty
+}
+
+// One subnets[] entry as written in the file.
+message AunMapSubnetEntry {
+    uint32 net = 1;
+    string subnet = 2;
+    string label = 3;
+}
+
+message AunListMapResponse {
+    repeated AunMapPeerEntry peers = 1;
+    repeated AunMapSubnetEntry subnets = 2;
+    // A load error, if the file was present but malformed; the lists are then
+    // empty.
+    string error = 3;
 }
 
 // --- Cable plug ---

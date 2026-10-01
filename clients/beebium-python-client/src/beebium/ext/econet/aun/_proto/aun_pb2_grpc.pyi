@@ -71,6 +71,19 @@ class AunServiceStub:
     state (Api, Launch and Discovered are untouched). Normally a modification
     is picked up automatically on the poll; this forces it.
     """
+    AddMapPeer: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapPeerRequest, _aun_pb2.AunAddMapPeerResponse]
+    """Edit the per-user aun-map.json. The server owns the file (it may be on
+    another host): it writes its own file atomically, preserving entry order
+    and unknown keys, then applies the change to its own peer set at once;
+    other instances pick it up from their poll. Add is add-or-replace.
+    """
+    RemoveMapPeer: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunRemoveMapPeerRequest, _aun_pb2.AunRemoveMapPeerResponse]
+    AddMapSubnet: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapSubnetRequest, _aun_pb2.AunAddMapSubnetResponse]
+    RemoveMapSubnet: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunRemoveMapSubnetRequest, _aun_pb2.AunRemoveMapSubnetResponse]
+    ListMap: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunListMapRequest, _aun_pb2.AunListMapResponse]
+    """List the map file's entries (with labels and host-resolution state),
+    distinct from ListPeers which lists the live resolved routing table.
+    """
 
 @_typing.type_check_only
 class AunServiceAsyncStub(AunServiceStub):
@@ -102,6 +115,19 @@ class AunServiceAsyncStub(AunServiceStub):
     """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
     state (Api, Launch and Discovered are untouched). Normally a modification
     is picked up automatically on the poll; this forces it.
+    """
+    AddMapPeer: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapPeerRequest, _aun_pb2.AunAddMapPeerResponse]  # type: ignore[assignment]
+    """Edit the per-user aun-map.json. The server owns the file (it may be on
+    another host): it writes its own file atomically, preserving entry order
+    and unknown keys, then applies the change to its own peer set at once;
+    other instances pick it up from their poll. Add is add-or-replace.
+    """
+    RemoveMapPeer: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunRemoveMapPeerRequest, _aun_pb2.AunRemoveMapPeerResponse]  # type: ignore[assignment]
+    AddMapSubnet: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapSubnetRequest, _aun_pb2.AunAddMapSubnetResponse]  # type: ignore[assignment]
+    RemoveMapSubnet: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunRemoveMapSubnetRequest, _aun_pb2.AunRemoveMapSubnetResponse]  # type: ignore[assignment]
+    ListMap: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunListMapRequest, _aun_pb2.AunListMapResponse]  # type: ignore[assignment]
+    """List the map file's entries (with labels and host-resolution state),
+    distinct from ListPeers which lists the live resolved routing table.
     """
 
 class AunServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -167,6 +193,49 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
         state (Api, Launch and Discovered are untouched). Normally a modification
         is picked up automatically on the poll; this forces it.
+        """
+
+    @_abc_1.abstractmethod
+    def AddMapPeer(
+        self,
+        request: _aun_pb2.AunAddMapPeerRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_aun_pb2.AunAddMapPeerResponse, _abc.Awaitable[_aun_pb2.AunAddMapPeerResponse]]:
+        """Edit the per-user aun-map.json. The server owns the file (it may be on
+        another host): it writes its own file atomically, preserving entry order
+        and unknown keys, then applies the change to its own peer set at once;
+        other instances pick it up from their poll. Add is add-or-replace.
+        """
+
+    @_abc_1.abstractmethod
+    def RemoveMapPeer(
+        self,
+        request: _aun_pb2.AunRemoveMapPeerRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_aun_pb2.AunRemoveMapPeerResponse, _abc.Awaitable[_aun_pb2.AunRemoveMapPeerResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def AddMapSubnet(
+        self,
+        request: _aun_pb2.AunAddMapSubnetRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_aun_pb2.AunAddMapSubnetResponse, _abc.Awaitable[_aun_pb2.AunAddMapSubnetResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def RemoveMapSubnet(
+        self,
+        request: _aun_pb2.AunRemoveMapSubnetRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_aun_pb2.AunRemoveMapSubnetResponse, _abc.Awaitable[_aun_pb2.AunRemoveMapSubnetResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def ListMap(
+        self,
+        request: _aun_pb2.AunListMapRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_aun_pb2.AunListMapResponse, _abc.Awaitable[_aun_pb2.AunListMapResponse]]:
+        """List the map file's entries (with labels and host-resolution state),
+        distinct from ListPeers which lists the live resolved routing table.
         """
 
 def add_AunServiceServicer_to_server(servicer: AunServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

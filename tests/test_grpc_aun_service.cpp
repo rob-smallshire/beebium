@@ -39,9 +39,14 @@
 #include <netinet/in.h>
 #endif
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
+#include <random>
 #include <span>
 #include <string>
+#include <system_error>
 
 namespace {
 
@@ -50,10 +55,16 @@ public:
     AunServiceFixture() : service_(transports_, peripherals_) {
         machine_.reset();
 
+        // A unique, initially-absent temp map file, so map tests are hermetic
+        // and never touch the real per-user aun-map.json.
+        std::random_device rd;
+        map_filepath_ = std::filesystem::temp_directory_path() /
+                        ("beebium-grpc-aun-map-" + std::to_string(rd()) + ".json");
+
         // Build the AUN extension on an OS-assigned ephemeral port and hand its
         // backend to EconetSocket so the dispatcher has something to talk to.
         auto ext = std::make_unique<beebium::AunEconetTransportExtension>();
-        ext->set_config({{"port", "0"}});
+        ext->set_config({{"port", "0"}, {"map-file", map_filepath_.string()}});
         auto backend = ext->create_backend(/*station=*/1);
         REQUIRE(backend != nullptr);
         machine_.state().memory.econet_socket.enable(
@@ -76,7 +87,13 @@ public:
         stub_ = beebium::ExtensionRpc::NewStub(channel_);
     }
 
-    ~AunServiceFixture() { server_->stop(); }
+    ~AunServiceFixture() {
+        server_->stop();
+        std::error_code ec;
+        std::filesystem::remove(map_filepath_, ec);
+    }
+
+    const std::filesystem::path& map_filepath() const { return map_filepath_; }
 
     // Serialize `req`, tunnel it via ExtensionRpc.Invoke (service=AunService,
     // the named method), and parse the reply into `resp`.
@@ -105,6 +122,7 @@ private:
     beebium::ExtensionRegistry peripherals_;
     beebium::service::ExtensionRpcServiceImpl service_;
     beebium::AunEconetTransportExtension* ext_ = nullptr;  // owned by transports_
+    std::filesystem::path map_filepath_;
     std::vector<grpc::Service*> services_;
     std::unique_ptr<beebium::service::Server<beebium::ModelB>> server_;
     std::shared_ptr<grpc::Channel> channel_;
@@ -286,6 +304,129 @@ TEST_CASE("AunService GetStatus reports the map-file path and ReloadMap runs",
     REQUIRE(fixture.invoke("ReloadMap", reload_req, &reload_resp).ok());
     CHECK(reload_resp.reloaded());  // enabled (default path), absent file is fine
     CHECK(reload_resp.error().empty());
+}
+
+TEST_CASE("AunService AddMapPeer then ListMap writes the file and lists it",
+          "[grpc][aun][extension-rpc][map]") {
+    AunServiceFixture fixture;
+    {
+        beebium::AunAddMapPeerRequest req;
+        req.set_net(0);
+        req.set_stn(254);
+        req.set_host("192.168.1.10");
+        req.set_port(32768);
+        req.set_label("file server");
+        beebium::AunAddMapPeerResponse resp;
+        REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
+        REQUIRE(resp.success());
+    }
+    {
+        beebium::AunAddMapSubnetRequest req;
+        req.set_net(128);
+        req.set_subnet("192.168.5.0/24");
+        beebium::AunAddMapSubnetResponse resp;
+        REQUIRE(fixture.invoke("AddMapSubnet", req, &resp).ok());
+        REQUIRE(resp.success());
+    }
+    {
+        beebium::AunListMapRequest req;
+        beebium::AunListMapResponse resp;
+        REQUIRE(fixture.invoke("ListMap", req, &resp).ok());
+        REQUIRE(resp.peers_size() == 1);
+        CHECK(resp.peers(0).stn() == 254);
+        CHECK(resp.peers(0).host() == "192.168.1.10");
+        CHECK(resp.peers(0).label() == "file server");
+        CHECK(resp.peers(0).resolved());  // an IPv4 literal always resolves
+        CHECK(resp.peers(0).resolved_ip() == "192.168.1.10");
+        REQUIRE(resp.subnets_size() == 1);
+        CHECK(resp.subnets(0).net() == 128);
+        CHECK(resp.subnets(0).subnet() == "192.168.5.0/24");
+    }
+    // The write reached the peer set at once (not only the file): it is routable.
+    CHECK(fixture.extension().peer_set().resolve(0, 254).has_value());
+    CHECK(fixture.extension().backend()->is_reachable(128, 50));  // subnet rule
+}
+
+TEST_CASE("AunService RemoveMapPeer reports whether an entry was removed",
+          "[grpc][aun][extension-rpc][map]") {
+    AunServiceFixture fixture;
+    {
+        beebium::AunAddMapPeerRequest req;
+        req.set_net(0); req.set_stn(254);
+        req.set_host("192.168.1.10"); req.set_port(32768);
+        beebium::AunAddMapPeerResponse resp;
+        REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
+    }
+    {
+        beebium::AunRemoveMapPeerRequest req;
+        req.set_net(0); req.set_stn(254);
+        beebium::AunRemoveMapPeerResponse resp;
+        REQUIRE(fixture.invoke("RemoveMapPeer", req, &resp).ok());
+        CHECK(resp.success());
+        CHECK(resp.removed());
+    }
+    {
+        beebium::AunRemoveMapPeerRequest req;
+        req.set_net(0); req.set_stn(99);  // never added
+        beebium::AunRemoveMapPeerResponse resp;
+        REQUIRE(fixture.invoke("RemoveMapPeer", req, &resp).ok());
+        CHECK(resp.success());
+        CHECK_FALSE(resp.removed());
+    }
+}
+
+TEST_CASE("AunService AddMapPeer validation names the field",
+          "[grpc][aun][extension-rpc][map]") {
+    AunServiceFixture fixture;
+    beebium::AunAddMapPeerRequest req;
+    req.set_net(0); req.set_stn(0);  // station out of range
+    req.set_host("192.168.1.10"); req.set_port(32768);
+    beebium::AunAddMapPeerResponse resp;
+    REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
+    CHECK_FALSE(resp.success());
+    CHECK(resp.error().find("station") != std::string::npos);
+}
+
+TEST_CASE("AunService map edits preserve a hand edit between RPC calls",
+          "[grpc][aun][extension-rpc][map]") {
+    AunServiceFixture fixture;
+    // First RPC creates the file with one peer.
+    {
+        beebium::AunAddMapPeerRequest req;
+        req.set_net(0); req.set_stn(1);
+        req.set_host("10.0.0.1"); req.set_port(32768);
+        beebium::AunAddMapPeerResponse resp;
+        REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
+        REQUIRE(resp.success());
+    }
+    // A hand edit adds an unknown top-level key and an unknown per-entry key.
+    {
+        std::ifstream in(fixture.map_filepath(), std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(in)), {});
+        in.close();
+        // Insert a top-level "schema" key after the opening brace.
+        auto brace = text.find('{');
+        REQUIRE(brace != std::string::npos);
+        text.insert(brace + 1, "\n  \"schema\": 7,");
+        std::ofstream(fixture.map_filepath(), std::ios::binary | std::ios::trunc)
+            << text;
+    }
+    // Second RPC adds another peer; the hand-added unknown key must survive.
+    {
+        beebium::AunAddMapPeerRequest req;
+        req.set_net(0); req.set_stn(2);
+        req.set_host("10.0.0.2"); req.set_port(32768);
+        beebium::AunAddMapPeerResponse resp;
+        REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
+        REQUIRE(resp.success());
+    }
+    std::ifstream in(fixture.map_filepath(), std::ios::binary);
+    std::string text((std::istreambuf_iterator<char>(in)), {});
+    CHECK(text.find("\"schema\"") != std::string::npos);  // unknown key kept
+    CHECK(text.find("10.0.0.1") != std::string::npos);     // first peer kept
+    CHECK(text.find("10.0.0.2") != std::string::npos);     // second peer added
+    // Order preserved: station 1 before station 2.
+    CHECK(text.find("\"station\": 1") < text.find("\"station\": 2"));
 }
 
 TEST_CASE("AunService AddPeer rejects invalid IP", "[grpc][aun][extension-rpc]") {

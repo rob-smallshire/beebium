@@ -37,6 +37,11 @@ class FakeChannel:
             "AddPeer": aun_pb2.AunAddPeerResponse(success=True),
             "RemovePeer": aun_pb2.AunRemovePeerResponse(success=True),
             "ListPeers": aun_pb2.AunListPeersResponse(),
+            "AddMapPeer": aun_pb2.AunAddMapPeerResponse(success=True),
+            "RemoveMapPeer": aun_pb2.AunRemoveMapPeerResponse(success=True, removed=True),
+            "AddMapSubnet": aun_pb2.AunAddMapSubnetResponse(success=True),
+            "RemoveMapSubnet": aun_pb2.AunRemoveMapSubnetResponse(success=True, removed=True),
+            "ListMap": aun_pb2.AunListMapResponse(),
         }
         self.calls: list[tuple[str, str, bytes]] = []
 
@@ -209,3 +214,72 @@ class TestPeers:
         assert peers[0].source == PeerSource.LAUNCH
         assert peers[1].source == PeerSource.MAP_FILE
         assert peers[2].source == PeerSource.SUBNET
+
+
+class TestMapEdits:
+    """The map-file editing wrappers (AddMapPeer/RemoveMapPeer/.../ListMap)."""
+
+    @pytest.fixture
+    def channel(self):
+        return FakeChannel()
+
+    @pytest.fixture
+    def aun(self, channel):
+        return Aun("aun", channel)
+
+    def test_add_map_peer_sends_fields(self, channel, aun):
+        aun.add_map_peer(net=0, stn=254, host="192.168.1.10", port=32768, label="fs")
+        req = channel.request("AddMapPeer", aun_pb2.AunAddMapPeerRequest)
+        assert req.net == 0
+        assert req.stn == 254
+        assert req.host == "192.168.1.10"
+        assert req.port == 32768
+        assert req.label == "fs"
+
+    def test_add_map_peer_failure_raises(self, channel, aun):
+        channel.set_response(
+            "AddMapPeer",
+            aun_pb2.AunAddMapPeerResponse(success=False, error="station must be 1-254"),
+        )
+        with pytest.raises(EconetError, match="station"):
+            aun.add_map_peer(net=0, stn=0, host="192.168.1.10")
+
+    def test_remove_map_peer_returns_removed(self, channel, aun):
+        channel.set_response(
+            "RemoveMapPeer",
+            aun_pb2.AunRemoveMapPeerResponse(success=True, removed=False),
+        )
+        assert aun.remove_map_peer(net=0, stn=99) is False
+
+    def test_add_map_subnet_sends_fields(self, channel, aun):
+        aun.add_map_subnet(net=128, subnet="192.168.5.0/24", label="risc os")
+        req = channel.request("AddMapSubnet", aun_pb2.AunAddMapSubnetRequest)
+        assert req.net == 128
+        assert req.subnet == "192.168.5.0/24"
+
+    def test_list_map_maps_entries(self, channel, aun):
+        channel.set_response(
+            "ListMap",
+            aun_pb2.AunListMapResponse(
+                peers=[
+                    aun_pb2.AunMapPeerEntry(
+                        net=0, stn=254, host="risc.local", port=32768,
+                        label="fs", resolved=False, resolved_ip="",
+                    )
+                ],
+                subnets=[aun_pb2.AunMapSubnetEntry(net=128, subnet="192.168.5.0/24")],
+            ),
+        )
+        listing = aun.list_map()
+        assert len(listing.peers) == 1
+        assert listing.peers[0].host == "risc.local"
+        assert listing.peers[0].resolved is False
+        assert listing.subnets[0].subnet == "192.168.5.0/24"
+
+    def test_list_map_malformed_raises(self, channel, aun):
+        channel.set_response(
+            "ListMap",
+            aun_pb2.AunListMapResponse(error="aun-map.json: invalid JSON at byte 11"),
+        )
+        with pytest.raises(EconetError, match="invalid JSON"):
+            aun.list_map()

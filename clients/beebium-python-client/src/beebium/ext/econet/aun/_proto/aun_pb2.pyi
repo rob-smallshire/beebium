@@ -199,6 +199,324 @@ class AunReloadMapResponse(_message.Message):
 Global___AunReloadMapResponse: _TypeAlias = AunReloadMapResponse  # noqa: Y015
 
 @_typing.final
+class AunAddMapPeerRequest(_message.Message):
+    """--- Map file editing ---"""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NET_FIELD_NUMBER: _builtins.int
+    STN_FIELD_NUMBER: _builtins.int
+    HOST_FIELD_NUMBER: _builtins.int
+    PORT_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    net: _builtins.int
+    """0..255"""
+    stn: _builtins.int
+    """1..254"""
+    host: _builtins.str
+    """IPv4 literal or DNS name"""
+    port: _builtins.int
+    """1..65535"""
+    label: _builtins.str
+    """optional note"""
+    def __init__(
+        self,
+        *,
+        net: _builtins.int = ...,
+        stn: _builtins.int = ...,
+        host: _builtins.str = ...,
+        port: _builtins.int = ...,
+        label: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["host", b"host", "label", b"label", "net", b"net", "port", b"port", "stn", b"stn"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunAddMapPeerRequest: _TypeAlias = AunAddMapPeerRequest  # noqa: Y015
+
+@_typing.final
+class AunAddMapPeerResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunAddMapPeerResponse: _TypeAlias = AunAddMapPeerResponse  # noqa: Y015
+
+@_typing.final
+class AunRemoveMapPeerRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NET_FIELD_NUMBER: _builtins.int
+    STN_FIELD_NUMBER: _builtins.int
+    net: _builtins.int
+    stn: _builtins.int
+    def __init__(
+        self,
+        *,
+        net: _builtins.int = ...,
+        stn: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["net", b"net", "stn", b"stn"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunRemoveMapPeerRequest: _TypeAlias = AunRemoveMapPeerRequest  # noqa: Y015
+
+@_typing.final
+class AunRemoveMapPeerResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    REMOVED_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    removed: _builtins.bool
+    """false if there was no such entry"""
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+        removed: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "removed", b"removed", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunRemoveMapPeerResponse: _TypeAlias = AunRemoveMapPeerResponse  # noqa: Y015
+
+@_typing.final
+class AunAddMapSubnetRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NET_FIELD_NUMBER: _builtins.int
+    SUBNET_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    net: _builtins.int
+    """0..255"""
+    subnet: _builtins.str
+    """a.b.c.0/24"""
+    label: _builtins.str
+    """optional note"""
+    def __init__(
+        self,
+        *,
+        net: _builtins.int = ...,
+        subnet: _builtins.str = ...,
+        label: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["label", b"label", "net", b"net", "subnet", b"subnet"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunAddMapSubnetRequest: _TypeAlias = AunAddMapSubnetRequest  # noqa: Y015
+
+@_typing.final
+class AunAddMapSubnetResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunAddMapSubnetResponse: _TypeAlias = AunAddMapSubnetResponse  # noqa: Y015
+
+@_typing.final
+class AunRemoveMapSubnetRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NET_FIELD_NUMBER: _builtins.int
+    net: _builtins.int
+    def __init__(
+        self,
+        *,
+        net: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["net", b"net"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunRemoveMapSubnetRequest: _TypeAlias = AunRemoveMapSubnetRequest  # noqa: Y015
+
+@_typing.final
+class AunRemoveMapSubnetResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SUCCESS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    REMOVED_FIELD_NUMBER: _builtins.int
+    success: _builtins.bool
+    error: _builtins.str
+    removed: _builtins.bool
+    def __init__(
+        self,
+        *,
+        success: _builtins.bool = ...,
+        error: _builtins.str = ...,
+        removed: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "removed", b"removed", "success", b"success"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunRemoveMapSubnetResponse: _TypeAlias = AunRemoveMapSubnetResponse  # noqa: Y015
+
+@_typing.final
+class AunListMapRequest(_message.Message):
+    """Empty."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunListMapRequest: _TypeAlias = AunListMapRequest  # noqa: Y015
+
+@_typing.final
+class AunMapPeerEntry(_message.Message):
+    """One peers[] entry as written in the file, with its host-resolution state."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NET_FIELD_NUMBER: _builtins.int
+    STN_FIELD_NUMBER: _builtins.int
+    HOST_FIELD_NUMBER: _builtins.int
+    PORT_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    RESOLVED_FIELD_NUMBER: _builtins.int
+    RESOLVED_IP_FIELD_NUMBER: _builtins.int
+    net: _builtins.int
+    stn: _builtins.int
+    host: _builtins.str
+    """as written (IPv4 literal or DNS name)"""
+    port: _builtins.int
+    label: _builtins.str
+    resolved: _builtins.bool
+    """false if the host did not resolve"""
+    resolved_ip: _builtins.str
+    """dotted-quad when resolved, else empty"""
+    def __init__(
+        self,
+        *,
+        net: _builtins.int = ...,
+        stn: _builtins.int = ...,
+        host: _builtins.str = ...,
+        port: _builtins.int = ...,
+        label: _builtins.str = ...,
+        resolved: _builtins.bool = ...,
+        resolved_ip: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["host", b"host", "label", b"label", "net", b"net", "port", b"port", "resolved", b"resolved", "resolved_ip", b"resolved_ip", "stn", b"stn"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunMapPeerEntry: _TypeAlias = AunMapPeerEntry  # noqa: Y015
+
+@_typing.final
+class AunMapSubnetEntry(_message.Message):
+    """One subnets[] entry as written in the file."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NET_FIELD_NUMBER: _builtins.int
+    SUBNET_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    net: _builtins.int
+    subnet: _builtins.str
+    label: _builtins.str
+    def __init__(
+        self,
+        *,
+        net: _builtins.int = ...,
+        subnet: _builtins.str = ...,
+        label: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["label", b"label", "net", b"net", "subnet", b"subnet"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunMapSubnetEntry: _TypeAlias = AunMapSubnetEntry  # noqa: Y015
+
+@_typing.final
+class AunListMapResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PEERS_FIELD_NUMBER: _builtins.int
+    SUBNETS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    error: _builtins.str
+    """A load error, if the file was present but malformed; the lists are then
+    empty.
+    """
+    @_builtins.property
+    def peers(self) -> _containers.RepeatedCompositeFieldContainer[Global___AunMapPeerEntry]: ...
+    @_builtins.property
+    def subnets(self) -> _containers.RepeatedCompositeFieldContainer[Global___AunMapSubnetEntry]: ...
+    def __init__(
+        self,
+        *,
+        peers: _abc.Iterable[Global___AunMapPeerEntry] | None = ...,
+        subnets: _abc.Iterable[Global___AunMapSubnetEntry] | None = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "peers", b"peers", "subnets", b"subnets"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___AunListMapResponse: _TypeAlias = AunListMapResponse  # noqa: Y015
+
+@_typing.final
 class AunSetConnectedRequest(_message.Message):
     """--- Cable plug ---"""
 

@@ -126,6 +126,74 @@ public:
                     resp.set_error(result.error);
                 });
         }
+        if (method == "AddMapPeer") {
+            return handle<AunAddMapPeerRequest, AunAddMapPeerResponse>(
+                method, request, response, [&](const auto& req, auto& resp) {
+                    if (req.net() > 255) return fail(resp, "net must be 0-255");
+                    if (req.port() > 65535) return fail(resp, "port must be 1-65535");
+                    auto result = extension_.add_map_peer(
+                        static_cast<std::uint8_t>(req.net()),
+                        static_cast<std::uint8_t>(req.stn()), req.host(),
+                        static_cast<std::uint16_t>(req.port()), req.label());
+                    if (!result.error.empty()) return fail(resp, result.error);
+                    resp.set_success(true);
+                });
+        }
+        if (method == "RemoveMapPeer") {
+            return handle<AunRemoveMapPeerRequest, AunRemoveMapPeerResponse>(
+                method, request, response, [&](const auto& req, auto& resp) {
+                    auto result = extension_.remove_map_peer(
+                        static_cast<std::uint8_t>(req.net()),
+                        static_cast<std::uint8_t>(req.stn()));
+                    if (!result.error.empty()) return fail(resp, result.error);
+                    resp.set_success(true);
+                    resp.set_removed(result.removed);
+                });
+        }
+        if (method == "AddMapSubnet") {
+            return handle<AunAddMapSubnetRequest, AunAddMapSubnetResponse>(
+                method, request, response, [&](const auto& req, auto& resp) {
+                    if (req.net() > 255) return fail(resp, "net must be 0-255");
+                    auto result = extension_.add_map_subnet(
+                        static_cast<std::uint8_t>(req.net()), req.subnet(),
+                        req.label());
+                    if (!result.error.empty()) return fail(resp, result.error);
+                    resp.set_success(true);
+                });
+        }
+        if (method == "RemoveMapSubnet") {
+            return handle<AunRemoveMapSubnetRequest, AunRemoveMapSubnetResponse>(
+                method, request, response, [&](const auto& req, auto& resp) {
+                    auto result = extension_.remove_map_subnet(
+                        static_cast<std::uint8_t>(req.net()));
+                    if (!result.error.empty()) return fail(resp, result.error);
+                    resp.set_success(true);
+                    resp.set_removed(result.removed);
+                });
+        }
+        if (method == "ListMap") {
+            return handle<AunListMapRequest, AunListMapResponse>(
+                method, request, response, [&](const auto&, auto& resp) {
+                    auto listing = extension_.list_map();
+                    resp.set_error(listing.error);
+                    for (const auto& p : listing.peers) {
+                        auto* entry = resp.add_peers();
+                        entry->set_net(p.net);
+                        entry->set_stn(p.stn);
+                        entry->set_host(p.host);
+                        entry->set_port(p.port);
+                        entry->set_label(p.label);
+                        entry->set_resolved(p.resolved);
+                        entry->set_resolved_ip(p.resolved_ip);
+                    }
+                    for (const auto& s : listing.subnets) {
+                        auto* entry = resp.add_subnets();
+                        entry->set_net(s.net);
+                        entry->set_subnet(s.subnet);
+                        entry->set_label(s.label);
+                    }
+                });
+        }
         return RpcStatus::error(
             kRpcUnimplemented,
             "AunService has no method '" + std::string(method) + "'");
@@ -152,7 +220,7 @@ private:
     }
 
     template <typename Resp>
-    static void fail(Resp& resp, const char* error) {
+    static void fail(Resp& resp, const std::string& error) {
         resp.set_success(false);
         resp.set_error(error);
     }

@@ -13,6 +13,12 @@ import {
     AunRemovePeerResponse,
     AunReloadMapRequest,
     AunReloadMapResponse,
+    AunAddMapPeerRequest,
+    AunAddMapPeerResponse,
+    AunRemoveMapPeerResponse,
+    AunAddMapSubnetRequest,
+    AunAddMapSubnetResponse,
+    AunListMapResponse,
     AunPeerSource,
 } from "../src/generated/aun.js";
 
@@ -292,6 +298,91 @@ describe("Aun", () => {
             await expect(new Aun(channel).removePeer(0, 1)).rejects.toThrow(
                 "peer not found",
             );
+        });
+    });
+
+    describe("map file edits", () => {
+        it("addMapPeer sends the fields and resolves on success", async () => {
+            const { channel, request } = fakeChannel({
+                AddMapPeer: ok(AunAddMapPeerResponse, { success: true, error: "" }),
+            });
+            await new Aun(channel).addMapPeer(0, 254, "192.168.1.10", 32768, "fs");
+            const req = request("AddMapPeer", AunAddMapPeerRequest);
+            expect(req.stn).toBe(254);
+            expect(req.host).toBe("192.168.1.10");
+            expect(req.label).toBe("fs");
+        });
+
+        it("addMapPeer throws on a validation error", async () => {
+            const { channel } = fakeChannel({
+                AddMapPeer: ok(AunAddMapPeerResponse, {
+                    success: false,
+                    error: "station must be 1-254",
+                }),
+            });
+            await expect(
+                new Aun(channel).addMapPeer(0, 0, "192.168.1.10"),
+            ).rejects.toThrow(EconetError);
+        });
+
+        it("removeMapPeer returns whether an entry was removed", async () => {
+            const { channel } = fakeChannel({
+                RemoveMapPeer: ok(AunRemoveMapPeerResponse, {
+                    success: true,
+                    error: "",
+                    removed: true,
+                }),
+            });
+            expect(await new Aun(channel).removeMapPeer(0, 254)).toBe(true);
+        });
+
+        it("addMapSubnet sends the fields", async () => {
+            const { channel, request } = fakeChannel({
+                AddMapSubnet: ok(AunAddMapSubnetResponse, {
+                    success: true,
+                    error: "",
+                }),
+            });
+            await new Aun(channel).addMapSubnet(128, "192.168.5.0/24", "risc os");
+            const req = request("AddMapSubnet", AunAddMapSubnetRequest);
+            expect(req.net).toBe(128);
+            expect(req.subnet).toBe("192.168.5.0/24");
+        });
+
+        it("listMap maps entries and resolution state", async () => {
+            const { channel } = fakeChannel({
+                ListMap: ok(AunListMapResponse, {
+                    peers: [
+                        {
+                            net: 0,
+                            stn: 254,
+                            host: "risc.local",
+                            port: 32768,
+                            label: "fs",
+                            resolved: false,
+                            resolvedIp: "",
+                        },
+                    ],
+                    subnets: [{ net: 128, subnet: "192.168.5.0/24", label: "" }],
+                    error: "",
+                }),
+            });
+            const listing = await new Aun(channel).listMap();
+            expect(listing.peers).toHaveLength(1);
+            expect(listing.peers[0]!.host).toBe("risc.local");
+            expect(listing.peers[0]!.resolved).toBe(false);
+            expect(listing.subnets[0]!.subnet).toBe("192.168.5.0/24");
+        });
+
+        it("listMap throws when the file is malformed", async () => {
+            const { channel } = fakeChannel({
+                ListMap: ok(AunListMapResponse, {
+                    peers: [],
+                    subnets: [],
+                    error: "aun-map.json: invalid JSON at byte 11",
+                }),
+            });
+            await expect(new Aun(channel).listMap()).rejects.toThrow(EconetError);
         });
     });
 });

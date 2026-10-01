@@ -24,6 +24,16 @@ import {
     AunRemovePeerResponse,
     AunReloadMapRequest,
     AunReloadMapResponse,
+    AunAddMapPeerRequest,
+    AunAddMapPeerResponse,
+    AunRemoveMapPeerRequest,
+    AunRemoveMapPeerResponse,
+    AunAddMapSubnetRequest,
+    AunAddMapSubnetResponse,
+    AunRemoveMapSubnetRequest,
+    AunRemoveMapSubnetResponse,
+    AunListMapRequest,
+    AunListMapResponse,
     AunPeerSource as ProtoAunPeerSource,
 } from "./generated/aun.js";
 import type { ExtensionChannel } from "./extension_rpc.js";
@@ -72,6 +82,30 @@ export interface PeerInfo {
      * first: `Api`, `Launch`, `MapFile`, `Discovered`, `Subnet`.
      */
     source: PeerSource;
+}
+
+/** A peers[] entry in the map file, with its host-resolution state. */
+export interface MapPeer {
+    net: number;
+    stn: number;
+    host: string;        // as written (IPv4 literal or DNS name)
+    port: number;
+    label: string;
+    resolved: boolean;
+    resolvedIp: string;  // dotted-quad when resolved, else empty
+}
+
+/** A subnets[] entry in the map file. */
+export interface MapSubnet {
+    net: number;
+    subnet: string;
+    label: string;
+}
+
+/** The map file's entries (distinct from the live routing table). */
+export interface MapListing {
+    peers: MapPeer[];
+    subnets: MapSubnet[];
 }
 
 function peerSourceFromProto(source: ProtoAunPeerSource): PeerSource {
@@ -214,5 +248,112 @@ export class Aun {
         if (response.error) {
             throw new EconetError(response.error);
         }
+    }
+
+    /**
+     * Add or replace a peer in the server's aun-map.json. The server writes its
+     * own file atomically (preserving order and unknown keys) and applies the
+     * change to its peer set at once; other instances pick it up from the poll.
+     *
+     * @throws {EconetError} On a validation or write error (names the field).
+     */
+    async addMapPeer(
+        net: number,
+        stn: number,
+        host: string,
+        port = 32768,
+        label = "",
+    ): Promise<void> {
+        const payload = AunAddMapPeerRequest.encode(
+            AunAddMapPeerRequest.fromPartial({ net, stn, host, port, label }),
+        ).finish();
+        const reply = await this.channel.invoke(SERVICE, "AddMapPeer", payload);
+        const response = AunAddMapPeerResponse.decode(reply);
+        if (!response.success) {
+            throw new EconetError(response.error);
+        }
+    }
+
+    /**
+     * Remove a peer from the map file. Resolves to whether an entry was removed.
+     *
+     * @throws {EconetError} On a write error.
+     */
+    async removeMapPeer(net: number, stn: number): Promise<boolean> {
+        const payload = AunRemoveMapPeerRequest.encode(
+            AunRemoveMapPeerRequest.fromPartial({ net, stn }),
+        ).finish();
+        const reply = await this.channel.invoke(SERVICE, "RemoveMapPeer", payload);
+        const response = AunRemoveMapPeerResponse.decode(reply);
+        if (!response.success) {
+            throw new EconetError(response.error);
+        }
+        return response.removed;
+    }
+
+    /**
+     * Add or replace a subnet rule (`a.b.c.0/24`) in the map file.
+     *
+     * @throws {EconetError} On a validation or write error.
+     */
+    async addMapSubnet(net: number, subnet: string, label = ""): Promise<void> {
+        const payload = AunAddMapSubnetRequest.encode(
+            AunAddMapSubnetRequest.fromPartial({ net, subnet, label }),
+        ).finish();
+        const reply = await this.channel.invoke(SERVICE, "AddMapSubnet", payload);
+        const response = AunAddMapSubnetResponse.decode(reply);
+        if (!response.success) {
+            throw new EconetError(response.error);
+        }
+    }
+
+    /**
+     * Remove a subnet rule from the map file. Resolves to whether one was removed.
+     *
+     * @throws {EconetError} On a write error.
+     */
+    async removeMapSubnet(net: number): Promise<boolean> {
+        const payload = AunRemoveMapSubnetRequest.encode(
+            AunRemoveMapSubnetRequest.fromPartial({ net }),
+        ).finish();
+        const reply = await this.channel.invoke(SERVICE, "RemoveMapSubnet", payload);
+        const response = AunRemoveMapSubnetResponse.decode(reply);
+        if (!response.success) {
+            throw new EconetError(response.error);
+        }
+        return response.removed;
+    }
+
+    /**
+     * List the map file's entries with labels and host resolution, distinct
+     * from listPeers() which lists the live resolved routing table.
+     *
+     * @throws {EconetError} If the file was present but could not be parsed.
+     */
+    async listMap(): Promise<MapListing> {
+        const payload = AunListMapRequest.encode(
+            AunListMapRequest.fromPartial({}),
+        ).finish();
+        const reply = await this.channel.invoke(SERVICE, "ListMap", payload);
+        const response = AunListMapResponse.decode(reply);
+        if (response.error) {
+            throw new EconetError(response.error);
+        }
+        return {
+            peers: response.peers.map((p) => ({
+                net: p.net,
+                stn: p.stn,
+                host: p.host,
+                port: p.port,
+                label: p.label,
+                resolved: p.resolved,
+                resolvedIp: p.resolvedIp,
+            })),
+            subnets: response.subnets.map((s) => ({
+                net: s.net,
+                subnet: s.subnet,
+                label: s.label,
+            })),
+        };
     }
 }

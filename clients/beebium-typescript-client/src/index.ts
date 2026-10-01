@@ -42,7 +42,15 @@ export {
     type HostSerialSetConfigOptions,
 } from "./host_serial.js";
 export { Tube, type TubeStatus } from "./tube.js";
-export { Aun, type AunStatus, type PeerInfo, PeerSource } from "./aun.js";
+export {
+    Aun,
+    type AunStatus,
+    type PeerInfo,
+    PeerSource,
+    type MapPeer,
+    type MapSubnet,
+    type MapListing,
+} from "./aun.js";
 export { Piconet, type PiconetStatus } from "./piconet.js";
 export { EconetTransport, type TransportInfo } from "./econet_transport.js";
 export {

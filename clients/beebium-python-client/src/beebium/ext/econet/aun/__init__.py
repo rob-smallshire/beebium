@@ -80,6 +80,36 @@ class PeerInfo:
     source: PeerSource = PeerSource.LAUNCH
 
 
+@dataclass(frozen=True)
+class MapPeer:
+    """A peers[] entry in the map file, with its host-resolution state."""
+
+    net: int
+    stn: int
+    host: str  # as written (IPv4 literal or DNS name)
+    port: int
+    label: str
+    resolved: bool
+    resolved_ip: str  # dotted-quad when resolved, else empty
+
+
+@dataclass(frozen=True)
+class MapSubnet:
+    """A subnets[] entry in the map file."""
+
+    net: int
+    subnet: str
+    label: str
+
+
+@dataclass(frozen=True)
+class MapListing:
+    """The map file's entries (distinct from the live routing table)."""
+
+    peers: list[MapPeer]
+    subnets: list[MapSubnet]
+
+
 class Aun(EconetTransportAdapter):
     """AUN-specific RPCs (peer table, cable plug, port status).
 
@@ -203,3 +233,103 @@ class Aun(EconetTransportAdapter):
         response = self._invoke("ReloadMap", request, aun_pb2.AunReloadMapResponse())
         if response.error:
             raise EconetError(response.error)
+
+    def add_map_peer(
+        self, net: int, stn: int, host: str, port: int = 32768, label: str = ""
+    ) -> None:
+        """Add or replace a peer in the server's ``aun-map.json``.
+
+        The server writes its own file (it may be on another host) atomically,
+        preserving entry order and unknown keys, then applies the change to its
+        peer set at once; other instances pick it up from their poll.
+
+        Args:
+            net: Econet network number (0-255).
+            stn: Econet station number (1-254).
+            host: IPv4 literal or DNS name.
+            port: UDP port (1-65535).
+            label: Optional note stored with the entry.
+
+        Raises:
+            EconetError: On a validation or write error (the message names the field).
+        """
+        request = aun_pb2.AunAddMapPeerRequest(
+            net=net, stn=stn, host=host, port=port, label=label
+        )
+        response = self._invoke(
+            "AddMapPeer", request, aun_pb2.AunAddMapPeerResponse()
+        )
+        if not response.success:
+            raise EconetError(response.error)
+
+    def remove_map_peer(self, net: int, stn: int) -> bool:
+        """Remove a peer from the map file. Returns whether an entry was removed.
+
+        Raises:
+            EconetError: On a write error.
+        """
+        request = aun_pb2.AunRemoveMapPeerRequest(net=net, stn=stn)
+        response = self._invoke(
+            "RemoveMapPeer", request, aun_pb2.AunRemoveMapPeerResponse()
+        )
+        if not response.success:
+            raise EconetError(response.error)
+        return response.removed
+
+    def add_map_subnet(self, net: int, subnet: str, label: str = "") -> None:
+        """Add or replace a subnet rule (``a.b.c.0/24``) in the map file.
+
+        Raises:
+            EconetError: On a validation or write error.
+        """
+        request = aun_pb2.AunAddMapSubnetRequest(net=net, subnet=subnet, label=label)
+        response = self._invoke(
+            "AddMapSubnet", request, aun_pb2.AunAddMapSubnetResponse()
+        )
+        if not response.success:
+            raise EconetError(response.error)
+
+    def remove_map_subnet(self, net: int) -> bool:
+        """Remove a subnet rule from the map file. Returns whether one was removed.
+
+        Raises:
+            EconetError: On a write error.
+        """
+        request = aun_pb2.AunRemoveMapSubnetRequest(net=net)
+        response = self._invoke(
+            "RemoveMapSubnet", request, aun_pb2.AunRemoveMapSubnetResponse()
+        )
+        if not response.success:
+            raise EconetError(response.error)
+        return response.removed
+
+    def list_map(self) -> MapListing:
+        """List the map file's entries with labels and host resolution.
+
+        Distinct from :attr:`peers`, which lists the live resolved routing table.
+
+        Raises:
+            EconetError: If the file was present but could not be parsed.
+        """
+        request = aun_pb2.AunListMapRequest()
+        response = self._invoke("ListMap", request, aun_pb2.AunListMapResponse())
+        if response.error:
+            raise EconetError(response.error)
+        return MapListing(
+            peers=[
+                MapPeer(
+                    net=p.net,
+                    stn=p.stn,
+                    host=p.host,
+                    port=p.port,
+                    label=p.label,
+                    resolved=p.resolved,
+                    resolved_ip=p.resolved_ip,
+                )
+                for p in response.peers
+            ],
+            subnets=[
+                MapSubnet(net=s.net, subnet=s.subnet, label=s.label)
+                for s in response.subnets
+            ],
+        )

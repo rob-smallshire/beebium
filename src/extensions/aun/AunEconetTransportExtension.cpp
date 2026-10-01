@@ -14,6 +14,7 @@
 
 #include "AunDiscoveryAnnouncer.hpp"
 #include "AunDiscoverySubscriber.hpp"
+#include "AunMapWriter.hpp"
 #include "beebium/econet/AunPacket.hpp"
 
 #ifdef BEEBIUM_BUILD_SERVICE
@@ -109,6 +110,17 @@ std::optional<std::uint32_t> resolve_host_bounded(
         return future.get();
     }
     return std::nullopt;  // did not resolve in time; retried on the next reload
+}
+
+// Format an IPv4 address (network byte order) as a dotted quad.
+std::string ip_to_dotted(std::uint32_t ip_net_byte_order) {
+    in_addr addr{};
+    addr.s_addr = ip_net_byte_order;
+    char buf[INET_ADDRSTRLEN] = {0};
+    if (inet_ntop(AF_INET, &addr, buf, sizeof(buf))) {
+        return buf;
+    }
+    return {};
 }
 
 }  // namespace
@@ -590,6 +602,125 @@ std::string AunEconetTransportExtension::map_file_error() const {
 std::vector<AunMapPeer> AunEconetTransportExtension::unreachable_map_peers() const {
     std::lock_guard<std::mutex> lock(map_file_mutex_);
     return unreachable_map_peers_;
+}
+
+AunEconetTransportExtension::MapEdit AunEconetTransportExtension::add_map_peer(
+        std::uint8_t net, std::uint8_t stn, const std::string& host,
+        std::uint16_t port, const std::string& label) {
+    resolve_map_file_path();
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) return {"the map file is disabled (map-file=none)"};
+        path = map_file_filepath_;
+    }
+    auto load = AunMapDocument::load(path);
+    if (!load.document) return {load.error};
+    auto document = *load.document;
+    if (std::string err = document.add_or_replace_peer(net, stn, host, port, label);
+        !err.empty()) {
+        return {err};
+    }
+    if (std::string err = document.save(path); !err.empty()) {
+        return {err};
+    }
+    reload_map_file();  // apply the server's own write to its peer set at once
+    return {"", true};
+}
+
+AunEconetTransportExtension::MapEdit AunEconetTransportExtension::remove_map_peer(
+        std::uint8_t net, std::uint8_t stn) {
+    resolve_map_file_path();
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) return {"the map file is disabled (map-file=none)"};
+        path = map_file_filepath_;
+    }
+    auto load = AunMapDocument::load(path);
+    if (!load.document) return {load.error};
+    auto document = *load.document;
+    bool removed = document.remove_peer(net, stn);
+    if (removed) {
+        if (std::string err = document.save(path); !err.empty()) {
+            return {err};
+        }
+        reload_map_file();
+    }
+    return {"", removed};
+}
+
+AunEconetTransportExtension::MapEdit AunEconetTransportExtension::add_map_subnet(
+        std::uint8_t net, const std::string& subnet_text,
+        const std::string& label) {
+    resolve_map_file_path();
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) return {"the map file is disabled (map-file=none)"};
+        path = map_file_filepath_;
+    }
+    auto load = AunMapDocument::load(path);
+    if (!load.document) return {load.error};
+    auto document = *load.document;
+    if (std::string err = document.add_or_replace_subnet(net, subnet_text, label);
+        !err.empty()) {
+        return {err};
+    }
+    if (std::string err = document.save(path); !err.empty()) {
+        return {err};
+    }
+    reload_map_file();
+    return {"", true};
+}
+
+AunEconetTransportExtension::MapEdit
+AunEconetTransportExtension::remove_map_subnet(std::uint8_t net) {
+    resolve_map_file_path();
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) return {"the map file is disabled (map-file=none)"};
+        path = map_file_filepath_;
+    }
+    auto load = AunMapDocument::load(path);
+    if (!load.document) return {load.error};
+    auto document = *load.document;
+    bool removed = document.remove_subnet(net);
+    if (removed) {
+        if (std::string err = document.save(path); !err.empty()) {
+            return {err};
+        }
+        reload_map_file();
+    }
+    return {"", removed};
+}
+
+AunEconetTransportExtension::MapListing AunEconetTransportExtension::list_map() {
+    resolve_map_file_path();
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) return {};  // disabled -> empty, no error
+        path = map_file_filepath_;
+    }
+    AunMapLoadResult loaded = load_aun_map(path);
+    MapListing listing;
+    if (!loaded.map.has_value()) {
+        listing.error = loaded.error;
+        return listing;
+    }
+    for (const auto& peer : loaded.map->peers) {
+        auto ip = resolve_host_bounded(peer.host, std::chrono::seconds(3));
+        listing.peers.push_back(ListedMapPeer{
+            peer.net, peer.stn, peer.host, peer.port, peer.label, ip.has_value(),
+            ip ? ip_to_dotted(*ip) : std::string{}});
+    }
+    for (const auto& subnet : loaded.map->subnets) {
+        listing.subnets.push_back(
+            ListedMapSubnet{subnet.net, subnet.subnet_text, subnet.label});
+    }
+    return listing;
 }
 
 std::vector<ExtensionRpcDispatcher*> AunEconetTransportExtension::rpc_dispatchers() {
