@@ -93,10 +93,9 @@ See `docs/clock-architecture.md` for the timing model. Key components:
 
 ## Git Commit Messages
 
-- Never include "Claude", "Opus", "Anthropic", or any AI attribution
+- Never include "Claude", "Opus", "Anthropic", or any AI attribution in the commit message body
 - Never include emojis
-- Never include "Co-Authored-By" lines referencing AI assistants
-- Never include "Generated with" lines
+- Attribution trailers (Co-Authored-By, session links) at the end of the message are allowed
 
 ## Project Structure
 
