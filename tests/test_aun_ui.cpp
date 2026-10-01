@@ -434,6 +434,19 @@ TEST_CASE("AunUi: an invalid ADD subnet shows a field-named error Indicator",
     CHECK(err->indicator().text().find("subnet") != std::string::npos);
 }
 
+TEST_CASE("AunUi: ADD subnet rejects net 0 (this machine's own net)",
+          "[aun][ui]") {
+    AunUiFixture fixture;
+    fixture.extension().ui()->handle_event(
+        list_event("subnets", EditableListEvent::ADD, "", "",
+                   {{"net", "0"}, {"subnet", "192.168.5.0/24"}}));
+    CHECK(fixture.extension().map_subnets().empty());
+    auto view = fixture.view();
+    const auto* err = find_control(view.root(), "edit_error");
+    REQUIRE(err != nullptr);
+    CHECK(err->indicator().text().find("net 0") != std::string::npos);
+}
+
 TEST_CASE("AunUi: the Reload file action picks up an external edit",
           "[aun][ui]") {
     AunUiFixture fixture;

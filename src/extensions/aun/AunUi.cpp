@@ -49,23 +49,27 @@ constexpr const char* ACTION_RELOAD      = "reload";
 // Newcomer-readable help, written for someone who does not already know
 // Econet/AUN. Shown as an information affordance, never inline.
 constexpr const char* HELP_NET_STN =
-    "The Econet network and station this peer answers to, written "
-    "net.station. Net 0 means this machine's own network. The station is 1 "
-    "to 254.";
+    "The station's Econet address: net number and station number, written "
+    "net.station. Net 0 means this machine's own net. Station numbers run "
+    "from 1 to 254; 254 is the usual file server.";
 constexpr const char* HELP_HOST =
-    "The peer's AUN address: an IPv4 address like 192.168.1.10, or a DNS "
-    "name. Names are resolved on the server's host, not here.";
+    "The IPv4 address or DNS name of the computer running the AUN station. A "
+    "name is looked up on the computer running this emulator, each time the "
+    "map is loaded.";
 constexpr const char* HELP_PORT =
-    "The UDP port the peer listens on. 32768 is the AUN convention; several "
-    "Beebium instances on one host use different ports.";
+    "The UDP port the station listens on. Real AUN machines and bridges use "
+    "32768. Several Beebium instances on one computer each need a different "
+    "port.";
 constexpr const char* HELP_REMARK =
-    "A note for your own use. Beebium does not interpret it.";
+    "A note for you, such as the machine's name or location. Beebium does not "
+    "use it.";
 constexpr const char* HELP_SUBNET_NET =
-    "The Econet network this rule maps. The AUN convention numbers these 128 "
-    "and above. The rule covers a whole /24.";
+    "The Econet net number this subnet stands for. AUN convention numbers "
+    "these from 128 upwards; net 0 is this machine's own net and cannot be a "
+    "subnet rule.";
 constexpr const char* HELP_SUBNET_CIDR =
-    "The IPv4 /24 this network maps onto. The station is the last octet and "
-    "the port is 32768.";
+    "The subnet whose addresses are the stations of this net: the machine at "
+    "a.b.c.40 is station 40.";
 
 // Inline note on the port field when saving an mDNS peer: the discovered
 // port is ephemeral and may differ next time.
@@ -74,12 +78,17 @@ constexpr const char* EPHEMERAL_PORT_NOTE =
     "different one next time.";
 
 constexpr const char* LIST_HELP_PEERS =
-    "Stations reachable over AUN. Map-file rows are editable here; rows from "
-    "the command line, the running program, or mDNS discovery are shown for "
-    "reference and can be saved into the map file.";
+    "Each peer maps one Econet station (net.station) to the IP address and "
+    "UDP port where its AUN implementation listens. Peers from the map file "
+    "are shared by every Beebium instance on this computer; peers found by "
+    "mDNS, given at launch, or added by a client are shown for this instance "
+    "only.";
 constexpr const char* LIST_HELP_SUBNETS =
-    "Each rule maps a whole Econet network to an IPv4 /24 by the AUN "
-    "convention: the station is the last octet and the port is 32768.";
+    "Each rule maps one Econet net (stations 1 to 254) onto one IPv4 /24 "
+    "subnet, where a station's number is the last octet of its IP address "
+    "and the UDP port is always 32768. This is the convention RISC OS and "
+    "other AUN implementations use, so one rule covers every machine on that "
+    "subnet.";
 
 std::string format_ip(std::uint32_t ip_addr) {
     char buf[INET_ADDRSTRLEN];
@@ -509,8 +518,10 @@ void AunUi::apply_add_peer(const std::string& net_stn, const std::string& host,
 void AunUi::apply_add_subnet(const std::string& net, const std::string& subnet,
                              const std::string& label) {
     int net_value = 0;
-    if (!parse_int(net, net_value) || net_value < 0 || net_value > 255) {
-        last_edit_error_ = "net must be 0-255";
+    if (!parse_int(net, net_value) || net_value < 1 || net_value > 255) {
+        // Net 0 is this machine's own net and cannot be a subnet rule.
+        last_edit_error_ = "net must be 1-255; net 0 is this machine's own net "
+                           "and cannot be a subnet rule";
         mark_dirty();
         return;
     }
