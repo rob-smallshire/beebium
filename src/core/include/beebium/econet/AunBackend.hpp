@@ -133,7 +133,7 @@ public:
     size_t peer_count() const;
 
     // The local UDP port this backend is bound to.
-    uint16_t local_port() const;
+    uint16_t local_port() const override;
 
     // Why the socket failed to come up, if it did. Empty when connected.
     // Names the specific cause (port + OS reason, e.g. "could not bind UDP

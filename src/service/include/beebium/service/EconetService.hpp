@@ -22,8 +22,10 @@
 #include "beebium/econet/TestBackend.hpp"
 #include "beebium/econet/Mc6854.hpp"
 #include "beebium/econet/FourWayHandshake.hpp"
+#include "beebium/extension/EconetTransportRegistry.hpp"
 
 #include <grpcpp/grpcpp.h>
+#include <string>
 #include <chrono>
 #include <mutex>
 #include <thread>
@@ -88,6 +90,18 @@ public:
         : machine_(machine) {}
 
     ~EconetServiceImpl() override = default;
+
+    // Give the service the Econet transport registry so EnableEconet can bring
+    // the configured transport up through its own create_backend -- the
+    // transport extension then owns the backend (its announcer, subscriber,
+    // peer set, and the AunService status all read it). Without this, Enable
+    // would bind a bare backend the extension never learns about, and AUN
+    // status would read local_port=0 (issue #54). Set once, before start();
+    // the registry outlives the server. nullptr leaves Enable on its
+    // transport-less fallback.
+    void set_transport_registry(EconetTransportRegistry* registry) {
+        transport_registry_ = registry;
+    }
 
     EconetServiceImpl(const EconetServiceImpl&) = delete;
     EconetServiceImpl& operator=(const EconetServiceImpl&) = delete;
@@ -200,11 +214,42 @@ public:
                 return grpc::Status::OK;
             }
 
-            // AUN networking: create UDP socket
+            // AUN networking. Bring up the CONFIGURED transport through its own
+            // create_backend when one is registered, so the transport extension
+            // owns the backend -- its announcer, subscriber, peer set and the
+            // AunService status all read that same backend. Binding a bare
+            // AunBackend here (the transport-less fallback below) bypasses the
+            // extension and leaves its status reading zero, and ignores the
+            // configured local net (issue #54).
             uint16_t port = (request->aun_port() == 0)
                 ? AUN_DEFAULT_PORT
                 : static_cast<uint16_t>(request->aun_port());
 
+            if (transport_registry_ && transport_registry_->size() == 1) {
+                auto& transport = *transport_registry_->extensions().front();
+                transport.set_config_value("port", std::to_string(port));
+                std::unique_ptr<NetworkBackend> backend =
+                    transport.create_backend(station_id);
+                if (!backend) {
+                    response->set_success(false);
+                    response->set_error(
+                        "Failed to bring up the Econet transport on port " +
+                        std::to_string(port));
+                    return grpc::Status::OK;
+                }
+                response->set_actual_aun_port(backend->local_port());
+                bool requires_real_time = transport.requires_real_time_pacing();
+                machine_.with_emulation_paused([&] {
+                    econet.enable(station_id, std::move(backend), true,
+                                  requires_real_time);
+                });
+                response->set_success(true);
+                return grpc::Status::OK;
+            }
+
+            // Transport-less fallback: no transport extension is registered
+            // (AUN was not configured at launch), so bind a bare AUN socket
+            // directly. Local net defaults to 0.
             auto backend = std::make_unique<AunBackend>(0, station_id, port);
 
             if (!backend->is_connected()) {
@@ -484,6 +529,7 @@ private:
     }
 
     MachineType& machine_;
+    EconetTransportRegistry* transport_registry_ = nullptr;
     std::mutex mutex_;
 };
 

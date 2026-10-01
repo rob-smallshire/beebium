@@ -72,11 +72,16 @@ public:
     /// @param policy_config Shutdown policy configuration
     /// @param shutdown_callback Callback to invoke when client requests shutdown
     /// @param extension_services Additional gRPC services from peripheral extensions
+    /// @param transport_registry Econet transport registry (for EnableEconet to
+    ///        bring the configured transport up through its own create_backend);
+    ///        may be null for a machine with no Econet transport. Must outlive
+    ///        the server.
     void start(Provenance provenance, MachineIdentity identity,
                bool enable_advertisement = false,
                ShutdownPolicyConfig policy_config = {},
                ShutdownCallback shutdown_callback = nullptr,
-               std::span<grpc::Service*> extension_services = {});
+               std::span<grpc::Service*> extension_services = {},
+               beebium::EconetTransportRegistry* transport_registry = nullptr);
 
     /// Stop the server and wait for shutdown
     void stop();
@@ -228,7 +233,8 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
                                 bool enable_advertisement,
                                 ShutdownPolicyConfig policy_config,
                                 ShutdownCallback shutdown_callback,
-                                std::span<grpc::Service*> extension_services) {
+                                std::span<grpc::Service*> extension_services,
+                                beebium::EconetTransportRegistry* transport_registry) {
     if (impl_->running) {
         return;
     }
@@ -309,6 +315,7 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
 
     impl_->econet_service = std::make_unique<EconetServiceImpl<MachineType>>(
         impl_->machine);
+    impl_->econet_service->set_transport_registry(transport_registry);
 
     impl_->serial_service = std::make_unique<SerialServiceImpl<MachineType>>(
         impl_->machine);

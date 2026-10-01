@@ -2593,7 +2593,7 @@ public:
 
             server.start(std::move(provenance), std::move(identity),
                         config.advertise, shutdown_policy_config, std::move(shutdown_callback),
-                        extension_services);
+                        extension_services, &am.transport_registry);
 
             // Print actual bound port (important when port 0 was requested for dynamic allocation)
             // Flush immediately so clients parsing stdout can detect the port before we block

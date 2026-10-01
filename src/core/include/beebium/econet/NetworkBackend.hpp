@@ -124,6 +124,11 @@ public:
     // override to propagate.
     virtual void on_station_id_changed(uint8_t /*new_station_id*/) {}
 
+    // The local UDP port this backend is bound to, or 0 for a backend with no
+    // UDP endpoint (TestBackend, Piconet). AUN overrides. Lets a caller holding
+    // only the NetworkBackend interface report the bound port.
+    virtual uint16_t local_port() const { return 0; }
+
     // A station-number collision observed by a discovery-capable transport: a
     // peer advertised a (net, stn) already held by a different, still-live
     // endpoint, and was refused rather than allowed to displace the incumbent
