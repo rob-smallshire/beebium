@@ -707,7 +707,16 @@ than in the panel:
    ("Peers (3)"), set by the server, since only the server knows what the
    list holds beyond what is shown.
 
-Field numbers: `EditableListAction.editor = 4`; `TextInput.help` and
-`TextInput.note` take the next free numbers in that message;
+Field numbers: `EditableListAction.editor = 4`; `TextInput.help = 4` and
+`TextInput.note = 5` (the next free numbers in that message);
 `EditableList.help = 6`. Additive; renderers that predate them ignore
 them.
+
+Built (#144 round 2): the three refinements are implemented. The Dispatch
+gauntlet validates an `ACTION` whose action carries an editor against that
+editor, the same no-partial rule as `ADD`/`EDIT`. The AUN panel's "Save to
+map file" is now such an action, prefilled, with the ephemeral-port warning
+on the port field's `note`; the fields carry newcomer labels and `help`; the
+list titles carry the counts and the `FileReference` state is short. These
+additions moved the fingerprint again (`626c2c65` -> `349dc89b`), another
+minor bump.
