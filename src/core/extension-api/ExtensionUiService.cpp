@@ -144,6 +144,30 @@ grpc::Status ExtensionUiServiceImpl::Dispatch(
         }
     }
 
+    // EditableList carries an event (add/edit/remove/action) whose item id,
+    // action id and commit fields Dispatch validates against the current
+    // list before handle_event sees it -- the same all-or-nothing guarantee
+    // ModalEditor commits get.
+    if (target->control_case() == ::beebium::Control::kEditableList) {
+        if (!detail::validate_editable_list_event(
+                *request, target->editable_list(), error)) {
+            response->set_accepted(false);
+            response->set_error(std::move(error));
+            return grpc::Status::OK;
+        }
+    }
+
+    // FileReference dispatches a server action id, which must name one of the
+    // actions the view offered on that reference.
+    if (target->control_case() == ::beebium::Control::kFileReference) {
+        if (!detail::validate_file_reference_action(
+                *request, target->file_reference(), error)) {
+            response->set_accepted(false);
+            response->set_error(std::move(error));
+            return grpc::Status::OK;
+        }
+    }
+
     ui->handle_event(*request);
     response->set_accepted(true);
     return grpc::Status::OK;

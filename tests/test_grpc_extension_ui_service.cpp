@@ -158,6 +158,131 @@ private:
     std::atomic<int> event_count_{0};
 };
 
+// FakeListUi exposes an EditableList ("list1") and a FileReference
+// ("file1"), used by the EditableListEvent / file_action_id dispatch
+// validation tests. The list has one add_editor field ("add.host"), an
+// item "a" that is editable + removable with an editor field
+// ("edit.a.host") and a "save" action, and an item "b" that is neither
+// editable nor removable and carries a "save" action. The file reference
+// offers a single "reload" action. handle_event records the last event.
+class FakeListUi : public beebium::ExtensionUi {
+public:
+    void build_view(beebium::View* out) const override {
+        auto* root = out->mutable_root();
+        root->set_id("root");
+        auto* group = root->mutable_group();
+
+        auto* list_ctrl = group->add_controls();
+        list_ctrl->set_id("list1");
+        auto* list = list_ctrl->mutable_editable_list();
+        list->set_title("Peers");
+        list->set_can_add(can_add_.load(std::memory_order_acquire));
+        list->set_empty_text("No peers");
+        {
+            auto* add_editor = list->mutable_add_editor();
+            add_editor->set_id("list1.add_editor");
+            auto* body = add_editor->mutable_group();
+            auto* field = body->add_controls();
+            field->set_id("add.host");
+            field->mutable_text_input()->set_label("host");
+        }
+        {
+            auto* item = list->add_items();
+            item->set_id("a");
+            item->set_primary("0.254  10.0.0.1:32768");
+            item->set_secondary("map file");
+            item->set_editable(true);
+            item->set_removable(true);
+            auto* editor = item->mutable_editor();
+            editor->set_id("a.editor");
+            auto* body = editor->mutable_group();
+            auto* field = body->add_controls();
+            field->set_id("edit.a.host");
+            field->mutable_text_input()->set_label("host");
+            auto* action = item->add_actions();
+            action->set_id("save");
+            action->set_title("Save to map file");
+        }
+        {
+            auto* item = list->add_items();
+            item->set_id("b");
+            item->set_primary("0.100  10.0.0.2:40001");
+            item->set_secondary("mDNS");
+            item->set_editable(false);
+            item->set_removable(false);
+            auto* action = item->add_actions();
+            action->set_id("save");
+            action->set_title("Save to map file");
+        }
+
+        auto* file_ctrl = group->add_controls();
+        file_ctrl->set_id("file1");
+        auto* file = file_ctrl->mutable_file_reference();
+        file->set_path("/tmp/aun-map.json");
+        file->set_display_name("aun-map.json");
+        file->set_state(beebium::Indicator_State_OK);
+        file->set_state_text("2 peers");
+        auto* action = file->add_actions();
+        action->set_id("reload");
+        action->set_title("Reload");
+    }
+
+    void handle_event(const beebium::DispatchRequest& req) override {
+        last_control_id_ = req.control_id();
+        if (req.payload_case() ==
+            beebium::DispatchRequest::kEditableListEvent) {
+            last_list_event_ = req.editable_list_event();
+        } else if (req.payload_case() ==
+                   beebium::DispatchRequest::kFileActionId) {
+            last_file_action_ = req.file_action_id();
+        }
+        ++event_count_;
+    }
+
+    void set_can_add(bool v) {
+        can_add_.store(v, std::memory_order_release);
+        mark_dirty();
+    }
+
+    const beebium::EditableListEvent& last_list_event() const {
+        return last_list_event_;
+    }
+    const std::string& last_file_action() const { return last_file_action_; }
+    const std::string& last_control_id() const { return last_control_id_; }
+    int event_count() const {
+        return event_count_.load(std::memory_order_acquire);
+    }
+
+private:
+    std::atomic<bool> can_add_{true};
+    beebium::EditableListEvent last_list_event_;
+    std::string last_file_action_;
+    std::string last_control_id_;
+    std::atomic<int> event_count_{0};
+};
+
+class FakeListTransport : public beebium::EconetTransportExtension {
+public:
+    explicit FakeListTransport(std::string name = "list") {
+        beebium::ExtensionManifest m;
+        m.name = std::move(name);
+        m.description = "Fake editable-list UI extension for tests";
+        m.cli_name = m.name;
+        m.extension_kind = "econet-transport";
+        set_manifest(std::move(m));
+    }
+
+    std::unique_ptr<beebium::NetworkBackend> create_backend(uint8_t) override {
+        return nullptr;
+    }
+
+    beebium::ExtensionUi* ui() override { return &ui_; }
+    FakeListUi& fake_ui() { return ui_; }
+
+private:
+    FakeListUi ui_;
+};
+
 class FakeModalTransport : public beebium::EconetTransportExtension {
 public:
     explicit FakeModalTransport(std::string name = "modal") {
@@ -689,4 +814,326 @@ TEST_CASE("Cancelling the SubscribeView context exits the server poll loop clean
     // cancel signal and next poll.
     REQUIRE((status.error_code() == grpc::StatusCode::CANCELLED ||
              status.error_code() == grpc::StatusCode::OK));
+}
+
+// --- EditableList dispatch (EditableListEvent payload) ---
+
+TEST_CASE("Dispatch ADD to an EditableList runs handle_event",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::ADD);
+    auto* f = event->mutable_commit()->add_fields();
+    f->set_field_id("add.host");
+    f->set_string_value("192.168.1.9");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE(resp.accepted());
+    REQUIRE(resp.error().empty());
+    REQUIRE(fake_ptr->fake_ui().event_count() == 1);
+    REQUIRE(fake_ptr->fake_ui().last_list_event().kind() ==
+            beebium::EditableListEvent::ADD);
+}
+
+TEST_CASE("Dispatch ADD is rejected when the list does not allow adding",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    fake_ptr->fake_ui().set_can_add(false);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::ADD);
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("does not allow adding") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+TEST_CASE("Dispatch EDIT to an editable item runs handle_event",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::EDIT);
+    event->set_item_id("a");
+    auto* f = event->mutable_commit()->add_fields();
+    f->set_field_id("edit.a.host");
+    f->set_string_value("10.0.0.9");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE(resp.accepted());
+    REQUIRE(fake_ptr->fake_ui().event_count() == 1);
+    REQUIRE(fake_ptr->fake_ui().last_list_event().item_id() == "a");
+}
+
+TEST_CASE("Dispatch EDIT with an unknown item id is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::EDIT);
+    event->set_item_id("nope");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("unknown item id") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+TEST_CASE("Dispatch EDIT to a non-editable item is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::EDIT);
+    event->set_item_id("b");  // not editable
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("not editable") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+TEST_CASE("Dispatch EDIT commit with an unknown field id is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::EDIT);
+    event->set_item_id("a");
+    auto* f = event->mutable_commit()->add_fields();
+    f->set_field_id("edit.a.nope");  // not a field of item a's editor
+    f->set_string_value("x");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("unknown editor field") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+TEST_CASE("Dispatch REMOVE of a removable item runs handle_event",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::REMOVE);
+    event->set_item_id("a");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE(resp.accepted());
+    REQUIRE(fake_ptr->fake_ui().event_count() == 1);
+}
+
+TEST_CASE("Dispatch REMOVE of a non-removable item is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::REMOVE);
+    event->set_item_id("b");  // not removable
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("not removable") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+TEST_CASE("Dispatch ACTION with a known action id runs handle_event",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::ACTION);
+    event->set_item_id("b");
+    event->set_action_id("save");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE(resp.accepted());
+    REQUIRE(fake_ptr->fake_ui().event_count() == 1);
+    REQUIRE(fake_ptr->fake_ui().last_list_event().action_id() == "save");
+}
+
+TEST_CASE("Dispatch ACTION with an unknown action id is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    auto* event = req.mutable_editable_list_event();
+    event->set_kind(beebium::EditableListEvent::ACTION);
+    event->set_item_id("a");
+    event->set_action_id("frobnicate");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("unknown action id") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+TEST_CASE("Dispatch with wrong payload type for an EditableList is rejected",
+          "[grpc][extension-ui][editable_list]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("list1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    req.set_bool_value(true);  // wrong variant for an EditableList
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("payload type") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
+}
+
+// --- FileReference dispatch (file_action_id payload) ---
+
+TEST_CASE("Dispatch a known file action runs handle_event",
+          "[grpc][extension-ui][file_reference]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("file1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    req.set_file_action_id("reload");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE(resp.accepted());
+    REQUIRE(fake_ptr->fake_ui().event_count() == 1);
+    REQUIRE(fake_ptr->fake_ui().last_file_action() == "reload");
+}
+
+TEST_CASE("Dispatch an unknown file action is rejected",
+          "[grpc][extension-ui][file_reference]") {
+    beebium::EconetTransportRegistry registry;
+    auto fake = std::make_unique<FakeListTransport>();
+    auto* fake_ptr = fake.get();
+    registry.add(std::move(fake));
+    ExtensionUiFixture fixture(registry);
+
+    grpc::ClientContext ctx;
+    beebium::DispatchRequest req;
+    req.set_extension_id("list");
+    req.set_control_id("file1");
+    req.set_view_revision(fake_ptr->fake_ui().current_revision());
+    req.set_file_action_id("destroy");
+
+    beebium::DispatchResponse resp;
+    REQUIRE(fixture.stub().Dispatch(&ctx, req, &resp).ok());
+    REQUIRE_FALSE(resp.accepted());
+    REQUIRE(resp.error().find("unknown file action") != std::string::npos);
+    REQUIRE(fake_ptr->fake_ui().event_count() == 0);
 }
