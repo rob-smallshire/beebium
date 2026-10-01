@@ -352,6 +352,9 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
         local_net, station, backend->local_port(),
         std::string{"beebium"}, std::string{BEEBIUM_VERSION},
         machine_uuid);  // copied; the subscriber needs it too, below
+    if (!discovery_service_type_.empty()) {
+        announcer_->set_service_type(discovery_service_type_);
+    }
     if (!announcer_->start()) {
         std::cerr << "AUN extension: mDNS announcement unavailable -- "
                      "discovery disabled\n";
@@ -364,6 +367,9 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     // see AunBackend::add_peer's PeerSource handling.
     subscriber_ = std::make_unique<AunDiscoverySubscriber>(
         peer_set_, station, nullptr, std::move(machine_uuid));
+    if (!discovery_service_type_.empty()) {
+        subscriber_->set_service_type(discovery_service_type_);
+    }
     // Discovery callbacks fire on the browser's background thread.
     // mark_dirty is atomic; the View is then re-built (and re-pushed
     // to gRPC subscribers) on the ExtensionUiService poll thread,

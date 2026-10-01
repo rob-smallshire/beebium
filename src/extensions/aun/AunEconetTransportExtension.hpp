@@ -120,6 +120,18 @@ public:
     bool set_desired_connected(bool connected);
     bool desired_connected() const { return desired_connected_; }
 
+    // Override the mDNS service type the discovery announcer advertises and
+    // the subscriber browses (default "_aun._udp"). Set before create_backend;
+    // it is applied to the announcer and subscriber it builds. Tests give each
+    // a per-test-unique type so a real AUN instance announcing "_aun._udp" on
+    // this host or the LAN cannot be adopted into the peer set and fail an
+    // otherwise-hermetic test. Empty keeps the default. Mirrors
+    // AunDiscoveryAnnouncer/Subscriber::set_service_type, which the real-mDNS
+    // [.mdns] tests already use directly.
+    void set_discovery_service_type(std::string service_type) {
+        discovery_service_type_ = std::move(service_type);
+    }
+
     // --- Map file (aun-map.json) ---
 
     struct ReloadResult {
@@ -240,6 +252,11 @@ private:
     // Desired cable state, applied to the backend when one exists. AUN comes up
     // connected; SetConnected before the backend is up records the wish here.
     bool desired_connected_ = true;
+
+    // Non-default mDNS service type for discovery, applied to the announcer and
+    // subscriber in create_backend. Empty means the default "_aun._udp". Used
+    // by tests to stay hermetic against real AUN announcers (see the setter).
+    std::string discovery_service_type_;
 
     // Map-file state, guarded because AunService.GetStatus reads it on a gRPC
     // thread while a reload runs on create_backend / the sweep thread.
