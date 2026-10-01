@@ -102,11 +102,14 @@ Global___View: _TypeAlias = View  # noqa: Y015
 class Control(_message.Message):
     """--- Controls ---
 
-    Nine primitives, deliberately small. Together with nested Groups and
+    Eleven primitives, deliberately small. Together with nested Groups and
     ModalEditors they cover the panels we have today (Piconet, AUN) and
     are expected to cover ~90% of any future extension. Stretching the
     alphabet should hurt slightly each time -- that's the forcing function
-    for keeping it small.
+    for keeping it small. The newest two, EditableList and FileReference,
+    each earn their place by replacing a dozen lower-level controls that
+    built the #142 AUN panel: see docs/discussion/extension-ui-architecture.md
+    "Vocabulary extension (2026-10-01)".
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -122,6 +125,8 @@ class Control(_message.Message):
     GROUP_FIELD_NUMBER: _builtins.int
     MODAL_EDITOR_FIELD_NUMBER: _builtins.int
     EDITABLE_CHOICE_FIELD_NUMBER: _builtins.int
+    EDITABLE_LIST_FIELD_NUMBER: _builtins.int
+    FILE_REFERENCE_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     """Stable id assigned by the extension. Used by Dispatch to address
     the control and by clients to patch widgets in place across pushes
@@ -154,6 +159,10 @@ class Control(_message.Message):
     def modal_editor(self) -> Global___ModalEditor: ...
     @_builtins.property
     def editable_choice(self) -> Global___EditableChoice: ...
+    @_builtins.property
+    def editable_list(self) -> Global___EditableList: ...
+    @_builtins.property
+    def file_reference(self) -> Global___FileReference: ...
     def __init__(
         self,
         *,
@@ -168,12 +177,14 @@ class Control(_message.Message):
         group: Global___Group | None = ...,
         modal_editor: Global___ModalEditor | None = ...,
         editable_choice: Global___EditableChoice | None = ...,
+        editable_list: Global___EditableList | None = ...,
+        file_reference: Global___FileReference | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["button", b"button", "choice", b"choice", "control", b"control", "editable_choice", b"editable_choice", "group", b"group", "indicator", b"indicator", "label", b"label", "modal_editor", b"modal_editor", "text_input", b"text_input", "toggle", b"toggle"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["button", b"button", "choice", b"choice", "control", b"control", "editable_choice", b"editable_choice", "editable_list", b"editable_list", "file_reference", b"file_reference", "group", b"group", "indicator", b"indicator", "label", b"label", "modal_editor", b"modal_editor", "text_input", b"text_input", "toggle", b"toggle"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["button", b"button", "choice", b"choice", "control", b"control", "editable_choice", b"editable_choice", "group", b"group", "id", b"id", "indicator", b"indicator", "label", b"label", "modal_editor", b"modal_editor", "text_input", b"text_input", "toggle", b"toggle", "tooltip", b"tooltip"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["button", b"button", "choice", b"choice", "control", b"control", "editable_choice", b"editable_choice", "editable_list", b"editable_list", "file_reference", b"file_reference", "group", b"group", "id", b"id", "indicator", b"indicator", "label", b"label", "modal_editor", b"modal_editor", "text_input", b"text_input", "toggle", b"toggle", "tooltip", b"tooltip"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_control: _TypeAlias = _typing.Literal["label", "indicator", "toggle", "button", "choice", "text_input", "group", "modal_editor", "editable_choice"]  # noqa: Y015
+    _WhichOneofReturnType_control: _TypeAlias = _typing.Literal["label", "indicator", "toggle", "button", "choice", "text_input", "group", "modal_editor", "editable_choice", "editable_list", "file_reference"]  # noqa: Y015
     _WhichOneofArgType_control: _TypeAlias = _typing.Literal["control", b"control"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType_control) -> _WhichOneofReturnType_control | None: ...
 
@@ -546,6 +557,220 @@ class ModalEditor(_message.Message):
 Global___ModalEditor: _TypeAlias = ModalEditor  # noqa: Y015
 
 @_typing.final
+class EditableList(_message.Message):
+    """Collection primitive: a titled list of records with the platform's
+    standard add / remove / edit affordances, replacing the Label + Button +
+    ModalEditor-per-row shape the first collection panel (#142 AUN) was built
+    from. Each item carries its own prefilled editor and its own per-item
+    actions, so one EditableList expresses a whole editable table. All user
+    actions on the list arrive through one dispatch payload,
+    EditableListEvent, keyed by the item's stable id.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TITLE_FIELD_NUMBER: _builtins.int
+    ITEMS_FIELD_NUMBER: _builtins.int
+    CAN_ADD_FIELD_NUMBER: _builtins.int
+    ADD_EDITOR_FIELD_NUMBER: _builtins.int
+    EMPTY_TEXT_FIELD_NUMBER: _builtins.int
+    title: _builtins.str
+    """"Peers", "Subnet rules" """
+    can_add: _builtins.bool
+    """shows the platform's "+" affordance"""
+    empty_text: _builtins.str
+    """shown when items is empty: "No peers" """
+    @_builtins.property
+    def items(self) -> _containers.RepeatedCompositeFieldContainer[Global___EditableListItem]: ...
+    @_builtins.property
+    def add_editor(self) -> Global___Control:
+        """The editor Control for a NEW item (fields only; the renderer supplies
+        the commit UI). By convention a Group of TextInput / Choice leaves,
+        mirroring a ModalEditor's editor tree. Committed as an ADD event.
+        """
+
+    def __init__(
+        self,
+        *,
+        title: _builtins.str = ...,
+        items: _abc.Iterable[Global___EditableListItem] | None = ...,
+        can_add: _builtins.bool = ...,
+        add_editor: Global___Control | None = ...,
+        empty_text: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["add_editor", b"add_editor"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["add_editor", b"add_editor", "can_add", b"can_add", "empty_text", b"empty_text", "items", b"items", "title", b"title"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___EditableList: _TypeAlias = EditableList  # noqa: Y015
+
+@_typing.final
+class EditableListItem(_message.Message):
+    """One row of an EditableList."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    PRIMARY_FIELD_NUMBER: _builtins.int
+    SECONDARY_FIELD_NUMBER: _builtins.int
+    SUBTITLE_FIELD_NUMBER: _builtins.int
+    STATE_FIELD_NUMBER: _builtins.int
+    EDITABLE_FIELD_NUMBER: _builtins.int
+    REMOVABLE_FIELD_NUMBER: _builtins.int
+    EDITOR_FIELD_NUMBER: _builtins.int
+    ACTIONS_FIELD_NUMBER: _builtins.int
+    NOTE_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    """stable; echoed back in dispatches"""
+    primary: _builtins.str
+    """"0.254  192.168.1.10:32768" """
+    secondary: _builtins.str
+    """right-aligned caption: "map file", "mDNS" """
+    subtitle: _builtins.str
+    """beneath, muted: the label "PiEconetBridge FS" """
+    state: Global___Indicator.State.ValueType
+    """Small state badge for the row. UNKNOWN means no indicator; WARN marks,
+    e.g., an unreachable peer. Reuses Indicator.State so the renderer shares
+    one badge style across controls.
+    """
+    editable: _builtins.bool
+    """edit affordance; `editor` below is prefilled"""
+    removable: _builtins.bool
+    """"-" affordance"""
+    note: _builtins.str
+    """short warning shown with the item, optional"""
+    @_builtins.property
+    def editor(self) -> Global___Control:
+        """prefilled editor for THIS item, when editable"""
+
+    @_builtins.property
+    def actions(self) -> _containers.RepeatedCompositeFieldContainer[Global___EditableListAction]:
+        """per-item commands, context menu"""
+
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        primary: _builtins.str = ...,
+        secondary: _builtins.str = ...,
+        subtitle: _builtins.str = ...,
+        state: Global___Indicator.State.ValueType = ...,
+        editable: _builtins.bool = ...,
+        removable: _builtins.bool = ...,
+        editor: Global___Control | None = ...,
+        actions: _abc.Iterable[Global___EditableListAction] | None = ...,
+        note: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["editor", b"editor"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions", "editable", b"editable", "editor", b"editor", "id", b"id", "note", b"note", "primary", b"primary", "removable", b"removable", "secondary", b"secondary", "state", b"state", "subtitle", b"subtitle"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___EditableListItem: _TypeAlias = EditableListItem  # noqa: Y015
+
+@_typing.final
+class EditableListAction(_message.Message):
+    """A named per-item command surfaced in the row's context menu. `warning`,
+    when set, is the confirmation text the renderer must show before
+    dispatching the ACTION; empty means no confirmation.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    TITLE_FIELD_NUMBER: _builtins.int
+    WARNING_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    title: _builtins.str
+    warning: _builtins.str
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        title: _builtins.str = ...,
+        warning: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["id", b"id", "title", b"title", "warning", b"warning"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___EditableListAction: _TypeAlias = EditableListAction  # noqa: Y015
+
+@_typing.final
+class FileReference(_message.Message):
+    """Reference primitive: a file on the server's host, shown as a small
+    document icon plus display name, with the path as a tooltip, a state
+    badge, and a pull-down of the server's actions. The renderer adds its
+    own client-side actions (Reveal in Finder, gated on the host fingerprint;
+    Copy Path, always). Server actions dispatch as `file_action_id`.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PATH_FIELD_NUMBER: _builtins.int
+    DISPLAY_NAME_FIELD_NUMBER: _builtins.int
+    STATE_FIELD_NUMBER: _builtins.int
+    STATE_TEXT_FIELD_NUMBER: _builtins.int
+    ACTIONS_FIELD_NUMBER: _builtins.int
+    path: _builtins.str
+    """absolute, on the server's host"""
+    display_name: _builtins.str
+    """"aun-map.json"; defaults to the path's file name"""
+    state: Global___Indicator.State.ValueType
+    """OK = loaded; WARN = missing; ERROR = load error. Reuses Indicator.State."""
+    state_text: _builtins.str
+    """"12 peers, 1 subnet" or the load error"""
+    @_builtins.property
+    def actions(self) -> _containers.RepeatedCompositeFieldContainer[Global___FileReferenceAction]:
+        """server actions: "Reload" """
+
+    def __init__(
+        self,
+        *,
+        path: _builtins.str = ...,
+        display_name: _builtins.str = ...,
+        state: Global___Indicator.State.ValueType = ...,
+        state_text: _builtins.str = ...,
+        actions: _abc.Iterable[Global___FileReferenceAction] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions", "display_name", b"display_name", "path", b"path", "state", b"state", "state_text", b"state_text"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___FileReference: _TypeAlias = FileReference  # noqa: Y015
+
+@_typing.final
+class FileReferenceAction(_message.Message):
+    """A named server-side action on a FileReference, surfaced in its pull-down."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    TITLE_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    title: _builtins.str
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        title: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["id", b"id", "title", b"title"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___FileReferenceAction: _TypeAlias = FileReferenceAction  # noqa: Y015
+
+@_typing.final
 class DispatchRequest(_message.Message):
     """--- Dispatch ---"""
 
@@ -558,6 +783,8 @@ class DispatchRequest(_message.Message):
     STRING_VALUE_FIELD_NUMBER: _builtins.int
     INDEX_VALUE_FIELD_NUMBER: _builtins.int
     EDITOR_COMMIT_FIELD_NUMBER: _builtins.int
+    EDITABLE_LIST_EVENT_FIELD_NUMBER: _builtins.int
+    FILE_ACTION_ID_FIELD_NUMBER: _builtins.int
     extension_id: _builtins.str
     """Which extension instance the event targets (matches View.extension_id)."""
     control_id: _builtins.str
@@ -571,8 +798,11 @@ class DispatchRequest(_message.Message):
     bool_value: _builtins.bool
     string_value: _builtins.str
     index_value: _builtins.int
+    file_action_id: _builtins.str
     @_builtins.property
     def editor_commit(self) -> Global___EditorCommit: ...
+    @_builtins.property
+    def editable_list_event(self) -> Global___EditableListEvent: ...
     def __init__(
         self,
         *,
@@ -583,16 +813,77 @@ class DispatchRequest(_message.Message):
         string_value: _builtins.str = ...,
         index_value: _builtins.int = ...,
         editor_commit: Global___EditorCommit | None = ...,
+        editable_list_event: Global___EditableListEvent | None = ...,
+        file_action_id: _builtins.str = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["bool_value", b"bool_value", "editor_commit", b"editor_commit", "index_value", b"index_value", "payload", b"payload", "string_value", b"string_value"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["bool_value", b"bool_value", "editable_list_event", b"editable_list_event", "editor_commit", b"editor_commit", "file_action_id", b"file_action_id", "index_value", b"index_value", "payload", b"payload", "string_value", b"string_value"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["bool_value", b"bool_value", "control_id", b"control_id", "editor_commit", b"editor_commit", "extension_id", b"extension_id", "index_value", b"index_value", "payload", b"payload", "string_value", b"string_value", "view_revision", b"view_revision"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["bool_value", b"bool_value", "control_id", b"control_id", "editable_list_event", b"editable_list_event", "editor_commit", b"editor_commit", "extension_id", b"extension_id", "file_action_id", b"file_action_id", "index_value", b"index_value", "payload", b"payload", "string_value", b"string_value", "view_revision", b"view_revision"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_payload: _TypeAlias = _typing.Literal["bool_value", "string_value", "index_value", "editor_commit"]  # noqa: Y015
+    _WhichOneofReturnType_payload: _TypeAlias = _typing.Literal["bool_value", "string_value", "index_value", "editor_commit", "editable_list_event", "file_action_id"]  # noqa: Y015
     _WhichOneofArgType_payload: _TypeAlias = _typing.Literal["payload", b"payload"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType_payload) -> _WhichOneofReturnType_payload | None: ...
 
 Global___DispatchRequest: _TypeAlias = DispatchRequest  # noqa: Y015
+
+@_typing.final
+class EditableListEvent(_message.Message):
+    """The user's action on one EditableList item. ADD carries no item_id and an
+    `commit` built from the list's add_editor; EDIT carries the item_id and an
+    `commit` from that item's editor; REMOVE carries just the item_id; ACTION
+    carries the item_id and the chosen action_id (and no commit). The server
+    validates item_id / action_id against the current view like any other
+    dispatch, and applies an ADD / EDIT commit with the same no-partial rule as
+    EditorCommit.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    class _Kind:
+        ValueType = _typing.NewType("ValueType", _builtins.int)
+        V: _TypeAlias = ValueType  # noqa: Y015
+
+    class _KindEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[EditableListEvent._Kind.ValueType], _builtins.type):
+        DESCRIPTOR: _descriptor.EnumDescriptor
+        ADD: EditableListEvent._Kind.ValueType  # 0
+        EDIT: EditableListEvent._Kind.ValueType  # 1
+        REMOVE: EditableListEvent._Kind.ValueType  # 2
+        ACTION: EditableListEvent._Kind.ValueType  # 3
+
+    class Kind(_Kind, metaclass=_KindEnumTypeWrapper): ...
+    ADD: EditableListEvent.Kind.ValueType  # 0
+    EDIT: EditableListEvent.Kind.ValueType  # 1
+    REMOVE: EditableListEvent.Kind.ValueType  # 2
+    ACTION: EditableListEvent.Kind.ValueType  # 3
+
+    KIND_FIELD_NUMBER: _builtins.int
+    ITEM_ID_FIELD_NUMBER: _builtins.int
+    ACTION_ID_FIELD_NUMBER: _builtins.int
+    COMMIT_FIELD_NUMBER: _builtins.int
+    kind: Global___EditableListEvent.Kind.ValueType
+    item_id: _builtins.str
+    """empty for ADD"""
+    action_id: _builtins.str
+    """for ACTION"""
+    @_builtins.property
+    def commit(self) -> Global___EditorCommit:
+        """for ADD and EDIT: the editor field values"""
+
+    def __init__(
+        self,
+        *,
+        kind: Global___EditableListEvent.Kind.ValueType = ...,
+        item_id: _builtins.str = ...,
+        action_id: _builtins.str = ...,
+        commit: Global___EditorCommit | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["commit", b"commit"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["action_id", b"action_id", "commit", b"commit", "item_id", b"item_id", "kind", b"kind"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___EditableListEvent: _TypeAlias = EditableListEvent  # noqa: Y015
 
 @_typing.final
 class EditorFieldValue(_message.Message):

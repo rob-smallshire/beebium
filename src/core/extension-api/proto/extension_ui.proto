@@ -61,11 +61,14 @@ message View {
 
 // --- Controls ---
 //
-// Nine primitives, deliberately small. Together with nested Groups and
+// Eleven primitives, deliberately small. Together with nested Groups and
 // ModalEditors they cover the panels we have today (Piconet, AUN) and
 // are expected to cover ~90% of any future extension. Stretching the
 // alphabet should hurt slightly each time -- that's the forcing function
-// for keeping it small.
+// for keeping it small. The newest two, EditableList and FileReference,
+// each earn their place by replacing a dozen lower-level controls that
+// built the #142 AUN panel: see docs/discussion/extension-ui-architecture.md
+// "Vocabulary extension (2026-10-01)".
 
 message Control {
     // Stable id assigned by the extension. Used by Dispatch to address
@@ -92,6 +95,8 @@ message Control {
         Group          group           = 8;
         ModalEditor    modal_editor    = 9;
         EditableChoice editable_choice = 10;
+        EditableList   editable_list   = 12;
+        FileReference  file_reference  = 13;
     }
 }
 
@@ -239,6 +244,70 @@ message ModalEditor {
     bool show_cancel = 5;
 }
 
+// Collection primitive: a titled list of records with the platform's
+// standard add / remove / edit affordances, replacing the Label + Button +
+// ModalEditor-per-row shape the first collection panel (#142 AUN) was built
+// from. Each item carries its own prefilled editor and its own per-item
+// actions, so one EditableList expresses a whole editable table. All user
+// actions on the list arrive through one dispatch payload,
+// EditableListEvent, keyed by the item's stable id.
+message EditableList {
+    string title = 1;                 // "Peers", "Subnet rules"
+    repeated EditableListItem items = 2;
+    bool can_add = 3;                 // shows the platform's "+" affordance
+    // The editor Control for a NEW item (fields only; the renderer supplies
+    // the commit UI). By convention a Group of TextInput / Choice leaves,
+    // mirroring a ModalEditor's editor tree. Committed as an ADD event.
+    Control add_editor = 4;
+    string empty_text = 5;            // shown when items is empty: "No peers"
+}
+
+// One row of an EditableList.
+message EditableListItem {
+    string id = 1;                    // stable; echoed back in dispatches
+    string primary = 2;               // "0.254  192.168.1.10:32768"
+    string secondary = 3;             // right-aligned caption: "map file", "mDNS"
+    string subtitle = 4;              // beneath, muted: the label "PiEconetBridge FS"
+    // Small state badge for the row. UNKNOWN means no indicator; WARN marks,
+    // e.g., an unreachable peer. Reuses Indicator.State so the renderer shares
+    // one badge style across controls.
+    Indicator.State state = 5;
+    bool editable = 6;                // edit affordance; `editor` below is prefilled
+    bool removable = 7;               // "-" affordance
+    Control editor = 8;               // prefilled editor for THIS item, when editable
+    repeated EditableListAction actions = 9;  // per-item commands, context menu
+    string note = 10;                 // short warning shown with the item, optional
+}
+
+// A named per-item command surfaced in the row's context menu. `warning`,
+// when set, is the confirmation text the renderer must show before
+// dispatching the ACTION; empty means no confirmation.
+message EditableListAction {
+    string id = 1;
+    string title = 2;
+    string warning = 3;
+}
+
+// Reference primitive: a file on the server's host, shown as a small
+// document icon plus display name, with the path as a tooltip, a state
+// badge, and a pull-down of the server's actions. The renderer adds its
+// own client-side actions (Reveal in Finder, gated on the host fingerprint;
+// Copy Path, always). Server actions dispatch as `file_action_id`.
+message FileReference {
+    string path = 1;                  // absolute, on the server's host
+    string display_name = 2;          // "aun-map.json"; defaults to the path's file name
+    // OK = loaded; WARN = missing; ERROR = load error. Reuses Indicator.State.
+    Indicator.State state = 3;
+    string state_text = 4;            // "12 peers, 1 subnet" or the load error
+    repeated FileReferenceAction actions = 5;  // server actions: "Reload"
+}
+
+// A named server-side action on a FileReference, surfaced in its pull-down.
+message FileReferenceAction {
+    string id = 1;
+    string title = 2;
+}
+
 // --- Dispatch ---
 
 message DispatchRequest {
@@ -261,15 +330,41 @@ message DispatchRequest {
     //   Button      -> none (leave the oneof unset)
     //   ModalEditor -> editor_commit (one atomic bundle of sub-control
     //                  values; see EditorCommit)
+    //   EditableList -> editable_list_event (add / edit / remove / action
+    //                  on one item; see EditableListEvent)
+    //   FileReference -> file_action_id (the id of the server action chosen
+    //                  from the pull-down)
     //
     // Validation: the server rejects requests whose payload variant
     // does not match the addressed control's type.
     oneof payload {
-        bool         bool_value    = 4;
-        string       string_value  = 5;
-        uint32       index_value   = 6;
-        EditorCommit editor_commit = 7;
+        bool              bool_value          = 4;
+        string            string_value        = 5;
+        uint32            index_value         = 6;
+        EditorCommit      editor_commit       = 7;
+        EditableListEvent editable_list_event = 8;
+        string            file_action_id      = 9;
     }
+}
+
+// The user's action on one EditableList item. ADD carries no item_id and an
+// `commit` built from the list's add_editor; EDIT carries the item_id and an
+// `commit` from that item's editor; REMOVE carries just the item_id; ACTION
+// carries the item_id and the chosen action_id (and no commit). The server
+// validates item_id / action_id against the current view like any other
+// dispatch, and applies an ADD / EDIT commit with the same no-partial rule as
+// EditorCommit.
+message EditableListEvent {
+    enum Kind {
+        ADD    = 0;
+        EDIT   = 1;
+        REMOVE = 2;
+        ACTION = 3;
+    }
+    Kind kind = 1;
+    string item_id = 2;               // empty for ADD
+    string action_id = 3;             // for ACTION
+    EditorCommit commit = 4;          // for ADD and EDIT: the editor field values
 }
 
 // One field's value inside an EditorCommit. The 'field_id' names a
