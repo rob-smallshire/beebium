@@ -24,6 +24,7 @@
 #endif
 
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
@@ -347,20 +348,28 @@ void AunUi::build_view(View* out) const {
         control->set_id(CONTROL_MAP_FILE);
         auto* file = control->mutable_file_reference();
         std::string path = ext_.map_file_path();
-        file->set_display_name("aun-map.json");
         std::string load_error = ext_.map_file_error();
+        // One shared file across every instance on the host, so the name is the
+        // role, not the leaf filename (which is in the tooltip/Reveal/Copy
+        // Path). The counts ride on the list titles; the state line sits on its
+        // own line under the name.
+        file->set_display_name("Shared AUN map");
         if (path.empty()) {
+            // map-file=none: no file in effect (hermetic runs / CLI edge).
             file->set_state(Indicator_State_WARN);
-            file->set_state_text("Map file disabled");
+            file->set_state_text("not found");
         } else {
             file->set_path(path);
+            std::error_code ec;
             if (!load_error.empty()) {
                 file->set_state(Indicator_State_ERROR);
                 file->set_state_text(load_error);
+            } else if (!std::filesystem::exists(path, ec)) {
+                // The resolved path has no file yet (none created): reachable
+                // but empty, not an error.
+                file->set_state(Indicator_State_WARN);
+                file->set_state_text("not found");
             } else {
-                // Short state only; the counts now ride on the list titles,
-                // and the display name keeps layout priority so it is never
-                // clipped by the state text.
                 file->set_state(Indicator_State_OK);
                 file->set_state_text("loaded");
             }

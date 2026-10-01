@@ -220,11 +220,13 @@ TEST_CASE("AunUi: empty state is two lists, a file reference and no errors",
     const auto* file = find_control(root, "map_file");
     REQUIRE(file != nullptr);
     REQUIRE(file->control_case() == Control::kFileReference);
-    CHECK(file->file_reference().display_name() == "aun-map.json");
+    CHECK(file->file_reference().display_name() == "Shared AUN map");
     CHECK(file->file_reference().path().find(fixture.map_filepath().string()) !=
           std::string::npos);
-    CHECK(file->file_reference().state() == beebium::Indicator::OK);
-    CHECK(file->file_reference().state_text() == "loaded");  // short; counts on titles
+    // The fixture's map file is not created until an edit writes it, so a fresh
+    // panel reports the reachable-but-absent state.
+    CHECK(file->file_reference().state() == beebium::Indicator::WARN);
+    CHECK(file->file_reference().state_text() == "not found");
     REQUIRE(file->file_reference().actions_size() == 1);
     CHECK(file->file_reference().actions(0).id() == "reload");
 }
