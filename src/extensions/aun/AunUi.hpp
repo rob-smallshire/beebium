@@ -23,6 +23,8 @@
 
 #include "beebium/extension/ExtensionUi.hpp"
 
+#include <string>
+
 namespace beebium {
 
 class AunEconetTransportExtension;  // forward; defined in this dir
@@ -35,7 +37,18 @@ public:
     void handle_event(const DispatchRequest& request) override;
 
 private:
+    // Validate and apply an Add/Edit peer or subnet submission, recording a
+    // field-named error (or clearing it on success) and marking the view dirty.
+    void apply_add_peer(const std::string& net_stn, const std::string& host,
+                        const std::string& port, const std::string& label);
+    void apply_add_subnet(const std::string& net, const std::string& subnet,
+                          const std::string& label);
+
     AunEconetTransportExtension& ext_;
+
+    // The last map-edit error (field-named), shown in the panel until the next
+    // successful edit clears it. Set by handle_event, read by build_view.
+    std::string last_edit_error_;
 };
 
 }  // namespace beebium
