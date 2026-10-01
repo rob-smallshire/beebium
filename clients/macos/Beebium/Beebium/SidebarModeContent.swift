@@ -366,8 +366,9 @@ struct NetworkModeView: View {
         }
     }
 
-    /// The station-collision warning text: the server's description of the last
-    /// collision, with the running count appended once it exceeds one.
+    /// The station-collision warning text: the server's description of the most
+    /// recent collision in effect, with the number in effect appended once more
+    /// than one is.
     private var stationCollisionText: String {
         let base = "Station collision: \(econetClient.lastStationCollision)"
         return econetClient.stationCollisionCount > 1
@@ -533,11 +534,11 @@ struct NetworkModeView: View {
                 }
             }
 
-            // A station-number collision is a transient warning, not a
-            // permanent counter: the server observed two stations on the
-            // network claiming the same number (#68). Shown only while the
-            // server reports one, with the running count appended once it has
-            // happened more than once.
+            // A station-number collision warning is a gauge of collisions
+            // currently in effect, not a running counter: two stations on the
+            // network claim the same number (#68/#138). The server clears it
+            // when the collisions end, so it shows only while one is in effect,
+            // with the number in effect appended once more than one is.
             if econetClient.stationCollisionCount > 0 {
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
