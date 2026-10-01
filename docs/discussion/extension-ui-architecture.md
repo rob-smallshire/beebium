@@ -515,3 +515,122 @@ Tracked in project memory; brief summary here.
   `feedback_state_vs_action_controls.md` guidance is sufficient.
 - **View diffing.** Pushes are full-tree today. If push payloads grow
   enough to matter, switch to a LiveView-style diff. Premature today.
+
+## Vocabulary extension (2026-10-01): EditableList and FileReference
+
+The AUN map-file panel (#142) was the first surface that edits a
+collection, and building it from Labels, Buttons and ModalEditors
+produced a panel that was correct and very busy: every affordance had to
+be spelled out in words ("Add peer", "Save to map file", the full file
+path). Two primitives fix that, and both are generic: any extension that
+owns a list of records (peers, subnet rules, mapped discs, serial ports) or
+a file on the server's host wants the same things. They are the eighth
+and ninth primitives, and they are the "stretch that should hurt": each
+earns its place by replacing a dozen lower-level controls, not by adding
+one.
+
+### EditableList
+
+Reads as: a titled list of items, each with primary text, secondary text
+(right-aligned caption), an optional subtitle, an optional state, and
+per-item flags. Writes as: add, edit, remove, and named per-item actions.
+
+```
+message EditableList {
+    string title = 1;                 // "Peers", "Subnet rules"
+    repeated EditableListItem items = 2;
+    bool can_add = 3;                 // shows the "+" affordance
+    Control add_editor = 4;           // the editor Control for a new item (fields only;
+                                      //   the renderer supplies the commit UI)
+    string empty_text = 5;            // shown when items is empty: "No peers"
+}
+
+message EditableListItem {
+    string id = 1;                    // stable; echoed back in dispatches
+    string primary = 2;               // "0.254  192.168.1.10:32768"
+    string secondary = 3;             // "map file", "mDNS", "subnet"
+    string subtitle = 4;              // the label: "PiEconetBridge FS"
+    Indicator.State state = 5;        // UNKNOWN = no indicator; WARN = unreachable, etc.
+    bool editable = 6;                // edit affordance; editor below is prefilled
+    bool removable = 7;               // "-" affordance
+    Control editor = 8;               // prefilled editor for this item, when editable
+    repeated EditableListAction actions = 9;  // per-item commands, e.g. "Save to map file"
+    string note = 10;                 // short warning shown with the item, optional
+}
+
+message EditableListAction {
+    string id = 1;
+    string title = 2;
+    string warning = 3;               // optional confirm text; empty = no confirmation
+}
+```
+
+Dispatch adds one payload:
+
+```
+message EditableListEvent {
+    enum Kind { ADD = 0; EDIT = 1; REMOVE = 2; ACTION = 3; }
+    Kind kind = 1;
+    string item_id = 2;               // empty for ADD
+    string action_id = 3;             // for ACTION
+    EditorCommit commit = 4;          // for ADD and EDIT: the editor field values
+}
+```
+
+Renderer contract: a bordered, compact list; rows show primary left,
+secondary right in caption style, subtitle beneath in secondary colour,
+the state as the platform's small indicator; beneath the list the
+platform's standard add/remove control (on macOS the gradient "+ -"
+segmented buttons as in System Settings, "-" enabled only with a
+removable selection); edit by double-click, Return, or the platform's
+edit affordance, opening the item's editor as a sheet or popover with
+Cancel and Save (ADD uses the list's `add_editor` and a Save titled
+"Add"); per-item actions in the row's context menu, each with its
+confirmation when `warning` is set. Labels are rendered verbatim. The
+renderer never invents an action the view did not list.
+
+### FileReference
+
+Reads as: a file on the server's host, by path, with a display name and
+a state. Writes as: named server-side actions; the renderer adds its own
+client-side ones.
+
+```
+message FileReference {
+    string path = 1;                  // absolute, on the server's host
+    string display_name = 2;          // "aun-map.json"; defaults to the path's file name
+    Indicator.State state = 3;        // OK = loaded; WARN = missing; ERROR = load error
+    string state_text = 4;            // "12 peers, 1 subnet" or the load error
+    repeated FileReferenceAction actions = 5;  // server actions: "Reload"
+}
+
+message FileReferenceAction {
+    string id = 1;
+    string title = 2;
+}
+```
+
+Dispatch payload: `string file_action_id`.
+
+Renderer contract: a small document icon and the display name, the path
+as a tooltip, the state indicator beside it, and a pull-down (shortcut)
+menu holding the server's actions plus the renderer's own: "Reveal in
+Finder" (or the platform equivalent) only when the server shares this
+host's filesystem (the existing host-fingerprint gating; see
+docs/frontend-local-server-gating.md), and "Copy Path" always.
+
+### Effect on the AUN panel
+
+The panel becomes: a FileReference line; an EditableList "Peers" whose
+rows carry provenance as secondary text, the label as subtitle,
+unreachable as WARN, map-file rows editable and removable, other rows
+read-only with a "Save to map file" action (mDNS rows with the
+ephemeral-port note); an EditableList "Subnet rules"; one Indicator for a
+load or validation error. No free-standing Buttons remain except
+Connect/Disconnect.
+
+`extension_ui.proto` is served over ExtensionRpc; whether it is part of
+the protocol fingerprint is decided by `scripts/sync_protocol_fingerprint.py`'s
+input set, and the implementer confirms either way. New primitives are
+additive: an older renderer ignores an unknown control (the `none` case),
+so the panel degrades to its remaining Labels rather than breaking.
