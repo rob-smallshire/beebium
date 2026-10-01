@@ -623,14 +623,20 @@ AUN uses a Class A IP address format with netmask &FFFF0000:
 
 ### Address Mapping (BeebEm Style)
 
-BeebEm uses a simpler configuration file (`Econet.cfg`) with explicit mappings:
+BeebEm lists explicit mappings, one `net stn ip port` line per station, among its mode and timing keywords in `Econet.cfg`, and keeps RISC OS style `AddMap` subnet rules in a separate `AUNMap` file:
 ```
+# Econet.cfg
 AUNMODE 1
-AUNMAP 0.254 192.168.0.100
-AUNMAP 0.253 192.168.0.101
+0 254 192.168.0.100 32768
+0 253 192.168.0.101 32768
+
+# AUNMap
+AddMap 192.168.0.0 128
 ```
 
 This differs from Acorn's official AUN IP scheme and may be more practical for emulator-to-emulator and emulator-to-bridge communication.
+
+Beebium reads neither file. To bring a BeebEm setup across once, `tools/aun/convert_beebem_econet_cfg.py` (run with `uv run` from `tools/aun`) turns the host lines into `peers` entries and the `AddMap` lines into `subnets` entries of an `aun-map.json`, reading both files the way BeebEm does; it can merge into an existing map, and it lists on stderr every BeebEm keyword it does not carry over, with the reason. See `tools/aun/README.md`.
 
 ## MOS Interface
 
