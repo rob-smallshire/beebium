@@ -23,17 +23,19 @@ enum ExtensionDispatchPayload: Sendable {
     case string(String)                        // TextInput
     case index(UInt32)                         // Choice
     case editorCommit([EditorFieldCommit])     // ModalEditor
+    case editableListEvent(EditableListIntent) // EditableList (add/edit/remove/action)
+    case fileAction(String)                    // FileReference server action id
 }
 
 /// One field's value inside a ModalEditor's EditorCommit. Mirrors the
 /// proto EditorFieldValue: the `fieldID` names the sub-control in the
 /// editor tree; `value` carries the sub-control's local-buffer state at
 /// commit time.
-struct EditorFieldCommit: Sendable {
+struct EditorFieldCommit: Sendable, Equatable {
     let fieldID: String
     let value: EditorFieldValue
 
-    enum EditorFieldValue: Sendable {
+    enum EditorFieldValue: Sendable, Equatable {
         case bool(Bool)
         case string(String)
         case index(UInt32)
@@ -131,21 +133,23 @@ final class ExtensionUiClient: ObservableObject, Disconnectable {
         case .index(let value):
             request.indexValue = value
         case .editorCommit(let fields):
-            var commit = Beebium_EditorCommit()
-            for field in fields {
-                var proto = Beebium_EditorFieldValue()
-                proto.fieldID = field.fieldID
-                switch field.value {
-                case .bool(let value):
-                    proto.boolValue = value
-                case .string(let value):
-                    proto.stringValue = value
-                case .index(let value):
-                    proto.indexValue = value
-                }
-                commit.fields.append(proto)
+            request.editorCommit = Self.editorCommit(from: fields)
+        case .editableListEvent(let intent):
+            var event = Beebium_EditableListEvent()
+            switch intent.kind {
+            case .add:    event.kind = .add
+            case .edit:   event.kind = .edit
+            case .remove: event.kind = .remove
+            case .action: event.kind = .action
             }
-            request.editorCommit = commit
+            event.itemID = intent.itemID
+            event.actionID = intent.actionID
+            if !intent.commit.isEmpty {
+                event.commit = Self.editorCommit(from: intent.commit)
+            }
+            request.editableListEvent = event
+        case .fileAction(let actionID):
+            request.fileActionID = actionID
         }
 
         do {
@@ -163,6 +167,26 @@ final class ExtensionUiClient: ObservableObject, Disconnectable {
     }
 
     // MARK: - Private
+
+    /// Build a proto EditorCommit from the renderer's field-commit list, shared
+    /// by the ModalEditor and EditableList add/edit dispatches.
+    private static func editorCommit(from fields: [EditorFieldCommit]) -> Beebium_EditorCommit {
+        var commit = Beebium_EditorCommit()
+        for field in fields {
+            var proto = Beebium_EditorFieldValue()
+            proto.fieldID = field.fieldID
+            switch field.value {
+            case .bool(let value):
+                proto.boolValue = value
+            case .string(let value):
+                proto.stringValue = value
+            case .index(let value):
+                proto.indexValue = value
+            }
+            commit.fields.append(proto)
+        }
+        return commit
+    }
 
     private func runSubscription(extensionID: String,
                                  request: Beebium_SubscribeViewRequest,

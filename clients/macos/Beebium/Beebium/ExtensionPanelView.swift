@@ -21,6 +21,11 @@ struct ExtensionPanelView: View {
     @ObservedObject var client: ExtensionUiClient
     let extensionID: String
 
+    /// Whether the server shares this host's filesystem; threaded to the renderer
+    /// so a FileReference offers "Reveal in Finder" only on a local server. The
+    /// default false (no reveal) suits call sites without the fingerprint to hand.
+    var isServerLocal: Bool = false
+
     var body: some View {
         // VStack rather than Group: Group is a transparent passthrough,
         // and when its conditional content yields nothing the
@@ -42,7 +47,8 @@ struct ExtensionPanelView: View {
                                 payload: payload
                             )
                         }
-                    }
+                    },
+                    isServerLocal: isServerLocal
                 )
             } else if let error = client.errors[extensionID] {
                 // Only show errors after a stream actually started; a

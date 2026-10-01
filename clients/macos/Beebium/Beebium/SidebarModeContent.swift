@@ -78,7 +78,8 @@ struct SidebarModeContent: View {
                 NetworkModeView(econetClient: econetClient,
                                 keyboardMappingManager: keyboardMappingManager,
                                 extensionUiClient: extensionUiClient,
-                                transportsClient: transportsClient)
+                                transportsClient: transportsClient,
+                                isServerLocal: systemClient.isServerLocal)
             }
         }
     }
@@ -354,6 +355,9 @@ struct NetworkModeView: View {
     @ObservedObject var keyboardMappingManager: KeyboardMappingManager
     @ObservedObject var extensionUiClient: ExtensionUiClient
     @ObservedObject var transportsClient: EconetTransportsClient
+    /// Whether the server shares this host's filesystem; passed to a transport
+    /// extension panel so a FileReference can gate "Reveal in Finder".
+    var isServerLocal: Bool = false
     @State private var showStationIdPopover = false
 
     var body: some View {
@@ -447,7 +451,8 @@ struct NetworkModeView: View {
                 // new transport extension surfaces here automatically.
                 ForEach(transportsClient.transports.filter(\.hasUI)) { transport in
                     ExtensionPanelView(client: extensionUiClient,
-                                       extensionID: transport.id)
+                                       extensionID: transport.id,
+                                       isServerLocal: isServerLocal)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                 }

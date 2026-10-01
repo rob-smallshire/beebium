@@ -38,6 +38,12 @@ struct ExtensionViewRenderer: View {
     /// over gRPC.
     let dispatch: (String, ExtensionDispatchPayload) -> Void
 
+    /// Whether the server shares this host's filesystem. Gates the
+    /// client-side "Reveal in Finder" on a FileReference; false (no
+    /// reveal) is the safe default for a remote server. Propagates to
+    /// nested controls through the recursive renderControl calls.
+    var isServerLocal: Bool = false
+
     var body: some View {
         renderControl(control)
     }
@@ -94,6 +100,17 @@ struct ExtensionViewRenderer: View {
             return AnyView(EditableChoiceField(controlId: control.id,
                                                editableChoice: ec,
                                                dispatch: dispatch)
+                .id(control.id))
+        case .editableList(let list):
+            return AnyView(EditableListView(controlId: control.id,
+                                            editableList: list,
+                                            dispatch: dispatch)
+                .id(control.id))
+        case .fileReference(let fileReference):
+            return AnyView(FileReferenceView(controlId: control.id,
+                                             fileReference: fileReference,
+                                             isServerLocal: isServerLocal,
+                                             dispatch: dispatch)
                 .id(control.id))
         case .none:
             return AnyView(EmptyView())

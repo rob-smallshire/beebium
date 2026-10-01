@@ -174,6 +174,22 @@ struct Beebium_Control: @unchecked Sendable {
     set {_uniqueStorage()._control = .editableChoice(newValue)}
   }
 
+  var editableList: Beebium_EditableList {
+    get {
+      if case .editableList(let v)? = _storage._control {return v}
+      return Beebium_EditableList()
+    }
+    set {_uniqueStorage()._control = .editableList(newValue)}
+  }
+
+  var fileReference: Beebium_FileReference {
+    get {
+      if case .fileReference(let v)? = _storage._control {return v}
+      return Beebium_FileReference()
+    }
+    set {_uniqueStorage()._control = .fileReference(newValue)}
+  }
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   enum OneOf_Control: Equatable, Sendable {
@@ -186,6 +202,8 @@ struct Beebium_Control: @unchecked Sendable {
     case group(Beebium_Group)
     case modalEditor(Beebium_ModalEditor)
     case editableChoice(Beebium_EditableChoice)
+    case editableList(Beebium_EditableList)
+    case fileReference(Beebium_FileReference)
 
   }
 
@@ -528,6 +546,176 @@ struct Beebium_ModalEditor: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
+/// Collection primitive: a titled list of records with the platform's
+/// standard add / remove / edit affordances, replacing the Label + Button +
+/// ModalEditor-per-row shape the first collection panel (#142 AUN) was built
+/// from. Each item carries its own prefilled editor and its own per-item
+/// actions, so one EditableList expresses a whole editable table. All user
+/// actions on the list arrive through one dispatch payload,
+/// EditableListEvent, keyed by the item's stable id.
+struct Beebium_EditableList: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// "Peers", "Subnet rules"
+  var title: String {
+    get {return _storage._title}
+    set {_uniqueStorage()._title = newValue}
+  }
+
+  var items: [Beebium_EditableListItem] {
+    get {return _storage._items}
+    set {_uniqueStorage()._items = newValue}
+  }
+
+  /// shows the platform's "+" affordance
+  var canAdd: Bool {
+    get {return _storage._canAdd}
+    set {_uniqueStorage()._canAdd = newValue}
+  }
+
+  /// The editor Control for a NEW item (fields only; the renderer supplies
+  /// the commit UI). By convention a Group of TextInput / Choice leaves,
+  /// mirroring a ModalEditor's editor tree. Committed as an ADD event.
+  var addEditor: Beebium_Control {
+    get {return _storage._addEditor ?? Beebium_Control()}
+    set {_uniqueStorage()._addEditor = newValue}
+  }
+  /// Returns true if `addEditor` has been explicitly set.
+  var hasAddEditor: Bool {return _storage._addEditor != nil}
+  /// Clears the value of `addEditor`. Subsequent reads from it will return its default value.
+  mutating func clearAddEditor() {_uniqueStorage()._addEditor = nil}
+
+  /// shown when items is empty: "No peers"
+  var emptyText: String {
+    get {return _storage._emptyText}
+    set {_uniqueStorage()._emptyText = newValue}
+  }
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// One row of an EditableList.
+struct Beebium_EditableListItem: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// stable; echoed back in dispatches
+  var id: String = String()
+
+  /// "0.254  192.168.1.10:32768"
+  var primary: String = String()
+
+  /// right-aligned caption: "map file", "mDNS"
+  var secondary: String = String()
+
+  /// beneath, muted: the label "PiEconetBridge FS"
+  var subtitle: String = String()
+
+  /// Small state badge for the row. UNKNOWN means no indicator; WARN marks,
+  /// e.g., an unreachable peer. Reuses Indicator.State so the renderer shares
+  /// one badge style across controls.
+  var state: Beebium_Indicator.State = .unknown
+
+  /// edit affordance; `editor` below is prefilled
+  var editable: Bool = false
+
+  /// "-" affordance
+  var removable: Bool = false
+
+  /// prefilled editor for THIS item, when editable
+  var editor: Beebium_Control {
+    get {return _editor ?? Beebium_Control()}
+    set {_editor = newValue}
+  }
+  /// Returns true if `editor` has been explicitly set.
+  var hasEditor: Bool {return self._editor != nil}
+  /// Clears the value of `editor`. Subsequent reads from it will return its default value.
+  mutating func clearEditor() {self._editor = nil}
+
+  /// per-item commands, context menu
+  var actions: [Beebium_EditableListAction] = []
+
+  /// short warning shown with the item, optional
+  var note: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _editor: Beebium_Control? = nil
+}
+
+/// A named per-item command surfaced in the row's context menu. `warning`,
+/// when set, is the confirmation text the renderer must show before
+/// dispatching the ACTION; empty means no confirmation.
+struct Beebium_EditableListAction: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var id: String = String()
+
+  var title: String = String()
+
+  var warning: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// Reference primitive: a file on the server's host, shown as a small
+/// document icon plus display name, with the path as a tooltip, a state
+/// badge, and a pull-down of the server's actions. The renderer adds its
+/// own client-side actions (Reveal in Finder, gated on the host fingerprint;
+/// Copy Path, always). Server actions dispatch as `file_action_id`.
+struct Beebium_FileReference: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// absolute, on the server's host
+  var path: String = String()
+
+  /// "aun-map.json"; defaults to the path's file name
+  var displayName: String = String()
+
+  /// OK = loaded; WARN = missing; ERROR = load error. Reuses Indicator.State.
+  var state: Beebium_Indicator.State = .unknown
+
+  /// "12 peers, 1 subnet" or the load error
+  var stateText: String = String()
+
+  /// server actions: "Reload"
+  var actions: [Beebium_FileReferenceAction] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// A named server-side action on a FileReference, surfaced in its pull-down.
+struct Beebium_FileReferenceAction: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var id: String = String()
+
+  var title: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 struct Beebium_DispatchRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -552,6 +740,10 @@ struct Beebium_DispatchRequest: Sendable {
   ///   Button      -> none (leave the oneof unset)
   ///   ModalEditor -> editor_commit (one atomic bundle of sub-control
   ///                  values; see EditorCommit)
+  ///   EditableList -> editable_list_event (add / edit / remove / action
+  ///                  on one item; see EditableListEvent)
+  ///   FileReference -> file_action_id (the id of the server action chosen
+  ///                  from the pull-down)
   ///
   /// Validation: the server rejects requests whose payload variant
   /// does not match the addressed control's type.
@@ -589,6 +781,22 @@ struct Beebium_DispatchRequest: Sendable {
     set {payload = .editorCommit(newValue)}
   }
 
+  var editableListEvent: Beebium_EditableListEvent {
+    get {
+      if case .editableListEvent(let v)? = payload {return v}
+      return Beebium_EditableListEvent()
+    }
+    set {payload = .editableListEvent(newValue)}
+  }
+
+  var fileActionID: String {
+    get {
+      if case .fileActionID(let v)? = payload {return v}
+      return String()
+    }
+    set {payload = .fileActionID(newValue)}
+  }
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   /// Typed payload, chosen to match the target Control's type:
@@ -598,6 +806,10 @@ struct Beebium_DispatchRequest: Sendable {
   ///   Button      -> none (leave the oneof unset)
   ///   ModalEditor -> editor_commit (one atomic bundle of sub-control
   ///                  values; see EditorCommit)
+  ///   EditableList -> editable_list_event (add / edit / remove / action
+  ///                  on one item; see EditableListEvent)
+  ///   FileReference -> file_action_id (the id of the server action chosen
+  ///                  from the pull-down)
   ///
   /// Validation: the server rejects requests whose payload variant
   /// does not match the addressed control's type.
@@ -606,10 +818,91 @@ struct Beebium_DispatchRequest: Sendable {
     case stringValue(String)
     case indexValue(UInt32)
     case editorCommit(Beebium_EditorCommit)
+    case editableListEvent(Beebium_EditableListEvent)
+    case fileActionID(String)
 
   }
 
   init() {}
+}
+
+/// The user's action on one EditableList item. ADD carries no item_id and an
+/// `commit` built from the list's add_editor; EDIT carries the item_id and an
+/// `commit` from that item's editor; REMOVE carries just the item_id; ACTION
+/// carries the item_id and the chosen action_id (and no commit). The server
+/// validates item_id / action_id against the current view like any other
+/// dispatch, and applies an ADD / EDIT commit with the same no-partial rule as
+/// EditorCommit.
+struct Beebium_EditableListEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var kind: Beebium_EditableListEvent.Kind = .add
+
+  /// empty for ADD
+  var itemID: String = String()
+
+  /// for ACTION
+  var actionID: String = String()
+
+  /// for ADD and EDIT: the editor field values
+  var commit: Beebium_EditorCommit {
+    get {return _commit ?? Beebium_EditorCommit()}
+    set {_commit = newValue}
+  }
+  /// Returns true if `commit` has been explicitly set.
+  var hasCommit: Bool {return self._commit != nil}
+  /// Clears the value of `commit`. Subsequent reads from it will return its default value.
+  mutating func clearCommit() {self._commit = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  enum Kind: SwiftProtobuf.Enum, Swift.CaseIterable {
+    typealias RawValue = Int
+    case add // = 0
+    case edit // = 1
+    case remove // = 2
+    case action // = 3
+    case UNRECOGNIZED(Int)
+
+    init() {
+      self = .add
+    }
+
+    init?(rawValue: Int) {
+      switch rawValue {
+      case 0: self = .add
+      case 1: self = .edit
+      case 2: self = .remove
+      case 3: self = .action
+      default: self = .UNRECOGNIZED(rawValue)
+      }
+    }
+
+    var rawValue: Int {
+      switch self {
+      case .add: return 0
+      case .edit: return 1
+      case .remove: return 2
+      case .action: return 3
+      case .UNRECOGNIZED(let i): return i
+      }
+    }
+
+    // The compiler won't synthesize support with the UNRECOGNIZED case.
+    static let allCases: [Beebium_EditableListEvent.Kind] = [
+      .add,
+      .edit,
+      .remove,
+      .action,
+    ]
+
+  }
+
+  init() {}
+
+  fileprivate var _commit: Beebium_EditorCommit? = nil
 }
 
 /// One field's value inside an EditorCommit. The 'field_id' names a
@@ -779,7 +1072,7 @@ extension Beebium_View: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementat
 
 extension Beebium_Control: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".Control"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}label\0\u{1}indicator\0\u{1}toggle\0\u{1}button\0\u{1}choice\0\u{3}text_input\0\u{1}group\0\u{3}modal_editor\0\u{3}editable_choice\0\u{1}tooltip\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}label\0\u{1}indicator\0\u{1}toggle\0\u{1}button\0\u{1}choice\0\u{3}text_input\0\u{1}group\0\u{3}modal_editor\0\u{3}editable_choice\0\u{1}tooltip\0\u{3}editable_list\0\u{3}file_reference\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -935,6 +1228,32 @@ extension Beebium_Control: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
           }
         }()
         case 11: try { try decoder.decodeSingularStringField(value: &_storage._tooltip) }()
+        case 12: try {
+          var v: Beebium_EditableList?
+          var hadOneofValue = false
+          if let current = _storage._control {
+            hadOneofValue = true
+            if case .editableList(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._control = .editableList(v)
+          }
+        }()
+        case 13: try {
+          var v: Beebium_FileReference?
+          var hadOneofValue = false
+          if let current = _storage._control {
+            hadOneofValue = true
+            if case .fileReference(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._control = .fileReference(v)
+          }
+        }()
         default: break
         }
       }
@@ -987,10 +1306,21 @@ extension Beebium_Control: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
         guard case .editableChoice(let v)? = _storage._control else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
       }()
-      case nil: break
+      default: break
       }
       if !_storage._tooltip.isEmpty {
         try visitor.visitSingularStringField(value: _storage._tooltip, fieldNumber: 11)
+      }
+      switch _storage._control {
+      case .editableList?: try {
+        guard case .editableList(let v)? = _storage._control else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      }()
+      case .fileReference?: try {
+        guard case .fileReference(let v)? = _storage._control else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+      }()
+      default: break
       }
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1423,9 +1753,311 @@ extension Beebium_ModalEditor.CommitRole: SwiftProtobuf._ProtoNameProviding {
   static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SAVE\0\u{1}ADD\0")
 }
 
+extension Beebium_EditableList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EditableList"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}title\0\u{1}items\0\u{3}can_add\0\u{3}add_editor\0\u{3}empty_text\0")
+
+  fileprivate class _StorageClass {
+    var _title: String = String()
+    var _items: [Beebium_EditableListItem] = []
+    var _canAdd: Bool = false
+    var _addEditor: Beebium_Control? = nil
+    var _emptyText: String = String()
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _title = source._title
+      _items = source._items
+      _canAdd = source._canAdd
+      _addEditor = source._addEditor
+      _emptyText = source._emptyText
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._title) }()
+        case 2: try { try decoder.decodeRepeatedMessageField(value: &_storage._items) }()
+        case 3: try { try decoder.decodeSingularBoolField(value: &_storage._canAdd) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._addEditor) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._emptyText) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._title.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._title, fieldNumber: 1)
+      }
+      if !_storage._items.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._items, fieldNumber: 2)
+      }
+      if _storage._canAdd != false {
+        try visitor.visitSingularBoolField(value: _storage._canAdd, fieldNumber: 3)
+      }
+      try { if let v = _storage._addEditor {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      if !_storage._emptyText.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._emptyText, fieldNumber: 5)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EditableList, rhs: Beebium_EditableList) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._title != rhs_storage._title {return false}
+        if _storage._items != rhs_storage._items {return false}
+        if _storage._canAdd != rhs_storage._canAdd {return false}
+        if _storage._addEditor != rhs_storage._addEditor {return false}
+        if _storage._emptyText != rhs_storage._emptyText {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EditableListItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EditableListItem"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}primary\0\u{1}secondary\0\u{1}subtitle\0\u{1}state\0\u{1}editable\0\u{1}removable\0\u{1}editor\0\u{1}actions\0\u{1}note\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.primary) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.secondary) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.subtitle) }()
+      case 5: try { try decoder.decodeSingularEnumField(value: &self.state) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.editable) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.removable) }()
+      case 8: try { try decoder.decodeSingularMessageField(value: &self._editor) }()
+      case 9: try { try decoder.decodeRepeatedMessageField(value: &self.actions) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.note) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.primary.isEmpty {
+      try visitor.visitSingularStringField(value: self.primary, fieldNumber: 2)
+    }
+    if !self.secondary.isEmpty {
+      try visitor.visitSingularStringField(value: self.secondary, fieldNumber: 3)
+    }
+    if !self.subtitle.isEmpty {
+      try visitor.visitSingularStringField(value: self.subtitle, fieldNumber: 4)
+    }
+    if self.state != .unknown {
+      try visitor.visitSingularEnumField(value: self.state, fieldNumber: 5)
+    }
+    if self.editable != false {
+      try visitor.visitSingularBoolField(value: self.editable, fieldNumber: 6)
+    }
+    if self.removable != false {
+      try visitor.visitSingularBoolField(value: self.removable, fieldNumber: 7)
+    }
+    try { if let v = self._editor {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
+    if !self.actions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.actions, fieldNumber: 9)
+    }
+    if !self.note.isEmpty {
+      try visitor.visitSingularStringField(value: self.note, fieldNumber: 10)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EditableListItem, rhs: Beebium_EditableListItem) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.primary != rhs.primary {return false}
+    if lhs.secondary != rhs.secondary {return false}
+    if lhs.subtitle != rhs.subtitle {return false}
+    if lhs.state != rhs.state {return false}
+    if lhs.editable != rhs.editable {return false}
+    if lhs.removable != rhs.removable {return false}
+    if lhs._editor != rhs._editor {return false}
+    if lhs.actions != rhs.actions {return false}
+    if lhs.note != rhs.note {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EditableListAction: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EditableListAction"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}title\0\u{1}warning\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.title) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.warning) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.title.isEmpty {
+      try visitor.visitSingularStringField(value: self.title, fieldNumber: 2)
+    }
+    if !self.warning.isEmpty {
+      try visitor.visitSingularStringField(value: self.warning, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EditableListAction, rhs: Beebium_EditableListAction) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.title != rhs.title {return false}
+    if lhs.warning != rhs.warning {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_FileReference: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".FileReference"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}path\0\u{3}display_name\0\u{1}state\0\u{3}state_text\0\u{1}actions\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.path) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.state) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.stateText) }()
+      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.actions) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.path.isEmpty {
+      try visitor.visitSingularStringField(value: self.path, fieldNumber: 1)
+    }
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 2)
+    }
+    if self.state != .unknown {
+      try visitor.visitSingularEnumField(value: self.state, fieldNumber: 3)
+    }
+    if !self.stateText.isEmpty {
+      try visitor.visitSingularStringField(value: self.stateText, fieldNumber: 4)
+    }
+    if !self.actions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.actions, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_FileReference, rhs: Beebium_FileReference) -> Bool {
+    if lhs.path != rhs.path {return false}
+    if lhs.displayName != rhs.displayName {return false}
+    if lhs.state != rhs.state {return false}
+    if lhs.stateText != rhs.stateText {return false}
+    if lhs.actions != rhs.actions {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_FileReferenceAction: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".FileReferenceAction"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}title\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.title) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.title.isEmpty {
+      try visitor.visitSingularStringField(value: self.title, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_FileReferenceAction, rhs: Beebium_FileReferenceAction) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.title != rhs.title {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension Beebium_DispatchRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".DispatchRequest"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}extension_id\0\u{3}control_id\0\u{3}view_revision\0\u{3}bool_value\0\u{3}string_value\0\u{3}index_value\0\u{3}editor_commit\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}extension_id\0\u{3}control_id\0\u{3}view_revision\0\u{3}bool_value\0\u{3}string_value\0\u{3}index_value\0\u{3}editor_commit\0\u{3}editable_list_event\0\u{3}file_action_id\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1473,6 +2105,27 @@ extension Beebium_DispatchRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
           self.payload = .editorCommit(v)
         }
       }()
+      case 8: try {
+        var v: Beebium_EditableListEvent?
+        var hadOneofValue = false
+        if let current = self.payload {
+          hadOneofValue = true
+          if case .editableListEvent(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.payload = .editableListEvent(v)
+        }
+      }()
+      case 9: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.payload != nil {try decoder.handleConflictingOneOf()}
+          self.payload = .fileActionID(v)
+        }
+      }()
       default: break
       }
     }
@@ -1509,6 +2162,14 @@ extension Beebium_DispatchRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
       guard case .editorCommit(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
     }()
+    case .editableListEvent?: try {
+      guard case .editableListEvent(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    }()
+    case .fileActionID?: try {
+      guard case .fileActionID(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 9)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1522,6 +2183,59 @@ extension Beebium_DispatchRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
+}
+
+extension Beebium_EditableListEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".EditableListEvent"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{3}item_id\0\u{3}action_id\0\u{1}commit\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.itemID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.actionID) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._commit) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.kind != .add {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 1)
+    }
+    if !self.itemID.isEmpty {
+      try visitor.visitSingularStringField(value: self.itemID, fieldNumber: 2)
+    }
+    if !self.actionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.actionID, fieldNumber: 3)
+    }
+    try { if let v = self._commit {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_EditableListEvent, rhs: Beebium_EditableListEvent) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.itemID != rhs.itemID {return false}
+    if lhs.actionID != rhs.actionID {return false}
+    if lhs._commit != rhs._commit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_EditableListEvent.Kind: SwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ADD\0\u{1}EDIT\0\u{1}REMOVE\0\u{1}ACTION\0")
 }
 
 extension Beebium_EditorFieldValue: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
