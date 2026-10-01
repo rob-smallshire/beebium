@@ -34,6 +34,9 @@ struct FileReferenceView: View {
             Text(displayName)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                // The name owns the row: when space is short the state text
+                // truncates, never the file name (#144 refinement).
+                .layoutPriority(1)
             if fileReference.state != .unknown {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 8))

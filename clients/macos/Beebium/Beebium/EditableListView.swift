@@ -34,11 +34,14 @@ struct EditableListView: View {
 
     private enum EditSheet: Identifiable {
         case add
-        case edit(String)
+        case edit(String)                                    // item id
+        case action(itemID: String, actionID: String)        // action with an editor
         var id: String {
             switch self {
-            case .add:          return "\u{1}add"
-            case .edit(let id): return id
+            case .add:                            return "\u{1}add"
+            case .edit(let id):                   return "\u{1}edit\u{1}" + id
+            case .action(let itemID, let actionID):
+                return "\u{1}action\u{1}" + itemID + "\u{1}" + actionID
             }
         }
     }
@@ -46,12 +49,19 @@ struct EditableListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if !editableList.title.isEmpty {
-                Text(editableList.title)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
+            if !editableList.title.isEmpty || !editableList.help.isEmpty {
+                HStack(spacing: 4) {
+                    if !editableList.title.isEmpty {
+                        Text(editableList.title)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                    }
+                    if !editableList.help.isEmpty {
+                        ExtensionFieldHelpButton(help: editableList.help)
+                    }
+                }
             }
             listBox
             AddRemoveSegmentedControl(
@@ -175,6 +185,14 @@ struct EditableListView: View {
             editor = editableList.items.first { $0.id == id }?.editor ?? Beebium_Control()
             title = "Save"
             makeIntent = { model.editIntent(itemID: id, commit: $0) }
+        case .action(let itemID, let actionID):
+            let action = editableList.items.first { $0.id == itemID }?
+                .actions.first { $0.id == actionID }
+            editor = action?.editor ?? Beebium_Control()
+            // The commit button is titled for the action ("Save to map file"),
+            // so the sheet reads as that action rather than a generic save.
+            title = action?.title ?? "Save"
+            makeIntent = { model.actionIntent(itemID: itemID, actionID: actionID, commit: $0) }
         }
         return VStack(alignment: .leading, spacing: 0) {
             ExtensionEditorForm(
@@ -205,6 +223,13 @@ struct EditableListView: View {
     /// confirmation uses the AppKit sheet alert on the key window, dispatching the
     /// action only on the confirm button.
     private func runAction(_ action: Beebium_EditableListAction, itemID: String) {
+        // An action that carries its own editor opens a prefilled sheet (the
+        // sheet is the gate, so such an action does not also set a warning);
+        // the ACTION dispatch then carries the edited values.
+        if action.hasEditor {
+            sheet = .action(itemID: itemID, actionID: action.id)
+            return
+        }
         if action.warning.isEmpty {
             dispatch(controlId, .editableListEvent(
                 model.actionIntent(itemID: itemID, actionID: action.id)))

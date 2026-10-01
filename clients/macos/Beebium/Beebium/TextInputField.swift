@@ -26,11 +26,7 @@ struct TextInputField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if !textInput.label.isEmpty {
-                Text(textInput.label)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            ExtensionFieldLabel(text: textInput.label, help: textInput.help)
             TextField(textInput.placeholder, text: $localValue)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
@@ -47,6 +43,7 @@ struct TextInputField: View {
                         localValue = newValue
                     }
                 }
+            ExtensionFieldNote(note: textInput.note)
         }
     }
 }

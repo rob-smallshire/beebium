@@ -71,8 +71,11 @@ final class EditableListViewModel: ObservableObject {
         return EditableListIntent(kind: .remove, itemID: row.id, actionID: "", commit: [])
     }
 
-    func actionIntent(itemID: String, actionID: String) -> EditableListIntent {
-        EditableListIntent(kind: .action, itemID: itemID, actionID: actionID, commit: [])
+    /// ACTION for a per-item command. When the action carries its own editor the
+    /// caller passes the committed field values; a plain action passes none.
+    func actionIntent(itemID: String, actionID: String,
+                      commit: [EditorFieldCommit] = []) -> EditableListIntent {
+        EditableListIntent(kind: .action, itemID: itemID, actionID: actionID, commit: commit)
     }
 
     func addIntent(commit: [EditorFieldCommit]) -> EditableListIntent {

@@ -83,11 +83,10 @@ struct ExtensionEditorForm: View {
                 set: { buffers[control.id] = .string($0) }
             )
             return AnyView(VStack(alignment: .leading, spacing: 4) {
-                if !ti.label.isEmpty {
-                    Text(ti.label).font(.caption).foregroundColor(.secondary)
-                }
+                ExtensionFieldLabel(text: ti.label, help: ti.help)
                 TextField(ti.placeholder, text: binding)
                     .textFieldStyle(.roundedBorder)
+                ExtensionFieldNote(note: ti.note)
             }
             .id(control.id))
         case .editableChoice(let ec):

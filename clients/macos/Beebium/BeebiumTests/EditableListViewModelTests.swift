@@ -79,4 +79,12 @@ final class EditableListViewModelTests: XCTestCase {
         XCTAssertEqual(model.actionIntent(itemID: "x", actionID: "save"),
                        EditableListIntent(kind: .action, itemID: "x", actionID: "save", commit: []))
     }
+
+    func testActionIntentCarriesAnEditorCommitWhenTheActionHasAnEditor() {
+        let model = EditableListViewModel(rows: [row("x")])
+        let fields = [EditorFieldCommit(fieldID: "port", value: .string("32768"))]
+        XCTAssertEqual(
+            model.actionIntent(itemID: "x", actionID: "save_to_map", commit: fields),
+            EditableListIntent(kind: .action, itemID: "x", actionID: "save_to_map", commit: fields))
+    }
 }
