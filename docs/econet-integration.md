@@ -33,11 +33,11 @@ These decisions were made during planning and inform all phases:
 
 - **Peer resolution must be an abstraction, not just static config**: The current `--aun map=...` mechanism requires users to know IP addresses and ports up front, which is at odds with modern networking (DHCP, dynamic IPs, mDNS). The `AunBackend` already has the right runtime mutation API (`add_peer`/`remove_peer`), but the architecture must ensure this is accessible to multiple peer sources — not just CLI args and gRPC calls. Considerations:
 
-  - **`AunBackend` peer table as the single source of truth**: All peer sources (CLI, presets, gRPC, future discovery) converge on `add_peer`/`remove_peer`. This is already the case and should remain so.
+  - **The peer set is the single source of truth (in the transport, not the backend)**: As of #55 the desired peer world lives in `AunPeerSet`, owned by `AunEconetTransportExtension`. All peer sources (CLI, presets, gRPC, discovery) converge on it, and it resolves one winner per `(net, stn)` and applies that routing view to the live `AunBackend` via `replace_peers`. The backend no longer ranks sources; it holds only the resolved view for its socket.
 
-  - **`EconetSocket` must expose the backend chain**: The gRPC service, discovery mechanisms, and any future peer source need a path to reach `AunBackend::add_peer()`. Phase 2 adds `EconetSocket::backend()` for this. Any discovery mechanism running in-process can use the same accessor.
+  - **`EconetSocket` must expose the backend chain**: The gRPC service and any in-process peer source reach the live backend via `EconetSocket::backend()`; the transport's `AunPeerSet` applies to it. Peer *edits* go through the transport (`add_api_peer`/`remove_api_peer`), so they work whether or not a backend exists yet.
 
-  - **Peer provenance**: Currently all peers are equivalent. A future discovery mechanism (mDNS, AUN broadcast) may need to distinguish static peers (from config/presets — never expire) from discovered peers (expire after a timeout, refreshed by re-announcement). This could be modelled as a provenance tag on peer entries, or as a separate overlay that manages discovered peers and calls `add_peer`/`remove_peer` as they appear and disappear. The simpler overlay approach avoids complicating the core peer table.
+  - **Peer provenance**: Implemented as a four-value `AunPeerProvenance` (`Api`, `Launch`, `MapFile`, `Discovered`) on each peer-set entry, resolved by fixed precedence (highest first: `Api`, `Launch`, `MapFile`, `Discovered`). Each source keeps its own entry, so removing a winner falls back to the next source present rather than dropping the station. Discovered peers are managed by the mDNS subscriber writing `Discovered` entries into the same set.
 
   - **Candidate discovery mechanisms** (future work, not part of the current programme):
     - **Beebium mDNS**: Beebium already advertises itself via mDNS for gRPC service discovery. Econet station metadata (Phase 3) could be used by other Beebium instances to auto-discover peers. This is the most natural fit for Beebium-to-Beebium networking.
@@ -102,7 +102,7 @@ The legacy preset keys `econet.aun_port`, `econet.aun_map`, and `econet.piconet.
 
 ## Phase 2: gRPC Service
 
-**Status:** `EconetService` is implemented, with transport-agnostic operations (`GetEconetStatus`, `EnableEconet`, `DisableEconet`, `SetStationId`, `SubscribeEconetEvents`). AUN-specific RPCs — `SetConnected`, `AddPeer`, `RemovePeer`, `ListPeers`, plus a richer `GetStatus` — live on the new `AunService` (`src/extensions/aun/aun.proto`), contributed by the AUN extension's `grpc_services()` hook so they only appear when AUN is the active transport.
+**Status:** `EconetService` is implemented, with transport-agnostic operations (`GetEconetStatus`, `EnableEconet`, `DisableEconet`, `SetStationId`, `SubscribeEconetEvents`). AUN-specific RPCs — `SetConnected`, `AddPeer`, `RemovePeer`, `ListPeers`, plus a richer `GetStatus` — are defined by `AunService` (`src/extensions/aun/aun.proto`) and served over the core's generic `ExtensionRpc` channel by the AUN extension's hand-written `AunDispatcher`, not as a plugin-hosted gRPC service; the AUN library therefore links protobuf but not gRPC. They are reachable only when AUN is the active transport.
 
 Both EconetService.* AUN methods and the new AunService.* methods exist concurrently for backward compatibility; the EconetService duplicates carry `DEPRECATED` comments and will be removed in a follow-up coordinated with Python and macOS Swift client updates.
 

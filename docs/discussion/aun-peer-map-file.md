@@ -250,14 +250,22 @@ mph1708.
 
 ## 7. Cleanup found on the way
 
-- `AunBackend.hpp` still says "there is no auto-discovery in this
-  implementation".
-- `aun-mdns-peer-discovery.md` says removing an operator entry lets the
+All four were addressed with step 1 (#55), which moved the peer table into
+`AunEconetTransportExtension` as `AunPeerSet`:
+
+- ~~`AunBackend.hpp` still says "there is no auto-discovery in this
+  implementation".~~ Done: the comment now describes the backend as holding
+  the resolved routing view set by the transport.
+- ~~`aun-mdns-peer-discovery.md` says removing an operator entry lets the
   discovered one take over; `remove_peer` removes outright and the
-  discovered peer returns only when re-announced.
-- `AunService.AddPeer` documents `net` as 0..127 but accepts up to 255.
-- `econet-integration.md` says `AunService` is contributed through
-  `grpc_services()`; it is served over ExtensionRpc.
+  discovered peer returns only when re-announced.~~ Done: `AunPeerSet` keeps
+  one entry per source, so removing the `Api` winner now falls back to a
+  `Discovered` entry still present — code and doc agree.
+- ~~`AunService.AddPeer` documents `net` as 0..127 but accepts up to 255.~~
+  Done: the dispatcher now rejects `net > 127`.
+- ~~`econet-integration.md` says `AunService` is contributed through
+  `grpc_services()`; it is served over ExtensionRpc.~~ Done: that doc now
+  describes the `AunDispatcher` over `ExtensionRpc`.
 
 ## 8. Open questions
 

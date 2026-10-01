@@ -82,7 +82,18 @@ The high bit (128..255) is reserved by the Acorn bridge protocol and is rejected
 
 ### AUN peer discovery via mDNS
 
-Beebium publishes a `_aun._udp` DNS-SD announcement when its AUN transport binds, and subscribes to the same service type on the LAN. Discovered peers are added to the routing table automatically as `Discovered` entries; operator-configured peers (from `--aun map=` or `AunService::AddPeer`) always take precedence — a discovered announcement that claims an `(net, stn)` already pinned by the operator is silently ignored.
+Beebium publishes a `_aun._udp` DNS-SD announcement when its AUN transport binds, and subscribes to the same service type on the LAN. Discovered peers are added to the routing table automatically as `Discovered` entries; operator sources always take precedence — a discovered announcement that claims an `(net, stn)` an operator source already holds is recorded but shadowed, not routed.
+
+**Peer provenance and precedence.** The peer table lives in the AUN transport extension (not the backend), which keeps a single entry per source for each `(net, stn)` and resolves one winner by a fixed precedence, highest first:
+
+| Provenance | Source | Sidebar caption |
+|------------|--------|-----------------|
+| `Api` | `AunService::AddPeer` at runtime (`bbc.transport[Aun].add_peer`, `Aun.addPeer`) | `API` |
+| `Launch` | `--aun map=` on the command line, or the preset's `map` | `launch` |
+| `MapFile` | the per-user `aun-map.json` (reserved; not populated yet) | `map file` |
+| `Discovered` | an `_aun._udp` mDNS announcement | `mDNS` |
+
+An explicit instruction for this process beats one for this launch, which beats the standing map file, which beats what the network discovered. Because each source keeps its own entry, removing the winner falls back to the next source still present rather than dropping the station — removing an `Api` peer for an `(net, stn)` a discovered announcement also names reveals the discovered one. Peer edits (`AddPeer`/`RemovePeer`/`SetConnected`) apply whether or not the socket is up yet; entries added before the transport binds survive until it does, and persist across the backend being re-created.
 
 This means **Beebium-to-Beebium AUN works with no `map=` configuration on the same LAN**: launch two servers with `--aun port=32768 --station 1` and `--aun port=32769 --station 254` and they'll find each other within a couple of seconds (`mDNS resolve + getaddrinfo` round-trip).
 

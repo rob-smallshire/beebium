@@ -133,8 +133,9 @@ A transport can advertise and browse for peers (AUN does this over mDNS:
 `AunDiscoveryAnnouncer` / `AunDiscoverySubscriber`, see
 `project_aun_mdns_discovery`). Discovered entries should be marked as such so a
 client can distinguish them from operator-configured ones — `AunPeer.source`
-carries `DISCOVERED` vs `OPERATOR_CONFIGURED`, and operator entries take routing
-precedence. mDNS discovery is bidirectional on all three platforms -- macOS via
+carries one of `LAUNCH`, `API`, `MAP_FILE` or `DISCOVERED`, and the operator
+sources (`API`, `LAUNCH`, `MAP_FILE`, in that precedence order) take routing
+precedence over `DISCOVERED`. mDNS discovery is bidirectional on all three platforms -- macOS via
 Bonjour, Windows via Apple Bonjour when installed and the native DnsService*
 API otherwise, Linux via Avahi -- but every provider can be absent at run time
 (no avahi-daemon, an old Windows), so guard accordingly.
