@@ -44,6 +44,28 @@ The bridge's log is printed automatically whenever a test that used it fails.
 | `BEEBIUM_PIEB_BIN` | Path to a built `econet-hpbridge` (Linux). |
 | `BEEBIUM_PIEB_SRC` | A PiEconetBridge checkout whose `utilities/econet-hpbridge` has been built (Linux). |
 | `PIEB_DEBUG` | Passed to the container: raises the bridge's debug level further. |
+| `BEEBIUM_PIEB_RECIPE_BRIDGE` | `host:port` of a bridge started outside the tests, for `test_bridge_recipe.py`. |
+| `BEEBIUM_PIEB_RECIPE_AUN_PORT` | The port that bridge's `AUN MAP HOST 2.80` line points at; Beebium binds it. |
+
+## The published recipe
+
+`tests/test_bridge_recipe.py` runs the configuration documented in
+`docs/networking.md` ("Connecting to a PiEconetBridge") as written: Beebium is
+station 80 on net 2 and maps the fileserver 1.254 with `--aun map=`. Unlike the
+other tests it does not start the bridge itself, and skips unless told where
+one is. On Linux:
+
+```bash
+BEEBIUM_AUN_PORT=40080 ../../docker/pieconetbridge/run-recipe.sh start
+BEEBIUM_PIEB_RECIPE_BRIDGE=127.0.0.1:32768 BEEBIUM_PIEB_RECIPE_AUN_PORT=40080 \
+    uv run pytest tests/test_bridge_recipe.py -m slow -v
+docker stop <the container name run-recipe.sh printed>
+```
+
+`run-recipe.sh render` prints the configuration instead, for a native
+`econet-hpbridge -l -c <file> -s -z -z`. The opt-in `PiEconetBridge recipe`
+workflow (`.github/workflows/pieb-bridge-recipe.yml`) does the same in CI, on
+demand and weekly.
 
 ## Platform notes
 

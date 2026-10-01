@@ -1,0 +1,14 @@
+# PiEconetBridge configuration for the published Beebium recipe (#143).
+# Rendered by run-recipe.sh; @NAME@ placeholders are substituted.
+#
+# No WIRE NET line: every network here is a Null network, carrying local
+# emulation and distant AUN hosts only, so no Pi, HAT or kernel module is
+# needed. Every net number must be non-zero.
+#
+# The fileserver: station 1.254, with its filestore at @FILESTORE@.
+FILESERVER ON 1.254 PATH @FILESTORE@
+# Beebium as station 2.80, at @BEEBIUM_HOST@ port @BEEBIUM_AUN_PORT@. NONE
+# leaves acknowledgement to Beebium itself rather than the bridge (AUTOACK).
+AUN MAP HOST 2.80 ON @BEEBIUM_HOST@ PORT @BEEBIUM_AUN_PORT@ NONE
+# EXPOSE lines must come last: upstream's config parser requires it.
+EXPOSE HOST 1.254 ON PORT *:@BRIDGE_AUN_PORT@
