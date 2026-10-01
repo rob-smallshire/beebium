@@ -89,11 +89,42 @@ Beebium publishes a `_aun._udp` DNS-SD announcement when its AUN transport binds
 | Provenance | Source | Sidebar caption |
 |------------|--------|-----------------|
 | `Api` | `AunService::AddPeer` at runtime (`bbc.transport[Aun].add_peer`, `Aun.addPeer`) | `API` |
-| `Launch` | `--aun map=` on the command line, or the preset's `map` | `launch` |
-| `MapFile` | the per-user `aun-map.json` (reserved; not populated yet) | `map file` |
+| `Launch` | `--aun map=` / `subnet=` on the command line, or the preset's equivalents | `launch` |
+| `MapFile` | the per-user `aun-map.json` | `map file` |
 | `Discovered` | an `_aun._udp` mDNS announcement | `mDNS` |
+| `Subnet` | derived from a `subnets` rule (an inbound identification or an outbound guess) | `subnet` |
 
-An explicit instruction for this process beats one for this launch, which beats the standing map file, which beats what the network discovered. Because each source keeps its own entry, removing the winner falls back to the next source still present rather than dropping the station — removing an `Api` peer for an `(net, stn)` a discovered announcement also names reveals the discovered one. Peer edits (`AddPeer`/`RemovePeer`/`SetConnected`) apply whether or not the socket is up yet; entries added before the transport binds survive until it does, and persist across the backend being re-created.
+An explicit instruction for this process beats one for this launch, which beats the standing map file, which beats what the network discovered, which beats a subnet convention. `Discovered` outranks `Subnet` on purpose: a Beebium at `192.168.1.40` advertising station 40 on port 40001 must not be sent packets at the convention's port 32768. Because each source keeps its own entry, removing the winner falls back to the next source still present rather than dropping the station — removing an `Api` peer for an `(net, stn)` a discovered announcement also names reveals the discovered one. Peer edits (`AddPeer`/`RemovePeer`/`SetConnected`) apply whether or not the socket is up yet; entries added before the transport binds survive until it does, and persist across the backend being re-created.
+
+A discovered announcement for an `(net, stn)` the map file pins to a *different* endpoint is a conflict worth seeing: the file wins the routing, and the disagreement is surfaced through the station-collision report (the sidebar line, `aun_station_collision_count`), described as the station being pinned by the map file. It clears when that announcement withdraws or when the file is edited to agree.
+
+### The AUN map file (`aun-map.json`)
+
+The machines that do not announce themselves — a RISC OS box, a PiEconetBridge, a BeebEm instance, real Acorn hardware — go in a per-user JSON file that every Beebium instance on the host reads. It is the standing part of the AUN world; `map=`, `AddPeer` and discovery cover the rest.
+
+**Location and overrides.** `<per-user Beebium directory>/aun-map.json` (macOS `~/Library/Application Support/Beebium/`, Windows `%APPDATA%\Beebium\`, Linux `$XDG_CONFIG_HOME/beebium/` or `~/.config/beebium/`) — the same directory presets and discs use. Override the path with `BEEBIUM_AUN_MAP_FILEPATH=<path>` for the environment or `--aun map-file=<path>` for one launch; `--aun map-file=none` disables the file (hermetic runs and tests use this).
+
+**Format.** A JSON object with two optional arrays:
+
+```json
+{
+  "peers": [
+    {"net": 0, "station": 254, "host": "192.168.1.10", "port": 32768,
+     "label": "PiEconetBridge file server"},
+    {"net": 0, "station": 41, "host": "risc-pc.local", "port": 32768}
+  ],
+  "subnets": [
+    {"net": 128, "subnet": "192.168.5.0/24", "label": "RISC OS convention"}
+  ]
+}
+```
+
+- `peers[]`: `net` (0..255), `station` (1..254), `host` (an IPv4 literal or a DNS name), `port` (1..65535), optional `label`. One entry per `(net, station)`; a duplicate is a load error naming both. A host is resolved when the file is loaded and on every reload; a name that does not resolve keeps its entry, shown as unreachable rather than routed. Resolution never runs on the emulation thread, and a name that takes too long is treated as unresolved for that pass and retried on the next reload.
+- `subnets[]`: the RISC OS `AUNMap` convention — "net N is this /24, the station is the last octet, the port is 32768". Both halves follow from one entry, with no switch to take one without the other: **inbound**, a datagram from an unknown sender inside the `/24` on port 32768 is accepted as net N station x (instead of being dropped); **outbound**, a frame for N.x with no explicit peer is sent to the `/24`'s x:32768. A guessed route is recorded as a `Subnet` peer (so it shows in the sidebar and resolves directly afterwards) and logged as a guess under `BEEBIUM_AUN_TRACE`. Only `/24` is supported — it is the one net-level mapping with a unique endpoint per station. A subnet rule can also be given for one launch with `--aun subnet=net@a.b.c.0/24`.
+
+Unknown keys are ignored (so a newer Beebium's file is not damaged by an older one), and a malformed file is reported with a position while the transport still comes up, keeping the previous entries.
+
+**Reload.** Each instance polls the file's modification time on the discovery sweep (~2.5 s) and reloads on change, replacing only the `MapFile` and `Subnet` state — `Api`, `Launch` and `Discovered` are untouched — so a hand or GUI edit reaches every running instance within a few seconds with no restart and no Break. `AunService.ReloadMap` forces a reload; `AunService.GetStatus` reports the file path on the server's host, its entry count and the last load error. The full design is in [`docs/discussion/aun-peer-map-file.md`](discussion/aun-peer-map-file.md).
 
 This means **Beebium-to-Beebium AUN works with no `map=` configuration on the same LAN**: launch two servers with `--aun port=32768 --station 1` and `--aun port=32769 --station 254` and they'll find each other within a couple of seconds (`mDNS resolve + getaddrinfo` round-trip).
 
@@ -172,7 +203,14 @@ The bridge matches Beebium's datagrams against its `AUN MAP HOST` line by source
 
 `docker/pieconetbridge/run-recipe.sh` builds a wire-free bridge image (no Pi, HAT or kernel module; pinned upstream commit) and starts it with this configuration, taking Beebium's host and port from `BEEBIUM_HOST` and `BEEBIUM_AUN_PORT`. Its `render` command prints the configuration for a bridge you run yourself.
 
-When the AUN peer map file (#139) lands, the `map=` entry above becomes one `peers` entry in `aun-map.json`, shared by every Beebium instance on the host; this paragraph will then give that form.
+The `map=` entry above can instead be a standing `peers` entry in `aun-map.json`, shared by every Beebium instance on the host, so the bridge is mapped once rather than on every launch:
+
+```json
+{"peers": [{"net": 1, "station": 254, "host": "<bridge-host>", "port": 32768,
+            "label": "PiEconetBridge file server"}]}
+```
+
+then launch with just `--aun net=2:port=32768` (the station and sideways ROM as above). See "The AUN map file" above.
 
 ### Background: known gaps
 
