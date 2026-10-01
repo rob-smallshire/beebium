@@ -186,6 +186,16 @@ private:
     mutable std::mutex name_map_mutex_;
     std::map<std::string, PeerRef> name_to_peer_;
 
+    // Every announcement we have seen and not withdrawn, keyed by instance
+    // name, with its full parsed fields. The browser delivers an announcement
+    // once and never re-delivers it, but a station change re-partitions which
+    // announcements are our own number, a peer, or a collision -- so we keep
+    // each one here and re-run the add path over all of them when our station
+    // changes (#148). Our own reflection is never stored. Dropped on
+    // withdrawal (non-same-host) and when the liveness sweep reaps a same-host
+    // peer, so a dead station is never re-adopted. Guarded by name_map_mutex_.
+    std::map<std::string, discovery::DiscoveredService> seen_;
+
     // A discovered advertisement refused as a collision (its (net, stn) was
     // held by a different live station), kept so it can be adopted once that
     // number frees. seq orders them: on adoption the most recent for a given

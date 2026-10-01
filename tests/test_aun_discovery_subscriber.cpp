@@ -625,6 +625,53 @@ TEST_CASE("AunDiscoverySubscriber: own-number collision -- a claimant with no si
           std::string::npos);
 }
 
+// #148: an announcement is delivered once and never re-delivered, so a station
+// change must re-evaluate the announcements we remember. The instance that held
+// our OLD number becomes an ordinary peer; a peer at our NEW number becomes an
+// own-number collision.
+TEST_CASE("AunDiscoverySubscriber: renumbering adopts the holder of our old number",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80, std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+    // While we are 80, a different instance on 0.80 is an own-number collision,
+    // not a peer -- nothing is routable to it.
+    subscriber.inject_added(make_service("Other 0.80", 0, 80, 50000,
+                                         nonlocal_ip(), "other-uuid"));
+    CHECK(peers.station_collisions().count == 1);
+    CHECK(peers.peer_count() == 0);
+
+    // We renumber to 81. The holder of our former 0.80 is now an ordinary peer,
+    // routable, and the own-number collision is gone -- even though mDNS never
+    // re-delivered the announcement.
+    subscriber.set_local_station(81);
+    CHECK(peers.station_collisions().count == 0);
+    REQUIRE(peers.peer_count() == 1);
+    auto ep = peers.resolve(0, 80);
+    REQUIRE(ep.has_value());
+    CHECK(ep->port == 50000);
+}
+
+TEST_CASE("AunDiscoverySubscriber: renumbering onto a held number makes it an own-number collision",
+          "[aun][discovery][subscriber][collision]") {
+    AunPeerSet peers;
+    AunDiscoverySubscriber subscriber(peers, 80, std::make_unique<FakeBrowser>(),
+                                      /*own_identity=*/"our-uuid");
+    // A peer at 0.81 is an ordinary, routable peer while we are 80.
+    subscriber.inject_added(make_service("Other 0.81", 0, 81, 50001,
+                                         nonlocal_ip(), "other-uuid"));
+    REQUIRE(peers.peer_count() == 1);
+    CHECK(peers.station_collisions().count == 0);
+
+    // We renumber to 81, onto that peer's number: it is no longer routable (it
+    // is our number now) and becomes an own-number collision.
+    subscriber.set_local_station(81);
+    CHECK_FALSE(peers.resolve(0, 81).has_value());
+    CHECK(peers.station_collisions().count == 1);
+    CHECK(peers.station_collisions().last.find("already in use") !=
+          std::string::npos);
+}
+
 TEST_CASE("AunDiscoverySubscriber: with no identity, our number is skipped silently",
           "[aun][discovery][subscriber][collision]") {
     // A subscriber with no own identity cannot tell its reflection from another

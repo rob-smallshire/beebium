@@ -553,6 +553,101 @@ TEST_CASE("AUN mDNS e2e: own-number collision tells incumbent and newcomer apart
           std::string::npos);
 }
 
+// #148, the user's exact sequence: two Station 80 instances and a Station 254
+// file server; renumber the second 80 to 81. The machine that held 80 is seen
+// by the renumbered machine only once -- as a claim on its own number while it
+// was still 80 -- and mDNS never re-delivers it, so before the fix 80 never
+// appeared in 81's peer list. After the fix all three see each other.
+TEST_CASE("AUN mDNS e2e: a renumbered station adopts the holder of its old number",
+          "[aun][discovery][e2e][.mdns]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    const std::string svc_type = unique_service_type();
+    constexpr uint8_t stn_server = 254;
+    constexpr uint8_t stn = 80;
+    constexpr uint8_t stn_new = 81;
+
+    // Server S and the incumbent client A come up first and find each other,
+    // so A is unambiguously S's 0.80 (all three share this one host, so a
+    // stale same-host entry would otherwise linger across B's renumber -- a
+    // test-rig artefact absent on the real multi-host network). B is brought up
+    // only after that.
+    AunBackend backend_s(0, stn_server, 0);
+    AunBackend backend_a(0, stn, 0);
+    REQUIRE(backend_s.is_connected());
+    REQUIRE(backend_a.is_connected());
+    AunPeerSet peers_s, peers_a;
+    peers_s.attach(&backend_s);
+    peers_a.attach(&backend_a);
+    AunDiscoveryAnnouncer ann_s(0, stn_server, backend_s.local_port(),
+                                "beebium-test", "1.0", "uuid-s");
+    AunDiscoveryAnnouncer ann_a(0, stn, backend_a.local_port(),
+                                "beebium-test", "1.0", "uuid-a");
+    ann_s.set_service_type(svc_type);
+    ann_a.set_service_type(svc_type);
+    REQUIRE(ann_s.start());
+    REQUIRE(ann_a.start());
+    AunDiscoverySubscriber sub_s(peers_s, stn_server, nullptr, "uuid-s");
+    AunDiscoverySubscriber sub_a(peers_a, stn, nullptr, "uuid-a");
+    sub_s.set_service_type(svc_type);
+    sub_a.set_service_type(svc_type);
+    REQUIRE(sub_s.start());
+    REQUIRE(sub_a.start());
+    REQUIRE(wait_until([&] {
+        return has_peer(peers_s, 0, stn, backend_a.local_port());
+    }));
+
+    // The second Station 80 (B) comes up: a collision with A everywhere.
+    AunBackend backend_b(0, stn, 0);
+    REQUIRE(backend_b.is_connected());
+    AunPeerSet peers_b;
+    peers_b.attach(&backend_b);
+    AunDiscoveryAnnouncer ann_b(0, stn, backend_b.local_port(),
+                                "beebium-test", "1.0", "uuid-b");
+    ann_b.set_service_type(svc_type);
+    REQUIRE(ann_b.start());
+    AunDiscoverySubscriber sub_b(peers_b, stn, nullptr, "uuid-b");
+    sub_b.set_service_type(svc_type);
+    REQUIRE(sub_b.start());
+
+    // B (the second 80) must have seen A's 0.80 as an own-number collision
+    // before it renumbers -- that is the announcement it must remember.
+    REQUIRE(wait_until([&] {
+        return peers_b.station_collisions().count >= 1;
+    }));
+    CHECK_FALSE(peers_b.resolve(0, stn).has_value());  // A not yet a peer of B
+
+    // B renumbers to 81, exactly as the transport's station-changed callback
+    // does: restamp since, re-announce, re-filter, tell the backend.
+    ann_b.set_since(3000);
+    ann_b.set_local_station(stn_new);
+    REQUIRE(ann_b.start());
+    sub_b.set_own_since(3000);
+    sub_b.set_local_station(stn_new);
+    backend_b.on_station_id_changed(stn_new);
+
+    // The fix: B now has A at 0.80, routable -- adopted from the remembered
+    // announcement with no re-delivery from mDNS.
+    REQUIRE(wait_until([&] {
+        return has_peer(peers_b, 0, stn, backend_a.local_port());
+    }));
+    CHECK(backend_b.is_reachable(0, stn));
+    // B's own-number collision cleared when it moved off 80.
+    REQUIRE(wait_until([&] {
+        return peers_b.station_collisions().count == 0;
+    }));
+
+    // A sees B at its new 0.81, and the server sees both.
+    REQUIRE(wait_until([&] {
+        return has_peer(peers_a, 0, stn_new, backend_b.local_port());
+    }));
+    REQUIRE(wait_until([&] {
+        return has_peer(peers_s, 0, stn, backend_a.local_port()) &&
+               has_peer(peers_s, 0, stn_new, backend_b.local_port());
+    }));
+}
+
 // #139: a map-file entry and discovery coexist. When the file pins a station
 // to a different endpoint than the one a peer announces over mDNS, the file
 // wins the routing and the disagreement is reported through the live collision

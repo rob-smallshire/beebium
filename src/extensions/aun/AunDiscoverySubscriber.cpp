@@ -177,6 +177,13 @@ void AunDiscoverySubscriber::handle_added(
         if (id_it != svc.txt_records.end() && id_it->second == own_identity_) {
             return;  // our own announcement
         }
+        // A genuine claim on our number by another instance. Remember it, with
+        // its fields, so if THIS machine later renumbers it can be re-evaluated
+        // as an ordinary peer -- the browser never re-delivers it (#148).
+        {
+            std::lock_guard lock(name_map_mutex_);
+            seen_[svc.instance_name] = svc;
+        }
         // First live station wins, so the two machines are in different
         // situations and must be told different things (#147). Decide which of
         // us claimed the number first from the bind-time "since" each
@@ -242,6 +249,14 @@ void AunDiscoverySubscriber::handle_added(
 
     if (svc.ipv4_addr_net_byte_order == 0 || svc.port == 0) {
         return;  // No usable endpoint yet (e.g. IPv6-only peer).
+    }
+
+    // Remember this peer announcement, with its fields, so a later station
+    // change can re-partition it (it may become our own number, or a parked
+    // collider for our new number) by re-running the add path (#148).
+    {
+        std::lock_guard lock(name_map_mutex_);
+        seen_[svc.instance_name] = svc;
     }
 
     // Note whether an operator source already holds this (net, stn): the
@@ -395,6 +410,16 @@ void AunDiscoverySubscriber::handle_removed(const std::string& instance_name) {
                 }
             }
         }
+        // Forget the remembered announcement so a station change never
+        // re-adopts a withdrawn station (#148) -- except a same-host peer we
+        // kept above, which is still reachable over loopback until the sweep
+        // reaps it (and that reap drops it from seen_ too).
+        const bool kept_same_host_peer =
+            !have_peer && ref.same_host &&
+            name_to_peer_.count(instance_name) > 0;
+        if (!kept_same_host_peer) {
+            seen_.erase(instance_name);
+        }
     }
 
     if (had_disagreement && trace_) {
@@ -482,6 +507,9 @@ void AunDiscoverySubscriber::sweep_once() {
         {
             std::lock_guard lock(name_map_mutex_);
             name_to_peer_.erase(c.name);
+            // The server exited: forget its announcement so a later station
+            // change does not re-adopt a dead peer (#148).
+            seen_.erase(c.name);
         }
         reaped.push_back({c.net, c.stn});
     }
@@ -549,23 +577,50 @@ void AunDiscoverySubscriber::adopt_pending(std::uint8_t net, std::uint8_t stn) {
 
 void AunDiscoverySubscriber::set_local_station(std::uint8_t local_stn) {
     local_stn_.store(local_stn, std::memory_order_relaxed);
-    // Our number changed, so any own-number collision (a claimant of our FORMER
-    // number) no longer collides with us: clear them all and republish.
-    bool cleared = false;
+
+    // A station change re-partitions every announcement we have ever seen: the
+    // instance that held our OLD number is now an ordinary peer; a parked
+    // collider for our NEW number is now an own-number collision; the rest are
+    // unchanged. mDNS never re-delivers an announcement the browser already
+    // delivered, so if we only cleared the old collisions the former holder of
+    // our number would never be adopted (#148). Instead, tear the discovered
+    // state down and rebuild it by re-running the add path over the remembered
+    // announcements against the new number, so nothing is left with a stale
+    // route or a stale collision.
+    std::vector<discovery::DiscoveredService> remembered;
+    std::vector<std::pair<std::uint8_t, std::uint8_t>> drop;
     {
         std::lock_guard lock(name_map_mutex_);
-        if (!own_collisions_.empty()) {
-            own_collisions_.clear();
-            cleared = true;
+        remembered.reserve(seen_.size());
+        for (const auto& [name, svc] : seen_) {
+            remembered.push_back(svc);
         }
-    }
-    if (cleared) {
-        if (trace_) {
-            std::cerr << "AUN RX: cleared own-number collisions "
-                         "(this machine's station changed)\n";
+        for (const auto& [name, ref] : name_to_peer_) {
+            drop.push_back({ref.net, ref.stn});
         }
-        publish_collision_report();
+        name_to_peer_.clear();
+        pending_.clear();
+        own_collisions_.clear();
+        file_disagreements_.clear();
     }
+    // Drop every discovered route outside the name-map lock (remove_peer takes
+    // the peer set's lock, the fixed order handle_added uses). handle_added's
+    // re-adds below restore the ones still live under the new number.
+    for (const auto& [net, stn] : drop) {
+        peers_.remove_peer(net, stn, AunPeerProvenance::Discovered);
+    }
+    if (trace_) {
+        std::cerr << "AUN RX: station changed to "
+                  << static_cast<unsigned>(local_stn) << "; re-evaluating "
+                  << remembered.size() << " known announcement(s)\n";
+    }
+    for (const auto& svc : remembered) {
+        handle_added(svc);
+    }
+    // handle_added republishes on each change it makes; publish once more so an
+    // all-clear (every former collision now resolved) is reported even when
+    // nothing was re-added.
+    publish_collision_report();
 }
 
 void AunDiscoverySubscriber::publish_collision_report() {
