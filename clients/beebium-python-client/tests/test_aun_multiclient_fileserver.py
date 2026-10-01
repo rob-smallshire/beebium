@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 
 from beebium.client import Beebium
-from beebium.client.pytest_plugin import LaunchBbc, resolve_preset
+from beebium.client.pytest_plugin import LaunchBbc
 
 FILE_SERVER_STATION = 254
 CLIENT_STATIONS = (80, 81)
@@ -94,7 +94,6 @@ def _command(bbc: Beebium, text: str) -> str:
 @pytest.mark.parametrize("nfs_rom_filename", ["acorn-anfs_4_18.rom", "acorn-nfs_3_34.rom"])
 def test_second_station_logs_on_to_file_server(
     launch_bbc: LaunchBbc,
-    beebium_server_filepath: Path | None,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     nfs_rom_filename: str,
@@ -111,9 +110,10 @@ def test_second_station_logs_on_to_file_server(
 
     # The shipped L3FS preset carries econet.transport; the CLI --aun now
     # overrides it rather than counting as a second transport (#150), so the
-    # preset is used as-is with no copy workaround.
+    # preset is used as-is with no copy workaround. launch_bbc resolves the
+    # id, and skips when there is no server to find it with.
     file_server = launch_bbc(
-        preset=resolve_preset("model-b-l3fs-aun", server=beebium_server_filepath),
+        preset="model-b-l3fs-aun",
         extra_args=[
             "--aun",
             _aun_args(ports[FILE_SERVER_STATION], {s: ports[s] for s in CLIENT_STATIONS}),

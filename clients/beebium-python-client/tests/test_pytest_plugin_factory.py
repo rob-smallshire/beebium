@@ -26,7 +26,6 @@ from pathlib import Path
 
 import pytest
 
-from beebium.client.exceptions import ServerNotFoundError
 from beebium.client.installation import ServerInstallation
 from beebium.client.pytest_plugin import PRESET_EXTENSION, resolve_preset
 
@@ -67,20 +66,6 @@ def _pid_is_alive(pid: int) -> bool:
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DISC_FILEPATH = REPO_ROOT / "tests" / "assets" / "discs" / "Disc001-CylonAttackAFSTD.ssd"
-
-
-@pytest.fixture(scope="module")
-def server_installation(beebium_server_filepath: Path | None) -> ServerInstallation:
-    """The server these tests launch, resolved as the plugin resolves it
-    (--beebium-server, BEEBIUM_SERVER, the checkout build, the beebium-server
-    wheel, then PATH). Tests that need one skip where there is none, as in the
-    wheel-only unit-test job."""
-    try:
-        if beebium_server_filepath is not None:
-            return ServerInstallation.coerce(beebium_server_filepath)
-        return ServerInstallation.default()
-    except ServerNotFoundError as e:
-        pytest.skip(f"no server to launch: {e}")
 
 
 @pytest.fixture

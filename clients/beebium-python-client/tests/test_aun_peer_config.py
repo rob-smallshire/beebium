@@ -27,6 +27,7 @@ from pathlib import Path
 
 from beebium.client import Beebium
 from beebium.client._proto import extension_ui_pb2
+from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation
 from beebium.ext.econet.aun import Aun, PeerSource
 
 
@@ -100,14 +101,12 @@ class _ViewStream:
         self._thread.join(timeout=2.0)
 
 
-def test_enable_with_port_binds_the_aun_transport(
-    mos_filepath: Path, beebium_server_filepath: Path | None
-) -> None:
+def test_enable_with_port_binds_the_aun_transport(mos_filepath: Path, server_installation: ServerInstallation) -> None:
     # #54: with the AUN transport configured but no station at launch, the
     # backend is inactive; Enable(aun_port=...) must bring it up through the
     # transport so AUN status shows the bound port, not local_port=0.
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", "net=1"],
     ) as bbc:
@@ -122,13 +121,13 @@ def test_enable_with_port_binds_the_aun_transport(
 
 
 def test_add_peer_before_enable_survives_and_is_listed(
-    mos_filepath: Path, beebium_server_filepath: Path | None
+    mos_filepath: Path, server_installation: ServerInstallation
 ) -> None:
     # #55: the peer table lives in the transport, not the backend, so AddPeer
     # works before the socket is up and the entry survives Enable bringing it
     # up. Previously this failed with "AUN backend is not active".
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", "net=1"],
     ) as bbc:
@@ -152,15 +151,13 @@ def test_add_peer_before_enable_survives_and_is_listed(
         assert peers[0].source == PeerSource.API
 
 
-def test_api_peer_survives_disable_and_reenable(
-    mos_filepath: Path, beebium_server_filepath: Path | None
-) -> None:
+def test_api_peer_survives_disable_and_reenable(mos_filepath: Path, server_installation: ServerInstallation) -> None:
     # #55: DisableEconet frees the backend. The peer table lives in the
     # transport, so the Api peer survives, peer edits after Disable are safe
     # (no use-after-free on the freed backend), and the peer is routed again
     # after a re-Enable.
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", "net=1"],
     ) as bbc:
@@ -189,19 +186,15 @@ def test_api_peer_survives_disable_and_reenable(
 
 
 def test_map_file_peers_listed_with_provenance_and_reloaded(
-    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+    mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
 ) -> None:
     # #139: launch with a map file; its peers are listed with "map file"
     # provenance, and an edit is picked up by ReloadMap without a restart.
     map_filepath = tmp_path / "aun-map.json"
-    map_filepath.write_text(
-        json.dumps(
-            {"peers": [{"net": 0, "station": 100, "host": "127.0.0.1", "port": 40100}]}
-        )
-    )
+    map_filepath.write_text(json.dumps({"peers": [{"net": 0, "station": 100, "host": "127.0.0.1", "port": 40100}]}))
 
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", f"map-file={map_filepath}"],
     ) as bbc:
@@ -216,11 +209,7 @@ def test_map_file_peers_listed_with_provenance_and_reloaded(
         assert status.map_file_entry_count == 1
 
         # Edit the file on disk: drop 100, add 101. ReloadMap applies it.
-        map_filepath.write_text(
-            json.dumps(
-                {"peers": [{"net": 0, "station": 101, "host": "127.0.0.1", "port": 40101}]}
-            )
-        )
+        map_filepath.write_text(json.dumps({"peers": [{"net": 0, "station": 101, "host": "127.0.0.1", "port": 40101}]}))
         aun.reload_map()
 
         stations = {p.stn for p in aun.peers}
@@ -229,7 +218,7 @@ def test_map_file_peers_listed_with_provenance_and_reloaded(
 
 
 def test_map_edit_rpcs_write_the_file_and_survive_a_hand_edit(
-    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+    mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
 ) -> None:
     # #141: the map-edit RPCs write the server's own file; a hand edit of the
     # file between two RPC calls (an unknown key) survives the next write, and
@@ -237,7 +226,7 @@ def test_map_edit_rpcs_write_the_file_and_survive_a_hand_edit(
     map_filepath = tmp_path / "aun-map.json"
 
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", f"map-file={map_filepath}"],
     ) as bbc:
@@ -275,19 +264,14 @@ def test_map_edit_rpcs_write_the_file_and_survive_a_hand_edit(
 
 
 def test_running_instance_sees_a_subcommand_write_via_the_poll(
-    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+    mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
 ) -> None:
     # #141: a CLI subcommand writing the map file reaches a running instance
     # through the same mtime poll a hand edit uses -- no RPC, no restart.
-    if beebium_server_filepath is None:
-        import pytest
-
-        pytest.skip("no server executable to run the subcommand with")
-
     map_filepath = tmp_path / "aun-map.json"
 
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", f"map-file={map_filepath}"],
     ) as bbc:
@@ -299,7 +283,7 @@ def test_running_instance_sees_a_subcommand_write_via_the_poll(
         # subcommand -- exactly what a GUI or a hand run would do.
         completed = subprocess.run(
             [
-                str(beebium_server_filepath),
+                str(server_installation.executable_filepath(DEFAULT_VARIANT)),
                 "add-aun-peer",
                 "0.254",
                 "127.0.0.1",
@@ -326,7 +310,7 @@ def test_running_instance_sees_a_subcommand_write_via_the_poll(
 
 
 def test_poll_driven_reload_repushes_the_sidebar_view(
-    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+    mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
 ) -> None:
     # #146: a map-file change seen by the sweep poll must re-push the AUN panel
     # view, not just update the peer table. We subscribe to the panel's
@@ -335,15 +319,10 @@ def test_poll_driven_reload_repushes_the_sidebar_view(
     # view to gain the "map file" row on its own. Station 111 is chosen so no
     # real announcer on the host or LAN supplies it via discovery; the only
     # source is the map file.
-    if beebium_server_filepath is None:
-        import pytest
-
-        pytest.skip("no server executable to run the subcommand with")
-
     map_filepath = tmp_path / "aun-map.json"
 
     with Beebium.launch(
-        server=beebium_server_filepath,
+        server=server_installation,
         mos_filepath=mos_filepath,
         extra_args=["--aun", f"map-file={map_filepath}"],
     ) as bbc:
@@ -360,7 +339,7 @@ def test_poll_driven_reload_repushes_the_sidebar_view(
             # A separate process edits the shared file -- no RPC on this server.
             completed = subprocess.run(
                 [
-                    str(beebium_server_filepath),
+                    str(server_installation.executable_filepath(DEFAULT_VARIANT)),
                     "add-aun-peer",
                     "0.111",
                     "127.0.0.1",
@@ -376,28 +355,22 @@ def test_poll_driven_reload_repushes_the_sidebar_view(
 
             # The poll reloads the file and must re-push the view on its own.
             assert stream.wait_for_map_file_row("0.111"), (
-                "the poll-driven reload updated the peer table but did not "
-                "re-push the sidebar view (#146)"
+                "the poll-driven reload updated the peer table but did not re-push the sidebar view (#146)"
             )
         finally:
             stream.close()
 
 
 def test_add_map_peer_in_one_instance_updates_a_second_instances_sidebar(
-    mos_filepath: Path, beebium_server_filepath: Path | None, tmp_path: Path
+    mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
 ) -> None:
     # #146, two-instance variant: instance A adds a peer through AddMapPeer,
     # writing the shared map file; instance B, subscribed to its own panel
     # view, gains the row from its poll with no interaction. Distinct AUN ports
     # so both can bind on this host; station 111 again avoids real discovery.
-    if beebium_server_filepath is None:
-        import pytest
-
-        pytest.skip("no server executable to run a second instance")
-
     map_filepath = tmp_path / "aun-map.json"
     launch_args = {
-        "server": beebium_server_filepath,
+        "server": server_installation,
         "mos_filepath": mos_filepath,
         "extra_args": ["--aun", f"map-file={map_filepath}"],
     }
@@ -417,8 +390,7 @@ def test_add_map_peer_in_one_instance_updates_a_second_instances_sidebar(
             bbc_a.transport[Aun].add_map_peer(0, 111, "127.0.0.1", 40111)
 
             assert stream.wait_for_map_file_row("0.111"), (
-                "instance B's sidebar view did not update after instance A "
-                "added a map-file peer (#146)"
+                "instance B's sidebar view did not update after instance A added a map-file peer (#146)"
             )
         finally:
             stream.close()

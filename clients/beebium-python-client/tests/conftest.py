@@ -22,6 +22,7 @@ import pytest
 
 from beebium.client import Beebium
 from beebium.client.exceptions import ServerNotFoundError
+from beebium.client.installation import ServerInstallation
 
 from firetrack import FIRETRACK_DISC_FILENAME
 from prestel_helpers import COMMSTAR_ROM_FILENAME, enter_prestel_chat
@@ -29,6 +30,20 @@ from tube_test_helpers import DFS_1770_ROM_CANDIDATES, find_dfs_1770_rom
 
 # The beebium fixtures (bbc, bbc_shared, stopped_bbc, etc.) are automatically
 # available from the beebium.client.pytest_plugin module via the entry point.
+
+
+@pytest.fixture(scope="module")
+def server_installation(beebium_server_filepath: Path | None) -> ServerInstallation:
+    """The server these tests launch, resolved as the plugin resolves it
+    (--beebium-server, BEEBIUM_SERVER, the checkout build, the beebium-server
+    wheel, then PATH). Tests that need one skip where there is none, as in the
+    wheel-only unit-test job."""
+    try:
+        if beebium_server_filepath is not None:
+            return ServerInstallation.coerce(beebium_server_filepath)
+        return ServerInstallation.default()
+    except ServerNotFoundError as e:
+        pytest.skip(f"no server to launch: {e}")
 
 
 @pytest.fixture(scope="module")
