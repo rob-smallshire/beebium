@@ -1,6 +1,6 @@
 {
   "name": "@beebium/client",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "TypeScript client for the Beebium BBC Micro emulator",
   "type": "module",
   "main": "dist/index.js",
