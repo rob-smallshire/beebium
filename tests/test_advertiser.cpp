@@ -13,8 +13,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/discovery/Advertiser.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <string>
 #include <thread>
 
 using namespace beebium::discovery;
@@ -43,6 +45,91 @@ TEST_CASE("Advertiser stop when not started is safe", "[advertiser]") {
     advertiser->stop();
     auto state = advertiser->state();
     REQUIRE_FALSE(state.advertising);
+}
+
+// Regression for GitHub #155: restarting a running advertiser must not
+// deallocate the DNS-SD service ref while its event thread is still inside a
+// DNS-SD call on it. The Bonjour advertiser used to deallocate the ref before
+// joining the event thread; macOS 14 tolerated the race but macOS 26 aborts
+// the process ("API MISUSE: Resurrection of an object" in libdispatch). The
+// trigger in the field is an AUN re-announce on a station change, which calls
+// advertiser->start() again -- and start() restarts by calling stop().
+//
+// This hammers that restart path: one driver repeatedly calls start() with a
+// changing ServiceInfo (each start() restarts the live event loop from the
+// previous start), interleaved with explicit stop()/start() pairs. It must run
+// to completion without crashing, and is clean under ASan/TSan. It needs no
+// network peer -- registering the service locally is enough -- but it does need
+// a functional local mDNS responder, so it skips where one is absent (e.g. a
+// Linux host without avahi-daemon, or Windows without Bonjour).
+TEST_CASE("Advertiser rapid restart does not resurrect the service ref",
+          "[advertiser][stress]") {
+    auto probe = create_advertiser();
+    if (!probe->state().available) {
+        SKIP("no mDNS advertiser on this platform");
+    }
+    ServiceInfo warmup;
+    warmup.instance_name = "Beebium Restart Probe";
+    warmup.service_type = "_beebium._tcp";
+    warmup.port = 48875;
+    if (!probe->start(warmup)) {
+        probe->stop();
+        SKIP("mDNS responder not functional in this environment");
+    }
+    probe->stop();
+
+    auto advertiser = create_advertiser();
+    constexpr int kIterations = 200;
+    for (int i = 0; i < kIterations; ++i) {
+        ServiceInfo info;
+        // A changing instance name mirrors a station renumber re-announce.
+        info.instance_name = "Beebium Stress " + std::to_string(i);
+        info.service_type = "_beebium._tcp";
+        info.port = static_cast<uint16_t>(48875 + (i % 7));
+        info.txt_records["uuid"] = "stress-" + std::to_string(i);
+        info.txt_records["seq"] = std::to_string(i);
+
+        REQUIRE(advertiser->start(info));
+
+        // Let the event loop actually enter DNSServiceProcessResult on this
+        // ref before the next start() restarts it -- that is the window the
+        // old ordering crashed in. Vary it so some restarts land mid-call.
+        if (i % 3 == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        // Occasionally restart via an explicit stop()/start() pair rather than
+        // start()'s implicit restart, to cover both orderings.
+        if (i % 5 == 0) {
+            advertiser->stop();
+        }
+    }
+    advertiser->stop();
+    REQUIRE_FALSE(advertiser->state().advertising);
+
+    // A concurrent driver thread stands in for the gRPC thread issuing the
+    // re-announce while the advertiser is already running. Calls on a single
+    // advertiser stay serialized (the real re-announce holds discovery_mutex_),
+    // so the driver owns the object for the whole burst; the point is that the
+    // restart races the advertiser's OWN event thread, not two callers.
+    auto driver = create_advertiser();
+    std::atomic<bool> go{false};
+    std::thread worker([&] {
+        while (!go.load()) { /* spin until released */ }
+        for (int i = 0; i < kIterations; ++i) {
+            ServiceInfo info;
+            info.instance_name = "Beebium Worker " + std::to_string(i);
+            info.service_type = "_beebium._tcp";
+            info.port = 48875;
+            driver->start(info);
+            if (i % 4 == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+        driver->stop();
+    });
+    go.store(true);
+    worker.join();
+    REQUIRE_FALSE(driver->state().advertising);
 }
 
 TEST_CASE("Advertiser start when unavailable returns false", "[advertiser]") {

@@ -98,15 +98,20 @@ public:
     }
 
     void stop() override {
+        // JOIN the event thread before deallocating browse_ref_. The event
+        // loop services browse_ref_ with DNSServiceProcessResult; deallocating
+        // it from here while that thread is inside the call is forbidden by
+        // dnssd and aborts on recent macOS. The loop selects with a short
+        // timeout and re-checks running_, so the join is prompt.
         running_ = false;
+
+        if (event_thread_.joinable()) {
+            event_thread_.join();
+        }
 
         if (browse_ref_) {
             dnssd_api()->DNSServiceRefDeallocate(browse_ref_);
             browse_ref_ = nullptr;
-        }
-
-        if (event_thread_.joinable()) {
-            event_thread_.join();
         }
 
         // Tear down any pending resolve/address refs.

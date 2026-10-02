@@ -58,6 +58,42 @@ TEST_CASE("Browser initial state", "[browser]") {
     CHECK_FALSE(s.browsing);
 }
 
+// Regression companion to the advertiser stress test (GitHub #155). The Bonjour
+// browser's stop() used to deallocate the browse ref before joining its event
+// thread; its select() loop made the window small but not zero. Restarting the
+// browser repeatedly must never deallocate the browse ref while the event
+// thread is inside DNSServiceProcessResult on it. No network peer is needed:
+// an empty browse still runs the event loop on the browse ref, and start()
+// restarts it via stop(). Skips where no browser is available.
+TEST_CASE("Browser rapid restart does not resurrect the browse ref",
+          "[browser][stress]") {
+    auto probe = create_browser();
+    if (!probe->state().available) {
+        SKIP("no mDNS browser on this platform");
+    }
+    BrowserCallbacks cbs;  // no-op callbacks; we are exercising lifecycle only
+    if (!probe->start("_beebium._tcp", cbs)) {
+        probe->stop();
+        SKIP("mDNS browse not functional in this environment");
+    }
+    probe->stop();
+
+    auto browser = create_browser();
+    constexpr int kIterations = 200;
+    for (int i = 0; i < kIterations; ++i) {
+        BrowserCallbacks callbacks;
+        REQUIRE(browser->start("_beebium._tcp", callbacks));
+        if (i % 3 == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        if (i % 5 == 0) {
+            browser->stop();
+        }
+    }
+    browser->stop();
+    CHECK_FALSE(browser->state().browsing);
+}
+
 TEST_CASE("Browser stop without start is safe", "[browser]") {
     auto browser = create_browser();
     browser->stop();

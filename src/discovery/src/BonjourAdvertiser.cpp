@@ -16,7 +16,15 @@
 
 #include "DnssdApi.hpp"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <sys/select.h>
+#endif
+
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <thread>
 
@@ -46,6 +54,18 @@ public:
             std::lock_guard lock(mutex_);
             info_ = info;
         }
+
+#ifdef _WIN32
+        // event_loop() calls select() on the DNS-SD socket, which needs Winsock
+        // initialised in this process. Refcounted, so this is safe even when the
+        // host app already called WSAStartup.
+        if (!wsa_inited_) {
+            WSADATA wsa_data;
+            if (WSAStartup(MAKEWORD(2, 2), &wsa_data) == 0) {
+                wsa_inited_ = true;
+            }
+        }
+#endif
 
         // Build TXT record
         TXTRecordRef txt_ref;
@@ -87,18 +107,25 @@ public:
     }
 
     void stop() override {
-        // Signal event loop to stop
+        // Signal the event loop to stop, then JOIN the event thread before
+        // touching service_ref_. The event thread may be inside
+        // DNSServiceProcessResult on service_ref_; deallocating a DNSServiceRef
+        // while another thread is inside a DNS-SD call on it is forbidden by
+        // dnssd and aborts the process on recent macOS ("API MISUSE:
+        // Resurrection of an object" in libdispatch). The event loop blocks in
+        // select() with a short timeout and re-checks running_, so the join
+        // completes promptly once running_ is cleared.
         running_ = false;
 
-        // Deallocate service (causes DNSServiceProcessResult to return)
+        if (event_thread_.joinable()) {
+            event_thread_.join();
+        }
+
+        // The event thread is gone: now nothing else races service_ref_, so it
+        // is safe to deallocate it here.
         if (service_ref_) {
             dnssd_api()->DNSServiceRefDeallocate(service_ref_);
             service_ref_ = nullptr;
-        }
-
-        // Wait for event thread to finish
-        if (event_thread_.joinable()) {
-            event_thread_.join();
         }
 
         // Reset state
@@ -107,6 +134,13 @@ public:
             std::lock_guard lock(mutex_);
             actual_name_.clear();
         }
+
+#ifdef _WIN32
+        if (wsa_inited_) {
+            WSACleanup();
+            wsa_inited_ = false;
+        }
+#endif
     }
 
     AdvertiserState state() const override {
@@ -123,20 +157,47 @@ private:
     std::atomic<bool> registered_{false};
     std::atomic<bool> running_{false};
     std::thread event_thread_;
+#ifdef _WIN32
+    bool wsa_inited_ = false;
+#endif
 
     mutable std::mutex mutex_;
     ServiceInfo info_;
     std::string actual_name_;
 
     void event_loop() {
+        // Drive the service ref via select() on its DNS-SD socket with a short
+        // timeout, calling DNSServiceProcessResult only when the socket is
+        // readable. This lets stop() shut the loop down by clearing running_
+        // and joining this thread BEFORE deallocating service_ref_: we never
+        // deallocate the ref while this thread might be inside a DNS-SD call on
+        // it (which aborts on recent macOS). service_ref_ is set once before
+        // this thread starts and only cleared after it is joined, so reading it
+        // here without a lock is safe.
         const DnssdApi* dnssd = dnssd_api();
-        while (running_ && service_ref_) {
-            // DNSServiceProcessResult blocks until an event is ready
-            // or the service ref is deallocated
-            DNSServiceErrorType err = dnssd->DNSServiceProcessResult(service_ref_);
-            if (err != kDNSServiceErr_NoError) {
-                // Service was deallocated or error occurred
-                break;
+        while (running_) {
+            int fd = static_cast<int>(dnssd->DNSServiceRefSockFD(service_ref_));
+            if (fd < 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                continue;
+            }
+
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(fd, &readfds);
+
+            timeval tv{};
+            tv.tv_sec = 0;
+            tv.tv_usec = 100 * 1000;
+            int n = ::select(fd + 1, &readfds, nullptr, nullptr, &tv);
+            if (!running_) break;
+            if (n <= 0) continue;
+
+            if (FD_ISSET(fd, &readfds)) {
+                DNSServiceErrorType err = dnssd->DNSServiceProcessResult(service_ref_);
+                if (err != kDNSServiceErr_NoError) {
+                    break;
+                }
             }
         }
     }
