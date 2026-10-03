@@ -41,6 +41,7 @@
 #include "beebium/disc/DiscConcepts.hpp"
 #include "beebium/econet/EconetConcepts.hpp"
 #include "beebium/econet/AunBackend.hpp"
+#include "beebium/econet/StationSelection.hpp"
 #include "beebium/econet/TestBackend.hpp"
 #include "beebium/tube/TubeConcepts.hpp"
 #include "beebium/service/Server.hpp"
@@ -467,6 +468,10 @@ struct ServerConfig {
 
     // Econet configuration
     int station_number = -1;                          // -1 = Econet not fitted
+    // When the station is requested as `auto[:lo-hi]` (issue #67) the number is
+    // chosen at launch by the transport, not now: station_number stays -1 and
+    // this range is resolved in install_econet, which then sets the station.
+    std::optional<beebium::econet::StationRange> station_auto_range;
     // Both AUN (built-in) and Piconet (plugin) are selected via the
     // generic extension dispatch:
     //
@@ -586,7 +591,8 @@ void print_usage(const char* program_name) {
     }
 
     if constexpr (HasEconetSocket<Memory>) {
-        std::cerr << "  --station <1-254>        Econet station number (enables Econet)\n";
+        std::cerr << "  --station <n>|auto[:lo-hi]  Econet station number (enables Econet);\n"
+                  << "                           'auto' picks a free number in lo-hi (default 80-253)\n";
     }
 
 
@@ -764,7 +770,15 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
     // Econet
     if (preset.econet) {
         const auto& econet = *preset.econet;
-        config.station_number = econet.station;
+        if (econet.auto_range.has_value()) {
+            // The number is chosen at launch (issue #67); install_econet
+            // resolves it. A later --station on the command line overrides this.
+            config.station_auto_range = econet.auto_range;
+            config.station_number = -1;
+        } else {
+            config.station_number = econet.station;
+            config.station_auto_range.reset();
+        }
 
         // Transport: convert preset.econet.transport (if present) into an
         // ExtensionInstance so it flows through the same dispatch as a
@@ -1186,15 +1200,18 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
         } else if (arg == "--fdc" && i + 1 < argc) {
             config.fdc_type = argv[++i];
         } else if (arg == "--station" && i + 1 < argc) {
-            try {
-                config.station_number = parse_int(argv[++i], "--station");
-            } catch (const std::runtime_error& e) {
-                std::cerr << "Error: " << e.what() << "\n";
+            std::string error;
+            auto spec = beebium::econet::parse_station_spec(argv[++i], error);
+            if (!spec.has_value()) {
+                std::cerr << "Error: --station " << error << "\n";
                 return ExitCode::USAGE;
             }
-            if (config.station_number < 1 || config.station_number > 254) {
-                std::cerr << "Error: --station must be 1-254\n";
-                return ExitCode::USAGE;
+            if (spec->is_auto) {
+                config.station_auto_range = spec->range;
+                config.station_number = -1;  // chosen at launch, in install_econet
+            } else {
+                config.station_number = spec->fixed;
+                config.station_auto_range.reset();
             }
         } else if (arg == "--provenance-type" && i + 1 < argc) {
             config.provenance_type = argv[++i];
@@ -1597,8 +1614,52 @@ std::optional<int> install_econet(MachineType& machine,
     using Memory = typename MachineType::Memory;
 
     if constexpr (HasEconetSocket<Memory>) {
-        if (config.station_number >= 1) {
-            auto station = static_cast<uint8_t>(config.station_number);
+        bool auto_assigned = false;
+        // The station to fit: config.station_number for a fixed number, or the
+        // number the transport chooses for --station auto. config is const, so
+        // the resolved value lives here rather than being written back.
+        int resolved_station = config.station_number;
+
+        // --station auto (or a preset's "auto"): choose a free station number
+        // now, before the socket is enabled, so the guest reads its final
+        // number at its first boot and never needs a Break (issue #67). The
+        // number comes from the transport, which browses the net; a transport
+        // that cannot choose for itself (Piconet, or AUN with port=none) makes
+        // --station auto an error rather than a silent fixed number.
+        if (config.station_auto_range.has_value()) {
+            if (transport_registry.empty()) {
+                std::cerr << "Error: --station auto needs an Econet transport; "
+                             "pass --aun ...\n";
+                return 1;
+            }
+            if (transport_registry.size() > 1) {
+                std::cerr << "Error: BBC machines support at most one Econet "
+                             "transport (got " << transport_registry.size() << ").\n";
+                return 1;
+            }
+            auto& transport = *transport_registry.extensions().front();
+            auto outcome = transport.select_auto_station(*config.station_auto_range);
+            using Status =
+                beebium::EconetTransportExtension::AutoStationOutcome::Status;
+            if (outcome.status == Status::Unsupported) {
+                std::cerr << "Error: " << outcome.report << "\n";
+                return 1;
+            }
+            // Exhaustion and a still-contested fall-back carry a report; print
+            // it (the design asks for the range-exhausted case to be reported
+            // on stderr rather than failing the launch).
+            if (!outcome.report.empty()) {
+                std::cerr << outcome.report << "\n";
+            }
+            resolved_station = outcome.station;
+            auto_assigned = true;
+        }
+
+        if (resolved_station >= 1) {
+            auto station = static_cast<uint8_t>(resolved_station);
+            // Appended to the "Econet station N" lines so the log shows when a
+            // number was chosen automatically rather than given.
+            const char* auto_note = auto_assigned ? " (auto-assigned)" : "";
 
             // Prefer an econet-transport extension if one was configured.
             // BBC machine policy: at most one transport. (Future Acorn
@@ -1621,12 +1682,12 @@ std::optional<int> install_econet(MachineType& machine,
                     // narrative the null-backend path below emits.
                     const bool connected = backend->is_connected();
                     if (connected) {
-                        std::cout << "Econet station " << config.station_number
-                                  << " via transport extension '"
+                        std::cout << "Econet station " << resolved_station
+                                  << auto_note << " via transport extension '"
                                   << transport.name() << "'\n";
                     } else {
-                        std::cout << "Econet station " << config.station_number
-                                  << " (transport '" << transport.name()
+                        std::cout << "Econet station " << resolved_station
+                                  << auto_note << " (transport '" << transport.name()
                                   << "' configured but unavailable -- no network)\n";
                     }
                     machine.state().memory.econet_socket.enable(
@@ -1642,8 +1703,8 @@ std::optional<int> install_econet(MachineType& machine,
                     machine.state().memory.econet_socket.enable(
                         station, std::move(stub), true,
                         transport.requires_real_time_pacing());
-                    std::cout << "Econet station " << config.station_number
-                              << " (transport '" << transport.name()
+                    std::cout << "Econet station " << resolved_station
+                              << auto_note << " (transport '" << transport.name()
                               << "' configured but unavailable -- no network)\n";
                 }
                 return std::nullopt;
@@ -1658,10 +1719,10 @@ std::optional<int> install_econet(MachineType& machine,
                 station, std::move(backend),
                 true);  // aun_mode = true (FourWayHandshake wraps disconnected backend)
 
-            std::cout << "Econet station " << config.station_number
+            std::cout << "Econet station " << resolved_station << auto_note
                       << " (no network -- pass --aun port=N or --piconet device_path=... to enable a transport)\n";
         }
-    } else if (config.station_number >= 1) {
+    } else if (config.station_number >= 1 || config.station_auto_range.has_value()) {
         std::cerr << "Warning: --station option ignored (machine has no Econet socket)\n";
     }
 
@@ -4392,6 +4453,9 @@ public:
         // into the generic extensions array -- so a preset created with
         // --station/--aun round-trips through PresetLoader to the same config.
         int station_number = -1;
+        // Set instead of station_number when --station is auto[:lo-hi] (issue
+        // #67): the preset records the literal, resolved at launch.
+        std::string station_auto_text;
         std::optional<typename ServerConfig<MachineType>::ExtensionInstance>
             econet_transport;
 
@@ -4432,15 +4496,19 @@ public:
             } else if (arg == "--sideways" && i + 1 < argc) {
                 sideways_args.push_back(argv[++i]);
             } else if (arg == "--station" && i + 1 < argc) {
-                try {
-                    station_number = std::stoi(argv[++i]);
-                } catch (...) {
-                    std::cerr << "Error: --station must be an integer 1-254\n";
+                std::string value = argv[++i];
+                std::string error;
+                auto spec = beebium::econet::parse_station_spec(value, error);
+                if (!spec.has_value()) {
+                    std::cerr << "Error: --station " << error << "\n";
                     return ExitCode::USAGE;
                 }
-                if (station_number < 1 || station_number > 254) {
-                    std::cerr << "Error: --station must be 1-254\n";
-                    return ExitCode::USAGE;
+                if (spec->is_auto) {
+                    station_auto_text = value;  // recorded verbatim in the preset
+                    station_number = -1;
+                } else {
+                    station_number = spec->fixed;
+                    station_auto_text.clear();
                 }
             } else if (auto mit = cli_name_to_manifest.find(to_lower(arg));
                        mit != cli_name_to_manifest.end()) {
@@ -4574,13 +4642,17 @@ public:
         // station in the econet section); a station with no transport is fine
         // -- Econet is fitted but has no network, exactly as `start` treats a
         // bare --station.
-        if (econet_transport && station_number < 1) {
+        if (econet_transport && station_number < 1 && station_auto_text.empty()) {
             std::cerr << "Error: Econet transport '" << econet_transport->name
-                      << "' requires --station <1-254>\n";
+                      << "' requires --station <1-254> or --station auto\n";
             return ExitCode::USAGE;
         }
-        if (station_number >= 1) {
-            preset["econet"]["station"] = station_number;
+        if (station_number >= 1 || !station_auto_text.empty()) {
+            if (!station_auto_text.empty()) {
+                preset["econet"]["station"] = station_auto_text;
+            } else {
+                preset["econet"]["station"] = station_number;
+            }
             if (econet_transport) {
                 auto to_value = [](const std::string& type,
                                    const std::string& v) -> nlohmann::ordered_json {

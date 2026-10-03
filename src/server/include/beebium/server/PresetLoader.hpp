@@ -13,6 +13,7 @@
 #pragma once
 
 #include <beebium/disc/DiscUrl.hpp>
+#include <beebium/econet/StationSelection.hpp>
 #include <beebium/server/CliArgParsers.hpp>
 
 #include <nlohmann/json.hpp>
@@ -50,7 +51,10 @@ struct PresetTransportConfig {
 
 // Preset Econet configuration
 struct PresetEconetConfig {
-    int station;                                     // 1-254
+    int station = 0;                                 // 1-254; unused when auto_range is set
+    // Set when the preset's station is "auto" / "auto:lo-hi" (issue #67): the
+    // number is chosen at launch, so `station` is unused.
+    std::optional<beebium::econet::StationRange> auto_range;
     std::optional<PresetTransportConfig> transport;  // present means "use this transport"
 };
 
@@ -196,17 +200,31 @@ inline std::pair<std::optional<PresetEconetConfig>, std::string> parse_econet_se
 
     PresetEconetConfig econet;
 
-    // Station number (required within econet section)
+    // Station (required within econet section): an integer 1-254, or the string
+    // "auto" / "auto:lo-hi" to choose a free number at launch (issue #67).
     if (!econet_json.contains("station")) {
         return {std::nullopt, "Econet section requires a 'station' field"};
     }
-    if (!econet_json["station"].is_number_integer()) {
-        return {std::nullopt, "Econet 'station' must be an integer"};
-    }
-    econet.station = econet_json["station"].get<int>();
-    if (econet.station < 1 || econet.station > 254) {
-        return {std::nullopt, "Econet station number must be between 1 and 254, got " +
-                              std::to_string(econet.station)};
+    if (econet_json["station"].is_number_integer()) {
+        econet.station = econet_json["station"].get<int>();
+        if (econet.station < 1 || econet.station > 254) {
+            return {std::nullopt, "Econet station number must be between 1 and 254, got " +
+                                  std::to_string(econet.station)};
+        }
+    } else if (econet_json["station"].is_string()) {
+        std::string error;
+        auto spec = beebium::econet::parse_station_spec(
+            econet_json["station"].get<std::string>(), error);
+        if (!spec.has_value()) {
+            return {std::nullopt, "Econet 'station': " + error};
+        }
+        if (spec->is_auto) {
+            econet.auto_range = spec->range;
+        } else {
+            econet.station = spec->fixed;
+        }
+    } else {
+        return {std::nullopt, "Econet 'station' must be an integer or \"auto\""};
     }
 
     // Transport (optional): { name: "<extension-name>", parameters: {...} }

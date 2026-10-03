@@ -371,6 +371,20 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
     # _aun._udp and discovers the peer via mDNS -- no fixed port, no map=.
     --station 80 --aun port=0)
 
+# As above but with an automatically-chosen station number (issue #67): the
+# server browses _aun._udp at launch and takes the lowest free number in the
+# default range, so several clients can be started together with no renumbering
+# (the trigger for #68/#148/#155). machine_name is the fixed "AUN client" since
+# the number is not known until launch; it becomes a template once #153 lands.
+add_system_preset(beebium-model-b "model-b-disc-aun-auto"
+    "AUN client, auto station (Model B)" "1985"
+    DESCRIPTION "Econet over AUN (UDP), automatic station number, ANFS + DFS"
+    --machine-name "AUN client"
+    --fdc acorn-1770
+    --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
+    --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
+    --station auto --aun port=0)
+
 # Tube coprocessor presets, so users can try the second processors (the machine
 # config UI has no Tube axis yet). Each is its disc-capable sibling plus a Tube
 # coprocessor plugin; both boot to the Tube banner (the DFS ROM carries the Tube
