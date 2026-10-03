@@ -265,16 +265,23 @@ shares, so a panel can never contradict the overlay beside it:
 Two finer rules keep a panel truthful even before the window-level verdict:
 
 - A streamed status that is **lost** (its stream ended for a non-cancellation
-  reason) is marked stale by its client: live gauges (a link's connected flag,
-  rate counters) are cleared, so nothing reads as a live link to a server that is
-  gone, while stable configuration (station number, fitted-or-not) is kept as
-  last-known for display. A fresh snapshot on a new stream clears the staleness,
+  reason) is marked stale by its client: live gauges (for Econet, the link's
+  connected flag, the speed-gate flag and the station-collision warning) are
+  cleared, so nothing reads as a live link to a server that is gone, while stable
+  configuration (station number, fitted-or-not) is kept as last-known for
+  display. The Network sidebar shows the link as "Unknown", never "Connected",
+  until a fresh snapshot arrives. A fresh snapshot on a new stream clears the staleness,
   and a superseded stream's late ending is ignored, so a reconnect is not
   poisoned by the old stream it replaced.
 - A list that has **never loaded** -- e.g. the transports list, when its first
   request met a dead server -- says "unavailable" rather than rendering as empty,
   so a crash is not mistaken for a machine that simply has no such feature; a list
   that loaded and then failed keeps its last contents.
+- An extension's control panel (`ExtensionUiService`, e.g. the AUN transport
+  panel) keeps its last View when its stream is **lost**, drawn dimmed and
+  disabled, rather than vanishing as though the machine had no such panel; it
+  is dropped only when the stream **finishes** (closed by the server, cancelled,
+  or no such extension).
 
 An editor that would dispatch to the server is disabled, and any open editor
 popover is dismissed, the moment availability leaves live, so the user cannot
@@ -308,6 +315,7 @@ fingerprint; all four constants were regenerated together.
 | Liveness states, heartbeat watchdog | `clients/macos/.../SystemClient.swift` (`Liveness`, `armHeartbeatWatchdog`) |
 | Disconnection overlays | `clients/macos/.../ContentView.swift` (`statusOverlay`, `disconnectionOverlay`, `reconnectingOverlay`, `recoveryFailedOverlay`) |
 | Active reconnect loop | `clients/macos/.../ReconnectCoordinator.swift` (+ `ReconnectCoordinatorTests`) |
+| Sidebar availability and staleness | `clients/macos/.../ServerAvailability.swift` (`ServerAvailability`, `SidebarStalePresentation`, `NetworkSidebarPresentation`); stream-loss handling in `EconetClient`, `EconetTransportsClient`, `ExtensionUiClient` |
 | Host sleep/wake abstraction | `clients/macos/.../SystemPowerMonitor.swift` (`SystemPowerMonitoring`, `MacSystemPowerMonitor`) |
 | Shared event loop group, channel teardown | `clients/macos/.../VideoClient.swift` (`sharedGroup`, `disconnect`) |
 | Window close flow | `clients/macos/.../ContentView.swift` (`WindowCloseCoordinator`), `MachineManager` |

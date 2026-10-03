@@ -15,6 +15,10 @@ Several parts of the protocol exchange **filesystem paths**:
 - `DriveStatus.disc_url` and a storage device's backing path are paths on the
   *server's* host. A front end that offers "reveal this in the file manager"
   is opening them on the client's host.
+- An extension panel's `FileReference` control (extension_ui.proto) carries a
+  `path` on the server's host -- the AUN panel's "Shared AUN map", for
+  instance, is the server's `aun-map.json`, as is `AunService.GetStatus`'s
+  `map_file_path`.
 
 Both are meaningful only when the two processes share a filesystem. With a
 server on another machine, inserting a disc fails with a confusing "no such
@@ -87,6 +91,9 @@ every peer look as though it is somewhere else.
 | Drag and drop a disc image | Yes | Same, from the file manager |
 | Reveal in file manager | Yes | Opens a path the server reported |
 | Reveal a sideways ROM image | Yes | Opens a path the server reported |
+| Reveal a `FileReference` (e.g. the AUN map file) | Yes | Opens a path the server reported |
+| A `FileReference`'s server actions (e.g. Reload) | **No** | Dispatched to the server, which acts on its own file |
+| Editing the AUN map's peers and subnets | **No** | The values travel, not a path; the server writes its own file (`AunService` map RPCs, or the panel's lists) |
 | Copy path | **No** | Still the path the server reported, and still worth quoting -- to paste into a terminal on that host, or into a bug report |
 
 Copy Path is the useful boundary case: it hands the user a string rather than
@@ -119,6 +126,12 @@ it, to catch a file deleted since the server loaded it.
 - `MemoryModeView` gates Reveal in Finder on a sideways slot's image. The
   Memory sidebar is read-only -- the client never calls `ConfigureSlot` -- so
   the slot's `image_name` only ever travels server-to-client.
+- `FileReferenceView` builds its pull-down with `FileReferenceMenu.items`: the
+  server's actions first, then Reveal in Finder only when `isServerLocal`, then
+  Copy Path always. The Network sidebar passes `isServerLocal` through
+  `ExtensionPanelView` to the renderer; a panel that is not given it (the
+  Peripherals sidebar's) defaults to `false`, so it never offers Reveal --
+  failing closed.
 - Views take `isServerLocal` as a plain parameter rather than a `SystemClient`
   to consult, so what they depend on is visible in their signature.
 
