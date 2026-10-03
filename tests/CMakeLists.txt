@@ -1053,6 +1053,11 @@ target_compile_definitions(test_frame_cycle_stamp PRIVATE
 )
 catch_discover_tests(test_frame_cycle_stamp)
 
+# Machine-name templates (#153)
+add_executable(test_name_template test_name_template.cpp)
+target_link_libraries(test_name_template PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_name_template)
+
 # FrameBuffer publication and capture tests (#162)
 add_executable(test_frame_buffer_publication test_frame_buffer_publication.cpp)
 target_link_libraries(test_frame_buffer_publication PRIVATE beebium_core Catch2::Catch2WithMain)
