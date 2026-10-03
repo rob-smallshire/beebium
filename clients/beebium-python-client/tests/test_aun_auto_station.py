@@ -30,8 +30,13 @@ from beebium.client.installation import ServerInstallation
 
 
 def test_auto_station_preset_comes_up_in_range(
-    mos_filepath: Path, server_installation: ServerInstallation
+    mos_filepath: Path,
+    server_installation: ServerInstallation,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Disable the per-host counter so the test is deterministic and never
+    # touches the user's real state file (issue #161).
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none")
     # The auto browse runs during server start-up, so allow a little longer for
     # the gRPC endpoint to become ready than the default.
     with Beebium.launch(
@@ -65,6 +70,7 @@ def test_run_during_auto_selection_starts_the_machine(
     # selection is still running. That early Run must be honoured so the machine
     # then runs; it must not fail and must not leave the machine paused forever.
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS", "3000")
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none")
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_BUDGET_MS", "4000")
     with Beebium.launch(
         server=server_installation,
@@ -110,6 +116,7 @@ def test_port_is_listening_before_auto_selection_finishes(
     # still succeed (the port is up early), and Econet is enabled with a station
     # in range once the deferred selection completes.
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS", "4000")
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none")
     monkeypatch.setenv("BEEBIUM_AUN_AUTO_BUDGET_MS", "5000")
     with Beebium.launch(
         server=server_installation,

@@ -54,6 +54,22 @@ bool platform_supports_mdns() {
     return adv->state().available && br->state().available;
 }
 
+void set_env(const char* name, const std::string& value) {
+#ifdef _WIN32
+    _putenv_s(name, value.c_str());
+#else
+    ::setenv(name, value.c_str(), 1);
+#endif
+}
+
+void unset_env(const char* name) {
+#ifdef _WIN32
+    _putenv_s(name, "");
+#else
+    ::unsetenv(name);
+#endif
+}
+
 // Selection timings sized for real mDNS propagation (first resolve can take
 // about a second, and is variable). Larger than the launch defaults: a live
 // test must give announcements time to cross between instances.
@@ -83,6 +99,9 @@ TEST_CASE("AUN auto station: map-file peers at 80 and 81 push the choice to 82",
     if (!platform_supports_mdns()) {
         SKIP("mDNS responder not available on this platform");
     }
+    // Disable the per-host counter so this test exercises lowest-free
+    // selection deterministically and never touches the user's state file.
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
     std::random_device rd;
     auto map_filepath = std::filesystem::temp_directory_path() /
                         ("beebium-auto-map-" + std::to_string(rd()) + ".json");
@@ -110,6 +129,7 @@ TEST_CASE("AUN auto station: a discovered station 80 is taken, so auto takes 81"
     if (!platform_supports_mdns()) {
         SKIP("mDNS responder not available on this platform");
     }
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
     const std::string svc_type = aun_unique_service_type();
 
     // A real station 80 on the same service type: bring its backend up so it
@@ -137,6 +157,7 @@ TEST_CASE("AUN auto station: three instances launched together end on distinct n
     if (!platform_supports_mdns()) {
         SKIP("mDNS responder not available on this platform");
     }
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
     const std::string svc_type = aun_unique_service_type();
 
     std::vector<std::unique_ptr<AunEconetTransportExtension>> exts;
@@ -172,4 +193,62 @@ TEST_CASE("AUN auto station: three instances launched together end on distinct n
         CHECK(int(s) >= 80);
         CHECK(int(s) <= 253);
     }
+}
+
+TEST_CASE("AUN auto station: a relaunch advances past a freed number, wrapping",
+          "[.mdns][aun][auto-station]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    // Point the per-host hint file at a temporary path, never the user's, and
+    // use a small range so wraparound is reached quickly. Each selection is
+    // solo on a unique service type -- nothing to discover -- so short timings
+    // are enough; the point is that the stored counter, not the live browse,
+    // moves the choice on past a just-freed number.
+    const std::string svc_type = aun_unique_service_type();
+    std::random_device rd;
+    auto state = std::filesystem::temp_directory_path() /
+                 ("beebium-auto-relaunch-" + std::to_string(rd()) + ".txt");
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", state.string());
+
+    auto pick = [&](const std::string& uuid) -> int {
+        auto ext = make_auto_ext(svc_type, uuid);
+        ext->set_auto_station_timings_for_test(300ms, 100ms, 1500ms);
+        auto outcome = ext->select_auto_station(econet::StationRange{80, 82});
+        // ext is destroyed here, freeing (ceasing to announce) its number.
+        return int(outcome.station);
+    };
+
+    // 80, then past-the-freed 81, then 82, then wrap back to 80 -- never
+    // reusing the number the previous (now closed) instance just held.
+    CHECK(pick("relaunch-a") == 80);
+    CHECK(pick("relaunch-b") == 81);
+    CHECK(pick("relaunch-c") == 82);
+    CHECK(pick("relaunch-d") == 80);
+
+    unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
+    std::error_code ec;
+    std::filesystem::remove(state, ec);
+    std::filesystem::remove(state.string() + ".lock", ec);
+}
+
+TEST_CASE("AUN auto station: BEEBIUM_AUN_AUTO_STATE_FILEPATH=none disables the hint",
+          "[.mdns][aun][auto-station]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    // Disabled -> lowest-free every time, so a freed number IS reused.
+    const std::string svc_type = aun_unique_service_type();
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
+
+    auto pick = [&](const std::string& uuid) -> int {
+        auto ext = make_auto_ext(svc_type, uuid);
+        ext->set_auto_station_timings_for_test(300ms, 100ms, 1500ms);
+        auto outcome = ext->select_auto_station(econet::StationRange{80, 82});
+        return int(outcome.station);
+    };
+    CHECK(pick("none-a") == 80);
+    CHECK(pick("none-b") == 80);  // reused, because the hint is disabled
+
+    unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
 }

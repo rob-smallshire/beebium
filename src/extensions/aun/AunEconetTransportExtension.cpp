@@ -16,6 +16,7 @@
 #include "AunDiscoverySubscriber.hpp"
 #include "AunMapWriter.hpp"
 #include "beebium/econet/AunPacket.hpp"
+#include "beebium/econet/AutoStationState.hpp"
 #include "beebium/net/SocketPlatform.hpp"
 
 #ifdef BEEBIUM_BUILD_SERVICE
@@ -41,6 +42,7 @@
 
 #include <charconv>
 #include <chrono>
+#include <filesystem>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -518,6 +520,33 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
                                    ? std::string(*machine_uuid_value)
                                    : std::string{};
 
+    // Monotonic allocation hint (issue #161): begin the search one past the
+    // last number this host allocated (wrapping), so a freed number is not
+    // reused immediately. The file is only a spacing hint; the claim/settle
+    // below stays the authority. BEEBIUM_AUN_AUTO_STATE_FILEPATH overrides the
+    // path and `none` disables it; any failure falls back to lowest-free (start
+    // at range.lo) with at most one warning, never failing the launch.
+    std::uint8_t search_start = range.lo;
+    std::optional<std::filesystem::path> state_filepath;
+    {
+        auto env = beebium::platform::get_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
+        if (!(env && *env == "none")) {
+            state_filepath = env
+                ? std::filesystem::path(*env)
+                : beebium::platform::user_state_base_dirpath() / "aun-auto-next";
+            auto chosen_start = econet::advance_auto_station_start(
+                *state_filepath, range, std::chrono::milliseconds(300));
+            if (chosen_start.has_value()) {
+                search_start = *chosen_start;
+            } else {
+                std::cerr << "AUN: auto-station hint file unavailable ("
+                          << state_filepath->string()
+                          << "); using the lowest free number\n";
+                state_filepath.reset();  // nothing to record at the end
+            }
+        }
+    }
+
     // The claim advertises a non-zero port even when the configured port is
     // OS-ephemeral (port=0): peers resolve the SRV record to detect a
     // collision, and a zero SRV port never completes that resolve, so the claim
@@ -552,8 +581,9 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
     };
 
     std::set<std::uint8_t> tried;  // numbers an incumbent pushed us off
-    auto first_free = econet::lowest_free_station(occupied_now({}), range);
-    std::uint8_t candidate = first_free.value_or(range.lo);
+    auto first_free =
+        econet::lowest_free_station_from(occupied_now({}), range, search_start);
+    std::uint8_t candidate = first_free.value_or(search_start);
     const bool start_exhausted = !first_free.has_value();
 
     // Raise the claim at the first candidate and start browsing.
@@ -577,7 +607,8 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
             // Someone holds this number and bound before us: climb to the next
             // free one, re-announce there, and restart the quiet timer.
             tried.insert(candidate);
-            auto next = econet::lowest_free_station(occupied_now(tried), range);
+            auto next = econet::lowest_free_station_from(occupied_now(tried),
+                                                         range, search_start);
             if (!next.has_value()) {
                 exhausted = true;
                 break;  // whole range taken; keep the current candidate
@@ -614,6 +645,12 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
     }
     out.status = Status::Selected;
     out.station = candidate;
+    // Record the number actually taken so the next launch on this host
+    // continues past it (best-effort; a failure just lets the hint lapse).
+    if (state_filepath.has_value()) {
+        econet::record_auto_station(*state_filepath, candidate,
+                                    std::chrono::milliseconds(300));
+    }
     return out;
 }
 
