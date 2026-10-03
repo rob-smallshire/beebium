@@ -398,38 +398,71 @@ class SetMachineNameResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     IDENTITY_FIELD_NUMBER: _builtins.int
-    UNKNOWN_KEYS_FIELD_NUMBER: _builtins.int
-    INAPPLICABLE_KEYS_FIELD_NUMBER: _builtins.int
-    MALFORMED_FIELD_NUMBER: _builtins.int
+    REPORT_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def identity(self) -> Global___MachineIdentity:
         """The updated identity: the template and its rendering."""
 
     @_builtins.property
-    def unknown_keys(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+    def report(self) -> Global___NameTemplateReport:
         """What the rendering could not substitute, so a client can warn without
-        parsing the template. See PreviewMachineNameResponse.
+        parsing the template. Only the caller gets this; a client watching the
+        status stream that wants it calls PreviewMachineName.
         """
 
-    @_builtins.property
-    def inapplicable_keys(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
-    @_builtins.property
-    def malformed(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
     def __init__(
         self,
         *,
         identity: Global___MachineIdentity | None = ...,
-        unknown_keys: _abc.Iterable[_builtins.str] | None = ...,
-        inapplicable_keys: _abc.Iterable[_builtins.str] | None = ...,
-        malformed: _abc.Iterable[_builtins.str] | None = ...,
+        report: Global___NameTemplateReport | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "report", b"report"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "inapplicable_keys", b"inapplicable_keys", "malformed", b"malformed", "unknown_keys", b"unknown_keys"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["identity", b"identity", "report", b"report"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___SetMachineNameResponse: _TypeAlias = SetMachineNameResponse  # noqa: Y015
+
+@_typing.final
+class NameTemplateReport(_message.Message):
+    """What a template's rendering could not substitute."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    UNKNOWN_KEYS_FIELD_NUMBER: _builtins.int
+    INAPPLICABLE_KEYS_FIELD_NUMBER: _builtins.int
+    MALFORMED_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def unknown_keys(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """The inner text of each {...} that is not a known key (rendered
+        verbatim), once each, in order; "" for an empty {}.
+        """
+
+    @_builtins.property
+    def inapplicable_keys(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Known keys that do not apply to this machine (rendered empty)."""
+
+    @_builtins.property
+    def malformed(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Malformed fragments, rendered literally: an unterminated "{..." or a
+        lone "}".
+        """
+
+    def __init__(
+        self,
+        *,
+        unknown_keys: _abc.Iterable[_builtins.str] | None = ...,
+        inapplicable_keys: _abc.Iterable[_builtins.str] | None = ...,
+        malformed: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["inapplicable_keys", b"inapplicable_keys", "malformed", b"malformed", "unknown_keys", b"unknown_keys"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___NameTemplateReport: _TypeAlias = NameTemplateReport  # noqa: Y015
 
 @_typing.final
 class ListNamePlaceholdersRequest(_message.Message):
@@ -546,38 +579,22 @@ class PreviewMachineNameResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     NAME_FIELD_NUMBER: _builtins.int
-    UNKNOWN_KEYS_FIELD_NUMBER: _builtins.int
-    INAPPLICABLE_KEYS_FIELD_NUMBER: _builtins.int
-    MALFORMED_FIELD_NUMBER: _builtins.int
+    REPORT_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """The rendering, as MachineIdentity.name would be with this template."""
     @_builtins.property
-    def unknown_keys(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """The inner text of each {...} that is not a known key (rendered
-        verbatim), once each, in order; "" for an empty {}.
-        """
-
-    @_builtins.property
-    def inapplicable_keys(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Known keys that do not apply to this machine (rendered empty)."""
-
-    @_builtins.property
-    def malformed(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Malformed fragments, rendered literally: an unterminated "{..." or a
-        lone "}".
-        """
+    def report(self) -> Global___NameTemplateReport:
+        """What the rendering could not substitute."""
 
     def __init__(
         self,
         *,
         name: _builtins.str = ...,
-        unknown_keys: _abc.Iterable[_builtins.str] | None = ...,
-        inapplicable_keys: _abc.Iterable[_builtins.str] | None = ...,
-        malformed: _abc.Iterable[_builtins.str] | None = ...,
+        report: Global___NameTemplateReport | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["report", b"report"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["inapplicable_keys", b"inapplicable_keys", "malformed", b"malformed", "name", b"name", "unknown_keys", b"unknown_keys"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "report", b"report"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

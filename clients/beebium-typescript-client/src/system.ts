@@ -116,15 +116,19 @@ export interface NameTemplateReport {
 }
 
 /** The rendering of a template, without the machine being renamed. */
-export interface MachineNamePreview extends NameTemplateReport {
+export interface MachineNamePreview {
     /** The name as `MachineIdentity.name` would be with this template. */
     name: string;
+    /** What the rendering could not substitute. */
+    report: NameTemplateReport;
 }
 
 /** The outcome of renaming a machine. */
-export interface SetMachineNameResult extends NameTemplateReport {
+export interface SetMachineNameResult {
     /** The updated identity: the template and its rendering. */
     identity: MachineIdentity;
+    /** What the rendering could not substitute. */
+    report: NameTemplateReport;
 }
 
 export interface ShutdownResponse {
@@ -225,11 +229,11 @@ function toNamePlaceholder(proto: ProtoNamePlaceholder): NamePlaceholder {
     };
 }
 
-function toNameTemplateReport(proto: NameTemplateReport): NameTemplateReport {
+function toNameTemplateReport(proto: NameTemplateReport | undefined): NameTemplateReport {
     return {
-        unknownKeys: [...proto.unknownKeys],
-        inapplicableKeys: [...proto.inapplicableKeys],
-        malformed: [...proto.malformed],
+        unknownKeys: [...(proto?.unknownKeys ?? [])],
+        inapplicableKeys: [...(proto?.inapplicableKeys ?? [])],
+        malformed: [...(proto?.malformed ?? [])],
     };
 }
 
@@ -330,7 +334,7 @@ export class System {
         }
         return {
             identity: toMachineIdentity(response.identity),
-            ...toNameTemplateReport(response),
+            report: toNameTemplateReport(response.report),
         };
     }
 
@@ -359,7 +363,7 @@ export class System {
         );
         return {
             name: response.name,
-            ...toNameTemplateReport(response),
+            report: toNameTemplateReport(response.report),
         };
     }
 

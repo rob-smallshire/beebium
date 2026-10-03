@@ -96,9 +96,9 @@ def test_preview_reports_unknown_keys_without_renaming(station_80: Beebium) -> N
     _wait_for_name(station_80, "Station 80")
     preview = station_80.system.preview_machine_name("Station {econet-station} {no-such-key}")
     assert preview.name == "Station 80 {no-such-key}"
-    assert preview.unknown_keys == ("no-such-key",)
-    assert preview.inapplicable_keys == ()
-    assert preview.malformed == ()
+    assert preview.report.unknown_keys == ("no-such-key",)
+    assert preview.report.inapplicable_keys == ()
+    assert preview.report.malformed == ()
 
     identity = station_80.system.identity
     assert identity.name == "Station 80"
@@ -107,13 +107,13 @@ def test_preview_reports_unknown_keys_without_renaming(station_80: Beebium) -> N
 
 def test_preview_reports_malformed_fragments(station_80: Beebium) -> None:
     preview = station_80.system.preview_machine_name("Station {econet-station")
-    assert preview.malformed
+    assert preview.report.malformed
     assert preview.name.startswith("Station ")
 
 
 def test_set_applies_the_template_and_reports_unknown_keys(station_80: Beebium) -> None:
     change = station_80.system.set_machine_name("Net {econet-station} {no-such-key}")
-    assert change.unknown_keys == ("no-such-key",)
+    assert change.report.unknown_keys == ("no-such-key",)
     assert change.identity.name_template == "Net {econet-station} {no-such-key}"
     assert change.identity.name == "Net 80 {no-such-key}"
 
@@ -160,5 +160,5 @@ def test_a_placeholder_without_econet_is_inapplicable_and_renders_empty(
 
         preview = bbc.system.preview_machine_name("Station [{econet-station}]")
         assert preview.name == "Station []"
-        assert preview.inapplicable_keys == ("econet-station",)
-        assert preview.unknown_keys == ()
+        assert preview.report.inapplicable_keys == ("econet-station",)
+        assert preview.report.unknown_keys == ()

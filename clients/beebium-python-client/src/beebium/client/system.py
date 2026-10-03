@@ -225,18 +225,32 @@ class NamePlaceholder:
 
 
 @dataclass(frozen=True)
-class MachineNamePreview:
-    """How a name template renders now, without changing anything.
+class NameTemplateReport:
+    """What a name template's rendering could not substitute.
 
-    The three report fields say what the rendering could not substitute, so
-    a client can warn without parsing the template. All are empty when the
-    template rendered fully.
+    Lets a client warn without parsing the template. All three are empty when
+    the template rendered fully.
     """
 
-    name: str  # The rendering, as MachineIdentity.name would be with this template
     unknown_keys: tuple[str, ...] = ()  # Inner text of each {...} that is not a known key (rendered verbatim)
     inapplicable_keys: tuple[str, ...] = ()  # Known keys that do not apply to this machine (rendered empty)
     malformed: tuple[str, ...] = ()  # Fragments rendered literally: an unterminated "{..." or a lone "}"
+
+    @classmethod
+    def _from_proto(cls, proto) -> NameTemplateReport:
+        return cls(
+            unknown_keys=tuple(proto.unknown_keys),
+            inapplicable_keys=tuple(proto.inapplicable_keys),
+            malformed=tuple(proto.malformed),
+        )
+
+
+@dataclass(frozen=True)
+class MachineNamePreview:
+    """How a name template renders now, without changing anything."""
+
+    name: str  # The rendering, as MachineIdentity.name would be with this template
+    report: NameTemplateReport = NameTemplateReport()  # What the rendering could not substitute
 
 
 @dataclass(frozen=True)
@@ -244,13 +258,11 @@ class MachineNameChange:
     """The result of setting a machine's name template.
 
     The template is applied even when parts of it did not render; the report
-    fields (as in :class:`MachineNamePreview`) say which, so a client can warn.
+    says which, so a client can warn.
     """
 
     identity: MachineIdentity  # The updated identity: the template and its rendering
-    unknown_keys: tuple[str, ...] = ()  # Inner text of each {...} that is not a known key (rendered verbatim)
-    inapplicable_keys: tuple[str, ...] = ()  # Known keys that do not apply to this machine (rendered empty)
-    malformed: tuple[str, ...] = ()  # Fragments rendered literally: an unterminated "{..." or a lone "}"
+    report: NameTemplateReport = NameTemplateReport()  # What the rendering could not substitute
 
 
 @dataclass(frozen=True)
@@ -329,7 +341,7 @@ class System:
         for placeholder in bbc.system.list_name_placeholders():
             print(f"{placeholder.insertion}: {placeholder.label} = {placeholder.value!r}")
         preview = bbc.system.preview_machine_name("Station {econet-station}")
-        print(f"Would be: {preview.name}, unknown: {preview.unknown_keys}")
+        print(f"Would be: {preview.name}, unknown: {preview.report.unknown_keys}")
         change = bbc.system.set_machine_name("Station {econet-station}")
         print(f"Now: {change.identity.name} from {change.identity.name_template}")
 
@@ -389,22 +401,21 @@ class System:
                 (grpc.RpcError with status INVALID_ARGUMENT).
 
         Returns:
-            MachineNameChange with the updated identity and the unknown keys,
-            inapplicable keys and malformed fragments in the template.
+            MachineNameChange with the updated identity and a report of the
+            unknown keys, inapplicable keys and malformed fragments in the
+            template.
 
         Example:
             change = bbc.system.set_machine_name("Station {econet-station}")
-            if change.unknown_keys:
-                print(f"Not known to this server: {change.unknown_keys}")
+            if change.report.unknown_keys:
+                print(f"Not known to this server: {change.report.unknown_keys}")
             print(change.identity.name)  # e.g. "Station 80"
         """
         request = system_pb2.SetMachineNameRequest(name_template=name_template)
         response = self._stub.SetMachineName(request)
         return MachineNameChange(
             identity=MachineIdentity._from_proto(response.identity, self),
-            unknown_keys=tuple(response.unknown_keys),
-            inapplicable_keys=tuple(response.inapplicable_keys),
-            malformed=tuple(response.malformed),
+            report=NameTemplateReport._from_proto(response.report),
         )
 
     def preview_machine_name(self, name_template: str) -> MachineNamePreview:
@@ -424,9 +435,7 @@ class System:
         response = self._stub.PreviewMachineName(request)
         return MachineNamePreview(
             name=response.name,
-            unknown_keys=tuple(response.unknown_keys),
-            inapplicable_keys=tuple(response.inapplicable_keys),
-            malformed=tuple(response.malformed),
+            report=NameTemplateReport._from_proto(response.report),
         )
 
     def list_name_placeholders(self) -> tuple[NamePlaceholder, ...]:

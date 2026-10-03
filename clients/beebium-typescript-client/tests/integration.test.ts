@@ -148,9 +148,9 @@ describe("Integration: Machine name templates", () => {
         await withStationServer(async (system) => {
             const preview = await system.previewMachineName("Station {econet-station} {no-such-key}");
             expect(preview.name).toBe("Station 80 {no-such-key}");
-            expect(preview.unknownKeys).toEqual(["no-such-key"]);
-            expect(preview.inapplicableKeys).toEqual([]);
-            expect(preview.malformed).toEqual([]);
+            expect(preview.report.unknownKeys).toEqual(["no-such-key"]);
+            expect(preview.report.inapplicableKeys).toEqual([]);
+            expect(preview.report.malformed).toEqual([]);
 
             const identity = await system.getIdentity();
             expect(identity.nameTemplate).toBe(TEMPLATE);
@@ -163,7 +163,7 @@ describe("Integration: Machine name templates", () => {
             const result = await system.setMachineName("Net {econet-station} {no-such-key}");
             expect(result.identity.nameTemplate).toBe("Net {econet-station} {no-such-key}");
             expect(result.identity.name).toBe("Net 80 {no-such-key}");
-            expect(result.unknownKeys).toEqual(["no-such-key"]);
+            expect(result.report.unknownKeys).toEqual(["no-such-key"]);
 
             const identity = await system.getIdentity();
             expect(identity.nameTemplate).toBe("Net {econet-station} {no-such-key}");

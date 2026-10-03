@@ -129,8 +129,8 @@ TEST_CASE("SetMachineName takes a template and reports what it could not substit
           "BBC Model B 80 {econet-sttion} green {oops");
     CHECK(response.identity().name_template() ==
           "{machine-model} {econet-station} {econet-sttion} {gizmo-colour} {oops");
-    CHECK(strings(response.unknown_keys()) == std::vector<std::string>{"econet-sttion"});
-    CHECK(strings(response.malformed()) == std::vector<std::string>{"{oops"});
+    CHECK(strings(response.report().unknown_keys()) == std::vector<std::string>{"econet-sttion"});
+    CHECK(strings(response.report().malformed()) == std::vector<std::string>{"{oops"});
     CHECK(fixture.identity().name() == response.identity().name());
 }
 
@@ -143,8 +143,8 @@ TEST_CASE("PreviewMachineName renders without changing anything",
     beebium::PreviewMachineNameResponse response;
     REQUIRE(fixture.system().PreviewMachineName(&context, request, &response).ok());
     CHECK(response.name() == "Station 80 (AUN, Model B) on net [] {literal}");
-    CHECK(strings(response.inapplicable_keys()) == std::vector<std::string>{"econet-net"});
-    CHECK(response.unknown_keys().empty());
+    CHECK(strings(response.report().inapplicable_keys()) == std::vector<std::string>{"econet-net"});
+    CHECK(response.report().unknown_keys().empty());
     CHECK(fixture.identity().name() == "Original");
     CHECK(fixture.identity().name_template() == "Original");
 }

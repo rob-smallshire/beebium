@@ -101,9 +101,7 @@ describe("System", () => {
                         modelName: "BBC Model B",
                         nameTemplate: "Station {econet-station} {nope}",
                     },
-                    unknownKeys: ["nope"],
-                    inapplicableKeys: [],
-                    malformed: [],
+                    report: { unknownKeys: ["nope"], inapplicableKeys: [], malformed: [] },
                 }),
             });
             const sys = new System(stub as any);
@@ -116,9 +114,7 @@ describe("System", () => {
                     modelType: "ModelB",
                     modelName: "BBC Model B",
                 },
-                unknownKeys: ["nope"],
-                inapplicableKeys: [],
-                malformed: [],
+                report: { unknownKeys: ["nope"], inapplicableKeys: [], malformed: [] },
             });
             expect(stub.setMachineName).toHaveBeenCalledWith(
                 { nameTemplate: "Station {econet-station} {nope}" },
@@ -130,24 +126,20 @@ describe("System", () => {
             const stub = createMockStub({
                 setMachineName: () => ({
                     identity: { ...FULL_SYSTEM_INFO.identity },
-                    unknownKeys: [],
-                    inapplicableKeys: ["econet-station"],
-                    malformed: ["{oops"],
+                    report: { unknownKeys: [], inapplicableKeys: ["econet-station"], malformed: ["{oops"] },
                 }),
             });
             const sys = new System(stub as any);
             const result = await sys.setMachineName("x");
-            expect(result.inapplicableKeys).toEqual(["econet-station"]);
-            expect(result.malformed).toEqual(["{oops"]);
+            expect(result.report.inapplicableKeys).toEqual(["econet-station"]);
+            expect(result.report.malformed).toEqual(["{oops"]);
         });
 
         it("throws when no identity returned", async () => {
             const stub = createMockStub({
                 setMachineName: () => ({
                     identity: undefined,
-                    unknownKeys: [],
-                    inapplicableKeys: [],
-                    malformed: [],
+                    report: { unknownKeys: [], inapplicableKeys: [], malformed: [] },
                 }),
             });
             const sys = new System(stub as any);
@@ -202,18 +194,14 @@ describe("System", () => {
             const stub = createMockStub({
                 previewMachineName: () => ({
                     name: "Station 80 {nope}",
-                    unknownKeys: ["nope"],
-                    inapplicableKeys: ["econet-net"],
-                    malformed: ["}"],
+                    report: { unknownKeys: ["nope"], inapplicableKeys: ["econet-net"], malformed: ["}"] },
                 }),
             });
             const sys = new System(stub as any);
             const preview = await sys.previewMachineName("Station {econet-station} {nope}");
             expect(preview).toEqual({
                 name: "Station 80 {nope}",
-                unknownKeys: ["nope"],
-                inapplicableKeys: ["econet-net"],
-                malformed: ["}"],
+                report: { unknownKeys: ["nope"], inapplicableKeys: ["econet-net"], malformed: ["}"] },
             });
             expect(stub.previewMachineName).toHaveBeenCalledWith(
                 { nameTemplate: "Station {econet-station} {nope}" },

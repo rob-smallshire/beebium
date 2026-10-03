@@ -22,6 +22,7 @@ from beebium.client.system import (
     MachineNameChange,
     MachineNamePreview,
     NamePlaceholder,
+    NameTemplateReport,
     Provenance,
     ServerStatus,
     ServerStatusEvent,
@@ -87,9 +88,11 @@ class MockSetMachineNameResponse:
         malformed: tuple[str, ...] = (),
     ):
         self.identity = MockIdentityResponse(name=name, name_template=name_template)
-        self.unknown_keys = list(unknown_keys)
-        self.inapplicable_keys = list(inapplicable_keys)
-        self.malformed = list(malformed)
+        self.report = system_pb2.NameTemplateReport(
+            unknown_keys=list(unknown_keys),
+            inapplicable_keys=list(inapplicable_keys),
+            malformed=list(malformed),
+        )
 
 
 @pytest.fixture
@@ -699,23 +702,21 @@ class TestSystemSetMachineName:
         assert isinstance(change.identity, MachineIdentity)
         assert change.identity.name == "Station 80 {bogus} "
         assert change.identity.name_template == "Station {econet-station} {bogus} {machine-preset}{"
-        assert change.unknown_keys == ("bogus",)
-        assert change.inapplicable_keys == ("machine-preset",)
-        assert change.malformed == ("{",)
+        assert change.report == NameTemplateReport(
+            unknown_keys=("bogus",), inapplicable_keys=("machine-preset",), malformed=("{",)
+        )
 
     def test_a_clean_template_reports_nothing(self, system, mock_stub):
         """A template that rendered fully has empty reports."""
         mock_stub.SetMachineName.return_value = MockSetMachineNameResponse(name="Girton")
         change = system.set_machine_name("Girton")
-        assert change.unknown_keys == ()
-        assert change.inapplicable_keys == ()
-        assert change.malformed == ()
+        assert change.report == NameTemplateReport()
 
     def test_result_is_frozen(self, system):
         """MachineNameChange is immutable."""
         change = system.set_machine_name("Girton")
         with pytest.raises(AttributeError):
-            change.unknown_keys = ("x",)
+            change.report = NameTemplateReport(unknown_keys=("x",))
 
 
 class TestSystemPreviewMachineName:
@@ -725,9 +726,9 @@ class TestSystemPreviewMachineName:
         """The rendering and the server's report come back as a MachineNamePreview."""
         mock_stub.PreviewMachineName.return_value = system_pb2.PreviewMachineNameResponse(
             name="Station 80 {bogus}",
-            unknown_keys=["bogus"],
-            inapplicable_keys=["machine-preset"],
-            malformed=["}"],
+            report=system_pb2.NameTemplateReport(
+                unknown_keys=["bogus"], inapplicable_keys=["machine-preset"], malformed=["}"]
+            ),
         )
         preview = system.preview_machine_name("Station {econet-station} {bogus}{machine-preset}}")
         request = mock_stub.PreviewMachineName.call_args.args[0]
@@ -735,9 +736,9 @@ class TestSystemPreviewMachineName:
         assert request.name_template == "Station {econet-station} {bogus}{machine-preset}}"
         assert preview == MachineNamePreview(
             name="Station 80 {bogus}",
-            unknown_keys=("bogus",),
-            inapplicable_keys=("machine-preset",),
-            malformed=("}",),
+            report=NameTemplateReport(
+                unknown_keys=("bogus",), inapplicable_keys=("machine-preset",), malformed=("}",)
+            ),
         )
 
     def test_does_not_rename(self, system, mock_stub):

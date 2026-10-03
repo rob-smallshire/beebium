@@ -569,12 +569,13 @@ plain name is a template without placeholders. See
 
 #### SetMachineName
 
-Sets the name template and returns the identity with its new rendering, plus
-what the rendering could not substitute, so a client can warn without parsing
-the template: `unknownKeys` (each `{...}` that is not a known key, rendered as
-written), `inapplicableKeys` (known keys that do not apply to this machine,
-rendered empty) and `malformed` (an unterminated `{...` or a lone `}`, rendered
-literally). An empty template is refused with `INVALID_ARGUMENT`. The rename is
+Sets the name template and returns the identity with its new rendering, plus a
+`report` (a `NameTemplateReport`) of what the rendering could not substitute, so
+a client can warn without parsing the template: `unknownKeys` (each `{...}` that
+is not a known key, rendered as written), `inapplicableKeys` (known keys that do
+not apply to this machine, rendered empty) and `malformed` (an unterminated
+`{...` or a lone `}`, rendered literally). Only the caller gets the report; a
+client watching the status stream that wants one calls `PreviewMachineName`. An empty template is refused with `INVALID_ARGUMENT`. The rename is
 announced to `WatchServerStatus` watchers and re-published over mDNS at once.
 
 ```bash
@@ -587,7 +588,7 @@ grpcurl -plaintext -d '{"nameTemplate": "Station {econet-station} {econet-sttion
 {
   "identity": {"name": "Station 80 {econet-sttion}",
                "nameTemplate": "Station {econet-station} {econet-sttion}", "...": "..."},
-  "unknownKeys": ["econet-sttion"]
+  "report": {"unknownKeys": ["econet-sttion"]}
 }
 ```
 
@@ -614,8 +615,8 @@ of keys; they ask. Every key begins with its owner's domain (`machine-`,
 #### PreviewMachineName
 
 Renders a template against the current values without changing anything, for a
-live preview while the user edits. Returns `name` and the same `unknownKeys`,
-`inapplicableKeys` and `malformed` lists as `SetMachineName`.
+live preview while the user edits. Returns `name` and the same `report` as
+`SetMachineName`.
 
 #### WatchServerStatus (Server Streaming)
 

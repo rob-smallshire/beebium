@@ -76,6 +76,17 @@ inline constexpr std::chrono::seconds kNameRefreshInterval{1};
 /// station's new name reaches browsers promptly.
 inline constexpr std::chrono::seconds kMinReannounceInterval{5};
 
+namespace detail {
+
+// Copy what a rendering could not substitute into its protobuf report.
+inline void populate_report(const NameRendering& rendering, NameTemplateReport* out) {
+    for (const auto& key : rendering.unknown_keys) out->add_unknown_keys(key);
+    for (const auto& key : rendering.inapplicable_keys) out->add_inapplicable_keys(key);
+    for (const auto& fragment : rendering.malformed) out->add_malformed(fragment);
+}
+
+}  // namespace detail
+
 /// gRPC service implementation for SystemService
 /// Provides machine configuration and identity information
 template<typename MachineType>
@@ -528,9 +539,7 @@ grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
         identity_.name = rendering.text;
         populate_identity_proto(response->mutable_identity());
     }
-    for (const auto& key : rendering.unknown_keys) response->add_unknown_keys(key);
-    for (const auto& key : rendering.inapplicable_keys) response->add_inapplicable_keys(key);
-    for (const auto& fragment : rendering.malformed) response->add_malformed(fragment);
+    detail::populate_report(rendering, response->mutable_report());
 
     // The name on the network is the name in the title bar of anyone looking
     // at this machine, so it has to follow the rename rather than wait for a
@@ -576,9 +585,7 @@ grpc::Status SystemServiceImpl<MachineType>::PreviewMachineName(
     PreviewMachineNameResponse* response) {
     const auto rendering = render_name(request->name_template());
     response->set_name(rendering.text);
-    for (const auto& key : rendering.unknown_keys) response->add_unknown_keys(key);
-    for (const auto& key : rendering.inapplicable_keys) response->add_inapplicable_keys(key);
-    for (const auto& fragment : rendering.malformed) response->add_malformed(fragment);
+    detail::populate_report(rendering, response->mutable_report());
     return grpc::Status::OK;
 }
 

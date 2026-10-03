@@ -178,10 +178,21 @@ message SetMachineNameResponse {
     MachineIdentity identity = 1;
 
     // What the rendering could not substitute, so a client can warn without
-    // parsing the template. See PreviewMachineNameResponse.
-    repeated string unknown_keys = 2;
-    repeated string inapplicable_keys = 3;
-    repeated string malformed = 4;
+    // parsing the template. Only the caller gets this; a client watching the
+    // status stream that wants it calls PreviewMachineName.
+    NameTemplateReport report = 2;
+}
+
+// What a template's rendering could not substitute.
+message NameTemplateReport {
+    // The inner text of each {...} that is not a known key (rendered
+    // verbatim), once each, in order; "" for an empty {}.
+    repeated string unknown_keys = 1;
+    // Known keys that do not apply to this machine (rendered empty).
+    repeated string inapplicable_keys = 2;
+    // Malformed fragments, rendered literally: an unterminated "{..." or a
+    // lone "}".
+    repeated string malformed = 3;
 }
 
 // === Name placeholders ===
@@ -222,14 +233,8 @@ message PreviewMachineNameRequest {
 message PreviewMachineNameResponse {
     // The rendering, as MachineIdentity.name would be with this template.
     string name = 1;
-    // The inner text of each {...} that is not a known key (rendered
-    // verbatim), once each, in order; "" for an empty {}.
-    repeated string unknown_keys = 2;
-    // Known keys that do not apply to this machine (rendered empty).
-    repeated string inapplicable_keys = 3;
-    // Malformed fragments, rendered literally: an unterminated "{..." or a
-    // lone "}".
-    repeated string malformed = 4;
+    // What the rendering could not substitute.
+    NameTemplateReport report = 2;
 }
 
 // === Shutdown RPC ===

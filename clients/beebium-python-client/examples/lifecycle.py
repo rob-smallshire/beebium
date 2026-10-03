@@ -30,7 +30,7 @@ def demo(bbc: Beebium) -> None:
 
     # Render a template without renaming the machine.
     preview = bbc.system.preview_machine_name(f"{ident.name_template} {{no-such-key}}")
-    print(f"preview : {preview.name!r} (unknown keys: {list(preview.unknown_keys)})")
+    print(f"preview : {preview.name!r} (unknown keys: {list(preview.report.unknown_keys)})")
 
     # Advance a fixed slice of *emulated* time (independent of the wall clock).
     bbc.debugger.ensure_stopped()
