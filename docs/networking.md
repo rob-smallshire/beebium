@@ -1,6 +1,6 @@
 # Econet and AUN Networking Support
 
-This document covers the design, research, and implementation of Econet and AUN (Acorn Universal Networking) support in Beebium. The core networking implementation (MC68B54 ADLC emulation, EconetSocket, FourWayHandshake) is complete, with the wire-side transport pluggable through the `EconetTransportExtension` extension point: AUN ships as a built-in extension, Piconet as a discoverable plugin, and `TestBackend` as the in-process test double. The architecture has been validated end-to-end with a real BBC Microcomputer talking via real Econet to a Beebium-emulated Level 3 File Server. See `docs/econet-integration.md` for the remaining integration work (presets, gRPC, service discovery, clients).
+This document covers the design, research, and implementation of Econet and AUN (Acorn Universal Networking) support in Beebium. The core networking implementation (MC68B54 ADLC emulation, EconetSocket, FourWayHandshake) is complete, with the wire-side transport pluggable through the `EconetTransportExtension` extension point: AUN ships as a built-in extension, Piconet as a discoverable plugin, and `TestBackend` as the in-process test double. The architecture has been validated end-to-end with a real BBC Microcomputer talking via real Econet to a Beebium-emulated Level 3 File Server. The work programme that exposed Econet through presets, gRPC and the clients is recorded in `docs/econet-integration.md`.
 
 ## Overview
 
@@ -14,8 +14,8 @@ AUN (Acorn Universal Networking) encapsulates Econet protocols over TCP/IP, orig
 
 1. **Emulate the MC68B54 ADLC** at the hardware level — **Done.** Cycle-accurate on the E-clock domain, with PSE, stored/present status, and full register semantics. See `Mc6854.hpp`.
 2. **Support AUN protocol** for network connectivity — **Done.** `AunBackend` handles UDP transport; `FourWayHandshake` bridges AUN's two-way protocol to the four-way handshake that NFS ROMs expect.
-3. **Enable connectivity with real Econet hardware** via the Piconet USB device — **Done.** `PiconetBackend` drives a real Piconet on `/dev/tty.usbmodem*`. Validated against a PiEconetBridge-hosted fileserver over a real Econet wire, and end-to-end against a real BBC Microcomputer talking to a Beebium-hosted Level 3 File Server. See `docs/discussion/piconet-feasibility.md` for the design and `docs/discussion/piconet-upstream-issues.md` for upstream-side findings.
-4. **Support NFS/ANFS ROMs** for file server access — **Done.** NFS 3.34 and ANFS 4.18 work correctly, including boot messages, `*I AM`, `*CAT`, `*DATE`, and file operations against a real Acorn Level 3 Fileserver, and more than one client logs on to one file server at once — the retransmission memory is keyed per sender, so a second station's first request is not mistaken for a duplicate of the first's (#149).
+3. **Enable connectivity with real Econet hardware** via the Piconet USB device — **Done.** `PiconetBackend` drives a real Piconet over its USB serial port (e.g. `/dev/tty.usbmodem*` on macOS, `COMn` on Windows). Validated against a PiEconetBridge-hosted fileserver over a real Econet wire, and end-to-end against a real BBC Microcomputer talking to a Beebium-hosted Level 3 File Server. See `docs/discussion/piconet-feasibility.md` for the design and `docs/discussion/piconet-upstream-issues.md` for upstream-side findings.
+4. **Support NFS/ANFS ROMs** for file server access — **Done.** NFS 3.34 and ANFS 4.18 work correctly, including boot messages, `*I AM`, `*CAT`, `*DATE`, and file operations against a real Acorn Level 3 Fileserver, and more than one client logs on to one file server at once — the retransmission memory is keyed per sender `(net, station, handle)`, so a second station's first request is not mistaken for a duplicate of the first's (#149).
 
 ## Network Transport Backends
 
@@ -23,15 +23,15 @@ Beebium decouples the emulated ADLC from the underlying transport via the `Netwo
 
 | Backend | CLI flag | Transport | Use case |
 |---|---|---|---|
-| `AunBackend` (built-in `aun` extension) | `--aun [port=<n>][:net=<n>][:map=<net.stn@ip@port>][:map-file=<path>|none][:subnet=<net>@<a.b.c.0/24>]...` (default `port=32768:net=0`) | UDP/IP, AUN-encapsulated | Talk to other Beebium instances, BeebEm, PiEconetBridge, or any AUN-speaking peer over IP. Auto-discovers other `_aun._udp` peers on the LAN; manual `map=` is no longer required between Beebium instances on the same network. |
-| `PiconetBackend` (`piconet` plugin extension) | `--piconet device_path=<path>` | USB-CDC serial to a Piconet board | Talk to real BBCs / Acorn fileservers / printers over a real Econet wire (POSIX-only) |
-| `TestBackend` | selected automatically by `--aun port=none` or by passing `--station <n>` with no transport flag | In-process; no I/O | Hardware fitted, no transport — NFS ROM sees "No Clock". Also the test double for unit tests. |
+| `AunBackend` (built-in `aun` extension) | `--aun [port=<n>\|none][:net=<n>][:map=<net.stn@ip@port>]...[:map-file=<path>\|none][:subnet=<net@a.b.c.0/24>]...[:discovery=on\|announce\|browse\|off]` (defaults `port=32768`, `net=0`, `discovery=on`; see "The `--aun` parameters") | UDP/IP, AUN-encapsulated | Talk to other Beebium instances, BeebEm, PiEconetBridge, or any AUN-speaking peer over IP. Discovers other `_aun._udp` peers on the LAN, so `map=` is not needed between Beebium instances on the same network. |
+| `PiconetBackend` (`piconet` plugin extension) | `--piconet [device_path=<path>\|auto]` (omitted or `auto`: find a connected Piconet by its USB vendor id and a STATUS probe) | USB-CDC serial to a Piconet board | Talk to real BBCs / Acorn fileservers / printers over a real Econet wire (macOS, Linux and Windows) |
+| `TestBackend` | selected automatically by `--aun port=none`, by a transport that fails to start (e.g. the UDP port is in use), or by passing `--station <n>` with no transport flag | In-process; no I/O | Hardware fitted, no transport — NFS ROM sees "No Clock". Also the test double for unit tests. |
 
-**Mutual exclusion:** `--piconet` and `--aun` cannot both be specified. The choice of transport is established at server startup; runtime swapping is not supported. BBC Micro / Master / Master Compact machines accept at most one transport. (The transport registry is intentionally non-singleton so future machine types like the Acorn Econet Bridge — two memory-mapped ADLCs — could hold two; per-machine cardinality is enforced at machine-setup time.)
+**One transport per machine.** `--piconet` and `--aun` cannot both be given (the launch fails with "BBC machines support at most one Econet transport"). The transport is chosen at server startup; runtime swapping is not supported. (The transport registry is intentionally non-singleton so a future machine type like the Acorn Econet Bridge — two memory-mapped ADLCs — could hold two; per-machine cardinality is enforced at machine-setup time.)
 
 ### Routing a transport's typed RPCs (ExtensionRpc)
 
-A transport's typed RPCs — `AunService` for AUN, `PiconetService` for Piconet — are served over the core's generic `ExtensionRpc` channel by the extension's hand-written dispatcher, and routed by the `extension_id` on `ExtensionRpc.Invoke`. That id is the per-instance id `EconetTransportService` reports (`ListTransports`), the same id `ExtensionUiService` uses for SubscribeView/Dispatch, so one id addresses a transport instance across all three services. An empty `extension_id` routes by service name alone, which the core accepts only while exactly one loaded instance offers that service; once more than one does — the two-ADLC Econet Bridge shape — an empty id is a `FAILED_PRECONDITION` whose message names the candidate ids, and the caller must pick one. This matches how peripheral extensions already route (`PeripheralExtensionService` id → ExtensionRpc). The clients pass the id they already receive from the transport listing: the Python client binds `info.id` on `bbc.transport[Aun]`, and the TypeScript client discovers it lazily for `bbc.aun` / `bbc.piconet` (with `bbc.aunInstance(id)` / `bbc.piconetInstance(id)` to address one explicitly). No wire change was needed — `InvokeRequest.extension_id` already existed — so the protocol fingerprint is unchanged.
+A transport's typed RPCs — `AunService` for AUN, `PiconetService` for Piconet — are served over the core's generic `ExtensionRpc` channel by the extension's hand-written dispatcher (`Extension::rpc_dispatchers()`), and routed by the `extension_id` on `ExtensionRpc.Invoke`. That id is the per-instance id `EconetTransportService` reports (`ListTransports`), the same id `ExtensionUiService` uses for SubscribeView/Dispatch, so one id addresses a transport instance across all three services. An empty `extension_id` routes by service name alone, which the core accepts only while exactly one loaded instance offers that service; once more than one does — the two-ADLC Econet Bridge shape — an empty id is a `FAILED_PRECONDITION` whose message names the candidate ids, and the caller must pick one. This matches how peripheral extensions already route (`PeripheralExtensionService` id → ExtensionRpc). The clients pass the id they already receive from the transport listing: the Python client binds `info.id` on `bbc.transport[Aun]`, and the TypeScript client discovers it lazily for `bbc.aun` / `bbc.piconet` (with `bbc.aunInstance(id)` / `bbc.piconetInstance(id)` to address one explicitly). `aun.proto` and the Piconet service proto travel inside `ExtensionRpc` payloads and are not part of the fingerprinted service protocol.
 
 **Configuration via preset JSON** mirrors the CLI through a single `econet.transport` object that names the transport extension and carries its parameters:
 
@@ -45,7 +45,22 @@ A transport's typed RPCs — `AunService` for AUN, `PiconetService` for Piconet 
 }
 ```
 
-`name` selects the extension (`aun` or `piconet`); `parameters` is a flat key/value map. The legacy preset keys `econet.aun_port`, `econet.aun_map`, and `econet.piconet.device_path` were removed; presets that still use them fail to load with a message pointing at the new shape.
+`name` selects the extension (`aun` or `piconet`); `parameters` is a flat key/value map (strings, integers or booleans; a list parameter such as `map` or `subnet` may also be a JSON array — see below). `station` is a number 1..254, or `"auto"` / `"auto:<lo>-<hi>"` to choose one at launch (see "Choosing a free station number at launch"). The older preset keys `econet.aun_port` and `econet.piconet` are rejected with a message pointing at the `transport` shape; `econet.aun_map` is no longer read (it is ignored like any unknown key).
+
+**A preset's transport and a command-line one.** A `--aun` or `--piconet` on the command line overrides the preset's `econet.transport` rather than counting as a second transport (#150). The same transport name merges parameters, the command line winning per key; a different name replaces the preset's transport outright. Note that the command-line parser fills in the schema defaults of keys you did not type (`port=32768`, `net=0`, `discovery=on` for AUN) before the merge, so those keys always come from the command line: to keep a preset's `port=0` while adding `discovery=off`, write `--aun port=0:discovery=off`.
+
+### The `--aun` parameters
+
+`describe-extension aun` lists the schema. Each parameter is also accepted as a key of a preset's `econet.transport.parameters`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `port` | `32768` | UDP port to bind. `0` binds an ephemeral port (the bundled AUN presets use this; the real port is what is announced over mDNS). `none` disables the transport (a disconnected `TestBackend` is fitted). A malformed value falls back to 32768 with a warning. |
+| `net` | `0` | This station's Econet net number, 0..255. See "Local Econet net number". |
+| `map` | — | A launch peer `[net.]stn@ip@port` (repeatable). `ip` must be an IPv4 literal; the port is required. A bare station means net 0. Malformed entries are skipped with a warning on stderr. |
+| `map-file` | per-user `aun-map.json` | Path of the map file, or `none` to disable it. See "The AUN map file". |
+| `subnet` | — | A launch subnet rule `net@a.b.c.0/24` (repeatable; only `/24`). See "The AUN map file". |
+| `discovery` | `on` | `on`, `announce`, `browse` or `off`. See "Discovery mode". An invalid value is a launch error. |
 
 ### Inner separators in `--aun map=`
 
@@ -55,11 +70,11 @@ The extension argument parser tokenises `--<extension> a:b:c` on `:`, which conf
 --aun port=32768:map=0.254@127.0.0.1@32769:map=0.253@127.0.0.1@32770
 ```
 
-`@` is chosen because it is shell-safe across bash, zsh, fish, cmd.exe, and PowerShell -- no quoting is required -- and collides with neither `.` (used inside `net.stn` and IPv4 addresses) nor `:` (the top-level argument separator). The `is_list` parser plumbing now preserves repeated tokens as an opaque vector, so each extension is free to pick whatever inner separator reads best for its data; `@` is a convention for AUN, not a framework rule.
+`@` is chosen because it is shell-safe across bash, zsh, fish, cmd.exe, and PowerShell -- no quoting is required -- and collides with neither `.` (used inside `net.stn` and IPv4 addresses) nor `:` (the top-level argument separator). The `is_list` parser plumbing preserves repeated tokens as an opaque vector, so each extension is free to pick whatever inner separator reads best for its data; `@` is a convention for AUN, not a framework rule.
 
 One embedded colon is rejoined automatically: a Windows drive letter in a value, such as `map-file=C:\Users\me\aun-map.json` (or with forward slashes). The parser tears it at the drive colon and then puts it back when a `key=value`'s value is a single letter and the next token begins with `\` or `/` -- so a map file path on Windows needs no quoting. Any *other* value that must contain a `:` (a URL, say) still has to be double-quoted, e.g. `key="scheme://host:port"`; a `//` continuation is treated as a split URL, not a drive path.
 
-In preset files, `map` accepts either a single string or a JSON array of strings:
+In preset files, `map` (and `subnet`) accepts either a single string or a JSON array of strings:
 
 ```json
 "parameters": {
@@ -68,7 +83,7 @@ In preset files, `map` accepts either a single string or a JSON array of strings
 }
 ```
 
-A single-string form (`"map": "0.254@127.0.0.1@32769"`) remains supported for backwards compatibility and is normalised to a one-element list at load time.
+A single string (`"map": "0.254@127.0.0.1@32769"`) is normalised to a one-element list at load time.
 
 ### Local Econet net number (`--aun net=N`)
 
@@ -82,33 +97,56 @@ The whole 0..255 range is addressable: a guest can address any net, and the RISC
 
 **Net 0 semantics.** BBC software addresses local-segment peers with `dest_net=0` ("this segment, don't route") on the wire, regardless of what net number the segment actually carries. `AunBackend` translates `dest_net=0` to the configured `local_net` before consulting the peer table, and on the receive side translates `src_net == local_net` back to `0` so the BBC sees frames in the form it expects. Cross-net frames (different absolute nets) pass through both translations unchanged. This means:
 
-- `--aun net=0` is the historical default and is fully wire-compatible with any AUN peer that uses the flat-cloud convention.
-- `--aun net=N` (non-zero) is useful for testing multi-net scenarios locally and for participating in deployments where a bridge has assigned a non-zero net to this segment.
-- Map entries (whether operator-configured via `map=` or auto-discovered via mDNS) can use any net 0..255; only the `dest_net=0` BBC convention triggers the translation.
+- `--aun net=0` is the default and is fully wire-compatible with any AUN peer that uses the flat-cloud convention.
+- `--aun net=N` (non-zero) is useful for testing multi-net scenarios locally and for participating in deployments where a bridge has assigned a non-zero net to this segment (see "Connecting to a PiEconetBridge").
+- Map entries (whether operator-configured via `map=`, the map file, or auto-discovered via mDNS) can use any net 0..255; only the `dest_net=0` BBC convention triggers the translation.
 
 ### AUN peer discovery via mDNS
 
-Beebium publishes a `_aun._udp` DNS-SD announcement when its AUN transport binds, and subscribes to the same service type on the LAN. Discovered peers are added to the routing table automatically as `Discovered` entries; operator sources always take precedence — a discovered announcement that claims an `(net, stn)` an operator source already holds is recorded but shadowed, not routed.
+Beebium publishes a `_aun._udp` DNS-SD announcement when its AUN transport binds, and subscribes to the same service type on the LAN (both are governed by `discovery=`; see "Discovery mode"). Discovered peers are added to the routing table automatically as `Discovered` entries; operator sources always take precedence — a discovered announcement that claims an `(net, stn)` an operator source already holds is recorded but shadowed, not routed.
 
-**Peer provenance and precedence.** The peer table lives in the AUN transport extension (not the backend), which keeps a single entry per source for each `(net, stn)` and resolves one winner by a fixed precedence, highest first:
+The announcement's instance name is `Beebium <net>.<station>` (the platform may append " (2)" on a name clash), and its TXT record carries `version=1`, `net`, `station`, `port`, `impl=beebium`, `impl-version`, `impl-identity` (the machine's UUID, the same one its `_beebium._tcp` announcement carries) and `since` (the Unix time, in seconds, at which this machine claimed its number, used to order a collision; see "Station-number collisions"). The schema, the rationale for the vendor-neutral service type, and the choice of `net=` as a mandatory field are documented in [`docs/discussion/aun-mdns-peer-discovery.md`](discussion/aun-mdns-peer-discovery.md). Other AUN implementations (BeebEm, PiEconetBridge, real Acorn hardware) are explicitly invited to adopt the same schema; nothing in it is Beebium-specific.
+
+This means **Beebium-to-Beebium AUN works with no `map=` configuration on the same LAN**: launch two servers with `--aun port=32768 --station 1` and `--aun port=32769 --station 254` (or `port=0` for both) and they'll find each other within a couple of seconds (`mDNS resolve + getaddrinfo` round-trip).
+
+**Platform support:**
+
+- macOS — Bonjour (`dns_sd.h`): both advertises and browses.
+- Linux — `AvahiAdvertiser` and `AvahiBrowser` (libavahi-client, loaded at runtime with `dlopen`), so a Linux server both publishes and discovers `_aun._udp` peers. Requires a running `avahi-daemon`; where Avahi is absent both sides degrade silently to a no-op (advertiser) / unavailable (browser).
+- Windows — publishes and discovers, with a provider chosen at run time:
+  - **Apple Bonjour** (`dnssd.dll`) when it is installed (iTunes, Adobe apps, etc. bundle it). Bonjour takes over the mDNS responder (UDP 5353), so where present it is preferred; it exposes the same `dns_sd.h` API the macOS advertiser/browser use, resolved at run time via `GetProcAddress` (no Bonjour SDK needed to build).
+  - **Native `windns.h`** (`DnsServiceRegister` / `DnsServiceBrowse` / `DnsServiceResolve`) otherwise. Requires Windows 10 1903+; always present, so there is always a provider.
+
+  Note: on a machine with Bonjour installed the native path may be unable to register (Bonjour owns 5353), which is exactly why the Bonjour provider is preferred when available.
+
+**Implementation rule — shutting down a DNS-SD event thread (`DNSServiceRef` lifetime).** The Bonjour advertiser and browser each run a background thread that drives `DNSServiceProcessResult` on a `DNSServiceRef`, waiting in `select()` on `DNSServiceRefSockFD` with a short timeout and a `running_` flag. A `DNSServiceRef` must **never** be passed to `DNSServiceRefDeallocate` while another thread is inside a DNS-SD call on it: dnssd forbids it, and on recent macOS (26 Tahoe) libdispatch turns the violation into an immediate process abort — `EXC_BREAKPOINT` with `"API MISUSE: Resurrection of an object"` — whereas macOS 14 tolerated the same race. So `stop()` always **clears `running_`, joins the event thread, and only then calls `DNSServiceRefDeallocate`** (`BonjourAdvertiser.cpp`, `BonjourBrowser.cpp`). The select-with-timeout loop makes the join prompt. This matters because `start()` restarts by calling `stop()`, so every re-announce — notably the AUN re-publish on a runtime station change (see "Changing the station number at runtime" below) — exercises this teardown on a running advertiser. The Avahi provider gets the same guarantee for free (`avahi_threaded_poll_stop` joins its poll thread before any object it uses is freed); the Windows native provider has no such owned thread (teardown waits on completion callbacks instead). Regression cover: the `[advertiser][stress]` and `[browser][stress]` cases hammer the restart path and are clean under TSan (they abort under TSan with the deallocate-before-join ordering) — see issue #155.
+
+**Future improvements:**
+
+- A future DSCP (Discovery Service Coordination Protocol, name TBD) layer on top of mDNS could let peers negotiate richer capability information — e.g. supported AUN extensions, machine model, fileserver hosting status — without requiring every consumer to talk gRPC. mDNS shipped first because it's independently useful; DSCP is the natural next step if richer per-peer metadata is wanted (see `docs/discussion/dynamic-station-config-protocol.md`).
+- Bridge-as-bridge announcements via a separate `_acorn-bridge._udp` service type, once Beebium grows a machine type with two ADLCs (the Acorn Econet Bridge). This is reserved but not implemented; only `_aun._udp` is published today.
+
+### Peer provenance and precedence
+
+The peer table lives in the AUN transport extension (`AunPeerSet`, not the backend), which keeps a single entry per source for each `(net, stn)` and resolves one winner by a fixed precedence, highest first:
 
 | Provenance | Source | Sidebar caption |
 |------------|--------|-----------------|
-| `Api` | `AunService::AddPeer` at runtime (`bbc.transport[Aun].add_peer`, `Aun.addPeer`) | `API` |
+| `Api` | `AunService.AddPeer` at runtime (`bbc.transport[Aun].add_peer`, `Aun.addPeer`) | `API` |
 | `Launch` | `--aun map=` / `subnet=` on the command line, or the preset's equivalents | `launch` |
 | `MapFile` | the per-user `aun-map.json` | `map file` |
 | `Discovered` | an `_aun._udp` mDNS announcement | `mDNS` |
 | `Subnet` | derived from a `subnets` rule (an inbound identification or an outbound guess) | `subnet` |
 
-An explicit instruction for this process beats one for this launch, which beats the standing map file, which beats what the network discovered, which beats a subnet convention. `Discovered` outranks `Subnet` on purpose: a Beebium at `192.168.1.40` advertising station 40 on port 40001 must not be sent packets at the convention's port 32768. Because each source keeps its own entry, removing the winner falls back to the next source still present rather than dropping the station — removing an `Api` peer for an `(net, stn)` a discovered announcement also names reveals the discovered one. Peer edits (`AddPeer`/`RemovePeer`/`SetConnected`) apply whether or not the socket is up yet; entries added before the transport binds survive until it does, and persist across the backend being re-created.
+An explicit instruction for this process beats one for this launch, which beats the standing map file, which beats what the network discovered, which beats a subnet convention. `Discovered` outranks `Subnet` on purpose: a Beebium at `192.168.1.40` advertising station 40 on port 40001 must not be sent packets at the convention's port 32768. Because each source keeps its own entry, removing the winner falls back to the next source still present rather than dropping the station — removing an `Api` peer for an `(net, stn)` a discovered announcement also names reveals the discovered one. Peer edits (`AddPeer`/`RemovePeer`/`SetConnected`) apply whether or not the socket is up yet; entries added before the transport binds survive until it does, and the `Api` layer persists across the backend being re-created (`EconetService.DisableEconet` / `EnableEconet`).
 
-A discovered announcement for an `(net, stn)` the map file pins to a *different* endpoint is a conflict worth seeing: the file wins the routing, and the disagreement is surfaced through the station-collision report (the sidebar line, `aun_station_collision_count`), described as the station being pinned by the map file. It clears when that announcement withdraws or when the file is edited to agree.
+A discovered announcement for an `(net, stn)` the map file pins to a *different* endpoint is a conflict worth seeing: the file wins the routing, and the disagreement is surfaced through the station-collision report (the sidebar line, `aun_station_collision_count`) as *"station N.S is pinned by the map file; ignored a discovered advertisement at `<ip:port>`"*. It clears when that announcement withdraws or when the file is edited to agree.
 
 ### The AUN map file (`aun-map.json`)
 
 The machines that do not announce themselves — a RISC OS box, a PiEconetBridge, a BeebEm instance, real Acorn hardware — go in a per-user JSON file that every Beebium instance on the host reads. It is the standing part of the AUN world; `map=`, `AddPeer` and discovery cover the rest.
 
-**Location and overrides.** `<per-user Beebium directory>/aun-map.json` (macOS `~/Library/Application Support/Beebium/`, Windows `%APPDATA%\Beebium\`, Linux `$XDG_CONFIG_HOME/beebium/` or `~/.config/beebium/`) — the same directory presets and discs use. Override the path with `BEEBIUM_AUN_MAP_FILEPATH=<path>` for the environment or `--aun map-file=<path>` for one launch; `--aun map-file=none` disables the file (hermetic runs and tests use this).
+**Location and overrides.** `<per-user Beebium directory>/aun-map.json` (macOS `~/Library/Application Support/Beebium/`, Windows `%APPDATA%\Beebium\`, Linux `$XDG_CONFIG_HOME/beebium/` or `~/.config/beebium/`) — the per-user directory that also holds the `presets/` directory. The path is chosen in this order: `--aun map-file=<path>` for one launch, then `BEEBIUM_AUN_MAP_FILEPATH=<path>` from the environment, then the per-user default; `--aun map-file=none` disables the file (hermetic runs and tests use this). `report-aun-map-filepath` prints the path in effect. A missing file is not an error — it is an empty map.
 
 **Format.** A JSON object with two optional arrays:
 
@@ -125,68 +163,69 @@ The machines that do not announce themselves — a RISC OS box, a PiEconetBridge
 }
 ```
 
-- `peers[]`: `net` (0..255), `station` (1..254), `host` (an IPv4 literal or a DNS name), `port` (1..65535), optional `label`. One entry per `(net, station)`; a duplicate is a load error naming both. A host is resolved when the file is loaded and on every reload; a name that does not resolve keeps its entry, shown as unreachable rather than routed. Resolution never runs on the emulation thread, and a name that takes too long is treated as unresolved for that pass and retried on the next reload.
-- `subnets[]`: the RISC OS `AUNMap` convention — "net N is this /24, the station is the last octet, the port is 32768". Both halves follow from one entry, with no switch to take one without the other: **inbound**, a datagram from an unknown sender inside the `/24` on port 32768 is accepted as net N station x (instead of being dropped); **outbound**, a frame for N.x with no explicit peer is sent to the `/24`'s x:32768. A guessed route is recorded as a `Subnet` peer (so it shows in the sidebar and resolves directly afterwards) and logged as a guess under `BEEBIUM_AUN_TRACE`. Only `/24` is supported — it is the one net-level mapping with a unique endpoint per station. A subnet rule can also be given for one launch with `--aun subnet=net@a.b.c.0/24`.
+- `peers[]`: `net` (0..255), `station` (1..254), `host` (an IPv4 literal or a DNS name), `port` (1..65535), optional `label`. One entry per `(net, station)`; a duplicate is a load error naming both. A host is resolved when the file is loaded and on every reload; a name that does not resolve keeps its entry, shown as unreachable rather than routed. Resolution never runs on the emulation thread, and a name that takes too long (3 s) is treated as unresolved for that pass and retried on the next reload.
+- `subnets[]`: `net` (0..255), `subnet` (`a.b.c.0/24`), optional `label`; one entry per net. This is the RISC OS `AUNMap` convention — "net N is this /24, the station is the last octet, the port is 32768". Both halves follow from one entry, with no switch to take one without the other: **inbound**, a datagram from an unknown sender inside the `/24` on port 32768 is accepted as net N station x (instead of being dropped); **outbound**, a frame for N.x with no explicit peer is sent to the `/24`'s x:32768. A guessed route is recorded as a `Subnet` peer (so it shows in the sidebar and resolves directly afterwards) and logged as a guess under `BEEBIUM_AUN_TRACE`. Only `/24` is supported — it is the one net-level mapping with a unique endpoint per station. A subnet rule can also be given for one launch with `--aun subnet=net@a.b.c.0/24`.
 
-Unknown keys are ignored (so a newer Beebium's file is not damaged by an older one), and a malformed file is reported with a position while the transport still comes up, keeping the previous entries.
+Unknown keys are ignored (so a newer Beebium's file is not damaged by an older one), and a malformed file is reported with a position (a byte offset for bad JSON, the `peers[i]`/`subnets[i]` entry for a bad field) while the transport still comes up, keeping the previous entries.
 
-**Reload.** Each instance polls the file's modification time on the discovery sweep (~2.5 s) and reloads on change, replacing only the `MapFile` and `Subnet` state — `Api`, `Launch` and `Discovered` are untouched — so a hand or GUI edit reaches every running instance within a few seconds with no restart and no Break. `AunService.ReloadMap` forces a reload; `AunService.GetStatus` reports the file path on the server's host, its entry count and the last load error. The full design is in [`docs/discussion/aun-peer-map-file.md`](discussion/aun-peer-map-file.md).
+**Reload.** While the transport browses (`discovery=on` or `browse`), each instance polls the file's modification time on the discovery liveness sweep (every 2.5 s) and reloads on change, replacing only the `MapFile` and `Subnet` state — `Api`, `Launch` and `Discovered` are untouched — so a hand or GUI edit reaches every running instance within a few seconds with no restart and no Break. With `discovery=announce` or `off` there is no sweep, so the file is read at launch and on an explicit reload or edit only. `AunService.ReloadMap` forces a reload; `AunService.GetStatus` reports the file path on the server's host (`map_file_path`), its entry count (`map_file_entry_count`) and the last load error (`map_file_error`). The full design is in [`docs/discussion/aun-peer-map-file.md`](discussion/aun-peer-map-file.md).
 
-This means **Beebium-to-Beebium AUN works with no `map=` configuration on the same LAN**: launch two servers with `--aun port=32768 --station 1` and `--aun port=32769 --station 254` and they'll find each other within a couple of seconds (`mDNS resolve + getaddrinfo` round-trip).
+**Command-line subcommands.** Every server binary edits the map file without starting a machine; each takes `--map-file <path>` to name a file other than the one `report-aun-map-filepath` reports:
 
-The TXT record schema, the rationale for the vendor-neutral service type, and the choice of `net=` as a mandatory field are documented in [`docs/discussion/aun-mdns-peer-discovery.md`](discussion/aun-mdns-peer-discovery.md). Other AUN implementations (BeebEm, PiEconetBridge, real Acorn hardware) are explicitly invited to adopt the same schema; nothing in it is Beebium-specific.
+| Subcommand | Effect |
+|---|---|
+| `report-aun-map-filepath` | Print the path in effect (after `--map-file` and `BEEBIUM_AUN_MAP_FILEPATH`). |
+| `create-aun-map` | Write a template with one example peer and one example subnet; refuses to overwrite an existing file. |
+| `show-aun-map` | List the peers and subnets with labels and host resolution (honours the global `--format`). |
+| `add-aun-peer <net.stn> <host> <port> [--label <text>]` | Add or replace the `peers[]` entry for `net.stn`. |
+| `remove-aun-peer <net.stn>` | Remove a peer. |
+| `add-aun-subnet <net> <a.b.c.0/24> [--label <text>]` | Add or replace the subnet rule for `net`. |
+| `remove-aun-subnet <net>` | Remove a subnet rule. |
+
+```bash
+beebium-model-b add-aun-peer 1.254 192.168.1.10 32768 --label "PiEconetBridge file server"
+beebium-model-b show-aun-map
+```
+
+A running instance picks the change up on its next reload. To bring a BeebEm `Econet.cfg` / `AUNMap` setup across once, see "Address Mapping (BeebEm Style)" below.
 
 #### Editing the map from the Network sidebar
 
 The Network sidebar edits the map file directly, so a GUI with no JSON gives the same standing world as a hand-edited `aun-map.json`. The panel is a **Peers** list, a **Subnet rules** list, and a line for the map file itself.
 
-The **Peers** list shows one row per station: the endpoint as the primary line, the provenance (`map file`, `launch`, `API`, `mDNS` or `subnet`) as a right-aligned caption, and, for a `map file` entry, its label beneath; an unreachable map-file peer (a host that did not resolve) is flagged. The list title carries the row count — "Peers (3)" — and an information affordance explains what the list is. The list's own add control opens a form for a new peer. Only `map file` rows are editable and removable in place; editing opens a prefilled editor, with the `net.station` fixed because it identifies the entry. Rows of the other provenances are read-only, but each offers a **Save to map file** action that opens the *same* form as add, prefilled with that row's endpoint, so the user can adjust it and confirm; on an mDNS-discovered Beebium peer the ephemeral-port warning sits on the port field of that form, where it matters, rather than on the row. The **Subnet rules** list works the same way, with add/edit/remove over the file's `subnets`.
+The **Peers** list shows one row per station: `net.stn  ip:port` as the primary line, the provenance (`map file`, `launch`, `API`, `mDNS` or `subnet`) as a right-aligned caption, and, for a `map file` entry, its label beneath; an unreachable map-file peer (a host that did not resolve) is flagged. The list title carries the row count — "Peers (3)" — and an information affordance explains what the list is. The list's own add control opens a form for a new peer. Only `map file` rows are editable and removable in place; editing opens a prefilled editor, with the `net.station` fixed because it identifies the entry. Rows of the other provenances are read-only, but each offers a **Save to map file** action that opens the *same* form as add, prefilled with that row's endpoint, so the user can adjust it and confirm; on an mDNS-discovered Beebium peer the ephemeral-port warning sits on the port field of that form, where it matters, rather than on the row. The **Subnet rules** list works the same way, with add/edit/remove over the file's `subnets`.
 
 Every form field is written for a newcomer — "Econet net and station (net.stn)", "AUN host (IP address or name)", "AUN UDP port", "Remark" — and carries an information affordance explaining it (that net 0 means this machine's own network, that the station is 1–254, that a host name is resolved on the server's host, that 32768 is the AUN convention). The subnet form reads the same way.
 
-The map file is shown as a file reference named **Shared AUN map** (the one file every instance on the host reads; its actual path is in the tooltip and in Reveal/Copy Path), with the resolved path as a tooltip, a state on its own line beneath — "loaded", "not found" (the file does not exist yet, or the map is disabled), or the load error — and a **Reload** action; the renderer adds its own "Reveal in Finder" (only when the server shares this host's filesystem; see [`docs/frontend-local-server-gating.md`](frontend-local-server-gating.md)) and "Copy Path". A failed edit is reported by a single error indicator naming the offending field.
+The map file is shown as a file reference named **Shared AUN map** (the one file every instance on the host reads; its actual path is in the tooltip and in Reveal/Copy Path), with a state on its own line beneath — "loaded", "not found" (the file does not exist yet, or the map is disabled), or the load error — and a **Reload** action; the renderer adds its own "Reveal in Finder" (only when the server shares this host's filesystem; see [`docs/frontend-local-server-gating.md`](frontend-local-server-gating.md)) and "Copy Path". A failed edit is reported by a single error indicator naming the offending field.
 
-Every edit writes the file atomically and reloads at once, so the change is in force immediately and reaches every other running instance on the next sweep (§ Reload) — the reload re-pushes the panel, so a peer added in one window's sidebar appears in another's within a sweep with no Reload needed. All of this is also available headless through `AunService` (`AddMapPeer`/`RemoveMapPeer`/`AddMapSubnet`/`RemoveMapSubnet`/`ReloadMap`/`ListMap`) and the `aun-map` CLI subcommands, so scripts and the sidebar share one code path. The two list controls and the file reference are generic Extension-UI primitives (`EditableList` and `FileReference`); see [`docs/discussion/extension-ui-architecture.md`](discussion/extension-ui-architecture.md).
+Every edit writes the file atomically and reloads at once, so the change is in force immediately and reaches every other running instance on its next reload (§ Reload) — the reload re-pushes the panel, so a peer added in one window's sidebar appears in another's within a sweep with no Reload needed. All of this is also available headless through `AunService` (`AddMapPeer`/`RemoveMapPeer`/`AddMapSubnet`/`RemoveMapSubnet`/`ReloadMap`/`ListMap`) and the map-file subcommands above, so scripts and the sidebar share one code path. The two list controls and the file reference are generic Extension-UI primitives (`EditableList` and `FileReference`); see [`docs/discussion/extension-ui-architecture.md`](discussion/extension-ui-architecture.md).
 
-#### Changing the station number at runtime
+### Changing the station number at runtime
 
-The station number can be changed while the machine runs (the Network sidebar's pencil edit, or `EconetService::SetStationId`). The guest only re-reads the number from `&FE18` on the next Break, so the change takes effect a Break later; but the AUN transport reacts immediately, because its advertised and self-filtered identity would otherwise stay fixed at the value it bound with. On a station change the transport re-publishes its `_aun._udp` announcement with the new station (the announcement's instance name embeds the station, so this withdraws the old name and publishes the new one) and updates the subscriber's self-filter so this machine now treats its *old* station number as just another peer. Without this, a machine whose station was changed in the sidebar would advertise a station nobody can route to and ignore its former number — the defect in issue #68.
+The station number can be changed while the machine runs (the Network sidebar's pencil edit, or `EconetService.SetStationId`). The guest only re-reads the number from `&FE18` on the next Break, so the change takes effect a Break later; but the AUN transport reacts immediately, because its advertised and self-filtered identity would otherwise stay fixed at the value it bound with. On a station change the transport stamps a fresh `since`, re-publishes its `_aun._udp` announcement with the new station (the instance name embeds the station, so this withdraws the old name and publishes the new one), and updates the subscriber's self-filter so this machine now treats its *old* station number as just another peer (#68). The subscriber also rebuilds its discovered state from every announcement it has seen, because mDNS delivers each announcement only once: a machine already announcing the old number is adopted as a peer, and one already on the new number becomes a collision (#148).
 
-#### Station-number collisions (first live station wins)
+### Station-number collisions (first live station wins)
 
-Two stations must not share a number. If a discovered announcement claims an `(net, stn)` that a **different, still-live** station already holds, Beebium refuses it rather than repointing the routing table at the newcomer: the incumbent keeps the number, the newcomer is not adopted, and the collision is recorded. A withdrawal of the refused announcement removes nothing (it never owned the entry), so the incumbent is never orphaned. A re-advertisement from the *same* station (an interface change, or a new ephemeral port) is not a collision and updates its endpoint in place. Collisions are logged under `BEEBIUM_AUN_TRACE` (each raise and each clear) and surfaced on `EconetService` status as `aun_station_collision_count` / `aun_last_station_collision`, which `WatchEconetStatus` streams.
+Two stations must not share a number. If a discovered announcement claims an `(net, stn)` that a **different, still-live** discovered station already holds, Beebium refuses it rather than repointing the routing table at the newcomer: the incumbent keeps the number, the newcomer is not adopted, and the collision is recorded. A withdrawal of the refused announcement removes nothing (it never owned the entry), so the incumbent is never orphaned. A re-advertisement from the *same* station (an interface change, or a new ephemeral port) is not a collision and updates its endpoint in place. Collisions are logged under `BEEBIUM_AUN_TRACE` (each raise and each clear) and surfaced on `EconetService` status as `aun_station_collision_count` / `aun_last_station_collision`, which `WatchEconetStatus` streams. A machine watching two others fight over a number sees *"station N.S already held by `<incumbent ip:port>`; rejected advertisement from `<ip:port>`"*.
 
-The report describes the collisions **currently in effect**, not a running total: `aun_station_collision_count` is how many are live right now and `aun_last_station_collision` the most recent still live (empty when none). A collision clears by itself — and the count drops, streamed to the sidebar — when the colliding advertisement is withdrawn, when it re-announces under a different number, when it is adopted because the incumbent went away, or (for an own-number collision) when this machine changes its own number. So the warning appears exactly while a conflict is live and disappears once it is resolved, with no client-side timer. The set is re-evaluated on every discovery add/remove, on the same-host liveness sweep, and on a station change.
+The report describes the collisions **currently in effect**, not a running total: `aun_station_collision_count` is how many are live right now and `aun_last_station_collision` the most recent still live (empty when none). A collision clears by itself — and the count drops, streamed to the sidebar — when the colliding advertisement is withdrawn, when it re-announces under a different number, when it is adopted because the incumbent went away, or (for an own-number collision) when this machine changes its own number. So the warning appears exactly while a conflict is live and disappears once it is resolved, with no client-side timer. The set is re-evaluated on every discovery add/remove, on the same-host liveness sweep, and on a station change. Collision reporting needs the transport to browse (`discovery=on` or `browse`).
 
-**Two machines on your own number are told different things** (issue #147). When another machine claims *this* machine's `(net, stn)`, first-live-wins means the two are in different situations, so the warning each operator sees differs by who bound first — decided from the `since` stamp both advertise (see the TXT schema in [`docs/discussion/aun-mdns-peer-discovery.md`](discussion/aun-mdns-peer-discovery.md); ties break on the instance identity, and a peer with no `since` is taken as the earlier one). The machine that bound **first** (the incumbent) is told *"Another machine at `<ip:port>` tried to claim station N.S and was rejected"* — it keeps the number and need do nothing. The machine that bound **later** (the newcomer) is told *"Station N.S is already in use by `<ip:port>`. Change this machine's station number in the Station field above; the new number takes effect at the next Break"* — it is unreachable until renumbered. A third machine that merely watches two others fight over a number still sees the neutral peer-vs-peer wording, which names the incumbent's endpoint. On a station change the roles are re-evaluated. The preventive half — a machine choosing a free number *before* it announces — is issue #67.
+**A claim on this machine's own number** is reported too, rather than silently ignored. Our own announcement, which Bonjour reflects back to us (possibly renamed), is recognised by its `impl-identity` TXT record and skipped. A machine never yields its own number, so there is nothing to adopt; the collision clears when the other instance stops claiming the number or when this machine moves off it. First-live-wins puts the two machines in different situations, so the warning each operator sees differs by who claimed first (#147) — decided from the `since` stamp both advertise; a tie breaks on `impl-identity` (the smaller is the incumbent), and a claimant with no `since` (another implementation) is taken as the incumbent. The machine that claimed **first** (the incumbent) is told *"Another machine at `<ip:port>` tried to claim station N.S and was rejected."* — it keeps the number and need do nothing. The machine that claimed **later** (the newcomer) is told *"Station N.S is already in use by `<ip:port>`. Change this machine's station number in the Station field above; the new number takes effect at the next Break."* — it is unreachable until renumbered. On a station change the roles are re-evaluated.
 
-The mirror case is treated the same way: an advertisement from a different instance claiming **this machine's own** number is reported as a collision (and logged) rather than silently ignored, so the incumbent — in Mark's scenario, the original Station 80 — sees that something else has appeared on its number. Our own announcement, which Bonjour reflects back to us, is recognised by its instance name and skipped. A machine never yields its own number, so there is nothing to adopt in this case; the collision clears when the other instance stops claiming the number or when this machine moves off it.
-
-A refused advertisement is not thrown away: it is parked, and **adopted automatically once the number frees** — when the incumbent's announcement is withdrawn, or (for a same-host peer) when the liveness sweep reaps its port. The most recent parked advertisement for a number wins. So a station that crashed and relaunched — its stale registration lingering, causing the relaunch to be refused as a collision — becomes reachable as soon as the stale one is removed or reaped, with no manual intervention. A parked advertisement withdrawn before the number frees is simply dropped. The preventive half — a machine choosing a free station number from what mDNS already shows, rather than colliding in the first place — is tracked as issue #67.
+A refused advertisement is not thrown away: it is parked, and **adopted automatically once the number frees** — when the incumbent's announcement is withdrawn, or (for a same-host peer) when the liveness sweep reaps its port. The most recent parked advertisement for a number wins. So a station that crashed and relaunched — its stale registration lingering, causing the relaunch to be refused as a collision — becomes reachable as soon as the stale one is removed or reaped, with no manual intervention. A parked advertisement withdrawn before the number frees is simply dropped. The preventive half — choosing a free number before announcing — is `--station auto`, next.
 
 ### Choosing a free station number at launch (`--station auto`, issue #67)
 
-The preventive half of the collision story: `--station auto` (or `auto:<lo>-<hi>`, default range 1-253), or a preset's `"econet": {"station": "auto"}`, makes the transport pick a free number at launch instead of colliding and renumbering afterwards — the renumber that triggered #68, #148 and #155. It is resolved before the machine runs and before the socket is enabled, so the guest reads its final number at its first boot with no Break, and it runs on the launch path, never the emulation thread.
+`--station auto` (or `auto:<lo>-<hi>`, both 1..254, default range 1-253), or a preset's `"econet": {"station": "auto"}` (or `"auto:<lo>-<hi>"`), makes the transport pick a free number at launch instead of colliding and renumbering afterwards — the renumber that triggered #68, #148 and #155. It is resolved before the machine runs and before the Econet socket is enabled, so the guest reads its final number at its first boot with no Break. A later `--station` on the command line overrides a preset's. Only AUN implements this: Piconet bridges a real wire with no announcements to consult and rejects `auto`, as does `--aun port=none` and a machine with no transport at all; each is a launch error. The chosen number becomes the socket's real station number, so status, the sidebar and the announcement all show it, and the launch log notes it as `(auto-assigned)`. The bundled `model-b-disc-aun-auto` preset uses it.
 
-The transport (AUN) raises a claim announcement at the range's lowest number and keeps it up while it browses `_aun._udp`. The numbers counted as *in use* are the discovered announcements on this net, the map-file peers and the launch `map=` entries — not subnet-derived guesses, which are conventions rather than claimed stations. If a peer that bound first (by the #147 `since`/identity ordering) is found on the claimed number, this instance climbs to the next free number and re-announces there; keeping the announcement up throughout is what lets instances started together discover one another and settle on distinct numbers. If the whole range is in use it configures the range's first number and reports it on stderr rather than failing the launch. Only AUN implements this; Piconet bridges a real wire with no announcements to consult and rejects `auto`. The chosen number becomes the socket's real station number, so status, the sidebar and the announcement all show it; the bundled `model-b-disc-aun-auto` preset uses it. (The complementary runtime adoption of a freed number is described above.)
+With the default `discovery=on`, the transport binds its socket and brings up its permanent announcer and subscriber at a provisional number — the first number, from the search start, not held by a map-file or launch `map=` peer — and keeps that claim announced while it browses `_aun._udp` (#160: the same announcer and subscriber stay up for the session, so nothing is torn down on the launch path). The numbers counted as *in use* are the discovered announcements on this net, the map-file peers and the launch `map=` entries — not subnet-derived guesses, which are conventions rather than claimed stations. If a peer that claimed first (by the #147 `since`/identity ordering) is found on the claimed number, this instance climbs to the next free number and re-announces there; keeping the announcement up throughout is what lets instances started together discover one another and settle on distinct numbers. If the whole range is in use it configures the range's first number and reports it on stderr rather than failing the launch. How the other discovery modes change this is under "Discovery mode".
 
-**Spacing re-use (issue #161).** Rather than always taking the lowest free number -- which hands a new machine a number another just vacated -- the search starts one past the last number this host allocated and wraps at the top, so re-use is spread across the range. The last-allocated number is a small per-user, per-host hint file beside `aun-map.json` (overridable by `BEEBIUM_AUN_AUTO_STATE_FILEPATH`; `none` disables it, restoring plain lowest-free). It is only a hint for spacing launches on one host -- the mDNS claim under the #147 ordering stays the arbiter for same-instant and cross-host races -- and it can never fail a launch: any error (missing directory, corrupt contents, a lock held beyond a few hundred ms) falls back to lowest-free with one line on stderr. A short exclusive file lock (portable: `flock` on POSIX, `LockFileEx` on Windows) serialises the read-advance-write; it is held only for that, never across the browse. Build-time boots (`capture-screenshot`, preset generation) never touch the file.
+**Spacing re-use (issue #161).** Rather than always taking the lowest free number -- which hands a new machine a number another just vacated -- the search starts one past the last number this host allocated and wraps at the top, so re-use is spread across the range. The last-allocated number is a small per-user, per-host hint file, `aun-auto-next`, beside `aun-map.json` (overridable by `BEEBIUM_AUN_AUTO_STATE_FILEPATH`; `none` disables it, restoring plain lowest-free). It is only a hint for spacing launches on one host -- the mDNS claim under the #147 ordering stays the arbiter for same-instant and cross-host races -- and it can never fail a launch: any error (missing directory, corrupt contents, a lock held beyond 300 ms) falls back to lowest-free with one line on stderr. A short exclusive lock on `aun-auto-next.lock` (`flock` on POSIX, `LockFileEx` on Windows) serialises the read-advance-write; it is held only for that, never across the browse.
 
-**Timing and where it runs.** Selection runs on the launch path, never the emulation thread, and *after* the gRPC server is listening and has printed its port — so a front-end's port-wait never times out on it, and the status stream shows Econet as not-yet-enabled while it proceeds; with `--wait=api` the first `Run` waits for it to finish. It is governed by three parameters (milliseconds), overridable for tests via the `BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS`, `_QUIET_MS` and `_BUDGET_MS` environment variables: a minimum observation window before settling on a number (default 1500, so a pre-existing peer is discovered first), a quiet period after the last move (default 600), and a hard budget (default 4000). Build-time boots — `capture-screenshot` and preset generation — take the range's first number immediately with no browse and no announce, so they stay deterministic and never touch the LAN.
+**Timing and where it runs.** Selection runs on the launch path, never the emulation thread, and *after* the gRPC server is listening and has printed its port — so a front-end's port-wait never times out on it, and the status stream shows Econet as not-yet-enabled while it proceeds; with `--wait=api` the first `Run` waits for it to finish. It is governed by three parameters (milliseconds), overridable for tests via the `BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS`, `BEEBIUM_AUN_AUTO_QUIET_MS` and `BEEBIUM_AUN_AUTO_BUDGET_MS` environment variables: a minimum observation window before settling on a number (default 1500, so a pre-existing peer is discovered first), a quiet period after the last move (default 600), and a hard budget (default 4000). Build-time boots — `capture-screenshot` and preset generation — take the range's first number immediately with no browse, no announce and no hint file, so they stay deterministic and never touch the LAN.
 
 **Reliability (read this).** A **staggered** launch — clients started a second or more apart, the usual case — is reliable: each later instance discovers the earlier ones' continuous claims and steps past them. A **same-instant** launch (several clients in the very same moment) is **best-effort**: real mDNS discovery is not guaranteed to be symmetric within the budget, so two instances can momentarily settle on one number. That residual clash is not silent — it surfaces as the ordinary station-number collision (the #147 sidebar warning and `aun_station_collision_count`), and the fix is the same as for any collision: renumber one. Lengthening `BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS` narrows the window at the cost of a slower launch.
-
-**Platform support today:**
-
-- macOS — full support via Bonjour (`dns_sd.h`): both advertises and browses.
-- Linux — full bidirectional discovery via `AvahiAdvertiser` and `AvahiBrowser` (libavahi-client, loaded at runtime with `dlopen`), so a Linux server both publishes and discovers `_aun._udp` peers with no manual `map=` needed. Requires a running `avahi-daemon`; where Avahi is absent both sides degrade silently to a no-op (advertiser) / unavailable (browser).
-- Windows — full bidirectional discovery (publishes and discovers `_aun._udp` peers, no manual `map=` needed), with a provider chosen at run time:
-  - **Apple Bonjour** (`dnssd.dll`) when it is installed (iTunes, Adobe apps, etc. bundle it). Bonjour takes over the mDNS responder (UDP 5353), so where present it is preferred; it exposes the same `dns_sd.h` API the macOS advertiser/browser use, resolved at run time via `GetProcAddress` (no Bonjour SDK needed to build).
-  - **Native `windns.h`** (`DnsServiceRegister` / `DnsServiceBrowse` / `DnsServiceResolve`) otherwise. Requires Windows 10 1903+; always present, so there is always a provider.
-
-  Note: on a machine with Bonjour installed the native path may be unable to register (Bonjour owns 5353), which is exactly why the Bonjour provider is preferred when available.
-
-**Implementation rule — shutting down a DNS-SD event thread (`DNSServiceRef` lifetime).** The Bonjour advertiser and browser each run a background thread that drives `DNSServiceProcessResult` on a `DNSServiceRef`, waiting in `select()` on `DNSServiceRefSockFD` with a short timeout and a `running_` flag. A `DNSServiceRef` must **never** be passed to `DNSServiceRefDeallocate` while another thread is inside a DNS-SD call on it: dnssd forbids it, and on recent macOS (26 Tahoe) libdispatch turns the violation into an immediate process abort — `EXC_BREAKPOINT` with `"API MISUSE: Resurrection of an object"` — whereas macOS 14 tolerated the same race. So `stop()` always **clears `running_`, joins the event thread, and only then calls `DNSServiceRefDeallocate`** (`BonjourAdvertiser.cpp`, `BonjourBrowser.cpp`). The select-with-timeout loop makes the join prompt. This matters because `start()` restarts by calling `stop()`, so every re-announce — notably the AUN re-publish on a runtime station change (see "Changing the station number at runtime" above) — exercises this teardown on a running advertiser. The Avahi provider gets the same guarantee for free (`avahi_threaded_poll_stop` joins its poll thread before any object it uses is freed); the Windows native provider has no such owned thread (teardown waits on completion callbacks instead). Regression cover: the `[advertiser][stress]` and `[browser][stress]` cases hammer the restart path and are clean under TSan (they abort under TSan with the old deallocate-before-join ordering) — see issue #155.
 
 ### Discovery mode (`--aun discovery=`, issue #158)
 
@@ -194,36 +233,31 @@ By default the AUN transport both **announces** itself on `_aun._udp` and **brow
 
 | mode | announce | browse | effect |
 |---|---|---|---|
-| `on` (default) | yes | yes | today's behaviour |
+| `on` (default) | yes | yes | announce and adopt discovered peers |
 | `announce` | yes | no | publish our record; adopt nothing from the network |
 | `browse` | no | yes | adopt discovered peers; publish nothing |
 | `off` | no | no | neither; only `map=` / the map file / `AddPeer` populate the table |
 
 Consequences, all following from "do we browse?":
 - **Collision reporting and parked adoption need us to browse**, so they are active only in `on` and `browse`; in `announce` and `off` an own-number clash is silent (we never see the claimant).
-- **Automatic station selection** (`--station auto`, #67/#161): with `off` it uses only the map file, launch `map=` entries and the per-host hint, with no claim and no observation delay (it resolves immediately); `announce` behaves as `off` for the in-use set (we cannot see others) but still records the hint and publishes the chosen number afterward; `browse` observes but does not claim, so a **same-instant race is not arbitrated** (two browse-only clients launched together can pick the same number, which then surfaces as an ordinary collision).
-- The `map-file=` handling and the map-file reload poll are independent of the mode.
-- The sidebar (`AunUi`) shows the mode on one line when it is not `on`; `AunService.GetStatus` reports it in `discovery_mode` (served over ExtensionRpc; `aun.proto` is **not** part of the fingerprinted service protocol, so the protocol fingerprint is unchanged).
-- An invalid value is a clear launch error naming the four choices.
-
-**Future improvements:**
-
-- A future DSCP (Discovery Service Coordination Protocol, name TBD) layer on top of mDNS could let peers negotiate richer capability information — e.g. supported AUN extensions, machine model, fileserver hosting status — without requiring every consumer to talk gRPC. mDNS shipped first because it's independently useful; DSCP is the natural next step if richer per-peer metadata is wanted.
-- Bridge-as-bridge announcements via a separate `_acorn-bridge._udp` service type, once Beebium grows a machine type with two ADLCs (the Acorn Econet Bridge). This is reserved but not implemented; only `_aun._udp` is published today.
+- **Automatic station selection** (`--station auto`, #67/#161): with `off` it uses only the map file, launch `map=` entries and the per-host hint, with no claim and no observation delay (it resolves immediately); `announce` behaves as `off` for the in-use set (we cannot see others) but still records the hint and publishes the chosen number afterward; `browse` observes for the usual window, then takes the lowest free number counting what it saw, but does not claim, so a **same-instant race is not arbitrated** (two browse-only clients launched together can pick the same number, which then surfaces as an ordinary collision).
+- **The map-file poll rides on the browse sweep**, so in `announce` and `off` the map file is read at launch and on an explicit reload or edit, not when another process changes it. `map-file=` itself is independent of the mode.
+- The sidebar (`AunUi`) shows "Discovery: `<mode>`" on one line when it is not `on`; `AunService.GetStatus` reports it in `discovery_mode` (and the Python and TypeScript clients expose it).
+- An invalid value is a launch error naming the four choices.
 
 ### `FourWayHandshake` is always in the path
 
-All three backends operate behind the `FourWayHandshake` decorator (`aun_mode = true` is the default for production use). Econet's wire protocol is a four-way handshake (scout / scout-ack / data / data-ack). AUN's UDP protocol is two-way (Unicast / Ack). Even Piconet is *atomic* from the host's perspective — the firmware completes the wire handshake before reporting the result. `FourWayHandshake` synthesises the missing scout-ack and final-ack frames locally so the NFS ROM sees the timing it expects regardless of the transport underneath.
+All three backends operate behind the `FourWayHandshake` decorator (the server always enables the Econet socket with `aun_mode = true`). Econet's wire protocol is a four-way handshake (scout / scout-ack / data / data-ack). AUN's UDP protocol is two-way (Unicast / Ack). Even Piconet is *atomic* from the host's perspective — the firmware completes the wire handshake before reporting the result. `FourWayHandshake` synthesises the missing scout-ack and final-ack frames locally so the NFS ROM sees the timing it expects regardless of the transport underneath.
 
 ### When to use which
 
-- **Other Beebium emulators on the same host or LAN:** `AunBackend`. mDNS discovery handles the peer-table population automatically (no manual `--aun map=` needed) on all three platforms (macOS, Windows, Linux); fall back to explicit `map=` for hermetic test runs, for hosts without a working mDNS responder installed, or for WAN deployments.
+- **Other Beebium emulators on the same host or LAN:** `AunBackend`. mDNS discovery handles the peer-table population automatically (no manual `--aun map=` needed) on all three platforms (macOS, Windows, Linux); fall back to explicit `map=` (with `discovery=off` for a fully deterministic table) for hermetic test runs, for hosts without a working mDNS responder installed, or for WAN deployments.
 - **A real BBC, Acorn fileserver, or other Econet peripheral:** `PiconetBackend` with a Piconet device on the wire. The wire's clock generator and termination must be present (the Piconet is a participant, not a clock source).
 - **Testing only:** `TestBackend` (or the test fakes `MockPiconetSerial`, `FakePiconetDevice`, `FakePiconetDeviceOnPty`, `AunBridgePiconetDevice` in `tests/piconet/`). The Piconet integration's test stack is described in `docs/discussion/piconet-feasibility.md` ("Testing Strategy" section).
 
 ### Connecting to a PiEconetBridge
 
-[PiEconetBridge](https://github.com/cr12925/PiEconetBridge) speaks AUN, so a Beebium station reaches a bridge, and the fileservers and wire stations behind it, through `AunBackend`. This is the arrangement the opt-in `PiEconetBridge recipe` workflow runs against a real bridge (`integration_tests/pieb-aun/tests/test_bridge_recipe.py`): a fileserver on 1.254 behind the bridge, and Beebium as station 80 on net 2.
+[PiEconetBridge](https://github.com/cr12925/PiEconetBridge) speaks AUN, so a Beebium station reaches a bridge, and the fileservers and wire stations behind it, through `AunBackend`. This is the arrangement the opt-in `PiEconetBridge recipe` workflow (`.github/workflows/pieb-bridge-recipe.yml`, run by hand or weekly, Linux only) runs against a real bridge (`integration_tests/pieb-aun/tests/test_bridge_recipe.py`): a fileserver on 1.254 behind the bridge, and Beebium as station 80 on net 2.
 
 **Every net number in a PiEconetBridge configuration must be non-zero.** The bridge decides for itself when to present net 0 to a given medium. So the bridge knows the Beebium segment by a non-zero net (2 here), and Beebium declares the same net with `--aun net=2`; inbound frames for net 2 are presented to the guest as net 0, its own segment.
 
@@ -241,18 +275,18 @@ On the Beebium side, declare the net and station the bridge expects, and map the
 
 ```bash
 beebium-model-b --station 80 \
-    --aun net=2:port=32768:map=1.254@<bridge-host>@32768 \
+    --aun net=2:port=32768:map=1.254@<bridge-ip>@32768 \
     --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom
 ```
 
-Then, at the BBC prompt, `*NET` and `*I AM 1.254 SYST` log in, and `*CAT` lists the fileserver's disc. If the map entry is missing, the login fails with the filing system's no-reply error: "No reply" from NFS 3.34, "Station 1.254 not present" from ANFS 4.18.
+`map=` takes an IPv4 literal for the bridge; a DNS name is accepted only in the map file. Then, at the BBC prompt, `*NET` and `*I AM 1.254 SYST` log in, and `*CAT` lists the fileserver's disc. If the map entry is missing, the login fails with the filing system's no-reply error: "No reply" from NFS 3.34, "Station 1.254 not present" from ANFS 4.18.
 
 The bridge matches Beebium's datagrams against its `AUN MAP HOST` line by source address and port, so the path between them must not rewrite either. Two consequences:
 
 - **Bridge and Beebium on one host** cannot both bind 32768. Give Beebium another port (`--aun port=40080`) and put the same port in the bridge's `AUN MAP HOST` line; the bridge stays on 32768.
 - **A bridge in a container** must share a network with Beebium without a port forwarder between them: host networking (`--network host`) on a Linux host, or, under Docker Desktop, Beebium running in a Linux container on the same host network. Docker Desktop's port forwarder rewrites UDP source endpoints, so a native macOS or Windows Beebium reaching a containerised bridge through a published port matches no static map entry; `integration_tests/pieb-aun/` works around that with a `DYNAMIC` net, at the cost of a bridge-assigned station number.
 
-`docker/pieconetbridge/run-recipe.sh` builds a wire-free bridge image (no Pi, HAT or kernel module; pinned upstream commit) and starts it with this configuration, taking Beebium's host and port from `BEEBIUM_HOST` and `BEEBIUM_AUN_PORT`. Its `render` command prints the configuration for a bridge you run yourself.
+`docker/pieconetbridge/run-recipe.sh` builds a wire-free bridge image (no Pi, HAT or kernel module; pinned upstream commit) and starts it with this configuration (`run-recipe.sh start`), taking Beebium's host and port from `BEEBIUM_HOST` and `BEEBIUM_AUN_PORT` (defaults `127.0.0.1` and `32769`, a one-host setup) and the bridge's port from `BRIDGE_AUN_PORT` (default 32768). Its `render` command prints the configuration for a bridge you run yourself.
 
 The `map=` entry above can instead be a standing `peers` entry in `aun-map.json`, shared by every Beebium instance on the host, so the bridge is mapped once rather than on every launch:
 
@@ -261,7 +295,7 @@ The `map=` entry above can instead be a standing `peers` entry in `aun-map.json`
             "label": "PiEconetBridge file server"}]}
 ```
 
-then launch with just `--aun net=2:port=32768` (the station and sideways ROM as above). See "The AUN map file" above.
+(or `add-aun-peer 1.254 <bridge-host> 32768 --label "PiEconetBridge file server"`), then launch with just `--aun net=2:port=32768` (the station and sideways ROM as above). See "The AUN map file" above.
 
 ### Background: known gaps
 
@@ -323,11 +357,15 @@ severs the wire while gated, and the gating state is reported on
 Beebium's transports are *extensions*, dispatched through the same machinery that handles peripheral extensions (acorn-rtc, acorn-scsi, etc.). The split between built-in and plugin extensions and the C++ class hierarchy that supports it:
 
 - `Extension` (`src/core/include/beebium/extension/Extension.hpp`) — common base. Holds the manifest and instance config; provides `name()`, `description()`, `id()`, `label()`, `config_value()`. No lifecycle methods.
-- `EconetTransportExtension : Extension` (`src/core/include/beebium/extension/EconetTransportExtension.hpp`) — the transport extension-point interface. Three virtual hooks:
+- `EconetTransportExtension : Extension` (`src/core/include/beebium/extension/EconetTransportExtension.hpp`) — the transport extension-point interface. Its virtual hooks:
   - `std::unique_ptr<NetworkBackend> create_backend(uint8_t station)` — produce the wire-side backend.
   - `void on_station_id_changed(uint8_t)` — propagate gRPC `SetStationId` updates to transports that need to inform a downstream device (Piconet's `SET_STATION` command).
-  - `std::vector<grpc::Service*> grpc_services()` — optional gRPC services the transport contributes (AUN extension exposes `AunService` here).
-- `PeripheralExtension : Extension` — the parallel base for hardware-port peripherals (1MHz bus, User VIA, Tube). Unchanged by the transport refactor; lifecycle is `attaches_to / provides / init(ExtensionContext&) / shutdown / grpc_services`.
+  - `bool requires_real_time_pacing() const` — whether the transport must run at 1x (see "Emulation speed and real-time peers").
+  - `std::optional<std::string> config_error() const` — validate the configuration at machine assembly, so a bad value (e.g. AUN's `discovery=`) is a launch error.
+  - `AutoStationOutcome select_auto_station(econet::StationRange)` — choose a station for `--station auto`; the default reports it unsupported (AUN overrides it).
+  
+  A transport's client-facing RPCs (`AunService`, `PiconetService`) are not hosted as gRPC services; they are served over `ExtensionRpc` through `Extension::rpc_dispatchers()` (see "Routing a transport's typed RPCs").
+- `PeripheralExtension : Extension` — the parallel base for hardware-port peripherals (1MHz bus, User VIA, Tube); lifecycle is `attaches_to / provides / init(ExtensionContext&) / shutdown`.
 
 ### Built-in vs plugin
 
@@ -336,9 +374,11 @@ Each extension is either compiled into the server (built-in) or loaded from an o
 | Extension | Kind | Lives in | Loaded from |
 |---|---|---|---|
 | `aun` (AUN UDP) | built-in | `src/extensions/aun/` | linked into `beebium-model-b` etc. |
-| `piconet` (USB-CDC bridge) | plugin | `src/extensions/piconet/` | `<extension-dir>/piconet/piconet.{so,dylib}` + `manifest.json`, POSIX-only |
-| `acorn-65c02-coprocessor` (Tube) | built-in | `src/extensions/acorn-65c02-coprocessor/` | linked into the server |
-| `acorn-scsi`, `acorn-rtc`, `scsi-hard-disc`, `test-scratch-ram` | plugins | `src/extensions/<name>/` | dlopen'd from the extension directory |
+| `host-serial` | built-in | `src/extensions/host-serial/` | linked into the server |
+| `piconet` (USB-CDC bridge) | plugin | `src/extensions/piconet/` | `<extension-dir>/piconet/piconet.{so,dylib,dll}` + `manifest.json` |
+| `acorn-65c02-coprocessor`, `acorn-65c102-coprocessor` (Tube), `acorn-scsi`, `acorn-rtc`, `scsi-hard-disc`, the serial plugins, `test-scratch-ram` | plugins | `src/extensions/<name>/` | loaded from the extension directory |
+
+`list-extensions` lists what a server found; `describe-extension <name>` prints one extension's parameter schema.
 
 ### Manifest
 
@@ -354,13 +394,23 @@ Every extension carries a manifest declaring its CLI name, parameter schema, and
     {"key": "port", "type": "string",
      "description": "UDP port to bind (decimal, or 'none' to disable)",
      "default_value": "32768"},
+    {"key": "net", "type": "string",
+     "description": "Local Econet net number this station belongs to (0..255)",
+     "default_value": "0"},
     {"key": "map", "type": "string", "is_list": true,
-     "description": "Peer entry 'net.stn@ip@port' (repeatable)"}
+     "description": "Peer entry 'net.stn@ip@port' (repeatable)"},
+    {"key": "map-file", "type": "string",
+     "description": "Path to the per-user aun-map.json, or 'none' to disable it"},
+    {"key": "subnet", "type": "string", "is_list": true,
+     "description": "Subnet rule 'net@a.b.c.0/24' (RISC OS convention; repeatable)"},
+    {"key": "discovery", "type": "string",
+     "description": "mDNS discovery: on (announce+browse), announce, browse, or off",
+     "default_value": "on"}
   ]
 }
 ```
 
-The CLI parser uses `cli_name` to recognise `--aun ...`; the parameter schema drives validation of the colon-separated argument string. `parameters[*].is_list = true` accumulates repeated `key=value` tokens into a `std::vector<std::string>` of raw values; the parser does not tokenise their contents, so each extension picks whatever inner separator suits its data.
+The CLI parser uses the manifest's CLI name (`cli` in `manifest.json`, `cli_name` in C++) to recognise `--aun ...`; the parameter schema drives validation of the colon-separated argument string. `parameters[*].is_list = true` accumulates repeated `key=value` tokens into a `std::vector<std::string>` of raw values; the parser does not tokenise their contents, so each extension picks whatever inner separator suits its data.
 
 ### Lifecycle
 
@@ -368,9 +418,10 @@ For an econet-transport extension the order is:
 
 1. `ServerMain` parses CLI flags, building a list of `ExtensionInstance{name, config}` records.
 2. Plugin manifests are scanned from the extension directory.
-3. The `EconetTransportRegistry` is populated by walking the instance list — entries whose manifest `extension_kind == "econet-transport"` are constructed (via `BuiltinExtensions::find()` for built-ins or `PluginLoader::load_extension()` for plugins) and added to the registry. This happens **before `machine.reset()`** so the BBC's reset routine sees a configured ADLC.
-4. `install_econet` queries the registry: if it holds a transport, it calls `transport->create_backend(station)` and hands the result to `EconetSocket::enable()`. Otherwise an internally-disconnected `TestBackend` is installed (NFS sees "No Clock").
-5. After the gRPC server starts, the transport registry's `collect_grpc_services()` contributes its services (e.g. `AunService`) alongside the peripheral extensions' services.
+3. A preset's `econet.transport` and a command-line transport of the same kind are reconciled (`merge_preset_econet_transport`, #150).
+4. The `EconetTransportRegistry` is populated by walking the instance list — entries whose manifest `extension_kind == "econet-transport"` are constructed (via `BuiltinExtensions::find()` for built-ins or `PluginLoader::load_extension()` for plugins), checked with `config_error()`, and added to the registry. This happens **before `machine.reset()`**.
+5. `install_econet` queries the registry: if it holds a transport, it calls `transport->create_backend(station)` and hands the result to `EconetSocket::enable()` (a null backend — `port=none`, a failed bind — is replaced by a disconnected `TestBackend`). With no transport an internally-disconnected `TestBackend` is installed (NFS sees "No Clock"). For a fixed station this runs before `machine.reset()`, so the BBC's reset routine sees a configured ADLC; for `--station auto` it runs after the gRPC server has printed its port and `select_auto_station` has chosen the number, still before the machine runs.
+6. The `ExtensionRpc` and `ExtensionUiService` services are given the transport registry and serve its transports directly — their `rpc_dispatchers()` and `ui()` — alongside the peripheral extensions.
 
 The same code path serves both built-in (AUN) and plugin (Piconet) transports — the only difference is whether `BuiltinExtensions::find()` or `PluginLoader::load_extension()` constructs the instance.
 
@@ -382,25 +433,27 @@ The macOS frontend's Network sidebar (sidebar mode 8) is split into a transport-
 
 - **Connection** — "Connected" / "Disconnected", driven by `EconetService.GetEconetStatus.connected`. For AUN this reflects the cable-simulation state (toggled via the panel's Connect/Disconnect button); for Piconet it reflects `is_serial_open() && mode == LISTEN`. Same row, same widget, same meaning across transports — "is the BBC actually in two-way comms with the wire?"
 - **Econet Station** — current station number with a pencil-edit affordance opening a popover (`SetStationId` via `EconetService`). Transport-agnostic.
+- **Station collision** — "Station collision: …" with the server's description, shown while `aun_station_collision_count` is non-zero (see "Station-number collisions").
 - **Speed-gating banner** — a yellow `exclamationmark.triangle` warning shown at the top of the panel when `GetEconetStatus.gated_by_speed` is true: the active transport requires real-time emulation (`requires_real_time`) but the emulation speed is not 1x, so its traffic has been severed (see "Emulation speed and real-time peers" above). The banner reuses the existing connection-error idiom and directs the user to the Processor panel to restore 1x speed. It is transport-agnostic — any transport reporting `requires_real_time` triggers it — but in practice only Piconet does.
 
 **Per-transport panel** (server-pushed `View` rendered by `ExtensionPanelView`, driven by whichever transport extension is active):
 
 - **AUN** (`AunUi`):
   - `Connect` / `Disconnect` Button — toggles `AunBackend::set_connected`. Label flips with the current state.
-  - `Listening on UDP port N` Label.
-  - `Peers` group — one Label per configured peer (`net.stn  ip:port`), or "No peer stations configured" when empty.
+  - `Listening on UDP port N` Label, and "Discovery: `<mode>`" when discovery is not `on`.
+  - **Peers** and **Subnet rules** lists and the **Shared AUN map** file reference — see "Editing the map from the Network sidebar".
+  - With no backend (bind failed, `port=none`) the panel is a single line giving the reason.
 
 - **Piconet** (`PiconetUi`):
-  - Device path Label (`Device: /dev/tty.usbmodem...`).
-  - Indicator — "Adapter responsive" (green) when the USB serial port is open; "Cannot open device: <errno>" (red) if the open failed at startup; "Adapter offline" (red) after a successful open followed by hot-unplug.
-  - `Enable` / `Disable` Button — toggles the firmware between LISTEN and STOP. Suppressed when the serial port is closed (no firmware to drive).
+  - Device path (`Device: /dev/tty.usbmodem...`, or `(unset)`), with an editor offering a port picker over the enumerated serial ports.
+  - Indicator — "Piconet at `<path>`" (green) when the USB serial port is open; "Cannot open device: `<reason>`" (red) if an open failed; the discovery status when discovery found no usable device; "Adapter offline" (red) after a successful open followed by hot-unplug.
+  - `Enable` / `Disable` Button — toggles the firmware between LISTEN and STOP while the serial port is open; otherwise a `Retry` Button re-runs discovery and, on success, brings the device up without restarting the machine.
 
-The transport panel is rendered through the **Extension UI framework** (see [`docs/discussion/extension-ui-architecture.md`](discussion/extension-ui-architecture.md)). The framework streams a typed control tree from the server to the client; the macOS renderer walks the tree once per push and produces native widgets. Adding a control to the AUN or Piconet panel requires server-side code only — the macOS app needs no changes to surface a new control type that's already in the seven-control vocabulary.
+The transport panel is rendered through the **Extension UI framework** (see [`docs/discussion/extension-ui-architecture.md`](discussion/extension-ui-architecture.md)). The framework streams a typed control tree from the server to the client; the macOS renderer walks the tree once per push and produces native widgets. Adding a control to the AUN or Piconet panel requires server-side code only — the macOS app needs no changes to surface a new control type that's already in the control vocabulary (`Label`, `Indicator`, `Toggle`, `Button`, `Choice`, `TextInput`, `Group`, `ModalEditor`, `EditableChoice`, `EditableList`, `FileReference`).
 
-The transport panel does not provide manual peer management for AUN. The Add/Remove peer affordance was designed but not built — the long-term direction is centralised station assignment via DSCP plus mDNS/Bonjour peer discovery (see `docs/discussion/dynamic-station-config-protocol.md`). Scripts can still manipulate peers via `AunService.AddPeer` / `RemovePeer` / `SetConnected` / `ListPeers` (typed RPCs that stay in place — see `feedback_extension_multi_api.md` in project memory for the principle that extensions can expose multiple APIs for different audiences).
+The sidebar's peer editing is over the map file. The per-process `Api` layer has no sidebar control; scripts manipulate it via `AunService.AddPeer` / `RemovePeer` / `SetConnected` / `ListPeers`.
 
-When the device is unplugged mid-session, Piconet correctly transitions to the offline state but does not auto-reconnect when the device returns. Re-attachment is tracked in [`docs/discussion/piconet-device-discovery.md`](discussion/piconet-device-discovery.md) for a future focused branch.
+When the device is unplugged mid-session, Piconet transitions to the offline state; it does not reconnect by itself when the device returns, but `Retry` brings it back without a restart. Automatic re-attachment is discussed in [`docs/discussion/piconet-device-discovery.md`](discussion/piconet-device-discovery.md).
 
 ## Hardware Architecture
 
@@ -1158,7 +1211,7 @@ Since Beebium uses AUN-over-UDP rather than a real Econet wire, only the E-clock
 
 The MC68B54 ADLC on the BBC Micro has its E pin connected to the **2MHz system clock**, not 1MHzE. Evidence:
 
-1. **Bus stretching mask**: $FEA0-$BEBF is marked "fast" (no stretching) in `BusStretching.hpp`, confirmed by jsbeeb and beebjit
+1. **Bus stretching mask**: $FEA0-$FEBF is marked "fast" (no stretching) in `BusStretching.hpp`, confirmed by jsbeeb and beebjit
 2. **BeebEm**: No `SyncIO()` applied to Econet register accesses (unlike VIAs, CRTC, ACIA which all apply 1MHz synchronisation)
 3. **BeebEm comment** (`Econet.cpp:171`): "max 250Khz network clock. **2MHz system clock**. one click every 8 cycles."
 4. **MC68B54 datasheet**: The "B" variant is rated for 2.0 MHz maximum E frequency (500ns minimum cycle time)
@@ -1351,9 +1404,10 @@ AunBackend (UDP transport — implements NetworkBackend)
 ├── send_frame(NetworkFrame)         // Encodes and sends AUN packet via UDP sendto()
 ├── receive_frame() -> optional      // Non-blocking receive via select() + recvfrom()
 ├── is_connected() -> bool           // Socket bound and valid
-├── add_peer(net, stn, ip, port)     // Explicit peer mapping
-├── remove_peer(net, stn)            // Remove peer mapping
-└── Peer Table
+├── replace_peers(routes)            // Routing view pushed by the extension's AunPeerSet
+├── set_subnet_rules(rules)          // Winning subnet rule per net, from AunPeerSet
+├── add_peer() / remove_peer()       // Single-entry edits (tests and tools)
+└── Peer Table (the routing view; provenance lives in AunPeerSet)
     ├── forward_map_                 // (net,stn) → (ip,port)
     └── reverse_map_                 // (ip,port) → (net,stn)
 
@@ -1415,21 +1469,7 @@ BBC Micro <--Econet--> Pi Bridge <--AUN/UDP--> Beebium
                            +--AUN/UDP--> Other bridges
 ```
 
-### Configuration
-
-The Pi Econet Bridge uses configuration for:
-- Local station number
-- Network number mappings
-- IP address to station mappings
-- File server locations
-
-### Compatibility Notes
-
-For Beebium to work with Pi Econet Bridge:
-1. Must implement AUN protocol correctly
-2. Must handle bridge-specific packet types
-3. May need to handle network number translation
-4. Should support dynamic station discovery
+Beebium reaches a bridge with the ordinary AUN transport; no bridge-specific support is needed. The configuration on both sides, and the constraints on the network path between them, are in "Connecting to a PiEconetBridge" above.
 
 ## NFS/ANFS ROMs
 
@@ -1439,10 +1479,11 @@ To use Econet file servers, BBC Micros need appropriate network filing system RO
 
 | ROM | Machine | Notes |
 |-----|---------|-------|
-| NFS 3.34 | Model B / B+ | Original network filing system (`roms/acorn-nfs_3_34.rom`, 8K) |
+| NFS 3.34 | Model B / B+ | Original network filing system (8K; test asset `tests/assets/roms/acorn-nfs_3_34.rom`) |
 | NFS 3.60 | Model B / B+ | Later version, combined with DFS in DNFS ROM |
-| ANFS 4.18 | Master 128 | Advanced NFS for Master series |
-| ANFS 4.25 | Master 128 | Later ANFS version |
+| NFS 3.65 | Model B / B+ | Last 8K NFS (`roms/acorn-nfs_3_65.rom`) |
+| ANFS 4.18 | Model B / B+ | Advanced NFS, 16K (`roms/acorn-anfs_4_18.rom`); the ROM the bundled AUN and Piconet presets use |
+| ANFS 4.21-4.26 | Master 128 | ANFS for the Master series |
 
 ### DNFS ROM
 
@@ -1453,11 +1494,11 @@ The DNFS (Disc and Network Filing System) ROM combines DFS 1.20 and NFS 3.60 int
 - **Selection:** Keyboard switch 1 (link S1) overrides to select NFS at boot
 - **Commands:** Use `*NET` or `*DISC` to switch filing systems at runtime
 
-**Important limitation:** DNFS's DFS 1.20 component requires the Intel 8271 FDC. There is no DNFS ROM with a WD1770-compatible DFS. Since Beebium currently only supports the WD1770 FDC, we cannot use DNFS. Instead, we use separate ROMs in two sideways slots:
-- DFS 2.x (WD1770-compatible) — e.g. `roms/acorn-dfs_2_26.rom`
-- NFS 3.34 (standalone) — `roms/acorn-nfs_3_34.rom`
+**Important limitation:** DNFS's DFS 1.20 component requires the Intel 8271 FDC. There is no DNFS ROM with a WD1770-compatible DFS. Since Beebium's only disc controller is the WD1770 (`list-fdcs`), DNFS's DFS cannot drive a disc. Instead, the bundled Econet client presets (`model-b-disc-aun-80`, `model-b-disc-aun-auto`, `model-b-disc-eco-81`) use separate ROMs in two sideways slots:
+- DFS 2.26 (WD1770-compatible) — `acorn-dfs_2_26.rom` in slot 13
+- ANFS 4.18 — `acorn-anfs_4_18.rom` in slot 14
 
-This is the default configuration for Econet-capable Beebium machines with disc support.
+(The `model-b-l3fs-aun` file-server preset carries ANFS 4.18 in slot 9, with ADFS in slot 10.)
 
 **NFS 3.60 improvements over 3.34:**
 - Multi-column catalogue display
@@ -1478,7 +1519,7 @@ Note: NFS can coexist with DFS/ADFS - users select filing system with *DISC, *NE
 
 ## Implementation Status
 
-The core Econet/AUN implementation is complete. This section summarises what was planned, what was built, and what differs from the original design. For remaining integration work (presets, gRPC, service discovery, clients), see `docs/econet-integration.md`.
+The core Econet/AUN implementation is complete. This section summarises what was planned, what was built, and what differs from the original design. The integration programme (presets, gRPC, service discovery, clients) is recorded in `docs/econet-integration.md`.
 
 ### Completed: ADLC Hardware Emulation (Mc6854.hpp)
 
@@ -1606,7 +1647,7 @@ The core Econet/AUN implementation is complete. This section summarises what was
    }
    ```
 
-   All three current hardware variants (Model B, Model B+, Model B with ROM/RAM board) have `EconetSocket econet_socket` as a member of their MemoryMap. The Master series (future) would also have it, with different INTON/INTOFF addresses.
+   Every current hardware variant (Model B, B+, B+ 128K, ROM/RAM board, ATPL Sidewise, Watford ROM/RAM, Integra-B) has `EconetSocket econet_socket` as a member of its MemoryMap. The Master series (future) would also have it, with different INTON/INTOFF addresses.
 
 6. **CTS/DCD logic**
    - DCD (SR2b5): low when network backend is connected (clock present), high otherwise
@@ -1622,7 +1663,7 @@ The core Econet/AUN implementation is complete. This section summarises what was
 **All items above are implemented.** Key implementation differences from the original design:
 - `EconetSocket` uses `unique_ptr<Mc6854>` (not `optional<Mc6854>`) because the `Mc6854` constructor requires a `NetworkBackend&` reference at construction time.
 - The ADLC open bus value for the &FEA0 region is provided via `set_last_bus_value_ptr()` — the pointer-to-member approach from the options listed above.
-- The `HasEconetSocket` concept and `econet_present()` helper were not needed. The `EconetSocket` is a direct member of all MemoryMap variants, and its `enabled()` / `nmi_pending()` / `tick_*()` methods are all safe to call when the socket is empty.
+- The `HasEconetSocket` concept and `econet_present()` helper live in `src/core/include/beebium/econet/EconetConcepts.hpp`; the server uses the concept to skip `--station` on a machine with no socket. The socket's `enabled()` / `nmi_pending()` / `tick_*()` methods are all safe to call when the socket is empty.
 - Byte trickle rate is 128 half-cycles (32us per byte), not 128 E-cycles (64us per byte) as stated in BeebEm's comments. Both rising and falling edges advance the byte timer, so 128 half-cycles = 64 full E-clock cycles.
 
 ### Completed: Econet Protocol Layer (originally Phase 2)
@@ -1667,42 +1708,27 @@ The flag fill and idle detection are also in `FourWayHandshake` (via `is_receivi
    - Transaction handle: 32-bit sequence number incremented by 4
    - Broadcast via `SO_BROADCAST` socket option
 
-2. **Local subnet discovery** (broadcast-based)
-   - On startup, broadcast announcement: "station N at IP:port"
-   - Listen for peer announcements, build dynamic peer table
-   - Periodic re-announcements (handle stations joining/leaving)
-   - No configuration needed for same-subnet peers
+2. **Local subnet discovery** — built as mDNS / DNS-SD peer discovery under `_aun._udp`, rather than the AUN broadcast announcement originally sketched; see "AUN peer discovery via mDNS" above. No configuration is needed for same-LAN Beebium peers.
 
-3. **Explicit address mapping** (for cross-subnet / bridge)
-   - `--aun map=<net.stn@ip@port>` (repeatable) for explicit mappings
-   - Static mappings take precedence over discovered peers
+3. **Explicit address mapping** (for cross-subnet / bridge / non-announcing peers)
+   - `--aun map=<net.stn@ip@port>` (repeatable; the port is required), the per-user `aun-map.json`, and `AunService.AddPeer`
+   - Operator mappings take precedence over discovered peers; see "Peer provenance and precedence"
 
-4. **Pi Econet Bridge compatibility**
-   - A future transport extension would expose this; nothing built yet
-   - Test with actual bridge hardware
-   - Handle bridge-specific behaviors
-   - Bridge provides access to real Econet stations
+4. **Pi Econet Bridge compatibility** — not a dedicated extension: PiEconetBridge speaks AUN, so `AunBackend` talks to it directly. `integration_tests/pieb-aun/` runs a real bridge — with no Pi, no Econet HAT and no kernel module — and drives login and catalogue operations against its emulated fileserver (see `docs/discussion/pieconetbridge-aun-interop-testing.md`); the published recipe is in "Connecting to a PiEconetBridge".
 
-**Items 1, 2 and 3 are implemented.** Item 2 arrived as mDNS peer discovery rather than the AUN broadcast announcement originally sketched — see "AUN peer discovery via mDNS" above — so `--aun map=` is optional on a LAN and required only for hermetic tests, hosts without a working responder, and WAN deployments. The port in a `map=` entry must be specified explicitly (no default).
+**All four items are implemented.**
 
-Item 4 (Pi Econet Bridge) is **implemented and tested**, though not as a dedicated extension: PiEconetBridge speaks AUN, so `AunBackend` talks to it directly. `integration_tests/pieb-aun/` runs a real bridge — with no Pi, no Econet HAT and no kernel module — and drives login and catalogue operations against its emulated fileserver. See `docs/discussion/pieconetbridge-aun-interop-testing.md`.
+### Completed: Configuration and Integration (originally Phase 4)
 
-### Partially Complete: Configuration and Integration (originally Phase 4)
+1. **Command-line options**:
+   - `--station <n>|auto[:lo-hi]` - Enable Econet hardware and set (or automatically choose) the station number (no flag = no Econet)
+   - `--aun [port=<n>|none][:net=<n>][:map=<net.stn@ip@port>]...[:map-file=<path>|none][:subnet=<net@a.b.c.0/24>]...[:discovery=<mode>]` - AUN UDP transport; see "The `--aun` parameters"
+   - `--piconet [device_path=<path>|auto]` - Piconet USB-CDC bridge to a real Econet wire
+   - Both transports flow through the generic extension dispatch (see "Econet Transport Extensions" above).
 
-1. **Command-line options** — **Done**:
-   - `--station <n>` - Enable Econet hardware and set station number (no flag = no Econet)
-   - `--aun [port=<n>][:map=<net.stn@ip@port>][:map-file=<path>|none][:subnet=<net>@<a.b.c.0/24>]...` - AUN UDP transport with explicit station-to-IP mappings, a shared map file, and /24 subnet rules
-   - `--piconet device_path=<path>` - Piconet USB-CDC bridge to a real Econet wire
-   - The legacy `--aun-port`, `--aun-map`, and bare `--piconet <path>` flags have been removed; both transports flow through the generic extension dispatch (see "Econet Transport Extensions" above).
+2. **Frontend integration** — preset `econet` section, `EconetService` / `EconetTransportService` over gRPC, the AUN and Piconet typed RPCs over `ExtensionRpc`, the Python and TypeScript clients, and the macOS Network sidebar. See `docs/econet-integration.md` for the programme.
 
-2. **Frontend integration** — **Not yet done.** Planned as part of the broader Econet integration work programme (see `docs/econet-integration.md`):
-   - Preset integration (JSON format)
-   - gRPC EconetService
-   - Service discovery metadata
-   - Python client wrapper
-   - macOS client sidebar UI
-
-3. **ROM management** — **Partially done.** NFS 3.34 ROM loading works via `--sideways 10:rom:acorn-nfs_3_34.rom`. ROM acquisition documentation is not yet written.
+3. **ROM management** — NFS/ANFS ROMs load into a sideways slot like any other, e.g. `--sideways slot=14:type=rom:image=acorn-anfs_4_18.rom`; the Econet presets carry DFS 2.26 and ANFS 4.18.
 
 ## Resolved: MC6854 FV/PSE Timing vs NFS ROM
 
@@ -1827,11 +1853,11 @@ Beebium's inline refill + byte timer reset approach is functionally equivalent b
 
 ### FourWayHandshake Port-0 Classification
 
-A separate issue (already fixed in the current branch): the `FourWayHandshake` classified all port-0 frames as Immediate operations, but BeebEm treats port-0 with control bytes 0x02-0x05 (POKE, JSR, UserProc, OSProc) as Unicast scouts with extra payload. Fixed in `FourWayHandshake.hpp` by checking the masked control byte:
+Not every port-0 frame is an Immediate operation: like BeebEm, `FourWayHandshake` treats port 0 with control bytes 0x02-0x05 (POKE, JSR, UserProc, OSProc) as Unicast scouts with extra payload, checking the masked control byte (`FourWayHandshake.hpp`):
 
 ```cpp
 uint8_t masked_ctrl = ctrl & 0x7F;
-bool is_port0_unicast = (masked_ctrl >= 0x02 && masked_ctrl <= 0x05);
+bool is_port0_unicast = (masked_ctrl >= CTRL_POKE && masked_ctrl <= CTRL_OSPROC);
 if (port == 0x00 && !is_port0_unicast) {
     // Immediate operation
 }
@@ -1854,16 +1880,7 @@ Key NFS 3.34 ROM routines for understanding the ADLC interaction:
 | $9DC8 | Reply continuation: checks RDA, reads byte 1, installs $9DE3 |
 | $9DE3 | Reply validation: checks RDA, reads bytes 2-3, then checks FV |
 
-All of these routines are in `disassembly/nfs_334_v2_96dc_9fff_adlc_nmi_handlers.asm` (included from `disassembly/nfs_334_v2.asm`, generated by `disassembly/nfs_334_v2.py`). The disassembly is split by address range:
-
-| File | Range | Contents |
-|------|-------|----------|
-| `nfs_334_v2_preamble.asm` | — | Constants, workspace definitions |
-| `nfs_334_v2_8000_84ff_header_dispatch_init.asm` | $8000-$84FF | ROM header, dispatch tables, init |
-| `nfs_334_v2_8500_8dff_filing_system.asm` | $8500-$8DFF | Filing system operations |
-| `nfs_334_v2_8e00_96db_cli_and_commands.asm` | $8E00-$96DB | CLI commands (*NET, *I AM, etc.) |
-| `nfs_334_v2_96dc_9fff_adlc_nmi_handlers.asm` | $96DC-$9FFF | **ADLC register access, NMI handlers, four-way handshake** |
-| `nfs_334_v2_appendix.asm` | — | Data tables, string constants |
+The addresses are NFS 3.34's. The labels above come from an earlier local disassembly that is not in this repository; the maintained annotated disassemblies of NFS 3.34 and the other NFS/ANFS versions are at <https://acornaeology.uk/acorn-nfs/>, where the routines carry descriptive names.
 
 ## Open Questions
 
@@ -1871,7 +1888,7 @@ All of these routines are in `disassembly/nfs_334_v2_96dc_9fff_adlc_nmi_handlers
 
 2. ~~**Clock detection**~~ **Resolved.** DCD (SR2b5) reflects `!backend.is_connected()`: high when disconnected (no clock), low when connected. CTS reflects `!(backend.is_connected() && CR2b7_RTS)`. The NFS ROM polls DCD during boot and reports "No Clock" when DCD is high. This is implemented and verified — see `test_boot_econet.cpp` for "No Clock" boot test.
 
-3. **Multi-network support**: The current implementation supports arbitrary network numbers via `--aun map=net.stn@ip@port` where `net` can be 0-255. Network number 0 is the default for local networks. MASSAGENETS (bit-7 translation) is not implemented. Sufficient for current needs.
+3. **Multi-network support**: Any net number 0-255 can be mapped (`map=`, the map file, subnet rules) and a station declares its own net with `--aun net=N` (default 0); see "Local Econet net number". MASSAGENETS (bit-7 translation) is not implemented. Sufficient for current needs.
 
 4. ~~**ROM licensing**~~ **Resolved.** The original copyright holder (Acorn Computers) is defunct. While the ROMs are technically still under copyright, there is no entity to enforce it. Widespread retro-computing community practice (distribution via mdfs.net, stardot.org.uk, etc.) demonstrates essentially zero risk. Beebium does not currently bundle NFS/ANFS ROMs but could do so if convenient.
 
@@ -1903,10 +1920,7 @@ This mirrors physical hardware — you either have the Econet interface fitted o
 **Peer configuration:**
 Peers are discovered over mDNS on a LAN; `--aun map=` remains for hermetic tests, hosts without a working mDNS responder, and WAN deployments.
 
-**Future enhancements:**
-- Preset integration (JSON format) for Econet configuration — see `docs/econet-integration.md`
-- gRPC-based runtime configuration (add/remove peers, enable/disable Econet)
-- Local subnet discovery via broadcast
+`--station auto` chooses a free number at launch instead (see "Choosing a free station number at launch"). Preset configuration, runtime configuration over gRPC (`EconetService.EnableEconet` / `DisableEconet` / `SetStationId`, `AunService.AddPeer`) and LAN discovery (mDNS) are all in place.
 
 ### Usage Examples
 
@@ -1946,14 +1960,14 @@ beebium-model-b --station 1 --aun map=0.254@192.168.2.50@32768
 **No Econet (DFS only):**
 ```bash
 # Without --station, no Econet hardware is fitted
-beebium-model-b --drive0 games.ssd
+beebium-model-b --fdc acorn-1770 --floppy 0:games.ssd
 ```
 
 ## References
 
-### Documentation (OCR'd text available in docs/manuals_text/)
+### Documentation (OCR'd text in docs/manuals_text/, datasheets in docs/datasheets/; both are local reference material, gitignored and not in the repository)
 
-- **MC68B54 ADLC Datasheet** (Motorola) - `docs/datasheets/MOTOROLA MICROPROCESSORS DATA MANUAL 6854 section.pdf`
+- **MC68B54 ADLC Datasheet** (Motorola) - the 6854 section of `docs/datasheets/MOTOROLA MICROPROCESSORS DATA MANUAL.pdf`
   - Complete register specifications, timing diagrams, programming considerations
   - Key insight: Status priority - test lowest priority conditions first (most frequent)
   - Stored vs Present status: DCD, Rx Abort, Rx Idle are OR of stored + present conditions
