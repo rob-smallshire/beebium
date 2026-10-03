@@ -120,7 +120,8 @@ struct SidebarModeContent: View {
         case .peripherals:
             PeripheralsModeView(client: peripheralsClient,
                                 extensionUiClient: extensionUiClient,
-                                serialClient: serialClient)
+                                serialClient: serialClient,
+                                isServerLocal: systemClient.isServerLocal)
         case .video:
             VideoModeView(videoSettings: videoSettings)
         case .sound:

@@ -27,6 +27,9 @@ struct PeripheralsModeView: View {
     @ObservedObject var client: PeripheralsClient
     @ObservedObject var extensionUiClient: ExtensionUiClient
     @ObservedObject var serialClient: SerialClient
+    /// Whether the server shares this host's filesystem; threaded to a peripheral
+    /// extension's panel so a FileReference can gate "Reveal in Finder" (#170).
+    var isServerLocal: Bool = false
 
     var body: some View {
         Group {
@@ -102,14 +105,16 @@ struct PeripheralsModeView: View {
                     }
                     ExtensionPointSection(group: group,
                                           extensionUiClient: extensionUiClient,
-                                          serialClient: serialClient)
+                                          serialClient: serialClient,
+                                          isServerLocal: isServerLocal)
                 }
                 if !client.tree.orphans.isEmpty {
                     if !client.tree.groups.isEmpty {
                         Divider().padding(.horizontal, 12)
                     }
                     OrphanSection(orphans: client.tree.orphans,
-                                  extensionUiClient: extensionUiClient)
+                                  extensionUiClient: extensionUiClient,
+                                  isServerLocal: isServerLocal)
                 }
             }
             .padding(.vertical, 8)
@@ -139,6 +144,7 @@ private struct ExtensionPointSection: View {
     let group: PeripheralTree.ExtensionPointGroup
     @ObservedObject var extensionUiClient: ExtensionUiClient
     @ObservedObject var serialClient: SerialClient
+    var isServerLocal: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -167,7 +173,8 @@ private struct ExtensionPointSection: View {
             ForEach(group.nodes) { node in
                 PeripheralNodeRow(node: node,
                                   depth: 0,
-                                  extensionUiClient: extensionUiClient)
+                                  extensionUiClient: extensionUiClient,
+                                  isServerLocal: isServerLocal)
             }
         }
     }
@@ -187,6 +194,7 @@ private struct ExtensionPointSection: View {
 private struct OrphanSection: View {
     let orphans: [PeripheralNode]
     @ObservedObject var extensionUiClient: ExtensionUiClient
+    var isServerLocal: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -200,7 +208,8 @@ private struct OrphanSection: View {
             ForEach(orphans) { node in
                 PeripheralNodeRow(node: node,
                                   depth: 0,
-                                  extensionUiClient: extensionUiClient)
+                                  extensionUiClient: extensionUiClient,
+                                  isServerLocal: isServerLocal)
             }
         }
     }
@@ -212,6 +221,7 @@ private struct PeripheralNodeRow: View {
     let node: PeripheralNode
     let depth: Int
     @ObservedObject var extensionUiClient: ExtensionUiClient
+    var isServerLocal: Bool = false
 
     private var leadingPadding: CGFloat {
         // Extensions sit one level in from their section header (which is at
@@ -262,7 +272,8 @@ private struct PeripheralNodeRow: View {
             // the view tree and releases the stream.
             if node.hasUI {
                 ExtensionPanelView(client: extensionUiClient,
-                                   extensionID: node.id)
+                                   extensionID: node.id,
+                                   isServerLocal: isServerLocal)
                     .padding(.leading, leadingPadding + 16)
                     .padding(.trailing, 16)
                     .padding(.bottom, 4)
@@ -271,7 +282,8 @@ private struct PeripheralNodeRow: View {
             ForEach(node.children) { child in
                 PeripheralNodeRow(node: child,
                                   depth: depth + 1,
-                                  extensionUiClient: extensionUiClient)
+                                  extensionUiClient: extensionUiClient,
+                                  isServerLocal: isServerLocal)
             }
         }
     }
