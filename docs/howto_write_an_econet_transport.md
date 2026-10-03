@@ -30,8 +30,8 @@ class MyTransportExtension : public beebium::EconetTransportExtension {
 public:
     // Build the backend from the current config. Return nullptr if the
     // transport is configured but unavailable (missing parameter, open
-    // failed) -- the server then installs a disconnected stub, and the UI
-    // surfaces the reason. The owning unique_ptr is handed off to
+    // failed) -- at launch the server then installs a disconnected stub, and
+    // the UI surfaces the reason. The owning unique_ptr is handed off to
     // EconetSocket; keep a *non-owning* raw pointer for your UI / dispatcher.
     std::unique_ptr<beebium::NetworkBackend> create_backend(uint8_t station) override {
         auto path = config_value("device_path");
@@ -62,14 +62,47 @@ Key differences from a peripheral extension:
 - **No `attaches_to()` / `init()` / `shutdown()`.** A transport doesn't occupy a
   hardware attachment point; the framework calls `create_backend()` and installs
   the result into the Econet socket.
-- **The backend is owned elsewhere.** `create_backend` *transfers ownership* of
-  the `NetworkBackend` to `EconetSocket`. Keep only a raw `backend_` pointer for
-  your UI and dispatcher to read. It becomes dangling at machine shutdown (which
-  only happens at process exit), so never dereference it from a destructor.
+- **The backend is owned elsewhere, and can go away.** `create_backend`
+  *transfers ownership* of the `NetworkBackend` to `EconetSocket`. Keep only a
+  raw `backend_` pointer for your UI and dispatcher to read. The backend does
+  not live only until process exit: `EconetService.DisableEconet` frees it at
+  runtime, and a later `EconetService.EnableEconet` calls `create_backend`
+  again for a new one. Clear your raw pointer when the backend is destroyed --
+  AUN does this with `AunBackend::set_destroyed_callback`, guarded by a weak
+  liveness token and a check that the backend being destroyed is still the one
+  it holds (see `AunEconetTransportExtension::create_backend`). Never
+  dereference the pointer from a destructor.
+- **Keep desired state in the extension, not the backend.** Anything a client
+  can set before the backend exists, or that must survive the backend being
+  recreated, belongs to the extension. AUN's `AunPeerSet` (the desired peer
+  world, with the provenance of each entry) and its desired cable state live in
+  `AunEconetTransportExtension`; the backend holds only the resolved routing
+  view the peer set applies to it. So `AunService.AddPeer`, `RemovePeer` and
+  `SetConnected` work with no backend at all, and take effect when one comes
+  up.
 - **`create_backend` returning `nullptr` is a normal state**, not an error —
   "configured but the cable's unplugged". Record a human-readable reason
   (`open_error_`) for the UI to show; the dispatcher's status RPC should report
-  it too.
+  it too. (A transport may instead return a backend that is present but not
+  connected, as Piconet does when discovery finds no device, so the UI has a
+  live backend to retry; the server reports either case as "configured but
+  unavailable".)
+- **Validate parameters in `config_error()`.** The server calls it at machine
+  assembly, before `create_backend`; return a human-readable reason (no
+  "Error:" prefix) and the launch fails with it, rather than silently falling
+  back. AUN uses it to reject a bad `discovery=` value.
+- **Station changes reach the backend.** When the station number changes at
+  runtime (`EconetService.SetStationId`), `EconetSocket` calls
+  `NetworkBackend::on_station_id_changed` on your backend (through the decorator
+  chain). Override that if the transport has to tell a device:
+  `PiconetBackend` sends `SET_STATION`, and `AunBackend` notifies the AUN
+  extension so it re-announces. (`EconetTransportExtension` also declares an
+  `on_station_id_changed`, but nothing calls it today; do not rely on it.)
+- **`select_auto_station()`** chooses a free number for `--station auto` at
+  launch, before `create_backend`. The default reports `Unsupported`, and the
+  server then refuses `--station auto` for that transport. AUN overrides it
+  with a browse-and-claim over mDNS; see `docs/networking.md` ("Choosing a free
+  station number at launch").
 - **Override `requires_real_time_pacing()` if your transport bridges to a
   real-time peer.** It defaults to `false` — any emulation speed is fine, as for
   AUN over UDP. Return `true` (as Piconet does) when the transport talks to real
@@ -86,9 +119,8 @@ with the same discipline as any device — bounded, never-blocking I/O on the
 emulation thread, threads owned and joined cleanly. `AunBackend` and
 `PiconetBackend` are the references.
 
-If host and parasite-style asynchrony is involved, remember the clock-domain
-rule: peers run on independent clocks and the bridge is asynchronous
-(`feedback_tube_clock_domains` is the analogous case for the Tube).
+Remember that peers run on independent clocks and the bridge between them is
+asynchronous: never make the emulation thread wait on a peer.
 
 ## Transport-specific RPCs
 
@@ -124,8 +156,9 @@ does (a future two-ADLC machine with two transports), an empty id is a
 `FAILED_PRECONDITION` whose message names the candidate ids. So `service_name()`
 need not be globally unique, but a single instance must not register the same
 service twice. AUN registers `"AunService"`, Piconet `"PiconetService"`. Worked
-examples: `AunDispatcher` (peer table, cable plug, status — five unary methods,
-with in-band success/error) and `PiconetDispatcher` (a single status method).
+examples: `AunDispatcher` (peer table, cable plug, status and the map-file
+editing methods — eleven unary methods, with in-band success/error) and
+`PiconetDispatcher` (a single status method).
 
 > Both AUN and Piconet previously hosted their own gRPC services. That put a
 > second gRPC runtime in the plugin and corrupted the heap when a streaming
@@ -137,19 +170,24 @@ with in-band success/error) and `PiconetDispatcher` (a single status method).
 ## Discovery (optional)
 
 A transport can advertise and browse for peers (AUN does this over mDNS:
-`AunDiscoveryAnnouncer` / `AunDiscoverySubscriber`, see
-`project_aun_mdns_discovery`). Discovered entries should be marked as such so a
-client can distinguish them from operator-configured ones — `AunPeer.source`
-carries one of `LAUNCH`, `API`, `MAP_FILE` or `DISCOVERED`, and the operator
-sources (`API`, `LAUNCH`, `MAP_FILE`, in that precedence order) take routing
-precedence over `DISCOVERED`. mDNS discovery is bidirectional on all three platforms -- macOS via
+`AunDiscoveryAnnouncer` / `AunDiscoverySubscriber`; see `docs/networking.md`,
+"AUN peer discovery via mDNS"). Discovered entries should be marked as such so a
+client can distinguish them from operator-configured ones. AUN records the
+provenance of every entry in its peer set (`AunPeerProvenance`: `Api`,
+`Launch`, `MapFile`, `Discovered`, `Subnet`) and resolves one winner per
+`(net, station)` by that precedence, highest first: the operator sources
+(`Api`, `Launch`, `MapFile`) beat `Discovered`, which beats `Subnet` (a guess
+derived from a subnet rule). Each source keeps its own entry, so removing the
+winner falls back to the next. On the wire, `AunPeer.source` carries the
+winner's provenance as `AUN_PEER_SOURCE_LAUNCH`, `_API`, `_MAP_FILE`,
+`_DISCOVERED` or `_SUBNET`. mDNS discovery is bidirectional on all three platforms -- macOS via
 Bonjour, Windows via Apple Bonjour when installed and the native DnsService*
 API otherwise, Linux via Avahi -- but every provider can be absent at run time
 (no avahi-daemon, an old Windows), so guard accordingly.
 
 Do **not** assume a single transport in shared infrastructure — a future Acorn
-Econet Bridge machine type would run two ADLCs at once
-(`project_econet_bridge_aspiration`).
+Econet Bridge machine type would run two ADLCs at once, one transport per
+ADLC.
 
 ## Built-in vs plugin
 
@@ -174,11 +212,13 @@ safe either way.)
 Identical to a peripheral extension:
 
 - **Client wrappers** tunnel through `ExtensionChannel`
-  (`clients/beebium-python-client/src/beebium/aun.py`, `clients/beebium-typescript-client/src/aun.ts`). They
-  expose the transport API and are reached via
-  `bbc.aun` / `bbc.piconet` once the transport is active. Check
-  `bbc.transport.active` first — the RPC returns an error / empty state when the
-  transport isn't the configured one.
+  (`clients/beebium-python-client/src/beebium/ext/econet/aun/__init__.py`, `clients/beebium-typescript-client/src/aun.ts`). They
+  expose the transport API. In Python, reach an adapter with
+  `bbc.transport[Aun]` (or `Aun.attach(bbc)`); the adapter routes its calls by
+  the transport's instance id. In TypeScript, use `bbc.aun` / `bbc.piconet`.
+  Check the active transport first (`bbc.transport.active` in Python,
+  `await bbc.transport.getActive()` in TypeScript) — the RPC returns an error /
+  empty state when the transport isn't the configured one.
 - **End-to-end test**: register the transport in an `EconetTransportRegistry`,
   stand up the real `ExtensionRpcServiceImpl`, and drive
   `ExtensionRpc.Invoke` (`tests/test_grpc_aun_service.cpp`).
@@ -186,15 +226,20 @@ Identical to a peripheral extension:
   unavailable-state path and the error cases
   (`tests/test_piconet_dispatcher.cpp`).
 - **Client unit tests** mock the channel with real serialized protobuf
-  (`tests/test_aun.py`, `clients/beebium-typescript-client/tests/aun.test.ts`).
+  (`clients/beebium-python-client/tests/test_aun.py`,
+  `clients/beebium-typescript-client/tests/aun.test.ts`).
 
 ## Checklist
 
 - `create_backend` returns the backend by value (ownership → `EconetSocket`);
-  keep only a non-owning pointer.
+  keep only a non-owning pointer, and clear it when the backend is destroyed
+  (`DisableEconet` frees it at runtime).
+- State a client can set before the backend exists, or that must survive its
+  recreation, lives in the extension (AUN's `AunPeerSet`), not the backend.
 - `nullptr` from `create_backend` is "unavailable", not a crash — record a
   reason for the UI and status RPC.
-- Unique `service_name()` across all extensions; routed by the core, not hosted
-  by you.
+- One registration per `service_name()` per instance; routed by the core (by
+  instance id, or by name while only one instance offers it), not hosted by
+  you.
 - Messages only, no gRPC, in the transport module.
 - Mark discovered peers distinctly; don't assume a single transport everywhere.
