@@ -26,7 +26,7 @@ and `--server` falls back to `$BEEBIUM_SERVER` / `PATH`.
 
 | Example | Shows |
 |---------|-------|
-| `lifecycle.py` | connect/launch, emulated-time run helpers, machine identity |
+| `lifecycle.py` | connect/launch, emulated-time run helpers, machine identity and name template |
 | `debugging.py` | debugger stop/step, breakpoints, CPU registers |
 | `memory_access.py` | bus vs peek, ranges, typed casts, named regions |
 | `keyboard_and_screen.py` | typing into BASIC, reading the MODE 7 screen |

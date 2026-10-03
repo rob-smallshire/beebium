@@ -16,8 +16,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from beebium.client._proto import system_pb2
 from beebium.client.system import (
     MachineIdentity,
+    MachineNameChange,
+    MachineNamePreview,
+    NamePlaceholder,
     Provenance,
     ServerStatus,
     ServerStatusEvent,
@@ -50,11 +54,13 @@ class MockIdentityResponse:
         name: str = "BBC Model B",
         model_type: str = "ModelB",
         model_name: str = "BBC Model B 32K",
+        name_template: str | None = None,
     ):
         self.uuid = uuid
         self.name = name
         self.model_type = model_type
         self.model_name = model_name
+        self.name_template = name if name_template is None else name_template
 
 
 class MockSystemInfoResponse:
@@ -72,8 +78,18 @@ class MockSystemInfoResponse:
 class MockSetMachineNameResponse:
     """Mock SetMachineName response."""
 
-    def __init__(self, name: str = "New Name"):
-        self.identity = MockIdentityResponse(name=name)
+    def __init__(
+        self,
+        name: str = "New Name",
+        name_template: str | None = None,
+        unknown_keys: tuple[str, ...] = (),
+        inapplicable_keys: tuple[str, ...] = (),
+        malformed: tuple[str, ...] = (),
+    ):
+        self.identity = MockIdentityResponse(name=name, name_template=name_template)
+        self.unknown_keys = list(unknown_keys)
+        self.inapplicable_keys = list(inapplicable_keys)
+        self.malformed = list(malformed)
 
 
 @pytest.fixture
@@ -254,12 +270,17 @@ class TestSystemIdentityProperty:
         identity = system.identity
         assert isinstance(identity, MachineIdentity)
 
-    def test_identity_caches_result(self, system, mock_stub):
-        """identity property caches the result."""
-        mock_stub.GetSystemInfo.return_value = MockSystemInfoResponse()
-        _ = system.identity
-        _ = system.identity
-        mock_stub.GetSystemInfo.assert_called_once()
+    def test_identity_reads_the_server_each_time(self, system, mock_stub):
+        """identity is not cached: a rendered name changes on the server by itself."""
+        mock_stub.GetSystemInfo.return_value = MockSystemInfoResponse(
+            identity=MockIdentityResponse(name="Station 80", name_template="Station {econet-station}")
+        )
+        assert system.identity.name == "Station 80"
+        mock_stub.GetSystemInfo.return_value = MockSystemInfoResponse(
+            identity=MockIdentityResponse(name="Station 81", name_template="Station {econet-station}")
+        )
+        assert system.identity.name == "Station 81"
+        assert mock_stub.GetSystemInfo.call_count == 2
 
     def test_identity_has_system_reference(self, system, mock_stub):
         """identity has reference back to the system."""
@@ -572,3 +593,246 @@ class TestSystemPacingStats:
         stats = system.get_pacing_stats()
 
         assert stats.estimated_max_speed_multiplier == 0.0
+
+
+class TestMachineIdentityNameTemplate:
+    """Tests for the name template carried by MachineIdentity."""
+
+    def test_name_template_defaults_to_the_name(self, mock_stub):
+        """A plain name is a template of itself, so it is the default."""
+        system = System(mock_stub)
+        identity = MachineIdentity(uuid="u", name="Girton", model_type="t", model_name="m", system=system)
+        assert identity.name_template == "Girton"
+
+    def test_name_template_is_distinct_from_the_rendered_name(self, mock_stub):
+        """The template is what the user edits; the name is its rendering."""
+        system = System(mock_stub)
+        identity = MachineIdentity(
+            uuid="u",
+            name="Station 80",
+            name_template="Station {econet-station}",
+            model_type="t",
+            model_name="m",
+            system=system,
+        )
+        assert identity.name == "Station 80"
+        assert identity.name_template == "Station {econet-station}"
+
+    def test_identity_property_reads_the_template_from_the_server(self, system, mock_stub):
+        """System.identity carries the server's template as well as the rendering."""
+        mock_stub.GetSystemInfo.return_value = MockSystemInfoResponse(
+            identity=MockIdentityResponse(name="Station 80", name_template="Station {econet-station}")
+        )
+        identity = system.identity
+        assert identity.name == "Station 80"
+        assert identity.name_template == "Station {econet-station}"
+
+    def test_setting_name_template_sends_it_as_the_template(self, mock_stub):
+        """Assigning name_template sends it in SetMachineNameRequest.name_template."""
+        mock_stub.SetMachineName.return_value = MockSetMachineNameResponse(
+            name="Station 80", name_template="Station {econet-station}"
+        )
+        system = System(mock_stub)
+        identity = MachineIdentity(uuid="u", name="Old", model_type="t", model_name="m", system=system)
+        identity.name_template = "Station {econet-station}"
+        request = mock_stub.SetMachineName.call_args.args[0]
+        assert request.name_template == "Station {econet-station}"
+        assert identity.name_template == "Station {econet-station}"
+        assert identity.name == "Station 80"
+
+    def test_setting_name_sends_it_as_the_template(self, mock_stub):
+        """Assigning name sends a template too: a plain name is a template."""
+        mock_stub.SetMachineName.return_value = MockSetMachineNameResponse(name="Girton")
+        system = System(mock_stub)
+        identity = MachineIdentity(uuid="u", name="Old", model_type="t", model_name="m", system=system)
+        identity.name = "Girton"
+        request = mock_stub.SetMachineName.call_args.args[0]
+        assert request.name_template == "Girton"
+        assert identity.name_template == "Girton"
+
+    def test_equality_includes_the_template(self, mock_stub):
+        """Identities with the same rendering but different templates differ."""
+        system = System(mock_stub)
+        id1 = MachineIdentity(
+            uuid="u", name="Station 80", name_template="Station 80", model_type="t", model_name="m", system=system
+        )
+        id2 = MachineIdentity(
+            uuid="u",
+            name="Station 80",
+            name_template="Station {econet-station}",
+            model_type="t",
+            model_name="m",
+            system=system,
+        )
+        assert id1 != id2
+
+    def test_repr_includes_the_template(self, mock_stub):
+        """__repr__ shows the template."""
+        system = System(mock_stub)
+        identity = MachineIdentity(
+            uuid="u", name="n", name_template="{machine-model}", model_type="t", model_name="m", system=system
+        )
+        assert "{machine-model}" in repr(identity)
+
+
+class TestSystemSetMachineName:
+    """Tests for System.set_machine_name."""
+
+    def test_sends_the_template(self, system, mock_stub):
+        """The template is sent unparsed in SetMachineNameRequest.name_template."""
+        system.set_machine_name("Station {econet-station}")
+        request = mock_stub.SetMachineName.call_args.args[0]
+        assert isinstance(request, system_pb2.SetMachineNameRequest)
+        assert request.name_template == "Station {econet-station}"
+
+    def test_returns_the_identity_and_what_did_not_render(self, system, mock_stub):
+        """The result carries the new identity and the server's report."""
+        mock_stub.SetMachineName.return_value = MockSetMachineNameResponse(
+            name="Station 80 {bogus} ",
+            name_template="Station {econet-station} {bogus} {machine-preset}{",
+            unknown_keys=("bogus",),
+            inapplicable_keys=("machine-preset",),
+            malformed=("{",),
+        )
+        change = system.set_machine_name("Station {econet-station} {bogus} {machine-preset}{")
+        assert isinstance(change, MachineNameChange)
+        assert isinstance(change.identity, MachineIdentity)
+        assert change.identity.name == "Station 80 {bogus} "
+        assert change.identity.name_template == "Station {econet-station} {bogus} {machine-preset}{"
+        assert change.unknown_keys == ("bogus",)
+        assert change.inapplicable_keys == ("machine-preset",)
+        assert change.malformed == ("{",)
+
+    def test_a_clean_template_reports_nothing(self, system, mock_stub):
+        """A template that rendered fully has empty reports."""
+        mock_stub.SetMachineName.return_value = MockSetMachineNameResponse(name="Girton")
+        change = system.set_machine_name("Girton")
+        assert change.unknown_keys == ()
+        assert change.inapplicable_keys == ()
+        assert change.malformed == ()
+
+    def test_result_is_frozen(self, system):
+        """MachineNameChange is immutable."""
+        change = system.set_machine_name("Girton")
+        with pytest.raises(AttributeError):
+            change.unknown_keys = ("x",)
+
+
+class TestSystemPreviewMachineName:
+    """Tests for System.preview_machine_name."""
+
+    def test_sends_the_template_and_maps_the_rendering(self, system, mock_stub):
+        """The rendering and the server's report come back as a MachineNamePreview."""
+        mock_stub.PreviewMachineName.return_value = system_pb2.PreviewMachineNameResponse(
+            name="Station 80 {bogus}",
+            unknown_keys=["bogus"],
+            inapplicable_keys=["machine-preset"],
+            malformed=["}"],
+        )
+        preview = system.preview_machine_name("Station {econet-station} {bogus}{machine-preset}}")
+        request = mock_stub.PreviewMachineName.call_args.args[0]
+        assert isinstance(request, system_pb2.PreviewMachineNameRequest)
+        assert request.name_template == "Station {econet-station} {bogus}{machine-preset}}"
+        assert preview == MachineNamePreview(
+            name="Station 80 {bogus}",
+            unknown_keys=("bogus",),
+            inapplicable_keys=("machine-preset",),
+            malformed=("}",),
+        )
+
+    def test_does_not_rename(self, system, mock_stub):
+        """A preview never calls SetMachineName."""
+        mock_stub.PreviewMachineName.return_value = system_pb2.PreviewMachineNameResponse(name="Other")
+        system.preview_machine_name("Other")
+        mock_stub.SetMachineName.assert_not_called()
+
+    def test_preview_is_frozen(self, system, mock_stub):
+        """MachineNamePreview is immutable."""
+        mock_stub.PreviewMachineName.return_value = system_pb2.PreviewMachineNameResponse(name="n")
+        preview = system.preview_machine_name("n")
+        with pytest.raises(AttributeError):
+            preview.name = "m"
+
+
+class TestSystemListNamePlaceholders:
+    """Tests for System.list_name_placeholders."""
+
+    def test_maps_every_field_in_server_order(self, system, mock_stub):
+        """Each record is mapped field-for-field, in the server's order."""
+        mock_stub.ListNamePlaceholders.return_value = system_pb2.ListNamePlaceholdersResponse(
+            placeholders=[
+                system_pb2.NamePlaceholder(
+                    key="zeta-thing",
+                    label="Zeta thing",
+                    description="A thing from a provider this client knows nothing about.",
+                    group="Zeta",
+                    insertion="{zeta-thing}",
+                    value="42",
+                    applicable=True,
+                ),
+                system_pb2.NamePlaceholder(
+                    key="alpha-other",
+                    label="Alpha other",
+                    description="Not fitted here.",
+                    group="Alpha",
+                    insertion="{alpha-other}",
+                    value="",
+                    applicable=False,
+                ),
+            ]
+        )
+        placeholders = system.list_name_placeholders()
+        assert placeholders == (
+            NamePlaceholder(
+                key="zeta-thing",
+                label="Zeta thing",
+                description="A thing from a provider this client knows nothing about.",
+                group="Zeta",
+                insertion="{zeta-thing}",
+                value="42",
+                applicable=True,
+            ),
+            NamePlaceholder(
+                key="alpha-other",
+                label="Alpha other",
+                description="Not fitted here.",
+                group="Alpha",
+                insertion="{alpha-other}",
+                value="",
+                applicable=False,
+            ),
+        )
+
+    def test_a_server_with_no_placeholders_lists_none(self, system, mock_stub):
+        """An empty registry is an empty tuple."""
+        mock_stub.ListNamePlaceholders.return_value = system_pb2.ListNamePlaceholdersResponse()
+        assert system.list_name_placeholders() == ()
+
+    def test_placeholder_is_frozen(self):
+        """NamePlaceholder is immutable."""
+        placeholder = NamePlaceholder(
+            key="k", label="l", description="d", group="g", insertion="{k}", value="v", applicable=True
+        )
+        with pytest.raises(AttributeError):
+            placeholder.value = "w"
+
+
+class TestWatchStatusIdentityTemplate:
+    """IDENTITY_CHANGED events carry the template as well as the rendering."""
+
+    def test_identity_changed_event_carries_the_template(self, system, mock_stub):
+        event = system_pb2.ServerStatusEvent(
+            status=system_pb2.SERVER_STATUS_IDENTITY_CHANGED,
+            identity=system_pb2.MachineIdentity(
+                uuid="u",
+                name="Station 81",
+                name_template="Station {econet-station}",
+                model_type="ModelB",
+                model_name="BBC Model B",
+            ),
+        )
+        mock_stub.WatchServerStatus.return_value = iter([event])
+        (received,) = list(system.watch_status())
+        assert received.status == ServerStatus.IDENTITY_CHANGED
+        assert received.identity.name == "Station 81"
+        assert received.identity.name_template == "Station {econet-station}"
