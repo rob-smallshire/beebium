@@ -66,19 +66,30 @@ struct FileReferenceView: View {
         return name.isEmpty ? fileReference.path : name
     }
 
+    // No menu button when there is nothing to offer (e.g. a disabled map file
+    // with no server actions): the title line then stands alone.
+    @ViewBuilder
     private var menu: some View {
-        Menu {
-            ForEach(menuItems.indices, id: \.self) { index in
-                menuItem(menuItems[index])
+        let items = menuItems
+        if !items.isEmpty {
+            Menu {
+                ForEach(items.indices, id: \.self) { index in
+                    // One divider between the server's actions and the renderer's
+                    // client-side ones; none at the top or when either group is empty.
+                    if index > 0 && isClientItem(items[index]) && !isClientItem(items[index - 1]) {
+                        Divider()
+                    }
+                    menuItem(items[index])
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundColor(.secondary)
             }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundColor(.secondary)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("File actions")
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("File actions")
     }
 
     private var menuItems: [FileReferenceMenu.Item] {
@@ -86,7 +97,15 @@ struct FileReferenceView: View {
             serverActions: fileReference.actions.map {
                 FileReferenceMenu.ServerAction(id: $0.id, title: $0.title)
             },
-            isServerLocal: isServerLocal)
+            isServerLocal: isServerLocal,
+            hasPath: !fileReference.path.isEmpty)
+    }
+
+    private func isClientItem(_ item: FileReferenceMenu.Item) -> Bool {
+        switch item {
+        case .reveal, .copyPath: return true
+        case .serverAction:      return false
+        }
     }
 
     @ViewBuilder
@@ -95,15 +114,11 @@ struct FileReferenceView: View {
         case .serverAction(let id, let title):
             Button(title) { dispatch(controlId, .fileAction(id)) }
         case .reveal:
-            Divider()
             Button("Reveal in Finder") {
                 NSWorkspace.shared.selectFile(fileReference.path,
                                               inFileViewerRootedAtPath: "")
             }
         case .copyPath:
-            // When Reveal is absent (a remote server) Copy Path still wants a
-            // divider between the server actions and the client-side one.
-            if !isServerLocal { Divider() }
             Button("Copy Path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(fileReference.path, forType: .string)

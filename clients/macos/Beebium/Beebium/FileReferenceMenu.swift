@@ -32,14 +32,20 @@ enum FileReferenceMenu {
         case copyPath
     }
 
-    /// Server actions in their given order, then Reveal in Finder when the
-    /// server is on this host, then Copy Path.
-    static func items(serverActions: [ServerAction], isServerLocal: Bool) -> [Item] {
+    /// Server actions in their given order, then the renderer's client-side ones:
+    /// Reveal in Finder when the server is on this host, then Copy Path. Both
+    /// client-side actions operate on the file's path, so neither is offered when
+    /// the path is empty (e.g. a disabled map file); the server's own actions,
+    /// which act by id, are unaffected.
+    static func items(serverActions: [ServerAction], isServerLocal: Bool,
+                      hasPath: Bool) -> [Item] {
         var items = serverActions.map { Item.serverAction(id: $0.id, title: $0.title) }
-        if isServerLocal {
-            items.append(.reveal)
+        if hasPath {
+            if isServerLocal {
+                items.append(.reveal)
+            }
+            items.append(.copyPath)
         }
-        items.append(.copyPath)
         return items
     }
 }

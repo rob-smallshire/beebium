@@ -22,28 +22,48 @@ final class FileReferenceMenuTests: XCTestCase {
 
     func testLocalServerAddsRevealThenCopyAfterServerActions() {
         XCTAssertEqual(
-            FileReferenceMenu.items(serverActions: [reload], isServerLocal: true),
+            FileReferenceMenu.items(serverActions: [reload], isServerLocal: true, hasPath: true),
             [.serverAction(id: "reload", title: "Reload"), .reveal, .copyPath])
     }
 
     func testRemoteServerOmitsReveal() {
         XCTAssertEqual(
-            FileReferenceMenu.items(serverActions: [reload], isServerLocal: false),
+            FileReferenceMenu.items(serverActions: [reload], isServerLocal: false, hasPath: true),
             [.serverAction(id: "reload", title: "Reload"), .copyPath])
     }
 
     func testNoServerActionsStillOffersClientItems() {
-        XCTAssertEqual(FileReferenceMenu.items(serverActions: [], isServerLocal: true),
-                       [.reveal, .copyPath])
-        XCTAssertEqual(FileReferenceMenu.items(serverActions: [], isServerLocal: false),
-                       [.copyPath])
+        XCTAssertEqual(
+            FileReferenceMenu.items(serverActions: [], isServerLocal: true, hasPath: true),
+            [.reveal, .copyPath])
+        XCTAssertEqual(
+            FileReferenceMenu.items(serverActions: [], isServerLocal: false, hasPath: true),
+            [.copyPath])
     }
 
     func testServerActionsKeepTheirOrder() {
         let actions = [FileReferenceMenu.ServerAction(id: "a", title: "A"),
                        FileReferenceMenu.ServerAction(id: "b", title: "B")]
         XCTAssertEqual(
-            FileReferenceMenu.items(serverActions: actions, isServerLocal: false),
+            FileReferenceMenu.items(serverActions: actions, isServerLocal: false, hasPath: true),
             [.serverAction(id: "a", title: "A"), .serverAction(id: "b", title: "B"), .copyPath])
+    }
+
+    // #170 (1): an empty path (e.g. map-file=none) offers neither client-side
+    // action, whether or not the server is local; server actions remain.
+    func testEmptyPathOffersNoClientActions() {
+        XCTAssertEqual(
+            FileReferenceMenu.items(serverActions: [reload], isServerLocal: true, hasPath: false),
+            [.serverAction(id: "reload", title: "Reload")])
+        XCTAssertEqual(
+            FileReferenceMenu.items(serverActions: [reload], isServerLocal: false, hasPath: false),
+            [.serverAction(id: "reload", title: "Reload")])
+    }
+
+    func testEmptyPathAndNoServerActionsIsAnEmptyMenu() {
+        XCTAssertEqual(
+            FileReferenceMenu.items(serverActions: [], isServerLocal: true, hasPath: false), [])
+        XCTAssertEqual(
+            FileReferenceMenu.items(serverActions: [], isServerLocal: false, hasPath: false), [])
     }
 }
