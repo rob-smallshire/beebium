@@ -60,7 +60,11 @@ message GetEconetStatusResponse {
     // True if Econet hardware is currently fitted (runtime).
     bool enabled = 2;
 
-    // Station number (1-254, 0 if disabled).
+    // The CONFIGURED station number (1-254; 0 if disabled): what the
+    // station links present now, as set at launch, by SetStationId or from
+    // the sidebar. The guest adopts it only when it re-reads the links, at
+    // its next Break; until then station_in_force shows the number it is
+    // still using.
     uint32 station_id = 3;
 
     // True if the FourWayHandshake sits between the ADLC and the transport.
@@ -132,6 +136,16 @@ message GetEconetStatusResponse {
     // empty when none. Zero / empty for non-AUN transports.
     uint32 aun_station_collision_count = 28;
     string aun_last_station_collision = 29;
+
+    // The station number IN FORCE (1-254; 0 if disabled): the number the
+    // guest is using -- what it read from the station links (&FE18) on its
+    // first read since the last reset or since Econet was fitted, which is
+    // the read with which a filing system takes its number at boot. Before
+    // that read it equals station_id. Later reads in the same boot (the NFS
+    // reads &FE18 as INTOFF on every Econet NMI) do not count. When it
+    // differs from station_id, a renumber is pending until the next Break;
+    // WatchEconetStatus pushes when the guest adopts it.
+    uint32 station_in_force = 30;
 
     // Field 25 (piconet) is reserved; Piconet status is on
     // PiconetService.GetStatus (in src/extensions/piconet/piconet_service.proto).

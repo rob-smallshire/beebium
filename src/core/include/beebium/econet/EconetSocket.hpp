@@ -221,7 +221,13 @@ public:
             // number; later reads in the same boot are INTOFF.
             if (station_read_pending_) {
                 station_read_pending_ = false;
+                const auto before = station_in_force();
                 read_station_.store(station_id_, std::memory_order_relaxed);
+                // The guest adopting a new number is a status change.
+                // Lock-free: an atomic increment, once per boot.
+                if (station_in_force() != before) {
+                    bump_status_sequence();
+                }
             }
             return station_id_;
         }
@@ -316,8 +322,12 @@ public:
         nmi_enable_ff_ = false;
         // The guest re-reads its station number as it restarts; until it
         // does, the number it will read is the one in force.
+        const auto before = station_in_force();
         read_station_.store(kNoStation, std::memory_order_relaxed);
         station_read_pending_ = true;
+        if (station_in_force() != before) {
+            bump_status_sequence();
+        }
     }
 
     // --- Accessors for testing ---

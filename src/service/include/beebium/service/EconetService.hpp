@@ -470,6 +470,7 @@ private:
             }
 
             response.set_station_id(econet.station_id());
+            response.set_station_in_force(econet.station_in_force().value_or(0));
             response.set_aun_mode(econet.aun_mode());
             response.set_requires_real_time(econet.requires_real_time());
             response.set_gated_by_speed(econet.gated_by_speed());

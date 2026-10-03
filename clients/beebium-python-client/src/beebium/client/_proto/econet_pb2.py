@@ -36,43 +36,43 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x65\x63onet.proto\x12\x07\x62\x65\x65\x62ium\"\x18\n\x16GetEconetStatusRequest\"\x99\x06\n\x17GetEconetStatusResponse\x12\x19\n\x11has_econet_socket\x18\x01 \x01(\x08\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\x12\x12\n\nstation_id\x18\x03 \x01(\r\x12\x10\n\x08\x61un_mode\x18\x04 \x01(\x08\x12\x11\n\tconnected\x18\x05 \x01(\x08\x12!\n\x04\x61\x64lc\x18\n \x01(\x0b\x32\x13.beebium.AdlcStatus\x12+\n\thandshake\x18\x0b \x01(\x0b\x32\x18.beebium.HandshakeStatus\x12\x12\n\ntick_count\x18\x0c \x01(\x04\x12\x1c\n\x14\x63r1_0x82_write_count\x18\r \x01(\r\x12 \n\x18rx_frames_received_count\x18\x0e \x01(\r\x12!\n\x19rx_blocked_by_reset_count\x18\x0f \x01(\r\x12!\n\x19scout_ack_generated_count\x18\x10 \x01(\r\x12!\n\x19tx_frames_from_beeb_count\x18\x11 \x01(\r\x12!\n\x19unexpected_tx_reset_count\x18\x12 \x01(\r\x12\x1a\n\x12tx_from_idle_count\x18\x13 \x01(\r\x12 \n\x18max_handshake_timer_seen\x18\x14 \x01(\x05\x12\x1e\n\x16watchdog_timeout_count\x18\x15 \x01(\r\x12\x16\n\x0esend_stage_log\x18\x16 \x01(\t\x12\x1f\n\x17ticks_with_timer_active\x18\x17 \x01(\x04\x12\x1a\n\x12requires_real_time\x18\x1a \x01(\x08\x12\x16\n\x0egated_by_speed\x18\x1b \x01(\x08\x12#\n\x1b\x61un_station_collision_count\x18\x1c \x01(\r\x12\"\n\x1a\x61un_last_station_collision\x18\x1d \x01(\tJ\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x18\x10\x19J\x04\x08\x19\x10\x1aR\x08\x61un_portR\npeer_countR\x1eread_stretch_coprocessor_ticksR\x07piconet\"\x9e\x02\n\nAdlcStatus\x12\x0b\n\x03\x63r1\x18\x01 \x01(\r\x12\x0b\n\x03\x63r2\x18\x02 \x01(\r\x12\x0b\n\x03\x63r3\x18\x03 \x01(\r\x12\x0b\n\x03\x63r4\x18\x04 \x01(\r\x12\x0b\n\x03sr1\x18\x05 \x01(\r\x12\x0b\n\x03sr2\x18\x06 \x01(\r\x12\x12\n\nirq_output\x18\x07 \x01(\x08\x12\x15\n\rtx_fifo_empty\x18\x08 \x01(\x08\x12\x14\n\x0ctx_fifo_full\x18\t \x01(\x08\x12\x15\n\rrx_fifo_empty\x18\n \x01(\x08\x12\x14\n\x0crx_fifo_full\x18\x0b \x01(\x08\x12\x16\n\x0etx_frame_field\x18\x0c \x01(\t\x12\x16\n\x0erx_frame_field\x18\r \x01(\t\x12\x11\n\tpse_level\x18\x0e \x01(\x05\x12\x11\n\tcts_input\x18\x0f \x01(\x08\"\x9b\x01\n\x0fHandshakeStatus\x12\r\n\x05stage\x18\x01 \x01(\t\x12\x18\n\x10\x66lag_fill_active\x18\x02 \x01(\x08\x12\x13\n\x0b\x66rames_held\x18\x03 \x01(\r\x12\x1a\n\x12\x66rames_redelivered\x18\x04 \x01(\x04\x12\x16\n\x0e\x66rames_expired\x18\x05 \x01(\x04\x12\x16\n\x0e\x66rames_dropped\x18\x06 \x01(\x04\"O\n\x13\x45nableEconetRequest\x12\x12\n\nstation_id\x18\x01 \x01(\r\x12\x10\n\x08\x61un_port\x18\x02 \x01(\r\x12\x12\n\nno_network\x18\x03 \x01(\x08\"O\n\x14\x45nableEconetResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x17\n\x0f\x61\x63tual_aun_port\x18\x03 \x01(\r\"\x16\n\x14\x44isableEconetRequest\"7\n\x15\x44isableEconetResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\")\n\x13SetStationIdRequest\x12\x12\n\nstation_id\x18\x01 \x01(\r\"6\n\x14SetStationIdResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"3\n\x18WatchEconetStatusRequest\x12\x17\n\x0fmin_interval_ms\x18\x01 \x01(\r\"J\n\x1cSubscribeEconetEventsRequest\x12\x11\n\tmax_batch\x18\x01 \x01(\r\x12\x17\n\x0fmin_interval_ms\x18\x02 \x01(\r\"\xc2\x01\n\x0f\x45\x63onetFrameInfo\x12\x12\n\nframe_type\x18\x01 \x01(\t\x12\x10\n\x08\x64\x65st_net\x18\x02 \x01(\r\x12\x10\n\x08\x64\x65st_stn\x18\x03 \x01(\r\x12\x0f\n\x07src_net\x18\x04 \x01(\r\x12\x0f\n\x07src_stn\x18\x05 \x01(\r\x12\x0c\n\x04port\x18\x06 \x01(\r\x12\x14\n\x0c\x63ontrol_byte\x18\x07 \x01(\r\x12\x13\n\x0b\x64\x61ta_length\x18\x08 \x01(\r\x12\x0e\n\x06handle\x18\n \x01(\r\x12\x0c\n\x04\x64\x61ta\x18\t \x01(\x0c\"\x83\x01\n\x0b\x45\x63onetEvent\x12&\n\x04type\x18\x01 \x01(\x0e\x32\x18.beebium.EconetEventType\x12\x10\n\x08sequence\x18\x02 \x01(\x04\x12\'\n\x05\x66rame\x18\x03 \x01(\x0b\x32\x18.beebium.EconetFrameInfo\x12\x11\n\tconnected\x18\x04 \x01(\x08*\xb0\x01\n\x0f\x45\x63onetEventType\x12\x18\n\x14\x45\x43ONET_EVENT_UNKNOWN\x10\x00\x12\x1b\n\x17\x45\x43ONET_EVENT_FRAME_SENT\x10\x01\x12\x1f\n\x1b\x45\x43ONET_EVENT_FRAME_RECEIVED\x10\x02\x12!\n\x1d\x45\x43ONET_EVENT_HANDSHAKE_CHANGE\x10\x03\x12\"\n\x1e\x45\x43ONET_EVENT_CONNECTION_CHANGE\x10\x04\x32\x83\x04\n\rEconetService\x12T\n\x0fGetEconetStatus\x12\x1f.beebium.GetEconetStatusRequest\x1a .beebium.GetEconetStatusResponse\x12K\n\x0c\x45nableEconet\x12\x1c.beebium.EnableEconetRequest\x1a\x1d.beebium.EnableEconetResponse\x12N\n\rDisableEconet\x12\x1d.beebium.DisableEconetRequest\x1a\x1e.beebium.DisableEconetResponse\x12K\n\x0cSetStationId\x12\x1c.beebium.SetStationIdRequest\x1a\x1d.beebium.SetStationIdResponse\x12V\n\x15SubscribeEconetEvents\x12%.beebium.SubscribeEconetEventsRequest\x1a\x14.beebium.EconetEvent0\x01\x12Z\n\x11WatchEconetStatus\x12!.beebium.WatchEconetStatusRequest\x1a .beebium.GetEconetStatusResponse0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x65\x63onet.proto\x12\x07\x62\x65\x65\x62ium\"\x18\n\x16GetEconetStatusRequest\"\xb3\x06\n\x17GetEconetStatusResponse\x12\x19\n\x11has_econet_socket\x18\x01 \x01(\x08\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\x12\x12\n\nstation_id\x18\x03 \x01(\r\x12\x10\n\x08\x61un_mode\x18\x04 \x01(\x08\x12\x11\n\tconnected\x18\x05 \x01(\x08\x12!\n\x04\x61\x64lc\x18\n \x01(\x0b\x32\x13.beebium.AdlcStatus\x12+\n\thandshake\x18\x0b \x01(\x0b\x32\x18.beebium.HandshakeStatus\x12\x12\n\ntick_count\x18\x0c \x01(\x04\x12\x1c\n\x14\x63r1_0x82_write_count\x18\r \x01(\r\x12 \n\x18rx_frames_received_count\x18\x0e \x01(\r\x12!\n\x19rx_blocked_by_reset_count\x18\x0f \x01(\r\x12!\n\x19scout_ack_generated_count\x18\x10 \x01(\r\x12!\n\x19tx_frames_from_beeb_count\x18\x11 \x01(\r\x12!\n\x19unexpected_tx_reset_count\x18\x12 \x01(\r\x12\x1a\n\x12tx_from_idle_count\x18\x13 \x01(\r\x12 \n\x18max_handshake_timer_seen\x18\x14 \x01(\x05\x12\x1e\n\x16watchdog_timeout_count\x18\x15 \x01(\r\x12\x16\n\x0esend_stage_log\x18\x16 \x01(\t\x12\x1f\n\x17ticks_with_timer_active\x18\x17 \x01(\x04\x12\x1a\n\x12requires_real_time\x18\x1a \x01(\x08\x12\x16\n\x0egated_by_speed\x18\x1b \x01(\x08\x12#\n\x1b\x61un_station_collision_count\x18\x1c \x01(\r\x12\"\n\x1a\x61un_last_station_collision\x18\x1d \x01(\t\x12\x18\n\x10station_in_force\x18\x1e \x01(\rJ\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x18\x10\x19J\x04\x08\x19\x10\x1aR\x08\x61un_portR\npeer_countR\x1eread_stretch_coprocessor_ticksR\x07piconet\"\x9e\x02\n\nAdlcStatus\x12\x0b\n\x03\x63r1\x18\x01 \x01(\r\x12\x0b\n\x03\x63r2\x18\x02 \x01(\r\x12\x0b\n\x03\x63r3\x18\x03 \x01(\r\x12\x0b\n\x03\x63r4\x18\x04 \x01(\r\x12\x0b\n\x03sr1\x18\x05 \x01(\r\x12\x0b\n\x03sr2\x18\x06 \x01(\r\x12\x12\n\nirq_output\x18\x07 \x01(\x08\x12\x15\n\rtx_fifo_empty\x18\x08 \x01(\x08\x12\x14\n\x0ctx_fifo_full\x18\t \x01(\x08\x12\x15\n\rrx_fifo_empty\x18\n \x01(\x08\x12\x14\n\x0crx_fifo_full\x18\x0b \x01(\x08\x12\x16\n\x0etx_frame_field\x18\x0c \x01(\t\x12\x16\n\x0erx_frame_field\x18\r \x01(\t\x12\x11\n\tpse_level\x18\x0e \x01(\x05\x12\x11\n\tcts_input\x18\x0f \x01(\x08\"\x9b\x01\n\x0fHandshakeStatus\x12\r\n\x05stage\x18\x01 \x01(\t\x12\x18\n\x10\x66lag_fill_active\x18\x02 \x01(\x08\x12\x13\n\x0b\x66rames_held\x18\x03 \x01(\r\x12\x1a\n\x12\x66rames_redelivered\x18\x04 \x01(\x04\x12\x16\n\x0e\x66rames_expired\x18\x05 \x01(\x04\x12\x16\n\x0e\x66rames_dropped\x18\x06 \x01(\x04\"O\n\x13\x45nableEconetRequest\x12\x12\n\nstation_id\x18\x01 \x01(\r\x12\x10\n\x08\x61un_port\x18\x02 \x01(\r\x12\x12\n\nno_network\x18\x03 \x01(\x08\"O\n\x14\x45nableEconetResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x17\n\x0f\x61\x63tual_aun_port\x18\x03 \x01(\r\"\x16\n\x14\x44isableEconetRequest\"7\n\x15\x44isableEconetResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\")\n\x13SetStationIdRequest\x12\x12\n\nstation_id\x18\x01 \x01(\r\"6\n\x14SetStationIdResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"3\n\x18WatchEconetStatusRequest\x12\x17\n\x0fmin_interval_ms\x18\x01 \x01(\r\"J\n\x1cSubscribeEconetEventsRequest\x12\x11\n\tmax_batch\x18\x01 \x01(\r\x12\x17\n\x0fmin_interval_ms\x18\x02 \x01(\r\"\xc2\x01\n\x0f\x45\x63onetFrameInfo\x12\x12\n\nframe_type\x18\x01 \x01(\t\x12\x10\n\x08\x64\x65st_net\x18\x02 \x01(\r\x12\x10\n\x08\x64\x65st_stn\x18\x03 \x01(\r\x12\x0f\n\x07src_net\x18\x04 \x01(\r\x12\x0f\n\x07src_stn\x18\x05 \x01(\r\x12\x0c\n\x04port\x18\x06 \x01(\r\x12\x14\n\x0c\x63ontrol_byte\x18\x07 \x01(\r\x12\x13\n\x0b\x64\x61ta_length\x18\x08 \x01(\r\x12\x0e\n\x06handle\x18\n \x01(\r\x12\x0c\n\x04\x64\x61ta\x18\t \x01(\x0c\"\x83\x01\n\x0b\x45\x63onetEvent\x12&\n\x04type\x18\x01 \x01(\x0e\x32\x18.beebium.EconetEventType\x12\x10\n\x08sequence\x18\x02 \x01(\x04\x12\'\n\x05\x66rame\x18\x03 \x01(\x0b\x32\x18.beebium.EconetFrameInfo\x12\x11\n\tconnected\x18\x04 \x01(\x08*\xb0\x01\n\x0f\x45\x63onetEventType\x12\x18\n\x14\x45\x43ONET_EVENT_UNKNOWN\x10\x00\x12\x1b\n\x17\x45\x43ONET_EVENT_FRAME_SENT\x10\x01\x12\x1f\n\x1b\x45\x43ONET_EVENT_FRAME_RECEIVED\x10\x02\x12!\n\x1d\x45\x43ONET_EVENT_HANDSHAKE_CHANGE\x10\x03\x12\"\n\x1e\x45\x43ONET_EVENT_CONNECTION_CHANGE\x10\x04\x32\x83\x04\n\rEconetService\x12T\n\x0fGetEconetStatus\x12\x1f.beebium.GetEconetStatusRequest\x1a .beebium.GetEconetStatusResponse\x12K\n\x0c\x45nableEconet\x12\x1c.beebium.EnableEconetRequest\x1a\x1d.beebium.EnableEconetResponse\x12N\n\rDisableEconet\x12\x1d.beebium.DisableEconetRequest\x1a\x1e.beebium.DisableEconetResponse\x12K\n\x0cSetStationId\x12\x1c.beebium.SetStationIdRequest\x1a\x1d.beebium.SetStationIdResponse\x12V\n\x15SubscribeEconetEvents\x12%.beebium.SubscribeEconetEventsRequest\x1a\x14.beebium.EconetEvent0\x01\x12Z\n\x11WatchEconetStatus\x12!.beebium.WatchEconetStatusRequest\x1a .beebium.GetEconetStatusResponse0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'econet_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_ECONETEVENTTYPE']._serialized_start=2097
-  _globals['_ECONETEVENTTYPE']._serialized_end=2273
+  _globals['_ECONETEVENTTYPE']._serialized_start=2123
+  _globals['_ECONETEVENTTYPE']._serialized_end=2299
   _globals['_GETECONETSTATUSREQUEST']._serialized_start=25
   _globals['_GETECONETSTATUSREQUEST']._serialized_end=49
   _globals['_GETECONETSTATUSRESPONSE']._serialized_start=52
-  _globals['_GETECONETSTATUSRESPONSE']._serialized_end=845
-  _globals['_ADLCSTATUS']._serialized_start=848
-  _globals['_ADLCSTATUS']._serialized_end=1134
-  _globals['_HANDSHAKESTATUS']._serialized_start=1137
-  _globals['_HANDSHAKESTATUS']._serialized_end=1292
-  _globals['_ENABLEECONETREQUEST']._serialized_start=1294
-  _globals['_ENABLEECONETREQUEST']._serialized_end=1373
-  _globals['_ENABLEECONETRESPONSE']._serialized_start=1375
-  _globals['_ENABLEECONETRESPONSE']._serialized_end=1454
-  _globals['_DISABLEECONETREQUEST']._serialized_start=1456
-  _globals['_DISABLEECONETREQUEST']._serialized_end=1478
-  _globals['_DISABLEECONETRESPONSE']._serialized_start=1480
-  _globals['_DISABLEECONETRESPONSE']._serialized_end=1535
-  _globals['_SETSTATIONIDREQUEST']._serialized_start=1537
-  _globals['_SETSTATIONIDREQUEST']._serialized_end=1578
-  _globals['_SETSTATIONIDRESPONSE']._serialized_start=1580
-  _globals['_SETSTATIONIDRESPONSE']._serialized_end=1634
-  _globals['_WATCHECONETSTATUSREQUEST']._serialized_start=1636
-  _globals['_WATCHECONETSTATUSREQUEST']._serialized_end=1687
-  _globals['_SUBSCRIBEECONETEVENTSREQUEST']._serialized_start=1689
-  _globals['_SUBSCRIBEECONETEVENTSREQUEST']._serialized_end=1763
-  _globals['_ECONETFRAMEINFO']._serialized_start=1766
-  _globals['_ECONETFRAMEINFO']._serialized_end=1960
-  _globals['_ECONETEVENT']._serialized_start=1963
-  _globals['_ECONETEVENT']._serialized_end=2094
-  _globals['_ECONETSERVICE']._serialized_start=2276
-  _globals['_ECONETSERVICE']._serialized_end=2791
+  _globals['_GETECONETSTATUSRESPONSE']._serialized_end=871
+  _globals['_ADLCSTATUS']._serialized_start=874
+  _globals['_ADLCSTATUS']._serialized_end=1160
+  _globals['_HANDSHAKESTATUS']._serialized_start=1163
+  _globals['_HANDSHAKESTATUS']._serialized_end=1318
+  _globals['_ENABLEECONETREQUEST']._serialized_start=1320
+  _globals['_ENABLEECONETREQUEST']._serialized_end=1399
+  _globals['_ENABLEECONETRESPONSE']._serialized_start=1401
+  _globals['_ENABLEECONETRESPONSE']._serialized_end=1480
+  _globals['_DISABLEECONETREQUEST']._serialized_start=1482
+  _globals['_DISABLEECONETREQUEST']._serialized_end=1504
+  _globals['_DISABLEECONETRESPONSE']._serialized_start=1506
+  _globals['_DISABLEECONETRESPONSE']._serialized_end=1561
+  _globals['_SETSTATIONIDREQUEST']._serialized_start=1563
+  _globals['_SETSTATIONIDREQUEST']._serialized_end=1604
+  _globals['_SETSTATIONIDRESPONSE']._serialized_start=1606
+  _globals['_SETSTATIONIDRESPONSE']._serialized_end=1660
+  _globals['_WATCHECONETSTATUSREQUEST']._serialized_start=1662
+  _globals['_WATCHECONETSTATUSREQUEST']._serialized_end=1713
+  _globals['_SUBSCRIBEECONETEVENTSREQUEST']._serialized_start=1715
+  _globals['_SUBSCRIBEECONETEVENTSREQUEST']._serialized_end=1789
+  _globals['_ECONETFRAMEINFO']._serialized_start=1792
+  _globals['_ECONETFRAMEINFO']._serialized_end=1986
+  _globals['_ECONETEVENT']._serialized_start=1989
+  _globals['_ECONETEVENT']._serialized_end=2120
+  _globals['_ECONETSERVICE']._serialized_start=2302
+  _globals['_ECONETSERVICE']._serialized_end=2817
 # @@protoc_insertion_point(module_scope)

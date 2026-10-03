@@ -101,7 +101,24 @@ export interface HandshakeStatus {
 export interface EconetStatus {
     hasEconetSocket: boolean;
     enabled: boolean;
+    /**
+     * The CONFIGURED station number (0 if disabled): what the station links
+     * present now. The guest adopts it at its next Break.
+     */
     stationId: number;
+    /**
+     * The station number IN FORCE (0 if disabled): the number the guest is
+     * using -- what it read from the station links on its first read since
+     * the last reset, the read with which a filing system takes its number at
+     * boot; until it has read, the configured number.
+     */
+    stationInForce: number;
+    /**
+     * True when a renumber waits for the guest to adopt it at the next Break:
+     * Econet is enabled and `stationId` differs from `stationInForce`.
+     * `watchStatus` reports the moment a Break resolves it.
+     */
+    stationChangePending: boolean;
     aunMode: boolean;
     connected: boolean;
     adlc: AdlcStatus | undefined;
@@ -175,6 +192,8 @@ function toEconetStatus(proto: ProtoGetEconetStatusResponse): EconetStatus {
         hasEconetSocket: proto.hasEconetSocket,
         enabled: proto.enabled,
         stationId: proto.stationId,
+        stationInForce: proto.stationInForce,
+        stationChangePending: proto.enabled && proto.stationId !== proto.stationInForce,
         aunMode: proto.aunMode,
         connected: proto.connected,
         adlc: toAdlcStatus(proto.adlc),

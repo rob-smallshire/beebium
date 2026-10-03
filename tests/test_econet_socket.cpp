@@ -630,3 +630,29 @@ TEST_CASE("EconetSocket: the station in force is readable while another thread r
     guest.join();
     CHECK(observed_bad == 0);
 }
+
+TEST_CASE("EconetSocket: the guest adopting a new number is a status change",
+          "[econet][socket][station-in-force]") {
+    EconetSocket socket;
+    socket.enable(80, std::make_unique<TestBackend>());
+    socket.read_station_id(0);
+    socket.set_station_id(81);
+
+    // INTOFF reads in the same boot change nothing.
+    auto seq = socket.status_sequence();
+    socket.read_station_id(0);
+    CHECK(socket.status_sequence() == seq);
+
+    // Break, and the guest's read: the number in force moves, and the
+    // status sequence with it, so a watcher wakes.
+    socket.reset();
+    socket.read_station_id(0);
+    CHECK(socket.station_in_force() == 81);
+    CHECK(socket.status_sequence() != seq);
+
+    // A Break that re-reads the same number is no change.
+    seq = socket.status_sequence();
+    socket.reset();
+    socket.read_station_id(0);
+    CHECK(socket.status_sequence() == seq);
+}

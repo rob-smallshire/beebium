@@ -664,3 +664,100 @@ TEST_CASE("EconetService SubscribeEconetEvents truncates long payloads but "
     context.TryCancel();
     (void)reader->Finish();
 }
+
+// ============================================================================
+// Station number in force vs configured (#172)
+// ============================================================================
+//
+// station_id is the configured number, what the station links present;
+// station_in_force is the number the guest is using, which it read from the
+// links on its first read since the last reset. A renumber is pending until
+// the guest re-reads the links at Break.
+
+namespace {
+
+beebium::GetEconetStatusResponse econet_status(EconetTestFixture& fixture) {
+    grpc::ClientContext context;
+    beebium::GetEconetStatusResponse response;
+    REQUIRE(fixture.stub().GetEconetStatus(&context, {}, &response).ok());
+    return response;
+}
+
+void enable_station(EconetTestFixture& fixture, uint32_t station) {
+    grpc::ClientContext context;
+    beebium::EnableEconetRequest request;
+    beebium::EnableEconetResponse response;
+    request.set_station_id(station);
+    request.set_no_network(true);
+    REQUIRE(fixture.stub().EnableEconet(&context, request, &response).ok());
+    REQUIRE(response.success());
+}
+
+void set_station(EconetTestFixture& fixture, uint32_t station) {
+    grpc::ClientContext context;
+    beebium::SetStationIdRequest request;
+    beebium::SetStationIdResponse response;
+    request.set_station_id(station);
+    REQUIRE(fixture.stub().SetStationId(&context, request, &response).ok());
+    REQUIRE(response.success());
+}
+
+}  // namespace
+
+TEST_CASE("EconetService reports no station in force with no Econet fitted",
+          "[grpc][econet][station-in-force]") {
+    EconetTestFixture fixture;
+    auto status = econet_status(fixture);
+    CHECK(status.station_id() == 0);
+    CHECK(status.station_in_force() == 0);
+}
+
+TEST_CASE("EconetService: a renumber is pending until the guest re-reads at Break",
+          "[grpc][econet][station-in-force]") {
+    EconetTestFixture fixture;
+    enable_station(fixture, 80);
+    auto& socket = fixture.machine().state().memory.econet_socket;
+    socket.read_station_id(0);  // the filing system takes its number at boot
+
+    auto before = econet_status(fixture);
+    CHECK(before.station_id() == 80);
+    CHECK(before.station_in_force() == 80);
+
+    set_station(fixture, 81);
+    auto pending = econet_status(fixture);
+    CHECK(pending.station_id() == 81);
+    CHECK(pending.station_in_force() == 80);
+
+    // INTOFF reads during traffic do not adopt the number.
+    socket.read_station_id(0);
+    CHECK(econet_status(fixture).station_in_force() == 80);
+
+    // Watch, then Break: the guest re-reads the links and the two converge,
+    // pushed as a status change.
+    grpc::ClientContext context;
+    // A backstop, so a missing push fails rather than hangs.
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+    beebium::WatchEconetStatusRequest request;
+    request.set_min_interval_ms(25);
+    auto reader = fixture.stub().WatchEconetStatus(&context, request);
+    beebium::GetEconetStatusResponse snapshot;
+    REQUIRE(reader->Read(&snapshot));
+    REQUIRE(snapshot.station_in_force() == 80);
+
+    socket.reset();
+    socket.read_station_id(0);
+
+    bool converged = false;
+    while (!converged && reader->Read(&snapshot)) {
+        converged = snapshot.station_in_force() == 81;
+    }
+    CHECK(converged);
+    CHECK(snapshot.station_id() == 81);
+    context.TryCancel();
+    while (reader->Read(&snapshot)) {}
+    (void)reader->Finish();
+
+    auto after = econet_status(fixture);
+    CHECK(after.station_id() == 81);
+    CHECK(after.station_in_force() == 81);
+}

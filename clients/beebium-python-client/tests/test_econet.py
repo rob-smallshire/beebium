@@ -85,6 +85,7 @@ class MockGetEconetStatusResponse:
         has_econet_socket=True,
         enabled=False,
         station_id=0,
+        station_in_force=None,
         aun_mode=False,
         connected=False,
         adlc=None,
@@ -106,6 +107,8 @@ class MockGetEconetStatusResponse:
         self.has_econet_socket = has_econet_socket
         self.enabled = enabled
         self.station_id = station_id
+        # As the server does: in force equals configured unless told otherwise.
+        self.station_in_force = station_id if station_in_force is None else station_in_force
         self.aun_mode = aun_mode
         self.connected = connected
         self.adlc = adlc
@@ -421,3 +424,32 @@ class TestDataclasses:
         hs = HandshakeStatus(stage="idle", flag_fill_active=False)
         with pytest.raises(AttributeError):
             hs.stage = "scout"
+
+
+class TestEconetStationInForce:
+    """The configured station number and the one in force (#172)."""
+
+    def test_both_numbers_are_reported(self, mock_stub, econet):
+        mock_stub.GetEconetStatus.return_value = MockGetEconetStatusResponse(
+            enabled=True, station_id=81, station_in_force=80
+        )
+        status = econet.status
+        assert status.station_id == 81
+        assert status.station_in_force == 80
+
+    def test_a_renumber_is_pending_until_the_numbers_agree(self, mock_stub, econet):
+        mock_stub.GetEconetStatus.return_value = MockGetEconetStatusResponse(
+            enabled=True, station_id=81, station_in_force=80
+        )
+        assert econet.status.station_change_pending is True
+
+        mock_stub.GetEconetStatus.return_value = MockGetEconetStatusResponse(
+            enabled=True, station_id=81, station_in_force=81
+        )
+        assert econet.status.station_change_pending is False
+
+    def test_nothing_is_pending_with_econet_disabled(self, mock_stub, econet):
+        mock_stub.GetEconetStatus.return_value = MockGetEconetStatusResponse(
+            enabled=False, station_id=0, station_in_force=0
+        )
+        assert econet.status.station_change_pending is False

@@ -128,6 +128,8 @@ class EconetStatus:
 
     has_econet_socket: bool
     enabled: bool
+    # The CONFIGURED station number (0 if disabled): what the station links
+    # present now. The guest adopts it at its next Break.
     station_id: int
     aun_mode: bool
     connected: bool
@@ -145,6 +147,22 @@ class EconetStatus:
     watchdog_timeout_count: int = 0
     send_stage_log: str = ""
     ticks_with_timer_active: int = 0
+    # The station number IN FORCE (0 if disabled): the number the guest is
+    # using -- what it read from the station links on its first read since
+    # the last reset, the read with which a filing system takes its number at
+    # boot; until it has read, the configured number.
+    station_in_force: int = 0
+
+    @property
+    def station_change_pending(self) -> bool:
+        """True when a renumber waits for the guest to adopt it at the next Break.
+
+        The configured number (``station_id``) differs from the number the
+        guest is using (``station_in_force``). Changing the number from the
+        sidebar or ``set_station_id`` does this; a Break resolves it, and
+        ``watch_status`` reports the moment it does.
+        """
+        return self.enabled and self.station_id != self.station_in_force
 
 
 _EVENT_TYPE_NAMES = {
@@ -218,6 +236,7 @@ def _response_to_status(response: econet_pb2.GetEconetStatusResponse) -> EconetS
         has_econet_socket=response.has_econet_socket,
         enabled=response.enabled,
         station_id=response.station_id,
+        station_in_force=response.station_in_force,
         aun_mode=response.aun_mode,
         connected=response.connected,
         adlc=adlc,
@@ -286,8 +305,9 @@ class Econet:
 
         The server pushes an initial snapshot on subscription, then a new
         snapshot whenever status visible on EconetService changes
-        (enable/disable, station ID change, transport link up/down, or a
-        change in the AUN station collisions in effect). The stream stays
+        (enable/disable, station ID change, the guest adopting a station
+        number at Break, transport link up/down, or a change in the AUN
+        station collisions in effect). The stream stays
         open until the client cancels or the server shuts down.
 
         Args:

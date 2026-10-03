@@ -41,12 +41,47 @@ function createMockStub(methods: Record<string, (req: any) => any>) {
 
 describe("Econet", () => {
     describe("getStatus", () => {
+        it("reports the configured station and the one in force (#172)", async () => {
+            const stub = createMockStub({
+                getEconetStatus: () => ({
+                    hasEconetSocket: true,
+                    enabled: true,
+                    stationId: 81,
+                    stationInForce: 80,
+                    aunMode: true,
+                    connected: true,
+                }),
+            });
+            const status = await new Econet(stub as any).getStatus();
+            expect(status.stationId).toBe(81);
+            expect(status.stationInForce).toBe(80);
+            expect(status.stationChangePending).toBe(true);
+        });
+
+        it("has no pending change when the numbers agree, or Econet is off", async () => {
+            const agreed = createMockStub({
+                getEconetStatus: () => ({
+                    hasEconetSocket: true, enabled: true, stationId: 81, stationInForce: 81,
+                    aunMode: true, connected: true,
+                }),
+            });
+            expect((await new Econet(agreed as any).getStatus()).stationChangePending).toBe(false);
+            const off = createMockStub({
+                getEconetStatus: () => ({
+                    hasEconetSocket: true, enabled: false, stationId: 0, stationInForce: 0,
+                    aunMode: false, connected: false,
+                }),
+            });
+            expect((await new Econet(off as any).getStatus()).stationChangePending).toBe(false);
+        });
+
         it("maps all fields including optional adlc and handshake", async () => {
             const stub = createMockStub({
                 getEconetStatus: () => ({
                     hasEconetSocket: true,
                     enabled: true,
                     stationId: 100,
+                    stationInForce: 100,
                     aunMode: true,
                     connected: true,
                     adlc: {
@@ -100,6 +135,7 @@ describe("Econet", () => {
                     hasEconetSocket: false,
                     enabled: false,
                     stationId: 0,
+                    stationInForce: 0,
                     aunMode: false,
                     connected: false,
                     adlc: undefined,
@@ -193,6 +229,7 @@ describe("Econet", () => {
                 hasEconetSocket: true,
                 enabled: false,
                 stationId: 0,
+                stationInForce: 0,
                 aunMode: false,
                 connected: false,
                 adlc: undefined,
@@ -269,6 +306,7 @@ describe("Econet", () => {
                     hasEconetSocket: true,
                     enabled: true,
                     stationId: 100,
+                    stationInForce: 100,
                     aunMode: true,
                     connected: true,
                     adlc: undefined,
