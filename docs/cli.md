@@ -113,9 +113,15 @@ beebium-model-b --preset ./my-game.preset.beebium      # preset file by path
 CLI-overrides-preset applies to the Econet transport too. A `--aun` (or
 `--piconet`) on the command line overrides the preset's `econet.transport`
 rather than counting as a second transport: the same transport name merges
-parameters with the CLI winning per key (so `--preset model-b-l3fs-aun --aun
-port=0:map-file=none` keeps the preset's net and takes the CLI's port and
-map-file), and a different transport name replaces the preset's outright.
+parameters with the CLI winning per key, and a different transport name
+replaces the preset's outright. The CLI's `--aun` already carries the
+manifest default of every parameter it does not name (`port=32768`, `net=0`,
+`discovery=on`), and those defaults win too, so only the default-less keys
+(`map`, `subnet`, `map-file`) are kept from the preset. Repeat on the command
+line any defaulted key the preset sets: `--preset model-b-disc-aun-80 --aun
+port=0:discovery=off:map-file=none` takes all three from the CLI, while
+`--aun map-file=none` alone would also replace the preset's `port=0` with
+32768 and its discovery setting with `on`.
 
 #### ROM Configuration
 
@@ -210,29 +216,46 @@ ships as a discoverable plugin under `src/extensions/piconet/`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--station <1-254>\|auto[:lo-hi]` | (omitted = no Econet) | Econet station number; presence enables Econet hardware. Without a transport extension the ADLC reports "No Clock". `auto` (or `auto:lo-hi`, default range 1-253) makes the transport choose a free number at launch -- see **Automatic station number** below. |
-| `--aun [port=<n>][:map=<net.stn@ip@port>][:discovery=<mode>]...` | — | AUN UDP transport. `port` defaults to 32768; `port=none` disables the network. `map=` is repeatable; the inner separator is `@` (shell-safe in every common shell, and non-colliding with the `.` inside IPv4 / `net.stn`). `discovery=on\|announce\|browse\|off` (default `on`) controls mDNS: `announce` publishes without adopting, `browse` adopts without publishing, `off` neither -- see **Discovery mode** below. An invalid value is a launch error. |
-| `--piconet device_path=<path>` | — | Piconet USB-CDC bridge to a real Econet wire (POSIX-only). Mutually exclusive with `--aun`. |
+| `--station <1-254>\|auto[:lo-hi]` | (omitted = no Econet) | Econet station number; presence enables Econet hardware. Without a transport extension the ADLC reports "No Clock". `auto` (or `auto:lo-hi`, default range 1-253; the keyword is case-insensitive) makes the transport choose a free number at launch -- see **Automatic station number** below. A number or range outside 1-254, or `lo` above `hi`, is a usage error (exit 64). |
+| `--aun [key=value[:key=value...]]` | — | AUN UDP transport. Parameters are listed below; `describe-extension aun` prints the same list. |
+| `--piconet [device_path=<path>]` | — | Piconet USB-CDC bridge to a real Econet wire. `device_path` names the serial device; omit it (or give `auto`) to find a connected Piconet by its USB vendor id and a STATUS probe. Mutually exclusive with `--aun`. |
+
+`--aun` parameters (colon-separated, the generic extension grammar):
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `port=<n>\|none` | `32768` | UDP port to bind. `0` lets the OS choose a free port (the announcement and `AunService.GetStatus` report the real one). `none` fits the hardware with no network. A value that is not a number in 0-65535 is reported on stderr and the default 32768 is used. |
+| `net=<0-255>` | `0` | The local Econet net number. An invalid value is reported on stderr and 0 is used. |
+| `map=<net.stn@ip@port>` | — | A peer for this launch (repeatable; provenance Launch). The inner separator is `@` (shell-safe in every common shell, and non-colliding with the `.` inside IPv4 / `net.stn`); `ip` is an IPv4 literal; a bare `stn` means net 0. A malformed entry is reported on stderr and skipped. |
+| `subnet=<net@a.b.c.0/24>` | — | A subnet rule for this launch (repeatable; the RISC OS convention: station is the last octet, port 32768). Only `/24`; the last octet of the address is ignored. A malformed entry is reported and skipped. |
+| `map-file=<path>\|none` | the per-user `aun-map.json` | The map file to load and edit. Precedence: this key, then `BEEBIUM_AUN_MAP_FILEPATH`, then the per-user default (`report-aun-map-filepath` prints it). `none` disables the map file. |
+| `discovery=on\|announce\|browse\|off` | `on` | mDNS on `_aun._udp`: `announce` publishes without adopting, `browse` adopts without publishing, `off` neither -- see **Discovery mode** below. Any other value is a launch error (exit 64). |
 
 **Transport selection:**
 
-- **`--aun port=<n>`:** Talk to other AUN-speaking peers (other Beebium instances, BeebEm, PiEconetBridge) over UDP/IP. Combine with one or more `map=` entries to populate the peer table.
+- **`--aun port=<n>`:** Talk to other AUN-speaking peers (other Beebium instances, BeebEm, PiEconetBridge) over UDP/IP. The peer table is filled from `map=` / `subnet=` entries, the map file, `AunService.AddPeer`, and (unless `discovery` says otherwise) other instances' `_aun._udp` announcements.
 - **`--piconet device_path=<path>`:** Talk to real BBCs / Acorn fileservers / printers / etc. over a real Econet wire via the [Piconet](https://github.com/jprayner/piconet) USB device. The wire's clock generator and termination must be present; the Piconet is a participant on the wire, not a clock source.
 - **`--aun port=none`:** Hardware fitted, no transport. Useful for testing the NFS ROM's "No Clock" path or for keeping a station number reserved without networking.
 - **No transport flag (just `--station`):** Econet hardware fitted but no transport configured — the ADLC sees no carrier (DCD high). Identical to the `port=none` case.
 - **No `--station`:** Econet hardware not fitted at all. The `&FE18` station ID register returns 0x00 (open bus); NFS ROM detects no Econet.
 
-**Discovery mode (`--aun discovery=`).** `on` (default) announces and browses `_aun._udp`; `announce` publishes without adopting; `browse` adopts without publishing; `off` does neither (only `map=` / the map file / `AddPeer` populate the table). Collision reporting and parked adoption need browsing, so they are silent under `announce` and `off`; with `off`, `--station auto` resolves immediately from the map file with no network wait, and with `browse` a same-instant auto race is not arbitrated. The sidebar shows the mode when it is not `on`, and `AunService.GetStatus` reports `discovery_mode` (over ExtensionRpc; the protocol fingerprint is unchanged). Full semantics in [networking.md](networking.md#discovery-mode---aun-discovery-issue-158).
+**Discovery mode (`--aun discovery=`).** `on` (default) announces and browses `_aun._udp`; `announce` publishes without adopting; `browse` adopts without publishing; `off` does neither (only `map=` / the map file / `AddPeer` populate the table). Collision reporting and parked adoption need browsing, so they are silent under `announce` and `off`; with `off` or `announce`, `--station auto` resolves immediately from the map file, launch `map=` peers and the per-host hint with no network wait, and with `browse` a same-instant auto race is not arbitrated. The sidebar shows the mode when it is not `on`, and `AunService.GetStatus` reports `discovery_mode` (over ExtensionRpc; the protocol fingerprint is unchanged). Full semantics in [networking.md](networking.md#discovery-mode---aun-discovery-issue-158).
 
-**Automatic station number (`--station auto`).** `--station auto` (or `auto:<lo>-<hi>`, default 1-253), or a preset's `"econet": {"station": "auto"}`, makes the transport pick a free station number at launch -- before the machine runs and before the socket is enabled, so the guest reads its final number at its first boot and never needs a Break. The number is chosen by browsing `_aun._udp` for the numbers in use on this net (plus map-file and launch `map=` peers, not subnet guesses), taking the lowest free one, and briefly settling a same-second race so instances started together land on distinct numbers. It is bounded (a few seconds) and runs off the emulation thread; if the whole range is in use it starts at the range's first number and says so on stderr rather than failing. Only the AUN transport supports it (Piconet bridges a real wire with no announcements to consult, and rejects `auto`); the bundled `model-b-disc-aun-auto` preset uses it. The chosen number is the socket's real station number, so every surface (status, sidebar, the `_aun._udp` announcement) shows it, and the launch log notes it as `(auto-assigned)`. Selection runs *after* the server is listening and has printed its port (so it never delays a launcher's port-wait); with `--wait=api` the first `Run()` waits for it. A **staggered** launch is reliable; a **same-instant** launch is best-effort — a residual clash surfaces as an ordinary station-number collision (renumber one). The timings are tunable via `BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS` / `_QUIET_MS` / `_BUDGET_MS` (defaults 1500 / 600 / 4000). Build-time boots (`capture-screenshot`, preset generation) take the range's first number with no browse, for determinism. To space re-use out, the search starts one past the last number this host allocated (wrapping), recorded in a small per-user hint file; `BEEBIUM_AUN_AUTO_STATE_FILEPATH` overrides its path and `none` disables it (plain lowest-free). The hint never fails a launch -- any error falls back to lowest-free. See [networking.md](networking.md#choosing-a-free-station-number-at-launch---station-auto-issue-67).
+**Automatic station number (`--station auto`).** `--station auto` (or `auto:<lo>-<hi>`, default 1-253), or a preset's `"econet": {"station": "auto"}`, makes the transport pick a free station number at launch -- before the machine runs and before the socket is enabled, so the guest reads its final number at its first boot and never needs a Break. The number is chosen by browsing `_aun._udp` for the numbers in use on this net (plus map-file and launch `map=` peers, not subnet guesses), taking the lowest free one, and briefly settling a same-second race so instances started together land on distinct numbers. It is bounded (a few seconds) and runs off the emulation thread; if the whole range is in use it starts at the range's first number and says so on stderr rather than failing. Only the AUN transport supports it (Piconet bridges a real wire with no announcements to consult, and rejects `auto`; so do `--aun port=none` and a bare `--station auto` with no transport -- these are reported once the server has printed its port, and it then exits with status 1); the bundled `model-b-disc-aun-auto` preset uses it. The chosen number is the socket's real station number, so every surface (status, sidebar, the `_aun._udp` announcement) shows it, and the launch log notes it as `(auto-assigned)`. Selection runs *after* the server is listening and has printed its port (so it never delays a launcher's port-wait); with `--wait=api` the first `Run()` waits for it. A **staggered** launch is reliable; a **same-instant** launch is best-effort — a residual clash surfaces as an ordinary station-number collision (renumber one). The timings are tunable via `BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS` / `_QUIET_MS` / `_BUDGET_MS` (defaults 1500 / 600 / 4000). Build-time boots (`capture-screenshot`, preset generation) take the range's first number with no browse, for determinism. To space re-use out, the search starts one past the last number this host allocated (wrapping), recorded in a small per-user hint file; `BEEBIUM_AUN_AUTO_STATE_FILEPATH` overrides its path and `none` disables it (plain lowest-free). The hint never fails a launch -- any error falls back to lowest-free. See [networking.md](networking.md#choosing-a-free-station-number-at-launch---station-auto-issue-67).
 
 **Examples:**
 
 ```bash
-# Two Beebium instances on loopback
+# Two Beebium instances on loopback, mapped to each other explicitly
 beebium-model-b --station 32 --aun port=32768:map=0.254@127.0.0.1@32769
 
 beebium-model-b --station 254 --aun port=32769:map=0.32@127.0.0.1@32768
+
+# Hermetic: OS-chosen port, no mDNS, no map file
+beebium-model-b --station 32 --aun port=0:discovery=off:map-file=none
+
+# Pick a free station number in 40-49 at launch
+beebium-model-b --station auto:40-49 --aun port=0
 
 # Talk to real Econet via Piconet
 beebium-model-b --station 250 --piconet device_path=/dev/tty.usbmodem101
@@ -250,23 +273,30 @@ Both transports are configured in presets via the generic
   "station": 32,
   "transport": {
     "name": "aun",
-    "parameters": { "port": "32768", "map": "0.254@127.0.0.1@32769" }
+    "parameters": {
+      "port": "32768",
+      "discovery": "on",
+      "map": ["0.254@127.0.0.1@32769", "0.253@127.0.0.1@32770"]
+    }
   }
 }
 ```
 
+`station` is an integer 1-254 or the string `"auto"` / `"auto:lo-hi"`.
 The `name` field selects the transport extension (`aun` or `piconet`);
-`parameters` is a flat key/value map that becomes the extension's
-config. CLI arguments override preset values; specifying both
-`--aun ...` and `--piconet ...` (whether on the CLI or via a preset)
-is rejected as "BBC machines support at most one Econet transport."
+`parameters` holds the same keys as the CLI parameters. A repeatable key
+(`map`, `subnet`) takes a JSON array of strings, or a single string for one
+entry. CLI arguments override preset values, including the transport (see
+**Presets** above). Two transports on the command line -- `--aun ...` and
+`--piconet ...` -- are rejected as "BBC machines support at most one Econet
+transport (got 2)."
 
 **Migration from older flags:** the legacy `--aun-port`,
-`--aun-map`, and bare `--piconet <path>` flags have been removed,
-along with the matching preset keys (`econet.aun_port`,
-`econet.aun_map`, `econet.piconet.device_path`). Update preset files
-to the `transport` shape above; presets that still use the old keys
-fail to load with a message pointing at the new form.
+`--aun-map`, and bare `--piconet <path>` flags have been removed
+(they are now unknown arguments, exit 64). Update preset files to the
+`transport` shape above: a preset with `econet.aun_port` or
+`econet.piconet` fails to load with a message pointing at the new form;
+an `econet.aun_map` key is ignored, like any other unknown key.
 
 See `docs/networking.md` for the architecture and `docs/discussion/piconet-feasibility.md` for the Piconet design.
 
@@ -579,11 +609,15 @@ beebium-model-b create-preset --name "My Elite Setup" [--from <source-id>] [--ou
 | `--name <name>` | Display name for the preset (required) |
 | `--from <id>` | Source preset to copy configuration from (optional) |
 | `--output <path>` | Write preset to specified path instead of user presets directory |
+| `--station <1-254>\|auto[:lo-hi]` | Fit Econet, recorded as `econet.station` (`auto` is recorded verbatim and resolved at each launch) |
+| `--aun ...` / `--piconet ...` | Recorded as the preset's `econet.transport`, same grammar as `start`. Requires `--station`; at most one transport |
 
 The preset ID is derived by slugifying the name. Outputs the created preset ID (or path if `--output` used) on success:
 ```
 my-elite-setup
 ```
+
+`create-preset` also accepts `--description`, `--machine-name`, `--auto-boot`, `--release-date`, `--fdc`, `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. The recorded transport parameters include the manifest defaults the CLI fills in, e.g. `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "net": "0", "port": "0"}`.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
@@ -626,7 +660,9 @@ Copies the preset file to the specified location. Works with both system and use
 
 ### AUN Map Subcommands
 
-These subcommands edit the per-user `aun-map.json` (the standing AUN peer map; see [networking.md](networking.md) "The AUN map file"). They are model-independent and write the file through the same library the running server uses, so a write is picked up by any running instance on its poll. Every one honours the `BEEBIUM_AUN_MAP_FILEPATH` environment variable and a `--map-file <path>` option (which wins over the environment); without either, the shared per-user path is used. GUIs that talk to a running (possibly remote) server use the `AunService` map RPCs instead; these subcommands are for scripts and hand setup.
+These subcommands edit the per-user `aun-map.json` (the standing AUN peer map; see [networking.md](networking.md#the-aun-map-file-aun-mapjson)). They are model-independent and need no ROMs or running server. They write the file atomically through the same library the running server uses, preserving entry order and unknown keys, so a running instance picks a write up on its next poll of the file. (The poll rides on the mDNS browse sweep, so an instance launched with `discovery=announce` or `discovery=off` does not see the change until `AunService.ReloadMap`, the sidebar's Reload, or a restart.) Every one honours the `BEEBIUM_AUN_MAP_FILEPATH` environment variable and a `--map-file <path>` (or `--map-file=<path>`) option, which wins over the environment; without either, the shared per-user path is used: `~/Library/Application Support/Beebium/aun-map.json` on macOS, `%APPDATA%\Beebium\aun-map.json` on Windows, `$XDG_CONFIG_HOME/beebium/aun-map.json` (else `~/.config/beebium/aun-map.json`) elsewhere. Unlike `--aun map-file=`, the word `none` is not special here. GUIs that talk to a running (possibly remote) server use the `AunService` map RPCs instead; these subcommands are for scripts and hand setup.
+
+Exit codes: `64` for a bad argument (a malformed `net.stn`, net, port or subnet, or the wrong number of arguments), `65` when the existing file is malformed (the error names the position), `74` when the file cannot be written, `78` from `create-aun-map` when the file already exists.
 
 #### report-aun-map-filepath
 
@@ -642,7 +678,7 @@ Outputs the resolved `aun-map.json` path (after `--map-file` and `BEEBIUM_AUN_MA
 beebium-model-b create-aun-map [--map-file <path>]
 ```
 
-Writes a template `aun-map.json` with one example peer and one example subnet, whose labels explain the PiEconetBridge and RISC OS cases. Refuses to overwrite an existing file (exits `78`, configuration error).
+Writes a template `aun-map.json` with one example peer (`0.254` at `192.168.1.10:32768`) and one example subnet (net `128` = `192.168.1.0/24`), whose labels explain the PiEconetBridge and RISC OS cases. Refuses to overwrite an existing file (exits `78`, configuration error).
 
 #### show-aun-map
 
@@ -650,7 +686,7 @@ Writes a template `aun-map.json` with one example peer and one example subnet, w
 beebium-model-b [--format pretty|tsv|jsonl] show-aun-map [--map-file <path>]
 ```
 
-Shows the parsed peers and subnets with their labels and host-resolution state, in the global output format. `pretty` is a human table; `tsv` and `jsonl` are machine-readable. Unknown top-level keys in the file are reported (and always preserved on a write).
+Shows the parsed peers and subnets with their labels and host-resolution state, in the global output format. `pretty` lists the file path, then peers and subnets, and any unknown top-level keys (which a write always preserves). `tsv` has the columns `kind net stn host_or_subnet port label resolved` (`resolved` is the IPv4 address, or `unresolved`). `jsonl` emits one object per entry: `{"kind":"peer","net","station","host","port","label","resolved","resolved_ip"}` or `{"kind":"subnet","net","subnet","label"}`. A missing file shows as empty.
 
 #### add-aun-peer
 
@@ -658,7 +694,7 @@ Shows the parsed peers and subnets with their labels and host-resolution state, 
 beebium-model-b add-aun-peer <net.stn> <host> <port> [--label <text>] [--map-file <path>]
 ```
 
-Adds or replaces the `peers` entry for `net.stn` (net 0-255, station 1-254). `host` is an IPv4 literal or a DNS name. Entry order and unknown keys in the file are preserved.
+Adds or replaces the `peers` entry for `net.stn` (net 0-255, station 1-254; both parts are required, e.g. `0.254`). `host` is an IPv4 literal or a DNS name; `port` is 1-65535. Creates the file if it does not exist. Entry order and unknown keys in the file are preserved.
 
 #### remove-aun-peer
 
@@ -674,7 +710,7 @@ Removes the `peers` entry for `net.stn`. Exits `0` whether or not an entry was p
 beebium-model-b add-aun-subnet <net> <a.b.c.0/24> [--label <text>] [--map-file <path>]
 ```
 
-Adds or replaces the `subnets` entry for `net` (the RISC OS convention: station is the last octet, port 32768). Only `/24` is supported.
+Adds or replaces the `subnets` entry for `net` (0-255; the RISC OS convention: station is the last octet, port 32768). Only `/24` is supported; the address is stored as written and its last octet is ignored.
 
 #### remove-aun-subnet
 
@@ -682,7 +718,7 @@ Adds or replaces the `subnets` entry for `net` (the RISC OS convention: station 
 beebium-model-b remove-aun-subnet <net> [--map-file <path>]
 ```
 
-Removes the `subnets` entry for `net`.
+Removes the `subnets` entry for `net`. Exits `0` whether or not an entry was present, reporting which.
 
 ### capture-screenshot
 
@@ -805,6 +841,11 @@ beebium-model-b start --help        # Start subcommand help
 | Variable | Description |
 |----------|-------------|
 | `BEEBIUM_NO_PACING` | Disable real-time pacing (run at maximum speed) |
+| `BEEBIUM_AUN_MAP_FILEPATH` | The AUN map file, used when `--aun map-file=` / `--map-file` is not given (empty = unset) |
+| `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | The per-host `--station auto` hint file (default `aun-auto-next` in the per-user directory that holds the default map file); `none` disables the hint |
+| `BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS`, `BEEBIUM_AUN_AUTO_QUIET_MS`, `BEEBIUM_AUN_AUTO_BUDGET_MS` | `--station auto` browse timings (defaults 1500 / 600 / 4000) |
+| `BEEBIUM_AUN_TRACE` | Set (to anything) to log AUN packets and discovery collisions to stderr |
+| `BEEBIUM_PICONET_TRACE` | Set (to anything) to log the Piconet serial protocol to stderr |
 
 ## Server Lifecycle
 
