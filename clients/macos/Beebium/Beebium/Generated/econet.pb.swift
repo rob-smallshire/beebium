@@ -24,6 +24,9 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
 enum Beebium_EconetEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
   typealias RawValue = Int
   case econetEventUnknown // = 0
+
+  /// HANDSHAKE_CHANGE is defined but not currently emitted; the stream
+  /// carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
   case econetEventFrameSent // = 1
   case econetEventFrameReceived // = 2
   case econetEventHandshakeChange // = 3
@@ -101,7 +104,9 @@ struct Beebium_GetEconetStatusResponse: @unchecked Sendable {
     set {_uniqueStorage()._stationID = newValue}
   }
 
-  /// True if AUN mode is active (FourWayHandshake present).
+  /// True if the FourWayHandshake sits between the ADLC and the transport.
+  /// Every way of fitting the hardware installs it, so this is true whenever
+  /// enabled is.
   var aunMode: Bool {
     get {return _storage._aunMode}
     set {_uniqueStorage()._aunMode = newValue}
@@ -217,13 +222,16 @@ struct Beebium_GetEconetStatusResponse: @unchecked Sendable {
     set {_uniqueStorage()._gatedBySpeed = newValue}
   }
 
-  /// AUN station-number collisions: a discovered peer advertised a (net, stn)
-  /// already held by a different, still-live station and was refused rather
-  /// than allowed to displace the incumbent (first live station wins; see
-  /// docs/networking.md "Station-number collisions"). aun_station_collision_count
-  /// counts them since the transport came up; aun_last_station_collision
-  /// describes the most recent one for display. Zero / empty for non-AUN
-  /// transports and when no collision has occurred.
+  /// AUN station-number collisions CURRENTLY IN EFFECT: a discovered peer
+  /// advertising a (net, stn) already held by a different, still-live station
+  /// and refused rather than allowed to displace the incumbent (first live
+  /// station wins; see docs/networking.md "Station-number collisions").
+  /// aun_station_collision_count is the number in effect right now, NOT a
+  /// running total: it drops back as collisions clear (the collider renames,
+  /// leaves, is adopted, or this machine changes its own number), so a client
+  /// can show the warning exactly while at least one is live.
+  /// aun_last_station_collision describes the most recent one still in effect,
+  /// empty when none. Zero / empty for non-AUN transports.
   var aunStationCollisionCount: UInt32 {
     get {return _storage._aunStationCollisionCount}
     set {_uniqueStorage()._aunStationCollisionCount = newValue}
@@ -322,8 +330,8 @@ struct Beebium_EnableEconetRequest: Sendable {
   /// Station number (1-254).
   var stationID: UInt32 = 0
 
-  /// UDP port to bind for AUN networking.
-  /// 0 = use default (32768).
+  /// UDP port for the AUN socket (0 = the AUN default, 32768). With a
+  /// transport configured it is passed to the transport as its port setting.
   /// Ignored when no_network is true.
   var aunPort: UInt32 = 0
 
@@ -345,7 +353,8 @@ struct Beebium_EnableEconetResponse: Sendable {
 
   var error: String = String()
 
-  /// Actual port bound (useful when 0/default was requested).
+  /// The port the transport's backend reports as bound (useful when
+  /// 0/default was requested); 0 when no_network was set.
   var actualAunPort: UInt32 = 0
 
   var unknownFields = SwiftProtobuf.UnknownStorage()

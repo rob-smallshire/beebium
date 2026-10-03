@@ -21,10 +21,12 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
 }
 
 /// Where a peer entry came from, mirroring the AunPeerProvenance the AUN
-/// transport resolves by. The three operator sources (Launch, Api, MapFile)
-/// all take precedence over Discovered, in the order Api > Launch > MapFile;
-/// a discovered announcement that claims a (net, stn) an operator source
-/// already holds is shadowed rather than displacing it. Named AunPeerSource
+/// transport resolves by. Each (net, stn) resolves to one winner by
+/// precedence, highest first: Api > Launch > MapFile > Discovered > Subnet.
+/// The three operator sources (Api, Launch, MapFile) all beat Discovered, so a
+/// discovered announcement that claims a (net, stn) an operator source already
+/// holds is shadowed rather than displacing it. Removing the winner falls back
+/// to the next source still present. Named AunPeerSource
 /// so the proto-generated C++ symbol does not collide with the transport's
 /// beebium::AunPeerProvenance enum class.
 enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
@@ -40,15 +42,17 @@ enum Beebium_AunPeerSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// Added at runtime via AunService::AddPeer.
   case api // = 2
 
-  /// Read from the per-user aun-map.json (reserved for the map-file step).
+  /// Read from the map file (the per-user aun-map.json, or the file named
+  /// by --aun map-file=): its peers[] entries whose host resolved.
   case mapFile // = 3
 
   /// Added by the AUN extension's mDNS subscriber from a
   /// _aun._udp announcement on the LAN.
   case discovered // = 4
 
-  /// Materialised from a subnets rule in the map file (an inbound sender
-  /// identified, or an outbound guess). Lowest precedence; Discovered wins.
+  /// Materialised from a subnet rule (the map file's subnets[] or
+  /// --aun subnet=): an inbound sender identified by its address, or an
+  /// outbound guess. Lowest precedence; every other source wins.
   case subnet // = 5
   case UNRECOGNIZED(Int)
 
@@ -108,26 +112,35 @@ struct Beebium_AunGetStatusResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// True if the AUN UDP socket is bound and the cable is connected.
+  /// True if the AUN UDP socket is bound and the cable is connected; false
+  /// while there is no socket.
   var connected: Bool = false
 
   /// The local UDP port the AUN backend is bound to (0 if none).
   var localPort: UInt32 = 0
 
-  /// Number of peers configured in the peer table.
+  /// Number of (net, stn) pairs in the resolved routing table (what ListPeers
+  /// returns). Reported even before the socket is up.
   var peerCount: UInt32 = 0
 
-  /// The per-user aun-map.json path on the server's host (empty when the map
-  /// file is disabled with map-file=none).
+  /// The map file's path on the server's host: --aun map-file=, else
+  /// BEEBIUM_AUN_MAP_FILEPATH, else the per-user aun-map.json. Empty when
+  /// the map file is disabled with map-file=none.
   var mapFilePath: String = String()
 
   /// Number of entries (peers + subnets) read from the map file on the last
-  /// load.
+  /// load, including peers whose host did not resolve.
   var mapFileEntryCount: UInt32 = 0
 
   /// The last map-file load error, or empty when the last load succeeded (or
   /// the file is absent, which is not an error).
   var mapFileError: String = String()
+
+  /// The mDNS discovery mode set by --aun discovery=: "on", "announce",
+  /// "browse" or "off". A frontend shows it when it is not "on". (aun.proto
+  /// is served over ExtensionRpc and is NOT part of the fingerprinted service
+  /// protocol.)
+  var discoveryMode: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -173,10 +186,10 @@ struct Beebium_AunAddMapPeerRequest: Sendable {
   /// 1..254
   var stn: UInt32 = 0
 
-  /// IPv4 literal or DNS name
+  /// IPv4 literal or DNS name, resolved on the server's
   var host: String = String()
 
-  /// 1..65535
+  /// host at each load
   var port: UInt32 = 0
 
   /// optional note
@@ -240,7 +253,7 @@ struct Beebium_AunAddMapSubnetRequest: Sendable {
   /// 0..255
   var net: UInt32 = 0
 
-  /// a.b.c.0/24
+  /// a.b.c.0/24: station = last octet, port 32768
   var subnet: String = String()
 
   /// optional note
@@ -405,7 +418,8 @@ struct Beebium_AunAddPeerRequest: Sendable {
   /// Econet station number (1-254).
   var stn: UInt32 = 0
 
-  /// Dotted-quad IP address (e.g. "192.168.1.100").
+  /// Dotted-quad IPv4 address (e.g. "192.168.1.100"); a DNS name is
+  /// rejected (use AddMapPeer for a name).
   var ipAddress: String = String()
 
   /// UDP port (0 = use AUN default 32768).
@@ -494,9 +508,8 @@ struct Beebium_AunPeer: Sendable {
 
   var port: UInt32 = 0
 
-  /// Provenance of this resolved entry (the source it won from). Clients
-  /// present it in the AUN panel's secondary text: "launch", "API",
-  /// "map file" or "mDNS".
+  /// Provenance of this resolved entry (the source it won from). The AUN
+  /// panel captions it "launch", "API", "map file", "mDNS" or "subnet".
   var source: Beebium_AunPeerSource = .unspecified
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -533,7 +546,7 @@ extension Beebium_AunGetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".AunGetStatusResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}connected\0\u{3}local_port\0\u{3}peer_count\0\u{3}map_file_path\0\u{3}map_file_entry_count\0\u{3}map_file_error\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}connected\0\u{3}local_port\0\u{3}peer_count\0\u{3}map_file_path\0\u{3}map_file_entry_count\0\u{3}map_file_error\0\u{3}discovery_mode\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -547,6 +560,7 @@ extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 4: try { try decoder.decodeSingularStringField(value: &self.mapFilePath) }()
       case 5: try { try decoder.decodeSingularUInt32Field(value: &self.mapFileEntryCount) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.mapFileError) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.discoveryMode) }()
       default: break
       }
     }
@@ -571,6 +585,9 @@ extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
     if !self.mapFileError.isEmpty {
       try visitor.visitSingularStringField(value: self.mapFileError, fieldNumber: 6)
     }
+    if !self.discoveryMode.isEmpty {
+      try visitor.visitSingularStringField(value: self.discoveryMode, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -581,6 +598,7 @@ extension Beebium_AunGetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.mapFilePath != rhs.mapFilePath {return false}
     if lhs.mapFileEntryCount != rhs.mapFileEntryCount {return false}
     if lhs.mapFileError != rhs.mapFileError {return false}
+    if lhs.discoveryMode != rhs.discoveryMode {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

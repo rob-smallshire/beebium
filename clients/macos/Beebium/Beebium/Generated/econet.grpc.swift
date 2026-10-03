@@ -11,10 +11,14 @@ import NIOConcurrencyHelpers
 import SwiftProtobuf
 
 
-/// Econet/AUN networking management service.
+/// Transport-agnostic Econet management service.
 ///
-/// Provides hardware configuration (enable/disable Econet), network status
-/// queries (ADLC registers, handshake state), and AUN peer management.
+/// Provides hardware configuration (fit/remove the Econet module, station
+/// number), status queries (ADLC registers, handshake state, station
+/// collisions) and a frame event stream. Transport-specific operations live
+/// on the active transport's own service, found via EconetTransportService:
+/// AUN peers, the cable plug and the AUN port on AunService
+/// (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
 ///
 /// Usage: instantiate `Beebium_EconetServiceClient`, then call methods of this protocol to make API calls.
 internal protocol Beebium_EconetServiceClientProtocol: GRPCClient {
@@ -59,7 +63,8 @@ extension Beebium_EconetServiceClientProtocol {
     return "beebium.EconetService"
   }
 
-  /// Query Econet hardware status (enabled, station ID, ADLC state, peers).
+  /// Query Econet hardware status (enabled, station ID, ADLC and handshake
+  /// state, link state, station collisions, diagnostic counters).
   ///
   /// - Parameters:
   ///   - request: Request to send to GetEconetStatus.
@@ -77,7 +82,12 @@ extension Beebium_EconetServiceClientProtocol {
     )
   }
 
-  /// Fit Econet hardware: set station ID, optionally bind AUN socket.
+  /// Fit Econet hardware with the given station number. Unless no_network is
+  /// set, the configured transport (--aun / --piconet / a preset) brings up
+  /// its backend through the transport extension; with no transport
+  /// configured a bare AUN socket is bound on net 0. Fails if Econet is
+  /// already fitted, as it is from launch whenever a station number is
+  /// configured (--station, or a preset).
   ///
   /// - Parameters:
   ///   - request: Request to send to EnableEconet.
@@ -95,7 +105,8 @@ extension Beebium_EconetServiceClientProtocol {
     )
   }
 
-  /// Remove Econet hardware (disable station, close AUN socket).
+  /// Remove Econet hardware: drop the station and the transport's backend
+  /// (for AUN, close the socket and stop announcing and browsing).
   ///
   /// - Parameters:
   ///   - request: Request to send to DisableEconet.
@@ -113,7 +124,9 @@ extension Beebium_EconetServiceClientProtocol {
     )
   }
 
-  /// Set the station ID (takes effect on next machine reset).
+  /// Set the station number, as if changing the station links. The guest
+  /// reads it from &FE18 on its next Break; the transport is told at once
+  /// (AUN re-announces the new number and re-runs its collision checks).
   ///
   /// - Parameters:
   ///   - request: Request to send to SetStationId.
@@ -131,8 +144,10 @@ extension Beebium_EconetServiceClientProtocol {
     )
   }
 
-  /// Stream Econet events (frame activity, handshake changes, connection state).
-  /// Reserved for future implementation.
+  /// Stream frames as they cross the transport, and link up/down changes.
+  /// Starts from the moment of subscription (no replay). Fails with
+  /// FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+  /// hardware is fitted.
   ///
   /// - Parameters:
   ///   - request: Request to send to SubscribeEconetEvents.
@@ -156,8 +171,9 @@ extension Beebium_EconetServiceClientProtocol {
   /// Server-pushed status stream. Writes an initial GetEconetStatusResponse
   /// as soon as the stream is established, then a fresh snapshot whenever
   /// status visible on EconetService changes (enable/disable, station ID
-  /// change, or transport backend connection toggle). The stream stays open
-  /// until the client cancels; use this instead of polling GetEconetStatus.
+  /// change, transport link up/down, or a change in the station collisions
+  /// in effect). The stream stays open until the client cancels; use this
+  /// instead of polling GetEconetStatus.
   ///
   /// - Parameters:
   ///   - request: Request to send to WatchEconetStatus.
@@ -236,10 +252,14 @@ internal struct Beebium_EconetServiceNIOClient: Beebium_EconetServiceClientProto
   }
 }
 
-/// Econet/AUN networking management service.
+/// Transport-agnostic Econet management service.
 ///
-/// Provides hardware configuration (enable/disable Econet), network status
-/// queries (ADLC registers, handshake state), and AUN peer management.
+/// Provides hardware configuration (fit/remove the Econet module, station
+/// number), status queries (ADLC registers, handshake state, station
+/// collisions) and a frame event stream. Transport-specific operations live
+/// on the active transport's own service, found via EconetTransportService:
+/// AUN peers, the cable plug and the AUN port on AunService
+/// (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 internal protocol Beebium_EconetServiceAsyncClientProtocol: GRPCClient {
   static var serviceDescriptor: GRPCServiceDescriptor { get }
@@ -525,36 +545,52 @@ internal enum Beebium_EconetServiceClientMetadata {
   }
 }
 
-/// Econet/AUN networking management service.
+/// Transport-agnostic Econet management service.
 ///
-/// Provides hardware configuration (enable/disable Econet), network status
-/// queries (ADLC registers, handshake state), and AUN peer management.
+/// Provides hardware configuration (fit/remove the Econet module, station
+/// number), status queries (ADLC registers, handshake state, station
+/// collisions) and a frame event stream. Transport-specific operations live
+/// on the active transport's own service, found via EconetTransportService:
+/// AUN peers, the cable plug and the AUN port on AunService
+/// (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
 ///
 /// To build a server, implement a class that conforms to this protocol.
 internal protocol Beebium_EconetServiceProvider: CallHandlerProvider {
   var interceptors: Beebium_EconetServiceServerInterceptorFactoryProtocol? { get }
 
-  /// Query Econet hardware status (enabled, station ID, ADLC state, peers).
+  /// Query Econet hardware status (enabled, station ID, ADLC and handshake
+  /// state, link state, station collisions, diagnostic counters).
   func getEconetStatus(request: Beebium_GetEconetStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_GetEconetStatusResponse>
 
-  /// Fit Econet hardware: set station ID, optionally bind AUN socket.
+  /// Fit Econet hardware with the given station number. Unless no_network is
+  /// set, the configured transport (--aun / --piconet / a preset) brings up
+  /// its backend through the transport extension; with no transport
+  /// configured a bare AUN socket is bound on net 0. Fails if Econet is
+  /// already fitted, as it is from launch whenever a station number is
+  /// configured (--station, or a preset).
   func enableEconet(request: Beebium_EnableEconetRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_EnableEconetResponse>
 
-  /// Remove Econet hardware (disable station, close AUN socket).
+  /// Remove Econet hardware: drop the station and the transport's backend
+  /// (for AUN, close the socket and stop announcing and browsing).
   func disableEconet(request: Beebium_DisableEconetRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_DisableEconetResponse>
 
-  /// Set the station ID (takes effect on next machine reset).
+  /// Set the station number, as if changing the station links. The guest
+  /// reads it from &FE18 on its next Break; the transport is told at once
+  /// (AUN re-announces the new number and re-runs its collision checks).
   func setStationId(request: Beebium_SetStationIdRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_SetStationIdResponse>
 
-  /// Stream Econet events (frame activity, handshake changes, connection state).
-  /// Reserved for future implementation.
+  /// Stream frames as they cross the transport, and link up/down changes.
+  /// Starts from the moment of subscription (no replay). Fails with
+  /// FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+  /// hardware is fitted.
   func subscribeEconetEvents(request: Beebium_SubscribeEconetEventsRequest, context: StreamingResponseCallContext<Beebium_EconetEvent>) -> EventLoopFuture<GRPCStatus>
 
   /// Server-pushed status stream. Writes an initial GetEconetStatusResponse
   /// as soon as the stream is established, then a fresh snapshot whenever
   /// status visible on EconetService changes (enable/disable, station ID
-  /// change, or transport backend connection toggle). The stream stays open
-  /// until the client cancels; use this instead of polling GetEconetStatus.
+  /// change, transport link up/down, or a change in the station collisions
+  /// in effect). The stream stays open until the client cancels; use this
+  /// instead of polling GetEconetStatus.
   func watchEconetStatus(request: Beebium_WatchEconetStatusRequest, context: StreamingResponseCallContext<Beebium_GetEconetStatusResponse>) -> EventLoopFuture<GRPCStatus>
 }
 
@@ -630,10 +666,14 @@ extension Beebium_EconetServiceProvider {
   }
 }
 
-/// Econet/AUN networking management service.
+/// Transport-agnostic Econet management service.
 ///
-/// Provides hardware configuration (enable/disable Econet), network status
-/// queries (ADLC registers, handshake state), and AUN peer management.
+/// Provides hardware configuration (fit/remove the Econet module, station
+/// number), status queries (ADLC registers, handshake state, station
+/// collisions) and a frame event stream. Transport-specific operations live
+/// on the active transport's own service, found via EconetTransportService:
+/// AUN peers, the cable plug and the AUN port on AunService
+/// (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
 ///
 /// To implement a server, implement an object which conforms to this protocol.
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
@@ -641,32 +681,43 @@ internal protocol Beebium_EconetServiceAsyncProvider: CallHandlerProvider, Senda
   static var serviceDescriptor: GRPCServiceDescriptor { get }
   var interceptors: Beebium_EconetServiceServerInterceptorFactoryProtocol? { get }
 
-  /// Query Econet hardware status (enabled, station ID, ADLC state, peers).
+  /// Query Econet hardware status (enabled, station ID, ADLC and handshake
+  /// state, link state, station collisions, diagnostic counters).
   func getEconetStatus(
     request: Beebium_GetEconetStatusRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_GetEconetStatusResponse
 
-  /// Fit Econet hardware: set station ID, optionally bind AUN socket.
+  /// Fit Econet hardware with the given station number. Unless no_network is
+  /// set, the configured transport (--aun / --piconet / a preset) brings up
+  /// its backend through the transport extension; with no transport
+  /// configured a bare AUN socket is bound on net 0. Fails if Econet is
+  /// already fitted, as it is from launch whenever a station number is
+  /// configured (--station, or a preset).
   func enableEconet(
     request: Beebium_EnableEconetRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_EnableEconetResponse
 
-  /// Remove Econet hardware (disable station, close AUN socket).
+  /// Remove Econet hardware: drop the station and the transport's backend
+  /// (for AUN, close the socket and stop announcing and browsing).
   func disableEconet(
     request: Beebium_DisableEconetRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_DisableEconetResponse
 
-  /// Set the station ID (takes effect on next machine reset).
+  /// Set the station number, as if changing the station links. The guest
+  /// reads it from &FE18 on its next Break; the transport is told at once
+  /// (AUN re-announces the new number and re-runs its collision checks).
   func setStationId(
     request: Beebium_SetStationIdRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_SetStationIdResponse
 
-  /// Stream Econet events (frame activity, handshake changes, connection state).
-  /// Reserved for future implementation.
+  /// Stream frames as they cross the transport, and link up/down changes.
+  /// Starts from the moment of subscription (no replay). Fails with
+  /// FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+  /// hardware is fitted.
   func subscribeEconetEvents(
     request: Beebium_SubscribeEconetEventsRequest,
     responseStream: GRPCAsyncResponseStreamWriter<Beebium_EconetEvent>,
@@ -676,8 +727,9 @@ internal protocol Beebium_EconetServiceAsyncProvider: CallHandlerProvider, Senda
   /// Server-pushed status stream. Writes an initial GetEconetStatusResponse
   /// as soon as the stream is established, then a fresh snapshot whenever
   /// status visible on EconetService changes (enable/disable, station ID
-  /// change, or transport backend connection toggle). The stream stays open
-  /// until the client cancels; use this instead of polling GetEconetStatus.
+  /// change, transport link up/down, or a change in the station collisions
+  /// in effect). The stream stays open until the client cancels; use this
+  /// instead of polling GetEconetStatus.
   func watchEconetStatus(
     request: Beebium_WatchEconetStatusRequest,
     responseStream: GRPCAsyncResponseStreamWriter<Beebium_GetEconetStatusResponse>,

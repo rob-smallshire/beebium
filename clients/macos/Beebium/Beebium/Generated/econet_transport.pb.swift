@@ -26,8 +26,9 @@ struct Beebium_EconetTransport: Sendable {
   // methods supported on all messages.
 
   /// Canonical extension name (e.g. "aun", "piconet"). Identifies
-  /// both the transport and the gRPC service the client should use
-  /// for transport-specific operations:
+  /// both the transport and the service the client should use for
+  /// transport-specific operations, invoked over ExtensionRpc with `id`
+  /// as the extension_id:
   ///   "aun"     -> AunService (src/extensions/aun/aun.proto)
   ///   "piconet" -> PiconetService (src/extensions/piconet/piconet_service.proto)
   var name: String = String()
@@ -35,14 +36,18 @@ struct Beebium_EconetTransport: Sendable {
   /// Human-readable description from the extension manifest.
   var description_p: String = String()
 
-  /// True if this transport is the one currently producing the
-  /// backend behind EconetSocket. False means the extension is
-  /// available but not active (or not loaded at all).
+  /// True if this transport is the one the server uses for Econet. Every
+  /// loaded transport on a BBC machine is active, including before Econet
+  /// hardware is fitted or while its backend is down (port=none, no
+  /// Piconet device); use EconetService.GetEconetStatus for the link
+  /// state.
   var active: Bool = false
 
   /// Opaque, stable per-instance id assigned by the server. This is
   /// the key clients pass to ExtensionUiService.SubscribeView /
-  /// Dispatch to drive the transport's control panel -- the same role
+  /// Dispatch to drive the transport's control panel, and the
+  /// extension_id of ExtensionRpc.Invoke that routes the transport's own
+  /// service (AunService, PiconetService) -- the same role
   /// PeripheralExtensionService.ExtensionInfo.id plays for peripherals.
   /// Do not assume any relationship to `name`: it is typically a UUID,
   /// and multi-instance transports each get a distinct id. Frontends
@@ -75,12 +80,9 @@ struct Beebium_ListTransportsResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Currently this returns only the loaded transport extensions
-  /// (one entry per extension passed via --aun / --piconet etc.).
-  /// Future expansion could include "available but not loaded"
-  /// entries -- transports the server knows about but the user
-  /// didn't select. The "active" flag distinguishes the operational
-  /// one in either case.
+  /// The loaded transport extensions: one entry per transport given via
+  /// --aun / --piconet or a preset's econet.transport. Transports the
+  /// server knows about but was not asked to load are not listed.
   var transports: [Beebium_EconetTransport] = []
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -104,8 +106,8 @@ struct Beebium_GetActiveTransportResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Empty when no transport is active (Econet hardware fitted but
-  /// no --aun / --piconet etc. given).
+  /// Unset when no transport is loaded (no --aun / --piconet and no
+  /// preset transport), whether or not Econet hardware is fitted.
   var active: Beebium_EconetTransport {
     get {return _active ?? Beebium_EconetTransport()}
     set {_active = newValue}

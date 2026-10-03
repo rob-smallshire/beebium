@@ -570,7 +570,7 @@ struct Beebium_EditableList: @unchecked Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// "Peers", "Subnet rules"
+  /// "Peers (3)", "Subnet rules (1)"
   var title: String {
     get {return _storage._title}
     set {_uniqueStorage()._title = newValue}
@@ -581,12 +581,13 @@ struct Beebium_EditableList: @unchecked Sendable {
     set {_uniqueStorage()._items = newValue}
   }
 
-  /// shows the platform's "+" affordance
+  /// shows the platform's "+" affordance;
   var canAdd: Bool {
     get {return _storage._canAdd}
     set {_uniqueStorage()._canAdd = newValue}
   }
 
+  /// an ADD is rejected unless set
   /// The editor Control for a NEW item (fields only; the renderer supplies
   /// the commit UI). By convention a Group of TextInput / Choice leaves,
   /// mirroring a ModalEditor's editor tree. Committed as an ADD event.
@@ -599,7 +600,7 @@ struct Beebium_EditableList: @unchecked Sendable {
   /// Clears the value of `addEditor`. Subsequent reads from it will return its default value.
   mutating func clearAddEditor() {_uniqueStorage()._addEditor = nil}
 
-  /// shown when items is empty: "No peers"
+  /// shown when items is empty: "No subnet rules"
   var emptyText: String {
     get {return _storage._emptyText}
     set {_uniqueStorage()._emptyText = newValue}
@@ -635,7 +636,7 @@ struct Beebium_EditableListItem: Sendable {
   /// right-aligned caption: "map file", "mDNS"
   var secondary: String = String()
 
-  /// beneath, muted: the label "PiEconetBridge FS"
+  /// beneath, muted: a label, "PiEconetBridge FS"
   var subtitle: String = String()
 
   /// Small state badge for the row. UNKNOWN means no indicator; WARN marks,
@@ -643,10 +644,10 @@ struct Beebium_EditableListItem: Sendable {
   /// one badge style across controls.
   var state: Beebium_Indicator.State = .unknown
 
-  /// edit affordance; `editor` below is prefilled
+  /// edit affordance; `editor` below is prefilled;
   var editable: Bool = false
 
-  /// "-" affordance
+  /// an EDIT is rejected unless set
   var removable: Bool = false
 
   /// prefilled editor for THIS item, when editable
@@ -720,16 +721,20 @@ struct Beebium_FileReference: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// absolute, on the server's host
+  /// Absolute, on the server's host. Empty when there is no file in effect
+  /// (the AUN map file under map-file=none).
   var path: String = String()
 
-  /// "aun-map.json"; defaults to the path's file name
+  /// The file's role, e.g. "Shared AUN map"; when empty the renderer shows
+  /// the path's file name.
   var displayName: String = String()
 
-  /// OK = loaded; WARN = missing; ERROR = load error. Reuses Indicator.State.
+  /// Reuses Indicator.State; the extension chooses the mapping. The AUN map
+  /// file uses OK = loaded, WARN = not found (or disabled), ERROR = load
+  /// error.
   var state: Beebium_Indicator.State = .unknown
 
-  /// "12 peers, 1 subnet" or the load error
+  /// "loaded", "not found", or the load error
   var stateText: String = String()
 
   /// server actions: "Reload"
@@ -865,13 +870,15 @@ struct Beebium_DispatchRequest: Sendable {
   init() {}
 }
 
-/// The user's action on one EditableList item. ADD carries no item_id and an
-/// `commit` built from the list's add_editor; EDIT carries the item_id and an
+/// The user's action on one EditableList item. ADD carries no item_id and a
+/// `commit` built from the list's add_editor; EDIT carries the item_id and a
 /// `commit` from that item's editor; REMOVE carries just the item_id; ACTION
-/// carries the item_id and the chosen action_id (and no commit). The server
-/// validates item_id / action_id against the current view like any other
-/// dispatch, and applies an ADD / EDIT commit with the same no-partial rule as
-/// EditorCommit.
+/// carries the item_id and the chosen action_id, plus a `commit` from the
+/// action's editor when the action has one (and no commit otherwise). The
+/// server validates the event against the current view before the extension
+/// sees it: ADD needs can_add, EDIT an editable item, REMOVE a removable item,
+/// ACTION an action the item offers; every commit is checked against its
+/// editor tree with the same no-partial rule as EditorCommit.
 struct Beebium_EditableListEvent: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -885,7 +892,7 @@ struct Beebium_EditableListEvent: Sendable {
   /// for ACTION
   var actionID: String = String()
 
-  /// for ADD and EDIT: the editor field values
+  /// for ADD, EDIT and an ACTION with an editor
   var commit: Beebium_EditorCommit {
     get {return _commit ?? Beebium_EditorCommit()}
     set {_commit = newValue}
@@ -945,8 +952,9 @@ struct Beebium_EditableListEvent: Sendable {
 }
 
 /// One field's value inside an EditorCommit. The 'field_id' names a
-/// sub-control inside the ModalEditor's editor tree (matches the
-/// Control.id of that leaf). The payload variant must match the
+/// sub-control inside the editor tree being committed (a ModalEditor's
+/// editor, or an EditableList's add_editor, item editor or action editor),
+/// matching the Control.id of that leaf. The payload variant must match the
 /// addressed sub-control's type (see EditorCommit validation below).
 struct Beebium_EditorFieldValue: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -993,8 +1001,9 @@ struct Beebium_EditorFieldValue: Sendable {
   init() {}
 }
 
-/// Atomic commit of a ModalEditor's editor tree. Sent as the payload of
-/// a DispatchRequest targeting a ModalEditor control.
+/// Atomic commit of an editor tree. Sent as the payload of a
+/// DispatchRequest targeting a ModalEditor control, and carried inside an
+/// EditableListEvent for an EditableList ADD, EDIT or editor-bearing ACTION.
 ///
 /// Clients bundle the final value of each sub-control whose value the
 /// user changed (or all sub-controls -- either is accepted). The server

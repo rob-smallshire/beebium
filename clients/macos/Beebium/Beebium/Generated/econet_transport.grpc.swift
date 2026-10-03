@@ -12,10 +12,11 @@ import SwiftProtobuf
 
 
 /// Transport-agnostic discovery service: tells clients which Econet
-/// transport extension is currently active on this server. Lets a
-/// client decide whether to use AunService, PiconetService, or some
-/// future transport-specific service without having to probe via
-/// trial-and-error or read transport-specific fields off other RPCs.
+/// transport extension is loaded on this server, and the instance id that
+/// addresses it. Lets a client decide whether to use AunService,
+/// PiconetService, or some future transport-specific service without having
+/// to probe via trial-and-error or read transport-specific fields off other
+/// RPCs.
 ///
 /// Modelled on PeripheralExtensionService.ListExtensions for
 /// peripheral extensions; this is the equivalent for econet
@@ -42,12 +43,11 @@ extension Beebium_EconetTransportServiceClientProtocol {
     return "beebium.EconetTransportService"
   }
 
-  /// List all econet transports known to this server, with an "active"
-  /// flag indicating which (if any) is currently producing the
-  /// NetworkBackend behind EconetSocket. For BBC Micro / Master /
-  /// Master Compact machines at most one transport is active; future
-  /// multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-  /// multiple actives.
+  /// List the econet transports loaded on this server, each with an
+  /// "active" flag. For BBC Micro / Master / Master Compact machines at
+  /// most one transport can be loaded (the server refuses more), and it is
+  /// always reported active; future multi-ADLC machine types (e.g. Acorn
+  /// Econet Bridge) may have several.
   ///
   /// - Parameters:
   ///   - request: Request to send to ListTransports.
@@ -144,10 +144,11 @@ internal struct Beebium_EconetTransportServiceNIOClient: Beebium_EconetTransport
 }
 
 /// Transport-agnostic discovery service: tells clients which Econet
-/// transport extension is currently active on this server. Lets a
-/// client decide whether to use AunService, PiconetService, or some
-/// future transport-specific service without having to probe via
-/// trial-and-error or read transport-specific fields off other RPCs.
+/// transport extension is loaded on this server, and the instance id that
+/// addresses it. Lets a client decide whether to use AunService,
+/// PiconetService, or some future transport-specific service without having
+/// to probe via trial-and-error or read transport-specific fields off other
+/// RPCs.
 ///
 /// Modelled on PeripheralExtensionService.ListExtensions for
 /// peripheral extensions; this is the equivalent for econet
@@ -282,10 +283,11 @@ internal enum Beebium_EconetTransportServiceClientMetadata {
 }
 
 /// Transport-agnostic discovery service: tells clients which Econet
-/// transport extension is currently active on this server. Lets a
-/// client decide whether to use AunService, PiconetService, or some
-/// future transport-specific service without having to probe via
-/// trial-and-error or read transport-specific fields off other RPCs.
+/// transport extension is loaded on this server, and the instance id that
+/// addresses it. Lets a client decide whether to use AunService,
+/// PiconetService, or some future transport-specific service without having
+/// to probe via trial-and-error or read transport-specific fields off other
+/// RPCs.
 ///
 /// Modelled on PeripheralExtensionService.ListExtensions for
 /// peripheral extensions; this is the equivalent for econet
@@ -295,12 +297,11 @@ internal enum Beebium_EconetTransportServiceClientMetadata {
 internal protocol Beebium_EconetTransportServiceProvider: CallHandlerProvider {
   var interceptors: Beebium_EconetTransportServiceServerInterceptorFactoryProtocol? { get }
 
-  /// List all econet transports known to this server, with an "active"
-  /// flag indicating which (if any) is currently producing the
-  /// NetworkBackend behind EconetSocket. For BBC Micro / Master /
-  /// Master Compact machines at most one transport is active; future
-  /// multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-  /// multiple actives.
+  /// List the econet transports loaded on this server, each with an
+  /// "active" flag. For BBC Micro / Master / Master Compact machines at
+  /// most one transport can be loaded (the server refuses more), and it is
+  /// always reported active; future multi-ADLC machine types (e.g. Acorn
+  /// Econet Bridge) may have several.
   func listTransports(request: Beebium_ListTransportsRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_ListTransportsResponse>
 
   /// Convenience: return the single active transport, or an empty
@@ -346,10 +347,11 @@ extension Beebium_EconetTransportServiceProvider {
 }
 
 /// Transport-agnostic discovery service: tells clients which Econet
-/// transport extension is currently active on this server. Lets a
-/// client decide whether to use AunService, PiconetService, or some
-/// future transport-specific service without having to probe via
-/// trial-and-error or read transport-specific fields off other RPCs.
+/// transport extension is loaded on this server, and the instance id that
+/// addresses it. Lets a client decide whether to use AunService,
+/// PiconetService, or some future transport-specific service without having
+/// to probe via trial-and-error or read transport-specific fields off other
+/// RPCs.
 ///
 /// Modelled on PeripheralExtensionService.ListExtensions for
 /// peripheral extensions; this is the equivalent for econet
@@ -361,12 +363,11 @@ internal protocol Beebium_EconetTransportServiceAsyncProvider: CallHandlerProvid
   static var serviceDescriptor: GRPCServiceDescriptor { get }
   var interceptors: Beebium_EconetTransportServiceServerInterceptorFactoryProtocol? { get }
 
-  /// List all econet transports known to this server, with an "active"
-  /// flag indicating which (if any) is currently producing the
-  /// NetworkBackend behind EconetSocket. For BBC Micro / Master /
-  /// Master Compact machines at most one transport is active; future
-  /// multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-  /// multiple actives.
+  /// List the econet transports loaded on this server, each with an
+  /// "active" flag. For BBC Micro / Master / Master Compact machines at
+  /// most one transport can be loaded (the server refuses more), and it is
+  /// always reported active; future multi-ADLC machine types (e.g. Acorn
+  /// Econet Bridge) may have several.
   func listTransports(
     request: Beebium_ListTransportsRequest,
     context: GRPCAsyncServerCallContext

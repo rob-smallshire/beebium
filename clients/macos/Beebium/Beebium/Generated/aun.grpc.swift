@@ -14,7 +14,15 @@ import SwiftProtobuf
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
 /// in src/extensions/aun/ and is served via that extension's AunDispatcher
 /// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-/// service block). It is reachable only when AUN is the active transport.
+/// service block). It is reachable whenever the AUN transport is loaded
+/// (--aun, or a preset whose econet.transport is aun), addressed by the
+/// instance id EconetTransportService reports; with no AUN transport loaded,
+/// ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+/// before the AUN socket is up (before EnableEconet, or with port=none): the
+/// edits are recorded and applied when the backend comes up.
+///
+/// Validation failures are reported in-band (success=false and an error
+/// string) with an OK call status; only a malformed request is a non-OK status.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -88,7 +96,9 @@ extension Beebium_AunServiceClientProtocol {
   }
 
   /// Connect or disconnect the simulated network cable. While
-  /// disconnected the ADLC sees DCD high (no carrier).
+  /// disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+  /// when the socket is not up yet the state is remembered and applied when
+  /// it comes up, and the response's error field says so.
   ///
   /// - Parameters:
   ///   - request: Request to send to SetConnected.
@@ -106,7 +116,9 @@ extension Beebium_AunServiceClientProtocol {
     )
   }
 
-  /// Add an Econet address <-> UDP endpoint peer mapping.
+  /// Add or replace this client's (Api) entry mapping an Econet address to a
+  /// UDP endpoint. It takes precedence over every other source for that
+  /// (net, stn) (see AunPeerSource).
   ///
   /// - Parameters:
   ///   - request: Request to send to AddPeer.
@@ -124,7 +136,10 @@ extension Beebium_AunServiceClientProtocol {
     )
   }
 
-  /// Remove a peer mapping by Econet address.
+  /// Remove the Api entry AddPeer made for an Econet address. Entries from
+  /// other sources are untouched, so a station also named by the launch
+  /// config, the map file or mDNS falls back to that entry rather than
+  /// disappearing. Always succeeds, including when there was no Api entry.
   ///
   /// - Parameters:
   ///   - request: Request to send to RemovePeer.
@@ -142,7 +157,8 @@ extension Beebium_AunServiceClientProtocol {
     )
   }
 
-  /// Enumerate all configured peers.
+  /// Enumerate the resolved routing table: one entry per (net, stn), from
+  /// whichever source won it (see AunPeer.source).
   ///
   /// - Parameters:
   ///   - request: Request to send to ListPeers.
@@ -160,7 +176,8 @@ extension Beebium_AunServiceClientProtocol {
     )
   }
 
-  /// Read the current AUN backend status (port, peer count, link state).
+  /// Read the AUN transport status (link state, port, peer count, map file,
+  /// discovery mode).
   ///
   /// - Parameters:
   ///   - request: Request to send to GetStatus.
@@ -178,9 +195,14 @@ extension Beebium_AunServiceClientProtocol {
     )
   }
 
-  /// Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-  /// state (Api, Launch and Discovered are untouched). Normally a modification
-  /// is picked up automatically on the poll; this forces it.
+  /// Re-read the per-user aun-map.json now, replacing the map file's peers,
+  /// its subnet rules and the Subnet peers materialised from subnet rules
+  /// (Api, Launch and Discovered peers, and --aun subnet= rules, are
+  /// untouched). A modification is picked up automatically by the mtime poll
+  /// on the discovery sweep, which runs while discovery browses
+  /// (discovery=on or browse); this forces it. Under discovery=announce or
+  /// off there is no poll, so another instance's edit arrives only with a
+  /// ReloadMap or this instance's own next map edit.
   ///
   /// - Parameters:
   ///   - request: Request to send to ReloadMap.
@@ -201,7 +223,10 @@ extension Beebium_AunServiceClientProtocol {
   /// Edit the per-user aun-map.json. The server owns the file (it may be on
   /// another host): it writes its own file atomically, preserving entry order
   /// and unknown keys, then applies the change to its own peer set at once;
-  /// other instances pick it up from their poll. Add is add-or-replace.
+  /// other instances pick it up from their poll (see ReloadMap). Add is
+  /// add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+  /// rule. Every edit fails with "the map file is disabled (map-file=none)"
+  /// when it is.
   ///
   /// - Parameters:
   ///   - request: Request to send to AddMapPeer.
@@ -275,6 +300,7 @@ extension Beebium_AunServiceClientProtocol {
 
   /// List the map file's entries (with labels and host-resolution state),
   /// distinct from ListPeers which lists the live resolved routing table.
+  /// Empty, with no error, when the map file is disabled.
   ///
   /// - Parameters:
   ///   - request: Request to send to ListMap.
@@ -353,7 +379,15 @@ internal struct Beebium_AunServiceNIOClient: Beebium_AunServiceClientProtocol {
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
 /// in src/extensions/aun/ and is served via that extension's AunDispatcher
 /// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-/// service block). It is reachable only when AUN is the active transport.
+/// service block). It is reachable whenever the AUN transport is loaded
+/// (--aun, or a preset whose econet.transport is aun), addressed by the
+/// instance id EconetTransportService reports; with no AUN transport loaded,
+/// ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+/// before the AUN socket is up (before EnableEconet, or with port=none): the
+/// edits are recorded and applied when the backend comes up.
+///
+/// Validation failures are reported in-band (success=false and an error
+/// string) with an OK call status; only a malformed request is a non-OK status.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -842,7 +876,15 @@ internal enum Beebium_AunServiceClientMetadata {
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
 /// in src/extensions/aun/ and is served via that extension's AunDispatcher
 /// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-/// service block). It is reachable only when AUN is the active transport.
+/// service block). It is reachable whenever the AUN transport is loaded
+/// (--aun, or a preset whose econet.transport is aun), addressed by the
+/// instance id EconetTransportService reports; with no AUN transport loaded,
+/// ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+/// before the AUN socket is up (before EnableEconet, or with port=none): the
+/// edits are recorded and applied when the backend comes up.
+///
+/// Validation failures are reported in-band (success=false and an error
+/// string) with an OK call status; only a malformed request is a non-OK status.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -854,30 +896,47 @@ internal protocol Beebium_AunServiceProvider: CallHandlerProvider {
   var interceptors: Beebium_AunServiceServerInterceptorFactoryProtocol? { get }
 
   /// Connect or disconnect the simulated network cable. While
-  /// disconnected the ADLC sees DCD high (no carrier).
+  /// disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+  /// when the socket is not up yet the state is remembered and applied when
+  /// it comes up, and the response's error field says so.
   func setConnected(request: Beebium_AunSetConnectedRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunSetConnectedResponse>
 
-  /// Add an Econet address <-> UDP endpoint peer mapping.
+  /// Add or replace this client's (Api) entry mapping an Econet address to a
+  /// UDP endpoint. It takes precedence over every other source for that
+  /// (net, stn) (see AunPeerSource).
   func addPeer(request: Beebium_AunAddPeerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunAddPeerResponse>
 
-  /// Remove a peer mapping by Econet address.
+  /// Remove the Api entry AddPeer made for an Econet address. Entries from
+  /// other sources are untouched, so a station also named by the launch
+  /// config, the map file or mDNS falls back to that entry rather than
+  /// disappearing. Always succeeds, including when there was no Api entry.
   func removePeer(request: Beebium_AunRemovePeerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunRemovePeerResponse>
 
-  /// Enumerate all configured peers.
+  /// Enumerate the resolved routing table: one entry per (net, stn), from
+  /// whichever source won it (see AunPeer.source).
   func listPeers(request: Beebium_AunListPeersRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunListPeersResponse>
 
-  /// Read the current AUN backend status (port, peer count, link state).
+  /// Read the AUN transport status (link state, port, peer count, map file,
+  /// discovery mode).
   func getStatus(request: Beebium_AunGetStatusRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunGetStatusResponse>
 
-  /// Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-  /// state (Api, Launch and Discovered are untouched). Normally a modification
-  /// is picked up automatically on the poll; this forces it.
+  /// Re-read the per-user aun-map.json now, replacing the map file's peers,
+  /// its subnet rules and the Subnet peers materialised from subnet rules
+  /// (Api, Launch and Discovered peers, and --aun subnet= rules, are
+  /// untouched). A modification is picked up automatically by the mtime poll
+  /// on the discovery sweep, which runs while discovery browses
+  /// (discovery=on or browse); this forces it. Under discovery=announce or
+  /// off there is no poll, so another instance's edit arrives only with a
+  /// ReloadMap or this instance's own next map edit.
   func reloadMap(request: Beebium_AunReloadMapRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunReloadMapResponse>
 
   /// Edit the per-user aun-map.json. The server owns the file (it may be on
   /// another host): it writes its own file atomically, preserving entry order
   /// and unknown keys, then applies the change to its own peer set at once;
-  /// other instances pick it up from their poll. Add is add-or-replace.
+  /// other instances pick it up from their poll (see ReloadMap). Add is
+  /// add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+  /// rule. Every edit fails with "the map file is disabled (map-file=none)"
+  /// when it is.
   func addMapPeer(request: Beebium_AunAddMapPeerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunAddMapPeerResponse>
 
   func removeMapPeer(request: Beebium_AunRemoveMapPeerRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunRemoveMapPeerResponse>
@@ -888,6 +947,7 @@ internal protocol Beebium_AunServiceProvider: CallHandlerProvider {
 
   /// List the map file's entries (with labels and host-resolution state),
   /// distinct from ListPeers which lists the live resolved routing table.
+  /// Empty, with no error, when the map file is disabled.
   func listMap(request: Beebium_AunListMapRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Beebium_AunListMapResponse>
 }
 
@@ -1011,7 +1071,15 @@ extension Beebium_AunServiceProvider {
 /// AUN-specific service. Lives alongside the AunEconetTransportExtension
 /// in src/extensions/aun/ and is served via that extension's AunDispatcher
 /// over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-/// service block). It is reachable only when AUN is the active transport.
+/// service block). It is reachable whenever the AUN transport is loaded
+/// (--aun, or a preset whose econet.transport is aun), addressed by the
+/// instance id EconetTransportService reports; with no AUN transport loaded,
+/// ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+/// before the AUN socket is up (before EnableEconet, or with port=none): the
+/// edits are recorded and applied when the backend comes up.
+///
+/// Validation failures are reported in-band (success=false and an error
+/// string) with an OK call status; only a malformed request is a non-OK status.
 ///
 /// EconetService remains the place for transport-agnostic Econet RPCs
 /// (status, station ID, enable/disable). Anything that only makes sense
@@ -1025,39 +1093,53 @@ internal protocol Beebium_AunServiceAsyncProvider: CallHandlerProvider, Sendable
   var interceptors: Beebium_AunServiceServerInterceptorFactoryProtocol? { get }
 
   /// Connect or disconnect the simulated network cable. While
-  /// disconnected the ADLC sees DCD high (no carrier).
+  /// disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+  /// when the socket is not up yet the state is remembered and applied when
+  /// it comes up, and the response's error field says so.
   func setConnected(
     request: Beebium_AunSetConnectedRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_AunSetConnectedResponse
 
-  /// Add an Econet address <-> UDP endpoint peer mapping.
+  /// Add or replace this client's (Api) entry mapping an Econet address to a
+  /// UDP endpoint. It takes precedence over every other source for that
+  /// (net, stn) (see AunPeerSource).
   func addPeer(
     request: Beebium_AunAddPeerRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_AunAddPeerResponse
 
-  /// Remove a peer mapping by Econet address.
+  /// Remove the Api entry AddPeer made for an Econet address. Entries from
+  /// other sources are untouched, so a station also named by the launch
+  /// config, the map file or mDNS falls back to that entry rather than
+  /// disappearing. Always succeeds, including when there was no Api entry.
   func removePeer(
     request: Beebium_AunRemovePeerRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_AunRemovePeerResponse
 
-  /// Enumerate all configured peers.
+  /// Enumerate the resolved routing table: one entry per (net, stn), from
+  /// whichever source won it (see AunPeer.source).
   func listPeers(
     request: Beebium_AunListPeersRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_AunListPeersResponse
 
-  /// Read the current AUN backend status (port, peer count, link state).
+  /// Read the AUN transport status (link state, port, peer count, map file,
+  /// discovery mode).
   func getStatus(
     request: Beebium_AunGetStatusRequest,
     context: GRPCAsyncServerCallContext
   ) async throws -> Beebium_AunGetStatusResponse
 
-  /// Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-  /// state (Api, Launch and Discovered are untouched). Normally a modification
-  /// is picked up automatically on the poll; this forces it.
+  /// Re-read the per-user aun-map.json now, replacing the map file's peers,
+  /// its subnet rules and the Subnet peers materialised from subnet rules
+  /// (Api, Launch and Discovered peers, and --aun subnet= rules, are
+  /// untouched). A modification is picked up automatically by the mtime poll
+  /// on the discovery sweep, which runs while discovery browses
+  /// (discovery=on or browse); this forces it. Under discovery=announce or
+  /// off there is no poll, so another instance's edit arrives only with a
+  /// ReloadMap or this instance's own next map edit.
   func reloadMap(
     request: Beebium_AunReloadMapRequest,
     context: GRPCAsyncServerCallContext
@@ -1066,7 +1148,10 @@ internal protocol Beebium_AunServiceAsyncProvider: CallHandlerProvider, Sendable
   /// Edit the per-user aun-map.json. The server owns the file (it may be on
   /// another host): it writes its own file atomically, preserving entry order
   /// and unknown keys, then applies the change to its own peer set at once;
-  /// other instances pick it up from their poll. Add is add-or-replace.
+  /// other instances pick it up from their poll (see ReloadMap). Add is
+  /// add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+  /// rule. Every edit fails with "the map file is disabled (map-file=none)"
+  /// when it is.
   func addMapPeer(
     request: Beebium_AunAddMapPeerRequest,
     context: GRPCAsyncServerCallContext
@@ -1089,6 +1174,7 @@ internal protocol Beebium_AunServiceAsyncProvider: CallHandlerProvider, Sendable
 
   /// List the map file's entries (with labels and host-resolution state),
   /// distinct from ListPeers which lists the live resolved routing table.
+  /// Empty, with no error, when the map file is disabled.
   func listMap(
     request: Beebium_AunListMapRequest,
     context: GRPCAsyncServerCallContext
