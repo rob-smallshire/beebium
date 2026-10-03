@@ -12,10 +12,13 @@
 
 """AUN (Acorn Universal Networking) transport-specific operations.
 
-These RPCs are surfaced by AunService when AUN is the active Econet
-transport on the server. Use bbc.transport.active to confirm AUN is
-the active transport before calling these methods; otherwise the RPC
-returns an error indicating "AUN backend is not active".
+These RPCs are served by the AUN transport's AunService, tunnelled over the
+core's ExtensionRpc channel. They are reachable whenever the server has the
+AUN transport loaded (``--aun`` or a preset's ``econet.transport``), whether
+or not its socket is up yet. Reach the adapter with ``bbc.transport[Aun]``
+(or ``Aun.attach(bbc)``), which raises ``ExtensionNotLoadedError`` when no
+AUN transport is loaded; ``bbc.transport.active`` reports which transport,
+if any, is loaded.
 """
 
 from __future__ import annotations
@@ -35,12 +38,13 @@ _SERVICE = "AunService"
 class PeerSource(IntEnum):
     """Where an AUN peer entry came from.
 
-    Resolved by precedence, highest first: ``API``, ``LAUNCH``,
-    ``MAP_FILE``, ``DISCOVERED``, ``SUBNET``. The three operator sources (a
-    runtime :meth:`Aun.add_peer`, the CLI ``--aun map=`` / preset for this
-    launch, and the per-user map file) take precedence over discovered
-    peers, which in turn beat a ``SUBNET`` entry derived from the map file's
-    subnet convention.
+    Each (net, stn) resolves to one winner by precedence, highest first:
+    ``API``, ``LAUNCH``, ``MAP_FILE``, ``DISCOVERED``, ``SUBNET``. The three
+    operator sources (a runtime :meth:`Aun.add_peer`, the CLI ``--aun map=`` /
+    preset for this launch, and the map file) take precedence over
+    discovered peers, which in turn beat a ``SUBNET`` entry materialised
+    from a subnet rule (the map file's ``subnets`` or ``--aun subnet=``).
+    Removing the winner falls back to the next source still present.
     """
 
     UNSPECIFIED = aun_pb2.AUN_PEER_SOURCE_UNSPECIFIED
@@ -55,16 +59,23 @@ class PeerSource(IntEnum):
 class AunStatus:
     """AUN-specific transport status."""
 
+    # True if the AUN socket is bound and the cable is plugged in; False
+    # while there is no socket.
     connected: bool
+    # The bound UDP port, 0 while there is no socket.
     local_port: int
+    # The number of (net, stn) entries in the resolved routing table (what
+    # Aun.peers returns), counted even before the socket is up.
     peer_count: int
-    # The per-user aun-map.json path on the server's host (empty when disabled
-    # with map-file=none), its entry count from the last load, and the last
-    # load error (empty on success or an absent file).
+    # The map file's path on the server's host (--aun map-file=, else
+    # BEEBIUM_AUN_MAP_FILEPATH, else the per-user aun-map.json; empty when
+    # disabled with map-file=none), its entry count from the last load, and
+    # the last load error (empty on success or an absent file).
     map_file_path: str = ""
     map_file_entry_count: int = 0
     map_file_error: str = ""
-    # The mDNS discovery mode: "on", "announce", "browse" or "off" (#158).
+    # The mDNS discovery mode set by --aun discovery=: "on", "announce",
+    # "browse" or "off".
     discovery_mode: str = "on"
 
 
@@ -76,9 +87,10 @@ class PeerInfo:
     stn: int
     ip_address: str
     port: int
-    # The source this resolved entry won from: LAUNCH (--aun map= / preset),
-    # API (a runtime add_peer), MAP_FILE (the per-user map file), or
-    # DISCOVERED (the AUN extension's mDNS subscriber).
+    # The source this resolved entry won from: API (a runtime add_peer),
+    # LAUNCH (--aun map= / preset), MAP_FILE (the map file), DISCOVERED (the
+    # AUN extension's mDNS subscriber) or SUBNET (materialised from a subnet
+    # rule).
     source: PeerSource = PeerSource.LAUNCH
 
 
@@ -113,14 +125,15 @@ class MapListing:
 
 
 class Aun(EconetTransportAdapter):
-    """AUN-specific RPCs (peer table, cable plug, port status).
+    """AUN-specific RPCs (peer table, map file, cable plug, status).
 
-    Available on the server's gRPC surface only when AUN is the active
-    Econet transport. Check ``bbc.transport.active`` first if your code
-    might run against a server configured for Piconet or no transport.
+    Available whenever the server has the AUN transport loaded. Check
+    ``bbc.transport.active`` first (or use ``bbc.transport.get(Aun)``) if
+    your code might run against a server configured for Piconet or no
+    transport.
 
     Usage:
-        aun = bbc.extensions[Aun]        # or Aun.attach(bbc)
+        aun = bbc.transport[Aun]         # or Aun.attach(bbc)
         aun.add_peer(net=0, stn=254, ip_address="192.168.1.10")
         print(aun.status)
     """
@@ -140,7 +153,7 @@ class Aun(EconetTransportAdapter):
 
     @property
     def status(self) -> AunStatus:
-        """Read the AUN backend status."""
+        """Read the AUN transport status (link, port, peers, map file, discovery mode)."""
         request = aun_pb2.AunGetStatusRequest()
         response = self._invoke("GetStatus", request, aun_pb2.AunGetStatusResponse())
         return AunStatus(
@@ -155,7 +168,13 @@ class Aun(EconetTransportAdapter):
 
     @property
     def peers(self) -> list[PeerInfo]:
-        """Enumerate all configured AUN peers."""
+        """The resolved routing table: one entry per (net, stn).
+
+        Each entry is the winning source's endpoint, from any source (API,
+        launch, map file, mDNS or a subnet rule); see :class:`PeerSource`.
+        Map-file peers whose host did not resolve are not here; see
+        :meth:`list_map`.
+        """
         request = aun_pb2.AunListPeersRequest()
         response = self._invoke("ListPeers", request, aun_pb2.AunListPeersResponse())
         return [
@@ -172,10 +191,12 @@ class Aun(EconetTransportAdapter):
     def set_connected(self, connected: bool) -> None:
         """Plug or unplug the simulated network cable.
 
-        While disconnected the ADLC sees DCD high (no carrier).
+        While disconnected the ADLC sees DCD high (no carrier). Before the
+        AUN socket is up the state is remembered and applied when it comes
+        up.
 
         Raises:
-            EconetError: If the AUN backend is not active or the call fails.
+            EconetError: If the server reports the call failed.
         """
         request = aun_pb2.AunSetConnectedRequest(connected=connected)
         response = self._invoke("SetConnected", request, aun_pb2.AunSetConnectedResponse())
@@ -189,16 +210,21 @@ class Aun(EconetTransportAdapter):
         ip_address: str,
         port: int = 0,
     ) -> None:
-        """Add an Econet address to UDP endpoint peer mapping.
+        """Add or replace this client's (``API``) peer mapping for an Econet address.
+
+        ``API`` entries take precedence over every other source for that
+        (net, stn). They work before the AUN socket is up (applied when it
+        comes up) and are not written to the map file; use
+        :meth:`add_map_peer` for a peer every instance should share.
 
         Args:
             net: Econet network number (0-255).
             stn: Econet station number (1-254).
-            ip_address: Dotted-quad IP address.
+            ip_address: Dotted-quad IPv4 address (a DNS name is rejected).
             port: UDP port (0 = use AUN default 32768).
 
         Raises:
-            EconetError: If the call fails.
+            EconetError: On a validation error (net, stn or ip_address).
         """
         request = aun_pb2.AunAddPeerRequest(
             net=net,
@@ -211,10 +237,14 @@ class Aun(EconetTransportAdapter):
             raise EconetError(response.error)
 
     def remove_peer(self, net: int, stn: int) -> None:
-        """Remove a peer mapping by Econet address.
+        """Remove the ``API`` entry :meth:`add_peer` made for an Econet address.
+
+        Entries from other sources are untouched, so a station also named by
+        the launch config, the map file or mDNS falls back to that entry.
+        Removing an address with no ``API`` entry is not an error.
 
         Raises:
-            EconetError: If the call fails.
+            EconetError: If the server reports the call failed.
         """
         request = aun_pb2.AunRemovePeerRequest(net=net, stn=stn)
         response = self._invoke("RemovePeer", request, aun_pb2.AunRemovePeerResponse())
@@ -224,10 +254,13 @@ class Aun(EconetTransportAdapter):
     def reload_map(self) -> None:
         """Re-read the per-user ``aun-map.json`` on the server now.
 
-        Replaces only the map file's contributions (``MAP_FILE`` peers and the
-        subnet rules); ``API``, ``LAUNCH`` and ``DISCOVERED`` entries are
-        untouched. A modification is normally picked up automatically on the
-        poll; this forces it.
+        Replaces only the map file's contributions (``MAP_FILE`` peers, the
+        map file's subnet rules, and the ``SUBNET`` peers materialised from
+        subnet rules); ``API``, ``LAUNCH`` and ``DISCOVERED`` entries and
+        ``--aun subnet=`` rules are untouched. A modification is picked up
+        automatically by the mtime poll while discovery browses
+        (``discovery=on`` or ``browse``); this forces it. With the map file
+        disabled (``map-file=none``) it does nothing.
 
         Raises:
             EconetError: If the file was present but could not be parsed.
@@ -254,7 +287,8 @@ class Aun(EconetTransportAdapter):
             label: Optional note stored with the entry.
 
         Raises:
-            EconetError: On a validation or write error (the message names the field).
+            EconetError: On a validation or write error (the message names the
+                field), or when the map file is disabled (``map-file=none``).
         """
         request = aun_pb2.AunAddMapPeerRequest(
             net=net, stn=stn, host=host, port=port, label=label
@@ -269,7 +303,8 @@ class Aun(EconetTransportAdapter):
         """Remove a peer from the map file. Returns whether an entry was removed.
 
         Raises:
-            EconetError: On a write error.
+            EconetError: On a read or write error, or when the map file is
+                disabled.
         """
         request = aun_pb2.AunRemoveMapPeerRequest(net=net, stn=stn)
         response = self._invoke(
@@ -280,10 +315,14 @@ class Aun(EconetTransportAdapter):
         return response.removed
 
     def add_map_subnet(self, net: int, subnet: str, label: str = "") -> None:
-        """Add or replace a subnet rule (``a.b.c.0/24``) in the map file.
+        """Add or replace the subnet rule for ``net`` (``a.b.c.0/24``) in the map file.
+
+        A rule maps every station on the net to ``a.b.c.<station>`` port
+        32768, the convention RISC OS and other AUN implementations use.
 
         Raises:
-            EconetError: On a validation or write error.
+            EconetError: On a validation or write error, or when the map file
+                is disabled.
         """
         request = aun_pb2.AunAddMapSubnetRequest(net=net, subnet=subnet, label=label)
         response = self._invoke(
@@ -296,7 +335,8 @@ class Aun(EconetTransportAdapter):
         """Remove a subnet rule from the map file. Returns whether one was removed.
 
         Raises:
-            EconetError: On a write error.
+            EconetError: On a read or write error, or when the map file is
+                disabled.
         """
         request = aun_pb2.AunRemoveMapSubnetRequest(net=net)
         response = self._invoke(
@@ -309,7 +349,8 @@ class Aun(EconetTransportAdapter):
     def list_map(self) -> MapListing:
         """List the map file's entries with labels and host resolution.
 
-        Distinct from :attr:`peers`, which lists the live resolved routing table.
+        Distinct from :attr:`peers`, which lists the live resolved routing
+        table. Empty when the map file is disabled.
 
         Raises:
             EconetError: If the file was present but could not be parsed.

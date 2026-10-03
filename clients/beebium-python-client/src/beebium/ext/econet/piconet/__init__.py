@@ -12,8 +12,9 @@
 
 """Piconet (USB-CDC Econet bridge) transport-specific operations.
 
-These RPCs are surfaced by PiconetService when Piconet is the active
-Econet transport on the server. The current scope is intentionally
+These RPCs are served by the Piconet transport's PiconetService, tunnelled
+over the core's ExtensionRpc channel, whenever the server has the Piconet
+transport loaded. The current scope is intentionally
 minimal -- just enough for a user to confirm "yes, my Piconet is
 plugged in, and it's on /dev/X". Future Piconet RPCs (firmware
 version, mode, counters, live clock detection via PollHardware,
@@ -56,13 +57,13 @@ class PiconetStatus:
 class Piconet(EconetTransportAdapter):
     """Piconet-specific RPCs.
 
-    Available on the server's gRPC surface only when Piconet is the
-    active Econet transport. Check ``bbc.transport.active`` first if
-    your code might run against a server configured for AUN or no
+    Available whenever the server has the Piconet transport loaded. Check
+    ``bbc.transport.active`` first (or use ``bbc.transport.get(Piconet)``)
+    if your code might run against a server configured for AUN or no
     transport.
 
     Usage:
-        piconet = bbc.extensions[Piconet]        # or Piconet.attach(bbc)
+        piconet = bbc.transport[Piconet]         # or Piconet.attach(bbc)
         status = piconet.status
         print(f"Piconet on {status.device_path} (open={status.serial_open})")
     """

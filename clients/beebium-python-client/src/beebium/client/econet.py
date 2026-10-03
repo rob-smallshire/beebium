@@ -19,7 +19,8 @@ live on the relevant transport service:
   - Piconet: see ``beebium.ext.econet.piconet.Piconet`` (wraps PiconetService)
 
 Use ``Beebium.transport`` (``EconetTransport``) to discover which one
-is active.
+is loaded, and ``bbc.transport[Aun]`` / ``bbc.transport[Piconet]`` to reach
+its adapter.
 """
 
 from __future__ import annotations
@@ -248,13 +249,14 @@ class Econet:
     ``beebium.ext.econet.piconet.Piconet``.
 
     Usage:
-        # Enable Econet with station ID 254 (binds an AUN socket)
+        # Fit Econet with station 254 (on a server launched without a
+        # station number; the configured transport brings up its backend)
         port = bbc.econet.enable(station_id=254)
 
-        # Discover which transport is active
+        # Discover which transport is loaded
         active = bbc.transport.active
         if active and active.name == "aun":
-            bbc.extensions[Aun].add_peer(net=0, stn=1, ip_address="192.168.1.100")
+            bbc.transport[Aun].add_peer(net=0, stn=1, ip_address="192.168.1.100")
 
         # Check the generic status
         status = bbc.econet.status
@@ -284,9 +286,9 @@ class Econet:
 
         The server pushes an initial snapshot on subscription, then a new
         snapshot whenever status visible on EconetService changes
-        (enable/disable, station ID change, or transport backend
-        connection toggle). The stream stays open until the client
-        cancels or the server shuts down.
+        (enable/disable, station ID change, transport link up/down, or a
+        change in the AUN station collisions in effect). The stream stays
+        open until the client cancels or the server shuts down.
 
         Args:
             min_interval_ms: Minimum interval between pushes (0 = server
@@ -354,15 +356,23 @@ class Econet:
         aun_port: int = 0,
         no_network: bool = False,
     ) -> int:
-        """Fit Econet hardware and optionally bind AUN socket.
+        """Fit Econet hardware with a station number.
+
+        Unless ``no_network`` is set, the server's configured transport
+        (``--aun`` / ``--piconet`` / a preset) brings up its backend; with no
+        transport configured the server binds a bare AUN socket on net 0.
+        Fails if Econet is already fitted, as it is from launch whenever a
+        station number is configured (``--station`` or a preset).
 
         Args:
             station_id: Station number (1-254).
-            aun_port: UDP port to bind (0 = use default 32768).
+            aun_port: UDP port for the AUN socket (0 = use default 32768);
+                passed to the transport as its port setting.
             no_network: If True, fit hardware with no network connection.
 
         Returns:
-            Actual AUN port bound (useful when 0/default was requested).
+            The port the backend reports as bound (useful when 0/default was
+            requested); 0 with ``no_network``.
 
         Raises:
             EconetError: If the operation fails.
@@ -378,10 +388,12 @@ class Econet:
         return response.actual_aun_port
 
     def set_station_id(self, station_id: int) -> None:
-        """Set the station number (takes effect on next machine reset).
+        """Set the station number, as if changing the station links.
 
         On the Model B this is equivalent to changing the 8 address links.
-        The NFS ROM re-reads the station number on Ctrl-Break.
+        The guest's NFS/ANFS ROM re-reads the station number on its next
+        Break; the transport is told at once (AUN re-announces the new number
+        and re-runs its collision checks).
 
         Args:
             station_id: Station number (1-254).
@@ -395,7 +407,10 @@ class Econet:
             raise EconetError(response.error)
 
     def disable(self) -> None:
-        """Remove Econet hardware (disable station, close AUN socket).
+        """Remove Econet hardware.
+
+        Drops the station and the transport's backend; for AUN, closes the
+        socket and stops announcing and browsing.
 
         Raises:
             EconetError: If the operation fails.

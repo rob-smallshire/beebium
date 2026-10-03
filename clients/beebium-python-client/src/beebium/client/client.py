@@ -327,7 +327,9 @@ class Beebium:
         """Discover loaded extensions and access their typed client adapters.
 
         Enumerate with :attr:`Extensions.loaded`; get a typed adapter with
-        ``bbc.extensions[Aun]`` (or ``Aun.attach(bbc)``).
+        ``bbc.extensions[AcornRtc]`` (or ``AcornRtc.attach(bbc)``). Econet
+        transports (AUN, Piconet) are reached through :attr:`transport`
+        instead.
         """
         if self._extensions is None:
             self._extensions = Extensions(

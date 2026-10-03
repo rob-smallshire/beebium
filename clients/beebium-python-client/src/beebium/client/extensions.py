@@ -19,7 +19,7 @@ parameter schema from its manifest, any storage devices it publishes, and
 whether it exposes an Extension UI.
 
 This module provides discovery only (metadata). Binding a loaded extension to a
-typed client adapter -- ``bbc.extensions[Aun]`` / ``Aun.attach(bbc)`` -- is a
+typed client adapter -- ``bbc.extensions[AcornRtc]`` / ``AcornRtc.attach(bbc)`` -- is a
 separate concern layered on top; see
 ``docs/discussion/python-client-architecture.md``.
 """
@@ -178,8 +178,11 @@ class Extensions:
     adapter class for the concrete type (full autocompletion), or by name for
     the base type::
 
-        aun = bbc.extensions[Aun]        # -> Aun (or Aun.attach(bbc))
-        adapter = bbc.extensions["aun"]  # -> ExtensionAdapter (generic)
+        rtc = bbc.extensions[AcornRtc]         # -> AcornRtc (or AcornRtc.attach(bbc))
+        adapter = bbc.extensions["acorn-rtc"]  # -> ExtensionAdapter (generic)
+
+    Econet transports (AUN, Piconet) are not peripherals; reach them with
+    ``bbc.transport[Aun]``.
     """
 
     def __init__(

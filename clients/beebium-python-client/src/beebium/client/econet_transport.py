@@ -10,13 +10,13 @@
 # You should have received a copy of the GNU General Public License along with Beebium.
 # If not, see <https://www.gnu.org/licenses/>.
 
-"""Econet transport discovery (which transport is active on the server).
+"""Econet transport discovery (which transport is loaded on the server).
 
 Wraps EconetTransportService. Use this to decide whether to drive
-``bbc.extensions[Aun]`` or ``bbc.extensions[Piconet]`` (or any future transport-specific
-service): each transport extension has a canonical name (``aun``,
-``piconet``, ...) which maps one-to-one with the corresponding
-service stub.
+``bbc.transport[Aun]`` or ``bbc.transport[Piconet]`` (or any future
+transport-specific service): each transport extension has a canonical name
+(``aun``, ``piconet``, ...) which maps one-to-one with the corresponding
+service.
 """
 
 from __future__ import annotations
@@ -42,14 +42,16 @@ class TransportInfo:
     """A single Econet transport extension known to the server."""
 
     # Canonical extension name -- "aun", "piconet", etc. Maps to the
-    # transport-specific gRPC service the client should use.
+    # transport-specific service (AunService, PiconetService) the client
+    # reaches over ExtensionRpc.
     name: str
 
     # Human-readable description from the extension manifest.
     description: str
 
-    # True if this transport is the one currently producing the
-    # backend behind EconetSocket on the server.
+    # True if this transport is the one the server uses for Econet. On a BBC
+    # machine every loaded transport is active, even before Econet hardware is
+    # fitted or while its backend is down; Econet.status gives the link state.
     active: bool
 
     # Opaque, server-assigned instance id. This is the key to pass to
@@ -91,10 +93,8 @@ class EconetTransport:
     def list(self) -> list[TransportInfo]:
         """List all econet transports the server knows about.
 
-        Returns one entry per loaded transport extension. The
-        ``active`` field is True for whichever one is currently
-        producing the wire backend; for BBC machine variants at most
-        one will be active.
+        Returns one entry per loaded transport extension. BBC machine
+        variants load at most one, and report it ``active``.
         """
         request = econet_transport_pb2.ListTransportsRequest()
         response = self._stub.ListTransports(request)
