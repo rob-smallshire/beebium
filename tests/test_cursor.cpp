@@ -16,12 +16,13 @@
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/FrameRenderer.hpp>
 #include <beebium/Saa5050.hpp>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <vector>
 #include <map>
 #include <set>
-#include "test_temp_paths.hpp"
 
 using namespace beebium;
 
@@ -892,10 +893,16 @@ void save_frame_raw(const std::string& filename, const std::span<const uint32_t>
     file.write(reinterpret_cast<const char*>(pixels.data()), pixels.size() * 4);
 }
 
-// Helper to save as PPM (portable bitmap format - easy to view)
-void save_frame_ppm(const std::string& filename, const std::span<const uint32_t>& pixels, int width, int height) {
-    std::ofstream file(filename);
-    if (!file) return;
+// Save a frame as a PPM (portable bitmap format - easy to view) for
+// inspection, into the directory named by BEEBIUM_TEST_FRAME_DUMP_DIRPATH. The
+// frames are a debugging aid and are not written otherwise, so a test run
+// leaves nothing behind. Returns the file written, or empty if none.
+std::string save_frame_ppm(const std::string& filename, const std::span<const uint32_t>& pixels, int width, int height) {
+    const char* dump_dirpath = std::getenv("BEEBIUM_TEST_FRAME_DUMP_DIRPATH");
+    if (dump_dirpath == nullptr || *dump_dirpath == '\0') return {};
+    const auto filepath = std::filesystem::path(dump_dirpath) / filename;
+    std::ofstream file(filepath);
+    if (!file) return {};
     file << "P3\n" << width << " " << height << "\n255\n";
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -907,6 +914,7 @@ void save_frame_ppm(const std::string& filename, const std::span<const uint32_t>
         }
         file << "\n";
     }
+    return filepath.string();
 }
 
 TEST_CASE("Exact reproduction Enter key sequence", "[video][cursor][repro]") {
@@ -972,9 +980,9 @@ TEST_CASE("Exact reproduction Enter key sequence", "[video][cursor][repro]") {
 
     // Save frame
     auto pixels = fb.read_frame();
-    const auto initial_filepath = beebium::test::unique_temp_path("beebium_repro_initial_", ".ppm");
-    save_frame_ppm(initial_filepath.string(), pixels, 640, 512);
-    WARN("Saved " << initial_filepath.string());
+    if (const auto saved = save_frame_ppm("repro_initial.ppm", pixels, 640, 512); !saved.empty()) {
+        WARN("Saved " << saved);
+    }
 
     // Press Enter by injecting CR via keyboard
     // The MOS reads keyboard via OSRDCH/OSBYTE, which polls the keyboard
@@ -1036,11 +1044,10 @@ TEST_CASE("Exact reproduction Enter key sequence", "[video][cursor][repro]") {
         cursor_col = cursor_offset % 40;
 
         auto px = fb.read_frame();
-        std::string filename = beebium::test::unique_temp_path(
-            "beebium_repro_enter_" + std::to_string(seq) + "_", ".ppm").string();
-        save_frame_ppm(filename, px, 640, 512);
+        const auto saved =
+            save_frame_ppm("repro_enter_" + std::to_string(seq) + ".ppm", px, 640, 512);
         WARN("Enter " << seq << ": cursor at line " << cursor_line << ", col " << cursor_col
-             << " -> " << filename);
+             << (saved.empty() ? "" : " -> ") << saved);
     }
 }
 
@@ -1117,10 +1124,11 @@ TEST_CASE("Save cursor frames for visual inspection", "[video][cursor][visual]")
 
         // Save frame
         auto pixels = fb.read_frame();
-        std::string filename = beebium::test::unique_temp_path(
-            "beebium_cursor_line_" + std::to_string(line) + "_", ".ppm").string();
-        save_frame_ppm(filename, pixels, 640, 512);
-        WARN("Saved " << filename);
+        if (const auto saved = save_frame_ppm(
+                "cursor_line_" + std::to_string(line) + ".ppm", pixels, 640, 512);
+            !saved.empty()) {
+            WARN("Saved " << saved);
+        }
     }
 
     // Also save baseline (no cursor)
@@ -1143,9 +1151,9 @@ TEST_CASE("Save cursor frames for visual inspection", "[video][cursor][visual]")
     fb.swap(fb.metadata());
 
     auto pixels = fb.read_frame();
-    const auto none_filepath = beebium::test::unique_temp_path("beebium_cursor_none_", ".ppm");
-    save_frame_ppm(none_filepath.string(), pixels, 640, 512);
-    WARN("Saved " << none_filepath.string() << " (no cursor baseline)");
+    if (const auto saved = save_frame_ppm("cursor_none.ppm", pixels, 640, 512); !saved.empty()) {
+        WARN("Saved " << saved << " (no cursor baseline)");
+    }
 }
 
 TEST_CASE("SAA5050 cursor XOR output", "[video][cursor][saa5050]") {
