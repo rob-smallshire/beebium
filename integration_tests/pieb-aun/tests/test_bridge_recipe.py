@@ -15,8 +15,13 @@
 This is the configuration a user follows from docs/networking.md ("Connecting
 to a PiEconetBridge"), run as written: the bridge exposes a fileserver on 1.254
 and maps Beebium as station 2.80; Beebium declares ``--aun net=2``, is station
-80, and maps 1.254 to the bridge with ``--aun map=``. The guest logs in with
-``*I AM 1.254 SYST`` and catalogues the fileserver's disc.
+80, and maps 1.254 to the bridge -- once with ``--aun map=``, and once with a
+standing ``peers`` entry in an AUN map file, the recipe's two forms. The guest
+logs in with ``*I AM 1.254 SYST`` and catalogues the fileserver's disc.
+
+Every launch names its map file and turns mDNS discovery off, so the only
+route to 1.254 is the one the test gives: neither the developer's own
+aun-map.json nor an announcement on the host's network can supply or hide it.
 
 Unlike test_login.py, the bridge is not started here. The opt-in workflow
 (.github/workflows/pieb-bridge-recipe.yml), or a developer, starts it from
@@ -38,7 +43,9 @@ among them, are emulated, so a slow host makes the test slower, never wrong.
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -96,8 +103,11 @@ def _failure_or_prompt(bbc: Beebium) -> bool:
     return any(failure in screen for failure in FAILURES) or _at_prompt(bbc)
 
 
-def _station_args(nfs_filepath, aun_port: int, map_entry: str | None) -> list[str]:
-    aun = f"net={BEEBIUM_NET}:port={aun_port}"
+def _station_args(
+    nfs_filepath, aun_port: int, map_entry: str | None, map_filepath: Path | None = None
+) -> list[str]:
+    map_file = "none" if map_filepath is None else str(map_filepath)
+    aun = f"net={BEEBIUM_NET}:port={aun_port}:map-file={map_file}:discovery=off"
     if map_entry is not None:
         aun += f":map={map_entry}"
     return [
@@ -130,6 +140,19 @@ def test_recipe_logs_in_and_catalogues(launch_bbc, nfs_filepath) -> None:
         extra_args=_station_args(nfs_filepath, aun_port, f"{FILESERVER}@{host}@{port}"),
         startup_timeout=30.0,
     )
+    _assert_logs_in_and_catalogues(bbc)
+
+
+def _write_map_file(map_filepath: Path, host: str, port: int) -> None:
+    """The recipe's standing map-file entry for the bridge's fileserver."""
+    net, station = (int(part) for part in FILESERVER.split("."))
+    map_filepath.write_text(json.dumps({
+        "peers": [{"net": net, "station": station, "host": host, "port": port,
+                   "label": "PiEconetBridge file server"}],
+    }))
+
+
+def _assert_logs_in_and_catalogues(bbc: Beebium) -> None:
     screen = _boot_and_log_in(bbc)
     for failure in FAILURES:
         assert failure not in screen, f"Login failed with {failure!r}:\n{screen}"
@@ -141,6 +164,22 @@ def test_recipe_logs_in_and_catalogues(launch_bbc, nfs_filepath) -> None:
     assert _run_until(bbc, lambda: "BEEBIUM" in _screen(bbc) and _at_prompt(bbc),
                       COMMAND_SECONDS), \
         f"*CAT did not catalogue the bridge's disc:\n{_screen(bbc)}"
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+def test_recipe_with_a_map_file_entry_logs_in_and_catalogues(
+    launch_bbc, nfs_filepath, tmp_path
+) -> None:
+    """The recipe's map-file form: the bridge mapped once, in aun-map.json."""
+    host, port, aun_port = _recipe_environment()
+    map_filepath = tmp_path / "aun-map.json"
+    _write_map_file(map_filepath, host, port)
+    bbc = launch_bbc(
+        extra_args=_station_args(nfs_filepath, aun_port, None, map_filepath),
+        startup_timeout=30.0,
+    )
+    _assert_logs_in_and_catalogues(bbc)
 
 
 @pytest.mark.slow
