@@ -7,7 +7,7 @@
  */
 
 import { afterEach } from "vitest";
-import { ServerProcess } from "../src/server-process.js";
+import { ServerProcess, type ServerProcessOptions } from "../src/server-process.js";
 import { Connection } from "../src/connection.js";
 
 /** All servers spawned during the current test. */
@@ -29,11 +29,15 @@ afterEach(async () => {
  *
  * The server is tracked so that if the test times out before the
  * finally block runs, the afterEach hook will kill it.
+ *
+ * `options` is passed to the ServerProcess, e.g. to add command-line
+ * arguments; the model defaults to "B".
  */
 export async function withServer(
     body: (conn: Connection, server: ServerProcess) => Promise<void>,
+    options: ServerProcessOptions = {},
 ): Promise<void> {
-    const server = new ServerProcess({ model: "B" });
+    const server = new ServerProcess({ model: "B", ...options });
     activeServers.add(server);
     await server.start(10000);
     const conn = new Connection(server.target);

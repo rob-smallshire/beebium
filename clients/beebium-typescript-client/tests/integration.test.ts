@@ -7,6 +7,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Connection } from "../src/connection.js";
 import { Debugger } from "../src/debugger.js";
 import { CPU } from "../src/cpu.js";
@@ -79,6 +82,92 @@ describe("Integration: System Service", () => {
             const system = new System(conn.systemStub);
             const ready = await system.waitForReady(5000);
             expect(ready).toBe(true);
+        });
+    });
+});
+
+// =========================================================================
+// System Service - Machine name templates
+// =========================================================================
+
+describe("Integration: Machine name templates", () => {
+    const TEMPLATE = "Station {econet-station}";
+    const AUN_ARGS = [
+        "--machine-name", TEMPLATE,
+        "--station", "80",
+        "--aun", "port=0:discovery=off:map-file=none",
+    ];
+
+    /**
+     * Run `body` against a Model B with Econet over AUN at station 80, named
+     * by a template. The AUN auto-station state goes to a temporary file so
+     * the test never reads or writes the user's own.
+     */
+    async function withStationServer(
+        body: (system: System) => Promise<void>,
+    ): Promise<void> {
+        const stateDirpath = mkdtempSync(join(tmpdir(), "beebium-names-"));
+        const previous = process.env["BEEBIUM_AUN_AUTO_STATE_FILEPATH"];
+        process.env["BEEBIUM_AUN_AUTO_STATE_FILEPATH"] = join(stateDirpath, "aun-auto-state.json");
+        try {
+            await withServer(async (conn, server) => {
+                await body(new System(conn.systemStub, server.provenanceUuid));
+            }, { args: AUN_ARGS });
+        } finally {
+            if (previous === undefined) {
+                delete process.env["BEEBIUM_AUN_AUTO_STATE_FILEPATH"];
+            } else {
+                process.env["BEEBIUM_AUN_AUTO_STATE_FILEPATH"] = previous;
+            }
+            rmSync(stateDirpath, { recursive: true, force: true });
+        }
+    }
+
+    it("renders the launch template and reports both forms", async () => {
+        await withStationServer(async (system) => {
+            const identity = await system.getIdentity();
+            expect(identity.nameTemplate).toBe(TEMPLATE);
+            expect(identity.name).toBe("Station 80");
+        });
+    });
+
+    it("lists econet-station with its current value", async () => {
+        await withStationServer(async (system) => {
+            const placeholders = await system.listNamePlaceholders();
+            const station = placeholders.find((p) => p.key === "econet-station");
+            expect(station).toBeDefined();
+            expect(station!.value).toBe("80");
+            expect(station!.applicable).toBe(true);
+            expect(station!.insertion).toBe("{econet-station}");
+            expect(station!.label).toBeTruthy();
+            expect(station!.group).toBeTruthy();
+        });
+    });
+
+    it("previews a template with unknown keys without renaming", async () => {
+        await withStationServer(async (system) => {
+            const preview = await system.previewMachineName("Station {econet-station} {no-such-key}");
+            expect(preview.name).toBe("Station 80 {no-such-key}");
+            expect(preview.unknownKeys).toEqual(["no-such-key"]);
+            expect(preview.inapplicableKeys).toEqual([]);
+            expect(preview.malformed).toEqual([]);
+
+            const identity = await system.getIdentity();
+            expect(identity.nameTemplate).toBe(TEMPLATE);
+            expect(identity.name).toBe("Station 80");
+        });
+    });
+
+    it("renames to a template and reports unknown keys", async () => {
+        await withStationServer(async (system) => {
+            const result = await system.setMachineName("Net {econet-station} {no-such-key}");
+            expect(result.identity.nameTemplate).toBe("Net {econet-station} {no-such-key}");
+            expect(result.identity.name).toBe("Net 80 {no-such-key}");
+            expect(result.unknownKeys).toEqual(["no-such-key"]);
+
+            const identity = await system.getIdentity();
+            expect(identity.nameTemplate).toBe("Net {econet-station} {no-such-key}");
+            expect(identity.name).toBe("Net 80 {no-such-key}");
         });
     });
 });
