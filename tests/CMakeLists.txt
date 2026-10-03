@@ -204,6 +204,10 @@ add_executable(test_aun_peer_set test_aun_peer_set.cpp)
 target_link_libraries(test_aun_peer_set PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
 catch_discover_tests(test_aun_peer_set)
 
+add_executable(test_station_selection test_station_selection.cpp)
+target_link_libraries(test_station_selection PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_station_selection)
+
 # AUN transport extension: peer ownership (AddPeer before Enable, survival
 # across backend re-creation, RemovePeer fall-back, SetConnected deferral).
 add_executable(test_aun_transport_extension test_aun_transport_extension.cpp)
