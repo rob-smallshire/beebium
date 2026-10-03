@@ -31,11 +31,11 @@ service ExtensionRpc {
   // event subscriptions).
   rpc ServerStream(InvokeRequest) returns (stream InvokeResponse);
 
-  // Discovery (which instances exist, which services they offer) is deferred:
-  // the existing PeripheralExtensionService already enumerates instances, and
-  // for now a client routes by service name (empty extension_id) when an
-  // extension type is a singleton. A dedicated discovery method that also
-  // reports each instance's services lands with Phase 1.
+  // Instance ids come from the discovery services: PeripheralExtensionService
+  // enumerates peripheral extension instances and EconetTransportService
+  // enumerates Econet transport instances. Either kind of id is a valid
+  // extension_id here. A dedicated discovery method that also reports each
+  // instance's services is deferred.
 
   // Client-streaming and bidi are deferred until an extension needs them
   // (none do today); they would be added the same way, with the FIRST frame
@@ -43,9 +43,12 @@ service ExtensionRpc {
 }
 
 message InvokeRequest {
-  // Target extension instance id. May be empty when exactly one loaded
-  // extension offers `service` (the common case today), in which case the
-  // core routes by service name.
+  // Target instance id: a peripheral extension's id (from
+  // PeripheralExtensionService) or an Econet transport's id (from
+  // EconetTransportService). May be empty when exactly one loaded instance
+  // offers `service`, in which case the core routes by service name; when
+  // more than one does, an empty id is FAILED_PRECONDITION and the status
+  // message lists the candidate ids.
   string extension_id = 1;
 
   // Logical service within the extension, e.g. "RpcSerial".

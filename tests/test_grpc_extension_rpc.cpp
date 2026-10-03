@@ -39,12 +39,15 @@
 
 namespace {
 
-// Serves "Echo" (unary: echoes the request bytes), "Fail" (unary: returns a
-// chosen non-OK status), and "Count" (server-stream: writes N single-byte
-// responses, where N is the first request byte).
+// Serves "Echo" (unary: echoes the request bytes), "WhoAmI" (unary: returns
+// the tag of the instance that owns this dispatcher, so a test can tell which
+// instance a call reached), "Fail" (unary: returns a chosen non-OK status),
+// "Count" (server-stream: writes N single-byte responses, where N is the
+// first request byte) and "WhoStream" (server-stream: writes the tag once).
 class FakeDispatcher final : public beebium::ExtensionRpcDispatcher {
 public:
-    explicit FakeDispatcher(std::string service) : service_(std::move(service)) {}
+    FakeDispatcher(std::string service, std::string tag)
+        : service_(std::move(service)), tag_(std::move(tag)) {}
 
     std::string_view service_name() const override { return service_; }
 
@@ -53,6 +56,10 @@ public:
                               beebium::RpcContext&) override {
         if (method == "Echo") {
             response.assign(request);
+            return beebium::RpcStatus::ok();
+        }
+        if (method == "WhoAmI") {
+            response.assign(tag_);
             return beebium::RpcStatus::ok();
         }
         if (method == "Fail") {
@@ -66,6 +73,10 @@ public:
                                      std::string_view request,
                                      beebium::RpcResponseWriter& writer,
                                      beebium::RpcContext& ctx) override {
+        if (method == "WhoStream") {
+            writer.write(tag_);
+            return beebium::RpcStatus::ok();
+        }
         if (method != "Count") {
             return beebium::RpcStatus::error(beebium::kRpcUnimplemented, "no stream");
         }
@@ -81,13 +92,14 @@ public:
 
 private:
     std::string service_;
+    std::string tag_;
 };
 
 // A transport extension carrying one dispatcher, addressable by a fixed id.
 class FakeRpcTransport : public beebium::EconetTransportExtension {
 public:
     FakeRpcTransport(std::string id, std::string service)
-        : dispatcher_(std::move(service)) {
+        : dispatcher_(std::move(service), id) {
         beebium::ExtensionManifest m;
         m.name = "fake-rpc";
         m.cli_name = m.name;
@@ -215,6 +227,118 @@ TEST_CASE("ExtensionRpc rejects an ambiguous service without an instance id",
     beebium::InvokeResponse resp;
     auto status = fix.stub().Invoke(&ctx, make_request("Echo", "Echo", ""), &resp);
     CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+}
+
+TEST_CASE("ExtensionRpc addresses each of two transports behind one service name by id",
+          "[grpc][extension-rpc]") {
+    beebium::EconetTransportRegistry transports;
+    transports.add(std::make_unique<FakeRpcTransport>("echo-1", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("echo-2", "Echo"));
+    ExtensionRpcFixture fix(transports);
+
+    for (const std::string id : {"echo-1", "echo-2"}) {
+        grpc::ClientContext ctx;
+        beebium::InvokeResponse resp;
+        auto status =
+            fix.stub().Invoke(&ctx, make_request("Echo", "WhoAmI", "", id), &resp);
+        REQUIRE(status.ok());
+        CHECK(resp.payload() == id);
+    }
+}
+
+TEST_CASE("ExtensionRpc server-stream reaches the transport instance named by id",
+          "[grpc][extension-rpc]") {
+    beebium::EconetTransportRegistry transports;
+    transports.add(std::make_unique<FakeRpcTransport>("echo-1", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("echo-2", "Echo"));
+    ExtensionRpcFixture fix(transports);
+
+    for (const std::string id : {"echo-1", "echo-2"}) {
+        grpc::ClientContext ctx;
+        auto reader =
+            fix.stub().ServerStream(&ctx, make_request("Echo", "WhoStream", "", id));
+        beebium::InvokeResponse resp;
+        REQUIRE(reader->Read(&resp));
+        CHECK(resp.payload() == id);
+        CHECK_FALSE(reader->Read(&resp));
+        CHECK(reader->Finish().ok());
+    }
+}
+
+TEST_CASE("ExtensionRpc addresses registry-assigned transport ids",
+          "[grpc][extension-rpc]") {
+    // No explicit id: the registry assigns each instance a unique one, the
+    // same id EconetTransportService reports, and ExtensionRpc routes by it.
+    beebium::EconetTransportRegistry transports;
+    transports.add(std::make_unique<FakeRpcTransport>("", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("", "Echo"));
+    const std::string first_id(transports.extensions()[0]->id());
+    const std::string second_id(transports.extensions()[1]->id());
+    REQUIRE_FALSE(first_id.empty());
+    REQUIRE(first_id != second_id);
+    ExtensionRpcFixture fix(transports);
+
+    for (const std::string& id : {first_id, second_id}) {
+        grpc::ClientContext ctx;
+        beebium::InvokeResponse resp;
+        auto status =
+            fix.stub().Invoke(&ctx, make_request("Echo", "Echo", "x", id), &resp);
+        CHECK(status.ok());
+    }
+}
+
+TEST_CASE("ExtensionRpc ambiguity error names the candidate instance ids",
+          "[grpc][extension-rpc]") {
+    beebium::EconetTransportRegistry transports;
+    transports.add(std::make_unique<FakeRpcTransport>("echo-1", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("echo-2", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("other-1", "Other"));
+    ExtensionRpcFixture fix(transports);
+
+    grpc::ClientContext ctx;
+    beebium::InvokeResponse resp;
+    auto status = fix.stub().Invoke(&ctx, make_request("Echo", "WhoAmI", ""), &resp);
+    CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+    const std::string message = status.error_message();
+    CHECK(message.find("echo-1") != std::string::npos);
+    CHECK(message.find("echo-2") != std::string::npos);
+    CHECK(message.find("other-1") == std::string::npos);
+
+    // The unambiguous service still routes by name alone.
+    grpc::ClientContext ctx2;
+    auto ok = fix.stub().Invoke(&ctx2, make_request("Other", "WhoAmI", ""), &resp);
+    REQUIRE(ok.ok());
+    CHECK(resp.payload() == "other-1");
+}
+
+TEST_CASE("ExtensionRpc ambiguous server-stream is rejected with the candidate ids",
+          "[grpc][extension-rpc]") {
+    beebium::EconetTransportRegistry transports;
+    transports.add(std::make_unique<FakeRpcTransport>("echo-1", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("echo-2", "Echo"));
+    ExtensionRpcFixture fix(transports);
+
+    grpc::ClientContext ctx;
+    auto reader = fix.stub().ServerStream(&ctx, make_request("Echo", "WhoStream", ""));
+    beebium::InvokeResponse resp;
+    CHECK_FALSE(reader->Read(&resp));
+    auto status = reader->Finish();
+    CHECK(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+    CHECK(status.error_message().find("echo-1") != std::string::npos);
+    CHECK(status.error_message().find("echo-2") != std::string::npos);
+}
+
+TEST_CASE("ExtensionRpc reports an unknown instance id as NOT_FOUND",
+          "[grpc][extension-rpc]") {
+    beebium::EconetTransportRegistry transports;
+    transports.add(std::make_unique<FakeRpcTransport>("echo-1", "Echo"));
+    ExtensionRpcFixture fix(transports);
+
+    grpc::ClientContext ctx;
+    beebium::InvokeResponse resp;
+    auto status =
+        fix.stub().Invoke(&ctx, make_request("Echo", "Echo", "", "nope"), &resp);
+    CHECK(status.error_code() == grpc::StatusCode::NOT_FOUND);
 }
 
 TEST_CASE("ExtensionRpc server-streams a dispatcher's responses",

@@ -444,3 +444,79 @@ TEST_CASE("AunService AddPeer rejects invalid IP", "[grpc][aun][extension-rpc]")
     REQUIRE_FALSE(resp.success());
     REQUIRE(resp.error().find("invalid") != std::string::npos);
 }
+
+// Two AUN transports at once (the shape a two-ADLC Econet Bridge machine
+// presents): both serve "AunService", so the instance id that
+// EconetTransportService reports is what selects one of them.
+TEST_CASE("AunService on two transport instances is addressed by instance id",
+          "[grpc][aun][extension-rpc]") {
+    beebium::ModelB machine;
+    beebium::EconetTransportRegistry transports;
+    beebium::ExtensionRegistry peripherals;
+    const std::string first_id = "aun-a";
+    const std::string second_id = "aun-b";
+    for (const std::string& id : {first_id, second_id}) {
+        auto ext = std::make_unique<beebium::AunEconetTransportExtension>();
+        ext->set_discovery_service_type(aun_unique_service_type());
+        // No backend is created: the desired peer set is owned by the
+        // extension and editable without one.
+        ext->set_config({{"id", id}, {"port", "0"}, {"map-file", "none"}});
+        transports.add(std::move(ext));
+    }
+
+    beebium::service::ExtensionRpcServiceImpl service(transports, peripherals);
+    std::vector<grpc::Service*> services{&service};
+    beebium::service::Server<beebium::ModelB> server(machine, "127.0.0.1", 0);
+    server.start(beebium::service::Provenance{},
+                 beebium::service::MachineIdentity{},
+                 /*enable_advertisement=*/false,
+                 /*policy_config=*/{},
+                 /*shutdown_callback=*/nullptr,
+                 std::span<grpc::Service*>(services));
+    auto channel = grpc::CreateChannel("127.0.0.1:" + std::to_string(server.port()),
+                                       grpc::InsecureChannelCredentials());
+    auto stub = beebium::ExtensionRpc::NewStub(channel);
+
+    auto invoke = [&](const std::string& extension_id, const std::string& method,
+                      const google::protobuf::Message& req,
+                      google::protobuf::Message* resp) {
+        grpc::ClientContext ctx;
+        beebium::InvokeRequest ireq;
+        ireq.set_extension_id(extension_id);
+        ireq.set_service("AunService");
+        ireq.set_method(method);
+        ireq.set_payload(req.SerializeAsString());
+        beebium::InvokeResponse iresp;
+        grpc::Status status = stub->Invoke(&ctx, ireq, &iresp);
+        if (status.ok()) {
+            REQUIRE(resp->ParseFromString(iresp.payload()));
+        }
+        return status;
+    };
+
+    beebium::AunAddPeerRequest add;
+    add.set_net(0);
+    add.set_stn(254);
+    add.set_ip_address("127.0.0.1");
+    add.set_port(40001);
+    beebium::AunAddPeerResponse added;
+    REQUIRE(invoke(second_id, "AddPeer", add, &added).ok());
+    REQUIRE(added.success());
+
+    beebium::AunListPeersRequest list;
+    beebium::AunListPeersResponse first_peers;
+    REQUIRE(invoke(first_id, "ListPeers", list, &first_peers).ok());
+    CHECK(first_peers.peers_size() == 0);
+    beebium::AunListPeersResponse second_peers;
+    REQUIRE(invoke(second_id, "ListPeers", list, &second_peers).ok());
+    CHECK(second_peers.peers_size() == 1);
+
+    // With two instances behind the one service name, no id is ambiguous.
+    beebium::AunListPeersResponse unrouted;
+    grpc::Status ambiguous = invoke("", "ListPeers", list, &unrouted);
+    CHECK(ambiguous.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+    CHECK(ambiguous.error_message().find(first_id) != std::string::npos);
+    CHECK(ambiguous.error_message().find(second_id) != std::string::npos);
+
+    server.stop();
+}

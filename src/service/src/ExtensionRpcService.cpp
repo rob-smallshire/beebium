@@ -85,27 +85,32 @@ void ExtensionRpcServiceImpl::for_each_extension(Fn&& fn) const {
 ExtensionRpcDispatcher* ExtensionRpcServiceImpl::find_dispatcher(
     const std::string& extension_id, const std::string& service,
     grpc::Status* status) const {
-    std::vector<ExtensionRpcDispatcher*> matches;
+    // Each match remembers the id of the instance that owns the dispatcher,
+    // so an ambiguity can name the candidates the caller must choose between.
+    struct Match {
+        ExtensionRpcDispatcher* dispatcher;
+        std::string instance_id;
+    };
+    std::vector<Match> matches;
     bool extension_seen = false;
 
     for_each_extension([&](Extension* ext) {
-        const bool id_matches = extension_id.empty() || ext->id() == extension_id;
-        if (!extension_id.empty() && ext->id() == extension_id) {
+        if (!extension_id.empty()) {
+            if (ext->id() != extension_id) {
+                return;
+            }
             extension_seen = true;
-        }
-        if (!id_matches) {
-            return;
         }
         for (auto* d : ext->rpc_dispatchers()) {
             if (d != nullptr && d->service_name() == service) {
-                matches.push_back(d);
+                matches.push_back({d, std::string(ext->id())});
             }
         }
     });
 
     if (matches.size() == 1) {
         *status = grpc::Status::OK;
-        return matches.front();
+        return matches.front().dispatcher;
     }
     if (matches.empty()) {
         if (!extension_id.empty() && !extension_seen) {
@@ -119,11 +124,29 @@ ExtensionRpcDispatcher* ExtensionRpcServiceImpl::find_dispatcher(
         }
         return nullptr;
     }
-    // More than one match and no instance specified: ambiguous.
+    if (!extension_id.empty()) {
+        // Instance ids are unique within a registry, so this needs the same
+        // id configured on instances in both registries, or one instance
+        // registering the service twice.
+        *status = grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "service '" + service + "' is offered more than once by instance id '" +
+                extension_id + "'");
+        return nullptr;
+    }
+    // More than one instance offers the service and none was named.
+    std::string candidates;
+    for (const auto& m : matches) {
+        if (!candidates.empty()) {
+            candidates += ", ";
+        }
+        candidates += m.instance_id;
+    }
     *status = grpc::Status(
         grpc::StatusCode::FAILED_PRECONDITION,
-        "service '" + service +
-            "' is offered by multiple extensions; specify extension_id");
+        "service '" + service + "' is offered by " +
+            std::to_string(matches.size()) +
+            " extension instances; specify extension_id, one of: " + candidates);
     return nullptr;
 }
 

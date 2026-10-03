@@ -55,9 +55,13 @@ public:
         grpc::ServerWriter<::beebium::InvokeResponse>* writer) override;
 
 private:
-    // Resolve (extension_id, service) to a dispatcher. If extension_id is
-    // empty, route by service name when exactly one loaded extension offers
-    // it. On failure, leaves a grpc::Status in *status and returns nullptr.
+    // Resolve (extension_id, service) to a dispatcher. A non-empty
+    // extension_id selects that instance, whether it is a peripheral
+    // extension or an Econet transport (the id EconetTransportService
+    // reports). An empty extension_id routes by service name when exactly
+    // one loaded instance offers the service, and is FAILED_PRECONDITION
+    // naming the candidate ids when more than one does. On failure, leaves
+    // a grpc::Status in *status and returns nullptr.
     ExtensionRpcDispatcher* find_dispatcher(const std::string& extension_id,
                                             const std::string& service,
                                             grpc::Status* status) const;
