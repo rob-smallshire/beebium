@@ -1,10 +1,10 @@
 /**
- * Econet transport discovery (which transport is active on the server).
+ * Econet transport discovery (which transport is loaded on the server).
  *
  * Wraps EconetTransportService. Use this to decide whether to drive
  * bbc.aun or bbc.piconet (or any future transport-specific service):
  * each transport extension has a canonical name ("aun", "piconet",
- * ...) which maps one-to-one with the corresponding service stub.
+ * ...) which maps one-to-one with the corresponding service.
  */
 
 import type {
@@ -18,7 +18,8 @@ import { EconetError } from "./exceptions.js";
 export interface TransportInfo {
     /**
      * Canonical extension name -- "aun", "piconet", etc. Maps to the
-     * transport-specific gRPC service the client should use.
+     * transport-specific service (AunService, PiconetService) the client
+     * reaches over ExtensionRpc.
      */
     name: string;
 
@@ -26,8 +27,10 @@ export interface TransportInfo {
     description: string;
 
     /**
-     * True if this transport is the one currently producing the
-     * backend behind EconetSocket on the server.
+     * True if this transport is the one the server uses for Econet. On a BBC
+     * machine every loaded transport is active, even before Econet hardware
+     * is fitted or while its backend is down; Econet.getStatus() gives the
+     * link state.
      */
     active: boolean;
 
@@ -70,10 +73,8 @@ export class EconetTransport {
     /**
      * List all econet transports the server knows about.
      *
-     * Returns one entry per loaded transport extension. The active
-     * field is true for whichever one is currently producing the
-     * wire backend; for BBC machine variants at most one will be
-     * active.
+     * Returns one entry per loaded transport extension. BBC machine
+     * variants load at most one, and report it active.
      */
     async list(): Promise<TransportInfo[]> {
         const response = await promisify<{}, ProtoListTransportsResponse>(

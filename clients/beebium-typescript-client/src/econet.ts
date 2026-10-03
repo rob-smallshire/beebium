@@ -1,16 +1,10 @@
 /**
  * Econet management interface for the Beebium TypeScript client.
  *
- * Provides Econet hardware configuration and status queries.
- *
- * Note: the AUN-specific operations (setConnected / addPeer /
- * removePeer / listPeers) moved out of EconetService into AunService
- * during the prior branch, and the full typed TS wrappers for the
- * new per-transport services (AunService, PiconetService,
- * EconetTransportService, ExtensionUiService) have not yet been
- * ported from the Python client. See
- * project_typescript_client_cutover.md in project memory for the
- * outstanding work.
+ * Provides transport-agnostic Econet hardware configuration, status queries
+ * and the frame event stream. Transport-specific operations live on the
+ * transport wrappers: bbc.aun (AunService), bbc.piconet (PiconetService), and
+ * bbc.transport (EconetTransportService) to discover which is loaded.
  */
 
 import type {
@@ -192,10 +186,8 @@ function toEconetStatus(proto: ProtoGetEconetStatusResponse): EconetStatus {
  * Econet management interface.
  *
  * Provides Econet hardware configuration and status queries. For
- * AUN-specific peer management, Piconet device status, or transport
- * discovery, use AunService / PiconetService / EconetTransportService
- * directly via gRPC -- the TS wrappers for those are not yet
- * implemented.
+ * AUN-specific peer management use bbc.aun, for Piconet device status
+ * bbc.piconet, and for transport discovery bbc.transport.
  */
 export class Econet {
     private readonly stub: EconetServiceClient;
@@ -219,8 +211,8 @@ export class Econet {
      *
      * The server pushes an initial snapshot on subscription, then a new
      * snapshot whenever status visible on EconetService changes
-     * (enable/disable, station ID, or transport backend connection
-     * toggle). Iteration ends when the client cancels or the server
+     * (enable/disable, station ID, transport link up/down, or a change in
+     * the AUN station collisions in effect). Iteration ends when the client cancels or the server
      * shuts down.
      *
      * @param options.minIntervalMs Minimum interval between pushes
@@ -277,12 +269,19 @@ export class Econet {
     }
 
     /**
-     * Enable Econet hardware.
+     * Fit Econet hardware with a station number.
+     *
+     * Unless noNetwork is set, the server's configured transport (--aun /
+     * --piconet / a preset) brings up its backend; with no transport
+     * configured the server binds a bare AUN socket on net 0. Fails if
+     * Econet is already fitted, as it is from launch whenever a station
+     * number is configured (--station or a preset).
      *
      * @param stationId - Station number (1-254).
-     * @param options.aunPort - UDP port to bind (0 = default 32768).
+     * @param options.aunPort - UDP port for the AUN socket (0 = default 32768),
+     *     passed to the transport as its port setting.
      * @param options.noNetwork - If true, fit hardware with no network connection.
-     * @returns The actual AUN port that was bound.
+     * @returns The port the backend reports as bound; 0 with noNetwork.
      */
     async enable(
         stationId: number,
@@ -306,7 +305,11 @@ export class Econet {
         return response.actualAunPort;
     }
 
-    /** Set the station ID (takes effect on next machine reset). */
+    /**
+     * Set the station number, as if changing the station links. The guest's
+     * NFS/ANFS ROM re-reads it on its next Break; the transport is told at
+     * once (AUN re-announces the new number and re-runs its collision checks).
+     */
     async setStationId(stationId: number): Promise<void> {
         const response = await promisify<{ stationId: number }, ProtoSetStationIdResponse>(
             this.stub as unknown as Record<string, Function>,
@@ -318,7 +321,10 @@ export class Econet {
         }
     }
 
-    /** Disable Econet hardware. */
+    /**
+     * Remove Econet hardware: drop the station and the transport's backend
+     * (for AUN, close the socket and stop announcing and browsing).
+     */
     async disable(): Promise<void> {
         const response = await promisify<{}, ProtoDisableEconetResponse>(
             this.stub as unknown as Record<string, Function>,

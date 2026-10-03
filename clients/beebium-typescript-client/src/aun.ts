@@ -1,14 +1,12 @@
 /**
  * AUN (Acorn Universal Networking) transport-specific operations.
  *
- * These RPCs are surfaced by the AunService dispatcher when AUN is the active
- * Econet transport on the server. Use bbc.transport.getActive() to confirm AUN
- * is the active transport before calling these methods; otherwise the call
- * returns an error indicating "AUN backend is not active".
- *
- * The AUN messages are tunnelled over the core's ExtensionRpc channel; the AUN
- * extension no longer hosts its own gRPC service. The public API here is
- * unchanged.
+ * These RPCs are served by the AUN transport's AunService dispatcher,
+ * tunnelled over the core's ExtensionRpc channel. They are reachable whenever
+ * the server has the AUN transport loaded (--aun or a preset's
+ * econet.transport), whether or not its socket is up yet. With no AUN
+ * transport loaded the call fails with gRPC NOT_FOUND; use
+ * bbc.transport.getActive() to see which transport, if any, is loaded.
  */
 
 import {
@@ -44,25 +42,34 @@ import { EconetError } from "./exceptions.js";
 const SERVICE = "AunService";
 
 export interface AunStatus {
+    /** True if the AUN socket is bound and the cable is plugged in. */
     connected: boolean;
+    /** The bound UDP port, 0 while there is no socket. */
     localPort: number;
+    /** Entries in the resolved routing table (what listPeers() returns). */
     peerCount: number;
-    /** The per-user aun-map.json path on the server's host (empty if disabled). */
+    /**
+     * The map file's path on the server's host (--aun map-file=, else
+     * BEEBIUM_AUN_MAP_FILEPATH, else the per-user aun-map.json; empty when
+     * disabled with map-file=none).
+     */
     mapFilePath: string;
     /** Entry count (peers + subnets) from the last map-file load. */
     mapFileEntryCount: number;
     /** The last map-file load error, empty on success or an absent file. */
     mapFileError: string;
-    /** The mDNS discovery mode: "on", "announce", "browse" or "off" (#158). */
+    /** The mDNS discovery mode set by --aun discovery=: "on", "announce", "browse" or "off". */
     discoveryMode: string;
 }
 
 /**
  * Where an AUN peer entry came from.
  *
- * Operator-configured peers (CLI `--aun map=`, the preset's
- * `econet.transport.parameters`, or `addPeer()`) always take precedence
- * over discovered peers in the routing table.
+ * Each (net, stn) resolves to one winner by precedence, highest first: `Api`,
+ * `Launch`, `MapFile`, `Discovered`, `Subnet`. The operator sources
+ * (`addPeer()`, CLI `--aun map=` / the preset's
+ * `econet.transport.parameters`, and the map file) all beat discovered
+ * peers. Removing the winner falls back to the next source still present.
  */
 export enum PeerSource {
     Launch = "launch",
@@ -81,7 +88,8 @@ export interface PeerInfo {
      * The source this resolved entry won from: `Launch` (`--aun map=` /
      * preset), `Api` (a runtime `addPeer`), `MapFile` (the per-user map
      * file), `Discovered` (the AUN extension's mDNS subscriber), or `Subnet`
-     * (derived from the map file's subnet convention). Precedence, highest
+     * (materialised from a subnet rule: the map file's `subnets` or
+     * `--aun subnet=`). Precedence, highest
      * first: `Api`, `Launch`, `MapFile`, `Discovered`, `Subnet`.
      */
     source: PeerSource;
@@ -128,11 +136,11 @@ function peerSourceFromProto(source: ProtoAunPeerSource): PeerSource {
 }
 
 /**
- * AUN-specific RPCs (peer table, cable plug, port status).
+ * AUN-specific RPCs (peer table, map file, cable plug, status).
  *
- * Available on the server's gRPC surface only when AUN is the active
- * Econet transport. Check bbc.transport.getActive() first if your
- * code might run against a server configured for Piconet or no
+ * Available whenever the server has the AUN transport loaded; reach it as
+ * bbc.aun (or bbc.aunInstance(id)). Check bbc.transport.getActive() first if
+ * your code might run against a server configured for Piconet or no
  * transport.
  */
 export class Aun {
@@ -156,7 +164,7 @@ export class Aun {
         return this.channel.invoke(SERVICE, method, payload, await this.extensionId.get());
     }
 
-    /** Read the AUN backend status. */
+    /** Read the AUN transport status (link, port, peers, map file, discovery mode). */
     async getStatus(): Promise<AunStatus> {
         const payload = AunGetStatusRequest.encode(
             AunGetStatusRequest.fromPartial({}),
@@ -174,7 +182,11 @@ export class Aun {
         };
     }
 
-    /** Enumerate all configured AUN peers. */
+    /**
+     * The resolved routing table: one entry per (net, stn), carrying the
+     * winning source. Map-file peers whose host did not resolve are not
+     * here; see listMap().
+     */
     async listPeers(): Promise<PeerInfo[]> {
         const payload = AunListPeersRequest.encode(
             AunListPeersRequest.fromPartial({}),
@@ -193,9 +205,10 @@ export class Aun {
     /**
      * Plug or unplug the simulated network cable.
      *
-     * While disconnected the ADLC sees DCD high (no carrier).
+     * While disconnected the ADLC sees DCD high (no carrier). Before the AUN
+     * socket is up the state is remembered and applied when it comes up.
      *
-     * @throws EconetError if the AUN backend is not active or the call fails.
+     * @throws EconetError if the server reports the call failed.
      */
     async setConnected(connected: boolean): Promise<void> {
         const payload = AunSetConnectedRequest.encode(
@@ -209,13 +222,17 @@ export class Aun {
     }
 
     /**
-     * Add an Econet address to UDP endpoint peer mapping.
+     * Add or replace this client's (`Api`) peer mapping for an Econet address.
+     *
+     * `Api` entries take precedence over every other source for that
+     * (net, stn). They work before the AUN socket is up and are not written to
+     * the map file; use addMapPeer() for a peer every instance should share.
      *
      * @param net - Econet network number (0-255).
      * @param stn - Econet station number (1-254).
-     * @param ipAddress - Dotted-quad IP address.
+     * @param ipAddress - Dotted-quad IPv4 address (a DNS name is rejected).
      * @param port - UDP port (0 = use AUN default 32768).
-     * @throws EconetError if the call fails.
+     * @throws EconetError on a validation error (net, stn or ipAddress).
      */
     async addPeer(
         net: number,
@@ -234,9 +251,12 @@ export class Aun {
     }
 
     /**
-     * Remove a peer mapping by Econet address.
+     * Remove the `Api` entry addPeer() made for an Econet address. Entries
+     * from other sources are untouched, so a station also named by the launch
+     * config, the map file or mDNS falls back to that entry. Removing an
+     * address with no `Api` entry is not an error.
      *
-     * @throws EconetError if the call fails.
+     * @throws EconetError if the server reports the call failed.
      */
     async removePeer(net: number, stn: number): Promise<void> {
         const payload = AunRemovePeerRequest.encode(
@@ -250,10 +270,13 @@ export class Aun {
     }
 
     /**
-     * Re-read the per-user aun-map.json on the server now, replacing only the
-     * map file's contributions (`MapFile` peers and the subnet rules); `Api`,
-     * `Launch` and `Discovered` entries are untouched. A modification is
-     * normally picked up automatically on the poll; this forces it.
+     * Re-read the map file on the server now, replacing only its
+     * contributions (`MapFile` peers, the map file's subnet rules, and the
+     * `Subnet` peers materialised from subnet rules); `Api`, `Launch` and
+     * `Discovered` entries and `--aun subnet=` rules are untouched. A
+     * modification is picked up automatically by the mtime poll while
+     * discovery browses (discovery=on or browse); this forces it. With the
+     * map file disabled (map-file=none) it does nothing.
      *
      * @throws {EconetError} If the file was present but could not be parsed.
      */
@@ -273,7 +296,8 @@ export class Aun {
      * own file atomically (preserving order and unknown keys) and applies the
      * change to its peer set at once; other instances pick it up from the poll.
      *
-     * @throws {EconetError} On a validation or write error (names the field).
+     * @throws {EconetError} On a validation or write error (names the field),
+     *     or when the map file is disabled (map-file=none).
      */
     async addMapPeer(
         net: number,
@@ -295,7 +319,8 @@ export class Aun {
     /**
      * Remove a peer from the map file. Resolves to whether an entry was removed.
      *
-     * @throws {EconetError} On a write error.
+     * @throws {EconetError} On a read or write error, or when the map file is
+     *     disabled.
      */
     async removeMapPeer(net: number, stn: number): Promise<boolean> {
         const payload = AunRemoveMapPeerRequest.encode(
@@ -310,9 +335,11 @@ export class Aun {
     }
 
     /**
-     * Add or replace a subnet rule (`a.b.c.0/24`) in the map file.
+     * Add or replace the subnet rule for `net` (`a.b.c.0/24`) in the map file:
+     * every station on the net maps to `a.b.c.<station>` port 32768.
      *
-     * @throws {EconetError} On a validation or write error.
+     * @throws {EconetError} On a validation or write error, or when the map
+     *     file is disabled.
      */
     async addMapSubnet(net: number, subnet: string, label = ""): Promise<void> {
         const payload = AunAddMapSubnetRequest.encode(
@@ -328,7 +355,8 @@ export class Aun {
     /**
      * Remove a subnet rule from the map file. Resolves to whether one was removed.
      *
-     * @throws {EconetError} On a write error.
+     * @throws {EconetError} On a read or write error, or when the map file is
+     *     disabled.
      */
     async removeMapSubnet(net: number): Promise<boolean> {
         const payload = AunRemoveMapSubnetRequest.encode(
@@ -344,7 +372,8 @@ export class Aun {
 
     /**
      * List the map file's entries with labels and host resolution, distinct
-     * from listPeers() which lists the live resolved routing table.
+     * from listPeers() which lists the live resolved routing table. Empty
+     * when the map file is disabled.
      *
      * @throws {EconetError} If the file was present but could not be parsed.
      */
