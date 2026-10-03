@@ -81,7 +81,7 @@ Both transports are configured via a single `econet.transport` object that names
 
 The `name` field selects the transport extension (`aun`, `piconet`, or any future extension). `parameters` is the same key/value map the CLI populates from `--<extension> key=value:key=value`; a repeatable (list) parameter such as AUN's `map` or `subnet` takes either a single string or a JSON array of strings. Only one `transport` is permitted per `econet` block on BBC machine variants; per-machine cardinality is enforced at machine-setup time, not in the preset loader. `station` is an integer 1-254, or the string `"auto"` / `"auto:<lo>-<hi>"` to choose a free number at launch (AUN only; the bundled `model-b-disc-aun-auto` preset uses it).
 
-A `--aun` (or `--piconet`) on the command line overrides the preset's transport: with the same transport name the parameters merge, the command line winning key by key; with a different name the command line's transport replaces the preset's (#150).
+A `--aun` (or `--piconet`) on the command line overrides the preset's transport: with the same transport name the parameters merge, the command line winning key by key; with a different name the command line's transport replaces the preset's (#150). The command line's parameters include the manifest defaults for keys it does not give, and those currently win over the preset too (so a preset's `port`, `net` or `discovery` must be repeated on the command line); see [cli.md](cli.md).
 
 The legacy preset keys `econet.aun_port` and `econet.piconet` are rejected with a message pointing at the new shape. Other unknown keys in the `econet` section, including the old `econet.aun_map`, are ignored.
 
