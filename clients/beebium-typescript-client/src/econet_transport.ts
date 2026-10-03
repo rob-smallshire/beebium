@@ -13,6 +13,7 @@ import type {
     GetActiveTransportResponse as ProtoGetActiveTransportResponse,
 } from "./generated/econet_transport.js";
 import { promisify } from "./call-utils.js";
+import { EconetError } from "./exceptions.js";
 
 export interface TransportInfo {
     /**
@@ -33,8 +34,9 @@ export interface TransportInfo {
     /**
      * Opaque, server-assigned instance id. This is the key to pass to
      * ExtensionUiService (SubscribeView / Dispatch) to drive this
-     * transport's control panel; typically a UUID, with no relationship
-     * to `name`. Discover it here rather than hardcoding names.
+     * transport's control panel, and the extensionId that routes the
+     * transport's typed RPCs over ExtensionRpc. Discover it here rather
+     * than hardcoding names.
      */
     id: string;
 
@@ -105,5 +107,26 @@ export class EconetTransport {
             id: response.active.id,
             hasUi: response.active.hasUi,
         };
+    }
+
+    /**
+     * The ExtensionRpc routing id for the transport called `name`.
+     *
+     * Returns the id of the single loaded transport with that name. When
+     * none is loaded the result is empty, which leaves the server to route
+     * by service name and report the missing transport itself. When several
+     * are loaded the name cannot choose between them: this throws an
+     * EconetError naming their ids, any of which addresses one instance.
+     */
+    async routingId(name: string): Promise<string> {
+        const matches = (await this.list()).filter((t) => t.name === name);
+        if (matches.length > 1) {
+            const ids = matches.map((t) => t.id).join(", ");
+            throw new EconetError(
+                `${matches.length} instances of Econet transport '${name}' are loaded; ` +
+                    `address one by its id: ${ids}`,
+            );
+        }
+        return matches.length === 1 ? matches[0]!.id : "";
     }
 }

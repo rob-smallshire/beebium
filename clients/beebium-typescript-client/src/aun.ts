@@ -36,7 +36,8 @@ import {
     AunListMapResponse,
     AunPeerSource as ProtoAunPeerSource,
 } from "./generated/aun.js";
-import type { ExtensionChannel } from "./extension_rpc.js";
+import { ExtensionIdResolver } from "./extension_rpc.js";
+import type { ExtensionChannel, ExtensionIdSource } from "./extension_rpc.js";
 import { EconetError } from "./exceptions.js";
 
 /** The logical service name the AUN extension's dispatcher registers. */
@@ -134,9 +135,23 @@ function peerSourceFromProto(source: ProtoAunPeerSource): PeerSource {
  */
 export class Aun {
     private readonly channel: ExtensionChannel;
+    private readonly extensionId: ExtensionIdResolver;
 
-    constructor(channel: ExtensionChannel) {
+    /**
+     * @param channel The ExtensionRpc channel that carries the messages.
+     * @param extensionId The transport instance to address: the id that
+     *     EconetTransportService reports for it, or a function that discovers
+     *     it on first use. Empty routes by service name, which the server
+     *     accepts only while one loaded instance offers the service.
+     */
+    constructor(channel: ExtensionChannel, extensionId: ExtensionIdSource = "") {
         this.channel = channel;
+        this.extensionId = new ExtensionIdResolver(extensionId);
+    }
+
+    /** Unary call to this transport instance's dispatcher. */
+    private async invoke(method: string, payload: Uint8Array): Promise<Uint8Array> {
+        return this.channel.invoke(SERVICE, method, payload, await this.extensionId.get());
     }
 
     /** Read the AUN backend status. */
@@ -144,7 +159,7 @@ export class Aun {
         const payload = AunGetStatusRequest.encode(
             AunGetStatusRequest.fromPartial({}),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "GetStatus", payload);
+        const reply = await this.invoke("GetStatus", payload);
         const response = AunGetStatusResponse.decode(reply);
         return {
             connected: response.connected,
@@ -161,7 +176,7 @@ export class Aun {
         const payload = AunListPeersRequest.encode(
             AunListPeersRequest.fromPartial({}),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "ListPeers", payload);
+        const reply = await this.invoke("ListPeers", payload);
         const response = AunListPeersResponse.decode(reply);
         return response.peers.map((p) => ({
             net: p.net,
@@ -183,7 +198,7 @@ export class Aun {
         const payload = AunSetConnectedRequest.encode(
             AunSetConnectedRequest.fromPartial({ connected }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "SetConnected", payload);
+        const reply = await this.invoke("SetConnected", payload);
         const response = AunSetConnectedResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -208,7 +223,7 @@ export class Aun {
         const payload = AunAddPeerRequest.encode(
             AunAddPeerRequest.fromPartial({ net, stn, ipAddress, port }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "AddPeer", payload);
+        const reply = await this.invoke("AddPeer", payload);
         const response = AunAddPeerResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -224,7 +239,7 @@ export class Aun {
         const payload = AunRemovePeerRequest.encode(
             AunRemovePeerRequest.fromPartial({ net, stn }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "RemovePeer", payload);
+        const reply = await this.invoke("RemovePeer", payload);
         const response = AunRemovePeerResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -243,7 +258,7 @@ export class Aun {
         const payload = AunReloadMapRequest.encode(
             AunReloadMapRequest.fromPartial({}),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "ReloadMap", payload);
+        const reply = await this.invoke("ReloadMap", payload);
         const response = AunReloadMapResponse.decode(reply);
         if (response.error) {
             throw new EconetError(response.error);
@@ -267,7 +282,7 @@ export class Aun {
         const payload = AunAddMapPeerRequest.encode(
             AunAddMapPeerRequest.fromPartial({ net, stn, host, port, label }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "AddMapPeer", payload);
+        const reply = await this.invoke("AddMapPeer", payload);
         const response = AunAddMapPeerResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -283,7 +298,7 @@ export class Aun {
         const payload = AunRemoveMapPeerRequest.encode(
             AunRemoveMapPeerRequest.fromPartial({ net, stn }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "RemoveMapPeer", payload);
+        const reply = await this.invoke("RemoveMapPeer", payload);
         const response = AunRemoveMapPeerResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -300,7 +315,7 @@ export class Aun {
         const payload = AunAddMapSubnetRequest.encode(
             AunAddMapSubnetRequest.fromPartial({ net, subnet, label }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "AddMapSubnet", payload);
+        const reply = await this.invoke("AddMapSubnet", payload);
         const response = AunAddMapSubnetResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -316,7 +331,7 @@ export class Aun {
         const payload = AunRemoveMapSubnetRequest.encode(
             AunRemoveMapSubnetRequest.fromPartial({ net }),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "RemoveMapSubnet", payload);
+        const reply = await this.invoke("RemoveMapSubnet", payload);
         const response = AunRemoveMapSubnetResponse.decode(reply);
         if (!response.success) {
             throw new EconetError(response.error);
@@ -334,7 +349,7 @@ export class Aun {
         const payload = AunListMapRequest.encode(
             AunListMapRequest.fromPartial({}),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "ListMap", payload);
+        const reply = await this.invoke("ListMap", payload);
         const response = AunListMapResponse.decode(reply);
         if (response.error) {
             throw new EconetError(response.error);

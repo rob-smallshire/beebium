@@ -385,4 +385,53 @@ describe("Aun", () => {
             await expect(new Aun(channel).listMap()).rejects.toThrow(EconetError);
         });
     });
+
+    describe("ExtensionRpc routing", () => {
+        const status = { GetStatus: ok(AunGetStatusResponse, { connected: true }) };
+
+        it("routes by service name when no instance id is given", async () => {
+            const { channel } = fakeChannel(status);
+            await new Aun(channel).getStatus();
+            const invoke = (channel as any).invoke;
+            expect(invoke.mock.calls[0][3]).toBe("");
+        });
+
+        it("passes a fixed transport instance id on every call", async () => {
+            const { channel } = fakeChannel({
+                ...status,
+                ListPeers: ok(AunListPeersResponse, { peers: [] }),
+            });
+            const aun = new Aun(channel, "aun-1");
+            await aun.getStatus();
+            await aun.listPeers();
+            const invoke = (channel as any).invoke;
+            expect(invoke.mock.calls[0][3]).toBe("aun-1");
+            expect(invoke.mock.calls[1][3]).toBe("aun-1");
+        });
+
+        it("resolves a deferred instance id once and reuses it", async () => {
+            const { channel } = fakeChannel(status);
+            const resolve = vi.fn(async () => "aun-resolved");
+            const aun = new Aun(channel, resolve);
+            await aun.getStatus();
+            await aun.getStatus();
+            const invoke = (channel as any).invoke;
+            expect(invoke.mock.calls[0][3]).toBe("aun-resolved");
+            expect(invoke.mock.calls[1][3]).toBe("aun-resolved");
+            expect(resolve).toHaveBeenCalledTimes(1);
+        });
+
+        it("retries the deferred id after a failed resolution", async () => {
+            const { channel } = fakeChannel(status);
+            const resolve = vi
+                .fn<() => Promise<string>>()
+                .mockRejectedValueOnce(new Error("unreachable"))
+                .mockResolvedValue("aun-late");
+            const aun = new Aun(channel, resolve);
+            await expect(aun.getStatus()).rejects.toThrow("unreachable");
+            await aun.getStatus();
+            const invoke = (channel as any).invoke;
+            expect(invoke.mock.calls[0][3]).toBe("aun-late");
+        });
+    });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { EconetTransport } from "../src/econet_transport.js";
+import { EconetError } from "../src/exceptions.js";
 
 function createMockStub(methods: Record<string, (req: any) => any>) {
     const stub: Record<string, any> = {};
@@ -112,6 +113,47 @@ describe("EconetTransport", () => {
             const active = await transport.getActive();
             expect(active).toBeDefined();
             expect(active!.name).toBe("piconet");
+        });
+    });
+
+    describe("routingId", () => {
+        const entry = (name: string, id: string) => ({
+            name,
+            description: "",
+            active: true,
+            id,
+            hasUi: false,
+        });
+
+        it("returns the id of the single transport with that name", async () => {
+            const stub = createMockStub({
+                listTransports: () => ({
+                    transports: [entry("piconet", "piconet"), entry("aun", "aun-7")],
+                }),
+            });
+            const transport = new EconetTransport(stub as any);
+            expect(await transport.routingId("aun")).toBe("aun-7");
+        });
+
+        it("returns an empty id when no transport has that name", async () => {
+            // The server then routes by service name and reports its own
+            // NOT_FOUND for a transport that is not loaded.
+            const stub = createMockStub({
+                listTransports: () => ({ transports: [entry("piconet", "piconet")] }),
+            });
+            const transport = new EconetTransport(stub as any);
+            expect(await transport.routingId("aun")).toBe("");
+        });
+
+        it("rejects a name shared by several transports, naming their ids", async () => {
+            const stub = createMockStub({
+                listTransports: () => ({
+                    transports: [entry("aun", "aun"), entry("aun", "aun-1")],
+                }),
+            });
+            const transport = new EconetTransport(stub as any);
+            await expect(transport.routingId("aun")).rejects.toThrow(EconetError);
+            await expect(transport.routingId("aun")).rejects.toThrow(/aun, aun-1/);
         });
     });
 });

@@ -34,7 +34,11 @@ export { System, type Provenance, type MachineIdentity, type ServerStatusEvent, 
 export { Disc, Drive, type DiscMetadata, type DriveStatus, type DiscControllerStatus, type DiscEvent, type DiscControllerInfo, DriveState, DiscEventType, DiscErrorKind } from "./disc.js";
 export { Econet, type EconetStatus, type AdlcStatus, type HandshakeStatus } from "./econet.js";
 export { Serial, type SerialStatus } from "./serial.js";
-export { ExtensionChannel } from "./extension_rpc.js";
+export {
+    ExtensionChannel,
+    ExtensionIdResolver,
+    type ExtensionIdSource,
+} from "./extension_rpc.js";
 export { RpcSerial, type RpcSerialStatus } from "./rpc_serial.js";
 export {
     HostSerial,

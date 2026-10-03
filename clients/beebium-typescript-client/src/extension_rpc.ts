@@ -21,10 +21,48 @@ import { toAsyncIterable } from "./stream-utils.js";
 /**
  * Thin wrapper over the core's ExtensionRpc stub.
  *
- * Routing: when extensionId is empty the core routes by service name, which is
- * unambiguous while an extension type is a singleton (the common case today). A
- * future discovery method will let a client target a specific instance.
+ * Routing: extensionId selects an instance -- a peripheral extension's id (from
+ * PeripheralExtensionService) or an Econet transport's id (from
+ * EconetTransportService). When it is empty the core routes by service name,
+ * which succeeds only while exactly one loaded instance offers the service;
+ * with more than one the call fails with FAILED_PRECONDITION naming the
+ * candidate ids.
  */
+/**
+ * The instance an adapter routes its ExtensionRpc calls to: an id known up
+ * front, or a function that discovers it on first use (for example by asking
+ * EconetTransportService which transport instance is loaded).
+ */
+export type ExtensionIdSource = string | (() => Promise<string>);
+
+/**
+ * Resolves an ExtensionIdSource once and remembers the answer. A failed
+ * discovery is not remembered, so the next call tries again.
+ */
+export class ExtensionIdResolver {
+    private readonly source: ExtensionIdSource;
+    private resolved?: Promise<string>;
+
+    constructor(source: ExtensionIdSource = "") {
+        this.source = source;
+    }
+
+    get(): Promise<string> {
+        if (this.resolved === undefined) {
+            const source = this.source;
+            const pending =
+                typeof source === "string" ? Promise.resolve(source) : source();
+            this.resolved = pending;
+            pending.catch(() => {
+                if (this.resolved === pending) {
+                    this.resolved = undefined;
+                }
+            });
+        }
+        return this.resolved;
+    }
+}
+
 export class ExtensionChannel {
     private readonly stub: ExtensionRpcClient;
 

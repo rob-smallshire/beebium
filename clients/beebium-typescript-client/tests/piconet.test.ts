@@ -37,6 +37,7 @@ describe("Piconet", () => {
                 "PiconetService",
                 "GetStatus",
                 expect.anything(),
+                "",
             );
             expect(status.devicePath).toBe("/dev/tty.usbmodem101");
             expect(status.serialOpen).toBe(true);
@@ -63,6 +64,20 @@ describe("Piconet", () => {
 
             await piconet.getStatus();
             expect(seenLength).toBe(0);
+        });
+    });
+
+    describe("ExtensionRpc routing", () => {
+        it("passes the transport instance id", async () => {
+            const { channel } = mockChannel(() => encodeStatus("/dev/ttyACM0", true));
+            await new Piconet(channel, "piconet-1").getStatus();
+            expect((channel as any).invoke.mock.calls[0][3]).toBe("piconet-1");
+        });
+
+        it("routes by service name when no instance id is given", async () => {
+            const { channel } = mockChannel(() => encodeStatus("/dev/ttyACM0", true));
+            await new Piconet(channel).getStatus();
+            expect((channel as any).invoke.mock.calls[0][3]).toBe("");
         });
     });
 });

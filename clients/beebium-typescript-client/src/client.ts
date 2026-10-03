@@ -324,24 +324,54 @@ export class Beebium {
         return this._tube;
     }
 
-    /** Access AUN-specific Econet operations (peer table, cable plug, port status). */
+    /**
+     * Access AUN-specific Econet operations (peer table, cable plug, port status).
+     *
+     * Addresses the loaded AUN transport by the instance id that
+     * EconetTransportService reports, discovered on first use. On a machine
+     * with several AUN transports use aunInstance(id).
+     */
     get aun(): Aun {
         if (this._aun === undefined) {
             this._aun = new Aun(
                 new ExtensionChannel(this.connection.extensionRpcStub),
+                () => this.transport.routingId("aun"),
             );
         }
         return this._aun;
     }
 
-    /** Access Piconet-specific operations (USB-CDC adapter status). */
+    /**
+     * AUN-specific operations on one transport instance, addressed by the
+     * id from bbc.transport.list().
+     */
+    aunInstance(id: string): Aun {
+        return new Aun(new ExtensionChannel(this.connection.extensionRpcStub), id);
+    }
+
+    /**
+     * Access Piconet-specific operations (USB-CDC adapter status).
+     *
+     * Addresses the loaded Piconet transport by the instance id that
+     * EconetTransportService reports, discovered on first use. On a machine
+     * with several Piconet transports use piconetInstance(id).
+     */
     get piconet(): Piconet {
         if (this._piconet === undefined) {
             this._piconet = new Piconet(
                 new ExtensionChannel(this.connection.extensionRpcStub),
+                () => this.transport.routingId("piconet"),
             );
         }
         return this._piconet;
+    }
+
+    /**
+     * Piconet-specific operations on one transport instance, addressed by
+     * the id from bbc.transport.list().
+     */
+    piconetInstance(id: string): Piconet {
+        return new Piconet(new ExtensionChannel(this.connection.extensionRpcStub), id);
     }
 
     /** Discover which Econet transport is active on the server. */

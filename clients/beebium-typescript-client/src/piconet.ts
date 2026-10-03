@@ -15,7 +15,8 @@ import {
     PiconetGetStatusRequest,
     PiconetGetStatusResponse,
 } from "./generated/piconet_service.js";
-import type { ExtensionChannel } from "./extension_rpc.js";
+import { ExtensionIdResolver } from "./extension_rpc.js";
+import type { ExtensionChannel, ExtensionIdSource } from "./extension_rpc.js";
 
 /** The logical service name the piconet extension's dispatcher registers. */
 const SERVICE = "PiconetService";
@@ -51,9 +52,23 @@ export interface PiconetStatus {
  */
 export class Piconet {
     private readonly channel: ExtensionChannel;
+    private readonly extensionId: ExtensionIdResolver;
 
-    constructor(channel: ExtensionChannel) {
+    /**
+     * @param channel The ExtensionRpc channel that carries the messages.
+     * @param extensionId The transport instance to address: the id that
+     *     EconetTransportService reports for it, or a function that discovers
+     *     it on first use. Empty routes by service name, which the server
+     *     accepts only while one loaded instance offers the service.
+     */
+    constructor(channel: ExtensionChannel, extensionId: ExtensionIdSource = "") {
         this.channel = channel;
+        this.extensionId = new ExtensionIdResolver(extensionId);
+    }
+
+    /** Unary call to this transport instance's dispatcher. */
+    private async invoke(method: string, payload: Uint8Array): Promise<Uint8Array> {
+        return this.channel.invoke(SERVICE, method, payload, await this.extensionId.get());
     }
 
     /** Read the Piconet adapter status (device path + serial open). */
@@ -61,7 +76,7 @@ export class Piconet {
         const payload = PiconetGetStatusRequest.encode(
             PiconetGetStatusRequest.fromPartial({}),
         ).finish();
-        const reply = await this.channel.invoke(SERVICE, "GetStatus", payload);
+        const reply = await this.invoke("GetStatus", payload);
         const response = PiconetGetStatusResponse.decode(reply);
         return {
             devicePath: response.devicePath,
