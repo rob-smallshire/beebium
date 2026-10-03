@@ -1,13 +1,30 @@
 # A persistent AUN peer map file
 
-Status: draft for discussion (2026-10-01). Prompted by mph1708's Stardot
+**Status (October 2026): implemented as proposed** (#139 reader, MapFile and
+Subnet provenances, subnet rules, `map-file=`/`subnet=`, reload; #141 the
+`AunService` map RPCs and the seven CLI subcommands; #140 the converter
+`tools/aun/convert_beebem_econet_cfg.py`; #142 and #144 the sidebar editing,
+built on the EditableList and FileReference primitives, with the file shown
+as "Shared AUN map"; #143 the bridge acceptance test; #146 poll-driven
+reloads refresh the sidebar). Differences from the text below: the mtime
+poll rides the discovery subscriber's sweep, so it runs only while the
+instance browses (`--aun discovery=on` or `browse`); with `off` or
+`announce` a hand edit is picked up by `ReloadMap`, an edit RPC, or a
+relaunch. An entry for this machine's own station is not filtered out (it
+is applied like any other peer, and `--station auto` counts it as
+occupied). The bridge acceptance test still maps the bridge with `--aun
+map=`; the map-file form of the recipe is in
+[`networking.md`](../networking.md#connecting-to-a-pieconetbridge). The
+user-facing description is [`networking.md`](../networking.md#the-aun-map-file-aun-mapjson).
+
+Originally drafted for discussion 2026-10-01. Prompted by mph1708's Stardot
 question (https://stardot.org.uk/forums/viewtopic.php?p=493685#p493685):
 how to link the Station 80 AUN preset to a PiEconetBridge that already
 serves a wired Econet, a BeebEm laptop and a RISC OS Pi 400 over AUN.
 Related: #55 (peer-table RPCs need an active backend), #54 (enable does not
 bind), #67 (pick a free station from mDNS), #66 (multi-homed case 2).
 
-## 1. Where the peer map comes from today
+## 1. Where the peer map came from (before #55)
 
 The AUN routing table (`AunBackend`'s peer table) is populated from three
 places, and every entry carries one of two provenances:
@@ -254,10 +271,10 @@ EXPOSE HOST 1.254 ON PORT *:32768
 
 `EXPOSE` lines must come last: upstream's config parser requires it.
 
-Beebium side, today, by `--aun map=`: `--station 80 --aun
+Beebium side, by `--aun map=`: `--station 80 --aun
 net=2:port=32768:map=1.254@<bridge-host>@32768` with an NFS or ANFS ROM in a
-sideways slot. `*NET`, `*I AM 1.254 SYST` and `*CAT` then complete. Once the
-map file lands: `add-aun-peer 1.254 <bridge-host> 32768 --label
+sideways slot. `*NET`, `*I AM 1.254 SYST` and `*CAT` then complete. With the
+map file: `add-aun-peer 1.254 <bridge-host> 32768 --label
 "PiEconetBridge FS"` (one `peers` entry in `aun-map.json`), then launch the
 Station 80 AUN preset with `--aun net=2`, and every other instance on the host
 sees the same entry.
@@ -270,8 +287,9 @@ the config has no wire net line (see
 `docker/pieconetbridge/run-recipe.sh` starts the daemon in a container with
 host networking, rendered from the config above, and a Model B mapped by
 `--aun map=` completes the login and the catalogue; a negative control with
-the map entry removed fails with the filing system's no-reply error. When the
-map file lands, the same test maps the bridge by file instead.
+the map entry removed fails with the filing system's no-reply error. The test
+still maps the bridge with `--aun map=`; it was not switched to the map file
+when #139 landed.
 
 What the test ran differs from the recipe in two ways, both forced by running
 both ends on one Linux host rather than on two:
@@ -329,7 +347,8 @@ All four were addressed with step 1 (#55), which moved the peer table into
   one entry per source, so removing the `Api` winner now falls back to a
   `Discovered` entry still present; code and doc agree.
 - ~~`AunService.AddPeer` documents `net` as 0..127 but accepts up to 255.~~
-  Done: the dispatcher now rejects `net > 127`.
+  Done: the dispatcher then rejected `net > 127`; #139 later widened every
+  net field to 0..255 (section 8), and it now rejects `net > 255`.
 - ~~`econet-integration.md` says `AunService` is contributed through
   `grpc_services()`; it is served over ExtensionRpc.~~ Done: that doc now
   describes the `AunDispatcher` over `ExtensionRpc`.

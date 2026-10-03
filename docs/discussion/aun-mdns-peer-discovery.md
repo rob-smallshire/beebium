@@ -2,8 +2,14 @@
 
 Replacing the manual `--aun map=` peer table with opportunistic discovery of other AUN endpoints on the local network, using the standard mDNS / DNS-SD machinery Beebium already employs for service discovery.
 
-Status: **Implemented** on branch `aun-mdns-peer-discovery`. Beebium publishes and consumes `_aun._udp` announcements; all three platforms have full bidirectional support -- macOS (Bonjour), Windows (Apple Bonjour when installed, else native DnsService*), and Linux (Avahi advertise + browse). See `docs/networking.md` for the user-facing description and known platform gaps.
+**Status (October 2026): implemented and merged.** Beebium publishes and browses `_aun._udp` on all three platforms -- macOS (Bonjour), Windows (Apple Bonjour when installed, else native DnsService*), and Linux (Avahi advertise + browse). See [`docs/networking.md`](../networking.md) for the user-facing description. What differs from the proposal below:
 
+* Net numbers are 0..255 everywhere (`--aun net=`, the `net=` TXT field, `map=`, `subnet=`), not 0..127 (#139).
+* Discovered peers are one layer of the transport's `AunPeerSet`, resolved by provenance precedence Api > Launch > MapFile > Discovered > Subnet. A shadowed discovered peer is still recorded and reappears if the operator entry is removed (#54/#55); a per-user map file (`aun-map.json`) adds the MapFile and Subnet layers (#139, see [`aun-peer-map-file.md`](aun-peer-map-file.md)).
+* Eviction is not TTL-based: a remote peer goes when its DNS-SD advertisement is withdrawn; a same-host peer goes when a ~2.5 s bind-probe liveness sweep finds its port free.
+* Two stations claiming one `(net, station)`: first live station wins, the refused one is parked and adopted when the number frees, and a collision report shows the collisions in effect (#68, #138); `since=` gives incumbent/newcomer wording (#147); a renumbered station rebuilds from remembered announcements (#148).
+* `--aun discovery=off|announce|browse|on` (default `on`) chooses whether to publish and/or browse (#158); `--station auto` uses discovery to pick a free number (#67, #160, #161).
+* DNS-SD refs are torn down by joining the event thread before deallocating, and the advertiser is `select()`-driven like the browser (#155).
 ---
 
 ## Problem
@@ -41,7 +47,7 @@ Mandatory:
 * `version=1` — schema version of the announcement; bump on incompatible changes. Consumers should ignore announcements with a `version` they don't understand rather than guessing.
 * `station=N` — Econet station number (1-254). Mandatory because there is no useful default.
 * `port=N` — UDP port the AUN endpoint is bound to. Mandatory.
-* `net=N` — Econet net number (0-127). Mandatory because the protocol allows non-zero nets and consumers must know which net to address us as. **See "Net number semantics" below for why this can't sensibly default-by-omission.**
+* `net=N` — Econet net number (0-255). Mandatory because the protocol allows non-zero nets and consumers must know which net to address us as. **See "Net number semantics" below for why this can't sensibly default-by-omission.**
 
 Optional:
 
@@ -68,13 +74,13 @@ This is the subtle bit. The conversation that produced this doc spent considerab
 
 **Implication for the announcement:** `net=N` must be a per-station self-declaration that consumers populate into their peer table verbatim. It cannot be omitted-with-default-0 because that would silently force every announcement into the flat-cloud model, breaking deployments that legitimately use multi-net topologies. Make it mandatory.
 
-**For Beebium specifically (today):** `AunBackend::local_net` is hardcoded to 0. Beebium instances will only ever announce `net=0` until that hardcoding is fixed. The fix (making `local_net` configurable) is part of this work package — see "Implementation sequence" below.
+**For Beebium specifically:** when this was written `AunBackend::local_net` was hardcoded to 0. It is now configurable with `--aun net=N` (a preset's `econet.transport.parameters.net`) and announced verbatim — see "Implementation sequence" below.
 
 ### Operator-configured peers always override discovered peers
 
 `--aun map=` (and equivalent preset entries) are operator intent and authoritative. mDNS-discovered peers are advisory and only apply when the operator hasn't said otherwise. This means:
 
-* If `--aun map=0.42@10.0.0.1@32768` is configured AND an announcement arrives claiming `(net=0, stn=42)` at a different `(ip, port)`, the configured entry wins. The discovered entry is ignored (or logged as a conflict; not yet decided).
+* If `--aun map=0.42@10.0.0.1@32768` is configured AND an announcement arrives claiming `(net=0, stn=42)` at a different `(ip, port)`, the configured entry wins. The discovered entry is recorded but shadowed, so it takes over if the configured entry is later removed.
 * Discovered peers populate the table for `(net, stn)` pairs that the operator has not configured.
 * Removing a `--aun map=` entry doesn't remove the corresponding discovered entry if one exists; the discovered entry takes over.
 
