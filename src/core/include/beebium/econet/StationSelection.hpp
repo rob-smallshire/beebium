@@ -32,16 +32,17 @@
 
 namespace beebium::econet {
 
-// The default auto range: above the conventional low station numbers and below
-// the file-server and bridge numbers (254 and up).
-inline constexpr std::uint8_t kAutoStationDefaultLo = 80;
-inline constexpr std::uint8_t kAutoStationDefaultHi = 253;
-
 // An inclusive range of candidate station numbers, lo <= hi, both in 1..254.
 struct StationRange {
-    std::uint8_t lo = kAutoStationDefaultLo;
-    std::uint8_t hi = kAutoStationDefaultHi;
+    std::uint8_t lo = 1;
+    std::uint8_t hi = 253;
 };
+
+// The one named default auto range. 1-253: station 0 and 255 are reserved and
+// 254 is the conventional file server, so 1-253 is every usable number; starting
+// at 1 also keeps an automatic client clear of the built-in fixed presets
+// (80, 81) and the file server (254) in practice.
+inline constexpr StationRange kAutoStationDefaultRange{};
 
 // A parsed `--station` value: a fixed number, or an automatic choice within a
 // range. `fixed` is meaningful only when !is_auto; `range` only when is_auto.
@@ -53,7 +54,7 @@ struct StationSpec {
 
 // Parse a `--station` / preset `econet.station` value.
 //   "1".."254"       -> a fixed station
-//   "auto"           -> automatic, default range 80-253
+//   "auto"           -> automatic, default range 1-253
 //   "auto:<lo>-<hi>" -> automatic, the given inclusive range
 // Returns the spec, or nullopt with a human-readable reason in `error` for an
 // out-of-range number, a malformed range, lo > hi, or any other bad form.
@@ -112,7 +113,7 @@ inline std::optional<StationSpec> parse_station_spec(std::string_view value,
     StationSpec spec;
     spec.is_auto = true;
     if (rest.empty()) {
-        spec.range = StationRange{kAutoStationDefaultLo, kAutoStationDefaultHi};
+        spec.range = kAutoStationDefaultRange;
         return spec;
     }
     if (rest.front() != ':') {

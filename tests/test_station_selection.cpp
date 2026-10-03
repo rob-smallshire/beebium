@@ -47,8 +47,10 @@ TEST_CASE("parse_station_spec accepts bare auto with the default range",
     auto spec = parse_station_spec("auto", error);
     REQUIRE(spec.has_value());
     CHECK(spec->is_auto);
-    CHECK(spec->range.lo == kAutoStationDefaultLo);
-    CHECK(spec->range.hi == kAutoStationDefaultHi);
+    CHECK(spec->range.lo == kAutoStationDefaultRange.lo);
+    CHECK(spec->range.hi == kAutoStationDefaultRange.hi);
+    CHECK(spec->range.lo == 1);
+    CHECK(spec->range.hi == 253);
     CHECK(error.empty());
 
     SECTION("auto is case-insensitive") {

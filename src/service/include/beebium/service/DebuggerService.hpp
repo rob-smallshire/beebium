@@ -238,6 +238,25 @@ public:
         counterpart_stop_cb_ = std::move(cb);
     }
 
+    // Launch-path coordination for --station auto (issue #67). The station
+    // selection (an mDNS browse of up to a few seconds) runs AFTER the gRPC
+    // server is listening, so a client -- the macOS app -- can connect and call
+    // Run() while it is still in progress. Run() waits (bounded) for the
+    // selection to finish before resuming, so that early Run is honoured and
+    // the machine starts once Econet is enabled on the chosen number, rather
+    // than being rejected as "already running" or lost. begin/end bracket the
+    // selection on the launch thread.
+    void begin_startup_selection() {
+        startup_selection_pending_.store(true, std::memory_order_release);
+    }
+    void end_startup_selection() {
+        {
+            std::lock_guard<std::mutex> lock(startup_mutex_);
+            startup_selection_pending_.store(false, std::memory_order_release);
+        }
+        startup_cv_.notify_all();
+    }
+
 private:
     CpuDebugTarget& machine_;
     // The target's CPU description, cached once at construction, and a
@@ -288,6 +307,11 @@ private:
     // mutex_ alone.
     std::mutex control_mutex_;
     std::mutex mutex_;
+
+    // --station auto launch coordination (see begin/end_startup_selection).
+    std::atomic<bool> startup_selection_pending_{false};
+    std::mutex startup_mutex_;
+    std::condition_variable startup_cv_;
     std::vector<BreakpointRecord> breakpoints_;
     std::atomic<uint32_t> next_breakpoint_id_{1};
     std::string halt_reason_;
@@ -577,6 +601,19 @@ grpc::Status DebuggerControlServiceImpl::Run(
     grpc::ServerContext* /*context*/,
     const Empty* /*request*/,
     RunResponse* response) {
+
+    // A --station auto selection may still be running on the launch thread
+    // (issue #67): the port is printed before it, so a client can connect and
+    // Run() while it is in progress. Wait (bounded, no locks held) for it to
+    // finish -- Econet is enabled when it does -- then resume, so this early
+    // Run starts the machine rather than racing the selection. Bounded so the
+    // RPC never blocks indefinitely even if selection somehow never signals.
+    if (startup_selection_pending_.load(std::memory_order_acquire)) {
+        std::unique_lock<std::mutex> lock(startup_mutex_);
+        startup_cv_.wait_for(lock, std::chrono::seconds(30), [this] {
+            return !startup_selection_pending_.load(std::memory_order_acquire);
+        });
+    }
 
     // Execution-state change: serialise with entry mutations (see the mutex
     // ordering note) so a resume cannot slip into a mutation's pause window.

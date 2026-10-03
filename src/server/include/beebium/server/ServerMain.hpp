@@ -592,7 +592,7 @@ void print_usage(const char* program_name) {
 
     if constexpr (HasEconetSocket<Memory>) {
         std::cerr << "  --station <n>|auto[:lo-hi]  Econet station number (enables Econet);\n"
-                  << "                           'auto' picks a free number in lo-hi (default 80-253)\n";
+                  << "                           'auto' picks a free number in lo-hi (default 1-253)\n";
     }
 
 
@@ -1855,6 +1855,23 @@ void apply_startup_options(MachineType& machine, const ServerConfig<MachineType>
     }
 }
 
+// Enter the --wait=api paused-at-first-instruction state: complete the reset
+// sequence (7 cycles) so PC holds the real reset vector (read from $FFFC/$FFFD
+// during cycles 4-6), then pause. The emulation loop then parks here until a
+// Run() RPC resumes. Factored out so the `start` path can enter this state
+// BEFORE a deferred --station auto selection, so a client that connects the
+// moment the port appears and calls Run() finds the machine paused (and Run
+// waits for the selection) rather than racing it. See issue #67.
+template<typename MachineType>
+void enter_api_wait_state(MachineType& machine) {
+    machine.run(7);
+    machine.pause();
+    std::cout << "Paused at first instruction (PC=$"
+              << std::hex << std::uppercase
+              << machine.state().cpu.pc.w
+              << std::dec << "). Waiting for Run() RPC...\n";
+}
+
 // Handle wait mode for controlled startup.
 // Must be called after machine.reset() and before the main emulation loop.
 // Returns false if a shutdown signal arrived while waiting, in which case the
@@ -1875,16 +1892,7 @@ bool handle_wait_mode(MachineType& machine, WaitMode wait_mode) {
             break;
 
         case WaitMode::Api:
-            // Complete the reset sequence (7 cycles) so PC contains the
-            // actual reset vector value, then pause before first instruction.
-            // The 6502 reset sequence reads the reset vector from $FFFC/$FFFD
-            // during cycles 4-6, loading PC with the entry point address.
-            machine.run(7);
-            machine.pause();
-            std::cout << "Paused at first instruction (PC=$"
-                      << std::hex << std::uppercase
-                      << machine.state().cpu.pc.w
-                      << std::dec << "). Waiting for Run() RPC...\n";
+            enter_api_wait_state(machine);
             break;
 
         case WaitMode::None:
@@ -2771,16 +2779,29 @@ public:
             // machine is told to run (handle_wait_mode / the first Run RPC
             // below waits for this to finish).
             if (am.pending_auto_station.has_value()) {
+                // Enter the --wait=api paused state BEFORE selecting, so a
+                // client that connects the moment the port appears and calls
+                // Run() finds the machine paused; Run() then waits (via
+                // begin/end_startup_selection below) for the selection to
+                // finish before resuming, rather than being rejected as
+                // "already running" or lost (the macOS black-screen defect).
+                if (config.wait_mode == WaitMode::Api) {
+                    enter_api_wait_state(machine);
+                }
+                server.debugger_service().begin_startup_selection();
                 int resolved_station = config.station_number;
                 bool auto_assigned = false;
-                if (auto exit_code = resolve_auto_station(
-                        config, transport_registry, /*offline=*/false,
-                        resolved_station, auto_assigned)) {
-                    return *exit_code;
+                auto exit_code = resolve_auto_station(
+                    config, transport_registry, /*offline=*/false,
+                    resolved_station, auto_assigned);
+                if (!exit_code) {
+                    exit_code = install_econet(machine, config, transport_registry,
+                                               resolved_station, auto_assigned);
                 }
-                if (auto exit_code =
-                        install_econet(machine, config, transport_registry,
-                                       resolved_station, auto_assigned)) {
+                // Always release a waiting Run(), even on error, so the RPC
+                // never hangs on a selection that failed.
+                server.debugger_service().end_startup_selection();
+                if (exit_code) {
                     return *exit_code;
                 }
             }
@@ -2807,8 +2828,15 @@ public:
 
             // Handle wait mode. A shutdown signal during the wait means the
             // emulation loop is never entered: the machine was asked to stop
-            // before it was ever asked to run.
-            if (handle_wait_mode(machine, config.wait_mode)) {
+            // before it was ever asked to run. A deferred --station auto launch
+            // already entered the Api wait state above (before selecting), so
+            // don't enter it again here.
+            WaitMode effective_wait_mode = config.wait_mode;
+            if (am.pending_auto_station.has_value() &&
+                config.wait_mode == WaitMode::Api) {
+                effective_wait_mode = WaitMode::None;
+            }
+            if (handle_wait_mode(machine, effective_wait_mode)) {
                 // Run main emulation loop (blocks until shutdown)
                 run_emulation_loop(machine, server, config);
             }

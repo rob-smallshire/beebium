@@ -48,10 +48,54 @@ def test_auto_station_preset_comes_up_in_range(
             time.sleep(0.25)
             status = bbc.econet.status
         assert status.enabled
-        # A number was chosen in the preset's default range (80-253), not left
+        # A number was chosen in the preset's default range (1-253), not left
         # at 0 and not out of range. The exact value depends on what else is on
         # the net, so only the range is asserted.
-        assert 80 <= status.station_id <= 253
+        assert 1 <= status.station_id <= 253
+
+
+def test_run_during_auto_selection_starts_the_machine(
+    mos_filepath: Path,
+    server_installation: ServerInstallation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Reproduces the macOS app defect (black screen on the auto preset): the app
+    # launches with --wait=api and calls DebuggerControl.Run ONCE, immediately
+    # after the port is reachable -- which is while the deferred station
+    # selection is still running. That early Run must be honoured so the machine
+    # then runs; it must not fail and must not leave the machine paused forever.
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS", "3000")
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_BUDGET_MS", "4000")
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        preset="model-b-disc-aun-auto",
+        extra_args=["--wait=api"],
+        startup_timeout=3.0,  # port is up well before the 3 s selection ends
+    ) as bbc:
+        # Call Run now, while selection is still in progress. Post-fix this
+        # blocks until selection completes, then starts the machine; it must not
+        # raise ("already running" or otherwise).
+        bbc.debugger.run()
+
+        # The machine actually executes: the cycle count advances.
+        start_cycles = bbc.debugger.cycle_count
+        deadline = time.monotonic() + 20.0
+        advanced = False
+        while time.monotonic() < deadline:
+            if bbc.debugger.cycle_count > start_cycles + 100_000:
+                advanced = True
+                break
+            time.sleep(0.2)
+        assert advanced, "machine never started running after Run during selection"
+
+        # Econet came up on the auto-chosen number.
+        status = bbc.econet.status
+        assert status.enabled
+        assert 1 <= status.station_id <= 253
+
+        # And it really booted: the MOS banner names the Econet station.
+        assert "Econet Station" in bbc.expect("Econet Station", timeout=20.0)
 
 
 def test_port_is_listening_before_auto_selection_finishes(
@@ -83,4 +127,4 @@ def test_port_is_listening_before_auto_selection_finishes(
                 break
             time.sleep(0.25)
         assert status.enabled
-        assert 80 <= status.station_id <= 253
+        assert 1 <= status.station_id <= 253
