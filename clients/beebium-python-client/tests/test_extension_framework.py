@@ -145,6 +145,21 @@ def test_resolve_loaded_ambiguous_name_raises_but_id_disambiguates():
     assert resolve_loaded(entries, "id-2", requested="'id-2'", kind="transport").id == "id-2"
 
 
+def test_resolve_loaded_exact_id_wins_over_a_shared_name():
+    # The server gives the first instance its manifest name as its id, so with
+    # two instances "aun" is both a name (two matches) and an id (one match).
+    entries = [_Entry("aun", "aun"), _Entry("aun", "aun-1")]
+    assert resolve_loaded(entries, "aun", requested="'aun'", kind="transport") is entries[0]
+    assert resolve_loaded(entries, "aun-1", requested="'aun-1'", kind="transport") is entries[1]
+
+
+def test_resolve_loaded_name_only_key_stays_ambiguous():
+    # An adapter class key carries a manifest name, never an id.
+    entries = [_Entry("aun", "aun"), _Entry("aun", "aun-1")]
+    with pytest.raises(ExtensionAmbiguousError):
+        resolve_loaded(entries, "aun", requested="Aun", kind="transport", match_id=False)
+
+
 # --------------------------------------------------------------------------
 # Integration: peripheral bridge (bbc.extensions) with rpc-serial
 # --------------------------------------------------------------------------

@@ -246,7 +246,7 @@ class Extensions:
                 registered for the resolved extension.
         """
         if isinstance(key, type):
-            info = self._require_loaded(key.EXTENSION_NAME, requested=key.__name__)
+            info = self._require_loaded(key.EXTENSION_NAME, requested=key.__name__, match_id=False)
             return key(info.name, self._channel, extension_id=info.id)
         info = self._require_loaded(key, requested=repr(key))
         # Create from the resolved manifest name (the entry-point key), bound to
@@ -274,5 +274,5 @@ class Extensions:
         except ExtensionError:
             return default
 
-    def _require_loaded(self, key: str, *, requested: str) -> ExtensionInfo:
-        return resolve_loaded(self.loaded, key, requested=requested, kind="extension")
+    def _require_loaded(self, key: str, *, requested: str, match_id: bool = True) -> ExtensionInfo:
+        return resolve_loaded(self.loaded, key, requested=requested, kind="extension", match_id=match_id)

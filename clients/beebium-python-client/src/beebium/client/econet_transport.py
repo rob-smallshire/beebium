@@ -54,8 +54,9 @@ class TransportInfo:
 
     # Opaque, server-assigned instance id. This is the key to pass to
     # ExtensionUiService (SubscribeView / Dispatch) to drive this
-    # transport's control panel; typically a UUID, with no relationship
-    # to ``name``. Discover it here rather than hardcoding names.
+    # transport's control panel, and the ``extension_id`` that routes the
+    # transport's typed RPCs over ExtensionRpc. Discover it here rather
+    # than hardcoding names.
     id: str
 
     # True if this transport implements an Extension UI, so a frontend
@@ -146,19 +147,15 @@ class EconetTransport:
             ExtensionAdapterNotInstalledError: (string key) if no adapter is
                 registered for the resolved transport.
         """
-        # TODO(#56): transports currently route over ExtensionRpc by *service
-        # name* (extension_id=""), because the EconetTransportService id targets
-        # the UI service, not ExtensionRpc. That is correct only because
-        # transports are mutually-exclusive singletons today. Once transports
-        # gain an ExtensionRpc routing id (issue #56), bind info.id here (as the
-        # peripheral bridge does) and this collapses to the peripheral shape.
+        # The id EconetTransportService reports is the transport's ExtensionRpc
+        # routing id, so the adapter is bound to that instance.
         if isinstance(key, type):
-            info = self._require_loaded(key.EXTENSION_NAME, requested=key.__name__)
-            return key(info.name, self._channel)
+            info = self._require_loaded(key.EXTENSION_NAME, requested=key.__name__, match_id=False)
+            return key(info.name, self._channel, extension_id=info.id)
         info = self._require_loaded(key, requested=repr(key))
         return cast(
             EconetTransportAdapter,
-            create_adapter(info.name, ECONET_ENTRY_POINT_GROUP, self._channel),
+            create_adapter(info.name, ECONET_ENTRY_POINT_GROUP, self._channel, extension_id=info.id),
         )
 
     @overload
@@ -175,5 +172,5 @@ class EconetTransport:
         except ExtensionError:
             return default
 
-    def _require_loaded(self, key: str, *, requested: str) -> TransportInfo:
-        return resolve_loaded(self.list(), key, requested=requested, kind="Econet transport")
+    def _require_loaded(self, key: str, *, requested: str, match_id: bool = True) -> TransportInfo:
+        return resolve_loaded(self.list(), key, requested=requested, kind="Econet transport", match_id=match_id)

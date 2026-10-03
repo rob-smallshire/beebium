@@ -33,10 +33,12 @@ from beebium.client._proto import extension_rpc_pb2, extension_rpc_pb2_grpc
 class ExtensionChannel:
     """Thin wrapper over the core's ExtensionRpc stub.
 
-    Routing: when ``extension_id`` is empty the core routes by service name,
-    which is unambiguous while an extension type is a singleton (the common
-    case today). A future discovery method will let a client target a specific
-    instance.
+    Routing: ``extension_id`` selects an instance -- a peripheral extension's
+    id (from PeripheralExtensionService) or an Econet transport's id (from
+    EconetTransportService). When it is empty the core routes by service name,
+    which succeeds only while exactly one loaded instance offers the service;
+    with more than one the call fails with FAILED_PRECONDITION naming the
+    candidate ids.
     """
 
     def __init__(self, stub: extension_rpc_pb2_grpc.ExtensionRpcStub):

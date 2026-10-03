@@ -86,8 +86,8 @@ class ExtensionAdapter(ABC):
             channel: The ExtensionRpc channel that carries this extension's
                 messages.
             extension_id: The server-assigned instance id to target. Empty
-                routes by service name (correct while an extension type is a
-                singleton, the common case).
+                routes by service name, which the server accepts only while
+                exactly one loaded instance offers the service.
         """
         self._name = name
         self._channel = channel
@@ -157,8 +157,8 @@ class PeripheralExtensionAdapter(ExtensionAdapter):
 class EconetTransportAdapter(ExtensionAdapter):
     """Base for adapters of Econet transports (the Econet wire backend).
 
-    Econet transports (AUN, Piconet) are mutually exclusive and are discovered
-    via EconetTransportService. Reached with ``bbc.transport[<Adapter>]`` or
+    Econet transports (AUN, Piconet) are discovered via EconetTransportService,
+    whose per-instance id is also the adapter's ExtensionRpc routing id. Reached with ``bbc.transport[<Adapter>]`` or
     ``<Adapter>.attach(bbc)``. Registers under the ``beebium.ext.econet``
     entry-point group.
     """
@@ -220,31 +220,34 @@ def create_adapter(name: str, group: str, channel: ExtensionChannel, extension_i
     return cls(name, channel, extension_id=extension_id)
 
 
-def resolve_loaded(entries, key: str, *, requested: str, kind: str):
+def resolve_loaded(entries, key: str, *, requested: str, kind: str, match_id: bool = True):
     """Return the single loaded entry matching ``key`` (a name or instance id).
 
     ``entries`` are the loaded records (objects with ``.name`` and ``.id`` --
     ``ExtensionInfo`` or ``TransportInfo``), and ``key`` is a manifest name or an
     instance id. Shared by both the peripheral and transport bridges so they
-    resolve and disambiguate identically.
+    resolve and disambiguate identically, and both bind the resolved entry's
+    ``id`` as the adapter's ExtensionRpc routing id.
+
+    An exact instance-id match wins over a name match: the server assigns the
+    first instance of an extension its manifest name as its id (``"aun"``,
+    then ``"aun-1"``), so with several instances loaded the first is still
+    addressable by that id. Pass ``match_id=False`` when ``key`` can only be a
+    manifest name (an adapter class's ``EXTENSION_NAME``), so that a class key
+    stays ambiguous when several instances are loaded.
 
     Raises:
         ExtensionNotLoadedError: if nothing matches.
         ExtensionAmbiguousError: if several match -- i.e. a name/type key with
             more than one loaded instance; address one by its id instead.
-
-    TODO(#56): today Econet transports are mutually-exclusive singletons and
-    route ExtensionRpc by *service name*, so for the transport bridge the ">1
-    match" branch is currently unreachable and the resolved id is not used for
-    routing. Once transports gain an ExtensionRpc routing id (see issue #56),
-    the transport bridge can bind ``entry.id`` the way the peripheral bridge
-    already does, the service-name routing workaround goes away, and this shared
-    resolver handles multi-instance transports (e.g. a 2-ADLC Econet Bridge)
-    with no further change.
     """
     if not key:
         raise ExtensionNotLoadedError(f"{requested} does not declare an EXTENSION_NAME.")
-    matches = [e for e in entries if e.name == key or e.id == key]
+    if match_id:
+        by_id = [e for e in entries if e.id == key]
+        if len(by_id) == 1:
+            return by_id[0]
+    matches = [e for e in entries if e.name == key or (match_id and e.id == key)]
     if not matches:
         available = ", ".join(sorted(e.name for e in entries)) or "(none)"
         raise ExtensionNotLoadedError(

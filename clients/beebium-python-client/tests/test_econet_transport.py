@@ -122,3 +122,87 @@ def test_active_returns_piconet(mock_stub, transport):
     active = transport.active
     assert active is not None
     assert active.name == "piconet"
+
+
+# -- ExtensionRpc routing: the adapter targets the transport's instance id ----
+
+
+def _aun_status_channel():
+    from beebium.ext.econet.aun._proto import aun_pb2
+
+    channel = MagicMock()
+    channel.invoke.return_value = aun_pb2.AunGetStatusResponse(
+        connected=True, local_port=32768, peer_count=0
+    ).SerializeToString()
+    return channel
+
+
+def test_class_subscript_binds_the_transport_instance_id(mock_stub):
+    from beebium.ext.econet.aun import Aun
+
+    mock_stub.ListTransports.return_value = MockListResponse(
+        transports=[MockTransport("aun", "AUN UDP transport", True, id="aun-instance")]
+    )
+    channel = _aun_status_channel()
+    aun = EconetTransport(mock_stub, channel)[Aun]
+    assert aun.extension_id == "aun-instance"
+
+    _ = aun.status
+    assert channel.invoke.call_args.kwargs["extension_id"] == "aun-instance"
+
+
+def test_string_subscript_binds_the_transport_instance_id(mock_stub):
+    mock_stub.ListTransports.return_value = MockListResponse(
+        transports=[MockTransport("aun", "AUN UDP transport", True, id="aun-instance")]
+    )
+    channel = _aun_status_channel()
+    aun = EconetTransport(mock_stub, channel)["aun"]
+    assert aun.extension_id == "aun-instance"
+
+    _ = aun.status
+    assert channel.invoke.call_args.kwargs["extension_id"] == "aun-instance"
+
+
+def test_piconet_adapter_binds_the_transport_instance_id(mock_stub):
+    from beebium.ext.econet.piconet import Piconet
+    from beebium.ext.econet.piconet._proto import piconet_service_pb2
+
+    mock_stub.ListTransports.return_value = MockListResponse(
+        transports=[MockTransport("piconet", "Piconet USB-CDC bridge", True, id="piconet-instance")]
+    )
+    channel = MagicMock()
+    channel.invoke.return_value = piconet_service_pb2.PiconetGetStatusResponse(
+        device_path="/dev/tty.usbmodem101", serial_open=True
+    ).SerializeToString()
+    piconet = EconetTransport(mock_stub, channel)[Piconet]
+    assert piconet.extension_id == "piconet-instance"
+
+    _ = piconet.status
+    assert channel.invoke.call_args.kwargs["extension_id"] == "piconet-instance"
+
+
+def test_two_transports_of_one_kind_are_addressed_by_id(mock_stub):
+    from beebium.client.exceptions import ExtensionAmbiguousError
+    from beebium.ext.econet.aun import Aun
+
+    mock_stub.ListTransports.return_value = MockListResponse(
+        transports=[
+            MockTransport("aun", "AUN UDP transport", True, id="aun"),
+            MockTransport("aun", "AUN UDP transport", True, id="aun-1"),
+        ]
+    )
+    channel = _aun_status_channel()
+    transport = EconetTransport(mock_stub, channel)
+
+    # Each instance is reachable by its id, and the adapter routes to it.
+    first = transport["aun"]
+    assert first.extension_id == "aun"
+    second = transport["aun-1"]
+    assert isinstance(second, Aun)
+    assert second.extension_id == "aun-1"
+    _ = second.status
+    assert channel.invoke.call_args.kwargs["extension_id"] == "aun-1"
+
+    # A class key cannot choose between two instances of the same kind.
+    with pytest.raises(ExtensionAmbiguousError, match="aun-1"):
+        _ = transport[Aun]
