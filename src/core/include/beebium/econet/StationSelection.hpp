@@ -143,16 +143,32 @@ inline std::optional<StationSpec> parse_station_spec(std::string_view value,
     return spec;
 }
 
-// The lowest number in [range.lo, range.hi] not present in `occupied`, or
-// nullopt when every number in the range is taken (the range is exhausted).
-inline std::optional<std::uint8_t> lowest_free_station(
-    const std::set<std::uint8_t>& occupied, StationRange range) {
-    for (int n = range.lo; n <= range.hi; ++n) {
+// The first number not in `occupied`, scanning from `start` upward and WRAPPING
+// from range.hi back to range.lo, so the whole range is tried exactly once
+// (issue #161: monotonic allocation that spaces re-use out). `start` outside the
+// range is treated as range.lo. nullopt when every number in the range is taken.
+inline std::optional<std::uint8_t> lowest_free_station_from(
+    const std::set<std::uint8_t>& occupied, StationRange range,
+    std::uint8_t start) {
+    if (start < range.lo || start > range.hi) {
+        start = range.lo;
+    }
+    const int span = static_cast<int>(range.hi) - static_cast<int>(range.lo) + 1;
+    for (int i = 0; i < span; ++i) {
+        const int n = static_cast<int>(range.lo) +
+                      ((static_cast<int>(start) - static_cast<int>(range.lo) + i) % span);
         if (occupied.find(static_cast<std::uint8_t>(n)) == occupied.end()) {
             return static_cast<std::uint8_t>(n);
         }
     }
     return std::nullopt;
+}
+
+// The lowest number in [range.lo, range.hi] not present in `occupied`, or
+// nullopt when every number in the range is taken (the range is exhausted).
+inline std::optional<std::uint8_t> lowest_free_station(
+    const std::set<std::uint8_t>& occupied, StationRange range) {
+    return lowest_free_station_from(occupied, range, range.lo);
 }
 
 }  // namespace beebium::econet

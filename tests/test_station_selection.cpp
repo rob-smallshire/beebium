@@ -102,6 +102,32 @@ TEST_CASE("lowest_free_station returns the first free number", "[station-selecti
     }
 }
 
+TEST_CASE("lowest_free_station_from scans from a start with wraparound",
+          "[station-selection]") {
+    SECTION("from a start, nothing occupied -> the start") {
+        CHECK(lowest_free_station_from({}, {1, 253}, 5) == 5);
+    }
+    SECTION("skips occupied numbers above the start") {
+        CHECK(lowest_free_station_from({5, 6}, {1, 253}, 5) == 7);
+    }
+    SECTION("wraps past the top back to the bottom of the range") {
+        // Start at the top, it is taken, so wrap to the free low numbers.
+        CHECK(lowest_free_station_from({90}, {80, 90}, 90) == 80);
+        CHECK(lowest_free_station_from({88, 89, 90}, {80, 90}, 88) == 80);
+    }
+    SECTION("a start outside the range is treated as range.lo") {
+        CHECK(lowest_free_station_from({}, {80, 90}, 5) == 80);
+        CHECK(lowest_free_station_from({}, {80, 90}, 200) == 80);
+    }
+    SECTION("exhausted range is nullopt regardless of start") {
+        CHECK(lowest_free_station_from({80, 81, 82}, {80, 82}, 81) == std::nullopt);
+    }
+    SECTION("lowest_free_station is lowest_free_station_from at range.lo") {
+        CHECK(lowest_free_station_from({80}, {80, 90}, 80) ==
+              lowest_free_station({80}, {80, 90}));
+    }
+}
+
 TEST_CASE("lowest_free_station reports an exhausted range", "[station-selection]") {
     CHECK(lowest_free_station({80, 81, 82}, {80, 82}) == std::nullopt);
     SECTION("a single-number range already taken is exhausted") {

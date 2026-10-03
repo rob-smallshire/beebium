@@ -13,11 +13,13 @@
 #ifndef BEEBIUM_PLATFORM_UTILS_HPP
 #define BEEBIUM_PLATFORM_UTILS_HPP
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <system_error>
+#include <thread>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -28,6 +30,7 @@
 #include <process.h>
 #elif defined(__APPLE__)
 #include <fcntl.h>
+#include <sys/file.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
 #include <mach-o/dyld.h>
@@ -35,6 +38,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <pwd.h>
+#include <sys/file.h>
 #include <unistd.h>
 #endif
 
@@ -243,6 +247,75 @@ inline std::optional<std::string> host_identifier() {
         }
     }
     return std::nullopt;
+#endif
+}
+
+// Run `fn` while holding an exclusive lock on `lock_filepath` (created if
+// absent). Acquisition is retried (polling, 10 ms) until `timeout` elapses;
+// returns false WITHOUT calling fn if the file cannot be opened or the lock
+// cannot be taken in time, so the caller can fall back. One wrapper over flock
+// (POSIX) and LockFileEx (Windows) so callers never touch the raw primitive;
+// the lock is advisory, so every accessor must go through this. `fn` must not
+// throw (do error-code I/O); if it does, the lock is released only at process
+// exit. Used for the per-host auto-station counter (issue #161).
+template <typename Fn>
+inline bool with_locked_file(const std::filesystem::path& lock_filepath,
+                             std::chrono::milliseconds timeout, Fn&& fn) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+#ifdef _WIN32
+    HANDLE handle = CreateFileW(
+        lock_filepath.wstring().c_str(), GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    bool locked = false;
+    for (;;) {
+        OVERLAPPED overlapped{};
+        if (LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                       0, 1, 0, &overlapped)) {
+            locked = true;
+            break;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (!locked) {
+        CloseHandle(handle);
+        return false;
+    }
+    fn();
+    OVERLAPPED overlapped{};
+    UnlockFileEx(handle, 0, 1, 0, &overlapped);
+    CloseHandle(handle);
+    return true;
+#else
+    int fd = ::open(lock_filepath.c_str(), O_RDWR | O_CREAT, 0600);
+    if (fd < 0) {
+        return false;
+    }
+    bool locked = false;
+    for (;;) {
+        if (::flock(fd, LOCK_EX | LOCK_NB) == 0) {
+            locked = true;
+            break;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (!locked) {
+        ::close(fd);
+        return false;
+    }
+    fn();
+    ::flock(fd, LOCK_UN);
+    ::close(fd);
+    return true;
 #endif
 }
 
