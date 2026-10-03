@@ -90,7 +90,7 @@ See [deployment.md](deployment.md) for ROM discovery and installation details.
 
 ## gRPC Services
 
-All services are defined in `src/service/proto/`. The major services are documented below. Additional services (AudioService, DiscService, EconetService, IndicatorService, SidewaysService, TubeService) are defined in their respective proto files.
+All core services are defined in `src/service/proto/`. The major services are documented below. Additional services (AudioService, DiscService, IndicatorService, SidewaysService, TubeService, SerialService, PeripheralExtensionService, CoprocessorDebuggerControl) are defined in their respective proto files; ExtensionUiService, which serves extensions' control panels, is in `src/core/extension-api/proto/extension_ui.proto`. Extension-provided APIs (e.g. `AunService`) are not gRPC services of their own: they are reached through [ExtensionRpc](#extensionrpc).
 
 ### VideoService
 
@@ -572,6 +572,113 @@ Events:
 ```
 
 Use this to detect server shutdown and cleanly disconnect clients. The `shutdownGraceMs` field indicates how long clients have to finish pending operations before the server terminates.
+
+### EconetService
+
+Transport-agnostic Econet control and status: whether the hardware is fitted,
+the station number, the ADLC and four-way-handshake state. Anything specific to
+one transport lives on that transport's own API (see
+[EconetTransportService](#econettransportservice) and [ExtensionRpc](#extensionrpc)).
+
+**Proto file:** `src/service/proto/econet.proto`
+
+| RPC | Behaviour |
+|-----|-----------|
+| `GetEconetStatus` | One `GetEconetStatusResponse`: `has_econet_socket`, `enabled`, `station_id` (0 when not fitted), `aun_mode`, `connected` (the backend's link state: socket bound and cable plugged for AUN, device responding for Piconet), `adlc`, `handshake`, the speed gate (`requires_real_time`, `gated_by_speed`), the AUN station-number collisions currently in effect (`aun_station_collision_count`, `aun_last_station_collision`; a gauge, not a running total), and diagnostic counters. |
+| `WatchEconetStatus` | Server stream of the same message: a snapshot at once, then one whenever the status changes, no more often than `min_interval_ms` (default 50). Use it instead of polling. |
+| `EnableEconet` | Fit the hardware at `station_id` (1-254). `no_network` fits it with no carrier. Otherwise, when a transport was configured at launch, that transport is brought up through its own backend, with `aun_port` (0 = 32768) written into its `port` parameter; with no transport configured, a bare AUN socket on net 0 is bound. `actual_aun_port` reports the bound port. Fails if Econet is already fitted. |
+| `DisableEconet` | Remove the hardware; the transport stops announcing and browsing. |
+| `SetStationId` | Change the station number (1-254) while fitted. The station register changes at once and an AUN transport re-announces and re-filters at once; the guest's network ROM reads the number at its next Break. |
+| `SubscribeEconetEvents` | Server stream of `EconetEvent`s from now on: frames sent and received (typed, after the four-way handshake, with the AUN `handle`), handshake and connection changes. `max_batch` (default 64) and `min_interval_ms` (default 20). A gap in `sequence` means events were lost. `FAILED_PRECONDITION` when the machine has no Econet socket or Econet is not fitted. |
+
+Errors in the unary RPCs are reported in the response's `success` / `error`
+fields, not as a gRPC status.
+
+```bash
+grpcurl -plaintext -import-path src/service/proto -proto econet.proto \
+  localhost:48875 beebium.EconetService/GetEconetStatus
+```
+
+### EconetTransportService
+
+Says which Econet transport extension is loaded, and gives the instance id a
+client needs for that transport's API and control panel.
+
+**Proto file:** `src/service/proto/econet_transport.proto`
+
+| RPC | Behaviour |
+|-----|-----------|
+| `ListTransports` | One `EconetTransport` per loaded transport (`--aun`, `--piconet`, or a preset's `econet.transport`): `name` (`"aun"`, `"piconet"`), `description`, `active`, `id` (the opaque per-instance id; pass it as `ExtensionRpc`'s `extension_id` and as the `ExtensionUiService` subscription key), `has_ui`. On BBC machines at most one is loaded, and it is active. |
+| `GetActiveTransport` | The single active transport, or an empty response when none is configured. |
+
+```bash
+grpcurl -plaintext -import-path src/service/proto -proto econet_transport.proto \
+  localhost:48875 beebium.EconetTransportService/ListTransports
+```
+
+```json
+{
+  "transports": [
+    {
+      "name": "aun",
+      "description": "AUN (Acorn Universal Networking) UDP econet transport",
+      "active": true,
+      "id": "c62a8575-74a5-4777-8023-b636530ddae7",
+      "hasUi": true
+    }
+  ]
+}
+```
+
+### ExtensionRpc
+
+The one core-hosted service through which clients call APIs that extensions
+provide. Extensions never host gRPC services; the core tunnels each call's
+serialized request and response to the extension as opaque bytes, so a plugin
+never links gRPC.
+
+**Proto file:** `src/service/proto/extension_rpc.proto`
+
+| RPC | Behaviour |
+|-----|-----------|
+| `Invoke` | Unary. `InvokeRequest` names `extension_id`, `service`, `method` and carries the serialized request in `payload`; the response's `payload` is the serialized reply. |
+| `ServerStream` | The same request, answered by a stream of `InvokeResponse`s. |
+
+Routing: a non-empty `extension_id` selects that instance, whether a peripheral
+extension's id (from `PeripheralExtensionService`) or a transport's id (from
+`EconetTransportService`). An empty `extension_id` routes by `service` when
+exactly one loaded instance offers it, and is `FAILED_PRECONDITION` listing the
+candidate ids when several do. An unknown id, or no instance offering the
+service, is `NOT_FOUND`; an unknown method is `UNIMPLEMENTED`. A non-OK reply
+carries its error in the gRPC status with an empty payload. The request's
+`metadata` map is not passed to the extension.
+
+The AUN transport registers `AunService` (`src/extensions/aun/aun.proto`), reachable only when AUN is the loaded transport:
+
+| Method | Behaviour |
+|--------|-----------|
+| `GetStatus` | `connected`, `local_port` (0 until the socket is up), `peer_count`, `map_file_path` (on the server's host; empty with `map-file=none`), `map_file_entry_count`, `map_file_error`, `discovery_mode` (`on`, `announce`, `browse`, `off`). |
+| `SetConnected` | Plug or unplug the simulated cable (DCD). Accepted before the socket exists and applied when it comes up; `error` then says so. |
+| `AddPeer`, `RemovePeer` | Add or remove a peer with provenance Api (net 0-255, stn 1-254, IPv4 `ip_address`, `port` 0 = 32768). Work with no socket up; the peer is applied when one is. |
+| `ListPeers` | The resolved routing table, each entry with the `source` it won from: Api > Launch > MapFile > Discovered > Subnet. |
+| `ReloadMap` | Re-read the map file now (`reloaded` is false only when the map file is disabled). |
+| `AddMapPeer`, `RemoveMapPeer`, `AddMapSubnet`, `RemoveMapSubnet` | Edit the server's map file (written atomically on the server's host, then applied at once). Add is add-or-replace; Remove reports `removed`. |
+| `ListMap` | The map file's entries as written, with labels and host resolution, as distinct from `ListPeers`. |
+
+The Piconet plugin registers `PiconetService`
+(`src/extensions/piconet/piconet_service.proto`) the same way. Clients normally
+use the typed wrappers (`bbc.transport[Aun]` in Python, `Aun` in TypeScript);
+with `grpcurl`, the payload is base64 protobuf:
+
+```bash
+grpcurl -plaintext -import-path src/service/proto -proto extension_rpc.proto \
+  -d '{"service": "AunService", "method": "GetStatus"}' \
+  localhost:48875 beebium.ExtensionRpc/Invoke
+```
+
+See [networking.md](networking.md) for the AUN peer table, map file and
+discovery, and [howto_write_an_econet_transport.md](howto_write_an_econet_transport.md)
+for registering a transport's dispatcher.
 
 ## BBC Keyboard Matrix
 
