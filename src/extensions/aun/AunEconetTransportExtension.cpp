@@ -478,6 +478,22 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
     using Status = AutoStationOutcome::Status;
     AutoStationOutcome out;
 
+    // Env overrides for the timings, so an integration test can force a long
+    // browse (to prove the gRPC port is printed before selection finishes)
+    // without a code hook. Milliseconds; ignored if unset or unparseable.
+    auto env_ms = [](const char* name, std::chrono::milliseconds& target) {
+        if (const char* v = std::getenv(name)) {
+            char* end = nullptr;
+            long ms = std::strtol(v, &end, 10);
+            if (end != v && ms >= 0) {
+                target = std::chrono::milliseconds(ms);
+            }
+        }
+    };
+    env_ms("BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS", auto_min_observe_);
+    env_ms("BEEBIUM_AUN_AUTO_QUIET_MS", auto_quiet_);
+    env_ms("BEEBIUM_AUN_AUTO_BUDGET_MS", auto_budget_);
+
     // port=none means the transport is disabled -- there is nothing to select
     // for. Report Unsupported so the launch path treats it like Piconet.
     auto port_value = config_value("port");

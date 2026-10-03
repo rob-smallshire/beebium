@@ -1607,54 +1607,68 @@ std::optional<int> install_disc_controller(MachineType& machine, const ServerCon
 // it in preference to the legacy --aun-port / --piconet flags. Phase 2
 // keeps the legacy paths working as a transitional measure; phase 3
 // removes them.
+// Resolve a --station auto request to a concrete number using the transport.
+// A fixed station passes through unchanged. `offline` (build-time boots:
+// capture-screenshot, and any future non-`start` path that boots from a preset)
+// skips the browse and announce entirely and takes the range's first number, so
+// preset generation and thumbnails stay deterministic and never touch the LAN
+// (the determinism rule: tests, capture and preset generation never touch
+// shared or network state). Returns an exit code on error (auto with no
+// transport, several transports, or a transport that cannot choose), else
+// nullopt, writing the chosen number and whether it was auto-assigned. The
+// `start` path calls this AFTER the gRPC server is listening and its port is
+// printed, so a slow browse never delays the port line a launcher waits for.
+template<typename MachineType>
+std::optional<int> resolve_auto_station(
+    const ServerConfig<MachineType>& config,
+    beebium::EconetTransportRegistry& transport_registry, bool offline,
+    int& resolved_station, bool& auto_assigned) {
+    resolved_station = config.station_number;
+    auto_assigned = false;
+    if (!config.station_auto_range.has_value()) {
+        return std::nullopt;  // a fixed station (or none)
+    }
+    if (transport_registry.empty()) {
+        std::cerr << "Error: --station auto needs an Econet transport; pass --aun ...\n";
+        return 1;
+    }
+    if (transport_registry.size() > 1) {
+        std::cerr << "Error: BBC machines support at most one Econet transport (got "
+                  << transport_registry.size() << ").\n";
+        return 1;
+    }
+    auto_assigned = true;
+    if (offline) {
+        resolved_station = config.station_auto_range->lo;  // deterministic
+        return std::nullopt;
+    }
+    auto& transport = *transport_registry.extensions().front();
+    auto outcome = transport.select_auto_station(*config.station_auto_range);
+    using Status = beebium::EconetTransportExtension::AutoStationOutcome::Status;
+    if (outcome.status == Status::Unsupported) {
+        std::cerr << "Error: " << outcome.report << "\n";
+        return 1;
+    }
+    // Exhaustion and a still-contested fall-back carry a report; print it (the
+    // design reports the range-exhausted case on stderr, not fail the launch).
+    if (!outcome.report.empty()) {
+        std::cerr << outcome.report << "\n";
+    }
+    resolved_station = outcome.station;
+    return std::nullopt;
+}
+
+// Install Econet hardware for an already-resolved station number (-1 = Econet
+// not fitted). `auto_assigned` only tunes the log line. --station auto is
+// resolved by resolve_auto_station beforehand, so this does no network I/O.
 template<typename MachineType>
 std::optional<int> install_econet(MachineType& machine,
                                    const ServerConfig<MachineType>& config,
-                                   beebium::EconetTransportRegistry& transport_registry) {
+                                   beebium::EconetTransportRegistry& transport_registry,
+                                   int resolved_station, bool auto_assigned) {
     using Memory = typename MachineType::Memory;
 
     if constexpr (HasEconetSocket<Memory>) {
-        bool auto_assigned = false;
-        // The station to fit: config.station_number for a fixed number, or the
-        // number the transport chooses for --station auto. config is const, so
-        // the resolved value lives here rather than being written back.
-        int resolved_station = config.station_number;
-
-        // --station auto (or a preset's "auto"): choose a free station number
-        // now, before the socket is enabled, so the guest reads its final
-        // number at its first boot and never needs a Break (issue #67). The
-        // number comes from the transport, which browses the net; a transport
-        // that cannot choose for itself (Piconet, or AUN with port=none) makes
-        // --station auto an error rather than a silent fixed number.
-        if (config.station_auto_range.has_value()) {
-            if (transport_registry.empty()) {
-                std::cerr << "Error: --station auto needs an Econet transport; "
-                             "pass --aun ...\n";
-                return 1;
-            }
-            if (transport_registry.size() > 1) {
-                std::cerr << "Error: BBC machines support at most one Econet "
-                             "transport (got " << transport_registry.size() << ").\n";
-                return 1;
-            }
-            auto& transport = *transport_registry.extensions().front();
-            auto outcome = transport.select_auto_station(*config.station_auto_range);
-            using Status =
-                beebium::EconetTransportExtension::AutoStationOutcome::Status;
-            if (outcome.status == Status::Unsupported) {
-                std::cerr << "Error: " << outcome.report << "\n";
-                return 1;
-            }
-            // Exhaustion and a still-contested fall-back carry a report; print
-            // it (the design asks for the range-exhausted case to be reported
-            // on stderr rather than failing the launch).
-            if (!outcome.report.empty()) {
-                std::cerr << outcome.report << "\n";
-            }
-            resolved_station = outcome.station;
-            auto_assigned = true;
-        }
-
         if (resolved_station >= 1) {
             auto station = static_cast<uint8_t>(resolved_station);
             // Appended to the "Econet station N" lines so the log shows when a
@@ -2176,6 +2190,12 @@ struct AssembledMachine {
     // (extension_registry owns it).
     beebium::CoprocessorExtension* coprocessor = nullptr;
 
+    // Set when --station auto was DEFERRED past assembly (the `start` path): the
+    // range to choose from once the gRPC server is listening and its port is
+    // printed, so a slow mDNS browse never delays the port line. Econet is not
+    // enabled until then. Empty for a fixed station or an offline resolve.
+    std::optional<beebium::econet::StationRange> pending_auto_station;
+
     AssembledMachine() = default;
     AssembledMachine(const AssembledMachine&) = delete;
     AssembledMachine& operator=(const AssembledMachine&) = delete;
@@ -2202,7 +2222,8 @@ struct AssemblyOutcome {
 // thread before the emulation loop starts.
 template<typename MachineType>
 AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
-                                              bool with_audio) {
+                                              bool with_audio,
+                                              bool defer_auto_station = false) {
     using Memory = typename MachineType::Memory;
 
     std::cout << "Initializing " << Memory::MACHINE_DISPLAY_NAME << "...\n";
@@ -2300,9 +2321,27 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         config.extension_instances = std::move(remaining);
     }
 
-    // Install Econet hardware
-    if (auto exit_code = install_econet(machine, config, am->transport_registry)) {
-        return {nullptr, *exit_code};
+    // Install Econet hardware. --station auto is resolved to a concrete number
+    // first. On the `start` path we DEFER that resolution (it may browse mDNS
+    // for a few seconds) until the gRPC server is listening and its port is
+    // printed, so a launcher's port-wait never times out; Econet is enabled
+    // then, before the machine runs. Off that path (capture-screenshot), or for
+    // a fixed station, resolve now -- offline (no browse/announce) so build-time
+    // boots stay deterministic.
+    if (config.station_auto_range.has_value() && defer_auto_station) {
+        am->pending_auto_station = config.station_auto_range;
+    } else {
+        int resolved_station = config.station_number;
+        bool auto_assigned = false;
+        if (auto exit_code = resolve_auto_station(
+                config, am->transport_registry, /*offline=*/true,
+                resolved_station, auto_assigned)) {
+            return {nullptr, *exit_code};
+        }
+        if (auto exit_code = install_econet(machine, config, am->transport_registry,
+                                            resolved_station, auto_assigned)) {
+            return {nullptr, *exit_code};
+        }
     }
 
     // Load disc images
@@ -2580,7 +2619,8 @@ public:
             // Assemble the machine. This is the single shared assembly every
             // subcommand uses, so `start` and `capture-screenshot` cannot diverge
             // in how the machine is built (see assemble_machine).
-            auto assembly = assemble_machine<MachineType>(config, /*with_audio=*/true);
+            auto assembly = assemble_machine<MachineType>(
+                config, /*with_audio=*/true, /*defer_auto_station=*/true);
             if (!assembly.assembled) {
                 return assembly.exit_code;
             }
@@ -2722,6 +2762,28 @@ public:
             // Flush immediately so clients parsing stdout can detect the port before we block
             std::cout << "Listening on port " << server.port() << std::endl;
             std::cout << Memory::MACHINE_DISPLAY_NAME << " ready. Press Ctrl+C to stop." << std::endl;
+
+            // --station auto was deferred so the port above printed without
+            // waiting on the (possibly multi-second) mDNS browse, which a
+            // launcher's port-wait must not time out on. Resolve it now, with
+            // the gRPC server already listening -- so the status stream shows
+            // Econet not-yet-enabled meanwhile -- and enable Econet before the
+            // machine is told to run (handle_wait_mode / the first Run RPC
+            // below waits for this to finish).
+            if (am.pending_auto_station.has_value()) {
+                int resolved_station = config.station_number;
+                bool auto_assigned = false;
+                if (auto exit_code = resolve_auto_station(
+                        config, transport_registry, /*offline=*/false,
+                        resolved_station, auto_assigned)) {
+                    return *exit_code;
+                }
+                if (auto exit_code =
+                        install_econet(machine, config, transport_registry,
+                                       resolved_station, auto_assigned)) {
+                    return *exit_code;
+                }
+            }
 
             // Wire cross-processor debugger stop entirely server-side. Stop
             // detection lives in the two DebuggerControlServiceImpl instances

@@ -20,7 +20,10 @@ server is available (the ``server_installation`` fixture handles that)."""
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
+
+import pytest
 
 from beebium.client import Beebium
 from beebium.client.installation import ServerInstallation
@@ -37,9 +40,47 @@ def test_auto_station_preset_comes_up_in_range(
         preset="model-b-disc-aun-auto",
         startup_timeout=30.0,
     ) as bbc:
+        # The station is chosen just after the port is up (deferred selection),
+        # so poll until Econet is enabled rather than reading immediately.
+        deadline = time.monotonic() + 30.0
         status = bbc.econet.status
+        while time.monotonic() < deadline and not status.enabled:
+            time.sleep(0.25)
+            status = bbc.econet.status
         assert status.enabled
         # A number was chosen in the preset's default range (80-253), not left
         # at 0 and not out of range. The exact value depends on what else is on
         # the net, so only the range is asserted.
+        assert 80 <= status.station_id <= 253
+
+
+def test_port_is_listening_before_auto_selection_finishes(
+    mos_filepath: Path,
+    server_installation: ServerInstallation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Issue #67 launch-path fix: the gRPC port must be printed (and the server
+    # listening) BEFORE the station browse runs, so a launcher's port-wait does
+    # not time out on a slow selection. Force a long observation window via the
+    # env hook, then launch with a SHORT startup timeout: the connection must
+    # still succeed (the port is up early), and Econet is enabled with a station
+    # in range once the deferred selection completes.
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_MIN_OBSERVE_MS", "4000")
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_BUDGET_MS", "5000")
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        extra_args=["--station", "auto", "--aun", "port=0:map-file=none"],
+        # Well under the 4 s selection: a pass proves the port appeared first.
+        startup_timeout=3.0,
+    ) as bbc:
+        # Poll until the deferred selection has enabled Econet (the selection
+        # runs after the port is up; allow for a populated-LAN teardown too).
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            status = bbc.econet.status
+            if status.enabled:
+                break
+            time.sleep(0.25)
+        assert status.enabled
         assert 80 <= status.station_id <= 253
