@@ -31,7 +31,11 @@ asks.
 ## 3. Template syntax
 
 - `{key}` is a placeholder. Keys are lowercase ASCII words joined by
-  hyphens: `econet-station`.
+  hyphens, and every key begins with the domain that owns it:
+  `econet-station`, `machine-model`. There are no bare keys such as
+  `station` or `transport`: a general word claims more than it means, and
+  a second kind of transport or station later would have nowhere to go
+  (user).
 - `{{` and `}}` are literal braces.
 - An unknown key renders verbatim, braces included, and is reported by
   validation as unknown. So a template written for a newer server, or
@@ -61,8 +65,11 @@ Placeholders come from **providers**: the core machine, the Econet
 socket, and any extension (a transport, a peripheral) through one method
 on the extension API. The server's registry is the union. Adding a
 placeholder is adding a provider entry: no protocol change, no client
-change, no template migration. Extension placeholders are namespaced by
-convention with their domain (`econet-...`, `scsi-...`).
+change, no template migration. The domain prefix is a rule, not a
+convention: the registry rejects a provider's key that does not start
+with one of the provider's declared domains (`machine-`, `econet-`,
+`scsi-`, ...), so two providers cannot collide and a key says whose
+state it shows.
 
 A placeholder earns its place only if its value **can change while the
 template stays the same**, or differs between machines launched from one
@@ -79,8 +86,8 @@ machine chooses for itself.
 | `econet-station` | Econet | The station number **in force** (user): the number the guest last read from the station links, which is what the filing system is using. Before the guest's first read it is the configured number. | The guest re-reads the links, normally at Break after a change in the sidebar or by `SetStationId`; or at launch under `--station auto`. |
 | `econet-net` | Econet | This machine's Econet net number (0 for the local net). | Launch configuration. |
 | `econet-transport` | Econet | The transport's display name ("AUN", "Piconet"); empty when Econet is fitted with no transport. | Econet enabled or disabled at runtime. |
-| `model` | Machine | The machine model's display name, as the server reports it in `SystemInfo`. | Never; included because it differs between machines sharing a hand-written template, and costs nothing. |
-| `preset` | Machine | The name of the preset the machine was launched from; empty if none. | Never; as above. |
+| `machine-model` | Machine | The machine model's display name, as the server reports it in `SystemInfo`. | Never; included because it differs between machines sharing a hand-written template, and costs nothing. |
+| `machine-preset` | Machine | The name of the preset the machine was launched from; empty if none. | Never; as above. |
 
 Not included, with reasons:
 
@@ -187,6 +194,6 @@ shutdown, since no server is running to render it.
 - Whether a not-applicable placeholder should render as empty (proposed)
   or as a visible marker. Empty reads better in titles; the picker and
   the unknown/inapplicable report make the cause discoverable.
-- Whether `model` should be the full display name ("BBC Model B") or a
+- Whether `machine-model` should be the full display name ("BBC Model B") or a
   short form; proposed: whatever `SystemInfo` already reports, so there
   is one name for a model.
