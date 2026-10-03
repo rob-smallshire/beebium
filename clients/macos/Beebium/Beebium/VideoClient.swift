@@ -74,9 +74,28 @@ final class VideoClient: ObservableObject, Disconnectable {
     /// reliably cancel the pending reconnect timer, so a subsequent
     /// syncShutdownGracefully() destroys an unresolved future. An event loop
     /// group is meant to be long-lived; keeping one for the process lifetime
-    /// (one thread, reclaimed at exit) sidesteps the teardown race entirely.
+    /// (reclaimed at exit) sidesteps the teardown race entirely.
+    ///
+    /// It has several loops, not one (#152). Every machine window's whole gRPC
+    /// channel -- video frames, audio and all control streams -- runs on this
+    /// group, and gRPC-Swift pins a connection to one loop at creation, so with a
+    /// single loop all windows' frame receive, HTTP/2 demux and protobuf decode
+    /// share one core: a measured ceiling (one NIO thread pinned at a core with
+    /// three-plus windows, each window's frame latency rising together). A few
+    /// loops spread windows across cores. The count is capped rather than the full
+    /// core count because the host also runs the servers, so more loops than this
+    /// only compete with them for cores without further relieving the client.
     private static let sharedGroup: EventLoopGroup =
-        MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        MultiThreadedEventLoopGroup(
+            numberOfThreads: eventLoopThreadCount(
+                coreCount: ProcessInfo.processInfo.activeProcessorCount))
+
+    /// How many NIO loops to run: one per core, capped at 4 and never below 1, so
+    /// windows spread across cores without over-subscribing a host that is also
+    /// running the emulator servers (#152).
+    nonisolated static func eventLoopThreadCount(coreCount: Int) -> Int {
+        max(1, min(coreCount, 4))
+    }
 
     private var _channel: GRPCChannel?
     private var streamTask: Task<Void, Never>?
