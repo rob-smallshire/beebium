@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -110,6 +111,9 @@ public:
             adlc_ = std::move(adlc);
         }
         station_id_ = station_id;
+        configured_station_.store(station_id, std::memory_order_relaxed);
+        read_station_.store(kNoStation, std::memory_order_relaxed);
+        station_read_pending_ = true;
         enabled_ = true;
         bump_status_sequence();
     }
@@ -137,6 +141,8 @@ public:
         observable_drop.reset();
         backend_drop.reset();
         enabled_ = false;
+        configured_station_.store(kNoStation, std::memory_order_relaxed);
+        read_station_.store(kNoStation, std::memory_order_relaxed);
         requires_real_time_ = false;
         speed_gated_.store(false, std::memory_order_relaxed);
         nmi_enable_ff_ = false;
@@ -180,6 +186,9 @@ public:
     // the NFS ROM re-reads the station number).
     void set_station_id(uint8_t station_id) {
         station_id_ = station_id;
+        if (configured_station_.load(std::memory_order_relaxed) != kNoStation) {
+            configured_station_.store(station_id, std::memory_order_relaxed);
+        }
         std::shared_ptr<NetworkBackend> backend;
         {
             std::lock_guard<std::mutex> lock(lifetime_mutex_);
@@ -208,6 +217,12 @@ public:
         nmi_enable_ff_ = false;
 
         if (enabled_) {
+            // The first read since a reset is the guest taking its station
+            // number; later reads in the same boot are INTOFF.
+            if (station_read_pending_) {
+                station_read_pending_ = false;
+                read_station_.store(station_id_, std::memory_order_relaxed);
+            }
             return station_id_;
         }
 
@@ -299,12 +314,37 @@ public:
             handshake_->reset();
         }
         nmi_enable_ff_ = false;
+        // The guest re-reads its station number as it restarts; until it
+        // does, the number it will read is the one in force.
+        read_station_.store(kNoStation, std::memory_order_relaxed);
+        station_read_pending_ = true;
     }
 
     // --- Accessors for testing ---
 
     bool nmi_enable_ff() const { return nmi_enable_ff_; }
     uint8_t station_id() const { return station_id_; }
+
+    // The station number in force: the number the guest is using. That is
+    // what it read from the station links (&FE18) on its first read since the
+    // last reset or since Econet was fitted -- the read with which a filing
+    // system takes its number at boot -- and, until it has read, the
+    // configured number. A change to the links (set_station_id) is pending
+    // until the guest re-reads them after a Break; the INTOFF reads in
+    // between, which also read &FE18, do not count. nullopt when no Econet is
+    // fitted.
+    //
+    // Lock-free and safe from any thread: two relaxed atomics, written by the
+    // emulation thread's &FE18 read and by configuration. A reader on another
+    // thread may see a value one read stale, never a torn one.
+    std::optional<uint8_t> station_in_force() const {
+        const int configured = configured_station_.load(std::memory_order_relaxed);
+        if (configured == kNoStation) {
+            return std::nullopt;
+        }
+        const int read = read_station_.load(std::memory_order_relaxed);
+        return static_cast<uint8_t>(read == kNoStation ? configured : read);
+    }
 
     // Monotonic sequence counter combining socket-level changes (enable,
     // disable, station id) with the active backend's connection-state
@@ -454,6 +494,14 @@ private:
     std::unique_ptr<FourWayHandshake> handshake_;
     std::unique_ptr<Mc6854> adlc_;
     uint8_t station_id_ = 0;
+    // The station number in force (station_in_force()). kNoStation means
+    // "none": not fitted, or not yet read since the last reset.
+    static constexpr int kNoStation = -1;
+    std::atomic<int> configured_station_{kNoStation};
+    std::atomic<int> read_station_{kNoStation};
+    // Whether the next &FE18 read is the guest taking its station number.
+    // Emulation-thread only (reads and reset), so plain.
+    bool station_read_pending_ = true;
     bool enabled_ = false;
     bool requires_real_time_ = false;
     std::atomic<bool> speed_gated_{false};

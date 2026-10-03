@@ -19,6 +19,8 @@
 #include "beebium/econet/SpeedGate.hpp"
 
 #include <atomic>
+#include <optional>
+#include <thread>
 
 using namespace beebium;
 
@@ -533,4 +535,98 @@ TEST_CASE("SpeedGate severs the wire while gated", "[econet][speed][gate]") {
 
     gated.store(false);
     CHECK(gate.is_connected());
+}
+
+// ===========================================================================
+// Station number in force (#153)
+// ===========================================================================
+//
+// The number the guest is using: what it read from the station links at
+// &FE18 on its first read since the last reset (or since Econet was fitted),
+// and the configured number until it has read. A changed number -- the
+// sidebar or SetStationId moving the links -- is in force only once the guest
+// re-reads them after a Break; the INTOFF reads in between, which also read
+// &FE18, do not count, since the filing system keeps the number it read at
+// reset.
+
+TEST_CASE("EconetSocket: no station is in force with no Econet fitted",
+          "[econet][socket][station-in-force]") {
+    EconetSocket socket;
+    CHECK_FALSE(socket.station_in_force().has_value());
+}
+
+TEST_CASE("EconetSocket: the configured station is in force until the guest reads it",
+          "[econet][socket][station-in-force]") {
+    EconetSocket socket;
+    socket.enable(42, std::make_unique<TestBackend>());
+    CHECK(socket.station_in_force() == 42);
+
+    // Before the first read, the configured number is what will be read:
+    // a change (--station auto settling, say) is followed.
+    socket.set_station_id(43);
+    CHECK(socket.station_in_force() == 43);
+
+    CHECK(socket.read_station_id(0) == 43);
+    CHECK(socket.station_in_force() == 43);
+}
+
+TEST_CASE("EconetSocket: a station change is pending until the guest re-reads after a reset",
+          "[econet][socket][station-in-force]") {
+    EconetSocket socket;
+    socket.enable(80, std::make_unique<TestBackend>());
+    socket.read_station_id(0);  // the filing system reads its number at boot
+    CHECK(socket.station_in_force() == 80);
+
+    socket.set_station_id(81);  // the sidebar moves the links
+    CHECK(socket.station_id() == 81);
+    CHECK(socket.station_in_force() == 80);
+
+    // INTOFF reads during traffic read the links too, but do not count.
+    socket.read_station_id(0);
+    socket.read_station_id(3);
+    CHECK(socket.station_in_force() == 80);
+
+    // Break: once the guest reads the links again, the new number is in force.
+    socket.reset();
+    CHECK(socket.station_in_force() == 81);
+    CHECK(socket.read_station_id(0) == 81);
+    CHECK(socket.station_in_force() == 81);
+
+    socket.set_station_id(82);
+    socket.read_station_id(0);
+    CHECK(socket.station_in_force() == 81);
+}
+
+TEST_CASE("EconetSocket: disabling Econet leaves no station in force",
+          "[econet][socket][station-in-force]") {
+    EconetSocket socket;
+    socket.enable(42, std::make_unique<TestBackend>());
+    socket.read_station_id(0);
+    socket.disable();
+    CHECK_FALSE(socket.station_in_force().has_value());
+
+    // Refitted: the new configuration is in force until read.
+    socket.enable(7, std::make_unique<TestBackend>());
+    CHECK(socket.station_in_force() == 7);
+}
+
+TEST_CASE("EconetSocket: the station in force is readable while another thread reads the links",
+          "[econet][socket][station-in-force]") {
+    EconetSocket socket;
+    socket.enable(10, std::make_unique<TestBackend>());
+    std::atomic<bool> done{false};
+    std::thread guest([&] {
+        for (int i = 0; i < 200000; ++i) {
+            if (i % 1000 == 0) socket.reset();
+            socket.read_station_id(0);
+        }
+        done = true;
+    });
+    int observed_bad = 0;
+    while (!done) {
+        auto in_force = socket.station_in_force();
+        if (!in_force || *in_force != 10) ++observed_bad;
+    }
+    guest.join();
+    CHECK(observed_bad == 0);
 }
