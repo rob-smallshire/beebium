@@ -1,51 +1,43 @@
 # Econet/AUN Stack Integration
 
-This document captures the work programme for integrating Econet/AUN features across the Beebium stack: presets, gRPC, service discovery, Python client, and macOS client.
+This document records the work programme that exposed the Econet/AUN networking core across the Beebium stack: presets, gRPC, service discovery, the Python client, and the macOS client. All five phases are complete. For how the networking works today -- transports, the AUN peer set and map file, discovery, station selection -- see [`networking.md`](networking.md); for writing a new transport, see [`howto_write_an_econet_transport.md`](howto_write_an_econet_transport.md).
 
-The Econet/AUN networking core (MC68B54 ADLC emulation, EconetSocket, FourWayHandshake) supports three transport backends: `AunBackend` (UDP/IP), `PiconetBackend` (USB-attached Piconet device on a real Econet wire), and `TestBackend` (in-process test double). It has been validated end-to-end against a real BBC Microcomputer talking via real Econet to a Beebium-emulated Level 3 File Server, and against a real Acorn Level 3 Fileserver running in BeebEm via AUN. This document plans the remaining work to expose these capabilities through the standard Beebium interfaces.
+The Econet/AUN networking core (MC68B54 ADLC emulation, EconetSocket, FourWayHandshake) runs over a `NetworkBackend` supplied by a transport extension: `AunBackend` (UDP/IP, from the built-in `aun` transport) or `PiconetBackend` (a USB-attached Piconet device on a real Econet wire, from the `piconet` plugin), with `TestBackend` as an in-process test double and as the disconnected stub fitted when no transport is configured. It has been validated end-to-end against a real BBC Microcomputer talking via real Econet to a Beebium-emulated Level 3 File Server, and against a real Acorn Level 3 Fileserver running in BeebEm via AUN.
 
 ## Phases
 
-| Phase | Summary | Status | Depends on |
-|-------|---------|--------|------------|
-| 0 | Update `docs/networking.md` to match implementation | **Done** | — |
-| 1 | Preset integration (JSON format, schema, apply) | **Done** (AUN + Piconet) | — |
-| 2 | gRPC proto + C++ service | Partial — status surfaces both AUN and Piconet; full read/write API still pending | — |
-| 3 | Service discovery metadata | Pending | Phase 2 |
-| 4 | Python client | Pending | Phase 2 |
-| 5 | macOS client | Pending | Phase 2 |
-
-Phases 1 and 2 are independent and can be done in either order. Phases 3-5 all depend on the proto definition from Phase 2. Phase 0 is a documentation prerequisite that should be done first.
+| Phase | Summary | Status |
+|-------|---------|--------|
+| 0 | Update `docs/networking.md` to match implementation | **Done** |
+| 1 | Preset integration (JSON format, schema, apply) | **Done** (AUN + Piconet) |
+| 2 | gRPC proto + C++ service | **Done** -- transport-agnostic `EconetService`; transport-specific RPCs on `AunService` / `PiconetService` over `ExtensionRpc` |
+| 3 | Service discovery metadata | **Done** |
+| 4 | Python client | **Done** |
+| 5 | macOS client | **Done** (Network sidebar); no Econet section in the configuration editor |
 
 ## Design Decisions
 
-These decisions were made during planning and inform all phases:
+These decisions were made during planning and still describe the implementation:
 
-- **Full read/write gRPC API**: The EconetService supports both status queries and runtime configuration (enable/disable Econet, add/remove peers), following the DiscService pattern which supports `InstallDiscController`, `InsertDisc`, etc.
+- **Read/write gRPC API**: The EconetService supports both status queries and runtime configuration (enable/disable Econet, set the station number), following the DiscService pattern. Peer management is transport-specific and lives on the transport's own service (`AunService`).
 
-- **Frame-level event streaming**: The gRPC service includes a `SubscribeEconetEvents` streaming RPC for frame send/receive events, handshake stage changes, and connection state changes. Follows the `SubscribeDiscEvents` pattern.
+- **Frame-level event streaming**: `EconetService.SubscribeEconetEvents` streams frame send/receive events, handshake stage changes, and connection state changes, following the `SubscribeDiscEvents` pattern. `WatchEconetStatus` pushes a fresh status snapshot on every change.
 
-- **DiscService as the primary pattern**: All aspects of the Econet integration (proto design, C++ service template, Python wrapper, Swift client, sidebar UI) follow the corresponding Disc subsystem implementation.
+- **DiscService as the primary pattern**: The Econet integration (proto design, C++ service template, Python wrapper, Swift client, sidebar UI) follows the corresponding Disc subsystem implementation.
 
 - **IP addresses as strings in proto**: Peer addresses use dotted-quad strings (`"192.168.1.100"`) rather than packed uint32, for client ergonomics.
 
-- **Observable backend decorator for frame events**: Frame observation uses a decorator in the backend chain (`FourWayHandshake -> ObservableBackend -> AunBackend`) rather than modifying the `NetworkBackend` interface. This follows the existing decorator pattern.
+- **Observable backend decorator for frame events**: Frame observation uses a decorator in the backend chain rather than modifying the `NetworkBackend` interface. `EconetSocket::enable` builds the chain `Mc6854 -> FourWayHandshake -> [SpeedGate] -> ObservableBackend -> <transport backend>`; the `SpeedGate` is present only for a transport that requires real-time pacing (Piconet), and observation sits directly above the wire, so it records what actually crossed the transport.
 
-- **Peer resolution must be an abstraction, not just static config**: The current `--aun map=...` mechanism requires users to know IP addresses and ports up front, which is at odds with modern networking (DHCP, dynamic IPs, mDNS). The `AunBackend` already has the right runtime mutation API (`add_peer`/`remove_peer`), but the architecture must ensure this is accessible to multiple peer sources — not just CLI args and gRPC calls. Considerations:
+- **Peer resolution is an abstraction, not just static config**: Peers can come from the command line or a preset, a runtime gRPC call, the per-user map file, mDNS discovery, or a subnet rule.
 
-  - **The peer set is the single source of truth (in the transport, not the backend)**: As of #55 the desired peer world lives in `AunPeerSet`, owned by `AunEconetTransportExtension`. All peer sources (CLI, presets, gRPC, discovery) converge on it, and it resolves one winner per `(net, stn)` and applies that routing view to the live `AunBackend` via `replace_peers`. The backend no longer ranks sources; it holds only the resolved view for its socket.
+  - **The peer set is the single source of truth (in the transport, not the backend)**: The desired peer world lives in `AunPeerSet`, owned by `AunEconetTransportExtension` (#54/#55). All peer sources converge on it; it resolves one winner per `(net, stn)` and applies that routing view to the live `AunBackend` via `replace_peers`. The backend holds only the resolved view for its socket, so the peer set outlives it: entries added before the socket is up wait in the set, and runtime (`Api`) entries survive backend recreation.
 
-  - **`EconetSocket` must expose the backend chain**: The gRPC service and any in-process peer source reach the live backend via `EconetSocket::backend()`; the transport's `AunPeerSet` applies to it. Peer *edits* go through the transport (`add_api_peer`/`remove_api_peer`), so they work whether or not a backend exists yet.
+  - **Peer edits go through the transport**: `AunService.AddPeer` / `RemovePeer` call the extension's `add_api_peer` / `remove_api_peer`, so they work whether or not a backend exists yet. `EconetService.EnableEconet` brings the network up through the configured transport's `create_backend`, so the extension owns the backend it reports on. The gRPC service reaches the live backend via `EconetSocket::backend()` (or a co-owning `backend_shared()` from a thread other than the emulation thread).
 
-  - **Peer provenance**: Implemented as a four-value `AunPeerProvenance` (`Api`, `Launch`, `MapFile`, `Discovered`) on each peer-set entry, resolved by fixed precedence (highest first: `Api`, `Launch`, `MapFile`, `Discovered`). Each source keeps its own entry, so removing a winner falls back to the next source present rather than dropping the station. Discovered peers are managed by the mDNS subscriber writing `Discovered` entries into the same set.
+  - **Peer provenance**: `AunPeerProvenance` has five values -- `Api`, `Launch`, `MapFile`, `Discovered`, `Subnet` -- resolved by fixed precedence, highest first in that order. Each source keeps its own entry, so removing a winner falls back to the next source present rather than dropping the station. The mDNS subscriber writes `Discovered` entries into the same set; `Subnet` entries are derived from a subnet rule (`--aun subnet=` or the map file's `subnets`).
 
-  - **Candidate discovery mechanisms** (future work, not part of the current programme):
-    - **Beebium mDNS**: Beebium already advertises itself via mDNS for gRPC service discovery. Econet station metadata (Phase 3) could be used by other Beebium instances to auto-discover peers. This is the most natural fit for Beebium-to-Beebium networking.
-    - **AUN broadcast discovery**: The original AUN protocol included broadcast announcements. This would enable interop with other AUN implementations (BeebEm, RISC OS).
-    - **User-specified discovery server**: A central rendezvous point for peers that aren't on the same subnet.
-    - **DSCP (Dynamic Station Configuration Protocol)**: A DHCP analogue for Econet — a DSCP server assigns station numbers from a pool, so instances can launch with `--station auto` rather than manually coordinating IDs. The client would query the server early in the `enable()` path and proceed with the assigned station ID. Just an idea for now, but potentially worth exploring as the number of Beebium instances on a network grows.
-
-  - **No changes needed now**: The current `add_peer`/`remove_peer` API on `AunBackend` is the right seam. Phase 2's `EconetSocket::backend()` accessor completes the access path. Future discovery work is additive — it calls into the existing API without requiring changes to `AunBackend`, `FourWayHandshake`, or `Mc6854`.
+  - **Discovery mechanisms**: Beebium-to-Beebium discovery over mDNS (`_aun._udp`) is implemented, with a `discovery=on|announce|browse|off` switch (#158), and `--station auto` chooses a free station number by browsing and claiming over the same records (#67) rather than through a central allocator. Not implemented: AUN broadcast discovery for interop with other AUN implementations, a user-specified rendezvous server, and a DHCP-like station allocator (see `docs/discussion/dynamic-station-config-protocol.md`).
 
 ---
 
@@ -87,47 +79,26 @@ Both transports are configured via a single `econet.transport` object that names
 }
 ```
 
-The `name` field selects the transport extension (`aun`, `piconet`, or any future extension). `parameters` is the same key/value map the CLI populates from `--<extension> key=value:key=value`. Only one `transport` is permitted per `econet` block on BBC machine variants; per-machine cardinality is enforced at machine-setup time, not in the preset loader.
+The `name` field selects the transport extension (`aun`, `piconet`, or any future extension). `parameters` is the same key/value map the CLI populates from `--<extension> key=value:key=value`; a repeatable (list) parameter such as AUN's `map` or `subnet` takes either a single string or a JSON array of strings. Only one `transport` is permitted per `econet` block on BBC machine variants; per-machine cardinality is enforced at machine-setup time, not in the preset loader. `station` is an integer 1-254, or the string `"auto"` / `"auto:<lo>-<hi>"` to choose a free number at launch (AUN only; the bundled `model-b-disc-aun-auto` preset uses it).
 
-The legacy preset keys `econet.aun_port`, `econet.aun_map`, and `econet.piconet.device_path` were removed; presets that still use them fail to load with a message pointing at the new shape.
+A `--aun` (or `--piconet`) on the command line overrides the preset's transport: with the same transport name the parameters merge, the command line winning key by key; with a different name the command line's transport replaces the preset's (#150).
+
+The legacy preset keys `econet.aun_port` and `econet.piconet` are rejected with a message pointing at the new shape. Other unknown keys in the `econet` section, including the old `econet.aun_map`, are ignored.
 
 ### Key files
 
 - `src/server/include/beebium/server/PresetLoader.hpp` — `PresetEconetConfig`, `PresetTransportConfig`, `parse_econet_section()`
-- `src/server/include/beebium/server/ServerMain.hpp` — `apply_preset()` converts a preset transport into an `ExtensionInstance`; the early-pass transport-registry filter then routes it through the same dispatch as the CLI
+- `src/server/include/beebium/server/ServerMain.hpp` — the preset's transport becomes an extension instance (merged with any CLI `--aun` / `--piconet` by `merge_preset_econet_transport`) and is routed through the same dispatch as the CLI
 - `tests/test_preset_loader.cpp` — Econet preset parsing tests including legacy-shape rejection
 - `tests/test_cli.cpp` — CLI parsing tests for `--aun port=...` and `--piconet device_path=...`
 
 ---
 
-## Phase 2: gRPC Service
+## Phase 2: gRPC Service — Done
 
-**Status:** `EconetService` is implemented, with transport-agnostic operations (`GetEconetStatus`, `EnableEconet`, `DisableEconet`, `SetStationId`, `SubscribeEconetEvents`). AUN-specific RPCs — `SetConnected`, `AddPeer`, `RemovePeer`, `ListPeers`, plus a richer `GetStatus` — are defined by `AunService` (`src/extensions/aun/aun.proto`) and served over the core's generic `ExtensionRpc` channel by the AUN extension's hand-written `AunDispatcher`, not as a plugin-hosted gRPC service; the AUN library therefore links protobuf but not gRPC. An `ExtensionRpc.Invoke` carries the transport instance id (the one `EconetTransportService` reports) in `extension_id` to select which transport it reaches; an empty id routes by service name while exactly one transport offers it, and is an ambiguity error once more than one does (see [`networking.md`](networking.md#routing-a-transports-typed-rpcs-extensionrpc)).
+`EconetService` (`src/service/proto/econet.proto`) is transport-agnostic: `GetEconetStatus`, `EnableEconet`, `DisableEconet`, `SetStationId`, `SubscribeEconetEvents` and `WatchEconetStatus`. `EconetTransportService` (`econet_transport.proto`) reports which transport extensions are loaded and which is active (`ListTransports`, `GetActiveTransport`), each with its instance id.
 
-Both EconetService.* AUN methods and the new AunService.* methods exist concurrently for backward compatibility; the EconetService duplicates carry `DEPRECATED` comments and will be removed in a follow-up coordinated with Python and macOS Swift client updates.
-
-### Core library prerequisites
-
-Before the gRPC service can be implemented, these accessors are needed:
-
-- `EconetSocket::backend()` — returns `NetworkBackend*` for peer management
-- `EconetSocket::aun_mode()` — query whether AUN mode is active
-- `AunBackend::list_peers()` — enumerate the peer table (returns `vector<PeerInfo>`)
-- `PiconetBackend::config()` — exposes the device path for status reporting (already in place)
-
-### Proto outline
-
-```
-service EconetService {
-    GetEconetStatus     — hardware state, ADLC registers, handshake stage, connection
-    EnableEconet        — fit Econet hardware (station ID, AUN port, AUN mode)
-    DisableEconet       — remove Econet hardware
-    AddPeer             — add Econet address <-> UDP endpoint mapping
-    RemovePeer          — remove peer by Econet address
-    ListPeers           — enumerate configured peers
-    SubscribeEconetEvents — stream frame, handshake, and connection events
-}
-```
+Transport-specific RPCs are not EconetService methods. AUN's are defined by `AunService` (`src/extensions/aun/aun.proto`): `SetConnected`, `AddPeer`, `RemovePeer`, `ListPeers`, `GetStatus`, and the map-file methods `ReloadMap`, `AddMapPeer`, `RemoveMapPeer`, `AddMapSubnet`, `RemoveMapSubnet` and `ListMap`. Piconet's `PiconetService` has a single `GetStatus`. Both are served over the core's generic `ExtensionRpc` channel by the extension's hand-written dispatcher (`AunDispatcher`, `PiconetDispatcher`), not as plugin-hosted gRPC services; the transport libraries therefore link protobuf but not gRPC. An `ExtensionRpc.Invoke` carries the transport instance id (the one `EconetTransportService` reports) in `extension_id` to select which transport it reaches; an empty id routes by service name while exactly one transport offers it, and is an ambiguity error once more than one does (#56; see [`networking.md`](networking.md#routing-a-transports-typed-rpcs-extensionrpc)).
 
 Key messages:
 - `GetEconetStatusResponse` includes nested `AdlcStatus` (CR1-4, SR1-2, FIFO state) and `HandshakeStatus` (stage, flag fill)
@@ -136,80 +107,93 @@ Key messages:
 
 ### Key files
 
-- `src/service/proto/econet.proto` — new proto definition
+- `src/service/proto/econet.proto`, `src/service/proto/econet_transport.proto` — proto definitions
 - `src/service/include/beebium/service/EconetService.hpp` — template service implementation
 - `src/service/include/beebium/service/Server.hpp` — registration
-- `src/core/include/beebium/econet/EconetSocket.hpp` — add accessors
-- `src/core/include/beebium/econet/AunBackend.hpp` — add `list_peers()`
-- `tests/test_grpc_econet.cpp` — service tests
+- `src/core/include/beebium/econet/EconetSocket.hpp` — `backend()`, `backend_shared()`, `aun_mode()`
+- `src/core/include/beebium/econet/AunBackend.hpp` — `list_peers()`, `replace_peers()`
+- `src/extensions/aun/aun.proto`, `src/extensions/aun/AunDispatcher.hpp` — AUN-specific RPCs
+- `tests/test_grpc_econet.cpp`, `tests/test_grpc_econet_transport_service.cpp`, `tests/test_grpc_aun_service.cpp` — service tests
 
 ---
 
-## Phase 3: Service Discovery Metadata
+## Phase 3: Service Discovery Metadata — Done
 
-Add Econet TXT records to the mDNS advertisement so discovery clients can see which machines have Econet fitted and their station numbers.
+The server's gRPC mDNS advertisement (`--advertise`) carries Econet TXT records so discovery clients can see which machines have Econet fitted and their station numbers.
 
 ### TXT records
 
-When Econet is enabled: `econet_station=N`
+When Econet is enabled: `econet_station=N`; when the backend is AUN, also `econet_net=N` and `econet_aun_port=N`. The records are set when the server starts advertising.
+
+(These are on the `_beebium._tcp` gRPC service record. The AUN transport's own `_aun._udp` peer announcements, with their `since=` and `impl-identity` records, are described in [`networking.md`](networking.md).)
 
 ### Key files
 
-- `src/service/include/beebium/service/SystemService.hpp` — add TXT record in `SetAdvertisement`
-- `clients/beebium-python-client/src/beebium/discovery.py` — parse `econet_station` from TXT records
+- `src/service/include/beebium/service/Server.hpp` — adds the TXT records in `Server::start`
+- `clients/beebium-python-client/src/beebium/client/discovery.py` — parses `econet_station`
+- `clients/macos/Beebium/Beebium/DiscoveryClient.swift` — parses `econet_station`
 
 ---
 
-## Phase 4: Python Client
+## Phase 4: Python Client — Done
 
 The Python client splits along the same line as the gRPC services: an
-`Econet` wrapper around the transport-agnostic `EconetService`, and an
-`Aun` wrapper around the AUN-specific `AunService`. Other transports
-(Piconet) would get their own wrappers if/when transport-specific
-RPCs are added.
+`Econet` wrapper around the transport-agnostic `EconetService`
+(`bbc.econet`), an `EconetTransport` wrapper around `EconetTransportService`
+(`bbc.transport`), and per-transport adapters for the transport-specific
+services. The AUN adapter `Aun` (package `beebium.ext.econet.aun`) is reached
+with `bbc.transport[Aun]` or `Aun.attach(bbc)`, and routes its calls by the
+transport's instance id; the Piconet adapter is `beebium.ext.econet.piconet`.
 
 ### Wrapper class outline
 
 ```python
 class Econet:                              # wraps EconetService
     status -> EconetStatus                 # generic: enabled, station_id, ADLC
+    watch_status(min_interval_ms=0) -> Iterator[EconetStatus]
     is_enabled -> bool
     station_id -> int
-    enable(station_id, aun_mode)           # transport-agnostic
+    enable(...)                            # transport-agnostic
+    set_station_id(station_id)
     disable()
-    events() -> Iterator[EconetEvent]
-    start_background_events(callback) -> EventStreamHandle
+    events(...) -> Iterator[EconetEvent]
 
 
-class Aun:                                  # wraps AunService
-    status -> AunStatus                     # AUN-specific: port, peers, link
-    peers -> list[PeerInfo]
+class Aun:                                  # AunService over ExtensionRpc
+    status -> AunStatus                     # port, peer count, map file, discovery mode
+    peers -> list[PeerInfo]                 # resolved routing view, with source
     set_connected(connected: bool)
-    add_peer(net, station, ip_address, port)
-    remove_peer(net, station)
+    add_peer(net, stn, ip_address, port)
+    remove_peer(net, stn)
+    reload_map()
+    add_map_peer(...) / remove_map_peer(net, stn)
+    add_map_subnet(net, subnet, label="") / remove_map_subnet(net)
+    list_map() -> MapListing
 ```
 
 ### Key files
 
-- `clients/beebium-python-client/src/beebium/econet.py` — new wrapper class
-- `clients/beebium-python-client/src/beebium/connection.py` — add `econet_stub`
-- `clients/beebium-python-client/src/beebium/client.py` — add `econet` property
-- `clients/beebium-python-client/src/beebium/__init__.py` — export new classes
-- `clients/beebium-python-client/tests/test_econet.py` — mock stub tests
+- `clients/beebium-python-client/src/beebium/client/econet.py` — `Econet`
+- `clients/beebium-python-client/src/beebium/client/econet_transport.py` — `EconetTransport`
+- `clients/beebium-python-client/src/beebium/ext/econet/aun/__init__.py` — `Aun`
+- `clients/beebium-python-client/src/beebium/client/client.py` — `econet` and `transport` properties
+- `clients/beebium-python-client/tests/test_econet.py`, `test_econet_transport.py`, `test_aun.py` — tests
 
 ---
 
-## Phase 5: macOS Client
+## Phase 5: macOS Client — Done
 
 ### UI integration
 
-The macOS sidebar already has a `.network` mode (case 8 in `SidebarMode.swift`) with the "network" SF Symbol icon. This is the natural home for Econet controls.
+The macOS sidebar's `.network` mode (in `SidebarMode.swift`, with the "network" SF Symbol icon) hosts the Econet controls: a transport-agnostic status section from `EconetClient`, and the active transport's own panel, rendered from the extension's server-driven UI (`ExtensionViewRenderer`). The AUN panel includes the editable "Shared AUN map". See [`networking.md`](networking.md) ("Network sidebar (macOS GUI)").
+
+The configuration editor (preset UI) has no Econet section; Econet is configured through presets and the command line.
 
 ### Key files
 
 - `clients/macos/Beebium/Beebium/EconetClient.swift` — gRPC client wrapper (`@MainActor`, `ObservableObject`, `Disconnectable`)
-- `clients/macos/Beebium/Beebium/NetworkModeView.swift` — sidebar content for `.network` mode
-- `clients/macos/Beebium/Beebium/ContentView.swift` — create and register `EconetClient`
-- `clients/macos/Beebium/Beebium/SidebarModeContent.swift` — route `.network` to `NetworkModeView`
-- `clients/macos/Beebium/Beebium/Configuration/` — Econet section in configuration editor (preset UI)
-- Generated Swift proto stubs from `econet.proto`
+- `clients/macos/Beebium/Beebium/EconetTransportsClient.swift` — `EconetTransportService` client
+- `clients/macos/Beebium/Beebium/SidebarModeContent.swift` — routes `.network` to `NetworkModeView`
+- `clients/macos/Beebium/Beebium/ContentView.swift` — creates and registers `EconetClient`
+- `clients/macos/Beebium/Beebium/ExtensionViewRenderer.swift` — renders the transport's panel
+- Generated Swift proto stubs from `econet.proto` and `econet_transport.proto`
