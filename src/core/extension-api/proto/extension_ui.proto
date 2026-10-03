@@ -62,7 +62,8 @@ message View {
 // --- Controls ---
 //
 // Eleven primitives, deliberately small. Together with nested Groups and
-// ModalEditors they cover the panels we have today (Piconet, AUN) and
+// ModalEditors they cover the panels we have today (the AUN and Piconet
+// transports; the RTC, host-serial and SCSI hard disc peripherals) and
 // are expected to cover ~90% of any future extension. Stretching the
 // alphabet should hurt slightly each time -- that's the forcing function
 // for keeping it small. The newest two, EditableList and FileReference,
@@ -264,14 +265,15 @@ message ModalEditor {
 // actions on the list arrive through one dispatch payload,
 // EditableListEvent, keyed by the item's stable id.
 message EditableList {
-    string title = 1;                 // "Peers", "Subnet rules"
+    string title = 1;                 // "Peers (3)", "Subnet rules (1)"
     repeated EditableListItem items = 2;
-    bool can_add = 3;                 // shows the platform's "+" affordance
+    bool can_add = 3;                 // shows the platform's "+" affordance;
+                                      // an ADD is rejected unless set
     // The editor Control for a NEW item (fields only; the renderer supplies
     // the commit UI). By convention a Group of TextInput / Choice leaves,
     // mirroring a ModalEditor's editor tree. Committed as an ADD event.
     Control add_editor = 4;
-    string empty_text = 5;            // shown when items is empty: "No peers"
+    string empty_text = 5;            // shown when items is empty: "No subnet rules"
     // Explains what the list is, for someone new to the domain. Rendered as
     // an information affordance beside the title, like TextInput.help. The
     // title itself carries any count, e.g. "Peers (3)". Empty means no help.
@@ -283,13 +285,14 @@ message EditableListItem {
     string id = 1;                    // stable; echoed back in dispatches
     string primary = 2;               // "0.254  192.168.1.10:32768"
     string secondary = 3;             // right-aligned caption: "map file", "mDNS"
-    string subtitle = 4;              // beneath, muted: the label "PiEconetBridge FS"
+    string subtitle = 4;              // beneath, muted: a label, "PiEconetBridge FS"
     // Small state badge for the row. UNKNOWN means no indicator; WARN marks,
     // e.g., an unreachable peer. Reuses Indicator.State so the renderer shares
     // one badge style across controls.
     Indicator.State state = 5;
-    bool editable = 6;                // edit affordance; `editor` below is prefilled
-    bool removable = 7;               // "-" affordance
+    bool editable = 6;                // edit affordance; `editor` below is prefilled;
+                                      // an EDIT is rejected unless set
+    bool removable = 7;               // "-" affordance; a REMOVE is rejected unless set
     Control editor = 8;               // prefilled editor for THIS item, when editable
     repeated EditableListAction actions = 9;  // per-item commands, context menu
     string note = 10;                 // short warning shown with the item, optional
@@ -319,11 +322,17 @@ message EditableListAction {
 // own client-side actions (Reveal in Finder, gated on the host fingerprint;
 // Copy Path, always). Server actions dispatch as `file_action_id`.
 message FileReference {
-    string path = 1;                  // absolute, on the server's host
-    string display_name = 2;          // "aun-map.json"; defaults to the path's file name
-    // OK = loaded; WARN = missing; ERROR = load error. Reuses Indicator.State.
+    // Absolute, on the server's host. Empty when there is no file in effect
+    // (the AUN map file under map-file=none).
+    string path = 1;
+    // The file's role, e.g. "Shared AUN map"; when empty the renderer shows
+    // the path's file name.
+    string display_name = 2;
+    // Reuses Indicator.State; the extension chooses the mapping. The AUN map
+    // file uses OK = loaded, WARN = not found (or disabled), ERROR = load
+    // error.
     Indicator.State state = 3;
-    string state_text = 4;            // "12 peers, 1 subnet" or the load error
+    string state_text = 4;            // "loaded", "not found", or the load error
     repeated FileReferenceAction actions = 5;  // server actions: "Reload"
 }
 
@@ -372,13 +381,15 @@ message DispatchRequest {
     }
 }
 
-// The user's action on one EditableList item. ADD carries no item_id and an
-// `commit` built from the list's add_editor; EDIT carries the item_id and an
+// The user's action on one EditableList item. ADD carries no item_id and a
+// `commit` built from the list's add_editor; EDIT carries the item_id and a
 // `commit` from that item's editor; REMOVE carries just the item_id; ACTION
-// carries the item_id and the chosen action_id (and no commit). The server
-// validates item_id / action_id against the current view like any other
-// dispatch, and applies an ADD / EDIT commit with the same no-partial rule as
-// EditorCommit.
+// carries the item_id and the chosen action_id, plus a `commit` from the
+// action's editor when the action has one (and no commit otherwise). The
+// server validates the event against the current view before the extension
+// sees it: ADD needs can_add, EDIT an editable item, REMOVE a removable item,
+// ACTION an action the item offers; every commit is checked against its
+// editor tree with the same no-partial rule as EditorCommit.
 message EditableListEvent {
     enum Kind {
         ADD    = 0;
@@ -389,12 +400,13 @@ message EditableListEvent {
     Kind kind = 1;
     string item_id = 2;               // empty for ADD
     string action_id = 3;             // for ACTION
-    EditorCommit commit = 4;          // for ADD and EDIT: the editor field values
+    EditorCommit commit = 4;          // for ADD, EDIT and an ACTION with an editor
 }
 
 // One field's value inside an EditorCommit. The 'field_id' names a
-// sub-control inside the ModalEditor's editor tree (matches the
-// Control.id of that leaf). The payload variant must match the
+// sub-control inside the editor tree being committed (a ModalEditor's
+// editor, or an EditableList's add_editor, item editor or action editor),
+// matching the Control.id of that leaf. The payload variant must match the
 // addressed sub-control's type (see EditorCommit validation below).
 message EditorFieldValue {
     string field_id = 1;
@@ -405,8 +417,9 @@ message EditorFieldValue {
     }
 }
 
-// Atomic commit of a ModalEditor's editor tree. Sent as the payload of
-// a DispatchRequest targeting a ModalEditor control.
+// Atomic commit of an editor tree. Sent as the payload of a
+// DispatchRequest targeting a ModalEditor control, and carried inside an
+// EditableListEvent for an EditableList ADD, EDIT or editor-bearing ACTION.
 //
 // Clients bundle the final value of each sub-control whose value the
 // user changed (or all sub-controls -- either is accepted). The server

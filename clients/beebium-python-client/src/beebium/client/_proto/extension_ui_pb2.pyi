@@ -103,7 +103,8 @@ class Control(_message.Message):
     """--- Controls ---
 
     Eleven primitives, deliberately small. Together with nested Groups and
-    ModalEditors they cover the panels we have today (Piconet, AUN) and
+    ModalEditors they cover the panels we have today (the AUN and Piconet
+    transports; the RTC, host-serial and SCSI hard disc peripherals) and
     are expected to cover ~90% of any future extension. Stretching the
     alphabet should hurt slightly each time -- that's the forcing function
     for keeping it small. The newest two, EditableList and FileReference,
@@ -592,11 +593,11 @@ class EditableList(_message.Message):
     EMPTY_TEXT_FIELD_NUMBER: _builtins.int
     HELP_FIELD_NUMBER: _builtins.int
     title: _builtins.str
-    """"Peers", "Subnet rules" """
+    """"Peers (3)", "Subnet rules (1)" """
     can_add: _builtins.bool
-    """shows the platform's "+" affordance"""
+    """shows the platform's "+" affordance;"""
     empty_text: _builtins.str
-    """shown when items is empty: "No peers" """
+    """shown when items is empty: "No subnet rules" """
     help: _builtins.str
     """Explains what the list is, for someone new to the domain. Rendered as
     an information affordance beside the title, like TextInput.help. The
@@ -606,7 +607,8 @@ class EditableList(_message.Message):
     def items(self) -> _containers.RepeatedCompositeFieldContainer[Global___EditableListItem]: ...
     @_builtins.property
     def add_editor(self) -> Global___Control:
-        """The editor Control for a NEW item (fields only; the renderer supplies
+        """an ADD is rejected unless set
+        The editor Control for a NEW item (fields only; the renderer supplies
         the commit UI). By convention a Group of TextInput / Choice leaves,
         mirroring a ModalEditor's editor tree. Committed as an ADD event.
         """
@@ -652,16 +654,18 @@ class EditableListItem(_message.Message):
     secondary: _builtins.str
     """right-aligned caption: "map file", "mDNS" """
     subtitle: _builtins.str
-    """beneath, muted: the label "PiEconetBridge FS" """
+    """beneath, muted: a label, "PiEconetBridge FS" """
     state: Global___Indicator.State.ValueType
     """Small state badge for the row. UNKNOWN means no indicator; WARN marks,
     e.g., an unreachable peer. Reuses Indicator.State so the renderer shares
     one badge style across controls.
     """
     editable: _builtins.bool
-    """edit affordance; `editor` below is prefilled"""
+    """edit affordance; `editor` below is prefilled;"""
     removable: _builtins.bool
-    """"-" affordance"""
+    """an EDIT is rejected unless set
+    "-" affordance; a REMOVE is rejected unless set
+    """
     note: _builtins.str
     """short warning shown with the item, optional"""
     @_builtins.property
@@ -755,13 +759,20 @@ class FileReference(_message.Message):
     STATE_TEXT_FIELD_NUMBER: _builtins.int
     ACTIONS_FIELD_NUMBER: _builtins.int
     path: _builtins.str
-    """absolute, on the server's host"""
+    """Absolute, on the server's host. Empty when there is no file in effect
+    (the AUN map file under map-file=none).
+    """
     display_name: _builtins.str
-    """"aun-map.json"; defaults to the path's file name"""
+    """The file's role, e.g. "Shared AUN map"; when empty the renderer shows
+    the path's file name.
+    """
     state: Global___Indicator.State.ValueType
-    """OK = loaded; WARN = missing; ERROR = load error. Reuses Indicator.State."""
+    """Reuses Indicator.State; the extension chooses the mapping. The AUN map
+    file uses OK = loaded, WARN = not found (or disabled), ERROR = load
+    error.
+    """
     state_text: _builtins.str
-    """"12 peers, 1 subnet" or the load error"""
+    """"loaded", "not found", or the load error"""
     @_builtins.property
     def actions(self) -> _containers.RepeatedCompositeFieldContainer[Global___FileReferenceAction]:
         """server actions: "Reload" """
@@ -865,13 +876,15 @@ Global___DispatchRequest: _TypeAlias = DispatchRequest  # noqa: Y015
 
 @_typing.final
 class EditableListEvent(_message.Message):
-    """The user's action on one EditableList item. ADD carries no item_id and an
-    `commit` built from the list's add_editor; EDIT carries the item_id and an
+    """The user's action on one EditableList item. ADD carries no item_id and a
+    `commit` built from the list's add_editor; EDIT carries the item_id and a
     `commit` from that item's editor; REMOVE carries just the item_id; ACTION
-    carries the item_id and the chosen action_id (and no commit). The server
-    validates item_id / action_id against the current view like any other
-    dispatch, and applies an ADD / EDIT commit with the same no-partial rule as
-    EditorCommit.
+    carries the item_id and the chosen action_id, plus a `commit` from the
+    action's editor when the action has one (and no commit otherwise). The
+    server validates the event against the current view before the extension
+    sees it: ADD needs can_add, EDIT an editable item, REMOVE a removable item,
+    ACTION an action the item offers; every commit is checked against its
+    editor tree with the same no-partial rule as EditorCommit.
     """
 
     DESCRIPTOR: _descriptor.Descriptor
@@ -904,7 +917,7 @@ class EditableListEvent(_message.Message):
     """for ACTION"""
     @_builtins.property
     def commit(self) -> Global___EditorCommit:
-        """for ADD and EDIT: the editor field values"""
+        """for ADD, EDIT and an ACTION with an editor"""
 
     def __init__(
         self,
@@ -925,8 +938,9 @@ Global___EditableListEvent: _TypeAlias = EditableListEvent  # noqa: Y015
 @_typing.final
 class EditorFieldValue(_message.Message):
     """One field's value inside an EditorCommit. The 'field_id' names a
-    sub-control inside the ModalEditor's editor tree (matches the
-    Control.id of that leaf). The payload variant must match the
+    sub-control inside the editor tree being committed (a ModalEditor's
+    editor, or an EditableList's add_editor, item editor or action editor),
+    matching the Control.id of that leaf. The payload variant must match the
     addressed sub-control's type (see EditorCommit validation below).
     """
 
@@ -960,8 +974,9 @@ Global___EditorFieldValue: _TypeAlias = EditorFieldValue  # noqa: Y015
 
 @_typing.final
 class EditorCommit(_message.Message):
-    """Atomic commit of a ModalEditor's editor tree. Sent as the payload of
-    a DispatchRequest targeting a ModalEditor control.
+    """Atomic commit of an editor tree. Sent as the payload of a
+    DispatchRequest targeting a ModalEditor control, and carried inside an
+    EditableListEvent for an EditableList ADD, EDIT or editor-bearing ACTION.
 
     Clients bundle the final value of each sub-control whose value the
     user changed (or all sub-controls -- either is accepted). The server
