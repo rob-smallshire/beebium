@@ -24,6 +24,7 @@
 
 #include "AunDiscoveryAnnouncer.hpp"
 #include "AunDiscoverySubscriber.hpp"
+#include "AunEconetTransportExtension.hpp"
 
 #include <beebium/discovery/Advertiser.hpp>
 #include <beebium/discovery/Browser.hpp>
@@ -699,4 +700,53 @@ TEST_CASE("AUN mDNS e2e: a map-file entry wins over a discovered one and reports
     REQUIRE(wait_until([&] {
         return peers_a.station_collisions().count == 0;
     }));
+}
+
+// Discovery mode (#158): only a browsing transport adopts a discovered peer.
+// One publisher on `on`; a `browse` instance adopts it, while `announce` and
+// `off` instances -- which never browse -- ignore it entirely.
+TEST_CASE("AUN discovery mode: browse adopts a peer that announce and off ignore",
+          "[.mdns][aun][discovery]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    const std::string svc = unique_service_type();
+
+    auto make = [&](std::uint8_t station, const std::string& mode,
+                    const std::string& uuid) {
+        auto ext = std::make_unique<AunEconetTransportExtension>();
+        ext->set_discovery_service_type(svc);
+        ext->set_config({{"port", "0"}, {"net", "0"}, {"map-file", "none"},
+                         {"discovery", mode}, {"machine_uuid", uuid}});
+        auto backend = ext->create_backend(station);
+        REQUIRE(backend != nullptr);
+        REQUIRE(backend->is_connected());
+        // Keep the backend alive for the test (the extension holds a non-owning
+        // pointer; discovery runs regardless of who owns the socket).
+        return std::pair{std::move(ext), std::move(backend)};
+    };
+
+    auto publisher = make(90, "on", "disc-pub");        // publishes 0.90
+    auto browser = make(91, "browse", "disc-browse");   // browses, no publish
+    auto announcer = make(92, "announce", "disc-announce");  // publishes, no browse
+    auto off = make(93, "off", "disc-off");             // neither
+
+    // The browser must discover and adopt the publisher's 0.90.
+    bool adopted = false;
+    auto deadline = std::chrono::steady_clock::now() + MDNS_TIMEOUT;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (browser.first->peer_set().resolve(0, 90).has_value()) {
+            adopted = true;
+            break;
+        }
+        std::this_thread::sleep_for(POLL_INTERVAL);
+    }
+    CHECK(adopted);
+
+    // announce and off never browse, so they adopt nothing -- not even the
+    // publisher's record that the browser just picked up.
+    CHECK_FALSE(announcer.first->peer_set().resolve(0, 90).has_value());
+    CHECK(announcer.first->peer_set().peer_count() == 0);
+    CHECK_FALSE(off.first->peer_set().resolve(0, 90).has_value());
+    CHECK(off.first->peer_set().peer_count() == 0);
 }

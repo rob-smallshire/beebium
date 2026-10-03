@@ -2329,6 +2329,16 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         config.extension_instances = std::move(remaining);
     }
 
+    // Validate each transport's config before anything else (issue #158): an
+    // invalid --aun discovery= value, say, is a clear launch error here rather
+    // than a silent fallback or a failure deep in create_backend.
+    for (const auto& transport : am->transport_registry.extensions()) {
+        if (auto error = transport->config_error()) {
+            std::cerr << "Error: " << transport->name() << " " << *error << "\n";
+            return {nullptr, ExitCode::USAGE};
+        }
+    }
+
     // Install Econet hardware. --station auto is resolved to a concrete number
     // first. On the `start` path we DEFER that resolution (it may browse mDNS
     // for a few seconds) until the gRPC server is listening and its port is

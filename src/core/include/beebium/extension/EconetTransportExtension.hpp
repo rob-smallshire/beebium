@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -66,6 +67,12 @@ public:
     // docs/networking.md ("Emulation speed and real-time peers"). Defined
     // out-of-line in EconetTransportExtension.cpp.
     virtual bool requires_real_time_pacing() const;
+
+    // Validate the current config, returning a human-readable reason (no
+    // "Error:" prefix) when it is invalid, else nullopt. The server calls this
+    // at machine assembly, before create_backend, so a bad parameter value is a
+    // clear launch error rather than a silent fallback. Default: always valid.
+    virtual std::optional<std::string> config_error() const { return std::nullopt; }
 
     // A transport's client-facing API (e.g. AUN peer-list RPCs) is served
     // through the core's ExtensionRpc channel via rpc_dispatchers() (declared

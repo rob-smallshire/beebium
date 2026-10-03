@@ -107,6 +107,9 @@ public:
                     resp.set_map_file_entry_count(
                         extension_.map_file_entry_count());
                     resp.set_map_file_error(extension_.map_file_error());
+                    resp.set_discovery_mode(
+                        AunEconetTransportExtension::discovery_mode_name(
+                            extension_.discovery_mode()));
                     auto* backend = extension_.backend();
                     if (!backend) {
                         // No socket yet -> no link, whatever cable state a

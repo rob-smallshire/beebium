@@ -240,6 +240,16 @@ void AunUi::build_view(View* out) const {
             "Listening on UDP port " + std::to_string(backend->local_port()));
     }
 
+    // Discovery mode, shown only when it is not the default "on" (#158), so a
+    // user who turned announce/browse/off on knows discovery is limited.
+    if (ext_.discovery_mode() != AunEconetTransportExtension::DiscoveryMode::On) {
+        auto* control = root_group->add_controls();
+        control->set_id("discovery_mode");
+        control->mutable_label()->set_text(
+            "Discovery: " + AunEconetTransportExtension::discovery_mode_name(
+                                ext_.discovery_mode()));
+    }
+
     // Map-file peers carry labels and host strings; index them for lookup.
     std::map<std::uint16_t, AunMapPeer> map_by_key;
     for (const auto& p : ext_.map_peers()) {

@@ -40,6 +40,7 @@
 #include <netinet/in.h>
 #endif
 
+#include <cctype>
 #include <charconv>
 #include <chrono>
 #include <filesystem>
@@ -162,6 +163,41 @@ std::uint8_t AunEconetTransportExtension::parse_net(const std::string& value) {
         return 0;
     }
     return static_cast<std::uint8_t>(parsed);
+}
+
+std::optional<AunEconetTransportExtension::DiscoveryMode>
+AunEconetTransportExtension::parse_discovery_mode(const std::string& value) {
+    std::string v;
+    v.reserve(value.size());
+    for (char c : value) {
+        v.push_back(static_cast<char>(
+            std::tolower(static_cast<unsigned char>(c))));
+    }
+    if (v.empty() || v == "on") return DiscoveryMode::On;
+    if (v == "announce") return DiscoveryMode::Announce;
+    if (v == "browse") return DiscoveryMode::Browse;
+    if (v == "off") return DiscoveryMode::Off;
+    return std::nullopt;
+}
+
+std::string AunEconetTransportExtension::discovery_mode_name(DiscoveryMode mode) {
+    switch (mode) {
+        case DiscoveryMode::On: return "on";
+        case DiscoveryMode::Announce: return "announce";
+        case DiscoveryMode::Browse: return "browse";
+        case DiscoveryMode::Off: return "off";
+    }
+    return "on";
+}
+
+std::optional<std::string> AunEconetTransportExtension::config_error() const {
+    if (auto value = config_value("discovery")) {
+        if (!parse_discovery_mode(std::string(*value)).has_value()) {
+            return "discovery must be one of off, announce, browse, on (got '" +
+                   std::string(*value) + "')";
+        }
+    }
+    return std::nullopt;
 }
 
 std::vector<AunEconetTransportExtension::PeerSpec>
@@ -291,7 +327,6 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
 
     auto net_value = config_value("net");
     auto local_net = parse_net(net_value ? std::string(*net_value) : std::string{});
-
     auto backend = std::make_unique<AunBackend>(local_net, station, *port);
     if (!backend->is_connected()) {
         // Keep the specific reason (port + OS cause) so AunUi can show it in
@@ -335,43 +370,70 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
         ? std::string(*machine_uuid_value)
         : std::string{};
 
-    announcer_ = std::make_unique<AunDiscoveryAnnouncer>(
-        local_net, station, backend->local_port(),
-        std::string{"beebium"}, std::string{BEEBIUM_VERSION},
-        machine_uuid);  // copied; the subscriber needs it too, below
-    if (!discovery_service_type_.empty()) {
-        announcer_->set_service_type(discovery_service_type_);
-    }
-    if (!announcer_->start()) {
-        std::cerr << "AUN extension: mDNS announcement unavailable -- "
-                     "discovery disabled\n";
+    // Discovery mode (#158): whether we publish and/or browse _aun._udp.
+    auto discovery_value = config_value("discovery");
+    discovery_mode_ = parse_discovery_mode(
+        discovery_value ? std::string(*discovery_value) : std::string{})
+                          .value_or(DiscoveryMode::On);
+    const bool do_announce = discovery_mode_ == DiscoveryMode::On ||
+                             discovery_mode_ == DiscoveryMode::Announce;
+    const bool do_browse = discovery_mode_ == DiscoveryMode::On ||
+                           discovery_mode_ == DiscoveryMode::Browse;
+
+    // Publish a DNS-SD announcement so other AUN-capable peers can
+    // discover us without an explicit --aun map= entry (unless discovery is
+    // browse/off, which do not publish). Failure to start (e.g. mDNS
+    // unavailable on this platform) is non-fatal -- the transport still works
+    // for explicitly-mapped peers.
+    //
+    // machine_uuid is injected by ServerMain so the announcement's
+    // impl-identity TXT record matches the same UUID this server
+    // publishes on its _beebium._tcp announcement -- a discovering
+    // tool can correlate the two and know which AUN peer is which
+    // Beebium machine.
+    if (do_announce) {
+        announcer_ = std::make_unique<AunDiscoveryAnnouncer>(
+            local_net, station, backend->local_port(),
+            std::string{"beebium"}, std::string{BEEBIUM_VERSION},
+            machine_uuid);  // copied; the subscriber needs it too, below
+        if (!discovery_service_type_.empty()) {
+            announcer_->set_service_type(discovery_service_type_);
+        }
+        if (!announcer_->start()) {
+            std::cerr << "AUN extension: mDNS announcement unavailable -- "
+                         "discovery disabled\n";
+        }
     }
 
     // Subscribe to peer announcements published by other AUN-capable
-    // stations and add them to our peer table as Discovered entries.
-    // Operator-configured peers (added via --aun map= or
-    // AunService::AddPeer) take precedence over discovered ones --
-    // see AunBackend::add_peer's PeerSource handling.
-    subscriber_ = std::make_unique<AunDiscoverySubscriber>(
-        peer_set_, station, nullptr, std::move(machine_uuid));
-    if (!discovery_service_type_.empty()) {
-        subscriber_->set_service_type(discovery_service_type_);
-    }
-    // Share the announcer's bind-time "since" so both halves agree which of two
-    // instances racing for one number is the incumbent (#147). The announcer
-    // stamped it at construction (this bind); the subscriber compares a
-    // claimant's advertised "since" against it.
-    subscriber_->set_own_since(announcer_->since());
-    // Discovery callbacks fire on the browser's background thread.
-    // mark_dirty is atomic; the View is then re-built (and re-pushed
-    // to gRPC subscribers) on the ExtensionUiService poll thread,
-    // which calls list_peers() under the peer-table lock. So a
-    // discovered peer reaches the UI within the next poll interval
-    // (~50ms) without the operator having to interact with anything.
-    subscriber_->set_on_peers_changed([this] { ui_.mark_dirty(); });
-    if (!subscriber_->start()) {
-        std::cerr << "AUN extension: mDNS subscription unavailable -- "
-                     "peer discovery disabled\n";
+    // stations and add them to our peer table as Discovered entries (unless
+    // discovery is announce/off, which do not browse). Operator-configured
+    // peers (--aun map= or AunService::AddPeer) take precedence over
+    // discovered ones -- see AunBackend::add_peer's PeerSource handling.
+    if (do_browse) {
+        subscriber_ = std::make_unique<AunDiscoverySubscriber>(
+            peer_set_, station, nullptr, std::move(machine_uuid));
+        if (!discovery_service_type_.empty()) {
+            subscriber_->set_service_type(discovery_service_type_);
+        }
+        // Share the announcer's bind-time "since" (when we also announce) so
+        // both halves agree which of two instances racing for one number is
+        // the incumbent (#147); browse-only keeps the subscriber's own
+        // construction-time since.
+        if (announcer_) {
+            subscriber_->set_own_since(announcer_->since());
+        }
+        // Discovery callbacks fire on the browser's background thread.
+        // mark_dirty is atomic; the View is then re-built (and re-pushed
+        // to gRPC subscribers) on the ExtensionUiService poll thread,
+        // which calls list_peers() under the peer-table lock. So a
+        // discovered peer reaches the UI within the next poll interval
+        // (~50ms) without the operator having to interact with anything.
+        subscriber_->set_on_peers_changed([this] { ui_.mark_dirty(); });
+        if (!subscriber_->start()) {
+            std::cerr << "AUN extension: mDNS subscription unavailable -- "
+                         "peer discovery disabled\n";
+        }
     }
 
     // React to a runtime station change (EconetService::SetStationId, on a gRPC
@@ -444,7 +506,6 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
         subscriber_.reset();  // stop browsing + join the sweep thread
         announcer_.reset();   // stop advertising a station with no backend
     });
-
     return backend;
 }
 
@@ -547,29 +608,25 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
         }
     }
 
-    // The claim advertises a non-zero port even when the configured port is
-    // OS-ephemeral (port=0): peers resolve the SRV record to detect a
-    // collision, and a zero SRV port never completes that resolve, so the claim
-    // would be invisible. The real port is advertised by create_backend right
-    // after; this placeholder matters only during selection.
-    const std::uint16_t claim_port = (*port != 0) ? *port : AUN_DEFAULT_PORT;
-
-    // Keep both a browse and a claim announcement up for the whole selection,
-    // and poll. A continuously-advertised claim is what lets other instances
-    // launched at the same time discover us reliably (a claim raised only for a
-    // brief settle is usually missed under real mDNS). local_stn tracks the
-    // current candidate so the subscriber judges own-number collisions against
-    // it; own_number_contested_as_newcomer() means another instance holds the
-    // candidate and bound first (the #147 ordering), so we yield and climb.
-    auto subscriber = std::make_unique<AunDiscoverySubscriber>(
-        peer_set_, /*local_stn=*/0, nullptr, machine_uuid);
-    auto announcer = std::make_unique<AunDiscoveryAnnouncer>(
-        local_net, range.lo, claim_port, std::string{"beebium"},
-        std::string{BEEBIUM_VERSION}, machine_uuid);
-    if (!discovery_service_type_.empty()) {
-        subscriber->set_service_type(discovery_service_type_);
-        announcer->set_service_type(discovery_service_type_);
-    }
+    // Discovery mode (#158) governs how selection runs:
+    //   On       -- browse AND claim: observe, claim, and arbitrate a
+    //               same-instant race by climbing past an earlier-bound
+    //               incumbent (#147).
+    //   Browse   -- browse but do not claim: observe discovered peers, then take
+    //               the lowest free number. A same-instant race is NOT
+    //               arbitrated (two browse-only instances may pick one number).
+    //   Announce -- publish but do not browse: we cannot see others, so the
+    //               in-use set is operator-only (map / map-file / launch) as in
+    //               Off; the claim itself is published later by create_backend.
+    //   Off      -- neither: operator-only in-use set, resolved immediately.
+    // The per-host hint (search_start, #161) applies in every mode.
+    auto discovery_value = config_value("discovery");
+    discovery_mode_ = parse_discovery_mode(
+        discovery_value ? std::string(*discovery_value) : std::string{})
+                          .value_or(DiscoveryMode::On);
+    const bool do_browse = discovery_mode_ == DiscoveryMode::On ||
+                           discovery_mode_ == DiscoveryMode::Browse;
+    const bool do_claim = discovery_mode_ == DiscoveryMode::On;
 
     auto occupied_now = [&](std::set<std::uint8_t> extra) {
         for (const auto& e : peer_set_.list_peers()) {
@@ -580,13 +637,71 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
         return extra;
     };
 
+    // Record the taken number in the hint file (best-effort) and build the
+    // outcome. nullopt means the range was exhausted (start at range.lo).
+    auto finalise = [&](std::optional<std::uint8_t> chosen) {
+        if (!chosen.has_value()) {
+            out.status = Status::Exhausted;
+            out.station = range.lo;
+            out.report = "Econet: all station numbers " + std::to_string(range.lo) +
+                         "-" + std::to_string(range.hi) +
+                         " are in use; starting at " + std::to_string(range.lo);
+            return out;
+        }
+        out.status = Status::Selected;
+        out.station = *chosen;
+        if (state_filepath.has_value()) {
+            econet::record_auto_station(*state_filepath, *chosen,
+                                        std::chrono::milliseconds(300));
+        }
+        return out;
+    };
+
+    if (!do_browse) {
+        // Announce / Off: no observation; operator-only in-use set; immediate.
+        return finalise(econet::lowest_free_station_from(occupied_now({}), range,
+                                                         search_start));
+    }
+
+    // We browse. Build the subscriber (the claim announcer, when we claim,
+    // advertises a non-zero port even for an OS-ephemeral port=0: peers resolve
+    // the SRV record to detect a collision and a zero SRV port never completes
+    // that resolve. The real port is advertised by create_backend right after.)
+    const std::uint16_t claim_port = (*port != 0) ? *port : AUN_DEFAULT_PORT;
+    auto subscriber = std::make_unique<AunDiscoverySubscriber>(
+        peer_set_, /*local_stn=*/0, nullptr, machine_uuid);
+    if (!discovery_service_type_.empty()) {
+        subscriber->set_service_type(discovery_service_type_);
+    }
+
+    if (!do_claim) {
+        // Browse-only: observe for the minimum window, then take the lowest free
+        // number with discovered peers counted. No claim, so a same-instant race
+        // is not arbitrated (documented).
+        subscriber->start();
+        std::this_thread::sleep_for(auto_min_observe_);
+        auto chosen = econet::lowest_free_station_from(occupied_now({}), range,
+                                                       search_start);
+        subscriber->stop();
+        return finalise(chosen);
+    }
+
+    // On: browse AND claim. Keep a claim up continuously and poll, climbing past
+    // an earlier-bound incumbent so instances launched together settle on
+    // distinct numbers.
+    auto announcer = std::make_unique<AunDiscoveryAnnouncer>(
+        local_net, range.lo, claim_port, std::string{"beebium"},
+        std::string{BEEBIUM_VERSION}, machine_uuid);
+    if (!discovery_service_type_.empty()) {
+        announcer->set_service_type(discovery_service_type_);
+    }
+
     std::set<std::uint8_t> tried;  // numbers an incumbent pushed us off
     auto first_free =
         econet::lowest_free_station_from(occupied_now({}), range, search_start);
     std::uint8_t candidate = first_free.value_or(search_start);
-    const bool start_exhausted = !first_free.has_value();
+    bool exhausted = !first_free.has_value();
 
-    // Raise the claim at the first candidate and start browsing.
     announcer->set_local_station(candidate);
     announcer->start();
     subscriber->set_own_since(announcer->since());
@@ -595,14 +710,12 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
 
     const auto start = std::chrono::steady_clock::now();
     auto last_move = start;
-    bool exhausted = start_exhausted;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
         const auto now = std::chrono::steady_clock::now();
         if (now - start >= auto_budget_) {
             break;  // hard cap; keep whatever candidate we hold
         }
-
         if (subscriber->own_number_contested_as_newcomer()) {
             // Someone holds this number and bound before us: climb to the next
             // free one, re-announce there, and restart the quiet timer.
@@ -613,9 +726,8 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
                 exhausted = true;
                 break;  // whole range taken; keep the current candidate
             }
-            // Keep our original bind-time "since": it gives a stable, launch-
-            // ordered tie-break if two instances climb onto the same number,
-            // so the earlier-launched one wins and the other climbs again.
+            // Keep our original bind-time "since": a stable, launch-ordered
+            // tie-break so the earlier-launched instance wins a shared number.
             candidate = *next;
             announcer->set_local_station(candidate);
             announcer->start();
@@ -624,34 +736,16 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
             last_move = now;
             continue;
         }
-
         // Settle once the candidate has stood unchallenged for the quiet period
         // AND we have observed long enough for a pre-existing peer to surface.
         if (now - start >= auto_min_observe_ && now - last_move >= auto_quiet_) {
             break;
         }
     }
-
     subscriber->stop();
     announcer->stop();
-
-    if (exhausted) {
-        out.status = Status::Exhausted;
-        out.station = range.lo;
-        out.report = "Econet: all station numbers " + std::to_string(range.lo) +
-                     "-" + std::to_string(range.hi) +
-                     " are in use; starting at " + std::to_string(range.lo);
-        return out;
-    }
-    out.status = Status::Selected;
-    out.station = candidate;
-    // Record the number actually taken so the next launch on this host
-    // continues past it (best-effort; a failure just lets the hint lapse).
-    if (state_filepath.has_value()) {
-        econet::record_auto_station(*state_filepath, candidate,
-                                    std::chrono::milliseconds(300));
-    }
-    return out;
+    return finalise(exhausted ? std::optional<std::uint8_t>{}
+                              : std::optional<std::uint8_t>(candidate));
 }
 
 AunEconetTransportExtension::AunEconetTransportExtension() = default;

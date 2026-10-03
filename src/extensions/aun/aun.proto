@@ -75,6 +75,11 @@ message AunGetStatusResponse {
     // The last map-file load error, or empty when the last load succeeded (or
     // the file is absent, which is not an error).
     string map_file_error = 6;
+
+    // The mDNS discovery mode (issue #158): "on", "announce", "browse" or
+    // "off". A frontend shows it when it is not "on". (aun.proto is served over
+    // ExtensionRpc and is NOT part of the fingerprinted service protocol.)
+    string discovery_mode = 7;
 }
 
 // --- Map file reload ---

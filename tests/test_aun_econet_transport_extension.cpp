@@ -233,3 +233,70 @@ TEST_CASE("AunEconetTransportExtension::create_backend: bind failure records a "
               != std::string::npos);
     }
 }
+
+// --- Discovery mode parsing and validation (#158) ---------------------------
+
+TEST_CASE("parse_discovery_mode: empty and 'on' -> On (default)",
+          "[econet][aun][extension][discovery]") {
+    using DM = AunEconetTransportExtension::DiscoveryMode;
+    REQUIRE(AunEconetTransportExtension::parse_discovery_mode("") == DM::On);
+    REQUIRE(AunEconetTransportExtension::parse_discovery_mode("on") == DM::On);
+    REQUIRE(AunEconetTransportExtension::parse_discovery_mode("ON") == DM::On);
+}
+
+TEST_CASE("parse_discovery_mode: the three limited modes",
+          "[econet][aun][extension][discovery]") {
+    using DM = AunEconetTransportExtension::DiscoveryMode;
+    REQUIRE(AunEconetTransportExtension::parse_discovery_mode("announce") == DM::Announce);
+    REQUIRE(AunEconetTransportExtension::parse_discovery_mode("Browse") == DM::Browse);
+    REQUIRE(AunEconetTransportExtension::parse_discovery_mode("off") == DM::Off);
+}
+
+TEST_CASE("parse_discovery_mode: an unknown value is nullopt",
+          "[econet][aun][extension][discovery]") {
+    REQUIRE_FALSE(
+        AunEconetTransportExtension::parse_discovery_mode("sometimes").has_value());
+    REQUIRE_FALSE(
+        AunEconetTransportExtension::parse_discovery_mode("yes").has_value());
+}
+
+TEST_CASE("discovery_mode_name round-trips the modes",
+          "[econet][aun][extension][discovery]") {
+    using DM = AunEconetTransportExtension::DiscoveryMode;
+    CHECK(AunEconetTransportExtension::discovery_mode_name(DM::On) == "on");
+    CHECK(AunEconetTransportExtension::discovery_mode_name(DM::Announce) == "announce");
+    CHECK(AunEconetTransportExtension::discovery_mode_name(DM::Browse) == "browse");
+    CHECK(AunEconetTransportExtension::discovery_mode_name(DM::Off) == "off");
+}
+
+TEST_CASE("config_error: a valid or absent discovery value is accepted",
+          "[econet][aun][extension][discovery]") {
+    AunEconetTransportExtension ext;
+    CHECK_FALSE(ext.config_error().has_value());  // no discovery key
+    ext.set_config({{"discovery", "off"}});
+    CHECK_FALSE(ext.config_error().has_value());
+    ext.set_config({{"discovery", "browse"}});
+    CHECK_FALSE(ext.config_error().has_value());
+}
+
+TEST_CASE("config_error: an invalid discovery value names the four choices",
+          "[econet][aun][extension][discovery]") {
+    AunEconetTransportExtension ext;
+    ext.set_config({{"discovery", "sometimes"}});
+    auto error = ext.config_error();
+    REQUIRE(error.has_value());
+    CHECK(error->find("off") != std::string::npos);
+    CHECK(error->find("announce") != std::string::npos);
+    CHECK(error->find("browse") != std::string::npos);
+    CHECK(error->find("on") != std::string::npos);
+    CHECK(error->find("sometimes") != std::string::npos);
+}
+
+TEST_CASE("discovery_mode() reads the config live",
+          "[econet][aun][extension][discovery]") {
+    using DM = AunEconetTransportExtension::DiscoveryMode;
+    AunEconetTransportExtension ext;
+    CHECK(ext.discovery_mode() == DM::On);  // default
+    ext.set_config({{"discovery", "announce"}});
+    CHECK(ext.discovery_mode() == DM::Announce);
+}

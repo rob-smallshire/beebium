@@ -67,6 +67,15 @@ public:
         std::uint16_t port;
     };
 
+    // What the transport does on `_aun._udp` (issue #158, the `discovery=`
+    // parameter). On = announce AND browse (the default, today's behaviour);
+    // Announce = publish our record but adopt nothing; Browse = adopt
+    // discovered peers but publish nothing; Off = neither. Collision reporting
+    // and parked adoption need us to browse, so they are active only in On and
+    // Browse; same-instant auto-station races need us to both claim and observe,
+    // so they are arbitrated only in On.
+    enum class DiscoveryMode { On, Announce, Browse, Off };
+
     AunEconetTransportExtension();
     ~AunEconetTransportExtension() override;
 
@@ -260,6 +269,26 @@ public:
     // dropped with a warning to stderr.
     static std::vector<PeerSpec> parse_map(std::span<const std::string> entries);
 
+    // Parse the "discovery" config value. Empty/missing -> On (the default).
+    // "on"/"announce"/"browse"/"off" (case-insensitive) map to the modes; any
+    // other value is nullopt, which config_error() turns into a launch error.
+    static std::optional<DiscoveryMode> parse_discovery_mode(const std::string& value);
+
+    // The discovery mode in force, parsed live from the config (so it is
+    // accurate even before create_backend). An invalid value -- rejected at
+    // launch by config_error() -- reports as On here.
+    DiscoveryMode discovery_mode() const {
+        auto value = config_value("discovery");
+        return parse_discovery_mode(value ? std::string(*value) : std::string{})
+            .value_or(DiscoveryMode::On);
+    }
+
+    // The mode as the wire/UI string: "on", "announce", "browse", "off".
+    static std::string discovery_mode_name(DiscoveryMode mode);
+
+    // #158: reject an invalid discovery= value at launch, naming the choices.
+    std::optional<std::string> config_error() const override;
+
 private:
     AunBackend* backend_ = nullptr;  // non-owning; lives in EconetSocket
     std::string unavailable_reason_;  // why there is no backend (bind failure)
@@ -278,6 +307,10 @@ private:
     // subscriber in create_backend. Empty means the default "_aun._udp". Used
     // by tests to stay hermetic against real AUN announcers (see the setter).
     std::string discovery_service_type_;
+
+    // Discovery mode in force (issue #158). Set from the "discovery" config in
+    // create_backend / select_auto_station; On until then.
+    DiscoveryMode discovery_mode_ = DiscoveryMode::On;
 
     // Map-file state, guarded because AunService.GetStatus reads it on a gRPC
     // thread while a reload runs on create_backend / the sweep thread.

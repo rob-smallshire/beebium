@@ -252,3 +252,40 @@ TEST_CASE("AUN auto station: BEEBIUM_AUN_AUTO_STATE_FILEPATH=none disables the h
 
     unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
 }
+
+TEST_CASE("AUN auto station: discovery=off resolves instantly from the map file",
+          "[aun][auto-station]") {
+    // With discovery off there is no browse and no observation delay: the
+    // in-use set is the map file (and launch map=/hint) alone, so selection is
+    // immediate. No mDNS responder is needed, hence no [.mdns] tag.
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");  // deterministic start
+    std::random_device rd;
+    auto map_filepath = std::filesystem::temp_directory_path() /
+                        ("beebium-auto-off-map-" + std::to_string(rd()) + ".json");
+    {
+        std::ofstream out(map_filepath, std::ios::binary | std::ios::trunc);
+        out << R"({"peers":[
+            {"net":0,"station":1,"host":"127.0.0.1","port":10000,"label":"a"}
+        ],"subnets":[]})";
+    }
+
+    auto ext = std::make_unique<AunEconetTransportExtension>();
+    ext->set_config({{"port", "0"}, {"net", "0"},
+                     {"map-file", map_filepath.string()},
+                     {"discovery", "off"}, {"machine_uuid", "auto-off"}});
+    // Generous windows that WOULD be spent if it wrongly observed; a fast
+    // return proves off does not wait.
+    ext->set_auto_station_timings_for_test(5000ms, 1000ms, 10000ms);
+
+    const auto before = std::chrono::steady_clock::now();
+    auto outcome = ext->select_auto_station(econet::StationRange{1, 253});
+    const auto elapsed = std::chrono::steady_clock::now() - before;
+
+    CHECK(outcome.status == Status::Selected);
+    CHECK(int(outcome.station) == 2);  // station 1 is taken by the map-file peer
+    CHECK(elapsed < 1s);               // instant: no observation window
+
+    std::error_code ec;
+    std::filesystem::remove(map_filepath, ec);
+    unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
+}

@@ -84,6 +84,10 @@ inline std::vector<Entry> make_entries() {
             {"subnet", "string",
              "Subnet rule 'net@a.b.c.0/24' (RISC OS convention; repeatable)",
              -1, false, /*is_list=*/true, ""});
+        m.parameters.push_back(
+            {"discovery", "string",
+             "mDNS discovery: on (announce+browse), announce, browse, or off",
+             -1, false, false, "on"});
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new AunEconetTransportExtension()); }});
