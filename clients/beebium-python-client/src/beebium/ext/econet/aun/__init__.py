@@ -236,20 +236,29 @@ class Aun(EconetTransportAdapter):
         if not response.success:
             raise EconetError(response.error)
 
-    def remove_peer(self, net: int, stn: int) -> None:
+    def remove_peer(self, net: int, stn: int) -> bool:
         """Remove the ``API`` entry :meth:`add_peer` made for an Econet address.
 
         Entries from other sources are untouched, so a station also named by
         the launch config, the map file or mDNS falls back to that entry.
         Removing an address with no ``API`` entry is not an error.
 
+        Args:
+            net: Econet network number (0-255).
+            stn: Econet station number (1-254).
+
+        Returns:
+            True if an ``API`` entry was removed, False if there was none.
+
         Raises:
-            EconetError: If the server reports the call failed.
+            EconetError: On a validation error (net or stn out of range) or if
+                the server reports the call failed.
         """
         request = aun_pb2.AunRemovePeerRequest(net=net, stn=stn)
         response = self._invoke("RemovePeer", request, aun_pb2.AunRemovePeerResponse())
         if not response.success:
             raise EconetError(response.error)
+        return response.removed
 
     def reload_map(self) -> None:
         """Re-read the per-user ``aun-map.json`` on the server now.
@@ -258,9 +267,9 @@ class Aun(EconetTransportAdapter):
         map file's subnet rules, and the ``SUBNET`` peers materialised from
         subnet rules); ``API``, ``LAUNCH`` and ``DISCOVERED`` entries and
         ``--aun subnet=`` rules are untouched. A modification is picked up
-        automatically by the mtime poll while discovery browses
-        (``discovery=on`` or ``browse``); this forces it. With the map file
-        disabled (``map-file=none``) it does nothing.
+        automatically by the mtime poll (every ~2.5 s, whatever the discovery
+        mode); this forces it. With the map file disabled (``map-file=none``)
+        it does nothing.
 
         Raises:
             EconetError: If the file was present but could not be parsed.

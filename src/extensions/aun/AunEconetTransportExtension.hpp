@@ -142,8 +142,9 @@ public:
 
     // Remove the Api-provenance entry for (net, stn). If a lower-precedence
     // source (a discovered peer, say) also names it, that one becomes the
-    // winner -- removal falls back rather than dropping the station.
-    void remove_api_peer(std::uint8_t net, std::uint8_t stn);
+    // winner -- removal falls back rather than dropping the station. Returns
+    // true if an Api entry was actually removed, false if there was none.
+    bool remove_api_peer(std::uint8_t net, std::uint8_t stn);
 
     // Record the desired cable state (AunService.SetConnected). Applied to the
     // backend immediately when one exists; otherwise remembered and applied at

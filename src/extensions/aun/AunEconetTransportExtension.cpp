@@ -772,9 +772,9 @@ void AunEconetTransportExtension::add_api_peer(
                        AunPeerProvenance::Api);
 }
 
-void AunEconetTransportExtension::remove_api_peer(std::uint8_t net,
+bool AunEconetTransportExtension::remove_api_peer(std::uint8_t net,
                                                   std::uint8_t stn) {
-    peer_set_.remove_peer(net, stn, AunPeerProvenance::Api);
+    return peer_set_.remove_peer(net, stn, AunPeerProvenance::Api);
 }
 
 bool AunEconetTransportExtension::set_desired_connected(bool connected) {

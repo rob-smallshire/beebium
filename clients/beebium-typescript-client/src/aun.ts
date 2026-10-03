@@ -256,9 +256,11 @@ export class Aun {
      * config, the map file or mDNS falls back to that entry. Removing an
      * address with no `Api` entry is not an error.
      *
-     * @throws EconetError if the server reports the call failed.
+     * @returns true if an `Api` entry was removed, false if there was none.
+     * @throws EconetError on a validation error (net or stn out of range) or
+     *   if the server reports the call failed.
      */
-    async removePeer(net: number, stn: number): Promise<void> {
+    async removePeer(net: number, stn: number): Promise<boolean> {
         const payload = AunRemovePeerRequest.encode(
             AunRemovePeerRequest.fromPartial({ net, stn }),
         ).finish();
@@ -267,6 +269,7 @@ export class Aun {
         if (!response.success) {
             throw new EconetError(response.error);
         }
+        return response.removed;
     }
 
     /**

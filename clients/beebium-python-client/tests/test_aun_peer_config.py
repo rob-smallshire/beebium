@@ -25,8 +25,11 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from beebium.client import Beebium
 from beebium.client._proto import extension_ui_pb2
+from beebium.client.exceptions import EconetError
 from beebium.client.installation import DEFAULT_VARIANT, ServerInstallation
 from beebium.ext.econet.aun import Aun, PeerSource
 
@@ -456,3 +459,30 @@ def test_discovery_mode_reported_in_status(
         extra_args=["--aun", "net=1:discovery=off"],
     ) as bbc:
         assert bbc.transport[Aun].status.discovery_mode == "off"
+
+
+def test_peer_rpcs_validate_ranges_and_report_removals(
+    mos_filepath: Path, server_installation: ServerInstallation
+) -> None:
+    # #168: numeric fields are range-checked before narrowing, with field-named
+    # errors, and remove_peer reports whether an entry was removed.
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", "net=1"],
+    ) as bbc:
+        aun = bbc.transport[Aun]
+
+        # Out-of-range values are rejected, not silently narrowed.
+        with pytest.raises(EconetError, match="net must be 0-255"):
+            aun.add_peer(net=256, stn=254, ip_address="127.0.0.1", port=40001)
+        with pytest.raises(EconetError, match="stn must be 1-254"):
+            aun.add_peer(net=0, stn=300, ip_address="127.0.0.1", port=40001)
+        with pytest.raises(EconetError, match="port must be 1-65535"):
+            aun.add_peer(net=0, stn=254, ip_address="127.0.0.1", port=70000)
+
+        # remove_peer reports whether anything was removed.
+        assert aun.remove_peer(net=0, stn=99) is False  # nothing there
+        aun.add_peer(net=0, stn=254, ip_address="127.0.0.1", port=40001)
+        assert aun.remove_peer(net=0, stn=254) is True
+        assert aun.remove_peer(net=0, stn=254) is False  # already gone

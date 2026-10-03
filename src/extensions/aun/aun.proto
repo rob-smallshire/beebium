@@ -243,6 +243,7 @@ message AunRemovePeerRequest {
 message AunRemovePeerResponse {
     bool success = 1;
     string error = 2;
+    bool removed = 3;  // false if there was no such entry
 }
 
 message AunListPeersRequest {

@@ -249,6 +249,7 @@ TEST_CASE("AunService RemovePeer", "[grpc][aun][extension-rpc]") {
         beebium::AunRemovePeerResponse resp;
         REQUIRE(fixture.invoke("RemovePeer", req, &resp).ok());
         REQUIRE(resp.success());
+        REQUIRE(resp.removed());  // an entry was actually removed
     }
 
     {
@@ -256,6 +257,146 @@ TEST_CASE("AunService RemovePeer", "[grpc][aun][extension-rpc]") {
         beebium::AunListPeersResponse resp;
         REQUIRE(fixture.invoke("ListPeers", req, &resp).ok());
         REQUIRE(resp.peers_size() == 0);
+    }
+}
+
+// #168: numeric fields are range-checked before narrowing, with field-named
+// errors, consistently across the peer and map RPCs; removals report whether
+// anything was removed.
+TEST_CASE("AunService RemovePeer reports removed=false for a missing entry",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+    beebium::AunRemovePeerRequest req;
+    req.set_net(0);
+    req.set_stn(99);  // nothing was ever added here
+    beebium::AunRemovePeerResponse resp;
+    REQUIRE(fixture.invoke("RemovePeer", req, &resp).ok());
+    CHECK(resp.success());        // the call succeeded...
+    CHECK_FALSE(resp.removed());  // ...but there was no such entry
+}
+
+TEST_CASE("AunService AddPeer rejects out-of-range net, stn and port",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+    auto add = [&](std::uint32_t net, std::uint32_t stn, std::uint32_t port) {
+        beebium::AunAddPeerRequest req;
+        req.set_net(net);
+        req.set_stn(stn);
+        req.set_ip_address("127.0.0.1");
+        req.set_port(port);
+        beebium::AunAddPeerResponse resp;
+        REQUIRE(fixture.invoke("AddPeer", req, &resp).ok());
+        return resp;
+    };
+
+    SECTION("net 256 (would narrow to 0)") {
+        auto resp = add(256, 254, 40001);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "net must be 0-255");
+    }
+    SECTION("station 300 (would narrow to 44)") {
+        auto resp = add(0, 300, 40001);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "stn must be 1-254");
+    }
+    SECTION("station 0") {
+        auto resp = add(0, 0, 40001);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "stn must be 1-254");
+    }
+    SECTION("port above 65535 (would truncate)") {
+        auto resp = add(0, 254, 70000);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "port must be 1-65535");
+    }
+}
+
+TEST_CASE("AunService RemovePeer rejects out-of-range net and stn",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+    auto remove = [&](std::uint32_t net, std::uint32_t stn) {
+        beebium::AunRemovePeerRequest req;
+        req.set_net(net);
+        req.set_stn(stn);
+        beebium::AunRemovePeerResponse resp;
+        REQUIRE(fixture.invoke("RemovePeer", req, &resp).ok());
+        return resp;
+    };
+    SECTION("net 256 (would act on net 0)") {
+        auto resp = remove(256, 254);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "net must be 0-255");
+    }
+    SECTION("station 300") {
+        auto resp = remove(0, 300);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "stn must be 1-254");
+    }
+}
+
+TEST_CASE("AunService AddMapPeer rejects out-of-range net, stn and port",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+    auto add = [&](std::uint32_t net, std::uint32_t stn, std::uint32_t port) {
+        beebium::AunAddMapPeerRequest req;
+        req.set_net(net);
+        req.set_stn(stn);
+        req.set_host("127.0.0.1");
+        req.set_port(port);
+        beebium::AunAddMapPeerResponse resp;
+        REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
+        return resp;
+    };
+    SECTION("station 300 (would narrow to 44)") {
+        auto resp = add(0, 300, 40001);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "stn must be 1-254");
+    }
+    SECTION("net 256") {
+        auto resp = add(256, 254, 40001);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "net must be 0-255");
+    }
+    SECTION("port 0 (no sentinel here, a map peer needs a real port)") {
+        auto resp = add(0, 254, 0);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "port must be 1-65535");
+    }
+    SECTION("port above 65535") {
+        auto resp = add(0, 254, 70000);
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "port must be 1-65535");
+    }
+}
+
+TEST_CASE("AunService RemoveMapPeer and the subnet RPCs reject out-of-range net",
+          "[grpc][aun][extension-rpc]") {
+    AunServiceFixture fixture;
+    {
+        beebium::AunRemoveMapPeerRequest req;
+        req.set_net(256);
+        req.set_stn(254);
+        beebium::AunRemoveMapPeerResponse resp;
+        REQUIRE(fixture.invoke("RemoveMapPeer", req, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "net must be 0-255");
+    }
+    {
+        beebium::AunAddMapSubnetRequest req;
+        req.set_net(256);
+        req.set_subnet("192.168.5.0/24");
+        beebium::AunAddMapSubnetResponse resp;
+        REQUIRE(fixture.invoke("AddMapSubnet", req, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "net must be 0-255");
+    }
+    {
+        beebium::AunRemoveMapSubnetRequest req;
+        req.set_net(256);
+        beebium::AunRemoveMapSubnetResponse resp;
+        REQUIRE(fixture.invoke("RemoveMapSubnet", req, &resp).ok());
+        CHECK_FALSE(resp.success());
+        CHECK(resp.error() == "net must be 0-255");
     }
 }
 
@@ -388,7 +529,9 @@ TEST_CASE("AunService AddMapPeer validation names the field",
     beebium::AunAddMapPeerResponse resp;
     REQUIRE(fixture.invoke("AddMapPeer", req, &resp).ok());
     CHECK_FALSE(resp.success());
-    CHECK(resp.error().find("station") != std::string::npos);
+    // The dispatcher now range-checks the field uniformly (#168), naming it by
+    // its request field "stn" before the extension layer is reached.
+    CHECK(resp.error().find("stn") != std::string::npos);
 }
 
 TEST_CASE("AunService map edits preserve a hand edit between RPC calls",

@@ -669,17 +669,21 @@ class AunRemovePeerResponse(_message.Message):
 
     SUCCESS_FIELD_NUMBER: _builtins.int
     ERROR_FIELD_NUMBER: _builtins.int
+    REMOVED_FIELD_NUMBER: _builtins.int
     success: _builtins.bool
     error: _builtins.str
+    removed: _builtins.bool
+    """false if there was no such entry"""
     def __init__(
         self,
         *,
         success: _builtins.bool = ...,
         error: _builtins.str = ...,
+        removed: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "success", b"success"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "removed", b"removed", "success", b"success"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

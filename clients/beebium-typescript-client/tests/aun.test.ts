@@ -278,25 +278,39 @@ describe("Aun", () => {
     });
 
     describe("removePeer", () => {
-        it("tunnels net and stn", async () => {
+        it("tunnels net and stn and returns removed=true", async () => {
             const { channel, request } = fakeChannel({
-                RemovePeer: ok(AunRemovePeerResponse, { success: true }),
+                RemovePeer: ok(AunRemovePeerResponse, {
+                    success: true,
+                    removed: true,
+                }),
             });
-            await new Aun(channel).removePeer(0, 254);
+            const removed = await new Aun(channel).removePeer(0, 254);
+            expect(removed).toBe(true);
             const req = request("RemovePeer", AunRemovePeerRequest);
             expect(req.net).toBe(0);
             expect(req.stn).toBe(254);
         });
 
-        it("throws EconetError on failure", async () => {
+        it("returns removed=false when there was no such entry (#168)", async () => {
+            const { channel } = fakeChannel({
+                RemovePeer: ok(AunRemovePeerResponse, {
+                    success: true,
+                    removed: false,
+                }),
+            });
+            expect(await new Aun(channel).removePeer(0, 99)).toBe(false);
+        });
+
+        it("throws EconetError on a field-named validation error (#168)", async () => {
             const { channel } = fakeChannel({
                 RemovePeer: ok(AunRemovePeerResponse, {
                     success: false,
-                    error: "peer not found",
+                    error: "stn must be 1-254",
                 }),
             });
-            await expect(new Aun(channel).removePeer(0, 1)).rejects.toThrow(
-                "peer not found",
+            await expect(new Aun(channel).removePeer(0, 300)).rejects.toThrow(
+                "stn must be 1-254",
             );
         });
     });

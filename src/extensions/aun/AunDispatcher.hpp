@@ -83,11 +83,16 @@ public:
         if (method == "RemovePeer") {
             return handle<AunRemovePeerRequest, AunRemovePeerResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
+                    if (auto e = check_net(req.net()); !e.empty())
+                        return fail(resp, e);
+                    if (auto e = check_stn(req.stn()); !e.empty())
+                        return fail(resp, e);
                     // Edits the desired peer set whether or not a backend is up.
-                    extension_.remove_api_peer(
+                    bool removed = extension_.remove_api_peer(
                         static_cast<std::uint8_t>(req.net()),
                         static_cast<std::uint8_t>(req.stn()));
                     resp.set_success(true);
+                    resp.set_removed(removed);
                 });
         }
         if (method == "ListPeers") {
@@ -132,8 +137,12 @@ public:
         if (method == "AddMapPeer") {
             return handle<AunAddMapPeerRequest, AunAddMapPeerResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
-                    if (req.net() > 255) return fail(resp, "net must be 0-255");
-                    if (req.port() > 65535) return fail(resp, "port must be 1-65535");
+                    if (auto e = check_net(req.net()); !e.empty())
+                        return fail(resp, e);
+                    if (auto e = check_stn(req.stn()); !e.empty())
+                        return fail(resp, e);
+                    if (auto e = check_port(req.port()); !e.empty())
+                        return fail(resp, e);
                     auto result = extension_.add_map_peer(
                         static_cast<std::uint8_t>(req.net()),
                         static_cast<std::uint8_t>(req.stn()), req.host(),
@@ -145,6 +154,10 @@ public:
         if (method == "RemoveMapPeer") {
             return handle<AunRemoveMapPeerRequest, AunRemoveMapPeerResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
+                    if (auto e = check_net(req.net()); !e.empty())
+                        return fail(resp, e);
+                    if (auto e = check_stn(req.stn()); !e.empty())
+                        return fail(resp, e);
                     auto result = extension_.remove_map_peer(
                         static_cast<std::uint8_t>(req.net()),
                         static_cast<std::uint8_t>(req.stn()));
@@ -156,7 +169,8 @@ public:
         if (method == "AddMapSubnet") {
             return handle<AunAddMapSubnetRequest, AunAddMapSubnetResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
-                    if (req.net() > 255) return fail(resp, "net must be 0-255");
+                    if (auto e = check_net(req.net()); !e.empty())
+                        return fail(resp, e);
                     auto result = extension_.add_map_subnet(
                         static_cast<std::uint8_t>(req.net()), req.subnet(),
                         req.label());
@@ -167,6 +181,8 @@ public:
         if (method == "RemoveMapSubnet") {
             return handle<AunRemoveMapSubnetRequest, AunRemoveMapSubnetResponse>(
                 method, request, response, [&](const auto& req, auto& resp) {
+                    if (auto e = check_net(req.net()); !e.empty())
+                        return fail(resp, e);
                     auto result = extension_.remove_map_subnet(
                         static_cast<std::uint8_t>(req.net()));
                     if (!result.error.empty()) return fail(resp, result.error);
@@ -228,15 +244,38 @@ private:
         resp.set_error(error);
     }
 
+    // Range checks for the numeric fields before they are narrowed to a byte or
+    // a port (#168). Each returns an empty string when the value is in range, or
+    // a field-named message otherwise. net is the full Econet net byte (0-255),
+    // stn an addressable station (1-254), port a usable UDP port (1-65535).
+    static std::string check_net(std::uint32_t net) {
+        return net > 255 ? "net must be 0-255" : std::string{};
+    }
+    static std::string check_stn(std::uint32_t stn) {
+        return (stn < 1 || stn > 254) ? "stn must be 1-254" : std::string{};
+    }
+    static std::string check_port(std::uint32_t port) {
+        return (port < 1 || port > 65535) ? "port must be 1-65535"
+                                          : std::string{};
+    }
+
     void add_peer(const AunAddPeerRequest& req, AunAddPeerResponse& resp) {
         // Validate against the documented range (net 0..255: the full Econet
         // net byte, which a guest can address). Edits the desired peer set
         // whether or not a backend is up.
-        if (req.net() > 255) {
-            return fail(resp, "net must be 0-255");
+        if (auto e = check_net(req.net()); !e.empty()) {
+            return fail(resp, e);
         }
-        if (req.stn() < 1 || req.stn() > 254) {
-            return fail(resp, "stn must be 1-254");
+        if (auto e = check_stn(req.stn()); !e.empty()) {
+            return fail(resp, e);
+        }
+        // port 0 is the documented "use the AUN default" sentinel here (unlike
+        // the map RPCs, where a concrete port is required); any other value
+        // must still be a real port, not silently truncated (#168).
+        if (req.port() != 0) {
+            if (auto e = check_port(req.port()); !e.empty()) {
+                return fail(resp, e);
+            }
         }
         in_addr addr{};
         if (inet_pton(AF_INET, req.ip_address().c_str(), &addr) != 1) {
