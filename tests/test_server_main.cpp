@@ -349,6 +349,15 @@ TEST_CASE("merge_preset_econet_transport: a preset discovery=off survives an unr
     CHECK(inst.config.at("port") == "0");          // user typed it
 }
 
+// The AUN transport's display name is what a machine-name template's
+// {econet-transport} shows and the default label its sidebar panel carries
+// (#153): the protocol's own short name, as Piconet's is.
+TEST_CASE("The AUN transport is displayed as 'AUN'", "[server_main][transport][name-template]") {
+    const auto* aun = beebium::builtin_extensions::find("aun");
+    REQUIRE(aun != nullptr);
+    CHECK(aun->manifest.display_name == "AUN");
+}
+
 // #166 end-to-end against the REAL AUN manifest: parse the CLI exactly as
 // server_main does (defaults and all), then merge. This is the seam the #150
 // tests missed by using manifests without defaults. Reproduces the reported

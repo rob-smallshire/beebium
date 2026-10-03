@@ -60,7 +60,7 @@ inline std::vector<Entry> make_entries() {
     {
         ExtensionManifest m;
         m.name = "aun";
-        m.display_name = "AUN Transport";
+        m.display_name = "AUN";
         m.description = "AUN (Acorn Universal Networking) UDP econet transport";
         m.cli_name = "aun";
         m.extension_kind = "econet-transport";

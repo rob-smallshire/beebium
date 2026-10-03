@@ -54,8 +54,8 @@ inline std::vector<NamePlaceholderInfo> econet_name_placeholder_infos() {
          "launch.",
          "Econet"},
         {"econet-transport", "Econet transport",
-         "The transport carrying Econet (\"AUN Transport\", \"Piconet\"), as "
-         "its sidebar labels it; empty when Econet is fitted with no "
+         "The transport carrying Econet (\"AUN\", \"Piconet\"), as its "
+         "sidebar labels it; empty when Econet is fitted with no "
          "transport. Changes when Econet is enabled or disabled.",
          "Econet"},
     };
