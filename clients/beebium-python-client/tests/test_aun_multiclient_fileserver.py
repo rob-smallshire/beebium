@@ -64,9 +64,11 @@ def _free_udp_port() -> int:
 
 
 def _aun_args(own_port: int, peers: dict[int, int]) -> str:
-    """An --aun value with net 0, no map file, and one map= entry per peer."""
+    """An --aun value with net 0, no map file, no mDNS discovery, and one map=
+    entry per peer: the machines find each other only through these entries,
+    and nothing is announced on, or adopted from, the host's network."""
     maps = "".join(f":map=0.{station}@127.0.0.1@{port}" for station, port in peers.items())
-    return f"net=0:port={own_port}:map-file=none{maps}"
+    return f"net=0:port={own_port}:map-file=none:discovery=off{maps}"
 
 
 def _screen_lines(bbc: Beebium) -> list[str]:
