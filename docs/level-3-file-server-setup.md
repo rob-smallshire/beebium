@@ -1,35 +1,72 @@
 # Running an Acorn Level 3 File Server in Beebium
 
-This document covers how to configure and run an Acorn Level 3 File Server
-(L3FS) v1.26 within Beebium, primarily for testing virtual (AUN) Econet
-networks. The companion document `FileServer-RTC-and-Timekeeping.md` covers
-the RTC/dongle/timekeeping aspects in detail; this document focuses on disc
-provisioning, command-line configuration, and the path towards automated
-testing.
+This document covers how to run an Acorn Level 3 File Server (L3FS) v1.26
+within Beebium, for virtual (AUN) Econet networks and for real Econet wires.
+The companion document `FileServer-RTC-and-Timekeeping.md` covers the
+RTC/dongle/timekeeping aspects in detail; this document covers the bundled
+file-server preset, hand-built command lines, disc provisioning, and the tests
+that exercise the file server.
+
+
+## Quick Start: the Bundled Preset
+
+Beebium ships a ready-made file server as the system preset
+`model-b-l3fs-aun` ("Station 254 (L3 File Server, Model B)"). It boots
+unattended to a serving file server ("Starting - Ready") with no keystrokes:
+
+```bash
+beebium-model-b --preset model-b-l3fs-aun --advertise
+```
+
+The preset is station 254 on net 0 over AUN, bound to an OS-chosen UDP port
+(`port=0`) and announced over `_aun._udp`, so client stations on the same LAN
+find it by mDNS discovery with no `map=` entries. Run a client the same way,
+for example with the automatic-station preset:
+
+```bash
+beebium-model-b --preset model-b-disc-aun-auto
+```
+
+and log on from the client with `*I AM SYST` (ANFS's default file server is
+station 254). The bundled disc has users `SYST`, `ChrisC` and `HermannH`; the
+root catalogue holds `Library` and `Passwords`.
+
+The SCSI image is a bundled master (`l3fs-v1_26b.dat`) that the server copies
+to a per-user working copy on first use; delete the working copy to reset the
+file server's disc. See [deployment.md](deployment.md#bundled-discs-and-copy-on-write).
+mDNS advertisement of the gRPC service (`--advertise`) is a launch flag, not
+part of the preset; the AUN transport's `_aun._udp` announcement is governed
+by `--aun discovery=` (default `on`). To keep a server off the LAN, override
+the preset's transport parameters on the command line, which merge with the
+preset's (`--aun discovery=off:map-file=none`).
 
 
 ## Hardware Configuration
 
-The L3FS requires a specific machine configuration:
+The L3FS requires:
 
-- **Machine**: Model B with ROM/RAM board (`beebium-model-b-romram`)
-- **Second processor**: 65C02 at 3MHz (the L3FS runs entirely on the parasite)
-- **Floppy controller**: Acorn 1770 (for loading the FS code from SSD)
-- **SCSI controller**: Acorn SCSI (the file server's data store)
+- **Machine**: BBC Model B (`beebium-model-b`)
+- **Second processor**: 65C02 at 3MHz (`--tube-65c02`; the L3FS runs entirely
+  on the parasite)
+- **SCSI controller**: Acorn SCSI (`--acorn-scsi`) with a hard disc
+  (`--scsi-hdd`), the file server's data store
 - **Econet**: Enabled with a station number (conventionally 254 for a file
   server)
 - **RTC**: Acorn User Port RTC with 7-bit-year-in-R7 layout (for v1.26)
+- **Floppy controller**: Acorn 1770 (`--fdc acorn-1770`), needed only to load
+  the file server from floppy
 
 
 ## ROM Requirements
 
-Three sideways ROMs are needed, each for a specific reason:
-
 | Slot | ROM | Purpose |
 |------|-----|---------|
 | 9 | ANFS 4.18 | Contains the **Tube Host Code** for the 65C02 second processor. Without ANFS, the Tube will not initialise. Also provides NFS for Econet client access. |
-| 10 | ADFS 1.30 | The L3FS stores its data on an ADFS-formatted SCSI disc. ADFS is needed to access the hard disc. |
-| 11 | DFS 2.26 | The FS3v126.ssd boot disc is in SSD (DFS) format. DFS is needed to `*RUN` the file server code from floppy. Must be the 1770-compatible version. |
+| 10 | ADFS 1.30 | The L3FS stores its data on an ADFS-formatted SCSI disc. ADFS is needed to access the hard disc, and in the higher-priority slot it is the boot filing system. |
+| 11 | DFS 2.26 | Only when loading the file server from the `FS3v126.ssd` floppy (DFS format). Must be the 1770-compatible version. |
+
+The bundled preset needs only ANFS and ADFS: its SCSI image carries the file
+server binary and boots it from ADFS.
 
 **Why ANFS and not DNFS?** DNFS 3.02/3.34 contain 8271-only DFS code which is
 NOT compatible with the Acorn 1770 floppy controller. Since we need 1770 DFS
@@ -39,23 +76,24 @@ DFS 2.26 and ANFS 4.18 ROMs. ANFS contains the same Tube Host Code as DNFS.
 
 ## Command Line
 
-The L3FS can be reached over either Econet transport: AUN/UDP for hermetic
-testing on a single host, or Piconet on a real Econet wire for use with
-real BBC Microcomputers.
+The L3FS can be reached over either Econet transport: AUN/UDP for testing on
+one host or a LAN, or Piconet on a real Econet wire for use with real BBC
+Microcomputers.
 
-### Variant A: AUN/UDP (loopback testing)
+### Variant A: AUN/UDP
 
-A working command line for running the L3FS reachable over AUN:
+The bundled preset spelled out as a command line, against your own copy of a
+file-server disc (an image path with a directory component is opened in place,
+read/write, with no copy-on-write):
 
 ```bash
-./beebium-model-b-romram \
-  --sideways 9:rom:roms/acorn-anfs_4_18.rom \
-  --sideways 10:rom:roms/acorn-adfs_1_30.rom \
-  --sideways 11:rom:roms/acorn-dfs_2_26.rom \
+beebium-model-b \
+  --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom \
+  --sideways slot=10:type=rom:image=acorn-adfs_1_30.rom \
   --fdc acorn-1770 \
-  --floppy 0:path/to/FS3v126.ssd \
+  --auto-boot \
   --acorn-scsi \
-  --scsi-hdd 0:path/to/scsi-l3fs.dat \
+  --scsi-hdd scsi-id=0:image=path/to/l3fs.dat \
   --station 254 \
   --aun port=10254:map=0.221@127.0.0.1@10221 \
   --machine-name "L3FS" \
@@ -64,26 +102,34 @@ A working command line for running the L3FS reachable over AUN:
   --advertise
 ```
 
-The `map=` entries map Econet station addresses to IP:port pairs. The
-inner separator is `;` (not `:`) because the extension argument parser
-tokenises on `:`. For loopback testing, each station uses port `10000
-+ station_number` by convention.
+To load the file server from the `FS3v126.ssd` floppy instead
+(`tests/assets/discs/FS3v126.ssd`), add
+`--sideways slot=11:type=rom:image=acorn-dfs_2_26.rom` and
+`--floppy 0:path/to/FS3v126.ssd`, and start it by hand (see "File Server
+Startup Sequence" below).
+
+The `map=` entries map Econet station addresses to UDP endpoints, as
+`net.stn@ip@port`; `@` is the inner separator because the extension argument
+parser tokenises on `:`. Static `map=` entries are needed only where mDNS
+discovery cannot reach (another subnet, discovery turned off, or a non-Beebium
+peer); the per-user map file and subnet rules are the persistent alternatives.
+For loopback testing, a convention is port `10000 + station_number`. See
+[networking.md](networking.md) for the map file, discovery and subnet rules.
 
 ### Variant B: Piconet on a real Econet wire
 
 To make the L3FS reachable from a real BBC Microcomputer (or any other
-Acorn-compatible station) on a physical Econet network, swap the AUN flags
+Acorn-compatible station) on a physical Econet network, swap the AUN flag
 for `--piconet`:
 
 ```bash
-./beebium-model-b-romram \
-  --sideways 9:rom:roms/acorn-anfs_4_18.rom \
-  --sideways 10:rom:roms/acorn-adfs_1_30.rom \
-  --sideways 11:rom:roms/acorn-dfs_2_26.rom \
+beebium-model-b \
+  --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom \
+  --sideways slot=10:type=rom:image=acorn-adfs_1_30.rom \
   --fdc acorn-1770 \
-  --floppy 0:path/to/FS3v126.ssd \
+  --auto-boot \
   --acorn-scsi \
-  --scsi-hdd 0:path/to/scsi-l3fs.dat \
+  --scsi-hdd scsi-id=0:image=path/to/l3fs.dat \
   --station 250 \
   --piconet device_path=/dev/tty.usbmodem101 \
   --machine-name "L3FS-via-Piconet" \
@@ -97,10 +143,15 @@ Notes specific to the Piconet variant:
 - **Pick a station number that's free on the wire.** The conventional FS
   station 254 may collide with another fileserver on the same wire (for
   example, a PiEconetBridge-hosted fileserver). Use `*STATIONS` from a real
-  BBC to confirm the chosen number is free before launching.
+  BBC to confirm the chosen number is free before launching. `--station auto`
+  is not available with Piconet.
+- **`device_path` may be omitted** (or set to `auto`) to discover a connected
+  Piconet by its USB vendor id.
 - **`--piconet` and `--aun` are mutually exclusive.** Both are Econet
   transport extensions; BBC machine variants accept at most one. The
   Beebium server enforces this at startup.
+- **Real-time speed only.** Piconet bridges to real stations, so the
+  transport is gated off whenever the emulation speed is not 1x.
 - **Wire infrastructure must be in place:** clock generator on the wire,
   termination at both ends, and the Piconet attached via its standard Econet
   socket. See `docs/networking.md` and `docs/discussion/piconet-feasibility.md`
@@ -112,21 +163,38 @@ Notes specific to the Piconet variant:
   reaching a Beebium-emulated L3FS at station 250 via real Econet over a
   Piconet on `/dev/tty.usbmodem101`.
 
-**Note:** `--scsi-hdd` requires the `.dat` image file, not the `.dsc`
-geometry sidecar. Passing the `.dsc` by mistake results in a "Broken
-directory" error from ADFS. The CLI should accept either `.dat` or `.dsc`
-and locate the companion file automatically, since both must be present
-side-by-side.
+**Note:** `--scsi-hdd image=` takes the `.dat` image file, not the `.dsc`
+geometry sidecar. The `.dsc` is found beside the `.dat` by name (and a default
+geometry is generated if it is absent). Passing the `.dsc` by mistake opens it
+as the disc data and results in a "Broken directory" error from ADFS.
 
 
 ## SCSI Disc Image Provisioning
 
-This is the main unsolved problem for automated testing. The L3FS needs a
-SCSI hard disc image that has been:
+The L3FS needs a SCSI hard disc image that has been:
 
 1. **ADFS-formatted** (the underlying filesystem)
-2. **Initialised with WFSINIT** (creates the L3FS partition within the ADFS
-   free space)
+2. **Given a Level 3 (AFS0) partition** within the ADFS free space -- on real
+   hardware by Acorn's WFSINIT program
+
+Beebium builds such images programmatically with the
+[`oaknut-disc`](https://pypi.org/project/oaknut-disc/) tool, whose `afs init`
+command creates the AFS0 partition, users and root directory without running
+WFSINIT in the emulator:
+
+- **The bundled image** (`l3fs-v1_26b`, used by the `model-b-l3fs-aun`
+  preset) is built by `packaging/discs/build-l3fs-image.sh` from the parts in
+  `packaging/discs/l3fs-parts/`: a 10 MB ADFS disc holding the `FS3v126`
+  binary, an unattended-start program (`StartFS`, chained by `!BOOT`, which
+  answers the drive-count and station-count prompts through a soft key), and an
+  AFS partition `L3DATA` with users `ChrisC` and `HermannH` and the `Library`
+  and `Library1` trees. See [deployment.md](deployment.md#bundled-discs-and-copy-on-write)
+  for how it is shipped and regenerated.
+- **The L3FS integration tests** (`integration_tests/l3fs/`) build their image
+  on demand the same way (`conftest.py`).
+
+The rest of this section is reference material on WFSINIT and the AFS0 format,
+for building or inspecting images by other means.
 
 ### What WFSINIT Does
 
@@ -191,6 +259,7 @@ uv run adfs-disc-tools create-image 16 /tmp/l3fs-data.dat
 Library usage:
 
 ```python
+from pathlib import Path
 from adfs_disc_tools import extract_blank_adfs_image
 extract_blank_adfs_image(Path("/tmp/l3fs-data.dat"), size_mb=16)
 ```
@@ -198,38 +267,26 @@ extract_blank_adfs_image(Path("/tmp/l3fs-data.dat"), size_mb=16)
 Available sizes: 2, 4, 8, 16, 20, 24, 32, 40, 48, 56, 64, 80, 96, 100,
 128, 192, 200, 256, 300, 320, 400, 512 MB.
 
-These blank images are the starting point for L3FS provisioning — they are
-ADFS-formatted but need WFSINIT to create the AFS0 partition.
+These blank images are ADFS-formatted but still need an AFS0 partition
+(WFSINIT, or `oaknut-disc afs init`).
 
-#### Beebium C++ test assets (`tests/assets/scsi/`)
+#### Beebium test assets (`tests/assets/scsi/`, `tests/assets/discs/`)
 
 | File | Description |
 |------|-------------|
-| `scsi0.dat` | BeebEm ADFS-formatted SCSI image (~10 MB) with sample files. Used by existing C++ integration tests. |
-| `scsi0.dsc` | BeebEm SCSI geometry descriptor for scsi0.dat. |
-
-#### BeebEm images (`/Users/rjs/Code/beebem-windows/UserData/DiscIms/`)
-
-| File | Size | Description |
-|------|------|-------------|
-| `L3FS-ISW.adl` | 640KB | ADFS floppy — the L3FS Initial Software disc. **Contains WFSINIT.** |
-| `l3server.adl` | 640KB | ADFS floppy containing the L3FS *code* (not a data disc). Contains AFS0 references in the file server source, not as filesystem structure. |
-| `L3-Utils.dsd` | 400KB | DFS double-sided disc with L3 utilities (Library, Library1, Utils). |
-
-**None of these are a ready-to-use L3FS data disc.** A blank ADFS image from
-`BBCHDDs.zip` would need to be WFSINIT'd (using `L3FS-ISW.adl`), or a new
-image constructed programmatically.
+| `scsi/scsi0.dat`, `scsi/scsi0.dsc` | BeebEm ADFS-formatted SCSI image (~10 MB) with sample files. Used by existing C++ integration tests. |
+| `scsi/blank-8mb.dat`, `scsi/blank-8mb.dsc` | Blank 8 MB ADFS-formatted SCSI image, a starting point for WFSINIT. |
+| `scsi/wfsinit.ssd` | WFSINIT on a DFS floppy (see also `scripts/wfsinit/`). |
+| `scsi/L3FS-KL.adl` | ADFS floppy that autoboots into a running file server; used by `integration_tests/l3fs/tests/test_l3fs_floppy_econet.py`. |
+| `discs/FS3v126.ssd` | The L3FS v1.26 code on a DFS floppy. |
+| `discs/l3server.adl` | ADFS floppy containing the L3FS *code* (not a data disc). |
 
 ### Boot Disc
 
-The L3FS v1.26 code is loaded from:
-
-| File | Location | Format |
-|------|----------|--------|
-| `FS3v126.ssd` | `/Users/rjs/Code/L3V126/FS3v126.ssd` | DFS SSD |
-
-The file server is started with `*RUN FS3v126` after booting from this disc.
-The code relocates itself to the 65C02 parasite processor.
+The L3FS v1.26 code is the `FS3v126` executable, on the `FS3v126.ssd` DFS
+floppy (`tests/assets/discs/FS3v126.ssd`) and inside the bundled SCSI image.
+From the floppy it is started with `*RUN FS3v126`; the code relocates itself to
+the 65C02 parasite processor.
 
 
 ### Why v1.26
@@ -304,16 +361,16 @@ Several sources exist:
 
 ## File Server Startup Sequence
 
-Once the SCSI disc is initialised:
+The bundled image runs this sequence unattended (its `!BOOT` chains
+`StartFS`). Started by hand, once the SCSI disc is initialised:
 
-1. Boot from DFS: `*DISC` (select DFS filing system)
-2. Load the file server: `*RUN FS3v126`
-3. The code transfers to the 65C02 parasite
-4. On the parasite, the FS:
-   - Detects the RTC dongle (or prompts for date if `DONGLE=1`)
+1. Select DFS and load the file server: `*DISC`, then `*RUN FS3v126`
+2. The code transfers to the 65C02 parasite
+3. On the parasite, the FS:
+   - Detects the RTC dongle (or prompts for the date if there is none)
    - Reads the SCSI disc bitmap (can take minutes for large discs)
-   - Prompts for number of drives
-   - Prompts for station count (1-40)
+   - Prompts for the number of drives
+   - Prompts for a command (`S` to start) and the station count
    - Displays "Starting - Ready"
 
 ### First-Time Configuration (from another station)
@@ -337,71 +394,30 @@ formatting with `*FORM` or SUPERFORM creates the free space map that WFSINIT
 then partitions.
 
 
-## Path to Automated Testing
+## Tests
 
-The goal is to provision a L3FS entirely programmatically for use in automated
-Econet integration tests, without manual interaction with WFSINIT.
+### L3FS Econet Tests (`integration_tests/l3fs/`)
 
-### Approach 1: Binary Disc Image Construction
+Slow tests (run with `pytest -m slow`) that launch a file server and a client
+station over AUN on one host and check that the client can log on.
+`test_l3fs_econet.py` builds a SCSI image with `oaknut-disc` and starts the
+server by hand; `test_l3fs_floppy_econet.py` uses the self-starting
+`L3FS-KL.adl` floppy.
 
-Write a tool (Python or C++) that constructs a valid L3FS SCSI disc image
-directly, without running WFSINIT inside the emulator:
+### Multi-client File Server Test (`clients/beebium-python-client/tests/test_aun_multiclient_fileserver.py`)
 
-1. Create an ADFS free space map (sectors 0-1)
-2. Write the AFS0 Disc Information Block at the partition boundary
-3. Initialise per-track sector bitmaps
-4. Create the root directory with `SYST` user
-5. Create the passwords file
-6. Write the allocation maps with `JesMap` headers
-
-The AFS0 format is fully documented at `http://mdfs.net/Docs/Comp/Disk/Format/AFS0`.
-This approach gives complete control over the disc layout and is fully
-deterministic and reproducible. It avoids the complexity of driving the
-emulator through WFSINIT's interactive BASIC program.
-
-### Approach 2: Scripted Emulator Interaction
-
-Use the gRPC debugger and keyboard services to:
-
-1. Launch Beebium with ADFS and a blank SCSI image
-2. Script the ADFS formatting commands via keyboard input
-3. Load and run WFSINIT, feeding it responses via keyboard input
-4. Capture the resulting disc image
-
-This is more fragile (depends on screen scraping or timing) but validates
-the real WFSINIT code path.
-
-### Approach 3: Pre-built Golden Image
-
-Create a WFSINIT'd disc image once (manually or via Approach 2), commit it
-to the test assets, and use it as a fixture. This is the simplest approach
-but the disc image is opaque and hard to modify.
-
-### Recommended Approach
-
-**Approach 1 (binary construction)** is the most robust for CI. The AFS0
-format is straightforward — the critical structures are:
-
-- ADFS free space map (2 sectors, well-documented)
-- AFS0 Disc Information Block (1 sector, 37 significant bytes)
-- Per-track bitmaps (1 sector per track, simple bitfield)
-- Root directory (1 sector minimum, 11-byte header + linked entries)
-- Allocation map (1 sector, `JesMap` header + 5-byte groups)
-
-A Python script of ~200-300 lines could construct a valid minimal L3FS image.
-This could live in the integration test fixtures alongside the existing
-`conftest.py` for L3FS clock tests.
-
-
-## Existing Test Infrastructure
+Launches the bundled `model-b-l3fs-aun` preset as station 254 and two client
+stations (80 and 81) on one host, with explicit `map=` entries and no map
+file, and checks that both log on and catalogue the root (the regression test
+for #149).
 
 ### L3FS Clock Tests (`integration_tests/l3fs-clock/`)
 
 These tests boot the L3FS to verify RTC polling timing. They use:
 
-- `conftest.py`: pytest fixtures, configurable via `L3FS_SSD` environment
-  variable (default: `/Users/rjs/Code/L3V126/FS3v126.ssd`)
-- `test_l3fs_clock_update.py`: monitors RTC RDDONG calls via gRPC
+- `conftest.py`: pytest fixtures; the `FS3v126.ssd` path is configurable via
+  the `L3FS_SSD` environment variable
+- `test_l3fs_clock_update.py`: monitors RTC RDDONG calls via the gRPC
   WatchActivity stream
 
 These tests exercise the RTC path but do not test Econet networking — the
@@ -409,50 +425,32 @@ file server starts but no clients connect.
 
 ### Unit Tests (`tests/test_saf3019p_v126.cpp`)
 
-329-line test suite validating SAF3019P emulation against exact byte sequences
-from the L3v126 `Uade04.asm` source. Tests dongle detection, RDDONG/WRDONG
-operations, and the V126 7-bit year layout.
+Validates SAF3019P emulation against exact byte sequences from the L3v126
+`Uade04.asm` source. Tests dongle detection, RDDONG/WRDONG operations, and the
+V126 7-bit year layout.
 
 ### Econet File Server Tests (`tests/test_econet_fileserver.cpp`)
 
-498-line integration test suite for Econet communication with an external
-file server (via BeebEm or real hardware). Configurable via
-`BEEBIUM_FILESERVER` environment variable. These currently require a
-manually-started external file server.
+Integration tests for Econet communication with an external file server (in
+BeebEm, real hardware, or another Beebium instance). They skip unless the
+`BEEBIUM_FILESERVER` environment variable names one, as `net.stn:ip:port`
+(e.g. `0.254:127.0.0.1:32768`).
 
 ### Econet Boot Tests (`tests/test_boot_econet.cpp`)
 
 Boot tests with Econet fitted, verifying NFS ROM loading.
 
 
-## Future Work: Automated Econet Network Tests
-
-The end goal is a test harness that:
-
-1. Constructs a fresh L3FS SCSI disc image (Approach 1)
-2. Launches a Beebium file server instance with the configuration above
-3. Launches one or more Beebium client instances with `--station N
-   --aun port=10N:map=0.254@127.0.0.1@10254`
-4. Waits for the file server to reach "Starting - Ready"
-5. On client stations, exercises Econet operations: `*I AM`, `*CAT`, file
-   load/save, `*NOTIFY`, `*REMOTE`
-6. Verifies results via gRPC (screen content, disc events, Econet events)
-7. Tears down all instances
-
-This would replace the current dependency on an external BeebEm file server
-and enable fully self-contained Econet testing in CI.
-
-
 ## References
 
 - `docs/FileServer-RTC-and-Timekeeping.md` — RTC dongle and timekeeping
 - `docs/acorn-user-port-rtc.md` — SAF3019P hardware details
-- `docs/econet-integration.md` — Econet/AUN gRPC integration plan
-- `docs/networking.md` — AUN networking implementation
-- `docs/local-beebem-econet-lessons.md` — Lessons from BeebEm's Econet work
+- `docs/econet-integration.md` — Econet/AUN integration across the stack
+- `docs/networking.md` — Econet transports, AUN map file and discovery
+- `docs/deployment.md` — bundled discs and per-user working copies
 - AFS0 format: `http://mdfs.net/Docs/Comp/Disk/Format/AFS0`
 - BeebMaster L3 setup: `https://www.beebmaster.co.uk/Econet/Level3.html`
 - BeebMaster disc structure PDF: `https://www.beebmaster.co.uk/Downloads/Understanding%20the%20Acorn%20Level%203%20File%20Server%20Structure.pdf`
 - Stardot L3FS in emulators: `https://stardot.org.uk/forums/viewtopic.php?t=27782`
 - Stardot WFSINIT with IDE: `https://stardot.org.uk/forums/viewtopic.php?t=28164`
-- L3FS v1.26 source: `/Users/rjs/Code/L3V126/` (disassembly)
+- L3FS v1.26 source: `https://github.com/mmbeeb/L3V126`
