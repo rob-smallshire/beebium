@@ -106,12 +106,10 @@ def l3fs_ssd_filepath():
         if p.exists():
             return p
         raise FileNotFoundError(f"L3FS_SSD={env} not found")
-    candidates = [
-        Path("/Users/rjs/Code/L3V126/FS3v126.ssd"),
-    ]
-    for c in candidates:
-        if c.exists():
-            return c
+    repo_root = Path(__file__).parent.parent.parent.parent
+    committed = repo_root / "tests" / "assets" / "discs" / "FS3v126.ssd"
+    if committed.exists():
+        return committed
     pytest.skip("FS3v126.ssd not found. Set L3FS_SSD environment variable.")
 
 
@@ -124,10 +122,4 @@ def scsi_hdd_filepath():
         if p.exists():
             return p
         raise FileNotFoundError(f"SCSI_HDD={env} not found")
-    candidates = [
-        Path("/Users/rjs/Code/beebem-windows/UserData/DiscIms/scsi0.dat"),
-    ]
-    for c in candidates:
-        if c.exists():
-            return c
-    pytest.skip("SCSI HDD image not found. Set SCSI_HDD environment variable.")
+    pytest.skip("No SCSI HDD image. Set the SCSI_HDD environment variable.")
