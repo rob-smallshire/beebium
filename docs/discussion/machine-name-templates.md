@@ -2,26 +2,9 @@
 
 Status: server and client libraries built (2026-10-03, issue #153); the
 macOS rename popover (section 8) is still to come. Decisions marked (user)
-come from the user's comments on the issue. Where the build settled a point
-the design left open, or differs from it:
-
-- **Station in force** (section 5): "the number the guest last read" is
-  precisely the number it read on its first read of the links (`&FE18`)
-  since the last reset, or since Econet was fitted -- the read with which a
-  filing system takes its number at boot. The NFS reads `&FE18` again as
-  INTOFF on every Econet NMI, and counting those would show a renumber before
-  the Break that puts it in force.
-- **Rendering** (sections 3, 6, 12): an inapplicable placeholder renders empty;
-  a name that renders blank falls back to the model's name; a malformed
-  fragment (an unterminated `{...`, a lone `}`) renders literally and is
-  reported separately from unknown keys. Re-announcements of a changing name
-  are limited to one every five seconds; a user's rename is re-announced at
-  once.
-- **Domains** (section 4): a domain is a single word and belongs to one
-  provider, which is what keeps two providers from colliding.
-- **`econet-transport`** shows the transport's sidebar label ("AUN Transport",
-  "Piconet"); **`machine-preset`** is not applicable without a preset.
-- **`machine-model`** (section 12) is `SystemInfo`'s model name.
+come from the user's comments on the issue. This document describes the
+design as built; where building it settled a point the first draft left open
+or had wrong, the section says so.
 
 ## 1. Problem
 
@@ -60,6 +43,12 @@ asks.
 - An unknown key renders verbatim, braces included, and is reported by
   validation as unknown. So a template written for a newer server, or
   for an extension that is not loaded, degrades visibly and loses nothing.
+  An empty `{}` and a brace pair whose content breaks the key grammar are
+  unknown keys too.
+- Malformed text renders literally and is reported separately from unknown
+  keys: a `{` with no `}` before the next `{` or the end (the `{` and the text
+  up to that point), and a lone `}` not part of `}}`. So `{a{econet-station}}`
+  renders `{a` literally, the placeholder, and a literal `}`.
 - Inside braces the characters `:`, `|`, `?` and `!` are reserved for
   future use (formatting, fallbacks, conditional text). Today a
   placeholder containing one is treated as unknown. Reserving them now is
@@ -67,6 +56,12 @@ asks.
 - A placeholder that is known but **not applicable** to this machine (an
   Econet placeholder on a machine with no Econet fitted) renders as the
   empty string, and the picker shows it as not applicable.
+- A value is inserted as it is, never parsed again, so a value containing
+  braces cannot inject a placeholder.
+- Rendering is a single left-to-right pass, linear in the template's length.
+- A template that renders blank (`{econet-station}` with no Econet fitted)
+  gives the model's display name instead: a machine always has a name to
+  show and to announce.
 
 ## 4. Placeholders are data, provided by their owners
 
@@ -78,7 +73,8 @@ A placeholder is described by a record, not by code in clients:
 | `label` | Short human name for a picker: "Econet station". |
 | `description` | One sentence on what it shows and when it changes. |
 | `group` | Heading for a picker: "Machine", "Econet". |
-| `value` | Current value on this machine, as text. |
+| `insertion` | The text a picker inserts into a template: `{key}`. Carried so that front ends need not build it (section 8). |
+| `value` | Current value on this machine, as text; empty when not applicable. |
 | `applicable` | False when this machine cannot have a value for it. |
 
 Placeholders come from **providers**: the core machine, the Econet
@@ -88,8 +84,11 @@ placeholder is adding a provider entry: no protocol change, no client
 change, no template migration. The domain prefix is a rule, not a
 convention: the registry rejects a provider's key that does not start
 with one of the provider's declared domains (`machine-`, `econet-`,
-`scsi-`, ...), so two providers cannot collide and a key says whose
-state it shows.
+`scsi-`, ...), so a key says whose state it shows. A domain is a single
+lowercase word and belongs to exactly one provider; that exclusivity, not
+the prefix alone, is what keeps two providers from colliding. A provider that
+breaks a rule is refused whole: a plugin loses its placeholders, the machine
+still launches.
 
 A placeholder earns its place only if its value **can change while the
 template stays the same**, or differs between machines launched from one
@@ -103,11 +102,11 @@ machine chooses for itself.
 
 | Key | Group | Value | Changes when |
 |-----|-------|-------|--------------|
-| `econet-station` | Econet | The station number **in force** (user): the number the guest last read from the station links, which is what the filing system is using. Before the guest's first read it is the configured number. | The guest re-reads the links, normally at Break after a change in the sidebar or by `SetStationId`; or at launch under `--station auto`. |
+| `econet-station` | Econet | The station number **in force** (user): the number the guest read from the station links (`&FE18`) on its **first** read since the last reset, or since Econet was fitted -- the read with which a filing system takes its number at boot, and so the number it is using. Before that read it is the configured number. Later reads in the same boot do not count: the NFS and ANFS read `&FE18` as INTOFF on every Econet NMI, and counting those would show a renumber before the Break that puts it in force. | The guest's first read after a Break, after a change in the sidebar or by `SetStationId`; or at launch under `--station auto`. |
 | `econet-net` | Econet | This machine's Econet net number (0 for the local net). | Launch configuration. |
-| `econet-transport` | Econet | The transport's display name ("AUN", "Piconet"); empty when Econet is fitted with no transport. | Econet enabled or disabled at runtime. |
-| `machine-model` | Machine | The machine model's display name, as the server reports it in `SystemInfo`. | Never; included because it differs between machines sharing a hand-written template, and costs nothing. |
-| `machine-preset` | Machine | The name of the preset the machine was launched from; empty if none. | Never; as above. |
+| `econet-transport` | Econet | The transport's display name, the label its sidebar panel carries ("AUN", "Piconet"); empty when Econet is fitted with no transport. | Econet enabled or disabled at runtime. |
+| `machine-model` | Machine | The machine model's display name, as the server reports it in `SystemInfo` ("BBC Model B"): one name for a model. | Never; included because it differs between machines sharing a hand-written template, and costs nothing. |
+| `machine-preset` | Machine | The name of the preset the machine was launched from. Not applicable, so empty, when it was launched without one. | Never; as above. |
 
 Not included, with reasons:
 
@@ -122,17 +121,22 @@ Not included, with reasons:
 
 ## 6. Rendering and change
 
-- The server re-renders on a low-frequency tick, once a second (user:
-  "every second or two would be fine"), off the emulation thread, reading
-  provider values through the existing quiesce-safe paths. No provider is
-  asked to push changes; polling at this rate is cheap and keeps
-  providers trivial to write.
+- The server re-renders once a second (user: "every second or two would be
+  fine") on a thread of its own, never the emulation thread, reading
+  provider values through paths that are safe from another thread
+  (`econet-station` is two relaxed atomics the emulation thread writes on its
+  `&FE18` read, with no lock on that path). No provider is asked to push
+  changes; polling at this rate is cheap and keeps providers trivial to
+  write.
 - When the rendered name changes, the server emits the identity change on
-  `WatchServerStatus` exactly as a rename does today, and re-publishes the
-  `_beebium._tcp` announcement, rate-limited to one re-announce per few
-  seconds so a flapping value cannot churn mDNS (see the responder
-  saturation note in networking.md).
-- Rendering is total: it never fails. Unknown and inapplicable
+  `WatchServerStatus` exactly as a rename does, and re-publishes the
+  `_beebium._tcp` announcement, at most once every five seconds -- long
+  enough to cover a registration's probe and announcement burst -- so a
+  flapping value cannot churn mDNS (see the responder saturation note in
+  networking.md). Changes within the interval coalesce into one
+  re-announcement of the latest name. A user's rename is deliberate and rare,
+  and is re-announced at once.
+- Rendering is total: it never fails. Unknown, malformed and inapplicable
   placeholders render as section 3 says.
 
 ## 7. Protocol surface
@@ -140,14 +144,19 @@ Not included, with reasons:
 `system.proto` (fingerprinted: this is a minor version bump).
 
 - `MachineIdentity` gains `name_template`. `name` stays the rendered name.
-- `SetMachineName` takes the template (a plain name is a template). Its
-  response carries the identity with both fields and the list of unknown
-  keys in the template, so a client can warn without parsing.
+- `SetMachineName` takes the template (a plain name is a template; an empty
+  one is refused). Its response carries the identity with both fields and a
+  `NameTemplateReport`: the unknown keys, the inapplicable keys and the
+  malformed fragments in the template, so a client can warn without
+  parsing. The template is applied even when parts of it do not render;
+  there is no strict mode, and the report goes only to the caller -- a
+  second client watching the status stream that wants one calls
+  `PreviewMachineName`.
 - `ListNamePlaceholders` returns the records of section 4 with current
   values.
-- `PreviewMachineName(template)` returns the rendering and the unknown
-  keys, without changing anything. Clients use it for live preview
-  instead of implementing the syntax.
+- `PreviewMachineName(template)` returns the rendering and the same
+  `NameTemplateReport`, without changing anything. Clients use it for live
+  preview instead of implementing the syntax.
 
 Python and TypeScript expose the template, the rendered name and the
 placeholder list (user), plus preview. Neither client carries a list of
@@ -209,11 +218,10 @@ shutdown, since no server is running to render it.
 - Placeholder removed or extension not loaded: renders verbatim and is
   reported as unknown.
 
-## 12. Open points
+## 12. Settled points
 
-- Whether a not-applicable placeholder should render as empty (proposed)
-  or as a visible marker. Empty reads better in titles; the picker and
-  the unknown/inapplicable report make the cause discoverable.
-- Whether `machine-model` should be the full display name ("BBC Model B") or a
-  short form; proposed: whatever `SystemInfo` already reports, so there
-  is one name for a model.
+- A not-applicable placeholder renders as empty rather than a visible
+  marker: empty reads better in titles, and the picker and the report make
+  the cause discoverable.
+- `machine-model` is the full display name `SystemInfo` reports ("BBC Model
+  B"), so there is one name for a model.
