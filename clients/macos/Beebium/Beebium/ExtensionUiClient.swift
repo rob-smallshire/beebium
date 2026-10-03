@@ -52,7 +52,8 @@ struct EditorFieldCommit: Sendable, Equatable {
 @MainActor
 final class ExtensionUiClient: ObservableObject, Disconnectable {
     /// Latest View for each subscribed extension, keyed by extension name.
-    /// Becomes nil for an extension when its stream ends with NOT_FOUND.
+    /// Dropped when the extension's stream finishes or is rejected; kept as
+    /// last-known when the stream is lost (see handleSubscriptionEnd).
     @Published private(set) var views: [String: Beebium_View] = [:]
 
     /// Per-extension error message (e.g. "extension not found", network drop).
@@ -81,9 +82,8 @@ final class ExtensionUiClient: ObservableObject, Disconnectable {
 
     /// Open a server-stream of View updates for the given extension.
     /// Idempotent: calling subscribe twice for the same extension is a
-    /// no-op (the existing stream stays open). Streams that end (server
-    /// disconnect, NOT_FOUND for a missing extension) clear the View
-    /// entry and record an error message.
+    /// no-op (the existing stream stays open). See handleSubscriptionEnd
+    /// for what a stream ending does to the cached View.
     func subscribe(to extensionID: String) {
         guard subscriptionTasks[extensionID] == nil else { return }
         guard let client = client else { return }
@@ -193,25 +193,56 @@ final class ExtensionUiClient: ObservableObject, Disconnectable {
                                  client: Beebium_ExtensionUiServiceNIOClient) async {
         let call = client.subscribeView(request) { [weak self] view in
             Task { @MainActor [weak self] in
-                self?.views[view.extensionID] = view
-                self?.errors.removeValue(forKey: view.extensionID)
+                self?.handleView(view)
             }
         }
 
+        // A server-streaming call's status future succeeds with a non-OK code
+        // when the server goes away; it only throws for local errors.
+        let end: SubscriptionEnd
         do {
-            _ = try await call.status.get()
-            // Stream ended cleanly (e.g. server cancelled). Drop the
-            // cached view so the UI stops showing stale data.
-            await MainActor.run { [weak self] in
-                self?.views.removeValue(forKey: extensionID)
-                self?.subscriptionTasks.removeValue(forKey: extensionID)
+            let status = try await call.status.get()
+            switch status.code {
+            case .ok, .cancelled, .notFound:
+                end = .finished
+            default:
+                end = .lost(status.description)
             }
         } catch {
-            await MainActor.run { [weak self] in
-                self?.views.removeValue(forKey: extensionID)
-                self?.errors[extensionID] = error.localizedDescription
-                self?.subscriptionTasks.removeValue(forKey: extensionID)
-            }
+            end = .lost(error.localizedDescription)
+        }
+        await MainActor.run { [weak self] in
+            self?.handleSubscriptionEnd(end, extensionID: extensionID)
+        }
+    }
+
+    /// Record a View pushed on an extension's stream.
+    func handleView(_ view: Beebium_View) {
+        views[view.extensionID] = view
+        errors.removeValue(forKey: view.extensionID)
+    }
+
+    /// How an extension's View stream ended.
+    enum SubscriptionEnd: Equatable {
+        /// Closed OK by the server, cancelled by us, or refused because there
+        /// is no such extension.
+        case finished
+        /// The stream was lost: the server is gone or unreachable.
+        case lost(String)
+    }
+
+    /// Apply the end of an extension's View stream. A finished stream drops the
+    /// cached View, since the server no longer vouches for it. A lost stream
+    /// keeps the last View so the panel can stay on screen, presented as stale
+    /// by its owner, instead of vanishing and reading as "this machine has no
+    /// such panel".
+    func handleSubscriptionEnd(_ end: SubscriptionEnd, extensionID: String) {
+        subscriptionTasks.removeValue(forKey: extensionID)
+        switch end {
+        case .finished:
+            views.removeValue(forKey: extensionID)
+        case .lost(let reason):
+            NSLog("[ExtensionUiClient] View stream lost (%@): %@", extensionID, reason)
         }
     }
 }

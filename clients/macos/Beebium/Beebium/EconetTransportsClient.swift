@@ -38,7 +38,13 @@ struct EconetTransportInfo: Identifiable, Hashable {
 final class EconetTransportsClient: ObservableObject, Disconnectable {
 
     @Published private(set) var transports: [EconetTransportInfo] = []
+    /// A ListTransports attempt has completed (successfully or not).
     @Published private(set) var isLoaded: Bool = false
+    /// ListTransports has succeeded at least once on this connection, so
+    /// `transports` is what the server reported (possibly empty) rather than
+    /// the initial placeholder. False with `isLoaded` true means the list is
+    /// unavailable, which is not the same as there being no transports.
+    @Published private(set) var hasListed: Bool = false
     @Published private(set) var errorMessage: String?
 
     private var client: Beebium_EconetTransportServiceNIOClient?
@@ -54,31 +60,46 @@ final class EconetTransportsClient: ObservableObject, Disconnectable {
         client = nil
         transports = []
         isLoaded = false
+        hasListed = false
         errorMessage = nil
     }
 
     func refresh() async {
-        guard let client = client else { return }
+        guard let client = client else {
+            NSLog("[EconetTransportsClient] ListTransports skipped: not connected")
+            return
+        }
         let request = Beebium_ListTransportsRequest()
         do {
             let response = try await client.listTransports(request).response.get()
-            self.transports = response.transports.map { t in
+            applyListResult(.success(response.transports.map { t in
                 EconetTransportInfo(id: t.id,
                                     name: t.name,
                                     description: t.description_p,
                                     active: t.active,
                                     hasUI: t.hasUi_p)
-            }
-            self.isLoaded = true
-            self.errorMessage = nil
+            }))
         } catch {
+            applyListResult(.failure(error))
+        }
+    }
+
+    /// Apply the outcome of a ListTransports attempt. A failure keeps the last
+    /// successfully listed transports (the configuration does not change at
+    /// runtime, so they remain the best description of the machine) and leaves
+    /// `hasListed` alone, so a first attempt that fails is distinguishable from
+    /// a server that reported no transports.
+    func applyListResult(_ result: Result<[EconetTransportInfo], Error>) {
+        switch result {
+        case .success(let listed):
+            transports = listed
+            hasListed = true
+            errorMessage = nil
+        case .failure(let error):
             NSLog("[EconetTransportsClient] ListTransports error: %@",
                   error.localizedDescription)
-            self.errorMessage = error.localizedDescription
-            // isLoaded remains true so the sidebar shows the error path
-            // on first attempt and keeps any prior list otherwise --
-            // same policy as PeripheralsClient.
-            self.isLoaded = true
+            errorMessage = error.localizedDescription
         }
+        isLoaded = true
     }
 }

@@ -31,9 +31,51 @@ private struct SidebarHeader: View {
     }
 }
 
+/// Banner stating why the server state beneath it is not current.
+private struct ServerUnavailableBanner: View {
+    let availability: ServerAvailability
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            if let systemImage = availability.systemImage {
+                Image(systemName: systemImage)
+                    .foregroundColor(.orange)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if let title = availability.title {
+                    Text(title)
+                        .font(.callout)
+                        .bold()
+                }
+                if let detail = availability.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.orange.opacity(0.4), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("sidebar-server-unavailable-banner")
+    }
+}
+
 /// Container view that displays content for the selected sidebar mode
 struct SidebarModeContent: View {
     let mode: SidebarMode
+    /// Whether the server is there to back the state the sidebar shows; the
+    /// same resolution the emulator-area overlay uses.
+    let serverAvailability: ServerAvailability
     @ObservedObject var discClient: DiscClient
     @ObservedObject var indicatorClient: IndicatorClient
     @ObservedObject var keyboardMappingManager: KeyboardMappingManager
@@ -50,37 +92,50 @@ struct SidebarModeContent: View {
     @ObservedObject var speedModel: SpeedControlModel
 
     var body: some View {
+        let stale = SidebarStalePresentation(mode: mode, availability: serverAvailability)
         VStack(spacing: 0) {
             SidebarHeader(mode: mode)
 
-            switch mode {
-            case .storage:
-                StorageModeView(discClient: discClient,
-                                peripheralsClient: peripheralsClient,
-                                indicatorClient: indicatorClient,
-                                isServerLocal: systemClient.isServerLocal)
-            case .memory:
-                MemoryModeView(sidewaysClient: sidewaysClient,
-                               isServerLocal: systemClient.isServerLocal)
-            case .peripherals:
-                PeripheralsModeView(client: peripheralsClient,
-                                    extensionUiClient: extensionUiClient,
-                                    serialClient: serialClient)
-            case .video:
-                VideoModeView(videoSettings: videoSettings)
-            case .sound:
-                AudioMixerView(audioClient: audioClient, mixerState: audioMixerState)
-            case .keyboard:
-                KeyboardModeView(mappingManager: keyboardMappingManager)
-            case .processor:
-                ProcessorModeView(speedModel: speedModel)
-            case .network:
-                NetworkModeView(econetClient: econetClient,
-                                keyboardMappingManager: keyboardMappingManager,
-                                extensionUiClient: extensionUiClient,
-                                transportsClient: transportsClient,
-                                isServerLocal: systemClient.isServerLocal)
+            if let banner = stale.banner {
+                ServerUnavailableBanner(availability: banner)
             }
+
+            modeContent
+                .disabled(!stale.isContentEnabled)
+                .opacity(stale.isContentDimmed ? 0.5 : 1.0)
+        }
+    }
+
+    @ViewBuilder
+    private var modeContent: some View {
+        switch mode {
+        case .storage:
+            StorageModeView(discClient: discClient,
+                            peripheralsClient: peripheralsClient,
+                            indicatorClient: indicatorClient,
+                            isServerLocal: systemClient.isServerLocal)
+        case .memory:
+            MemoryModeView(sidewaysClient: sidewaysClient,
+                           isServerLocal: systemClient.isServerLocal)
+        case .peripherals:
+            PeripheralsModeView(client: peripheralsClient,
+                                extensionUiClient: extensionUiClient,
+                                serialClient: serialClient)
+        case .video:
+            VideoModeView(videoSettings: videoSettings)
+        case .sound:
+            AudioMixerView(audioClient: audioClient, mixerState: audioMixerState)
+        case .keyboard:
+            KeyboardModeView(mappingManager: keyboardMappingManager)
+        case .processor:
+            ProcessorModeView(speedModel: speedModel)
+        case .network:
+            NetworkModeView(econetClient: econetClient,
+                            keyboardMappingManager: keyboardMappingManager,
+                            extensionUiClient: extensionUiClient,
+                            transportsClient: transportsClient,
+                            serverAvailability: serverAvailability,
+                            isServerLocal: systemClient.isServerLocal)
         }
     }
 }
@@ -355,17 +410,37 @@ struct NetworkModeView: View {
     @ObservedObject var keyboardMappingManager: KeyboardMappingManager
     @ObservedObject var extensionUiClient: ExtensionUiClient
     @ObservedObject var transportsClient: EconetTransportsClient
+    /// Whether the server is there to back the cached Econet state.
+    var serverAvailability: ServerAvailability = .live
     /// Whether the server shares this host's filesystem; passed to a transport
     /// extension panel so a FileReference can gate "Reveal in Finder".
     var isServerLocal: Bool = false
     @State private var showStationIdPopover = false
 
+    /// Every decision about what to show, taken from the cached client state
+    /// and the server availability; the views below only lay it out.
+    private var presentation: NetworkSidebarPresentation {
+        NetworkSidebarPresentation(.init(
+            availability: serverAvailability,
+            econetIsLoaded: econetClient.isLoaded,
+            econetIsStale: econetClient.isStale,
+            econetEnabled: econetClient.enabled,
+            econetConnected: econetClient.connected,
+            transportsHaveListed: transportsClient.hasListed,
+            transportsAttempted: transportsClient.isLoaded,
+            transportPanelIDs: transportsClient.transports.filter(\.hasUI).map(\.id)
+        ))
+    }
+
     var body: some View {
-        if !econetClient.isLoaded {
+        switch presentation.content {
+        case .loading:
             loadingView
-        } else if !econetClient.enabled {
+        case .unavailable:
+            unavailableView
+        case .notFitted:
             notFittedView
-        } else {
+        case .status:
             econetContentView
         }
     }
@@ -401,6 +476,22 @@ struct NetworkModeView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Unavailable State
+
+    // No Econet status was ever received and the server is not live. The
+    // banner above the mode content says why; this says what is missing.
+    private var unavailableView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "network.slash")
+                .font(.system(size: 32))
+                .foregroundColor(.secondary)
+            Text(NetworkSidebarPresentation.statusUnavailableText)
+                .font(.headline)
+                .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -449,16 +540,38 @@ struct NetworkModeView: View {
                 // keyed by the server-assigned instance id. The client
                 // holds no knowledge of specific transport types, so a
                 // new transport extension surfaces here automatically.
-                ForEach(transportsClient.transports.filter(\.hasUI)) { transport in
-                    ExtensionPanelView(client: extensionUiClient,
-                                       extensionID: transport.id,
-                                       isServerLocal: isServerLocal)
+                switch presentation.transportArea {
+                case .none:
+                    EmptyView()
+                case .unavailable:
+                    Text(NetworkSidebarPresentation.transportListUnavailableText)
+                        .font(.callout)
+                        .foregroundColor(.secondary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
+                case .panels(let ids, let isEnabled):
+                    ForEach(ids, id: \.self) { id in
+                        ExtensionPanelView(client: extensionUiClient,
+                                           extensionID: id,
+                                           isServerLocal: isServerLocal)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                    }
+                    .disabled(!isEnabled)
+                    // When the server is not live the whole mode is already
+                    // dimmed by its container; dim here only for a status
+                    // stream lost on an otherwise live server.
+                    .opacity(isEnabled || !serverAvailability.isLive ? 1.0 : 0.5)
                 }
             }
         }
         .task { await transportsClient.refresh() }
+        .onChange(of: presentation.isStationEditorEnabled) { isEnabled in
+            // An editor left open would dispatch to a server that is not there.
+            if !isEnabled {
+                showStationIdPopover = false
+            }
+        }
     }
 
     // MARK: - Speed Gating Banner
@@ -511,9 +624,10 @@ struct NetworkModeView: View {
                 Spacer()
                 Image(systemName: "circle.fill")
                     .font(.system(size: 8))
-                    .foregroundColor(econetClient.connected ? .green : .secondary)
-                Text(econetClient.connected ? "Connected" : "Disconnected")
+                    .foregroundColor(presentation.linkState == .connected ? .green : .secondary)
+                Text(presentation.linkState.label)
                     .fontWeight(.medium)
+                    .foregroundColor(presentation.isStatusStale ? .secondary : .primary)
             }
 
             HStack {
@@ -522,12 +636,14 @@ struct NetworkModeView: View {
                 Spacer()
                 Text("\(econetClient.stationId)")
                     .fontWeight(.medium)
+                    .foregroundColor(presentation.isStatusStale ? .secondary : .primary)
                 Button {
                     showStationIdPopover = true
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.borderless)
+                .disabled(!presentation.isStationEditorEnabled)
                 .help("Edit Econet station")
                 .popover(isPresented: $showStationIdPopover, arrowEdge: .trailing) {
                     StationIdPopover(
@@ -559,12 +675,19 @@ struct NetworkModeView: View {
                       + "station numbers.")
             }
 
-            // The Connect/Disconnect button + AUN Port row lived
-            // here previously. Both are AUN-specific concerns and
-            // now live in the AUN panel below (rendered via
-            // ExtensionPanelView). The transport-agnostic header
-            // shows only what every Econet machine has: link state
-            // and station number.
+            // The status stream was lost while the server still reads as
+            // live (its own liveness verdict follows separately), so the
+            // rows above are last-known values: say so.
+            if presentation.isStatusStale {
+                Text(NetworkSidebarPresentation.statusUnavailableText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // The transport-agnostic header shows only what every Econet
+            // machine has: link state and station number. Transport-specific
+            // controls (Connect/Disconnect, AUN port) live in the transport's
+            // own panel below.
         }
     }
 
@@ -671,6 +794,7 @@ struct SidebarModeContent_Previews: PreviewProvider {
     static var previews: some View {
         SidebarModeContent(
             mode: .keyboard,
+            serverAvailability: .live,
             discClient: DiscClient(),
             indicatorClient: IndicatorClient(),
             keyboardMappingManager: KeyboardMappingManager(),

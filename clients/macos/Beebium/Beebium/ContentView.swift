@@ -177,6 +177,10 @@ struct ContentView: View {
             Divider()
             SidebarModeContent(
                 mode: sidebarMode,
+                serverAvailability: ServerAvailability.resolve(
+                    liveness: systemClient.liveness,
+                    reconnectPhase: reconnectCoordinator.phase
+                ),
                 discClient: discClient,
                 indicatorClient: indicatorClient,
                 keyboardMappingManager: keyboardMappingManager,
