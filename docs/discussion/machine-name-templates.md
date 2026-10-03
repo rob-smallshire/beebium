@@ -1,7 +1,27 @@
 # Machine names as templates
 
-Status: design, 2026-10-03. Issue #153. Decisions marked (user) come from
-the user's comments on the issue.
+Status: server and client libraries built (2026-10-03, issue #153); the
+macOS rename popover (section 8) is still to come. Decisions marked (user)
+come from the user's comments on the issue. Where the build settled a point
+the design left open, or differs from it:
+
+- **Station in force** (section 5): "the number the guest last read" is
+  precisely the number it read on its first read of the links (`&FE18`)
+  since the last reset, or since Econet was fitted -- the read with which a
+  filing system takes its number at boot. The NFS reads `&FE18` again as
+  INTOFF on every Econet NMI, and counting those would show a renumber before
+  the Break that puts it in force.
+- **Rendering** (sections 3, 6, 12): an inapplicable placeholder renders empty;
+  a name that renders blank falls back to the model's name; a malformed
+  fragment (an unterminated `{...`, a lone `}`) renders literally and is
+  reported separately from unknown keys. Re-announcements of a changing name
+  are limited to one every five seconds; a user's rename is re-announced at
+  once.
+- **Domains** (section 4): a domain is a single word and belongs to one
+  provider, which is what keeps two providers from colliding.
+- **`econet-transport`** shows the transport's sidebar label ("AUN Transport",
+  "Piconet"); **`machine-preset`** is not applicable without a preset.
+- **`machine-model`** (section 12) is `SystemInfo`'s model name.
 
 ## 1. Problem
 

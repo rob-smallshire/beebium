@@ -545,13 +545,77 @@ grpcurl -plaintext \
   localhost:48875 beebium.SystemService/GetSystemInfo
 ```
 
-Response:
+Response (abridged):
 ```json
 {
-  "machineType": "ModelB",
-  "machineDisplayName": "BBC Model B"
+  "identity": {
+    "uuid": "6f1c...",
+    "name": "Station 80 (AUN, Model B)",
+    "modelType": "ModelB",
+    "modelName": "BBC Model B",
+    "nameTemplate": "Station {econet-station} (AUN, Model B)"
+  },
+  "clockSpeedHz": 2000000,
+  "protocolFingerprint": "..."
 }
 ```
+
+`identity.name` is the name to show; `identity.nameTemplate` is the name as the
+user edits it. The name is a template (#153): text in which `{key}` stands for
+a placeholder's current value, rendered by the server and re-rendered about once
+a second, so a placeholder such as `{econet-station}` keeps the name current. A
+plain name is a template without placeholders. See
+[cli.md](cli.md#machine-name) for the syntax.
+
+#### SetMachineName
+
+Sets the name template and returns the identity with its new rendering, plus
+what the rendering could not substitute, so a client can warn without parsing
+the template: `unknownKeys` (each `{...}` that is not a known key, rendered as
+written), `inapplicableKeys` (known keys that do not apply to this machine,
+rendered empty) and `malformed` (an unterminated `{...` or a lone `}`, rendered
+literally). An empty template is refused with `INVALID_ARGUMENT`. The rename is
+announced to `WatchServerStatus` watchers and re-published over mDNS at once.
+
+```bash
+grpcurl -plaintext -d '{"nameTemplate": "Station {econet-station} {econet-sttion}"}' \
+  -import-path src/service/proto -proto system.proto \
+  localhost:48875 beebium.SystemService/SetMachineName
+```
+
+```json
+{
+  "identity": {"name": "Station 80 {econet-sttion}",
+               "nameTemplate": "Station {econet-station} {econet-sttion}", "...": "..."},
+  "unknownKeys": ["econet-sttion"]
+}
+```
+
+#### ListNamePlaceholders
+
+Lists every placeholder a template can use on this server -- the core's and any
+loaded extension's -- with its `key`, `label`, `description`, `group` (a picker
+heading), `insertion` (the text a picker inserts, `{key}`), current `value`, and
+`applicable` (false when this machine cannot have a value). Clients carry no list
+of keys; they ask. Every key begins with its owner's domain (`machine-`,
+`econet-`, ...).
+
+```json
+{"placeholders": [
+  {"key": "machine-model", "label": "Machine model", "group": "Machine",
+   "insertion": "{machine-model}", "value": "BBC Model B", "applicable": true,
+   "description": "..."},
+  {"key": "econet-station", "label": "Econet station", "group": "Econet",
+   "insertion": "{econet-station}", "value": "80", "applicable": true,
+   "description": "..."}
+]}
+```
+
+#### PreviewMachineName
+
+Renders a template against the current values without changing anything, for a
+live preview while the user edits. Returns `name` and the same `unknownKeys`,
+`inapplicableKeys` and `malformed` lists as `SetMachineName`.
 
 #### WatchServerStatus (Server Streaming)
 
@@ -568,10 +632,16 @@ Events:
 {"status": "SERVER_STATUS_READY", "message": "Server ready"}
 ```
 ```json
+{"status": "SERVER_STATUS_IDENTITY_CHANGED", "identity": {"name": "Station 81 (AUN, Model B)", "...": "..."}}
+```
+```json
 {"status": "SERVER_STATUS_SHUTTING_DOWN", "message": "Server shutting down", "shutdownGraceMs": 5000}
 ```
 
-Use this to detect server shutdown and cleanly disconnect clients. The `shutdownGraceMs` field indicates how long clients have to finish pending operations before the server terminates.
+`SERVER_STATUS_IDENTITY_CHANGED` carries the new identity whenever the name
+changes: a `SetMachineName`, or a re-rendering in which a placeholder's value
+changed (a renumbered station, at its next Break). Use this to detect server
+shutdown and cleanly disconnect clients. The `shutdownGraceMs` field indicates how long clients have to finish pending operations before the server terminates.
 
 ### EconetService
 

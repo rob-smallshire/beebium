@@ -187,6 +187,46 @@ Listening on port 54321
 
 Scripts can parse the `Listening on port <N>` line to discover the allocated port.
 
+#### Machine Name
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--machine-name <template>` | the preset's `machine_name`, else the model's name | The machine's name: text in which `{key}` placeholders are filled from the machine's state |
+
+The name is a **template** (#153). Ordinary text is a plain name, as before;
+`{key}` stands for a placeholder's current value, and the server keeps the
+rendered name up to date as values change -- re-rendering once a second -- so
+window titles, `SystemInfo` and the mDNS announcement follow the machine:
+
+```bash
+beebium-model-b --machine-name "Station {econet-station} (AUN, Model B)" \
+    --station 80 --aun port=0
+# named "Station 80 (AUN, Model B)"; renumbered to 81, it becomes
+# "Station 81 (AUN, Model B)" at the next Break
+```
+
+- Keys are lowercase words joined by hyphens, each beginning with the domain
+  that owns it: `econet-station`, `machine-model`.
+  [list-name-placeholders](#list-name-placeholders) lists them; extensions can
+  add their own.
+- `{{` and `}}` are literal braces.
+- An unknown key renders as written, braces included, so a template written
+  for a newer server or a plugin that is not loaded degrades visibly.
+- A placeholder that does not apply to this machine (an Econet placeholder with
+  no Econet fitted) renders empty; a name that renders blank falls back to the
+  model's name.
+- `:` `|` `?` `!` inside braces are reserved for future formatting and
+  fallbacks; today they make the placeholder unknown.
+
+`econet-station` is the number **in force**: the number the guest's filing
+system read from the station links at its last Break, which is the number it
+is using. A renumber from the sidebar or `SetStationId` shows in the name once
+the guest re-reads the links at the next Break.
+
+A preset's `machine_name` is a template in the same way. A shell needs the
+braces quoted only where it would otherwise expand them (`{a,b}` in bash and
+zsh); the templates above are safe as written in double quotes.
+
 #### Service Advertisement (mDNS)
 
 | Option | Default | Description |
@@ -197,7 +237,9 @@ Advertisement is opt-in. With `--advertise`, the server publishes an
 `_beebium._tcp` record on the local network carrying its host, port, and TXT
 metadata (`uuid`, `model`, `role`, `provenance`); a discovering frontend (the
 macOS app today) lists it without the user typing `host:port`. The advertised
-instance name is the machine's display name (`--machine-name`).
+instance name is the machine's rendered name (`--machine-name`), and is
+re-announced when the rendering changes -- at most once every five seconds, so
+a value that changes repeatedly cannot flood the network.
 
 Platform support: macOS (Bonjour) and Windows (Win32 DNS-SD) are built in; Linux
 uses Avahi, which is loaded at runtime, so a running `avahi-daemon` is required
@@ -483,6 +525,35 @@ Attachment points:
 
 Occupancy is an integer range `[min..max]`: how many extensions must and may attach. A connector is `0..1` (optional, at most one -- so the UI offers "which **one**, if any"); a bus is `0..N` (`N` = no upper bound, shown as `null` in jsonl). The range accommodates hardware that is not simply single-or-many -- e.g. a future twin-Tube machine would be `0..2`. `tsv` and `jsonl` carry `id`, `display_name`, `min_occupancy`, `max_occupancy` (blank/`null` when unbounded), and `description`. Like the other discovery commands, this needs no running emulator.
 
+### list-name-placeholders
+
+List the placeholders a machine-name template can use: each one's key (written
+`{key}` in a template), label, group and description, and its value where it is
+known before launch. For people writing presets and launch commands; a running
+server's `ListNamePlaceholders` RPC lists every placeholder, extensions'
+included, with live values.
+
+```bash
+beebium-model-b --format pretty list-name-placeholders
+```
+
+```
+Machine:
+  {machine-model}  Machine model = BBC Model B
+      The machine's model, as the server reports it ("BBC Model B"). Never changes.
+  {machine-preset}  Preset
+      The name of the preset the machine was launched from; ...
+Econet:
+  {econet-station}  Econet station
+      The station number in force: ...
+  {econet-net}  Econet net
+  {econet-transport}  Econet transport
+```
+
+`tsv` carries `key`, `label`, `group`, `value` and `description`; `jsonl` the
+same plus `insertion` (`{key}`), with `value` `null` where it is only known at
+launch. Like the other discovery commands, this needs no running emulator.
+
 ### describe-machine
 
 Output machine information for programmatic use.
@@ -615,7 +686,7 @@ The preset ID is derived by slugifying the name. Outputs the created preset ID (
 my-elite-setup
 ```
 
-`create-preset` also accepts `--description`, `--machine-name`, `--auto-boot`, `--release-date`, `--fdc`, `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. The recorded transport parameters include the manifest defaults the CLI fills in, e.g. `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "net": "0", "port": "0"}`.
+`create-preset` also accepts `--description`, `--machine-name` (a name template, recorded as written; see [Machine Name](#machine-name)), `--auto-boot`, `--release-date`, `--fdc`, `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. The recorded transport parameters include the manifest defaults the CLI fills in, e.g. `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "net": "0", "port": "0"}`.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
