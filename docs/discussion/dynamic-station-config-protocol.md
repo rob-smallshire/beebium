@@ -4,7 +4,23 @@ Speculative design for automatic Econet station number assignment alongside
 AUN, informed by analysis of PiEconetBridge's architecture and BeebEm's
 station self-assignment problems.
 
-Status: Early exploration. Not committed to implementation.
+**Status (October 2026): not implemented; superseded for the Beebium-only
+case.** No DSCP server, wire format or `dscp:` station form exists. Automatic
+station numbering was built instead without a coordinator (#67, #160,
+#161): `--station auto[:lo-hi]` (default range 1-253, or a preset's
+`"econet": {"station": "auto"}`) makes the AUN transport claim a number with
+its own `_aun._udp` announcement and climb past any earlier-bound station it
+discovers, starting one past the last number this host allocated (a per-host
+hint file, `BEEBIUM_AUN_AUTO_STATE_FILEPATH`). It needs no server process,
+respects map-file and `map=` stations, and arbitrates same-instant races
+only best-effort; the residual clash surfaces as an ordinary station
+collision (#147). So `--station auto` below means the proposed DSCP
+behaviour, not today's. See `docs/networking.md`, "Choosing a free station
+number at launch". The proposal remains relevant for mixed networks with
+real hardware or non-mDNS emulators, which the decentralised scheme cannot
+see.
+
+Originally: early exploration, not committed to implementation.
 
 ---
 
@@ -15,7 +31,8 @@ hardware) share an Econet, station numbers must be unique. Today this is
 managed manually:
 
 - Real hardware: DIP switches or CMOS RAM (fixed at configuration time)
-- Beebium: `--station N` on the command line, or preset file
+- Beebium: `--station N` on the command line, or preset file (now also
+  `--station auto`, the decentralised mDNS scheme in the status note above)
 - BeebEm: `Econet.cfg` or their proprietary self-assignment mechanism
 
 Manual assignment breaks down when:
@@ -25,7 +42,8 @@ Manual assignment breaks down when:
 - Mixed networks include both emulators and real hardware with pre-assigned
   station numbers that must be respected
 
-BeebEm's self-assignment (see `docs/local-beebem-econet-lessons.md` section 0)
+BeebEm's self-assignment (see `docs/local-beebem-econet-lessons.md` section 0, a local, untracked
+note)
 is purely emulator-to-emulator, incompatible with real hardware, uses a
 non-standard port formula, and has destructive collision resolution. It
 demonstrates the need but not a viable solution.
@@ -552,7 +570,10 @@ If a PiEconetBridge is present on the network, the DSCP server needs to:
 ## Interaction With mDNS
 
 Beebium already advertises gRPC services via mDNS. The econet-integration plan
-(Phase 3) adds Econet TXT records (`econet_station=N`). With DSCP:
+(Phase 3) proposed Econet TXT records (`econet_station=N`); as built, the
+station is published instead in the AUN transport's own `_aun._udp`
+announcement (`net=`, `station=`, `port=`; see
+[`aun-mdns-peer-discovery.md`](aun-mdns-peer-discovery.md)). With DSCP:
 
 - The DSCP server advertises itself as `_beebium-dscp._tcp`
 - Beebium instances discover the DSCP server via mDNS browse
