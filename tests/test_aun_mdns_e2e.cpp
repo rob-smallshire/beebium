@@ -363,7 +363,12 @@ TEST_CASE("AUN mDNS e2e: late subscriber discovers an already-present peer",
 
 namespace {
 
-// Poll until pred() holds or the mDNS deadline passes.
+// Poll until pred() holds or the mDNS deadline passes. On timeout, say so
+// explicitly: a false here is almost always a discovery event that never
+// arrived (the system responder slow or saturated -- see #164 and
+// mdns_serial_guard.hpp), not a wrong value, and the bare REQUIRE(false) at the
+// call site cannot tell the two apart. The deadline is unchanged -- a healthy
+// responder answers well within it.
 template <typename Pred>
 bool wait_until(Pred pred) {
     auto deadline = std::chrono::steady_clock::now() + MDNS_TIMEOUT;
@@ -371,7 +376,12 @@ bool wait_until(Pred pred) {
         if (pred()) return true;
         std::this_thread::sleep_for(POLL_INTERVAL);
     }
-    return pred();
+    if (pred()) return true;
+    WARN("wait_until: no mDNS event within "
+         << std::chrono::duration_cast<std::chrono::seconds>(MDNS_TIMEOUT).count()
+         << "s -- the system responder is likely saturated (several real-mDNS "
+            "test runs at once); rerun this binary alone after a short pause.");
+    return false;
 }
 
 bool has_peer(const AunPeerSet& peers, uint8_t net, uint8_t stn,

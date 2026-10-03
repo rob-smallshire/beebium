@@ -208,7 +208,7 @@ add_executable(test_station_selection test_station_selection.cpp)
 target_link_libraries(test_station_selection PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_station_selection)
 
-add_executable(test_aun_auto_station test_aun_auto_station.cpp)
+add_executable(test_aun_auto_station test_aun_auto_station.cpp mdns_serial_guard.cpp)
 target_link_libraries(test_aun_auto_station PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
 target_include_directories(test_aun_auto_station PRIVATE ${CMAKE_SOURCE_DIR}/src/extensions/aun)
 catch_discover_tests(test_aun_auto_station)
@@ -237,12 +237,12 @@ catch_discover_tests(test_aun_map_writer)
 # End-to-end mDNS test: paired announcers / subscribers with real
 # platform mDNS. Tagged [.mdns] so it's skipped by default in
 # environments without a working responder.
-add_executable(test_aun_mdns_e2e test_aun_mdns_e2e.cpp)
+add_executable(test_aun_mdns_e2e test_aun_mdns_e2e.cpp mdns_serial_guard.cpp)
 target_link_libraries(test_aun_mdns_e2e PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
 catch_discover_tests(test_aun_mdns_e2e)
 
 # Browser smoke tests (state, lifecycle, real-mDNS round-trip on macOS)
-add_executable(test_browser test_browser.cpp)
+add_executable(test_browser test_browser.cpp mdns_serial_guard.cpp)
 target_link_libraries(test_browser PRIVATE beebium_discovery Catch2::Catch2WithMain)
 # --allow-running-no-tests: the [browser][integration] cases SKIP where there is
 # no functional mDNS responder (e.g. the GitHub Windows Server runner, whose
@@ -1198,7 +1198,7 @@ target_link_libraries(test_indicators PRIVATE beebium_core Catch2::Catch2WithMai
 catch_discover_tests(test_indicators)
 
 # Advertiser tests (discovery library)
-add_executable(test_advertiser test_advertiser.cpp)
+add_executable(test_advertiser test_advertiser.cpp mdns_serial_guard.cpp)
 target_link_libraries(test_advertiser PRIVATE beebium_discovery Catch2::Catch2WithMain)
 # Allow skipped tests to pass (mDNS may not be available on CI)
 catch_discover_tests(test_advertiser EXTRA_ARGS --allow-running-no-tests)
