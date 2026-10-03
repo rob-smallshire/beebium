@@ -41,6 +41,7 @@
 #include "beebium/econet/AunBackend.hpp"
 #include "beebium/extension/EconetTransportExtension.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -81,6 +82,26 @@ public:
     // lifetime and the raw pointer becomes dangling once the machine
     // shuts down (which only happens at process exit).
     std::unique_ptr<NetworkBackend> create_backend(std::uint8_t station) override;
+
+    // Choose a free station number by browsing `_aun._udp` for the numbers
+    // already in use on this net (discovered announcements, map-file peers and
+    // launch map= entries, but not subnet guesses), taking the lowest free one,
+    // then announcing it and settling briefly so that when two instances pick
+    // the same free number in the same second the #147 newcomer yields and
+    // tries the next. Bounded; runs on the launch path before create_backend.
+    // See issue #67 and docs/networking.md.
+    AutoStationOutcome select_auto_station(econet::StationRange range) override;
+
+    // Override the selection timings so the hermetic mDNS tests can widen the
+    // observation window (real mDNS discovery is variable) without changing the
+    // launch-time defaults. Call before select_auto_station.
+    void set_auto_station_timings_for_test(std::chrono::milliseconds min_observe,
+                                           std::chrono::milliseconds quiet,
+                                           std::chrono::milliseconds budget) {
+        auto_min_observe_ = min_observe;
+        auto_quiet_ = quiet;
+        auto_budget_ = budget;
+    }
 
     // AUN-specific operations (peer table, cable plug, port status), served
     // through the core's ExtensionRpc channel rather than a hosted gRPC service.
@@ -283,6 +304,23 @@ private:
     // sweep interval with no platform file-watch code. Runs off the emulation
     // thread.
     void poll_map_file();
+
+    // Seed the operator peer layers (Launch from --aun map=/subnet=, MapFile
+    // from the per-user file) into the peer set for `local_net`, clearing the
+    // launch-scoped layers first. Shared by create_backend and
+    // select_auto_station so both see the same occupied stations.
+    void seed_operator_layers(std::uint8_t local_net);
+
+    // Timings for select_auto_station (issue #67). It keeps a claim
+    // announcement up and polls: it observes for at least auto_min_observe_ (so
+    // a pre-existing peer is discovered before settling), settles once the
+    // chosen number has been quiet for auto_quiet_, and never runs past
+    // auto_budget_. Real mDNS discovery is variable, so these are generous; the
+    // whole selection usually finishes well inside the budget. Tests widen them
+    // via set_auto_station_timings_for_test.
+    std::chrono::milliseconds auto_min_observe_{1500};
+    std::chrono::milliseconds auto_quiet_{600};
+    std::chrono::milliseconds auto_budget_{4000};
 
     std::unique_ptr<AunDispatcher> dispatcher_;  // lazily constructed
     // Owned by the extension so its lifetime ends with the extension.

@@ -29,6 +29,16 @@ void EconetTransportExtension::on_station_id_changed(uint8_t /*new_id*/) {}
 
 bool EconetTransportExtension::requires_real_time_pacing() const { return false; }
 
+EconetTransportExtension::AutoStationOutcome
+EconetTransportExtension::select_auto_station(econet::StationRange /*range*/) {
+    AutoStationOutcome outcome;
+    outcome.status = AutoStationOutcome::Status::Unsupported;
+    outcome.report =
+        "automatic station selection (--station auto) is not supported by this "
+        "transport; give an explicit station number";
+    return outcome;
+}
+
 EconetTransportRegistry::~EconetTransportRegistry() = default;
 
 }  // namespace beebium

@@ -208,6 +208,11 @@ add_executable(test_station_selection test_station_selection.cpp)
 target_link_libraries(test_station_selection PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_station_selection)
 
+add_executable(test_aun_auto_station test_aun_auto_station.cpp)
+target_link_libraries(test_aun_auto_station PRIVATE beebium_ext_aun Catch2::Catch2WithMain)
+target_include_directories(test_aun_auto_station PRIVATE ${CMAKE_SOURCE_DIR}/src/extensions/aun)
+catch_discover_tests(test_aun_auto_station)
+
 # AUN transport extension: peer ownership (AddPeer before Enable, survival
 # across backend re-creation, RemovePeer fall-back, SetConnected deferral).
 add_executable(test_aun_transport_extension test_aun_transport_extension.cpp)

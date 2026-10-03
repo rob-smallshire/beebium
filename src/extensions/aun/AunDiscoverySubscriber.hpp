@@ -114,6 +114,14 @@ public:
         own_since_.store(since_unix_seconds, std::memory_order_relaxed);
     }
 
+    // True when an own-number collision is in effect in which this machine is
+    // the NEWCOMER (another instance bound this (net, stn) first, by the #147
+    // since/identity ordering). The auto station selector announces a
+    // candidate, settles briefly, and reads this to decide whether to yield
+    // the number and try the next (issue #67). A collision where we are the
+    // incumbent does not count: we keep the number and the other side moves.
+    bool own_number_contested_as_newcomer() const;
+
     // Test-only: parse a TXT record set into the (net, stn) pair the
     // subscriber would derive. Returns nullopt if the schema is
     // missing or invalid (so the subscriber can't safely act on it).
@@ -225,6 +233,11 @@ private:
     struct OwnNumberCollision {
         std::uint64_t seq;
         std::string description;
+        // True when this machine is the NEWCOMER under the #147 since/identity
+        // ordering (the other instance bound the number first). The auto
+        // station selector reads this to decide whether to yield a candidate
+        // number and try the next (see own_number_contested_as_newcomer()).
+        bool we_are_newcomer = false;
     };
     std::map<std::string, OwnNumberCollision> own_collisions_;  // name_map_mutex_
 

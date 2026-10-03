@@ -44,6 +44,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string_view>
 #include <thread>
@@ -301,35 +302,13 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     }
     unavailable_reason_.clear();  // a working backend clears any prior reason
 
-    // Re-seed the launch-scoped layers from the current config: Launch from
-    // --aun map= / the preset, and clear Discovered so a fresh subscriber
-    // repopulates it. The Api (and later MapFile) layers persist across backend
-    // recreation -- a peer added via AunService.AddPeer before the socket came
-    // up, or before a reconnect, survives and is applied here.
-    peer_set_.set_local_net(local_net);
-    peer_set_.clear_provenance(AunPeerProvenance::Launch);
-    peer_set_.clear_provenance(AunPeerProvenance::Discovered);
-    peer_set_.clear_provenance(AunPeerProvenance::Subnet);
-    peer_set_.clear_subnet_rules(AunPeerProvenance::Launch);
-    auto map_entries = config_list("map");
-    auto peers = parse_map(map_entries ? *map_entries : std::span<const std::string>{});
-    for (const auto& p : peers) {
-        peer_set_.set_peer(p.net, p.stn, p.ip_addr_net_byte_order, p.port,
-                           AunPeerProvenance::Launch);
-    }
-    // --aun subnet= gives a subnet rule for this launch (Launch provenance).
-    auto subnet_entries = config_list("subnet");
-    for (const auto& s : parse_subnet_specs(
-             subnet_entries ? *subnet_entries
-                            : std::span<const std::string>{})) {
-        peer_set_.set_subnet_rule(s.net, s.base_ip, AunPeerProvenance::Launch);
-    }
-
-    // Load the per-user map file (MapFile peers + subnet rules). Resolution runs
-    // here, off the emulation thread. A malformed or missing file is reported
-    // but never stops the transport coming up.
-    resolve_map_file_path();
-    reload_map_file();
+    // Re-seed the launch-scoped layers from the current config (Launch from
+    // --aun map=/subnet=, MapFile from the per-user file), clearing Discovered
+    // so a fresh subscriber repopulates it. The Api layer persists across
+    // backend recreation -- a peer added via AunService.AddPeer before the
+    // socket came up, or before a reconnect, survives and is applied here. The
+    // same seeding feeds select_auto_station's occupied-station view.
+    seed_operator_layers(local_net);
 
     backend_ = backend.get();  // non-owning; ownership goes to EconetSocket
 
@@ -465,6 +444,161 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     });
 
     return backend;
+}
+
+void AunEconetTransportExtension::seed_operator_layers(std::uint8_t local_net) {
+    // Launch from --aun map= / the preset, cleared and re-seeded; Discovered and
+    // the launch Subnet rules cleared so a fresh subscriber repopulates them.
+    // The Api layer persists across recreation.
+    peer_set_.set_local_net(local_net);
+    peer_set_.clear_provenance(AunPeerProvenance::Launch);
+    peer_set_.clear_provenance(AunPeerProvenance::Discovered);
+    peer_set_.clear_provenance(AunPeerProvenance::Subnet);
+    peer_set_.clear_subnet_rules(AunPeerProvenance::Launch);
+    auto map_entries = config_list("map");
+    for (const auto& p :
+         parse_map(map_entries ? *map_entries : std::span<const std::string>{})) {
+        peer_set_.set_peer(p.net, p.stn, p.ip_addr_net_byte_order, p.port,
+                           AunPeerProvenance::Launch);
+    }
+    auto subnet_entries = config_list("subnet");
+    for (const auto& s : parse_subnet_specs(
+             subnet_entries ? *subnet_entries
+                            : std::span<const std::string>{})) {
+        peer_set_.set_subnet_rule(s.net, s.base_ip, AunPeerProvenance::Launch);
+    }
+    // Load the per-user map file (MapFile peers + subnet rules), off the
+    // emulation thread. A malformed or missing file is reported, never fatal.
+    resolve_map_file_path();
+    reload_map_file();
+}
+
+EconetTransportExtension::AutoStationOutcome
+AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
+    using Status = AutoStationOutcome::Status;
+    AutoStationOutcome out;
+
+    // port=none means the transport is disabled -- there is nothing to select
+    // for. Report Unsupported so the launch path treats it like Piconet.
+    auto port_value = config_value("port");
+    auto port = parse_port(port_value ? std::string(*port_value) : std::string{});
+    if (!port.has_value()) {
+        out.status = Status::Unsupported;
+        out.report = "AUN transport is disabled (port=none); --station auto needs "
+                     "a port to claim a number on";
+        return out;
+    }
+
+    auto net_value = config_value("net");
+    std::uint8_t local_net =
+        parse_net(net_value ? std::string(*net_value) : std::string{});
+
+    // Seed the operator layers so map= and map-file peers count as occupied,
+    // then browse briefly so discovered peers do too.
+    seed_operator_layers(local_net);
+
+    auto machine_uuid_value = config_value("machine_uuid");
+    std::string machine_uuid = machine_uuid_value
+                                   ? std::string(*machine_uuid_value)
+                                   : std::string{};
+
+    // The claim advertises a non-zero port even when the configured port is
+    // OS-ephemeral (port=0): peers resolve the SRV record to detect a
+    // collision, and a zero SRV port never completes that resolve, so the claim
+    // would be invisible. The real port is advertised by create_backend right
+    // after; this placeholder matters only during selection.
+    const std::uint16_t claim_port = (*port != 0) ? *port : AUN_DEFAULT_PORT;
+
+    // Keep both a browse and a claim announcement up for the whole selection,
+    // and poll. A continuously-advertised claim is what lets other instances
+    // launched at the same time discover us reliably (a claim raised only for a
+    // brief settle is usually missed under real mDNS). local_stn tracks the
+    // current candidate so the subscriber judges own-number collisions against
+    // it; own_number_contested_as_newcomer() means another instance holds the
+    // candidate and bound first (the #147 ordering), so we yield and climb.
+    auto subscriber = std::make_unique<AunDiscoverySubscriber>(
+        peer_set_, /*local_stn=*/0, nullptr, machine_uuid);
+    auto announcer = std::make_unique<AunDiscoveryAnnouncer>(
+        local_net, range.lo, claim_port, std::string{"beebium"},
+        std::string{BEEBIUM_VERSION}, machine_uuid);
+    if (!discovery_service_type_.empty()) {
+        subscriber->set_service_type(discovery_service_type_);
+        announcer->set_service_type(discovery_service_type_);
+    }
+
+    auto occupied_now = [&](std::set<std::uint8_t> extra) {
+        for (const auto& e : peer_set_.list_peers()) {
+            if (e.net == local_net && e.provenance != AunPeerProvenance::Subnet) {
+                extra.insert(e.stn);
+            }
+        }
+        return extra;
+    };
+
+    std::set<std::uint8_t> tried;  // numbers an incumbent pushed us off
+    auto first_free = econet::lowest_free_station(occupied_now({}), range);
+    std::uint8_t candidate = first_free.value_or(range.lo);
+    const bool start_exhausted = !first_free.has_value();
+
+    // Raise the claim at the first candidate and start browsing.
+    announcer->set_local_station(candidate);
+    announcer->start();
+    subscriber->set_own_since(announcer->since());
+    subscriber->set_local_station(candidate);
+    subscriber->start();
+
+    const auto start = std::chrono::steady_clock::now();
+    auto last_move = start;
+    bool exhausted = start_exhausted;
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        const auto now = std::chrono::steady_clock::now();
+        if (now - start >= auto_budget_) {
+            break;  // hard cap; keep whatever candidate we hold
+        }
+
+        if (subscriber->own_number_contested_as_newcomer()) {
+            // Someone holds this number and bound before us: climb to the next
+            // free one, re-announce there, and restart the quiet timer.
+            tried.insert(candidate);
+            auto next = econet::lowest_free_station(occupied_now(tried), range);
+            if (!next.has_value()) {
+                exhausted = true;
+                break;  // whole range taken; keep the current candidate
+            }
+            // Keep our original bind-time "since": it gives a stable, launch-
+            // ordered tie-break if two instances climb onto the same number,
+            // so the earlier-launched one wins and the other climbs again.
+            candidate = *next;
+            announcer->set_local_station(candidate);
+            announcer->start();
+            subscriber->set_own_since(announcer->since());
+            subscriber->set_local_station(candidate);
+            last_move = now;
+            continue;
+        }
+
+        // Settle once the candidate has stood unchallenged for the quiet period
+        // AND we have observed long enough for a pre-existing peer to surface.
+        if (now - start >= auto_min_observe_ && now - last_move >= auto_quiet_) {
+            break;
+        }
+    }
+
+    subscriber->stop();
+    announcer->stop();
+
+    if (exhausted) {
+        out.status = Status::Exhausted;
+        out.station = range.lo;
+        out.report = "Econet: all station numbers " + std::to_string(range.lo) +
+                     "-" + std::to_string(range.hi) +
+                     " are in use; starting at " + std::to_string(range.lo);
+        return out;
+    }
+    out.status = Status::Selected;
+    out.station = candidate;
+    return out;
 }
 
 AunEconetTransportExtension::AunEconetTransportExtension() = default;

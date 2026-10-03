@@ -16,9 +16,11 @@
 #include "Export.hpp"
 #include "Extension.hpp"
 #include "../econet/NetworkBackend.hpp"
+#include "../econet/StationSelection.hpp"
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace grpc { class Service; }
@@ -68,6 +70,28 @@ public:
     // A transport's client-facing API (e.g. AUN peer-list RPCs) is served
     // through the core's ExtensionRpc channel via rpc_dispatchers() (declared
     // on Extension), not by hosting a gRPC service here.
+
+    // The result of choosing a station number automatically (issue #67).
+    struct AutoStationOutcome {
+        enum class Status {
+            Selected,     // `station` is a free number this transport claimed
+            Exhausted,    // the whole range was in use; `station` is range.lo
+            Unsupported,  // this transport cannot choose a number for itself
+        };
+        Status status = Status::Unsupported;
+        std::uint8_t station = 0;  // meaningful for Selected and Exhausted
+        std::string report;        // human-readable note for the non-Selected cases
+    };
+
+    // Choose a free station number in `range` at launch, BEFORE create_backend
+    // and before the Econet socket is enabled, so the guest reads its final
+    // number at its first boot and never needs a Break. Bounded in time and run
+    // on the launch path, never the emulation thread. The default is
+    // Unsupported: a transport with no peers to consult (Piconet bridges a real
+    // wire) cannot pick a number, and the caller reports that --station auto is
+    // not available for it. AUN overrides this with a browse-and-claim. Defined
+    // out-of-line in EconetTransportExtension.cpp.
+    virtual AutoStationOutcome select_auto_station(econet::StationRange range);
 };
 
 }  // namespace beebium

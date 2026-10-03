@@ -115,6 +115,16 @@ bool AunDiscoverySubscriber::is_subscribed() const {
     return browser_->state().browsing;
 }
 
+bool AunDiscoverySubscriber::own_number_contested_as_newcomer() const {
+    std::lock_guard lock(name_map_mutex_);
+    for (const auto& [name, collision] : own_collisions_) {
+        if (collision.we_are_newcomer) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void AunDiscoverySubscriber::set_on_peers_changed(std::function<void()> cb) {
     std::lock_guard lock(callback_mutex_);
     on_peers_changed_ = std::move(cb);
@@ -240,7 +250,8 @@ void AunDiscoverySubscriber::handle_added(
             // withdrawn; a re-advertisement from the same claimant updates in
             // place (same key) rather than double-counting.
             own_collisions_[svc.instance_name] =
-                OwnNumberCollision{++pending_seq_, std::move(description)};
+                OwnNumberCollision{++pending_seq_, std::move(description),
+                                   we_are_newcomer};
         }
         publish_collision_report();
         return;
