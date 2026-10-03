@@ -150,18 +150,17 @@ VideoServiceImpl::capture_screen() const {
     capture->stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
     capture->pixels.resize(frame_buffer_.capacity_pixels());
 
-    // The metadata, the grid and the pixels are read one after another, so a
-    // frame completing between them would pair one frame's bands with
-    // another's pixels -- the incoherence this whole mechanism exists to
-    // remove. Retry while the frame counter moves under us; at fifty frames a
-    // second a couple of attempts is always enough, and the bound means a
-    // machine running flat out cannot spin here for ever.
+    // The frame's metadata and pixels are read together, but the teletext
+    // grid is a separate source, so a frame completing between the two reads
+    // would pair one frame's grid with another's pixels -- the incoherence
+    // this whole mechanism exists to remove. Retry while the frame counter
+    // moves under us; at fifty frames a second a couple of attempts is always
+    // enough, and the bound means a machine running flat out cannot spin here
+    // for ever.
     for (int attempt = 0; attempt < 8; ++attempt) {
         const uint64_t before = frame_buffer_.version();
-        capture->metadata = frame_buffer_.metadata();
         capture->teletext = teletext_grid_.snapshot();
-        frame_buffer_.copy_frame(capture->pixels.data(), capture->pixels.size());
-        if (frame_buffer_.version() == before) {
+        if (frame_buffer_.read_frame(capture->metadata, capture->pixels) == before) {
             break;
         }
     }
@@ -425,76 +424,25 @@ grpc::Status VideoServiceImpl::SubscribeFrames(
 
     uint64_t last_version = 0;
 
-    // Pre-allocate buffers at capacity to handle any frame size
-    std::vector<uint32_t> raw_buffer(frame_buffer_.capacity_pixels());
-    std::vector<uint32_t> packed_buffer(frame_buffer_.capacity_pixels());
+    // Pre-allocated at capacity to hold any frame size.
+    std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
+    const auto stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
 
     while (!context->IsCancelled()) {
-        uint64_t current_version = frame_buffer_.version();
+        if (frame_buffer_.version() != last_version) {
+            // One read for the metadata and the pixels, so a frame completing
+            // meanwhile cannot pair one frame's stamp with another's pixels.
+            FrameMetadata meta;
+            const uint64_t version = frame_buffer_.read_frame(meta, pixels);
 
-        if (current_version != last_version) {
-            // Get logical dimensions and metadata
-            size_t width = frame_buffer_.width();
-            size_t height = frame_buffer_.height();
-            size_t stride = frame_buffer_.stride_pixels();
-            const auto& meta = frame_buffer_.metadata();
-
-            // Copy raw frame data (with stride padding)
-            frame_buffer_.copy_frame(raw_buffer.data(), raw_buffer.size());
-
-            // Pack pixels by removing stride padding (if any)
-            size_t packed_size = width * height;
-            if (width == stride) {
-                // No padding, direct copy
-                std::copy(raw_buffer.begin(), raw_buffer.begin() + packed_size, packed_buffer.begin());
-            } else {
-                // Remove padding by copying row by row
-                for (size_t y = 0; y < height; ++y) {
-                    std::copy(raw_buffer.begin() + y * stride,
-                              raw_buffer.begin() + y * stride + width,
-                              packed_buffer.begin() + y * width);
-                }
-            }
-
-            // Build frame message
             Frame frame;
-            frame.set_frame_number(current_version);
-            frame.set_cycle_count(meta.cycle_count);
-            frame.set_width(static_cast<uint32_t>(width));
-            frame.set_height(static_cast<uint32_t>(height));
-            frame.set_pixels(packed_buffer.data(), packed_size * sizeof(uint32_t));
-
-            // Set field order based on interlace metadata
-            if (meta.interlaced) {
-                frame.set_field_order(FieldOrder::EVEN_FIRST);  // Our renderer writes even lines first
-            } else {
-                frame.set_field_order(FieldOrder::PROGRESSIVE);
-            }
-
-            // Set border dimensions from CRTC timing
-            frame.set_left_border(meta.left_border);
-            frame.set_right_border(meta.right_border);
-            frame.set_top_border(meta.top_border);
-            frame.set_bottom_border(meta.bottom_border);
-
-            // Set target display resolution for client-side scaling
-            frame.set_display_width(meta.display_width);
-            frame.set_display_height(meta.display_height);
-
-            // Set per-region geometry for split-screen modes
-            for (const auto& region : meta.regions) {
-                auto* proto_region = frame.add_regions();
-                proto_region->set_start_line(region.start_line);
-                proto_region->set_end_line(region.end_line);
-                proto_region->set_pixel_width(region.pixel_width);
-            }
-
+            to_proto_frame(meta, pixels, stride, &frame);
             if (!writer->Write(frame)) {
                 // Client disconnected
                 break;
             }
 
-            last_version = current_version;
+            last_version = version;
         }
 
         // Brief sleep to avoid busy-waiting
@@ -519,37 +467,24 @@ grpc::Status VideoServiceImpl::CaptureFrame(
 
     std::vector<uint32_t> pixels(frame_buffer_.capacity_pixels());
     const auto stride = static_cast<uint32_t>(frame_buffer_.stride_pixels());
-    uint64_t seen_version = 0;
 
-    // Frames complete every 20 ms or so; look every millisecond, so each one
-    // is examined while it is still the current frame.
-    while (!context->IsCancelled()) {
-        const uint64_t version = frame_buffer_.version();
-        if (version != 0 && version != seen_version) {
-            seen_version = version;
-            // Metadata and pixels are read one after the other; retry if a
-            // frame completes between them, so they describe the same frame.
-            FrameMetadata meta;
-            bool coherent = false;
-            for (int attempt = 0; attempt < 8 && !coherent; ++attempt) {
-                const uint64_t before = frame_buffer_.version();
-                meta = frame_buffer_.metadata();
-                frame_buffer_.copy_frame(pixels.data(), pixels.size());
-                coherent = frame_buffer_.version() == before;
-            }
-            if (coherent && meta.cycle_count >= request->after_cycle()) {
-                to_proto_frame(meta, pixels, stride, response);
-                return grpc::Status::OK;
-            }
-        }
-        if (std::chrono::steady_clock::now() >= deadline) {
+    // The frame buffer answers the capture as frames are published, so the
+    // frame returned is the first to qualify however late this thread runs.
+    FrameMetadata meta;
+    switch (frame_buffer_.capture_frame_after(
+                request->after_cycle(), deadline,
+                [context] { return context->IsCancelled(); }, meta, pixels)) {
+        case FrameBuffer::CaptureResult::Captured:
+            to_proto_frame(meta, pixels, stride, response);
+            return grpc::Status::OK;
+        case FrameBuffer::CaptureResult::TimedOut:
             return grpc::Status(
                 grpc::StatusCode::DEADLINE_EXCEEDED,
                 "no frame completed at or after cycle " +
                     std::to_string(request->after_cycle()) + " within " +
                     std::to_string(timeout_ms) + " ms");
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        case FrameBuffer::CaptureResult::Cancelled:
+            break;
     }
     return grpc::Status(grpc::StatusCode::CANCELLED, "client cancelled");
 }

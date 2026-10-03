@@ -137,11 +137,13 @@ Each frame contains:
 
 Returns the frame the machine completed at or after an emulated cycle
 (`cycleCount >= afterCycle`): the current frame if it already qualifies,
-otherwise the next to complete, never one stamped earlier. Only the latest
-frame is held, so an earlier qualifying frame cannot be returned once a newer
-one has replaced it. The machine must run for a later frame to complete; the
-server waits up to `timeoutMs` (default 5000, at most 60000) and then fails
-with `DEADLINE_EXCEEDED`.
+otherwise the next to complete, never one stamped earlier. Frames completing
+while the request waits are examined as they are published, so the one
+returned is the first to qualify however busy the server is. Only the latest
+frame is held, so a qualifying frame that completed before the request arrived
+cannot be returned once a newer one has replaced it. The machine must run for
+a later frame to complete; the server waits up to `timeoutMs` (default 5000,
+at most 60000) and then fails with `DEADLINE_EXCEEDED`.
 
 ```bash
 grpcurl -plaintext -d '{"afterCycle": 4000000, "timeoutMs": 2000}' \

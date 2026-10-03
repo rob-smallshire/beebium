@@ -5371,14 +5371,13 @@ public:
                 return ExitCode::SOFTWARE;
             }
 
-            // Extract frame data
-            const auto& metadata = frame_buffer.metadata();
+            // Extract frame data: the metadata and pixels of one frame
+            FrameMetadata metadata;
+            std::vector<uint32_t> frame_copy(frame_buffer.capacity_pixels());
+            frame_buffer.read_frame(metadata, frame_copy);
             uint32_t frame_width = metadata.width;
             uint32_t frame_height = metadata.height;
             size_t stride_pixels = frame_buffer.stride_pixels();
-
-            std::vector<uint32_t> frame_copy(stride_pixels * frame_height);
-            frame_buffer.copy_frame(frame_copy.data(), frame_copy.size());
 
             // Scale from logical frame to display dimensions (nearest-neighbour)
             // with black border around the image
