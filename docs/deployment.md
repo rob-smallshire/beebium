@@ -1,12 +1,16 @@
 # Beebium Deployment and Resource Discovery
 
-This document describes how Beebium server executables are deployed and how they locate ROM files at runtime.
+This document describes how Beebium server executables are deployed, how they locate ROMs, presets, extensions and bundled discs at runtime, and where they keep per-user state.
 
 > For embedding the servers and their native dependencies inside the macOS `.app` bundle (and the path to a distributable, notarized build), see [macOS App Packaging](macos-app-packaging.md).
 
 ## ROM Files
 
-Beebium requires ROM files to operate. These are not included in the repository due to copyright.
+Beebium requires ROM files to operate. The ROM images live in the repository's
+`roms/` directory; the build copies the ones the shipped machines and presets
+need into `build/roms/`, and `cmake --install` installs every `.rom` from
+`roms/` into `share/beebium/roms/`. Tube coprocessor firmware is not in the ROM
+directory: it ships inside each coprocessor plugin's `roms/` directory.
 
 ### ROM Naming Convention
 
@@ -17,22 +21,35 @@ ROMs use the format `<supplier>-<product>_<version>.rom`:
 | `acorn-mos_1_20.rom` | MOS 1.20 for BBC Model B | 16 KB |
 | `acorn-mos_2_0.rom` | MOS 2.0 for BBC Model B+ | 16 KB |
 | `bbc-basic_2.rom` | BBC BASIC II | 16 KB |
+| `acorn-dfs_2_26.rom` | DFS 2.26 (1770) | 16 KB |
 
 ### Default ROMs per Machine
 
-| Machine | Executable | MOS ROM | Language ROM (Slot 15) |
-|---------|------------|---------|------------------------|
-| BBC Model B | `beebium-model-b` | `acorn-mos_1_20.rom` | `bbc-basic_2.rom` |
-| BBC Model B+ 64K | `beebium-model-b-plus` | `acorn-mos_2_0.rom` | `bbc-basic_2.rom` |
+| Machine | Executable | MOS ROM | Default sideways ROMs |
+|---------|------------|---------|-----------------------|
+| BBC Model B | `beebium-model-b` | `acorn-mos_1_20.rom` | slot 15: `bbc-basic_2.rom` |
+| Model B with ROM/RAM board | `beebium-model-b-romram` | `acorn-mos_1_20.rom` | slot 15: `bbc-basic_2.rom` |
+| Model B with ATPL Sidewise | `beebium-model-b-atpl-sidewise` | `acorn-mos_1_20.rom` | slot 14: `bbc-basic_2.rom` |
+| Model B with Watford ROM/RAM | `beebium-model-b-watford-rom-ram` | `acorn-mos_1_20.rom` | slot 15: `bbc-basic_2.rom` |
+| Model B with Integra-B | `beebium-model-b-integra-b` | `acorn-mos_1_20.rom` | slot 3: `bbc-basic_2.rom`; slot 15: `computech-ibos_1_26.rom` |
+| BBC Model B+ 64K | `beebium-model-b-plus` | `acorn-mos_2_0.rom` | slot 15: `bbc-basic_2.rom`; slot 11: `acorn-dfs_2_26.rom` |
+| BBC Model B+ 128K | `beebium-model-b-plus-128k` | `acorn-mos_2_0.rom` | slot 15: `bbc-basic_2.rom`; slot 11: `acorn-dfs_2_26.rom` |
 
-Slot 15 is the highest priority sideways ROM slot, conventionally used for the default language (BASIC from factory). Use `--rom 15:<filepath>` to replace BASIC with another language ROM.
+The language slot holds the default language (BASIC from the factory). Use
+`--language-rom <filepath>` to put another language ROM in that slot, or
+`--sideways slot=<n>:type=rom:image=<filepath>` to fill any slot. Each
+executable's `start --help` lists its defaults.
 
 ## Directory Layouts
 
 ### Extensions Directory
 
-Peripheral extensions, including the Acorn 65C02 second processor
-(`acorn-65c02-coprocessor`), are plugins loaded from `<exe-dir>/extensions/`.
+Plugin extensions, including the Acorn 65C02 second processor
+(`acorn-65c02-coprocessor`) and the Piconet Econet transport, are loaded from
+`<exe-dir>/extensions/`, one directory per plugin holding its library, its
+`manifest.json` and any firmware in `roms/`. (Some extensions, such as the AUN
+transport, are built into the server.) `--extension-dir <path>` adds further
+search directories, and `list-extensions` shows what resolves.
 A server run from a build tree in which the plugins have not been built
 (the `beebium-servers` target builds them all), or from an installed tree
 missing `extensions/acorn-65c02-coprocessor/`, has no Tube coprocessor:
@@ -42,20 +59,26 @@ ship the `extensions/` tree.
 
 ### Build Directory (Development)
 
-After building, ROMs are copied to `build/roms/`:
+After building, ROMs are copied to `build/roms/`, generated presets sit beside
+the executables, and bundled disc masters are decompressed to `build/discs/`:
 
 ```
 build/
 ├── src/server/
-│   ├── beebium-model-b
-│   └── beebium-model-b-plus
-└── roms/
-    ├── acorn-mos_1_20.rom
-    ├── acorn-mos_2_0.rom
-    └── bbc-basic_2.rom
+│   ├── beebium-model-b, beebium-model-b-plus, ...
+│   ├── extensions/<name>/{<plugin library>, manifest.json}
+│   └── presets/   (*.preset.beebium, *.thumbnail.png)
+├── roms/
+│   ├── acorn-mos_1_20.rom
+│   ├── acorn-mos_2_0.rom
+│   └── bbc-basic_2.rom, ...
+└── discs/
+    └── l3fs-v1_26b.dat, l3fs-v1_26b.dsc
 ```
 
-The executable locates ROMs via `../roms/` relative to its directory (i.e., `build/src/server/../roms/` = `build/roms/`).
+The executable finds ROMs in the nearest `roms/` directory at or above its own
+directory (`build/src/server/` -> `build/roms/`), and bundled discs likewise in
+the nearest `discs/`.
 
 ### Installed Layout (FHS-Compliant)
 
@@ -65,13 +88,14 @@ When installed via `cmake --install`, the tree is relocatable and self-describin
 <prefix>/
 ├── bin/
 │   ├── beebium-model-b, beebium-model-b-plus, ...
-│   └── extensions/<name>/{<plugin>.so, manifest.json}
+│   └── extensions/<name>/{<plugin>.so, manifest.json, roms/}
 ├── lib/
 │   ├── libbeebium_extension_api.so
 │   └── libbeebium_extension_ui_proto.so
 └── share/beebium/
     ├── roms/      (acorn-mos_1_20.rom, ...)
-    └── presets/
+    ├── presets/   (*.preset.beebium, *.thumbnail.png)
+    └── discs/     (bundled disc masters, read-only)
 ```
 
 The server binaries carry an `$ORIGIN`-relative `RPATH` (`@loader_path` on macOS),
@@ -86,14 +110,16 @@ cmake --install build --prefix /opt/beebium
 ```
 
 The distributable packages ship this same tree, differing only in *where* they
-place it: the `.deb` installs it under `/opt/beebium` with `/usr/bin` symlinks
+place it: the `.deb` and `.rpm` install it under `/opt/beebium` with `/usr/bin` symlinks
 onto the binaries, while the `.tar.gz` (and the Windows `.zip`) is a relocatable
 single directory the user extracts anywhere and puts on `PATH`. Because discovery
 is entirely relative to the binary's own location, all of these work unchanged.
 For the self-contained, statically linked bundles (and how they are built,
 validated, and shipped), see [Packaging and Distribution](packaging.md).
 
-The executable locates ROMs via `../share/beebium/roms/` relative to its directory.
+The executable locates ROMs via `../share/beebium/roms/`, presets via
+`../share/beebium/presets/`, and disc masters via `../share/beebium/discs/`,
+relative to its directory.
 
 ## ROM Discovery Algorithm
 
@@ -101,7 +127,7 @@ At startup, Beebium searches for the ROM directory in this order:
 
 1. **Explicit path**: `--rom-dir <dirpath>` command-line argument
 2. **Environment variable**: `BEEBIUM_ROM_DIR`
-3. **Build layout**: `<executable_dir>/../roms/`
+3. **Build layout**: a `roms/` directory at or above `<executable_dir>` (searched upward a few levels, so a multi-config generator's per-config subdirectory still finds it)
 4. **Installed layout**: `<executable_dir>/../share/beebium/roms/`
 5. **Compile-time fallback**: `BEEBIUM_DEFAULT_ROM_DIR` (if defined)
 
@@ -109,7 +135,7 @@ The first existing directory wins.
 
 ### Individual ROM Resolution
 
-When loading a ROM file (via `--mos` or `--rom`):
+When loading a ROM file (via `--mos`, `--language-rom`, `--sideways ...:image=`, or a preset):
 
 1. **Absolute path**: Used as-is (e.g., `/path/to/custom.rom`)
 2. **Relative path with directory**: Resolved against current working directory (e.g., `./roms/custom.rom`)
@@ -136,7 +162,25 @@ cmake --install . --prefix ~/.local
 
 The CMake install rules handle:
 - Executables to `bin/`
+- Plugin extensions (library, `manifest.json`, firmware) to `bin/extensions/<name>/`
+- The extension ABI libraries to `lib/`
 - ROM files (`.rom`) to `share/beebium/roms/`
+- System presets and their thumbnails to `share/beebium/presets/`
+- Bundled disc masters (`.dat`, `.dsc`), read-only, to `share/beebium/discs/`
+
+## Preset Discovery
+
+System presets (shipped with the software) are searched in this order:
+
+1. `$BEEBIUM_SERVERS_DIRPATH/presets/`
+2. `<executable_dir>/presets/` (build layout)
+3. `<executable_dir>/../share/beebium/presets/` (installed layout)
+
+User presets (created with `create-preset` / `import-preset`) live in
+`$BEEBIUM_USER_PRESETS_DIRPATH` if set, else `presets/` in the per-user state
+directory (below). `report-presets-dirpath` prints the user presets directory.
+A preset id is looked up among the system presets first, then the user
+presets.
 
 ## Bundled Discs and Copy-on-Write
 
@@ -154,15 +198,20 @@ opens a master; instead, on first use of a bundled image it copies the master
 to a **per-user working copy** and opens that. This keeps a shipped image (or a
 signed/sealed macOS app bundle) from ever being modified.
 
-Working copies live in the per-user Beebium state directory, a sibling of the
-user presets directory (all Beebium per-user state co-locates, so a future move
-to an XDG data location would move it all together). That one directory holds
-`presets/`, the disc working copies in `discs/`, and the shared AUN peer map
-`aun-map.json` (see `docs/networking.md`):
+Working copies live in the per-user Beebium state directory. That one
+directory holds all of Beebium's per-user state: the user presets in
+`presets/`, the disc working copies in `discs/`, the shared AUN map file
+`aun-map.json`, and the AUN automatic-station hint `aun-auto-next` (with its
+lock file `aun-auto-next.lock`):
 
-- macOS: `~/Library/Application Support/Beebium/` (`presets/`, `discs/`, `aun-map.json`)
-- Windows: `%APPDATA%\Beebium\` (`presets\`, `discs\`, `aun-map.json`)
-- Linux: `$XDG_CONFIG_HOME/beebium/` (or `~/.config/beebium/`) (`presets/`, `discs/`, `aun-map.json`)
+- macOS: `~/Library/Application Support/Beebium/`
+- Windows: `%APPDATA%\Beebium\`
+- Linux: `$XDG_CONFIG_HOME/beebium/` (or `~/.config/beebium/`)
+
+Each location can be overridden separately (see Environment Variables); the
+working-copy directory is replaced by `BEEBIUM_DISC_WORK_DIR`, which also
+changes the copy policy. `report-aun-map-filepath` prints the map file path in
+effect. For the map file and the hint file, see `docs/networking.md`.
 
 **Reset a disc to its shipped state**: delete its working copy; the next boot
 re-copies the pristine master.
@@ -199,8 +248,12 @@ launcher enables it.
 | Variable | Description |
 |----------|-------------|
 | `BEEBIUM_ROM_DIR` | Path to ROM directory (overrides auto-detection) |
+| `BEEBIUM_SERVERS_DIRPATH` | Directory whose `presets/` holds the system presets (overrides auto-detection) |
+| `BEEBIUM_USER_PRESETS_DIRPATH` | User presets directory (overrides the per-user default) |
 | `BEEBIUM_DISC_DIR` | Path to the bundled disc **master** directory (overrides auto-detection) |
 | `BEEBIUM_DISC_WORK_DIR` | Working-copy directory. When set, selects an ephemeral "scratch" mode that always re-copies the master fresh (used by the build to keep thumbnail capture deterministic and stateless); when unset, working copies persist in the per-user discs directory |
+| `BEEBIUM_AUN_MAP_FILEPATH` | AUN map file path (overrides the per-user `aun-map.json`; `--aun map-file=` overrides this, and `map-file=none` disables the map file) |
+| `BEEBIUM_AUN_AUTO_STATE_FILEPATH` | AUN automatic-station hint file (overrides the per-user `aun-auto-next`; `none` disables the hint) |
 
 Example:
 ```bash
@@ -242,9 +295,9 @@ Use verbose mode to see which paths are checked:
 # The server prints the ROM paths it loads
 beebium-model-b
 # Output:
-# Loading MOS ROM: /path/to/roms/acorn-mos_1_20.rom
-# Loading ROM into slot 15: /path/to/roms/bbc-basic_2.rom
 # Initializing BBC Model B...
+# Loading MOS ROM: "/path/to/roms/acorn-mos_1_20.rom"
+# Loading ROM into slot 15: "/path/to/roms/bbc-basic_2.rom"
 ```
 
 ## Platform Notes
@@ -265,6 +318,5 @@ beebium-model-b
 
 ### Windows
 
-- Portable: Keep executable and `roms/` folder together
-- Installed: Use Program Files layout with `share/beebium/roms/`
+- Portable: the `.zip` keeps the installed layout (`bin/`, `share/beebium/`) in one relocatable directory
 - The executable uses `GetModuleFileName` to find its own path
