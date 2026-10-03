@@ -8,8 +8,17 @@ service SystemService {
     // Get current system/machine information
     rpc GetSystemInfo(GetSystemInfoRequest) returns (SystemInfo);
 
-    // Set the machine's user-assignable name
+    // Set the machine's name template (a plain name is a template with no
+    // placeholders). See MachineIdentity.name_template.
     rpc SetMachineName(SetMachineNameRequest) returns (SetMachineNameResponse);
+
+    // List the placeholders a name template can use on this server, with
+    // their current values. Clients carry no list of keys; they ask.
+    rpc ListNamePlaceholders(ListNamePlaceholdersRequest) returns (ListNamePlaceholdersResponse);
+
+    // Render a name template against the current values without changing
+    // anything, for a live preview while the user edits.
+    rpc PreviewMachineName(PreviewMachineNameRequest) returns (PreviewMachineNameResponse);
 
     // Subscribe to server status events (shutdown notifications, identity changes, etc.)
     // Server sends READY immediately upon subscription, then status changes.
@@ -65,7 +74,10 @@ message MachineIdentity {
     // RFC 4122 v4 UUID, stable for machine lifetime
     string uuid = 1;
 
-    // User-assignable label, mutable via SetMachineName
+    // The name to show: name_template rendered against the current values of
+    // its placeholders. Titles, the _beebium._tcp announcement and every
+    // consumer that displays the machine use this. Re-rendered about once a
+    // second; a change arrives as SERVER_STATUS_IDENTITY_CHANGED.
     string name = 2;
 
     // Machine model type identifier (e.g., "ModelB", "ModelBPlus")
@@ -75,6 +87,15 @@ message MachineIdentity {
     // Human-readable model name (e.g., "BBC Model B 32K")
     // Immutable, set at creation
     string model_name = 4;
+
+    // The name as the user edits it, mutable via SetMachineName: ordinary
+    // text in which {key} stands for a placeholder's current value, e.g.
+    // "Station {econet-station} (AUN, Model B)". {{ and }} are literal
+    // braces; an unknown key renders verbatim; a placeholder that does not
+    // apply to this machine renders empty; ':' '|' '?' '!' inside braces are
+    // reserved. A template without braces is a plain name. See
+    // docs/discussion/machine-name-templates.md.
+    string name_template = 5;
 }
 
 // Connection tracking information
@@ -148,13 +169,67 @@ message SystemInfo {
 // === SetMachineName RPC ===
 
 message SetMachineNameRequest {
-    // New name for the machine (must not be empty)
-    string name = 1;
+    // The new name template (must not be empty).
+    string name_template = 1;
 }
 
 message SetMachineNameResponse {
-    // Updated identity with new name
+    // The updated identity: the template and its rendering.
     MachineIdentity identity = 1;
+
+    // What the rendering could not substitute, so a client can warn without
+    // parsing the template. See PreviewMachineNameResponse.
+    repeated string unknown_keys = 2;
+    repeated string inapplicable_keys = 3;
+    repeated string malformed = 4;
+}
+
+// === Name placeholders ===
+
+message ListNamePlaceholdersRequest {
+}
+
+// A placeholder a name template can use, and its value on this machine.
+message NamePlaceholder {
+    // Used in templates as {key}. Begins with its owner's domain
+    // ("econet-station", "machine-model"); never renamed once shipped.
+    string key = 1;
+    // Short human name for a picker: "Econet station".
+    string label = 2;
+    // One sentence on what it shows and when it changes.
+    string description = 3;
+    // Picker heading: "Machine", "Econet".
+    string group = 4;
+    // The text a picker inserts into the template for this placeholder
+    // ("{econet-station}"); front ends insert it rather than building it.
+    string insertion = 5;
+    // The current value on this machine, as text; empty when not applicable.
+    string value = 6;
+    // False when this machine cannot have a value (an Econet placeholder with
+    // no Econet fitted); the placeholder then renders as the empty string.
+    bool applicable = 7;
+}
+
+message ListNamePlaceholdersResponse {
+    // Every placeholder on this server, in a stable order.
+    repeated NamePlaceholder placeholders = 1;
+}
+
+message PreviewMachineNameRequest {
+    string name_template = 1;
+}
+
+message PreviewMachineNameResponse {
+    // The rendering, as MachineIdentity.name would be with this template.
+    string name = 1;
+    // The inner text of each {...} that is not a known key (rendered
+    // verbatim), once each, in order; "" for an empty {}.
+    repeated string unknown_keys = 2;
+    // Known keys that do not apply to this machine (rendered empty).
+    repeated string inapplicable_keys = 3;
+    // Malformed fragments, rendered literally: an unterminated "{..." or a
+    // lone "}".
+    repeated string malformed = 4;
 }
 
 // === Shutdown RPC ===

@@ -91,8 +91,8 @@ void NamePlaceholderRegistry::add_extension(const Extension& extension) {
     }
 }
 
-std::vector<NamePlaceholder> NamePlaceholderRegistry::snapshot() const {
-    std::vector<NamePlaceholder> out;
+std::vector<NamePlaceholderState> NamePlaceholderRegistry::snapshot() const {
+    std::vector<NamePlaceholderState> out;
     out.reserve(entries_.size());
     for (const auto& entry : entries_) {
         const auto value = entry.provider->placeholder_value(entry.info.key);

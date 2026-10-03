@@ -38,7 +38,7 @@ namespace beebium {
 class Extension;
 
 // A placeholder as clients see it: its description and its current value.
-struct NamePlaceholder {
+struct NamePlaceholderState {
     std::string key;
     std::string label;
     std::string description;
@@ -69,7 +69,7 @@ public:
     void add_extension(const Extension& extension);
 
     // Every placeholder with its current value, in registration order.
-    std::vector<NamePlaceholder> snapshot() const;
+    std::vector<NamePlaceholderState> snapshot() const;
 
     // Render a template against the current values.
     NameRendering render(std::string_view name_template) const;

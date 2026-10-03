@@ -16,9 +16,12 @@
 #include "system.grpc.pb.h"
 #include "beebium/PacingClock.hpp"
 #include "beebium/PlatformUtils.hpp"
+#include "beebium/NamePlaceholderRegistry.hpp"
+#include "beebium/NameTemplate.hpp"
 #include "beebium/service/ConnectionTracker.hpp"
 #include "beebium/service/HostFingerprint.hpp"
 #include "beebium/service/ProtocolFingerprint.hpp"
+#include "beebium/service/ReannounceLimiter.hpp"
 #include "beebium/service/ShutdownPolicy.hpp"
 #include "beebium/service/ShutdownCoordinator.hpp"
 #include <beebium/discovery/Advertiser.hpp>
@@ -51,10 +54,27 @@ struct Provenance {
 /// Stable UUID and mutable name for identification and labeling
 struct MachineIdentity {
     std::string uuid;       // RFC 4122 v4 UUID, stable for machine lifetime
-    std::string name;       // User-assignable label, mutable
+    // The name to show: name_template rendered against its placeholders'
+    // current values (#153). At construction, the template when
+    // name_template is empty.
+    std::string name;
     std::string model_type; // e.g., "ModelB" (immutable)
     std::string model_name; // e.g., "BBC Model B" (immutable)
+    // The name as the user edits it, with {key} placeholders. Mutable.
+    std::string name_template;
 };
+
+/// How often the name is re-rendered, so it follows placeholder values that
+/// change under a fixed template (#153). A placeholder value needs no push;
+/// polling at this rate is cheap.
+inline constexpr std::chrono::seconds kNameRefreshInterval{1};
+
+/// The least time between two re-publications of the _beebium._tcp
+/// announcement that a changing rendered name causes; see
+/// ReannounceLimiter.hpp. Long enough to cover a registration's probe and
+/// announcement burst (some three seconds), short enough that a renumbered
+/// station's new name reaches browsers promptly.
+inline constexpr std::chrono::seconds kMinReannounceInterval{5};
 
 /// gRPC service implementation for SystemService
 /// Provides machine configuration and identity information
@@ -72,7 +92,7 @@ public:
                       ShutdownPolicyConfig policy_config = {},
                       ShutdownCoordinator* shutdown_coordinator = nullptr,
                       ShutdownCallback shutdown_callback = nullptr);
-    ~SystemServiceImpl() override = default;
+    ~SystemServiceImpl() override { stop_name_refresh(); }
 
     // Non-copyable
     SystemServiceImpl(const SystemServiceImpl&) = delete;
@@ -107,6 +127,16 @@ public:
         grpc::ServerContext* context,
         const SetMachineNameRequest* request,
         SetMachineNameResponse* response) override;
+
+    grpc::Status ListNamePlaceholders(
+        grpc::ServerContext* context,
+        const ListNamePlaceholdersRequest* request,
+        ListNamePlaceholdersResponse* response) override;
+
+    grpc::Status PreviewMachineName(
+        grpc::ServerContext* context,
+        const PreviewMachineNameRequest* request,
+        PreviewMachineNameResponse* response) override;
 
     grpc::Status WatchServerStatus(
         grpc::ServerContext* context,
@@ -159,7 +189,37 @@ public:
     /// Must be called before advertisement can work correctly.
     void set_server_port(uint16_t port);
 
+    /// The placeholders name templates are rendered against (#153), or
+    /// nullptr for none. Renders the current template at once. Call before
+    /// the server accepts connections; the registry must outlive the service.
+    void set_name_placeholders(const NamePlaceholderRegistry* registry);
+
+    /// Start re-rendering the name every kNameRefreshInterval on a thread of
+    /// its own (never the emulation thread). A changed rendering is sent to
+    /// watchers as an identity change and re-announced, rate-limited.
+    void start_name_refresh();
+
+    /// Stop the refresh thread and wait for it. Idempotent; the destructor
+    /// calls it. Call before stopping the advertiser, so the refresh cannot
+    /// re-announce a machine that is going away.
+    void stop_name_refresh();
+
+    /// Start the _beebium._tcp announcement under the current name.
+    void start_advertisement();
+
 private:
+    /// Render a template; a blank rendering falls back to the model's display
+    /// name, since a machine must have a name to show and to announce.
+    NameRendering render_name(std::string_view name_template) const;
+
+    /// Re-render the current template; on a change, notify watchers and ask
+    /// for a re-announcement. Then re-announce if the limiter allows.
+    void refresh_name();
+
+    /// Re-announce under the current name, if advertising.
+    /// Caller holds advertisement_mutex_.
+    void republish_advertisement_locked();
+
     /// Notify watchers that identity has changed.
     void notify_identity_changed();
 
@@ -180,7 +240,6 @@ private:
     discovery::Advertiser* advertiser_;
 
     discovery::ServiceInfo build_service_info();
-    void republish_advertisement();
     ShutdownPolicyEvaluator policy_evaluator_;
     ShutdownCoordinator* shutdown_coordinator_;
     ShutdownCallback shutdown_callback_;
@@ -203,6 +262,19 @@ private:
     // so every watcher sees every reset (coalescing bursts to the latest).
     std::atomic<uint64_t> reset_generation_{0};
     std::atomic<bool> last_reset_hard_{false};
+
+    // Machine-name templates (#153).
+    const NamePlaceholderRegistry* name_placeholders_ = nullptr;
+    std::thread name_refresh_thread_;
+    std::mutex name_refresh_mutex_;
+    std::condition_variable name_refresh_cv_;
+    bool name_refresh_stop_ = false;
+
+    // Serialises every start, stop and re-publication of the advertisement
+    // (the RPCs, a rename and the name refresh run on different threads), and
+    // guards reannounce_limiter_.
+    std::mutex advertisement_mutex_;
+    ReannounceLimiter reannounce_limiter_{kMinReannounceInterval};
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -229,6 +301,9 @@ SystemServiceImpl<MachineType>::SystemServiceImpl(
     , shutdown_callback_(std::move(shutdown_callback))
     , server_port_(server_port)
     , clock_speed_hz_(clock_speed_hz) {
+    if (identity_.name_template.empty()) {
+        identity_.name_template = identity_.name;
+    }
 }
 
 template<typename MachineType>
@@ -238,6 +313,7 @@ void SystemServiceImpl<MachineType>::populate_identity_proto(
     proto->set_name(identity_.name);
     proto->set_model_type(identity_.model_type);
     proto->set_model_name(identity_.model_name);
+    proto->set_name_template(identity_.name_template);
 }
 
 template<typename MachineType>
@@ -293,6 +369,7 @@ discovery::ServiceInfo SystemServiceImpl<MachineType>::build_service_info() {
     }
     info.port = server_port_;
     info.txt_records["uuid"] = identity_.uuid;
+    info.txt_records["role"] = "host";
     info.txt_records["model"] = identity_.model_type;
     info.txt_records["provenance"] = provenance_.type;
 
@@ -323,7 +400,7 @@ discovery::ServiceInfo SystemServiceImpl<MachineType>::build_service_info() {
 // Only when already advertising. Renaming a machine whose advertisement the
 // user turned off must not turn it back on.
 template<typename MachineType>
-void SystemServiceImpl<MachineType>::republish_advertisement() {
+void SystemServiceImpl<MachineType>::republish_advertisement_locked() {
     if (!advertiser_ || !advertiser_->state().advertising) {
         return;
     }
@@ -332,31 +409,176 @@ void SystemServiceImpl<MachineType>::republish_advertisement() {
 }
 
 template<typename MachineType>
+void SystemServiceImpl<MachineType>::start_advertisement() {
+    if (!advertiser_) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(advertisement_mutex_);
+    advertiser_->start(build_service_info());
+    reannounce_limiter_.note_published(ReannounceLimiter::Clock::now());
+}
+
+template<typename MachineType>
+NameRendering SystemServiceImpl<MachineType>::render_name(
+    std::string_view name_template) const {
+    NameRendering rendering = name_placeholders_
+        ? name_placeholders_->render(name_template)
+        : render_name_template(name_template,
+              [](std::string_view) -> std::optional<NamePlaceholderValue> {
+                  return std::nullopt;
+              });
+    const bool blank = rendering.text.find_first_not_of(" \t\r\n") == std::string::npos;
+    if (blank) {
+        // model_name is immutable, so this read needs no lock.
+        rendering.text = identity_.model_name;
+    }
+    return rendering;
+}
+
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::set_name_placeholders(
+    const NamePlaceholderRegistry* registry) {
+    name_placeholders_ = registry;
+    std::string name_template;
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        name_template = identity_.name_template;
+    }
+    const auto rendering = render_name(name_template);
+    std::lock_guard<std::mutex> lock(watchers_mutex_);
+    identity_.name = rendering.text;
+}
+
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::refresh_name() {
+    std::string name_template;
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        name_template = identity_.name_template;
+    }
+    // Rendered outside the lock: a provider may take locks of its own.
+    const auto rendering = render_name(name_template);
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(watchers_mutex_);
+        // A rename while rendering has already set the name for its own
+        // template; this rendering is of the old one.
+        if (identity_.name_template == name_template && identity_.name != rendering.text) {
+            identity_.name = rendering.text;
+            changed = true;
+        }
+    }
+    if (changed) {
+        notify_identity_changed();
+    }
+    std::lock_guard<std::mutex> lock(advertisement_mutex_);
+    if (changed) {
+        reannounce_limiter_.request();
+    }
+    if (reannounce_limiter_.take(ReannounceLimiter::Clock::now())) {
+        republish_advertisement_locked();
+    }
+}
+
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::start_name_refresh() {
+    std::lock_guard<std::mutex> lock(name_refresh_mutex_);
+    if (name_refresh_thread_.joinable()) {
+        return;
+    }
+    name_refresh_stop_ = false;
+    name_refresh_thread_ = std::thread([this] {
+        std::unique_lock<std::mutex> lock(name_refresh_mutex_);
+        while (!name_refresh_cv_.wait_for(lock, kNameRefreshInterval,
+                                          [this] { return name_refresh_stop_; })) {
+            lock.unlock();
+            refresh_name();
+            lock.lock();
+        }
+    });
+}
+
+template<typename MachineType>
+void SystemServiceImpl<MachineType>::stop_name_refresh() {
+    {
+        std::lock_guard<std::mutex> lock(name_refresh_mutex_);
+        name_refresh_stop_ = true;
+    }
+    name_refresh_cv_.notify_all();
+    if (name_refresh_thread_.joinable()) {
+        name_refresh_thread_.join();
+    }
+}
+
+template<typename MachineType>
 grpc::Status SystemServiceImpl<MachineType>::SetMachineName(
     grpc::ServerContext* /*context*/,
     const SetMachineNameRequest* request,
     SetMachineNameResponse* response) {
 
-    // Validate name is not empty
-    if (request->name().empty()) {
+    const std::string& name_template = request->name_template();
+    if (name_template.empty()) {
         return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Name cannot be empty");
     }
 
-    // Update the name
+    const auto rendering = render_name(name_template);
     {
         std::lock_guard<std::mutex> lock(watchers_mutex_);
-        identity_.name = request->name();
+        identity_.name_template = name_template;
+        identity_.name = rendering.text;
         populate_identity_proto(response->mutable_identity());
     }
+    for (const auto& key : rendering.unknown_keys) response->add_unknown_keys(key);
+    for (const auto& key : rendering.inapplicable_keys) response->add_inapplicable_keys(key);
+    for (const auto& fragment : rendering.malformed) response->add_malformed(fragment);
 
     // The name on the network is the name in the title bar of anyone looking
     // at this machine, so it has to follow the rename rather than wait for a
-    // restart.
-    republish_advertisement();
+    // restart. A rename is deliberate and rare, so it is not delayed by the
+    // limiter that paces re-announcements of changing placeholder values.
+    {
+        std::lock_guard<std::mutex> lock(advertisement_mutex_);
+        republish_advertisement_locked();
+        reannounce_limiter_.note_published(ReannounceLimiter::Clock::now());
+    }
 
     // Notify watchers of the change
     notify_identity_changed();
 
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::ListNamePlaceholders(
+    grpc::ServerContext* /*context*/,
+    const ListNamePlaceholdersRequest* /*request*/,
+    ListNamePlaceholdersResponse* response) {
+    if (!name_placeholders_) {
+        return grpc::Status::OK;
+    }
+    for (const auto& placeholder : name_placeholders_->snapshot()) {
+        auto* out = response->add_placeholders();
+        out->set_key(placeholder.key);
+        out->set_label(placeholder.label);
+        out->set_description(placeholder.description);
+        out->set_group(placeholder.group);
+        out->set_insertion(placeholder.insertion);
+        out->set_value(placeholder.value);
+        out->set_applicable(placeholder.applicable);
+    }
+    return grpc::Status::OK;
+}
+
+template<typename MachineType>
+grpc::Status SystemServiceImpl<MachineType>::PreviewMachineName(
+    grpc::ServerContext* /*context*/,
+    const PreviewMachineNameRequest* request,
+    PreviewMachineNameResponse* response) {
+    const auto rendering = render_name(request->name_template());
+    response->set_name(rendering.text);
+    for (const auto& key : rendering.unknown_keys) response->add_unknown_keys(key);
+    for (const auto& key : rendering.inapplicable_keys) response->add_inapplicable_keys(key);
+    for (const auto& fragment : rendering.malformed) response->add_malformed(fragment);
     return grpc::Status::OK;
 }
 
@@ -601,8 +823,10 @@ grpc::Status SystemServiceImpl<MachineType>::SetAdvertisement(
         return grpc::Status::OK;
     }
 
+    std::lock_guard<std::mutex> lock(advertisement_mutex_);
     if (request->enabled()) {
         advertiser_->start(build_service_info());
+        reannounce_limiter_.note_published(ReannounceLimiter::Clock::now());
     } else {
         // Stop advertising
         advertiser_->stop();

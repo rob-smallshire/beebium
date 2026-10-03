@@ -50,7 +50,17 @@ class SystemServiceStub:
     GetSystemInfo: _grpc.UnaryUnaryMultiCallable[_system_pb2.GetSystemInfoRequest, _system_pb2.SystemInfo]
     """Get current system/machine information"""
     SetMachineName: _grpc.UnaryUnaryMultiCallable[_system_pb2.SetMachineNameRequest, _system_pb2.SetMachineNameResponse]
-    """Set the machine's user-assignable name"""
+    """Set the machine's name template (a plain name is a template with no
+    placeholders). See MachineIdentity.name_template.
+    """
+    ListNamePlaceholders: _grpc.UnaryUnaryMultiCallable[_system_pb2.ListNamePlaceholdersRequest, _system_pb2.ListNamePlaceholdersResponse]
+    """List the placeholders a name template can use on this server, with
+    their current values. Clients carry no list of keys; they ask.
+    """
+    PreviewMachineName: _grpc.UnaryUnaryMultiCallable[_system_pb2.PreviewMachineNameRequest, _system_pb2.PreviewMachineNameResponse]
+    """Render a name template against the current values without changing
+    anything, for a live preview while the user edits.
+    """
     WatchServerStatus: _grpc.UnaryStreamMultiCallable[_system_pb2.WatchServerStatusRequest, _system_pb2.ServerStatusEvent]
     """Subscribe to server status events (shutdown notifications, identity changes, etc.)
     Server sends READY immediately upon subscription, then status changes.
@@ -83,7 +93,17 @@ class SystemServiceAsyncStub(SystemServiceStub):
     GetSystemInfo: _aio.UnaryUnaryMultiCallable[_system_pb2.GetSystemInfoRequest, _system_pb2.SystemInfo]  # type: ignore[assignment]
     """Get current system/machine information"""
     SetMachineName: _aio.UnaryUnaryMultiCallable[_system_pb2.SetMachineNameRequest, _system_pb2.SetMachineNameResponse]  # type: ignore[assignment]
-    """Set the machine's user-assignable name"""
+    """Set the machine's name template (a plain name is a template with no
+    placeholders). See MachineIdentity.name_template.
+    """
+    ListNamePlaceholders: _aio.UnaryUnaryMultiCallable[_system_pb2.ListNamePlaceholdersRequest, _system_pb2.ListNamePlaceholdersResponse]  # type: ignore[assignment]
+    """List the placeholders a name template can use on this server, with
+    their current values. Clients carry no list of keys; they ask.
+    """
+    PreviewMachineName: _aio.UnaryUnaryMultiCallable[_system_pb2.PreviewMachineNameRequest, _system_pb2.PreviewMachineNameResponse]  # type: ignore[assignment]
+    """Render a name template against the current values without changing
+    anything, for a live preview while the user edits.
+    """
     WatchServerStatus: _aio.UnaryStreamMultiCallable[_system_pb2.WatchServerStatusRequest, _system_pb2.ServerStatusEvent]  # type: ignore[assignment]
     """Subscribe to server status events (shutdown notifications, identity changes, etc.)
     Server sends READY immediately upon subscription, then status changes.
@@ -125,7 +145,29 @@ class SystemServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _system_pb2.SetMachineNameRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_system_pb2.SetMachineNameResponse, _abc.Awaitable[_system_pb2.SetMachineNameResponse]]:
-        """Set the machine's user-assignable name"""
+        """Set the machine's name template (a plain name is a template with no
+        placeholders). See MachineIdentity.name_template.
+        """
+
+    @_abc_1.abstractmethod
+    def ListNamePlaceholders(
+        self,
+        request: _system_pb2.ListNamePlaceholdersRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_system_pb2.ListNamePlaceholdersResponse, _abc.Awaitable[_system_pb2.ListNamePlaceholdersResponse]]:
+        """List the placeholders a name template can use on this server, with
+        their current values. Clients carry no list of keys; they ask.
+        """
+
+    @_abc_1.abstractmethod
+    def PreviewMachineName(
+        self,
+        request: _system_pb2.PreviewMachineNameRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_system_pb2.PreviewMachineNameResponse, _abc.Awaitable[_system_pb2.PreviewMachineNameResponse]]:
+        """Render a name template against the current values without changing
+        anything, for a live preview while the user edits.
+        """
 
     @_abc_1.abstractmethod
     def WatchServerStatus(

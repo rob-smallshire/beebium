@@ -514,6 +514,9 @@ struct ServerConfig {
 
     // Preset file path
     std::optional<std::filesystem::path> preset_filepath;
+    // The launching preset's display name ("" without a preset), for the
+    // machine-preset name placeholder.
+    std::string preset_name;
 
     // Extension configuration: search paths added via --extension-dir, in order.
     // Later paths override earlier ones (and the auto-resolved default
@@ -628,7 +631,10 @@ void print_usage(const char* program_name) {
               << "  --provenance-uuid <uuid> Provenance instance UUID (RFC 4122)\n"
               << "  --provenance-version <v> Provenance version string\n"
               << "  --machine-uuid <uuid>    Machine identity UUID (RFC 4122, default: auto-generated)\n"
-              << "  --machine-name <name>    Machine name/label (default: from model)\n"
+              << "  --machine-name <template> Machine name: text with {key} placeholders\n"
+              << "                           filled from the machine's state, e.g.\n"
+              << "                           'Station {econet-station}'; see\n"
+              << "                           list-name-placeholders (default: from model)\n"
               << "  --allow-shutdown         Allow any client to shut down the server\n"
               << "  --advertise              Enable mDNS service advertisement\n"
               << "  --extension-dir <path>   Add an extension search directory. Repeatable;\n"
@@ -732,6 +738,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
     if (preset.machine_name && config.machine_name.empty()) {
         config.machine_name = *preset.machine_name;
     }
+    config.preset_name = preset.name;
 
     // Auto-boot: preset supplies a default keyboard-link state; a CLI
     // --auto-boot (which sets auto_boot_set) takes precedence.
@@ -1986,6 +1993,20 @@ StepResult step_emulation(MachineType& machine, double speed_multiplier,
     return result;
 }
 
+// Register the name placeholders `ext` offers, if any (#153). A plugin whose
+// placeholders break the registration rules (a key outside its domains, a
+// domain another provider owns) is reported and its placeholders left out;
+// the machine still launches.
+template<typename MachineType>
+void register_extension_name_placeholders(beebium::service::Server<MachineType>& server,
+                                          const beebium::Extension& ext) {
+    try {
+        server.name_placeholders().add_extension(ext);
+    } catch (const beebium::NamePlaceholderError& e) {
+        std::cerr << "Warning: " << e.what() << "; its name placeholders are unavailable\n";
+    }
+}
+
 // Run the main emulation loop with pacing.
 // This function blocks until g_running becomes false (signal handler sets it).
 // Sets up shutdown callbacks for clean signal handling.
@@ -2745,11 +2766,14 @@ public:
                 config.machine_name = std::string(Memory::MACHINE_DISPLAY_NAME);
             }
 
+            // The name is a template (#153); the server renders it, and
+            // re-renders it as its placeholders' values change.
             beebium::service::MachineIdentity identity{
                 config.machine_uuid,
                 config.machine_name,
                 std::string(Memory::MACHINE_TYPE),
-                std::string(Memory::MACHINE_DISPLAY_NAME)
+                std::string(Memory::MACHINE_DISPLAY_NAME),
+                config.machine_name
             };
 
             // Print provenance details for debugging (before move)
@@ -2784,6 +2808,17 @@ public:
             // emulation loop starts, below.
             server.set_initial_speed_multiplier(
                 config.speed_multiplier_override.value_or(1.0));
+
+            // Placeholders the loaded extensions offer for the machine's name
+            // template. A plugin that breaks the registration rules loses its
+            // placeholders, not the machine.
+            for (auto* ext : extension_registry.extensions()) {
+                register_extension_name_placeholders(server, *ext);
+            }
+            for (const auto& transport : transport_registry.extensions()) {
+                register_extension_name_placeholders(server, *transport);
+            }
+            server.set_launch_preset_name(config.preset_name);
 
             server.start(std::move(provenance), std::move(identity),
                         config.advertise, shutdown_policy_config, std::move(shutdown_callback),
@@ -3503,6 +3538,107 @@ public:
                 }
                 break;
 
+            case OutputFormat::Auto:
+                break;
+        }
+        return ExitCode::OK;
+    }
+};
+
+// ListNamePlaceholders subcommand: the placeholders a machine-name template
+// can use (#153), for people writing presets and launch commands. Lists the
+// core's placeholders without launching a machine, so only values fixed
+// before launch are shown; a running server's ListNamePlaceholders RPC lists
+// every placeholder, extensions' included, with live values.
+template<typename MachineType>
+class ListNamePlaceholdersSubcommand : public Subcommand<MachineType> {
+public:
+    std::string_view name() const override { return "list-name-placeholders"; }
+    std::string_view description() const override {
+        return "List the placeholders a machine-name template can use";
+    }
+
+    void help(const char* program_name) const override {
+        std::cerr << "Usage: " << program_name << " list-name-placeholders\n"
+                  << "\n"
+                  << "Lists the placeholders a machine-name template (--machine-name, a\n"
+                  << "preset's machine_name) can use: each placeholder's key, written\n"
+                  << "{key} in a template, its label, group and description, and its\n"
+                  << "value where it is known before launch. 'Station {econet-station}'\n"
+                  << "renders as 'Station 80' on station 80, and follows a renumber at\n"
+                  << "the next Break. {{ and }} are literal braces; an unknown key\n"
+                  << "renders as written. Extensions can add placeholders; a running\n"
+                  << "server lists them all. Honours --format pretty|tsv|jsonl.\n";
+    }
+
+    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
+        if (global.help_requested) {
+            help(argv[0]);
+            return ExitCode::OK;
+        }
+        for (int i = global.subcommand_argv_start; i < argc; ++i) {
+            std::string_view tok = argv[i];
+            if (tok == "--help" || tok == "-h") {
+                help(argv[0]);
+                return ExitCode::OK;
+            }
+            std::cerr << "Unknown argument: " << tok << "\n";
+            help(argv[0]);
+            return ExitCode::USAGE;
+        }
+
+        using Memory = typename MachineType::Memory;
+        std::vector<beebium::NamePlaceholderInfo> infos =
+            beebium::service::machine_name_placeholder_infos();
+        for (auto& info : beebium::service::econet_name_placeholder_infos()) {
+            infos.push_back(std::move(info));
+        }
+        // The one value fixed before launch.
+        auto known_value = [](const std::string& key) -> std::optional<std::string> {
+            if (key == "machine-model") return std::string(Memory::MACHINE_DISPLAY_NAME);
+            return std::nullopt;
+        };
+
+        OutputFormat format = resolve_output_format(global.output_format);
+        switch (format) {
+            case OutputFormat::Pretty: {
+                std::string group;
+                for (const auto& info : infos) {
+                    if (info.group != group) {
+                        group = info.group;
+                        std::cout << group << ":\n";
+                    }
+                    std::cout << "  {" << info.key << "}  " << info.label;
+                    if (auto value = known_value(info.key)) {
+                        std::cout << " = " << *value;
+                    }
+                    std::cout << "\n      " << info.description << "\n";
+                }
+                break;
+            }
+            case OutputFormat::Tsv:
+                std::cout << "key\tlabel\tgroup\tvalue\tdescription\n";
+                for (const auto& info : infos) {
+                    std::cout << info.key << "\t" << info.label << "\t" << info.group << "\t"
+                              << known_value(info.key).value_or("") << "\t"
+                              << info.description << "\n";
+                }
+                break;
+            case OutputFormat::Jsonl:
+                for (const auto& info : infos) {
+                    auto value = known_value(info.key);
+                    std::cout << "{\"key\":\"" << extension_listing::json_escape(info.key)
+                              << "\",\"label\":\"" << extension_listing::json_escape(info.label)
+                              << "\",\"group\":\"" << extension_listing::json_escape(info.group)
+                              << "\",\"insertion\":\"{"
+                              << extension_listing::json_escape(info.key)
+                              << "}\",\"value\":"
+                              << (value ? "\"" + extension_listing::json_escape(*value) + "\""
+                                        : std::string("null"))
+                              << ",\"description\":\""
+                              << extension_listing::json_escape(info.description) << "\"}\n";
+                }
+                break;
             case OutputFormat::Auto:
                 break;
         }
@@ -5706,6 +5842,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<ListExtensionsSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeExtensionSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListAttachmentPointsSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ListNamePlaceholdersSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeMachineSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribePresetSchemaSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());

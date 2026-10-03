@@ -21,6 +21,8 @@
 #include "beebium/service/DiscService.hpp"
 #include "beebium/service/IndicatorService.hpp"
 #include "beebium/service/SystemService.hpp"
+#include "beebium/service/NamePlaceholders.hpp"
+#include "beebium/NamePlaceholderRegistry.hpp"
 #include "beebium/service/AudioService.hpp"
 #include "beebium/service/SidewaysService.hpp"
 #include "beebium/service/EconetService.hpp"
@@ -89,6 +91,18 @@ public:
     /// Check if server is running
     bool is_running() const;
 
+    /// The machine-name placeholders (#153). The core machine's and the
+    /// Econet socket's are registered already; register an extension's with
+    /// name_placeholders().add_extension(ext) before start(). The extension
+    /// must outlive the server.
+    NamePlaceholderRegistry& name_placeholders() { return impl_->name_placeholders; }
+
+    /// The name of the preset the machine was launched from, for the
+    /// machine-preset placeholder. Call before start().
+    void set_launch_preset_name(std::string preset_name) {
+        impl_->machine_name_placeholders.set_preset_name(std::move(preset_name));
+    }
+
     /// Get the address the server is bound to
     std::string address() const;
 
@@ -151,6 +165,13 @@ private:
         // Connection tracking (must be declared before services that use it)
         ConnectionTracker connection_tracker;
 
+        // Machine-name placeholders (#153). Declared before the services that
+        // render names, so they outlive them.
+        MachineNamePlaceholders machine_name_placeholders{
+            std::string(MachineType::Memory::MACHINE_DISPLAY_NAME)};
+        EconetNamePlaceholders<MachineType> econet_name_placeholders{machine};
+        NamePlaceholderRegistry name_placeholders;
+
         TeletextGrid teletext_grid;
         std::unique_ptr<VideoServiceImpl> video_service;
         std::unique_ptr<KeyboardServiceImpl> keyboard_service;
@@ -179,6 +200,8 @@ private:
         Impl(MachineType& m, const std::string& addr, uint16_t p)
             : machine(m), address(addr), port(p) {
             frame_renderer.set_field_cycles(&machine.video_binding().renderer.field_cycles());
+            name_placeholders.add(machine_name_placeholders, "machine");
+            name_placeholders.add(econet_name_placeholders, "econet socket");
         }
 
         // Background thread that consumes video_output queue and renders to frame_buffer
@@ -242,12 +265,6 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     // Create advertiser (platform-specific implementation)
     impl_->advertiser = discovery::create_advertiser();
 
-    // Save identity info before moving (needed for advertisement later)
-    std::string identity_name = identity.name;
-    std::string identity_uuid = identity.uuid;
-    std::string identity_model_type = identity.model_type;
-    std::string provenance_type = provenance.type;
-
     // Create services
     // The SAA5050 fills the grid as it renders, so a client can read the MODE 7
     // screen as characters. Attached for the server's lifetime; the grid
@@ -296,6 +313,10 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
         &impl_->connection_tracker, impl_->advertiser.get(), 0,
         static_cast<uint32_t>(MachineType::Memory::default_pacing_config().base_clock_hz),
         policy_config, nullptr, std::move(shutdown_callback));
+
+    // Render the name template before anyone can ask for the name.
+    impl_->econet_name_placeholders.set_transport_registry(transport_registry);
+    impl_->system_service->set_name_placeholders(&impl_->name_placeholders);
 
     // Surface every machine reset (Break, Ctrl-Break, Reset RPC) to
     // WatchServerStatus subscribers, so clients resync as they do at boot. The
@@ -375,33 +396,13 @@ void Server<MachineType>::start(Provenance provenance, MachineIdentity identity,
     // Now that we know the actual port, update SystemService
     impl_->system_service->set_server_port(impl_->port);
 
-    // Start mDNS advertisement if enabled
-    if (enable_advertisement && impl_->advertiser) {
-        discovery::ServiceInfo info;
-        info.instance_name = identity_name;
-        info.port = impl_->port;
-        info.txt_records["uuid"] = identity_uuid;
-        info.txt_records["role"] = "host";
-        info.txt_records["model"] = identity_model_type;
-        info.txt_records["provenance"] = provenance_type;
-
-        using Memory = typename MachineType::Memory;
-        if constexpr (HasEconetSocket<Memory>) {
-            auto& econet = impl_->machine.state().memory.econet_socket;
-            if (econet.enabled()) {
-                info.txt_records["econet_station"] = std::to_string(econet.station_id());
-                // Co-owning handle: a concurrent DisableEconet cannot free the
-                // backend under this dynamic_cast/read.
-                auto backend = econet.backend_shared();
-                if (auto* aun = dynamic_cast<AunBackend*>(backend.get())) {
-                    info.txt_records["econet_net"] = std::to_string(aun->local_net());
-                    info.txt_records["econet_aun_port"] = std::to_string(aun->local_port());
-                }
-            }
-        }
-
-        impl_->advertiser->start(info);
+    // Start mDNS advertisement if enabled, under the rendered name.
+    if (enable_advertisement) {
+        impl_->system_service->start_advertisement();
     }
+
+    // Follow placeholder values that change under the template.
+    impl_->system_service->start_name_refresh();
 
     impl_->running = true;
 
@@ -416,6 +417,12 @@ void Server<MachineType>::stop() {
     }
 
     impl_->running = false;
+
+    // Stop the name refresh first, so it cannot re-announce the machine
+    // while the advertisement is being withdrawn.
+    if (impl_->system_service) {
+        impl_->system_service->stop_name_refresh();
+    }
 
     // Stop mDNS advertisement
     if (impl_->advertiser) {

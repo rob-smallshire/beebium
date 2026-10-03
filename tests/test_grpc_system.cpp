@@ -359,7 +359,7 @@ TEST_CASE("SystemService SetMachineName changes name", "[grpc][system][identity]
     // Change name
     grpc::ClientContext context2;
     beebium::SetMachineNameRequest name_request;
-    name_request.set_name("My BBC Micro");
+    name_request.set_name_template("My BBC Micro");
     beebium::SetMachineNameResponse name_response;
 
     auto status = fixture.system().SetMachineName(&context2, name_request, &name_response);
@@ -375,7 +375,7 @@ TEST_CASE("SystemService SetMachineName persists across GetSystemInfo calls", "[
     // Change name
     grpc::ClientContext context1;
     beebium::SetMachineNameRequest name_request;
-    name_request.set_name("Test Server");
+    name_request.set_name_template("Test Server");
     beebium::SetMachineNameResponse name_response;
     REQUIRE(fixture.system().SetMachineName(&context1, name_request, &name_response).ok());
 
@@ -393,7 +393,7 @@ TEST_CASE("SystemService SetMachineName rejects empty name", "[grpc][system][ide
 
     grpc::ClientContext context;
     beebium::SetMachineNameRequest request;
-    request.set_name("");  // Empty
+    request.set_name_template("");  // Empty
     beebium::SetMachineNameResponse response;
 
     auto status = fixture.system().SetMachineName(&context, request, &response);
@@ -416,7 +416,7 @@ TEST_CASE("SystemService SetMachineName preserves model_type and model_name", "[
     // Change name
     grpc::ClientContext context2;
     beebium::SetMachineNameRequest name_request;
-    name_request.set_name("New Name");
+    name_request.set_name_template("New Name");
     beebium::SetMachineNameResponse name_response;
     REQUIRE(fixture.system().SetMachineName(&context2, name_request, &name_response).ok());
 

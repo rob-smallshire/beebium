@@ -58,6 +58,16 @@ class SystemServiceStub(object):
                 request_serializer=system__pb2.SetMachineNameRequest.SerializeToString,
                 response_deserializer=system__pb2.SetMachineNameResponse.FromString,
                 _registered_method=True)
+        self.ListNamePlaceholders = channel.unary_unary(
+                '/beebium.SystemService/ListNamePlaceholders',
+                request_serializer=system__pb2.ListNamePlaceholdersRequest.SerializeToString,
+                response_deserializer=system__pb2.ListNamePlaceholdersResponse.FromString,
+                _registered_method=True)
+        self.PreviewMachineName = channel.unary_unary(
+                '/beebium.SystemService/PreviewMachineName',
+                request_serializer=system__pb2.PreviewMachineNameRequest.SerializeToString,
+                response_deserializer=system__pb2.PreviewMachineNameResponse.FromString,
+                _registered_method=True)
         self.WatchServerStatus = channel.unary_stream(
                 '/beebium.SystemService/WatchServerStatus',
                 request_serializer=system__pb2.WatchServerStatusRequest.SerializeToString,
@@ -108,7 +118,24 @@ class SystemServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SetMachineName(self, request, context):
-        """Set the machine's user-assignable name
+        """Set the machine's name template (a plain name is a template with no
+        placeholders). See MachineIdentity.name_template.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListNamePlaceholders(self, request, context):
+        """List the placeholders a name template can use on this server, with
+        their current values. Clients carry no list of keys; they ask.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PreviewMachineName(self, request, context):
+        """Render a name template against the current values without changing
+        anything, for a live preview while the user edits.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -180,6 +207,16 @@ def add_SystemServiceServicer_to_server(servicer, server):
                     servicer.SetMachineName,
                     request_deserializer=system__pb2.SetMachineNameRequest.FromString,
                     response_serializer=system__pb2.SetMachineNameResponse.SerializeToString,
+            ),
+            'ListNamePlaceholders': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListNamePlaceholders,
+                    request_deserializer=system__pb2.ListNamePlaceholdersRequest.FromString,
+                    response_serializer=system__pb2.ListNamePlaceholdersResponse.SerializeToString,
+            ),
+            'PreviewMachineName': grpc.unary_unary_rpc_method_handler(
+                    servicer.PreviewMachineName,
+                    request_deserializer=system__pb2.PreviewMachineNameRequest.FromString,
+                    response_serializer=system__pb2.PreviewMachineNameResponse.SerializeToString,
             ),
             'WatchServerStatus': grpc.unary_stream_rpc_method_handler(
                     servicer.WatchServerStatus,
@@ -273,6 +310,60 @@ class SystemService(object):
             '/beebium.SystemService/SetMachineName',
             system__pb2.SetMachineNameRequest.SerializeToString,
             system__pb2.SetMachineNameResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListNamePlaceholders(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SystemService/ListNamePlaceholders',
+            system__pb2.ListNamePlaceholdersRequest.SerializeToString,
+            system__pb2.ListNamePlaceholdersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PreviewMachineName(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/beebium.SystemService/PreviewMachineName',
+            system__pb2.PreviewMachineNameRequest.SerializeToString,
+            system__pb2.PreviewMachineNameResponse.FromString,
             options,
             channel_credentials,
             insecure,
