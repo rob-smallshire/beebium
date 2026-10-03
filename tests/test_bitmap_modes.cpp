@@ -611,7 +611,7 @@ TEST_CASE("Diagnostic: Direct screen memory write in Mode 0", "[bitmap][diagnost
             }
         }
     }
-    fb.swap();
+    fb.swap(fb.metadata());
 
     // 7. Check if any non-black pixels were produced
     auto frame_data = fb.read_frame();

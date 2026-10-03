@@ -348,9 +348,6 @@ private:
         size_t frame_width = max_x_written_ > 0 ? max_x_written_ : frame_buffer_->capacity_width();
         size_t frame_height = max_y_written_ > 0 ? max_y_written_ : frame_buffer_->capacity_height();
 
-        // Set logical dimensions to match actual content
-        frame_buffer_->set_dimensions(frame_width, frame_height);
-
         // Build and store metadata
         FrameMetadata meta;
         meta.width = static_cast<uint32_t>(frame_width);
@@ -474,10 +471,9 @@ private:
         std::fill(scanline_display_widths_.begin(),
                   scanline_display_widths_.begin() + tracked, uint16_t{0});
 
-        frame_buffer_->set_metadata(meta);
-
-        // Swap buffers (no reallocation - just pointer swap)
-        frame_buffer_->swap();
+        // Publish the frame with its metadata (no reallocation - just a
+        // pointer swap)
+        frame_buffer_->swap(std::move(meta));
 
         // Clear new write buffer to black for next frame
         // (Gap scanlines in MODE 3/6 will remain black)

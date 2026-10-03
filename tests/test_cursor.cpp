@@ -600,7 +600,7 @@ TEST_CASE("Cursor displays on all text lines", "[video][cursor][diagnostic]") {
                 renderer.process(machine.memory().video_output.value());
             }
         }
-        fb.swap();
+        fb.swap(fb.metadata());
     };
 
     // Run multiple frames to ensure cursor detection happens across blink cycle
@@ -1110,7 +1110,7 @@ TEST_CASE("Save cursor frames for visual inspection", "[video][cursor][visual]")
                 renderer.process(machine.memory().video_output.value());
             }
         }
-        fb.swap();
+        fb.swap(fb.metadata());
 
         // Save frame
         auto pixels = fb.read_frame();
@@ -1136,7 +1136,7 @@ TEST_CASE("Save cursor frames for visual inspection", "[video][cursor][visual]")
             renderer.process(machine.memory().video_output.value());
         }
     }
-    fb.swap();
+    fb.swap(fb.metadata());
 
     auto pixels = fb.read_frame();
     save_frame_ppm("/tmp/cursor_none.ppm", pixels, 640, 512);

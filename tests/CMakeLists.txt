@@ -1053,6 +1053,11 @@ target_compile_definitions(test_frame_cycle_stamp PRIVATE
 )
 catch_discover_tests(test_frame_cycle_stamp)
 
+# FrameBuffer publication and capture tests (#162)
+add_executable(test_frame_buffer_publication test_frame_buffer_publication.cpp)
+target_link_libraries(test_frame_buffer_publication PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_frame_buffer_publication)
+
 # FrameRenderer physical display width and border tests
 add_executable(test_frame_renderer_display_width test_frame_renderer_display_width.cpp)
 target_link_libraries(test_frame_renderer_display_width PRIVATE beebium_core Catch2::Catch2WithMain)

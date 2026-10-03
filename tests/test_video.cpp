@@ -250,6 +250,14 @@ TEST_CASE("HeapFrameAllocator", "[video]") {
 // FrameBuffer tests
 // ============================================================================
 
+// Metadata for a frame filling the 16x16 test buffer.
+static FrameMetadata frame_16x16() {
+    FrameMetadata meta;
+    meta.width = 16;
+    meta.height = 16;
+    return meta;
+}
+
 TEST_CASE("FrameBuffer double buffering", "[video]") {
     FrameBuffer fb(nullptr, 16, 16);  // Small buffer for testing
 
@@ -269,7 +277,7 @@ TEST_CASE("FrameBuffer double buffering", "[video]") {
         fb.write_pixel(15, 15, 0xFF00FF00);  // Green pixel
 
         // Swap buffers
-        fb.swap();
+        fb.swap(frame_16x16());
         CHECK(fb.version() == 1);
 
         // Read from back buffer
@@ -279,17 +287,17 @@ TEST_CASE("FrameBuffer double buffering", "[video]") {
     }
 
     SECTION("version increments") {
-        fb.swap();
+        fb.swap(frame_16x16());
         CHECK(fb.version() == 1);
-        fb.swap();
+        fb.swap(frame_16x16());
         CHECK(fb.version() == 2);
-        fb.swap();
+        fb.swap(frame_16x16());
         CHECK(fb.version() == 3);
     }
 
     SECTION("clear") {
         fb.clear(0xFFFFFFFF);  // White
-        fb.swap();
+        fb.swap(frame_16x16());
 
         auto frame = fb.read_frame();
         CHECK(frame[0] == 0xFFFFFFFF);

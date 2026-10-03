@@ -14,9 +14,16 @@
 #define BEEBIUM_FRAME_BUFFER_HPP
 
 #include "FrameAllocator.hpp"
-#include <mutex>
+#include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <functional>
+#include <list>
+#include <mutex>
+#include <span>
 #include <vector>
 
 namespace beebium {
@@ -90,9 +97,12 @@ struct FrameMetadata {
 //
 // Thread safety:
 // - write_ptr(): Called only by core (single thread), no lock needed
-// - swap(): Called by core at VSYNC, acquires lock briefly
-// - read_frame(): Called by clients, acquires lock briefly
-// - version(): Lock-free read of atomic counter
+// - swap(meta): Called by core at VSYNC; publishes the pixels, the metadata
+//   and the new version together under the lock
+// - read_frame(meta, pixels), metadata(), width(), height(): Called by
+//   clients; each takes the lock, so what it returns belongs to one frame
+// - capture_frame_after(): Called by clients; answered as frames are published
+// - version(): Lock-free read of atomic counter, for noticing a new frame
 //
 class FrameBuffer {
 public:
@@ -164,13 +174,31 @@ public:
 
     // --- Core interface (called at VSYNC) ---
 
-    // Swap front and back buffers.
-    // Called by core at VSYNC to publish the completed frame.
-    // Increments version counter so clients can detect new frames.
-    void swap() {
+    // Publish the completed frame: swap front and back buffers, install the
+    // frame's metadata and logical dimensions, and increment the version, all
+    // under one lock, so no reader sees one frame's metadata with another's
+    // pixels. Any capture waiting for this frame is answered here, before the
+    // next frame can replace it.
+    void swap(FrameMetadata meta) {
+        assert(meta.width <= capacity_width_ && meta.height <= capacity_height_);
         std::lock_guard<std::mutex> lock(mutex_);
         std::swap(front_, back_);
+        width_ = meta.width;
+        height_ = meta.height;
+        metadata_ = std::move(meta);
         version_.fetch_add(1, std::memory_order_release);
+
+        bool answered = false;
+        for (PendingCapture* capture : pending_captures_) {
+            if (!capture->done && metadata_.cycle_count >= capture->after_cycle) {
+                copy_published_locked(capture->meta, capture->pixels);
+                capture->done = true;
+                answered = true;
+            }
+        }
+        if (answered) {
+            captured_.notify_all();
+        }
     }
 
     // --- Client interface (called by frontends) ---
@@ -190,6 +218,15 @@ public:
         std::copy(back_.begin(), back_.begin() + count, dest);
     }
 
+    // Read the latest published frame whole: its metadata and as many of its
+    // pixels as fit, taken under one lock. Returns its version, which is 0
+    // before any frame has been published.
+    uint64_t read_frame(FrameMetadata& meta, std::span<uint32_t> pixels) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        copy_published_locked(meta, pixels);
+        return version_.load(std::memory_order_relaxed);
+    }
+
     // Get the frame version counter.
     // Incremented each time swap() is called.
     // Clients can poll this to detect new frames without locking.
@@ -197,11 +234,69 @@ public:
         return version_.load(std::memory_order_acquire);
     }
 
+    enum class CaptureResult { Captured, TimedOut, Cancelled };
+
+    // Wait for the first frame completed at or after `after_cycle` (by its
+    // metadata's cycle_count) and copy it out. The latest published frame is
+    // taken if it already qualifies; otherwise the request is answered by
+    // swap() as frames are published, so the frame returned is the first to
+    // qualify however late this thread runs. Gives up at `deadline`, or when
+    // `cancelled` returns true (it is polled while waiting).
+    CaptureResult capture_frame_after(uint64_t after_cycle,
+                                      std::chrono::steady_clock::time_point deadline,
+                                      const std::function<bool()>& cancelled,
+                                      FrameMetadata& meta,
+                                      std::span<uint32_t> pixels) {
+        // How often a waiting capture looks at `cancelled`. Frames are not
+        // missed between looks: swap() answers the capture itself.
+        constexpr auto kCancelPoll = std::chrono::milliseconds(50);
+
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (version_.load(std::memory_order_relaxed) != 0
+            && metadata_.cycle_count >= after_cycle) {
+            copy_published_locked(meta, pixels);
+            return CaptureResult::Captured;
+        }
+
+        PendingCapture capture{after_cycle, meta, pixels};
+        pending_captures_.push_back(&capture);
+        CaptureResult result = CaptureResult::TimedOut;
+        while (true) {
+            if (capture.done) {
+                result = CaptureResult::Captured;
+                break;
+            }
+            if (cancelled()) {
+                result = CaptureResult::Cancelled;
+                break;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= deadline) {
+                break;
+            }
+            captured_.wait_until(lock, std::min(deadline, now + kCancelPoll));
+        }
+        pending_captures_.remove(&capture);
+        return result;
+    }
+
+    // Captures waiting for a frame (for tests).
+    size_t pending_captures() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return pending_captures_.size();
+    }
+
     // --- Query interface ---
 
-    // Logical dimensions (current frame content size)
-    size_t width() const { return width_; }
-    size_t height() const { return height_; }
+    // Logical dimensions (the latest published frame's content size)
+    size_t width() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return width_;
+    }
+    size_t height() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return height_;
+    }
 
     // Physical capacity (maximum allocated size, never changes)
     size_t capacity_width() const { return capacity_width_; }
@@ -216,23 +311,16 @@ public:
     size_t capacity_bytes() const { return capacity_pixels() * sizeof(uint32_t); }
 
     // Logical frame size (content only)
-    size_t pixel_count() const { return width_ * height_; }
+    size_t pixel_count() const { return width() * height(); }
     size_t byte_size() const { return pixel_count() * sizeof(uint32_t); }
-
-    // --- Dimension management ---
-
-    // Set logical dimensions for current frame (must fit in capacity).
-    // Called at frame swap to record the actual frame size.
-    void set_dimensions(size_t width, size_t height) {
-        assert(width <= capacity_width_ && height <= capacity_height_);
-        width_ = width;
-        height_ = height;
-    }
 
     // --- Metadata interface ---
 
-    void set_metadata(const FrameMetadata& meta) { metadata_ = meta; }
-    const FrameMetadata& metadata() const { return metadata_; }
+    // The latest published frame's metadata, copied under the lock.
+    FrameMetadata metadata() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return metadata_;
+    }
 
 private:
     // Physical allocation (fixed at construction, never changes)
@@ -249,10 +337,30 @@ private:
     std::span<uint32_t> front_;  // Core writes here during rendering
     std::span<uint32_t> back_;   // Clients read here (immutable between swaps)
 
-    mutable std::mutex mutex_;   // Protects swap operations
+    // A capture_frame_after() call waiting for a frame, answered by swap().
+    struct PendingCapture {
+        uint64_t after_cycle;
+        FrameMetadata& meta;
+        std::span<uint32_t> pixels;
+        bool done = false;
+    };
+
+    // Copy the published frame out; the caller holds mutex_.
+    void copy_published_locked(FrameMetadata& meta, std::span<uint32_t> pixels) const {
+        meta = metadata_;
+        const size_t count = std::min(pixels.size(), back_.size());
+        std::copy(back_.begin(), back_.begin() + count, pixels.begin());
+    }
+
+    // Guards back_, metadata_, width_ and height_, and the pending captures:
+    // everything swap() publishes.
+    mutable std::mutex mutex_;
     std::atomic<uint64_t> version_{0};  // Frame version counter
 
-    FrameMetadata metadata_;  // Per-frame metadata (updated at swap)
+    FrameMetadata metadata_;  // The published frame's metadata (set by swap)
+
+    std::list<PendingCapture*> pending_captures_;
+    std::condition_variable captured_;  // Signalled when swap() answers a capture
 };
 
 } // namespace beebium

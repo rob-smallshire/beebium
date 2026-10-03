@@ -149,7 +149,7 @@ Consumes queue, tracks raster position, writes BGRA32 pixels to framebuffer. Swa
 
 ### FrameBuffer
 
-Double-buffered with mutex-protected swap. Core writes to front buffer; clients read immutable back buffer. Version counter for change detection.
+Double-buffered. Core writes to the front buffer; clients read the immutable back buffer. A swap publishes the pixels, the frame's metadata and the version counter together under one lock, and readers take the metadata and pixels of one frame in one read (`read_frame`), so no reader pairs one frame's metadata (its completion cycle, say) with another's pixels. A capture waiting for the first frame completed at or after a cycle (`capture_frame_after`, behind `CaptureFrame`) is answered by the swap itself, so it cannot miss that frame however late the waiting thread runs. The version counter can be read without the lock to notice a new frame.
 
 ## Integration
 
