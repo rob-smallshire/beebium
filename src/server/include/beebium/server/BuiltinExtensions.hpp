@@ -66,7 +66,8 @@ inline std::vector<Entry> make_entries() {
         m.extension_kind = "econet-transport";
         m.parameters.push_back(
             {"port", "string",
-             "UDP port to bind (decimal, or 'none' to disable)",
+             "UDP port to bind (decimal; 0 for an OS-chosen port, or 'none' to "
+             "disable the network)",
              -1, false, false, "32768"});
         m.parameters.push_back(
             {"net", "string",
@@ -74,15 +75,18 @@ inline std::vector<Entry> make_entries() {
              -1, false, false, "0"});
         m.parameters.push_back(
             {"map", "string",
-             "Peer entry 'net.stn@ip@port' (repeatable)",
+             "Peer entry 'net.stn@ip@port', IPv4 ip; a bare stn means net 0 "
+             "(repeatable)",
              -1, false, /*is_list=*/true, ""});
         m.parameters.push_back(
             {"map-file", "string",
-             "Path to the per-user aun-map.json, or 'none' to disable it",
+             "Path to the AUN map file (default: BEEBIUM_AUN_MAP_FILEPATH, else the "
+             "per-user aun-map.json), or 'none' to disable it",
              -1, false, false, ""});
         m.parameters.push_back(
             {"subnet", "string",
-             "Subnet rule 'net@a.b.c.0/24' (RISC OS convention; repeatable)",
+             "Subnet rule 'net@a.b.c.0/24' (RISC OS convention: station is the "
+             "last octet, port 32768; repeatable)",
              -1, false, /*is_list=*/true, ""});
         m.parameters.push_back(
             {"discovery", "string",

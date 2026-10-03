@@ -470,7 +470,7 @@ struct ServerConfig {
     int station_number = -1;                          // -1 = Econet not fitted
     // When the station is requested as `auto[:lo-hi]` (issue #67) the number is
     // chosen at launch by the transport, not now: station_number stays -1 and
-    // this range is resolved in install_econet, which then sets the station.
+    // resolve_auto_station turns this range into the number install_econet fits.
     std::optional<beebium::econet::StationRange> station_auto_range;
     // Both AUN (built-in) and Piconet (plugin) are selected via the
     // generic extension dispatch:
@@ -854,9 +854,11 @@ void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
 // line. Everywhere else the rule is CLI-overrides-preset (sideways, station,
 // disc); the transport follows it rather than counting as a second transport
 // (#150). A CLI transport of the SAME name as the preset's merges parameters,
-// the CLI winning per key, so `--aun port=0:map-file=none` on a preset that set
-// net=0 keeps the net and adds the CLI's keys. A CLI transport of a DIFFERENT
-// name replaces the preset's outright. Either way the preset's transport
+// the CLI winning per key. The CLI instance already holds the manifest default
+// of every parameter it did not name (ExtensionArgParser fills them in), so
+// those defaults win as well: only default-less keys (for AUN: map, subnet,
+// map-file) are taken from the preset. A CLI transport of a DIFFERENT name
+// replaces the preset's outright. Either way the preset's transport
 // instance is dropped, leaving one. Two transports both from the CLI are left
 // alone so the one-transport check still reports that as an error.
 //
@@ -1287,8 +1289,9 @@ std::optional<std::string> validate_config(const ServerConfig<MachineType>& conf
     }
 
     // Econet transports are mutually exclusive. Both AUN and Piconet
-    // are now extension instances; mutex enforcement lives in
-    // install_econet (which sees the EconetTransportRegistry).
+    // are extension instances; the one-transport check lives in
+    // resolve_auto_station and install_econet (which see the
+    // EconetTransportRegistry).
 
     // Validate --sideways arguments against the machine variant's slot
     // topology, taking into account any motherboard link state that affects
@@ -1599,14 +1602,6 @@ std::optional<int> install_disc_controller(MachineType& machine, const ServerCon
     return std::nullopt;
 }
 
-// Install Econet hardware for machines with Econet sockets.
-// Returns exit code on error, nullopt on success.
-//
-// transport_registry is populated by start() from any econet-transport
-// extension instances; if it contains a transport, install_econet uses
-// it in preference to the legacy --aun-port / --piconet flags. Phase 2
-// keeps the legacy paths working as a transitional measure; phase 3
-// removes them.
 // Resolve a --station auto request to a concrete number using the transport.
 // A fixed station passes through unchanged. `offline` (build-time boots:
 // capture-screenshot, and any future non-`start` path that boots from a preset)
@@ -1659,8 +1654,13 @@ std::optional<int> resolve_auto_station(
 }
 
 // Install Econet hardware for an already-resolved station number (-1 = Econet
-// not fitted). `auto_assigned` only tunes the log line. --station auto is
-// resolved by resolve_auto_station beforehand, so this does no network I/O.
+// not fitted), on machines with an Econet socket. transport_registry holds the
+// econet-transport extension instances (--aun, --piconet, or the preset's
+// econet.transport); with one, its create_backend supplies the backend, and
+// with none the hardware is fitted with no network. `auto_assigned` only tunes
+// the log line. --station auto is resolved by resolve_auto_station beforehand,
+// so this does no network I/O beyond the transport's own bring-up. Returns an
+// exit code on error, nullopt on success.
 template<typename MachineType>
 std::optional<int> install_econet(MachineType& machine,
                                    const ServerConfig<MachineType>& config,
@@ -4515,7 +4515,8 @@ public:
                   << "  --release-date <date>     Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
                   << "  --fdc <id>                Disc controller for the FDC socket (e.g. acorn-1770)\n"
                   << "  --sideways SLOT:TYPE[:IMAGE]  Sideways slot (repeatable); same grammar as 'start'\n"
-                  << "  --station <1-254>         Econet station number (fits Econet). An econet-\n"
+                  << "  --station <1-254>|auto[:lo-hi]  Econet station number (fits Econet); auto is\n"
+                  << "                            recorded as given and resolved at each launch. An econet-\n"
                   << "                            transport extension flag (e.g. --aun, --piconet)\n"
                   << "                            is recorded as the station's transport.\n"
                   << "  --<extension> [k=v:k=v]   Add an extension instance (repeatable); same\n"
