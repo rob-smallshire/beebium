@@ -291,6 +291,15 @@ public:
 
 private:
     AunBackend* backend_ = nullptr;  // non-owning; lives in EconetSocket
+
+    // For --station auto in a browsing mode (#160): the backend and permanent
+    // announcer/subscriber are brought up by select_auto_station itself (so the
+    // peers it discovers are already in the table and there is no temporary
+    // browse to tear down on the launch path). select stashes the owning
+    // backend here; the create_backend() the server then calls hands it over.
+    // Declared early so it is destroyed AFTER announcer_/subscriber_ in the
+    // test path where it is never handed over.
+    std::unique_ptr<NetworkBackend> preselected_backend_;
     std::string unavailable_reason_;  // why there is no backend (bind failure)
 
     // The desired peer world. Declared before announcer_/subscriber_ so it is

@@ -27,7 +27,9 @@
 
 #include <beebium/discovery/Advertiser.hpp>
 #include <beebium/discovery/Browser.hpp>
+#include <beebium/econet/AunBackend.hpp>
 #include <beebium/econet/StationSelection.hpp>
+#include "AunDiscoveryAnnouncer.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -287,5 +289,87 @@ TEST_CASE("AUN auto station: discovery=off resolves instantly from the map file"
 
     std::error_code ec;
     std::filesystem::remove(map_filepath, ec);
+    unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
+}
+
+// #160: the selection must hand its browse to the transport's permanent
+// subscriber so that, once the backend is enabled, the peers it discovered are
+// already in the table (no second discovery round) and no browse teardown runs
+// on the launch path. Spawns a synthetic population on a unique service type,
+// times port-equivalent -> enabled, and asserts the peers are present at once.
+namespace {
+void bench_auto_selection(int n_peers) {
+    const std::string svc = aun_unique_service_type();
+    // Real, adoptable peers: each a bound AunBackend plus an announcer that
+    // advertises its actual UDP port (mirrors the proven e2e pattern). A raw
+    // announcer with an unbound placeholder port is not reliably adopted.
+    std::vector<std::unique_ptr<AunBackend>> backends;
+    std::vector<std::unique_ptr<AunDiscoveryAnnouncer>> population;
+    for (int i = 0; i < n_peers; ++i) {
+        const auto stn = static_cast<std::uint8_t>(100 + i);
+        auto be = std::make_unique<AunBackend>(/*local_net=*/0, stn, 0);
+        auto a = std::make_unique<AunDiscoveryAnnouncer>(
+            0, stn, be->local_port(), "beebium", "1.0",
+            "pop-" + std::to_string(i));
+        a->set_service_type(svc);
+        a->start();
+        backends.push_back(std::move(be));
+        population.push_back(std::move(a));
+    }
+    // Let the population register before we browse.
+    std::this_thread::sleep_for(1500ms);
+
+    auto ext = make_auto_ext(svc, "bench");
+    // Observe long enough to discover the population; choose from a low range
+    // the population (100+) does not occupy, so selection itself is trivial.
+    // The point of the bench is what follows create_backend: before #160, the
+    // selection's browse was torn down and create_backend started a fresh
+    // discovery round, so the just-discovered peers were absent until it caught
+    // up. After #160 the selection hands its live browse to the permanent
+    // backend, so every peer is present the instant the backend is enabled.
+    ext->set_auto_station_timings_for_test(6000ms, 500ms, 12000ms);
+
+    const auto t0 = std::chrono::steady_clock::now();
+    auto outcome = ext->select_auto_station(econet::StationRange{1, 50});
+    auto backend = ext->create_backend(outcome.station);
+    const auto t1 = std::chrono::steady_clock::now();
+    const auto ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+
+    REQUIRE(backend != nullptr);
+    WARN("#160 bench: " << n_peers << " peers, select+create_backend took " << ms
+                        << " ms (station " << int(outcome.station) << ")");
+
+    // The peers discovered during selection must be in the table immediately
+    // after the backend is enabled -- no waiting for a second discovery round.
+    int present = 0;
+    for (int i = 0; i < n_peers; ++i) {
+        if (ext->peer_set().resolve(0, static_cast<std::uint8_t>(100 + i))
+                .has_value()) {
+            ++present;
+        }
+    }
+    WARN("#160 bench: peers present immediately = " << present << " of " << n_peers);
+    CHECK(present == n_peers);
+}
+}  // namespace
+
+TEST_CASE("AUN auto station: selection hands its browse to the permanent subscriber, 10 peers",
+          "[.mdns][aun][auto-station][bench160]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
+    bench_auto_selection(10);
+    unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
+}
+
+TEST_CASE("AUN auto station: selection hands its browse to the permanent subscriber, 50 peers",
+          "[.mdns][aun][auto-station][bench160]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
+    bench_auto_selection(50);
     unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
 }

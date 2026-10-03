@@ -318,6 +318,13 @@ std::vector<SubnetSpec> parse_subnet_specs(
 
 std::unique_ptr<NetworkBackend>
 AunEconetTransportExtension::create_backend(std::uint8_t station) {
+    // #160: a browsing --station auto selection already brought the backend
+    // and the permanent announcer/subscriber up (at `station`); hand that
+    // backend over rather than building a second one and re-browsing.
+    if (preselected_backend_) {
+        return std::move(preselected_backend_);
+    }
+
     auto port_value = config_value("port");
     auto port = parse_port(port_value ? std::string(*port_value) : std::string{});
     if (!port.has_value()) {
@@ -663,62 +670,46 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
                                                          search_start));
     }
 
-    // We browse. Build the subscriber (the claim announcer, when we claim,
-    // advertises a non-zero port even for an OS-ephemeral port=0: peers resolve
-    // the SRV record to detect a collision and a zero SRV port never completes
-    // that resolve. The real port is advertised by create_backend right after.)
-    const std::uint16_t claim_port = (*port != 0) ? *port : AUN_DEFAULT_PORT;
-    auto subscriber = std::make_unique<AunDiscoverySubscriber>(
-        peer_set_, /*local_stn=*/0, nullptr, machine_uuid);
-    if (!discovery_service_type_.empty()) {
-        subscriber->set_service_type(discovery_service_type_);
-    }
-
-    if (!do_claim) {
-        // Browse-only: observe for the minimum window, then take the lowest free
-        // number with discovered peers counted. No claim, so a same-instant race
-        // is not arbitrated (documented).
-        subscriber->start();
-        std::this_thread::sleep_for(auto_min_observe_);
-        auto chosen = econet::lowest_free_station_from(occupied_now({}), range,
-                                                       search_start);
-        subscriber->stop();
-        return finalise(chosen);
-    }
-
-    // On: browse AND claim. Keep a claim up continuously and poll, climbing past
-    // an earlier-bound incumbent so instances launched together settle on
-    // distinct numbers.
-    auto announcer = std::make_unique<AunDiscoveryAnnouncer>(
-        local_net, range.lo, claim_port, std::string{"beebium"},
-        std::string{BEEBIUM_VERSION}, machine_uuid);
-    if (!discovery_service_type_.empty()) {
-        announcer->set_service_type(discovery_service_type_);
-    }
-
-    std::set<std::uint8_t> tried;  // numbers an incumbent pushed us off
+    // We browse (on or browse). Bring the backend and the PERMANENT
+    // announcer/subscriber up now, at a provisional station, via create_backend
+    // -- so the peers we discover land in the live peer set and are kept, with
+    // no temporary browse to tear down on the launch path (#160). The
+    // create_backend() the server calls next hands this same backend over. The
+    // provisional station is the lowest free from the operator layers alone
+    // (discovery has not run yet); for `on` the loop climbs from there.
     auto first_free =
         econet::lowest_free_station_from(occupied_now({}), range, search_start);
-    std::uint8_t candidate = first_free.value_or(search_start);
+    const std::uint8_t provisional = first_free.value_or(search_start);
+    std::uint8_t candidate = provisional;
     bool exhausted = !first_free.has_value();
 
-    announcer->set_local_station(candidate);
-    announcer->start();
-    subscriber->set_own_since(announcer->since());
-    subscriber->set_local_station(candidate);
-    subscriber->start();
+    preselected_backend_ = create_backend(provisional);
+    if (!preselected_backend_) {
+        // Bind failed (e.g. the port is in use); create_backend already logged
+        // the specific reason. Report it like Piconet's Unsupported.
+        out.status = Status::Unsupported;
+        out.report = unavailable_reason_.empty()
+                         ? "AUN transport unavailable"
+                         : ("AUN transport unavailable: " + unavailable_reason_);
+        return out;
+    }
+    // create_backend started the subscriber (on/browse) and, for `on`, an
+    // announcer claiming `provisional`.
 
     const auto start = std::chrono::steady_clock::now();
     auto last_move = start;
+    std::set<std::uint8_t> tried;  // numbers an incumbent pushed us off
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
         const auto now = std::chrono::steady_clock::now();
         if (now - start >= auto_budget_) {
             break;  // hard cap; keep whatever candidate we hold
         }
-        if (subscriber->own_number_contested_as_newcomer()) {
+        if (do_claim && subscriber_ &&
+            subscriber_->own_number_contested_as_newcomer()) {
             // Someone holds this number and bound before us: climb to the next
-            // free one, re-announce there, and restart the quiet timer.
+            // free one, re-point the permanent announcer/subscriber there, and
+            // restart the quiet timer.
             tried.insert(candidate);
             auto next = econet::lowest_free_station_from(occupied_now(tried),
                                                          range, search_start);
@@ -726,13 +717,15 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
                 exhausted = true;
                 break;  // whole range taken; keep the current candidate
             }
-            // Keep our original bind-time "since": a stable, launch-ordered
+            // Keep the original bind-time "since": a stable, launch-ordered
             // tie-break so the earlier-launched instance wins a shared number.
             candidate = *next;
-            announcer->set_local_station(candidate);
-            announcer->start();
-            subscriber->set_own_since(announcer->since());
-            subscriber->set_local_station(candidate);
+            if (announcer_) {
+                announcer_->set_local_station(candidate);
+                announcer_->start();
+                subscriber_->set_own_since(announcer_->since());
+            }
+            subscriber_->set_local_station(candidate);
             last_move = now;
             continue;
         }
@@ -742,8 +735,24 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
             break;
         }
     }
-    subscriber->stop();
-    announcer->stop();
+
+    // Browse-only never claimed, so re-pick now that discovery has run: take
+    // the lowest free number with discovered peers counted.
+    if (!do_claim) {
+        candidate =
+            econet::lowest_free_station_from(occupied_now({}), range, search_start)
+                .value_or(provisional);
+        exhausted = false;  // browse mode reports a number even if contested
+    }
+
+    const std::uint8_t final_station = exhausted ? range.lo : candidate;
+    // Align the backend (and, via its station-change callback, the permanent
+    // announcer/subscriber) with the chosen number when it differs from the one
+    // we bound at. This re-announces with a fresh since and updates the
+    // subscriber self-filter -- the #68 path.
+    if (final_station != provisional && backend_) {
+        backend_->on_station_id_changed(final_station);
+    }
     return finalise(exhausted ? std::optional<std::uint8_t>{}
                               : std::optional<std::uint8_t>(candidate));
 }
