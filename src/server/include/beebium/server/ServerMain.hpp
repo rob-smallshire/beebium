@@ -2787,7 +2787,7 @@ public:
 
             // Print identity details
             std::cout << "Identity: uuid=" << identity.uuid
-                      << ", name='" << identity.name
+                      << ", name_template='" << identity.name_template
                       << "', model_type='" << identity.model_type
                       << "', model_name='" << identity.model_name
                       << "'" << std::endl;

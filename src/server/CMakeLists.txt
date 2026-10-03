@@ -362,6 +362,9 @@ add_system_preset(beebium-model-b-plus-128k "model-b-plus-128k"
 add_system_preset(beebium-model-b "model-b-disc-aun-80"
     "Station 80 (AUN, Model B)" "1985"
     DESCRIPTION "Econet over AUN (UDP), ANFS + DFS"
+    # The name follows the station number in force (#153), so a renumbered
+    # machine's title follows it at the next Break.
+    --machine-name "Station {econet-station} (AUN, Model B)"
     --fdc acorn-1770
     --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
     --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
@@ -374,12 +377,12 @@ add_system_preset(beebium-model-b "model-b-disc-aun-80"
 # As above but with an automatically-chosen station number (issue #67): the
 # server browses _aun._udp at launch and takes the lowest free number in the
 # default range, so several clients can be started together with no renumbering
-# (the trigger for #68/#148/#155). machine_name is the fixed "AUN client" since
-# the number is not known until launch; it becomes a template once #153 lands.
+# (the trigger for #68/#148/#155). The name is a template (#153), so each
+# machine is titled with the number it chose.
 add_system_preset(beebium-model-b "model-b-disc-aun-auto"
     "AUN client, auto station (Model B)" "1985"
     DESCRIPTION "Econet over AUN (UDP), automatic station number, ANFS + DFS"
-    --machine-name "AUN client"
+    --machine-name "Station {econet-station} (AUN, Model B)"
     --fdc acorn-1770
     --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
     --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
@@ -421,6 +424,7 @@ if(TARGET beebium_ext_piconet_plugin)
         "model-b-disc-eco-81"
         "Station 81 (Piconet, Model B)" "1985"
         DESCRIPTION "Econet via Piconet USB, ANFS + DFS"
+        --machine-name "Station {econet-station} (Piconet, Model B)"
         --fdc acorn-1770
         --sideways slot=13:type=rom:image=acorn-dfs_2_26.rom
         --sideways slot=14:type=rom:image=acorn-anfs_4_18.rom
@@ -452,7 +456,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         # server unattended; the thumbnail then captures "Starting - Ready".
         # THUMBNAIL_DELAY covers the parasite's SCSI bitmap read + FS start.
         THUMBNAIL_DELAY 30
-        --machine-name "L3FS"
+        --machine-name "L3 File Server, station {econet-station}"
         --auto-boot
         --fdc acorn-1770
         --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom

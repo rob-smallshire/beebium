@@ -429,6 +429,23 @@ TEST_CASE("create-preset: --machine-name round-trips through the loader",
     CHECK(*loaded.config->machine_name == "L3FS");
 }
 
+TEST_CASE("create-preset: a --machine-name template round-trips unchanged (#153)",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "templated.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Station\" "
+        "--machine-name \"Station {econet-station} {{x}}\" "
+        "--output \"" + output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    REQUIRE(loaded.config->machine_name.has_value());
+    CHECK(*loaded.config->machine_name == "Station {econet-station} {{x}}");
+}
+
 TEST_CASE("create-preset: --auto-boot round-trips through the loader",
           "[integration][preset][create-preset]") {
     TempDirectory temp_dir;
