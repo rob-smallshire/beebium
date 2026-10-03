@@ -7,10 +7,10 @@ Subnet provenances, subnet rules, `map-file=`/`subnet=`, reload; #141 the
 built on the EditableList and FileReference primitives, with the file shown
 as "Shared AUN map"; #143 the bridge acceptance test; #146 poll-driven
 reloads refresh the sidebar). Differences from the text below: the mtime
-poll rides the discovery subscriber's sweep, so it runs only while the
-instance browses (`--aun discovery=on` or `browse`); with `off` or
-`announce` a hand edit is picked up by `ReloadMap`, an edit RPC, or a
-relaunch. An entry for this machine's own station is not filtered out (it
+poll runs on its own timer whenever a map file is in force, independent of
+the discovery mode (#165), so a hand, subcommand or GUI edit is picked up
+within the poll interval under `discovery=off` and `announce` too. An entry
+for this machine's own station is not filtered out (it
 is applied like any other peer, and `--station auto` counts it as
 occupied). The bridge acceptance test still maps the bridge with `--aun
 map=`; the map-file form of the recipe is in

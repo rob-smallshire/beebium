@@ -309,6 +309,55 @@ def test_running_instance_sees_a_subcommand_write_via_the_poll(
             raise AssertionError("the subcommand's write was not polled in")
 
 
+def test_discovery_off_instance_still_sees_a_subcommand_map_write(
+    mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
+) -> None:
+    # #165: the map-file reload poll used to ride the discovery subscriber's
+    # sweep, so with discovery=off (no browsing) an external edit was never
+    # picked up -- exactly the config where the map file matters most. With the
+    # poll on its own timer it now reaches a running discovery=off instance.
+    map_filepath = tmp_path / "aun-map.json"
+
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", f"map-file={map_filepath}:discovery=off"],
+    ) as bbc:
+        bbc.econet.enable(station_id=2, aun_port=32768)
+        aun = bbc.transport[Aun]
+        assert aun.status.discovery_mode == "off"  # no browsing sweep at all
+        assert not any(p.stn == 254 for p in aun.peers)
+
+        completed = subprocess.run(
+            [
+                str(server_installation.executable_filepath(DEFAULT_VARIANT)),
+                "add-aun-peer",
+                "0.254",
+                "127.0.0.1",
+                "40254",
+                "--map-file",
+                str(map_filepath),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+        # The dedicated poll (~2.5 s) picks up the write with no browsing.
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            peers = {p.stn: p for p in aun.peers}
+            if 254 in peers:
+                assert peers[254].source == PeerSource.MAP_FILE
+                break
+            time.sleep(0.25)
+        else:
+            raise AssertionError(
+                "the subcommand's write was not polled in with discovery=off"
+            )
+
+
 def test_poll_driven_reload_repushes_the_sidebar_view(
     mos_filepath: Path, server_installation: ServerInstallation, tmp_path: Path
 ) -> None:

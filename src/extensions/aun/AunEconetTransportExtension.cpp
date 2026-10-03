@@ -481,15 +481,11 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
             }
         });
 
-    // Poll the map file for edits on the subscriber's periodic sweep (off the
-    // emulation thread). The weak token makes a sweep during teardown a no-op.
-    if (subscriber_) {
-        subscriber_->set_on_sweep([this, alive]() {
-            auto keep_alive = alive.lock();
-            if (!keep_alive) return;
-            poll_map_file();
-        });
-    }
+    // Reload the map file on an external edit from a dedicated timer, so it
+    // works whatever the discovery mode -- discovery=off/announce has no
+    // browsing sweep to ride, and that is exactly where the map file matters
+    // most (#165). start is a no-op when the map file is disabled.
+    start_map_file_poll();
 
     // React to the backend being freed (EconetService::DisableEconet drops
     // EconetSocket's reference; nothing else notifies us). Drop our raw pointer
@@ -512,6 +508,7 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
         backend_ = nullptr;
         subscriber_.reset();  // stop browsing + join the sweep thread
         announcer_.reset();   // stop advertising a station with no backend
+        stop_map_file_poll(); // nothing to route to once the backend is gone
     });
     return backend;
 }
@@ -758,7 +755,13 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
 }
 
 AunEconetTransportExtension::AunEconetTransportExtension() = default;
-AunEconetTransportExtension::~AunEconetTransportExtension() = default;
+
+AunEconetTransportExtension::~AunEconetTransportExtension() {
+    // Stop and join the map-file poll before any member it touches is
+    // destroyed. The backend's destroyed callback does this on Disable; this is
+    // the teardown-without-Disable safety net.
+    stop_map_file_poll();
+}
 
 void AunEconetTransportExtension::add_api_peer(
         std::uint8_t net, std::uint8_t stn,
@@ -915,6 +918,47 @@ void AunEconetTransportExtension::poll_map_file() {
     auto current = ec ? std::filesystem::file_time_type::min() : mtime;
     if (current != last) {
         reload_map_file();  // records the new mtime
+    }
+}
+
+void AunEconetTransportExtension::start_map_file_poll() {
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        if (!map_file_enabled_) {
+            return;  // no file to watch (map-file=none)
+        }
+    }
+    if (map_file_poll_thread_.joinable()) {
+        return;  // already running (e.g. a #160 preselected handover)
+    }
+    {
+        std::lock_guard<std::mutex> lock(map_file_poll_mutex_);
+        map_file_poll_stop_ = false;
+    }
+    map_file_poll_thread_ = std::thread([this] {
+        for (;;) {
+            std::unique_lock<std::mutex> lock(map_file_poll_mutex_);
+            // Wake early on stop; otherwise reload on each interval. The wait
+            // releases the lock, so stop_map_file_poll() never blocks on it.
+            map_file_poll_cv_.wait_for(lock, kMapFilePollInterval,
+                                       [this] { return map_file_poll_stop_; });
+            if (map_file_poll_stop_) {
+                return;
+            }
+            lock.unlock();
+            poll_map_file();
+        }
+    });
+}
+
+void AunEconetTransportExtension::stop_map_file_poll() {
+    {
+        std::lock_guard<std::mutex> lock(map_file_poll_mutex_);
+        map_file_poll_stop_ = true;
+    }
+    map_file_poll_cv_.notify_all();
+    if (map_file_poll_thread_.joinable()) {
+        map_file_poll_thread_.join();
     }
 }
 

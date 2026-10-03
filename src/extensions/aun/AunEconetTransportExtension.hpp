@@ -42,12 +42,14 @@
 #include "beebium/extension/EconetTransportExtension.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace beebium {
@@ -331,21 +333,37 @@ private:
     std::vector<AunMapPeer> unreachable_map_peers_;
     std::vector<AunMapPeer> map_peers_;      // the file's peers (with labels)
     std::vector<AunMapSubnet> map_subnets_;  // the file's subnets (with labels)
-    // The map file's modification time at the last load, so the sweep poll can
+    // The map file's modification time at the last load, so the poll can
     // detect a change. file_time_type::min() stands for an absent file.
     std::filesystem::file_time_type map_file_mtime_ =
         std::filesystem::file_time_type::min();
+
+    // A dedicated timer that reloads the map file on an external edit, running
+    // whenever the transport is up with a map file in force -- independent of
+    // the discovery mode, because discovery=off/announce has no browsing sweep
+    // to ride yet is exactly where the map file matters most (#165). Off the
+    // emulation thread. Stopped and joined when the backend is freed and in the
+    // destructor.
+    static constexpr std::chrono::milliseconds kMapFilePollInterval{2500};
+    std::thread map_file_poll_thread_;
+    std::mutex map_file_poll_mutex_;         // guards map_file_poll_stop_ + the cv wait
+    std::condition_variable map_file_poll_cv_;
+    bool map_file_poll_stop_ = false;
 
     // Resolve the effective map-file path from --aun map-file= / the
     // BEEBIUM_AUN_MAP_FILEPATH env / the shared per-user default, and whether it
     // is enabled (map-file=none disables). Called once in create_backend.
     void resolve_map_file_path();
 
-    // Poll the map file's modification time and reload on a change. Wired to the
-    // subscriber's sweep, so a hand or GUI edit reaches this instance within a
-    // sweep interval with no platform file-watch code. Runs off the emulation
-    // thread.
+    // Poll the map file's modification time and reload on a change, so a hand,
+    // subcommand or GUI edit reaches this instance within a poll interval with
+    // no platform file-watch code. Runs off the emulation thread.
     void poll_map_file();
+
+    // Start / stop the dedicated map-file poll timer. start is a no-op when the
+    // map file is disabled or the timer already runs; stop signals and joins.
+    void start_map_file_poll();
+    void stop_map_file_poll();
 
     // Seed the operator peer layers (Launch from --aun map=/subnet=, MapFile
     // from the per-user file) into the peer set for `local_net`, clearing the
