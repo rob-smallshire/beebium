@@ -35,6 +35,7 @@
 // directly so the failure can be observed without having to spawn the server.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_temp_paths.hpp"
 
 #include <beebium/extension/ExtensionContext.hpp>
 #include <beebium/extension/ExtensionRegistry.hpp>
@@ -63,8 +64,7 @@ const std::filesystem::path kPluginExtensionsDirpath;
 // file (for HardDiskImage::open) but does not perform any I/O until SCSI
 // commands are issued, so a few KB is enough to satisfy initialisation.
 std::filesystem::path make_temp_dat_image() {
-    auto path = std::filesystem::temp_directory_path()
-              / "beebium_scsi_plugin_shutdown_test.dat";
+    auto path = beebium::test::unique_temp_path("beebium_scsi_plugin_shutdown_test_", ".dat");
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     std::vector<char> zeros(4096, 0);
     file.write(zeros.data(), static_cast<std::streamsize>(zeros.size()));

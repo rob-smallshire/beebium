@@ -15,6 +15,7 @@
 
 #include <beebium/server/PresetLoader.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include "test_temp_paths.hpp"
 
 #include <filesystem>
 
@@ -145,7 +146,8 @@ TEST_CASE("load_preset: unknown keys are ignored (forward compatibility)", "[pre
 
 TEST_CASE("load_preset: name falls back to filename stem", "[preset][load_preset]") {
     // Create a test preset without a name field
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "no_name.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "no_name.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b"})";
@@ -229,7 +231,8 @@ TEST_CASE("PresetConfig: default state", "[preset][PresetConfig]") {
 // ============================================================================
 
 TEST_CASE("load_preset: empty storage section", "[preset][load_preset]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "empty_storage.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "empty_storage.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "Empty Storage", "storage": {}})";
@@ -246,7 +249,8 @@ TEST_CASE("load_preset: empty storage section", "[preset][load_preset]") {
 }
 
 TEST_CASE("load_preset: fdc_socket without mode", "[preset][load_preset]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "fdc_no_mode.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "fdc_no_mode.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "FDC No Mode", "storage": {"fdc_socket": {"id": "acorn-1770"}}})";
@@ -262,7 +266,8 @@ TEST_CASE("load_preset: fdc_socket without mode", "[preset][load_preset]") {
 }
 
 TEST_CASE("load_preset: floppy_drives with only drive 1", "[preset][load_preset]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "drive1_only.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "drive1_only.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "Drive 1 Only", "storage": {"floppy_drives": [{"drive": 1, "image_uri": "file:///test.ssd"}]}})";
@@ -280,7 +285,8 @@ TEST_CASE("load_preset: floppy_drives with only drive 1", "[preset][load_preset]
 }
 
 TEST_CASE("load_preset: fdc_socket id 'none'", "[preset][load_preset]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "fdc_none.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "fdc_none.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "No FDC", "storage": {"fdc_socket": {"id": "none"}}})";
@@ -332,7 +338,8 @@ TEST_CASE("load_preset: econet AUN with port=none disables network",
 
 TEST_CASE("load_preset: AUN map as JSON array lands in list_parameters",
           "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_aun_map_array.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_aun_map_array.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({
@@ -369,7 +376,8 @@ TEST_CASE("load_preset: AUN map as single string stays as scalar parameter",
     // Backwards-compatible single-peer preset form. Downstream
     // normalisation (in ServerMain) will move this into list_config
     // once the schema is known.
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_aun_map_string.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_aun_map_string.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({
@@ -398,7 +406,8 @@ TEST_CASE("load_preset: AUN map as single string stays as scalar parameter",
 
 TEST_CASE("load_preset: econet with piconet via transport object",
           "[preset][load_preset][econet][piconet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_piconet.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_piconet.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({
@@ -427,7 +436,8 @@ TEST_CASE("load_preset: econet with piconet via transport object",
 
 TEST_CASE("load_preset: legacy piconet object is rejected with migration hint",
           "[preset][load_preset][econet][piconet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_legacy_piconet.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_legacy_piconet.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({
@@ -449,7 +459,8 @@ TEST_CASE("load_preset: legacy piconet object is rejected with migration hint",
 
 TEST_CASE("load_preset: legacy aun_port is rejected with migration hint",
           "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_legacy_aun_port.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_legacy_aun_port.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({
@@ -467,7 +478,8 @@ TEST_CASE("load_preset: legacy aun_port is rejected with migration hint",
 }
 
 TEST_CASE("load_preset: econet with storage", "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_storage.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_storage.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({
@@ -489,7 +501,8 @@ TEST_CASE("load_preset: econet with storage", "[preset][load_preset][econet]") {
 }
 
 TEST_CASE("load_preset: unknown econet keys ignored", "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_unknown.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_unknown.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "Unknown Keys", "econet": { "station": 1, "future_field": true }})";
@@ -505,7 +518,8 @@ TEST_CASE("load_preset: unknown econet keys ignored", "[preset][load_preset][eco
 }
 
 TEST_CASE("load_preset: econet station 0 is invalid", "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_bad0.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_bad0.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "Bad Station", "econet": { "station": 0 }})";
@@ -519,7 +533,8 @@ TEST_CASE("load_preset: econet station 0 is invalid", "[preset][load_preset][eco
 }
 
 TEST_CASE("load_preset: econet station 255 is invalid", "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_bad255.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_bad255.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "Bad Station", "econet": { "station": 255 }})";
@@ -533,7 +548,8 @@ TEST_CASE("load_preset: econet station 255 is invalid", "[preset][load_preset][e
 }
 
 TEST_CASE("load_preset: econet station 300 is invalid", "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_bad300.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_bad300.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "Bad Station", "econet": { "station": 300 }})";
@@ -547,7 +563,8 @@ TEST_CASE("load_preset: econet station 300 is invalid", "[preset][load_preset][e
 }
 
 TEST_CASE("load_preset: econet missing station", "[preset][load_preset][econet]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "econet_nostation.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_nostation.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"name": "No Station", "econet": { "aun_port": 12345 }})";
@@ -613,7 +630,8 @@ TEST_CASE("load_preset: sideways ROM image is not URI-normalized", "[preset][loa
     // Sideways ROM references are ROM-library names resolved via the ROM
     // search path (like --sideways and DEFAULT_DFS_ROM), not disc-image
     // paths, so they must NOT be rewritten to file:// URIs.
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_verbatim.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_verbatim.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": { "slots": [ { "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" } ] }})";
@@ -628,7 +646,8 @@ TEST_CASE("load_preset: sideways ROM image is not URI-normalized", "[preset][loa
 }
 
 TEST_CASE("load_preset: sideways_bank present but no slots is empty", "[preset][load_preset][sideways]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_noslots.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_noslots.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": {}})";
@@ -642,7 +661,8 @@ TEST_CASE("load_preset: sideways_bank present but no slots is empty", "[preset][
 }
 
 TEST_CASE("load_preset: sideways rom without image_uri is invalid", "[preset][load_preset][sideways]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_rom_noimage.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_rom_noimage.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": { "slots": [ { "slot": 14, "type": "rom" } ] }})";
@@ -656,7 +676,8 @@ TEST_CASE("load_preset: sideways rom without image_uri is invalid", "[preset][lo
 }
 
 TEST_CASE("load_preset: sideways empty with image_uri is invalid", "[preset][load_preset][sideways]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_empty_image.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_empty_image.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": { "slots": [ { "slot": 13, "type": "empty", "image_uri": "x.rom" } ] }})";
@@ -670,7 +691,8 @@ TEST_CASE("load_preset: sideways empty with image_uri is invalid", "[preset][loa
 }
 
 TEST_CASE("load_preset: sideways invalid type is rejected", "[preset][load_preset][sideways]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_badtype.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_badtype.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": { "slots": [ { "slot": 14, "type": "flash", "image_uri": "x.rom" } ] }})";
@@ -684,7 +706,8 @@ TEST_CASE("load_preset: sideways invalid type is rejected", "[preset][load_prese
 }
 
 TEST_CASE("load_preset: sideways slot out of range is rejected", "[preset][load_preset][sideways]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_badslot.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_badslot.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": { "slots": [ { "slot": 16, "type": "rom", "image_uri": "x.rom" } ] }})";
@@ -698,7 +721,8 @@ TEST_CASE("load_preset: sideways slot out of range is rejected", "[preset][load_
 }
 
 TEST_CASE("load_preset: sideways slot entry missing slot is rejected", "[preset][load_preset][sideways]") {
-    std::filesystem::path temp_filepath = std::filesystem::temp_directory_path() / "sw_noslotfield.preset.beebium";
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "sw_noslotfield.preset.beebium";
     {
         std::ofstream file(temp_filepath);
         file << R"({"model": "model-b", "sideways_bank": { "slots": [ { "type": "rom", "image_uri": "x.rom" } ] }})";

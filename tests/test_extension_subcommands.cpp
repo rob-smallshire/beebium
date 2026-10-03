@@ -19,6 +19,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/PlatformUtils.hpp>
+#include "test_temp_paths.hpp"
 
 #include <atomic>
 #include <cstdlib>
@@ -36,12 +37,8 @@ struct ProcessResult {
 };
 
 ProcessResult run_command(const std::string& command) {
-    static std::atomic<unsigned long> counter{0};
-    auto suffix = std::to_string(counter.fetch_add(1));
-    auto stdout_filepath = std::filesystem::temp_directory_path()
-        / ("beebium_ext_test_stdout_" + suffix + ".txt");
-    auto stderr_filepath = std::filesystem::temp_directory_path()
-        / ("beebium_ext_test_stderr_" + suffix + ".txt");
+    auto stdout_filepath = beebium::test::unique_temp_path("beebium_ext_test_stdout_", ".txt");
+    auto stderr_filepath = beebium::test::unique_temp_path("beebium_ext_test_stderr_", ".txt");
 
     std::string full_command = command;
 #ifdef _WIN32

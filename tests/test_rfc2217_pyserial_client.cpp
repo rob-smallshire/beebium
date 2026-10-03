@@ -18,6 +18,7 @@
 // `uv run --with pyserial python3`, then `python3`).
 
 #include "Rfc2217ServerEndpoint.hpp"
+#include "test_temp_paths.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -98,7 +99,7 @@ TEST_CASE("rfc2217-server-serial interoperates with a pySerial client",
     // echo-check DONE. TCP order guarantees the break is processed by the server
     // before DONE (which follows it on the stream) comes back echoed.
     const std::filesystem::path script =
-        std::filesystem::temp_directory_path() / "beebium_rfc2217_pyserial_client.py";
+        beebium::test::unique_temp_path("beebium_rfc2217_pyserial_client_", ".py");
     {
         std::ofstream f(script);
         f << "import sys, serial\n"

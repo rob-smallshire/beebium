@@ -25,6 +25,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "test_temp_paths.hpp"
 
 namespace {
 
@@ -71,8 +72,8 @@ ProcessResult run_command(const std::string& command,
     result.exit_code = -1;
 
     // Create temporary files for output capture
-    auto stdout_filepath = std::filesystem::temp_directory_path() / "beebium_test_stdout.txt";
-    auto stderr_filepath = std::filesystem::temp_directory_path() / "beebium_test_stderr.txt";
+    auto stdout_filepath = beebium::test::unique_temp_path("beebium_test_stdout_", ".txt");
+    auto stderr_filepath = beebium::test::unique_temp_path("beebium_test_stderr_", ".txt");
 
     // Set environment variables in current process - child processes inherit them
     for (const auto& [name, value] : env_vars) {
@@ -164,26 +165,9 @@ std::filesystem::path find_executable(const std::string& name) {
 }
 
 // RAII helper for temporary directories
-class TempDirectory {
+class TempDirectory : public beebium::test::ScopedTempDir {
 public:
-    TempDirectory() {
-        path_ = std::filesystem::temp_directory_path() /
-                ("beebium_test_" + std::to_string(std::rand()));
-        std::filesystem::create_directories(path_);
-    }
-
-    ~TempDirectory() {
-        std::error_code ec;
-        std::filesystem::remove_all(path_, ec);
-    }
-
-    const std::filesystem::path& path() const { return path_; }
-
-    TempDirectory(const TempDirectory&) = delete;
-    TempDirectory& operator=(const TempDirectory&) = delete;
-
-private:
-    std::filesystem::path path_;
+    TempDirectory() : ScopedTempDir("beebium_test_") {}
 };
 
 const std::string EXECUTABLE = find_executable("beebium-model-b").string();
@@ -830,7 +814,7 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
 TEST_CASE("model-b-romram boots without an auto-loaded DFS ROM",
           "[integration][romram][sideways]") {
     const std::string romram = find_executable("beebium-model-b-romram").string();
-    auto output_filepath = std::filesystem::temp_directory_path() / "beebium_romram_bare.png";
+    auto output_filepath = beebium::test::unique_temp_path("beebium_romram_bare_", ".png");
 
     auto result = run_command(
         romram + " capture-screenshot --output \"" + output_filepath.string() + "\" --duration 0");
@@ -851,8 +835,7 @@ TEST_CASE("model-b-romram boots without an auto-loaded DFS ROM",
 
 TEST_CASE("create-preset --fdc and --sideways build a loadable rich preset",
           "[integration][preset][create-preset][sideways]") {
-    auto output_filepath =
-        std::filesystem::temp_directory_path() / "beebium_gen_disc.preset.beebium";
+    auto output_filepath = beebium::test::unique_temp_path("beebium_gen_disc_", ".preset.beebium");
 
     auto create_result = run_command(
         EXECUTABLE + " create-preset --name \"Gen Disc\" --release-date 1982"
@@ -871,8 +854,7 @@ TEST_CASE("create-preset --fdc and --sideways build a loadable rich preset",
     REQUIRE(contents.find("1982") != std::string::npos);
 
     // The generated preset must load, validate, and boot end to end.
-    auto screenshot_filepath =
-        std::filesystem::temp_directory_path() / "beebium_gen_disc.png";
+    auto screenshot_filepath = beebium::test::unique_temp_path("beebium_gen_disc_", ".png");
     auto boot_result = run_command(
         EXECUTABLE + " capture-screenshot --preset \"" + output_filepath.string() +
         "\" --output \"" + screenshot_filepath.string() + "\" --duration 0");
@@ -909,7 +891,7 @@ TEST_CASE("shipped system presets load, validate, and boot",
         REQUIRE(std::filesystem::exists(preset_filepath));
 
         auto screenshot_filepath =
-            std::filesystem::temp_directory_path() / ("beebium_shipped_" + c.preset_id + ".png");
+            beebium::test::unique_temp_path("beebium_shipped_" + c.preset_id + "_", ".png");
         auto result = run_command(
             executable.string() + " capture-screenshot --preset \"" +
             preset_filepath.string() + "\" --output \"" + screenshot_filepath.string() +
@@ -963,10 +945,9 @@ TEST_CASE("capture-screenshot runs the Tube coprocessor from a preset",
         REQUIRE(std::filesystem::exists(tube_preset));
         REQUIRE(std::filesystem::exists(host_preset));
 
-        auto tube_png = std::filesystem::temp_directory_path()
-                      / ("beebium_" + c.tube_preset + ".png");
-        auto host_png = std::filesystem::temp_directory_path()
-                      / ("beebium_" + c.host_preset + "_twin.png");
+        auto tube_png = beebium::test::unique_temp_path("beebium_" + c.tube_preset + "_", ".png");
+        auto host_png =
+            beebium::test::unique_temp_path("beebium_" + c.host_preset + "_twin_", ".png");
 
         // Capture both at the same duration, past the boot banner, so the only
         // difference between the two renders is the coprocessor.
@@ -1047,8 +1028,8 @@ TEST_CASE("capture-screenshot --crop none is byte-identical to the default and t
     auto preset = exe.parent_path() / "presets" / "model-b-disc.preset.beebium";
     REQUIRE(std::filesystem::exists(preset));
 
-    auto none_png = std::filesystem::temp_directory_path() / "beebium_crop_none.png";
-    auto def_png = std::filesystem::temp_directory_path() / "beebium_crop_default.png";
+    auto none_png = beebium::test::unique_temp_path("beebium_crop_none_", ".png");
+    auto def_png = beebium::test::unique_temp_path("beebium_crop_default_", ".png");
 
     auto none = run_command(exe.string() + " capture-screenshot --preset \"" +
                             preset.string() + "\" --output \"" + none_png.string() +
@@ -1092,10 +1073,8 @@ TEST_CASE("capture-screenshot --crop auto enlarges the content relative to the f
         INFO("preset: " << c.preset_id);
         REQUIRE(std::filesystem::exists(preset));
 
-        auto none_png = std::filesystem::temp_directory_path()
-                      / ("beebium_" + c.preset_id + "_none.png");
-        auto auto_png = std::filesystem::temp_directory_path()
-                      / ("beebium_" + c.preset_id + "_auto.png");
+        auto none_png = beebium::test::unique_temp_path("beebium_" + c.preset_id + "_none_", ".png");
+        auto auto_png = beebium::test::unique_temp_path("beebium_" + c.preset_id + "_auto_", ".png");
 
         auto none = run_command(exe.string() + " capture-screenshot --preset \"" +
                                 preset.string() + "\" --output \"" + none_png.string() +
@@ -1225,7 +1204,7 @@ TEST_CASE("describe-disc-image reports a non-disc file as not recognised, with a
           "[integration][disc][describe-disc-image]") {
     // A file that is plainly not a disc image. Exit is still 0 -- the file
     // was readable; the verdict is in the JSON, not the exit code.
-    auto tmp = std::filesystem::temp_directory_path() / "beebium_not_a_disc.bin";
+    auto tmp = beebium::test::unique_temp_path("beebium_not_a_disc_", ".bin");
     {
         std::ofstream f(tmp, std::ios::binary);
         f << "this is not a disc image";
@@ -1266,8 +1245,7 @@ TEST_CASE("describe-disc-image --help returns OK",
 namespace {
 // A unique temp aun-map.json path for a hermetic subcommand test.
 std::filesystem::path temp_aun_map_filepath() {
-    return std::filesystem::temp_directory_path() /
-           ("beebium-aun-map-sub-" + std::to_string(std::rand()) + ".json");
+    return beebium::test::unique_temp_path("beebium-aun-map-sub-", ".json");
 }
 }  // namespace
 

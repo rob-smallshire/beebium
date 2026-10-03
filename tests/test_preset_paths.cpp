@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>  // For creating test files
+#include "test_temp_paths.hpp"
 
 using namespace beebium::server;
 
@@ -149,10 +150,7 @@ TEST_CASE("get_user_presets_dirpath: Linux path contains .config or XDG_CONFIG_H
 
 TEST_CASE("ensure_user_presets_dirpath_exists: creates directory if missing", "[PresetPaths][user_presets]") {
     // Create a temporary directory for testing
-    auto temp_dir = std::filesystem::temp_directory_path() / "beebium_test_presets_create";
-
-    // Clean up first
-    std::filesystem::remove_all(temp_dir);
+    auto temp_dir = beebium::test::unique_temp_path("beebium_test_presets_create_");
     REQUIRE_FALSE(std::filesystem::exists(temp_dir));
 
     // This test would need to set the env var to work properly
@@ -168,17 +166,15 @@ TEST_CASE("ensure_user_presets_dirpath_exists: creates directory if missing", "[
 // ============================================================================
 
 TEST_CASE("list_presets_in_directory: empty directory returns empty list", "[PresetPaths][list]") {
-    auto temp_dir = std::filesystem::temp_directory_path() / "beebium_test_presets_empty";
-    std::filesystem::create_directories(temp_dir);
+    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_empty_");
+    const auto& temp_dir = scoped_dir.path();
 
     auto presets = PresetPaths::list_presets_in_directory(temp_dir);
     REQUIRE(presets.empty());
-
-    std::filesystem::remove_all(temp_dir);
 }
 
 TEST_CASE("list_presets_in_directory: non-existent directory returns empty list", "[PresetPaths][list]") {
-    auto non_existent = std::filesystem::temp_directory_path() / "beebium_test_nonexistent_dir_12345";
+    auto non_existent = beebium::test::unique_temp_path("beebium_test_nonexistent_dir_");
     REQUIRE_FALSE(std::filesystem::exists(non_existent));
 
     auto presets = PresetPaths::list_presets_in_directory(non_existent);
@@ -186,8 +182,8 @@ TEST_CASE("list_presets_in_directory: non-existent directory returns empty list"
 }
 
 TEST_CASE("list_presets_in_directory: finds preset files", "[PresetPaths][list]") {
-    auto temp_dir = std::filesystem::temp_directory_path() / "beebium_test_presets_find";
-    std::filesystem::create_directories(temp_dir);
+    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_find_");
+    const auto& temp_dir = scoped_dir.path();
 
     // Create test preset files
     std::ofstream(temp_dir / "model-b.preset.beebium") << "{}";
@@ -198,13 +194,11 @@ TEST_CASE("list_presets_in_directory: finds preset files", "[PresetPaths][list]"
     REQUIRE(presets.size() == 2);
     REQUIRE(std::find(presets.begin(), presets.end(), "model-b") != presets.end());
     REQUIRE(std::find(presets.begin(), presets.end(), "my-setup") != presets.end());
-
-    std::filesystem::remove_all(temp_dir);
 }
 
 TEST_CASE("list_presets_in_directory: ignores non-preset files", "[PresetPaths][list]") {
-    auto temp_dir = std::filesystem::temp_directory_path() / "beebium_test_presets_ignore";
-    std::filesystem::create_directories(temp_dir);
+    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_ignore_");
+    const auto& temp_dir = scoped_dir.path();
 
     // Create preset file and non-preset files
     std::ofstream(temp_dir / "model-b.preset.beebium") << "{}";
@@ -216,13 +210,11 @@ TEST_CASE("list_presets_in_directory: ignores non-preset files", "[PresetPaths][
 
     REQUIRE(presets.size() == 1);
     REQUIRE(presets[0] == "model-b");
-
-    std::filesystem::remove_all(temp_dir);
 }
 
 TEST_CASE("list_presets_in_directory: ignores subdirectories", "[PresetPaths][list]") {
-    auto temp_dir = std::filesystem::temp_directory_path() / "beebium_test_presets_subdir";
-    std::filesystem::create_directories(temp_dir);
+    beebium::test::ScopedTempDir scoped_dir("beebium_test_presets_subdir_");
+    const auto& temp_dir = scoped_dir.path();
     std::filesystem::create_directories(temp_dir / "subdir.preset.beebium");  // Directory with preset-like name
 
     std::ofstream(temp_dir / "model-b.preset.beebium") << "{}";
@@ -231,8 +223,6 @@ TEST_CASE("list_presets_in_directory: ignores subdirectories", "[PresetPaths][li
 
     REQUIRE(presets.size() == 1);
     REQUIRE(presets[0] == "model-b");
-
-    std::filesystem::remove_all(temp_dir);
 }
 
 // ============================================================================

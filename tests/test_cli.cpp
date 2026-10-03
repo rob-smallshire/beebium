@@ -19,6 +19,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include "test_temp_paths.hpp"
 
 using namespace beebium::server;
 using MachineType = beebium::ModelB;
@@ -1278,9 +1279,8 @@ namespace {
 
     // An empty directory standing in for the user presets directory.
     std::filesystem::path empty_user_presets_dirpath() {
-        auto dirpath = std::filesystem::temp_directory_path() / "beebium_test_no_user_presets";
-        std::filesystem::create_directories(dirpath);
-        return dirpath;
+        static const beebium::test::ScopedTempDir dir("beebium_test_no_user_presets_");
+        return dir.path();
     }
 }
 
@@ -1300,8 +1300,8 @@ TEST_CASE("parse_start_arguments: --preset resolves a bare id as a system preset
 }
 
 TEST_CASE("parse_start_arguments: --preset resolves a bare id as a user preset", "[cli][parse_start_arguments][preset]") {
-    auto user_dirpath = std::filesystem::temp_directory_path() / "beebium_test_user_presets_104";
-    std::filesystem::create_directories(user_dirpath);
+    beebium::test::ScopedTempDir user_dir("beebium_test_user_presets_104_");
+    const auto& user_dirpath = user_dir.path();
     std::filesystem::copy_file(presets_dirpath() / "storage.preset.beebium",
                                user_dirpath / "my-storage.preset.beebium",
                                std::filesystem::copy_options::overwrite_existing);
@@ -1922,7 +1922,7 @@ TEST_CASE("dispatch_subcommand: import-preset --help returns OK", "[cli][dispatc
 
 TEST_CASE("dispatch_subcommand: import-preset with invalid JSON returns DATAERR", "[cli][dispatch_subcommand][import-preset]") {
     // Create a temporary file with invalid JSON
-    auto temp_filepath = std::filesystem::temp_directory_path() / "invalid-test.preset.beebium";
+    auto temp_filepath = beebium::test::unique_temp_path("invalid-test-", ".preset.beebium");
     {
         std::ofstream f(temp_filepath);
         f << "{ not valid json }";
@@ -1942,7 +1942,7 @@ TEST_CASE("dispatch_subcommand: import-preset with invalid JSON returns DATAERR"
 
 TEST_CASE("dispatch_subcommand: import-preset with wrong model returns DATAERR", "[cli][dispatch_subcommand][import-preset]") {
     // Create a temporary file with a different model
-    auto temp_filepath = std::filesystem::temp_directory_path() / "wrong-model-test.preset.beebium";
+    auto temp_filepath = beebium::test::unique_temp_path("wrong-model-test-", ".preset.beebium");
     {
         std::ofstream f(temp_filepath);
         f << R"({"model": "wrong-model-12345", "name": "Wrong Model Test"})";

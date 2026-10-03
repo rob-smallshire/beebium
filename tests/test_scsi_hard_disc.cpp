@@ -14,6 +14,7 @@
 #include <ScsiHardDisc.hpp>
 #include <ScsiConstants.hpp>
 #include <HardDiskImage.hpp>
+#include "test_temp_paths.hpp"
 
 #include <filesystem>
 
@@ -23,15 +24,8 @@ using namespace beebium::scsi;
 namespace {
 
 struct TempDisc {
-    std::filesystem::path dirpath;
-
-    TempDisc() {
-        dirpath = std::filesystem::temp_directory_path() /
-            ("beebium_test_shd_" + std::to_string(reinterpret_cast<uintptr_t>(this)));
-        std::filesystem::create_directories(dirpath);
-    }
-
-    ~TempDisc() { std::filesystem::remove_all(dirpath); }
+    beebium::test::ScopedTempDir dir{"beebium_test_shd_"};
+    const std::filesystem::path& dirpath = dir.path();
 
     std::filesystem::path dat_filepath() const { return dirpath / "test.dat"; }
 

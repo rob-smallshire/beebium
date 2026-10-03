@@ -17,6 +17,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
+#include "test_temp_paths.hpp"
 
 #include "beebium/Machines.hpp"
 #include "beebium/disc/DiscUrl.hpp"
@@ -816,8 +817,7 @@ TEST_CASE("DiscService reports an eject and insert in quick succession", "[grpc]
     }
 
     // A second image with a distinct path; only the source URL matters here.
-    auto replacement_path =
-        std::filesystem::temp_directory_path() / "beebium-replacement-disc.ssd";
+    auto replacement_path = beebium::test::unique_temp_path("beebium-replacement-disc-", ".ssd");
     std::filesystem::copy_file(disc_path, replacement_path,
                                std::filesystem::copy_options::overwrite_existing);
 

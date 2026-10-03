@@ -12,6 +12,7 @@
 
 #include <beebium/extension/AttachmentPointCatalogue.hpp>
 #include <beebium/extension/PluginLoader.hpp>
+#include "test_temp_paths.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -54,7 +55,7 @@ TEST_CASE("attachment-point display name falls back to the id",
 
 TEST_CASE("manifest parser reads the attaches_to array", "[extension][manifest]") {
     namespace fs = std::filesystem;
-    const fs::path root = fs::temp_directory_path() / "beebium_attaches_to_test";
+    const fs::path root = beebium::test::unique_temp_path("beebium_attaches_to_test_");
     const fs::path ext_dir = root / "voltmace-delta";
     fs::create_directories(ext_dir);
     {
@@ -83,7 +84,7 @@ TEST_CASE("manifest parser reads the attaches_to array", "[extension][manifest]"
 TEST_CASE("manifest with no attaches_to parses to an empty list",
           "[extension][manifest]") {
     namespace fs = std::filesystem;
-    const fs::path root = fs::temp_directory_path() / "beebium_attaches_to_empty_test";
+    const fs::path root = beebium::test::unique_temp_path("beebium_attaches_to_empty_test_");
     const fs::path ext_dir = root / "plain";
     fs::create_directories(ext_dir);
     {

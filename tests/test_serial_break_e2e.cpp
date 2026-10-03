@@ -25,6 +25,7 @@
 
 #include "Rfc2217ServerEndpoint.hpp"
 #include "SerialTestDevice.hpp"
+#include "test_temp_paths.hpp"
 
 #include <beebium/FrameAllocator.hpp>
 #include <beebium/FrameBuffer.hpp>
@@ -181,7 +182,7 @@ TEST_CASE("BBC 6502 program transmits a serial BREAK to the device",
     const std::string beebasm = find_beebasm();
     if (beebasm.empty()) SKIP("beebasm not found (set BEEBIUM_BEEBASM or install beebasm)");
 
-    const auto ssd = std::filesystem::temp_directory_path() / "beebium_serial_break_tx.ssd";
+    const auto ssd = beebium::test::unique_temp_path("beebium_serial_break_tx_", ".ssd");
     REQUIRE(assemble_ssd(beebasm, /*MODE=*/0, ssd));
 
     SerialTestDevice device;
@@ -217,7 +218,7 @@ TEST_CASE("pySerial transmits a BREAK that the BBC 6502 program detects",
     const std::string runner = find_pyserial_runner();
     if (runner.empty()) SKIP("no pySerial-capable Python found");
 
-    const auto ssd = std::filesystem::temp_directory_path() / "beebium_serial_break_rx.ssd";
+    const auto ssd = beebium::test::unique_temp_path("beebium_serial_break_rx_", ".ssd");
     REQUIRE(assemble_ssd(beebasm, /*MODE=*/1, ssd));
 
     rfc2217::Rfc2217ServerEndpoint::Options opts;
@@ -234,8 +235,7 @@ TEST_CASE("pySerial transmits a BREAK that the BBC 6502 program detects",
     REQUIRE(beeb.run_until_byte(kReady, 0xAA, 30'000'000));
 
     // A pySerial client that connects and sends a real break.
-    const auto script =
-        std::filesystem::temp_directory_path() / "beebium_serial_break_sender.py";
+    const auto script = beebium::test::unique_temp_path("beebium_serial_break_sender_", ".py");
     {
         std::ofstream f(script);
         f << "import sys, serial\n"

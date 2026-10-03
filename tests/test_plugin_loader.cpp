@@ -20,6 +20,8 @@
 #include <beebium/extension/ExtensionRegistry.hpp>
 #include <beebium/extension/OneMHzBusPort.hpp>
 
+#include "test_temp_paths.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -88,16 +90,12 @@ TEST_CASE("PluginLoader scan_manifests with MissingDirPolicy::Throw "
 TEST_CASE("PluginLoader scan_manifests with MissingDirPolicy::Throw "
           "succeeds for existing empty directory",
           "[extension][plugin]") {
-    auto tmp_dirpath = std::filesystem::temp_directory_path()
-                       / "beebium_plugin_loader_empty_dir";
-    std::filesystem::create_directories(tmp_dirpath);
+    beebium::test::ScopedTempDir tmp_dir("beebium_plugin_loader_empty_dir_");
 
     beebium::PluginLoader loader;
     auto manifests = loader.scan_manifests(
-        tmp_dirpath, beebium::PluginLoader::MissingDirPolicy::Throw);
+        tmp_dir.path(), beebium::PluginLoader::MissingDirPolicy::Throw);
     REQUIRE(manifests.empty());
-
-    std::filesystem::remove_all(tmp_dirpath);
 }
 
 TEST_CASE("PluginLoader find_manifest returns nullptr for unknown name",
@@ -231,9 +229,7 @@ namespace {
 // Write a manifest.json with the given body into a fresh temp directory and
 // return that directory. Caller removes it.
 std::filesystem::path write_manifest(const std::string& json) {
-    static int counter = 0;
-    auto dir = std::filesystem::temp_directory_path()
-             / ("beebium-manifest-roms-" + std::to_string(counter++));
+    auto dir = beebium::test::unique_temp_path("beebium-manifest-roms-");
     std::filesystem::create_directories(dir);
     std::ofstream f(dir / "manifest.json");
     f << json;
@@ -301,8 +297,7 @@ TEST_CASE("PluginLoader load_extension fails naming the plugin and path when a "
     beebium::ExtensionManifest m;
     m.name = "broken-firmware";
     m.library_stem = "broken-firmware";
-    m.manifest_dirpath = std::filesystem::temp_directory_path()
-                       / "beebium-broken-firmware-plugin";
+    m.manifest_dirpath = beebium::test::unique_temp_path("beebium-broken-firmware-plugin-");
     m.roms.push_back(beebium::RomImage{"client", "absent.rom", 2048, ""});
 
     beebium::PluginLoader loader;
@@ -323,8 +318,7 @@ TEST_CASE("PluginLoader load_extension fails when a declared ROM is the wrong si
     // declaring a 4096-byte ROM (the 2732 device size) with a present but
     // wrong-size file beside it must fail the load naming the sizes -- there is
     // no half-size or padded acceptance.
-    auto dir = std::filesystem::temp_directory_path()
-             / "beebium-wrong-size-rom-plugin";
+    auto dir = beebium::test::unique_temp_path("beebium-wrong-size-rom-plugin-");
     std::filesystem::create_directories(dir / "roms");
     {
         std::ofstream f(dir / "roms" / "fw.rom", std::ios::binary);

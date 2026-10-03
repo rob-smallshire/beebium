@@ -13,6 +13,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <HardDiskImage.hpp>
 #include <ScsiConstants.hpp>
+#include "test_temp_paths.hpp"
 
 #include <array>
 #include <cstdio>
@@ -25,19 +26,8 @@ namespace {
 
 // RAII temporary directory for test files
 struct TempDir {
-    std::filesystem::path dirpath;
-
-    TempDir() {
-        dirpath = std::filesystem::temp_directory_path() / "beebium_test_hdi_XXXXXX";
-        // Use a unique name based on pointer value
-        dirpath = std::filesystem::temp_directory_path() /
-            ("beebium_test_hdi_" + std::to_string(reinterpret_cast<uintptr_t>(this)));
-        std::filesystem::create_directories(dirpath);
-    }
-
-    ~TempDir() {
-        std::filesystem::remove_all(dirpath);
-    }
+    beebium::test::ScopedTempDir dir{"beebium_test_hdi_"};
+    const std::filesystem::path& dirpath = dir.path();
 
     std::filesystem::path dat_filepath() const { return dirpath / "test.dat"; }
 };
