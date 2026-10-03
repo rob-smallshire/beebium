@@ -32,6 +32,7 @@ namespace beebium {
 class ExtensionUi;             // forward decl; defined in ExtensionUi.hpp
 class ExtensionStorage;        // forward decl; defined in ExtensionStorage.hpp
 class ExtensionRpcDispatcher;  // forward decl; defined in ExtensionRpc.hpp
+class NamePlaceholderProvider;  // forward decl; defined in NamePlaceholderProvider.hpp
 
 // Common base for all extension-point types. Holds manifest, instance
 // config, and identity accessors. No lifecycle methods -- those belong
@@ -213,6 +214,14 @@ public:
     // must outlive the Extension instance (typically members of the concrete
     // class). See docs/discussion/extension-rpc-channel.md.
     virtual std::vector<ExtensionRpcDispatcher*> rpc_dispatchers() { return {}; }
+
+    // Optional machine-name hook. Returns the extension's source of name
+    // placeholders, or nullptr (the default) when it offers none. The server
+    // registers it at launch, so its keys can appear in a machine's name
+    // template ("{scsi-...}"); its keys must begin with one of its declared
+    // domains. The returned pointer must outlive the Extension instance
+    // (typically `this`, or a member). See NamePlaceholderProvider.hpp.
+    virtual const NamePlaceholderProvider* name_placeholders() const { return nullptr; }
 
 protected:
     ExtensionManifest manifest_;

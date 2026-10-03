@@ -10,6 +10,7 @@ add_library(beebium_core STATIC
     src/KeyboardMapping.cpp
     src/ScreenText.cpp
     src/NameTemplate.cpp
+    src/NamePlaceholderRegistry.cpp
     src/TeletextText.cpp
     src/TextTranslation.cpp
     src/TypeAheadQueue.cpp
