@@ -5,13 +5,19 @@ guest see when the network misbehaves?" Eight defects, in descending order of
 severity. Five are correctness bugs with user-visible consequences; three are
 documentation or hygiene.
 
-**All eight are fixed.** A ninth, found by the perturbation proxy once it
-existed, is open — see "9. A transaction stalls when acks are reordered" below.
-
- 1 (packet destruction), 2 (transmit failures reported
-as success), 3 (cable simulation), 4 (blocking socket), 5 (frame-level event
-streaming), 6 (documentation drift), 7 (teardown order), 8 (inbound net
-translation).
+**Status (October 2026): all nine are fixed** — 1 (packet destruction), 2
+(transmit failures reported as success), 3 (cable simulation), 4 (blocking
+socket), 5 (frame-level event streaming), 6 (documentation drift), 7 (teardown
+order), 8 (inbound net translation), and a ninth found later by the
+perturbation proxy, "9. A transaction stalls when acks are reordered". The
+duplicate-handle memory of defect 9 was later re-keyed by sender, `(source net,
+source station, handle)`, after it swallowed a second client's first request
+(#149). The holding-queue counters are reported in
+`GetEconetStatusResponse.handshake` (`HandshakeStatus`). Since #55 the
+discovery subscriber writes to the transport's `AunPeerSet`, not to the
+backend, so the ordering hazard in defect 7 no longer applies in the form
+described. A would-block send (defect 4) is still only counted, not reported
+to the guest.
 
 Fixing 2 also turned up and fixed two ADLC defects it was resting on: Rx Idle
 never latching or reaching S2RQ, and the handshake reporting the line inactive
@@ -115,8 +121,9 @@ stage and the rest must be re-evaluated against the new stage rather than the
 one just left.
 
 Four counters — held, redelivered, expired, dropped — are exposed for tests to
-assert on the mechanism rather than only the outcome. They are not yet reachable
-from a client; that arrives with defect 5.
+assert on the mechanism rather than only the outcome. Clients read them from
+`GetEconetStatus` (`HandshakeStatus.frames_held`, `frames_redelivered`,
+`frames_expired`, `frames_dropped`).
 
 **Tests.** Six cases tagged `[holding]` in `tests/test_four_way_handshake.cpp`
 covering the overtaking reply, a third station's traffic, a broadcast, TTL
@@ -322,7 +329,7 @@ The PSE interaction needed no compromise in the end. Two things resolved it:
 
 The full 2775-test suite is green, as is the interop suite.
 
-**Transport half: still open, and now precisely specified.** The ADLC can
+**Transport half: first attempt on the fixed ADLC.** The ADLC can
 deliver the interrupt, but that alone is not sufficient -- established by
 experiment rather than argument: re-applying the reachability pre-flight on top
 of the fixed ADLC still leaves the guest silent.
@@ -390,11 +397,6 @@ deadlocking the state machine. That prop is no longer needed now the holding
 queue exists, which makes this a better time to revisit it than before — but
 not without the ROM work first.
 
-**Test.** `integration_tests/pieb-aun/tests/test_unreachable_station.py`,
-`xfail(strict=True)`. It addresses a station neither the bridge nor our peer
-table knows, and requires that the guest be told *something*. It will flip to
-an unexpected pass the moment this is genuinely fixed.
-
 ## 3. Disconnecting the AUN cable does not disconnect it
 
 **Status:** FIXED. **Severity:** medium.
@@ -448,10 +450,10 @@ on a datagram socket it means the send buffer is full, so the frame is dropped
 rather than delayed, which is the correct trade for the emulation thread —
 Econet is a lossy medium and the guest's protocol copes with a lost frame.
 
-`AunBackend::send_would_block_count()` exposes the count. It is currently
-diagnostic only; once defect 2 gives us a failure channel, a would-block send
-becomes something we can report to the guest honestly instead of counting
-quietly.
+`AunBackend::send_would_block_count()` exposes the count. It is diagnostic
+only: defect 2's fix gave transports a failure channel (a `Nack` delivered to
+the handshake), but a would-block send does not use it, so it is still counted
+quietly rather than reported to the guest.
 
 ## 5. `SubscribeEconetEvents` is unimplemented
 
@@ -581,32 +583,6 @@ That relocates the question. It is not that the reply is lost, nor that the
 holding queue failed: `redelivered=2` shows reordered frames being caught and
 re-offered correctly. It is that the guest declines to answer.
 
-### Contributing defect, fixed: abandoning a transaction discarded held frames
-
-`reset_handshake()` cleared the holding queue. Held frames are by definition
-*not* part of the transaction in flight -- that is the whole reason they are
-held -- so a watchdog timeout, a reported transmit failure, or an unexpected
-transmission would throw away network traffic that had arrived and was simply
-waiting for a stage that could accept it. With six watchdog resets in this
-scenario, that was destroying frames steadily.
-
-Fixed: `reset_handshake()` now leaves held frames alone, and only the public
-`reset()` -- a machine reset, where forgetting everything is the point --
-discards them. This was self-inflicted, introduced with the defect 1 fix and
-invisible until reordering made watchdog resets common.
-
-It improved matters (`redelivered` went from 1 to 2) but did not resolve the
-stall, so it was a contributing defect rather than the cause.
-
-### Secondary finding: stale acks occupy the holding queue
-
-An `Ack` for a transaction that has already completed is accepted by no stage,
-so it sits in the holding queue until its TTL expires a second later
-(`expired=1` in every run). Harmless today, but it means the queue carries
-frames that can never be delivered, and under heavier reordering that is
-capacity spent on nothing. An `Ack` arriving with no transaction outstanding
-could be recognised as stale and discarded immediately rather than held.
-
 ### Root cause, confirmed by the AUN handle
 
 The handle settled it. A peer retransmitting an unacknowledged frame reuses
@@ -705,11 +681,12 @@ could be recognised as stale and discarded on arrival. Left alone for now,
 since inventing more special cases in the receive path is exactly how this area
 became hard to reason about.
 
-**Tests.** Five cases tagged `[duplicate]` in `tests/test_four_way_handshake.cpp`
+**Tests.** Six cases tagged `[duplicate]` in `tests/test_four_way_handshake.cpp`
 (acknowledge a retransmission, do not confuse a fresh transaction carrying the
-same bytes, drop one arriving mid-transaction, bound the memory, and deliver
-two senders that reuse one handle while still suppressing a true per-sender
-retransmission), two under
+same bytes, drop one arriving mid-transaction, do not drop a different
+sender's frame mid-transaction, bound the memory, and deliver two senders that
+reuse one handle while still suppressing a true per-sender retransmission),
+two under
 `[holding]` for the reset behaviour, and
 `integration_tests/pieb-aun/tests/test_reordered_reply.py` against a real
 bridge with acks deliberately reordered.
