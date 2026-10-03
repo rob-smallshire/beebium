@@ -188,9 +188,26 @@ The transport (AUN) raises a claim announcement at the range's lowest number and
 
 **Implementation rule — shutting down a DNS-SD event thread (`DNSServiceRef` lifetime).** The Bonjour advertiser and browser each run a background thread that drives `DNSServiceProcessResult` on a `DNSServiceRef`, waiting in `select()` on `DNSServiceRefSockFD` with a short timeout and a `running_` flag. A `DNSServiceRef` must **never** be passed to `DNSServiceRefDeallocate` while another thread is inside a DNS-SD call on it: dnssd forbids it, and on recent macOS (26 Tahoe) libdispatch turns the violation into an immediate process abort — `EXC_BREAKPOINT` with `"API MISUSE: Resurrection of an object"` — whereas macOS 14 tolerated the same race. So `stop()` always **clears `running_`, joins the event thread, and only then calls `DNSServiceRefDeallocate`** (`BonjourAdvertiser.cpp`, `BonjourBrowser.cpp`). The select-with-timeout loop makes the join prompt. This matters because `start()` restarts by calling `stop()`, so every re-announce — notably the AUN re-publish on a runtime station change (see "Changing the station number at runtime" above) — exercises this teardown on a running advertiser. The Avahi provider gets the same guarantee for free (`avahi_threaded_poll_stop` joins its poll thread before any object it uses is freed); the Windows native provider has no such owned thread (teardown waits on completion callbacks instead). Regression cover: the `[advertiser][stress]` and `[browser][stress]` cases hammer the restart path and are clean under TSan (they abort under TSan with the old deallocate-before-join ordering) — see issue #155.
 
+### Discovery mode (`--aun discovery=`, issue #158)
+
+By default the AUN transport both **announces** itself on `_aun._udp` and **browses** for peers. `--aun discovery=<mode>` (or the `discovery` key in a preset's `econet.transport.parameters`) narrows that, for a LAN with stations you do not want adopted, for a deterministic scripted setup using only `map=`/the map file, or for running unrelated Beebium networks on one LAN:
+
+| mode | announce | browse | effect |
+|---|---|---|---|
+| `on` (default) | yes | yes | today's behaviour |
+| `announce` | yes | no | publish our record; adopt nothing from the network |
+| `browse` | no | yes | adopt discovered peers; publish nothing |
+| `off` | no | no | neither; only `map=` / the map file / `AddPeer` populate the table |
+
+Consequences, all following from "do we browse?":
+- **Collision reporting and parked adoption need us to browse**, so they are active only in `on` and `browse`; in `announce` and `off` an own-number clash is silent (we never see the claimant).
+- **Automatic station selection** (`--station auto`, #67/#161): with `off` it uses only the map file, launch `map=` entries and the per-host hint, with no claim and no observation delay (it resolves immediately); `announce` behaves as `off` for the in-use set (we cannot see others) but still records the hint and publishes the chosen number afterward; `browse` observes but does not claim, so a **same-instant race is not arbitrated** (two browse-only clients launched together can pick the same number, which then surfaces as an ordinary collision).
+- The `map-file=` handling and the map-file reload poll are independent of the mode.
+- The sidebar (`AunUi`) shows the mode on one line when it is not `on`; `AunService.GetStatus` reports it in `discovery_mode` (served over ExtensionRpc; `aun.proto` is **not** part of the fingerprinted service protocol, so the protocol fingerprint is unchanged).
+- An invalid value is a clear launch error naming the four choices.
+
 **Future improvements:**
 
-- An optional `--aun no-discovery` switch (or `BEEBIUM_AUN_DISCOVERY=off`) for environments where the operator wants to opt out of mDNS entirely (corporate networks, paranoid users) without disabling the AUN transport.
 - A future DSCP (Discovery Service Coordination Protocol, name TBD) layer on top of mDNS could let peers negotiate richer capability information — e.g. supported AUN extensions, machine model, fileserver hosting status — without requiring every consumer to talk gRPC. mDNS shipped first because it's independently useful; DSCP is the natural next step if richer per-peer metadata is wanted.
 - Bridge-as-bridge announcements via a separate `_acorn-bridge._udp` service type, once Beebium grows a machine type with two ADLCs (the Acorn Econet Bridge). This is reserved but not implemented; only `_aun._udp` is published today.
 

@@ -394,3 +394,16 @@ def test_add_map_peer_in_one_instance_updates_a_second_instances_sidebar(
             )
         finally:
             stream.close()
+
+
+def test_discovery_mode_reported_in_status(
+    mos_filepath: Path, server_installation: ServerInstallation
+) -> None:
+    # #158: AunService.GetStatus reports the discovery mode. `off` neither
+    # announces nor browses, so this touches no network.
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        extra_args=["--aun", "net=1:discovery=off"],
+    ) as bbc:
+        assert bbc.transport[Aun].status.discovery_mode == "off"

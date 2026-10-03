@@ -116,6 +116,7 @@ class AunGetStatusResponse(_message.Message):
     MAP_FILE_PATH_FIELD_NUMBER: _builtins.int
     MAP_FILE_ENTRY_COUNT_FIELD_NUMBER: _builtins.int
     MAP_FILE_ERROR_FIELD_NUMBER: _builtins.int
+    DISCOVERY_MODE_FIELD_NUMBER: _builtins.int
     connected: _builtins.bool
     """True if the AUN UDP socket is bound and the cable is connected."""
     local_port: _builtins.int
@@ -134,6 +135,11 @@ class AunGetStatusResponse(_message.Message):
     """The last map-file load error, or empty when the last load succeeded (or
     the file is absent, which is not an error).
     """
+    discovery_mode: _builtins.str
+    """The mDNS discovery mode (issue #158): "on", "announce", "browse" or
+    "off". A frontend shows it when it is not "on". (aun.proto is served over
+    ExtensionRpc and is NOT part of the fingerprinted service protocol.)
+    """
     def __init__(
         self,
         *,
@@ -143,10 +149,11 @@ class AunGetStatusResponse(_message.Message):
         map_file_path: _builtins.str = ...,
         map_file_entry_count: _builtins.int = ...,
         map_file_error: _builtins.str = ...,
+        discovery_mode: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["connected", b"connected", "local_port", b"local_port", "map_file_entry_count", b"map_file_entry_count", "map_file_error", b"map_file_error", "map_file_path", b"map_file_path", "peer_count", b"peer_count"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["connected", b"connected", "discovery_mode", b"discovery_mode", "local_port", b"local_port", "map_file_entry_count", b"map_file_entry_count", "map_file_error", b"map_file_error", "map_file_path", b"map_file_path", "peer_count", b"peer_count"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

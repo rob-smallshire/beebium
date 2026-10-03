@@ -64,6 +64,8 @@ class AunStatus:
     map_file_path: str = ""
     map_file_entry_count: int = 0
     map_file_error: str = ""
+    # The mDNS discovery mode: "on", "announce", "browse" or "off" (#158).
+    discovery_mode: str = "on"
 
 
 @dataclass(frozen=True)
@@ -148,6 +150,7 @@ class Aun(EconetTransportAdapter):
             map_file_path=response.map_file_path,
             map_file_entry_count=response.map_file_entry_count,
             map_file_error=response.map_file_error,
+            discovery_mode=response.discovery_mode or "on",
         )
 
     @property

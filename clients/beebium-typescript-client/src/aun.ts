@@ -53,6 +53,8 @@ export interface AunStatus {
     mapFileEntryCount: number;
     /** The last map-file load error, empty on success or an absent file. */
     mapFileError: string;
+    /** The mDNS discovery mode: "on", "announce", "browse" or "off" (#158). */
+    discoveryMode: string;
 }
 
 /**
@@ -168,6 +170,7 @@ export class Aun {
             mapFilePath: response.mapFilePath,
             mapFileEntryCount: response.mapFileEntryCount,
             mapFileError: response.mapFileError,
+            discoveryMode: response.discoveryMode || "on",
         };
     }
 

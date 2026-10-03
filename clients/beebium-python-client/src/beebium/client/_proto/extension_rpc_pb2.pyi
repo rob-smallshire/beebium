@@ -59,9 +59,12 @@ class InvokeRequest(_message.Message):
     PAYLOAD_FIELD_NUMBER: _builtins.int
     METADATA_FIELD_NUMBER: _builtins.int
     extension_id: _builtins.str
-    """Target extension instance id. May be empty when exactly one loaded
-    extension offers `service` (the common case today), in which case the
-    core routes by service name.
+    """Target instance id: a peripheral extension's id (from
+    PeripheralExtensionService) or an Econet transport's id (from
+    EconetTransportService). May be empty when exactly one loaded instance
+    offers `service`, in which case the core routes by service name; when
+    more than one does, an empty id is FAILED_PRECONDITION and the status
+    message lists the candidate ids.
     """
     service: _builtins.str
     """Logical service within the extension, e.g. "RpcSerial"."""
