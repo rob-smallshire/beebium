@@ -28,6 +28,8 @@
 #include <thread>
 #include <chrono>
 #include <fstream>
+#include <functional>
+#include <string>
 #include <vector>
 
 namespace {
@@ -89,6 +91,117 @@ private:
     std::unique_ptr<beebium::VideoService::Stub> stub_;
 };
 
+// Emulated cycles per second (the 6502's 2 MHz).
+constexpr uint64_t kCyclesPerSecond = 2'000'000;
+
+// The cycles in one step of a running machine: about half a field.
+constexpr uint64_t kStepCycles = 20000;
+
+// How long a machine runs, in emulated time, before a test waiting on it gives
+// up. Generous: a test meets its condition long before, on any host, because a
+// slow host slows the machine and the renderer together.
+constexpr uint64_t kEmulatedBudgetCycles = 10 * kCyclesPerSecond;
+
+// How long the server's render thread may take to consume one step's batches
+// before it is judged stalled. Only a render thread that has stopped reaches
+// it; a slow one merely slows the machine paced on it.
+constexpr auto kRenderStallBackstop = std::chrono::seconds(120);
+
+// Wait until the server's render thread has consumed every batch the machine
+// has produced. Pacing the machine on this rather than on a sleep means it
+// never outruns the renderer however loaded the host is: a batch dropped from a
+// full queue takes the sync flags that end a frame with it. False if the
+// backstop passes first.
+bool wait_for_renderer(beebium::ModelB& machine) {
+    const auto& queue = machine.state().memory.video_output.value();
+    const auto backstop = std::chrono::steady_clock::now() + kRenderStallBackstop;
+    while (!queue.empty()) {
+        if (std::chrono::steady_clock::now() >= backstop) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    return true;
+}
+
+// Runs the fixture's machine on its own thread, a step at a time, each step
+// paced on the server's render thread consuming it, until it is stopped, its
+// emulated budget is spent, or the render thread stalls. `on_finish` runs when
+// it stops of its own accord, so a test blocked on a stream can be released.
+class RunningMachine {
+public:
+    explicit RunningMachine(VideoTestFixture& fixture,
+                            std::function<void()> on_finish = {},
+                            uint64_t budget_cycles = kEmulatedBudgetCycles)
+        : fixture_(fixture),
+          on_finish_(std::move(on_finish)),
+          budget_cycles_(budget_cycles),
+          thread_([this]() { run(); }) {}
+
+    ~RunningMachine() { stop(); }
+
+    // Stop the machine. Afterwards its cycle count may be read directly.
+    void stop() {
+        running_ = false;
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+
+    // The machine's cycle count after its latest step.
+    uint64_t cycles() const { return cycles_.load(); }
+
+    // Why the machine stopped of its own accord, or empty if it did not.
+    std::string finish_reason() const {
+        switch (finish_.load()) {
+            case Finish::BudgetSpent:
+                return "the machine ran its budget of "
+                       + std::to_string(budget_cycles_ / kCyclesPerSecond)
+                       + " emulated seconds";
+            case Finish::RenderStalled:
+                return "the server's render thread consumed nothing for "
+                       + std::to_string(kRenderStallBackstop.count()) + " s";
+            case Finish::None:
+                break;
+        }
+        return {};
+    }
+
+private:
+    enum class Finish { None, BudgetSpent, RenderStalled };
+
+    void run() {
+        const uint64_t start = fixture_.machine().cycle_count();
+        while (running_) {
+            fixture_.run_cycles(kStepCycles);
+            cycles_ = fixture_.machine().cycle_count();
+            if (!wait_for_renderer(fixture_.machine())) {
+                finish(Finish::RenderStalled);
+                return;
+            }
+            if (cycles_ - start >= budget_cycles_) {
+                finish(Finish::BudgetSpent);
+                return;
+            }
+        }
+    }
+
+    void finish(Finish why) {
+        finish_ = why;
+        if (on_finish_) {
+            on_finish_();
+        }
+    }
+
+    VideoTestFixture& fixture_;
+    std::function<void()> on_finish_;
+    const uint64_t budget_cycles_;
+    std::atomic<bool> running_{true};
+    std::atomic<uint64_t> cycles_{0};
+    std::atomic<Finish> finish_{Finish::None};
+    std::thread thread_;  // last, so it starts once the members above exist
+};
+
 } // anonymous namespace
 
 TEST_CASE("VideoService GetConfig returns video dimensions", "[grpc][video]") {
@@ -115,23 +228,17 @@ TEST_CASE("VideoService SubscribeFrames streams frames", "[grpc][video]") {
     auto reader = fixture.stub().SubscribeFrames(&context, request);
 
     // Run emulation in a separate thread to generate frames
-    std::atomic<bool> running{true};
-    std::thread emu_thread([&]() {
-        while (running) {
-            fixture.run_cycles(20000);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
+    RunningMachine running(fixture, [&]() { context.TryCancel(); });
 
     // Try to receive at least one frame
     beebium::Frame frame;
     bool received = reader->Read(&frame);
 
     // Stop emulation
-    running = false;
+    running.stop();
     context.TryCancel();
-    emu_thread.join();
 
+    INFO(running.finish_reason());
     REQUIRE(received);
     CHECK(frame.width() == 736);
     CHECK(frame.height() == 576);
@@ -147,13 +254,7 @@ TEST_CASE("VideoService frame version increments on VSYNC", "[grpc][video]") {
     auto reader = fixture.stub().SubscribeFrames(&context, request);
 
     // Run emulation to generate multiple frames
-    std::atomic<bool> running{true};
-    std::thread emu_thread([&]() {
-        while (running) {
-            fixture.run_cycles(20000);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
+    RunningMachine running(fixture, [&]() { context.TryCancel(); });
 
     // Receive two frames and check version increments
     beebium::Frame frame1, frame2;
@@ -161,10 +262,10 @@ TEST_CASE("VideoService frame version increments on VSYNC", "[grpc][video]") {
     bool received2 = reader->Read(&frame2);
 
     // Stop emulation
-    running = false;
+    running.stop();
     context.TryCancel();
-    emu_thread.join();
 
+    INFO(running.finish_reason());
     REQUIRE(received1);
     REQUIRE(received2);
     CHECK(frame2.frame_number() > frame1.frame_number());
@@ -173,40 +274,42 @@ TEST_CASE("VideoService frame version increments on VSYNC", "[grpc][video]") {
 TEST_CASE("VideoService frames carry the cycle at which they completed", "[grpc][video][cycle]") {
     VideoTestFixture fixture;
 
+    // The first frame completes at cycle 0, on the vsync edge the CRTC raises
+    // at power-on, and a stamp of 0 also means "unknown". Run past it before
+    // subscribing, so the stream cannot start with that one frame.
+    fixture.run_cycles(kStepCycles);
+    REQUIRE(wait_for_renderer(fixture.machine()));
+
     grpc::ClientContext context;
     beebium::SubscribeFramesRequest request;
     auto reader = fixture.stub().SubscribeFrames(&context, request);
 
-    std::atomic<bool> running{true};
-    std::atomic<uint64_t> cycles_run{0};
-    std::thread emu_thread([&]() {
-        while (running) {
-            fixture.run_cycles(20000);
-            cycles_run = fixture.machine().cycle_count();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
+    RunningMachine running(fixture, [&]() { context.TryCancel(); });
 
     std::vector<beebium::Frame> frames(4);
     bool received = true;
     for (auto& frame : frames) {
         received = received && reader->Read(&frame);
     }
-    const uint64_t cycles_after = cycles_run;
 
-    running = false;
+    running.stop();
     context.TryCancel();
-    emu_thread.join();
+    // Stopped, so this is the last cycle the machine reached: no frame can
+    // have completed after it.
+    const uint64_t final_cycle = fixture.machine().cycle_count();
 
+    INFO(running.finish_reason());
     REQUIRE(received);
     for (size_t i = 0; i < frames.size(); ++i) {
-        INFO("frame " << i);
+        INFO("frame " << i << ": number " << frames[i].frame_number()
+             << ", cycle " << frames[i].cycle_count());
         CHECK(frames[i].cycle_count() != 0);
         if (i > 0) {
+            CHECK(frames[i].frame_number() > frames[i - 1].frame_number());
             CHECK(frames[i].cycle_count() > frames[i - 1].cycle_count());
         }
     }
-    CHECK(frames.back().cycle_count() <= cycles_after + 20000);
+    CHECK(frames.back().cycle_count() <= final_cycle);
 }
 
 // Count bright pixels in a frame (BGRA32 format)
@@ -353,9 +456,17 @@ TEST_CASE("VideoService streams cursor blink pattern", "[grpc][video][cursor]") 
     std::vector<size_t> brightness_values;
     std::mutex brightness_mutex;
 
+    std::atomic<bool> render_stalled{false};
     std::thread emu_thread([&]() {
         while (running) {
             machine.run(80000);  // One frame worth
+            // Let the renderer consume the frame before the next, so none of
+            // its batches is dropped however loaded the host is.
+            if (!wait_for_renderer(machine)) {
+                render_stalled = true;
+                context.TryCancel();
+                return;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     });
@@ -377,6 +488,7 @@ TEST_CASE("VideoService streams cursor blink pattern", "[grpc][video][cursor]") 
     context.TryCancel();
     emu_thread.join();
 
+    REQUIRE_FALSE(render_stalled);
     REQUIRE(brightness_values.size() >= 50);
 
     // Analyze brightness for periodic pattern (cursor blink)
@@ -402,56 +514,28 @@ TEST_CASE("VideoService streams cursor blink pattern", "[grpc][video][cursor]") 
 
 namespace {
 
-// Run the machine until frames have been rendered and the bands recorded.
+// Wait, while the machine runs, until the display has produced bands to read
+// geometry from. Returns empty when it has, or why it never did.
 //
 // The renderer runs on the server's own thread, pulling batches the emulation
 // thread pushed, so both have to make progress before there is a frame to read
-// geometry from.
-// Runs the machine on its own thread for as long as it is alive.
-//
-// Paced rather than run flat out: the batch queue is bounded, and a producer
-// that gets too far ahead has its batches dropped, taking with them the sync
-// flags that end a frame. Pacing is also what lets the server's render thread
-// keep up, which it must for there to be a completed frame to read at all.
-class RunningMachine {
-public:
-    explicit RunningMachine(VideoTestFixture& fixture)
-        : thread_([this, &fixture]() {
-              while (running_) {
-                  fixture.run_cycles(20000);
-                  std::this_thread::sleep_for(std::chrono::milliseconds(1));
-              }
-          }) {}
-
-    ~RunningMachine() {
-        running_ = false;
-        thread_.join();
-    }
-
-private:
-    std::atomic<bool> running_{true};
-    std::thread thread_;
-};
-
-// Poll until the display has produced something, or give up.
-//
-// A machine that has just been reset has not drawn anything yet, and a poll
-// beats a fixed sleep: it ends as soon as there is something to read rather
-// than always costing the worst case.
-bool wait_for_bands(VideoTestFixture& fixture,
-                    std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
+// geometry from; the running machine is paced on the renderer, and its budget
+// bounds the wait in emulated time.
+std::string wait_for_bands(VideoTestFixture& fixture, const RunningMachine& running) {
+    auto has_bands = [&fixture]() {
         grpc::ClientContext context;
         beebium::GetScreenGeometryRequest request;
         beebium::ScreenGeometry response;
-        if (fixture.stub().GetScreenGeometry(&context, request, &response).ok()
-            && response.bands_size() > 0) {
-            return true;
+        return fixture.stub().GetScreenGeometry(&context, request, &response).ok()
+               && response.bands_size() > 0;
+    };
+    while (!has_bands()) {
+        if (const std::string reason = running.finish_reason(); !reason.empty()) {
+            return has_bands() ? std::string{} : "no bands: " + reason;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    return false;
+    return {};
 }
 
 } // anonymous namespace
@@ -460,7 +544,7 @@ TEST_CASE("VideoService GetScreenGeometry reports a band's character grid",
           "[grpc][video][screen-text]") {
     VideoTestFixture fixture;
     RunningMachine running(fixture);
-    REQUIRE(wait_for_bands(fixture));
+    REQUIRE(wait_for_bands(fixture, running) == std::string{});
 
     grpc::ClientContext context;
     beebium::GetScreenGeometryRequest request;
@@ -486,7 +570,7 @@ TEST_CASE("VideoService GetScreenText reads a MODE 7 boot screen",
           "[grpc][video][screen-text]") {
     VideoTestFixture fixture;
     RunningMachine running(fixture);
-    REQUIRE(wait_for_bands(fixture));
+    REQUIRE(wait_for_bands(fixture, running) == std::string{});
 
     grpc::ClientContext context;
     beebium::GetScreenTextRequest request;
@@ -513,7 +597,7 @@ TEST_CASE("VideoService GetScreenText honours a region",
           "[grpc][video][screen-text]") {
     VideoTestFixture fixture;
     RunningMachine running(fixture);
-    REQUIRE(wait_for_bands(fixture));
+    REQUIRE(wait_for_bands(fixture, running) == std::string{});
 
     grpc::ClientContext context;
     beebium::GetScreenTextRequest request;
@@ -546,24 +630,29 @@ TEST_CASE("VideoService GetScreenText honours a region",
 
 namespace {
 
-// Run the machine, letting the server's render thread keep up, until a
-// predicate holds or time runs out.
+// Run the machine a step at a time, letting the server's render thread consume
+// each step, until a predicate holds. Returns empty when it does, or why it
+// never did: the emulated budget spent, or the render thread stalled.
 //
 // Single-threaded on purpose, unlike RunningMachine above: these tests write to
 // screen memory between steps, and a machine running on its own thread would
 // race with that.
 template <typename Predicate>
-bool pump_until(VideoTestFixture& fixture, Predicate predicate,
-                std::chrono::milliseconds timeout = std::chrono::seconds(15)) {
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-        if (predicate()) {
-            return true;
+std::string pump_until(VideoTestFixture& fixture, Predicate predicate) {
+    const uint64_t start = fixture.machine().cycle_count();
+    while (!predicate()) {
+        if (fixture.machine().cycle_count() - start >= kEmulatedBudgetCycles) {
+            return "not seen within "
+                   + std::to_string(kEmulatedBudgetCycles / kCyclesPerSecond)
+                   + " emulated seconds";
         }
-        fixture.run_cycles(20000);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        fixture.run_cycles(kStepCycles);
+        if (!wait_for_renderer(fixture.machine())) {
+            return "the server's render thread consumed nothing for "
+                   + std::to_string(kRenderStallBackstop.count()) + " s";
+        }
     }
-    return predicate();
+    return {};
 }
 
 grpc::Status read_screen_text(VideoTestFixture& fixture,
@@ -607,7 +696,7 @@ void write_marker(VideoTestFixture& fixture, const std::string& marker) {
 TEST_CASE("VideoService HoldScreen returns the grid with the hold",
           "[grpc][video][screen-hold]") {
     VideoTestFixture fixture;
-    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }) == std::string{});
 
     beebium::ScreenHold hold;
     auto status = hold_screen(fixture, hold);
@@ -629,7 +718,7 @@ TEST_CASE("VideoService a held screen does not change as the machine draws on",
     VideoTestFixture fixture;
     REQUIRE(pump_until(fixture, [&] {
         return live_text(fixture).find("BASIC") != std::string::npos;
-    }));
+    }) == std::string{});
 
     beebium::ScreenHold hold;
     REQUIRE(hold_screen(fixture, hold).ok());
@@ -643,7 +732,7 @@ TEST_CASE("VideoService a held screen does not change as the machine draws on",
     write_marker(fixture, "ZZZZ");
     REQUIRE(pump_until(fixture, [&] {
         return live_text(fixture).find("ZZZZ") != std::string::npos;
-    }));
+    }) == std::string{});
 
     beebium::ScreenText live;
     REQUIRE(read_screen_text(fixture, live).ok());
@@ -664,7 +753,7 @@ TEST_CASE("VideoService a held screen does not change as the machine draws on",
 TEST_CASE("VideoService GetScreenGeometry reads a held screen",
           "[grpc][video][screen-hold]") {
     VideoTestFixture fixture;
-    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }) == std::string{});
 
     beebium::ScreenHold hold;
     REQUIRE(hold_screen(fixture, hold).ok());
@@ -685,7 +774,7 @@ TEST_CASE("VideoService GetScreenGeometry reads a held screen",
 
 TEST_CASE("VideoService a released hold is gone", "[grpc][video][screen-hold]") {
     VideoTestFixture fixture;
-    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }) == std::string{});
 
     beebium::ScreenHold hold;
     REQUIRE(hold_screen(fixture, hold).ok());
@@ -708,7 +797,7 @@ TEST_CASE("VideoService an unknown hold is refused, not read live",
     // Falling back to the live screen would be the very confusion holding
     // exists to prevent, and it would be silent.
     VideoTestFixture fixture;
-    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }) == std::string{});
 
     const uint64_t never_held = 0xDEADBEEF;
 
@@ -729,7 +818,7 @@ TEST_CASE("VideoService HoldScreen can return the still it captured",
     // So a client can display exactly the frame its reads will be made
     // against, rather than whichever frame it last happened to draw.
     VideoTestFixture fixture;
-    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }));
+    REQUIRE(pump_until(fixture, [&] { return !live_text(fixture).empty(); }) == std::string{});
 
     beebium::ScreenHold hold;
     REQUIRE(hold_screen(fixture, hold, /*include_frame=*/true).ok());
@@ -751,38 +840,37 @@ TEST_CASE("VideoService HoldScreen can return the still it captured",
 TEST_CASE("VideoService CaptureFrame returns a frame completed at or after a cycle",
           "[grpc][video][cycle]") {
     VideoTestFixture fixture;
-
-    std::atomic<bool> running{true};
-    std::atomic<uint64_t> cycles_run{0};
-    std::thread emu_thread([&]() {
-        while (running) {
-            fixture.run_cycles(20000);
-            cycles_run = fixture.machine().cycle_count();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
+    RunningMachine running(fixture);
 
     // Ask repeatedly for frames completed after a cycle the machine has not
-    // reached yet: each must be stamped at or after it, never before.
-    bool all_ok = true;
+    // reached yet: each must be stamped at or after it, never before. The
+    // timeout is the most the server allows, as a backstop only: the machine
+    // reaches each cycle in a few steps, however slowly the host runs it.
+    std::vector<std::string> failures;
     std::vector<uint64_t> asked, stamped;
     for (int i = 0; i < 5; ++i) {
-        const uint64_t after = cycles_run.load() + 50000;
+        const uint64_t after = running.cycles() + 50000;
         grpc::ClientContext ctx;
         beebium::CaptureFrameRequest req;
         req.set_after_cycle(after);
-        req.set_timeout_ms(5000);
+        req.set_timeout_ms(60000);
         beebium::Frame frame;
         auto status = fixture.stub().CaptureFrame(&ctx, req, &frame);
-        all_ok = all_ok && status.ok();
+        if (!status.ok()) {
+            failures.push_back(status.error_message() + " (machine at cycle "
+                               + std::to_string(running.cycles()) + ")");
+        }
         asked.push_back(after);
         stamped.push_back(frame.cycle_count());
     }
 
-    running = false;
-    emu_thread.join();
+    running.stop();
 
-    REQUIRE(all_ok);
+    INFO(running.finish_reason());
+    for (const auto& failure : failures) {
+        INFO(failure);
+    }
+    REQUIRE(failures.empty());
     for (size_t i = 0; i < asked.size(); ++i) {
         INFO("capture " << i);
         CHECK(stamped[i] >= asked[i]);
@@ -816,8 +904,8 @@ TEST_CASE("VideoService CaptureFrame with after_cycle 0 returns the current fram
           "[grpc][video][cycle]") {
     VideoTestFixture fixture;
     fixture.run_cycles(200000);
-    // Give the render thread time to consume the batches.
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // Let the render thread consume the batches, so there is a frame.
+    REQUIRE(wait_for_renderer(fixture.machine()));
 
     grpc::ClientContext ctx;
     beebium::CaptureFrameRequest req;
