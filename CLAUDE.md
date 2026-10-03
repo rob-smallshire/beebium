@@ -29,7 +29,7 @@ The emulator aims for cycle-accurate behaviour where it matters (6502, VIA timer
 ### Process Model
 
 ```
-beebium-model-b (or -model-b-plus, -model-b-plus-128k, -model-b-romram)
+beebium-model-b (or another variant: -model-b-plus, -model-b-integra-b, ...)
     |
     +-- gRPC Services (VideoService, AudioService, KeyboardService, etc.)
     |
@@ -40,10 +40,10 @@ beebium-model-b (or -model-b-plus, -model-b-plus-128k, -model-b-romram)
 
 ### Core Design
 
-- **Headless emulator servers**: Each machine variant is a separate executable (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-plus-128k`, `beebium-model-b-romram`)
+- **Headless emulator servers**: Each machine variant is a separate executable (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-plus-128k`, `beebium-model-b-romram`, `beebium-model-b-atpl-sidewise`, `beebium-model-b-watford-rom-ram`, `beebium-model-b-integra-b`)
 - **gRPC for control**: All interaction via well-defined protocol buffers
 - **Lock-free video/audio**: `OutputQueue` using moodycamel::ReaderWriterQueue for pixel streaming
-- **Policy-based machines**: `Machine<Hardware>` template with `ModelBHardware`, `ModelBPlusHardware`, `ModelBPlus128KHardware`, `ModelBRomRamBoardHardware`
+- **Policy-based machines**: `Machine<Hardware>` template with one hardware policy per variant (`ModelBHardware`, `ModelBPlusHardware`, `ModelBIntegraBHardware`, ...; see Hardware Policies below)
 
 ### gRPC Services
 
@@ -61,10 +61,11 @@ beebium-model-b (or -model-b-plus, -model-b-plus-128k, -model-b-romram)
 | DeviceInspection | debugger.proto | Reads device state safely under quiesce |
 | TubeService | tube.proto | Tube / second-processor control |
 | SerialService | serial.proto | MC6850 ACIA / serial-ULA host-serial bridge |
-| EconetService | econet.proto | Econet/AUN status, WatchEconetStatus |
+| EconetService | econet.proto | Econet enable/disable, station number, status and events (WatchEconetStatus) |
 | EconetTransportService | econet_transport.proto | Econet transport (AUN/Piconet) configuration and discovery |
 | PeripheralExtensionService | peripheral_extension.proto | Peripheral/extension discovery and configuration |
-| ExtensionRpc | extension_rpc.proto | Shared channel for plugin-hosted typed RPCs and UI Dispatch |
+| ExtensionUiService | extension_ui.proto | Extension-supplied sidebar views (SubscribeView) and user actions (Dispatch) |
+| ExtensionRpc | extension_rpc.proto | Shared channel for plugin-hosted typed RPCs, e.g. AunService (aun.proto), routed to a transport by instance id |
 
 ### Video Pipeline
 
@@ -123,11 +124,12 @@ beebium/
 │   │   ├── proto/*.proto
 │   │   ├── include/beebium/service/
 │   │   └── src/
-│   ├── server/                  # Server executables
+│   ├── server/                  # Server executables, one main per variant
 │   │   ├── main_model_b.cpp
 │   │   ├── main_model_b_plus.cpp
-│   │   └── main_model_b_romram.cpp
-│   └── discovery/               # Service advertisement (Bonjour/Avahi/mDNS)
+│   │   └── main_model_b_*.cpp
+│   ├── discovery/               # Service advertisement and browse (Bonjour/Avahi/mDNS)
+│   └── extensions/              # Plugins: Econet transports (aun, piconet), SCSI, serial, coprocessors
 ├── clients/
 │   ├── macos/                   # Swift/Metal frontend
 │   │   └── Beebium/
@@ -180,7 +182,10 @@ ctest --output-on-failure
 - `beebium-model-b`: BBC Model B server
 - `beebium-model-b-plus`: BBC Model B+ server (64K, integral BASIC/DFS)
 - `beebium-model-b-plus-128k`: BBC Model B+ 128K server (adds four 16K sideways RAM banks W/X/Y/Z per AN 030)
-- `beebium-model-b-romram`: Model B with ROM/RAM board
+- `beebium-model-b-romram`: Model B with a notional 16-slot ROM/RAM board
+- `beebium-model-b-atpl-sidewise`: Model B with the ATPL Sidewise ROM/RAM board
+- `beebium-model-b-watford-rom-ram`: Model B with the Watford Electronics ROM/RAM board
+- `beebium-model-b-integra-b`: Model B with the Computech Integra-B board (IBOS)
 - `beebium-servers`: All server executables
 
 ## Key Components
@@ -203,7 +208,10 @@ class Machine {
 - `ModelBHardware`: Standard BBC Model B (32K RAM, 16K sideways ROM)
 - `ModelBPlusHardware`: Model B+ (64K RAM, shadow modes, integral BASIC/DFS)
 - `ModelBPlus128KHardware`: B+ 128K (64K main RAM + 64K sideways RAM in four banks W/X/Y/Z)
-- `ModelBRomRamBoardHardware`: Model B with sideways RAM
+- `ModelBRomRamBoardHardware`: Model B with a notional 16-slot ROM/RAM board
+- `ModelBAtplSidewiseHardware`: Model B with the ATPL Sidewise board (slot 15 RAM-or-ROM, write-protect)
+- `ModelBWatfordRomRamHardware`: Model B with the Watford Electronics ROM/RAM board
+- `ModelBIntegraBHardware`: Model B with the Computech Integra-B board (shadow/private RAM, real-time clock)
 
 ### VIA Implementation (`Via6522.hpp`)
 
@@ -297,7 +305,7 @@ Complete transcripts of BBC Micro documentation:
 ### Fully Implemented
 
 - 6502 CPU (NMOS/CMOS, cycle-accurate)
-- Four machine variants (Model B, B+, B+ 128K, B with ROM/RAM board)
+- Seven machine variants (Model B, B+, B+ 128K, and Model B with the notional ROM/RAM, ATPL Sidewise, Watford ROM/RAM and Integra-B boards)
 - 6522 VIA (System and User) with full timer and interrupt support
 - 6845 CRTC with display timing
 - Video ULA with all display modes (0-7)
@@ -305,13 +313,13 @@ Complete transcripts of BBC Micro documentation:
 - WD1770 disc controller with SSD/DSD support
 - Keyboard matrix with type-ahead
 - Tube coprocessors as plugins: Acorn 6502 Second Processor (3 MHz) and 65C102 Co-processor (4 MHz), single-threaded host-time-driven contract, family-agnostic debugger
-- gRPC service layer (16 services)
+- gRPC service layer (17 services)
 - macOS frontend with Metal rendering
 - Service advertisement AND browse/discovery over mDNS on all platforms: macOS (Bonjour), Linux (Avahi, dlopen'd), Windows (dual-provider: Apple Bonjour dnssd.dll when installed, else native DnsService*, selected at runtime). Full bidirectional AUN peer discovery everywhere
+- Econet: MC6854 ADLC with the four-way handshake, and two transports as plugins: AUN (UDP; mDNS peer discovery, the per-user aun-map.json map file, `--station auto`) and Piconet (a USB bridge to a real Econet network). See `docs/networking.md`
 - Python test client
 
 ### Future Work
 
-- Econet/AUN networking
 - Additional platform frontends (Windows, Linux)
 - CRT shader pipeline
