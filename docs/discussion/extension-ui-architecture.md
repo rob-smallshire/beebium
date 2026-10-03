@@ -4,13 +4,23 @@ A server-driven, message-passing approach to giving extensions
 symmetric reach into every Beebium frontend (macOS / Windows / Linux /
 web / Python diagnostics) without per-frontend code per extension.
 
-Status: Implemented on the `extension-ui-framework` branch (2026-04-20).
-The framework spine, Piconet pilot, AUN migration, Python client, and
-macOS Swift client all landed; manual end-to-end verification on macOS
-confirmed the round-trip behaviour for both transports. See
-[Implementation Notes](#implementation-notes) at the bottom of this
-document for what got built, what was deferred, and where the design
-deviated from the proposal.
+**Status (October 2026): implemented and merged.** The framework spine,
+Piconet pilot, AUN migration, Python client and macOS Swift client landed
+on the `extension-ui-framework` branch (2026-04-20); see
+[Implementation Notes](#implementation-notes) for what was built and where
+it deviated. Since then: the vocabulary has grown to eleven primitives
+(`ModalEditor` and `EditableChoice`, then `EditableList` and
+`FileReference` in #144; see
+[Vocabulary extension](#vocabulary-extension-2026-10-01-editablelist-and-filereference)
+below); views are addressed by an opaque server-assigned `extension_id`
+rather than `extension_name`, and a `Button` dispatch leaves the payload
+oneof unset rather than sending `Empty`; the AUN panel gained map-file
+editing (#142, #144) instead of staying read-only; `WatchEconetStatus`
+replaced the macOS 500 ms status poll; and the AUN `map=` inner separator
+is `@`, not `;`. The Python and TypeScript clients do not yet model
+`EditableList` and `FileReference` (#151). The wire schema below is the
+original sketch; `src/core/extension-api/proto/extension_ui.proto` is
+authoritative.
 
 ---
 
@@ -425,7 +435,7 @@ design and where it deviates. Written 2026-04-20 after the
   transport-agnostic header (Connection state, Econet Station + edit
   popover) stays hardcoded in NetworkModeView since those are
   transport-agnostic concerns.
-- **Python client** — `clients/beebium-python-client/src/beebium/extension_ui.py`
+- **Python client** — `clients/beebium-python-client/src/beebium/client/extension_ui.py`
   with dataclass mirrors of every control type, `subscribe_view`
   iterator, `start_background_subscription` daemon-thread pattern,
   type-dispatched `dispatch(payload=bool|str|int|None)`.
@@ -478,25 +488,25 @@ design and where it deviates. Written 2026-04-20 after the
   the Dispatch path no longer goes through `EconetClient`, so the
   header stayed stale on connection toggles. Added a 500 ms
   `refreshStatus()` poll in `EconetClient` as a workaround. The
-  proper fix — a `WatchEconetStatus` server-streamed RPC — is
-  deferred and tracked separately.
+  proper fix, the server-streamed `WatchEconetStatus` RPC, has since
+  replaced it.
 
 - **AUN map separator `;` requires shell quoting.** The original
   Phase 2 design chose `;` as the inner field separator inside `--aun
   map=net.stn;ip;port` because `:` was already taken for k=v pairs.
   The shell interprets `;` as a command separator unless the argument
-  is quoted. The error message in the AUN parser was sharpened to
-  mention this gotcha; the deeper fix (refactor `is_list` arg-parser
-  to free `,` as the inner separator) is deferred.
+  is quoted. Since resolved: the `is_list` parser keeps repeated tokens
+  as an opaque vector and AUN uses `@` (`map=0.254@127.0.0.1@32768`),
+  which needs no quoting; see `docs/networking.md`.
 
 ### What was deferred
 
 Tracked in project memory; brief summary here.
 
 - **Add Peer / Remove Peer form on the AUN panel.** Designed (TextInput
-  × 3 + Button + per-row Remove) but not built. Future direction is
-  the Dynamic Station Configuration Protocol plus mDNS/Bonjour
-  auto-discovery, not manual peer management.
+  × 3 + Button + per-row Remove) but not built at the time; mDNS
+  discovery came first. Built later as map-file editing on the
+  `EditableList` primitive (#142, #144; see below).
 - **`Toggle.enabled` schema field.** Considered for the no-backend
   state but rejected in favour of suppressing the control entirely.
   Worth revisiting if a future use case needs visible-but-disabled
@@ -505,8 +515,8 @@ Tracked in project memory; brief summary here.
   *detection* works; hot-attach does not. See
   `docs/discussion/piconet-device-discovery.md` for the design.
 - **Server-streamed `WatchEconetStatus`** to replace the macOS
-  client's 500 ms polling workaround. Modelled on
-  `IndicatorService::Subscribe`'s server-side push pattern.
+  client's 500 ms polling workaround. Since built, and the macOS
+  `EconetClient` subscribes to it.
 - **Generic async-update mechanism in the framework.** Each extension
   currently wires its own callback from backend to UI. If two or
   three extensions converge on the same pattern, factor it then.
@@ -524,8 +534,9 @@ produced a panel that was correct and very busy: every affordance had to
 be spelled out in words ("Add peer", "Save to map file", the full file
 path). Two primitives fix that, and both are generic: any extension that
 owns a list of records (peers, subnet rules, mapped discs, serial ports) or
-a file on the server's host wants the same things. They are the eighth
-and ninth primitives, and they are the "stretch that should hurt": each
+a file on the server's host wants the same things. They are the tenth
+and eleventh primitives (after `ModalEditor` and `EditableChoice`), and
+they are the "stretch that should hurt": each
 earns its place by replacing a dozen lower-level controls, not by adding
 one.
 
