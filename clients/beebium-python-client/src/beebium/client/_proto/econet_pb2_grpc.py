@@ -38,10 +38,14 @@ if _version_not_supported:
 
 
 class EconetServiceStub(object):
-    """Econet/AUN networking management service.
+    """Transport-agnostic Econet management service.
 
-    Provides hardware configuration (enable/disable Econet), network status
-    queries (ADLC registers, handshake state), and AUN peer management.
+    Provides hardware configuration (fit/remove the Econet module, station
+    number), status queries (ADLC registers, handshake state, station
+    collisions) and a frame event stream. Transport-specific operations live
+    on the active transport's own service, found via EconetTransportService:
+    AUN peers, the cable plug and the AUN port on AunService
+    (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
     """
 
     def __init__(self, channel):
@@ -83,43 +87,58 @@ class EconetServiceStub(object):
 
 
 class EconetServiceServicer(object):
-    """Econet/AUN networking management service.
+    """Transport-agnostic Econet management service.
 
-    Provides hardware configuration (enable/disable Econet), network status
-    queries (ADLC registers, handshake state), and AUN peer management.
+    Provides hardware configuration (fit/remove the Econet module, station
+    number), status queries (ADLC registers, handshake state, station
+    collisions) and a frame event stream. Transport-specific operations live
+    on the active transport's own service, found via EconetTransportService:
+    AUN peers, the cable plug and the AUN port on AunService
+    (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
     """
 
     def GetEconetStatus(self, request, context):
-        """Query Econet hardware status (enabled, station ID, ADLC state, peers).
+        """Query Econet hardware status (enabled, station ID, ADLC and handshake
+        state, link state, station collisions, diagnostic counters).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def EnableEconet(self, request, context):
-        """Fit Econet hardware: set station ID, optionally bind AUN socket.
+        """Fit Econet hardware with the given station number. Unless no_network is
+        set, the configured transport (--aun / --piconet / a preset) brings up
+        its backend through the transport extension; with no transport
+        configured a bare AUN socket is bound on net 0. Fails if Econet is
+        already fitted, as it is from launch whenever a station number is
+        configured (--station, or a preset).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def DisableEconet(self, request, context):
-        """Remove Econet hardware (disable station, close AUN socket).
+        """Remove Econet hardware: drop the station and the transport's backend
+        (for AUN, close the socket and stop announcing and browsing).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SetStationId(self, request, context):
-        """Set the station ID (takes effect on next machine reset).
+        """Set the station number, as if changing the station links. The guest
+        reads it from &FE18 on its next Break; the transport is told at once
+        (AUN re-announces the new number and re-runs its collision checks).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SubscribeEconetEvents(self, request, context):
-        """Stream Econet events (frame activity, handshake changes, connection state).
-        Reserved for future implementation.
+        """Stream frames as they cross the transport, and link up/down changes.
+        Starts from the moment of subscription (no replay). Fails with
+        FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+        hardware is fitted.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -129,8 +148,9 @@ class EconetServiceServicer(object):
         """Server-pushed status stream. Writes an initial GetEconetStatusResponse
         as soon as the stream is established, then a fresh snapshot whenever
         status visible on EconetService changes (enable/disable, station ID
-        change, or transport backend connection toggle). The stream stays open
-        until the client cancels; use this instead of polling GetEconetStatus.
+        change, transport link up/down, or a change in the station collisions
+        in effect). The stream stays open until the client cancels; use this
+        instead of polling GetEconetStatus.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -178,10 +198,14 @@ def add_EconetServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class EconetService(object):
-    """Econet/AUN networking management service.
+    """Transport-agnostic Econet management service.
 
-    Provides hardware configuration (enable/disable Econet), network status
-    queries (ADLC registers, handshake state), and AUN peer management.
+    Provides hardware configuration (fit/remove the Econet module, station
+    number), status queries (ADLC registers, handshake state, station
+    collisions) and a frame event stream. Transport-specific operations live
+    on the active transport's own service, found via EconetTransportService:
+    AUN peers, the cable plug and the AUN port on AunService
+    (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
     """
 
     @staticmethod

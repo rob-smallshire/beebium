@@ -3,21 +3,21 @@ syntax = "proto3";
 package beebium;
 
 // Transport-agnostic discovery service: tells clients which Econet
-// transport extension is currently active on this server. Lets a
-// client decide whether to use AunService, PiconetService, or some
-// future transport-specific service without having to probe via
-// trial-and-error or read transport-specific fields off other RPCs.
+// transport extension is loaded on this server, and the instance id that
+// addresses it. Lets a client decide whether to use AunService,
+// PiconetService, or some future transport-specific service without having
+// to probe via trial-and-error or read transport-specific fields off other
+// RPCs.
 //
 // Modelled on PeripheralExtensionService.ListExtensions for
 // peripheral extensions; this is the equivalent for econet
 // transports.
 service EconetTransportService {
-    // List all econet transports known to this server, with an "active"
-    // flag indicating which (if any) is currently producing the
-    // NetworkBackend behind EconetSocket. For BBC Micro / Master /
-    // Master Compact machines at most one transport is active; future
-    // multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-    // multiple actives.
+    // List the econet transports loaded on this server, each with an
+    // "active" flag. For BBC Micro / Master / Master Compact machines at
+    // most one transport can be loaded (the server refuses more), and it is
+    // always reported active; future multi-ADLC machine types (e.g. Acorn
+    // Econet Bridge) may have several.
     rpc ListTransports(ListTransportsRequest) returns (ListTransportsResponse);
 
     // Convenience: return the single active transport, or an empty
@@ -29,8 +29,9 @@ service EconetTransportService {
 
 message EconetTransport {
     // Canonical extension name (e.g. "aun", "piconet"). Identifies
-    // both the transport and the gRPC service the client should use
-    // for transport-specific operations:
+    // both the transport and the service the client should use for
+    // transport-specific operations, invoked over ExtensionRpc with `id`
+    // as the extension_id:
     //   "aun"     -> AunService (src/extensions/aun/aun.proto)
     //   "piconet" -> PiconetService (src/extensions/piconet/piconet_service.proto)
     string name = 1;
@@ -38,14 +39,18 @@ message EconetTransport {
     // Human-readable description from the extension manifest.
     string description = 2;
 
-    // True if this transport is the one currently producing the
-    // backend behind EconetSocket. False means the extension is
-    // available but not active (or not loaded at all).
+    // True if this transport is the one the server uses for Econet. Every
+    // loaded transport on a BBC machine is active, including before Econet
+    // hardware is fitted or while its backend is down (port=none, no
+    // Piconet device); use EconetService.GetEconetStatus for the link
+    // state.
     bool active = 3;
 
     // Opaque, stable per-instance id assigned by the server. This is
     // the key clients pass to ExtensionUiService.SubscribeView /
-    // Dispatch to drive the transport's control panel -- the same role
+    // Dispatch to drive the transport's control panel, and the
+    // extension_id of ExtensionRpc.Invoke that routes the transport's own
+    // service (AunService, PiconetService) -- the same role
     // PeripheralExtensionService.ExtensionInfo.id plays for peripherals.
     // Do not assume any relationship to `name`: it is typically a UUID,
     // and multi-instance transports each get a distinct id. Frontends
@@ -63,12 +68,9 @@ message ListTransportsRequest {
 }
 
 message ListTransportsResponse {
-    // Currently this returns only the loaded transport extensions
-    // (one entry per extension passed via --aun / --piconet etc.).
-    // Future expansion could include "available but not loaded"
-    // entries -- transports the server knows about but the user
-    // didn't select. The "active" flag distinguishes the operational
-    // one in either case.
+    // The loaded transport extensions: one entry per transport given via
+    // --aun / --piconet or a preset's econet.transport. Transports the
+    // server knows about but was not asked to load are not listed.
     repeated EconetTransport transports = 1;
 }
 
@@ -77,7 +79,7 @@ message GetActiveTransportRequest {
 }
 
 message GetActiveTransportResponse {
-    // Empty when no transport is active (Econet hardware fitted but
-    // no --aun / --piconet etc. given).
+    // Unset when no transport is loaded (no --aun / --piconet and no
+    // preset transport), whether or not Econet hardware is fitted.
     EconetTransport active = 1;
 }

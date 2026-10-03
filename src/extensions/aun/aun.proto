@@ -5,7 +5,15 @@ package beebium;
 // AUN-specific service. Lives alongside the AunEconetTransportExtension
 // in src/extensions/aun/ and is served via that extension's AunDispatcher
 // over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-// service block). It is reachable only when AUN is the active transport.
+// service block). It is reachable whenever the AUN transport is loaded
+// (--aun, or a preset whose econet.transport is aun), addressed by the
+// instance id EconetTransportService reports; with no AUN transport loaded,
+// ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+// before the AUN socket is up (before EnableEconet, or with port=none): the
+// edits are recorded and applied when the backend comes up.
+//
+// Validation failures are reported in-band (success=false and an error
+// string) with an OK call status; only a malformed request is a non-OK status.
 //
 // EconetService remains the place for transport-agnostic Econet RPCs
 // (status, station ID, enable/disable). Anything that only makes sense
@@ -13,30 +21,47 @@ package beebium;
 // simulation that drives DCD) lives here.
 service AunService {
     // Connect or disconnect the simulated network cable. While
-    // disconnected the ADLC sees DCD high (no carrier).
+    // disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+    // when the socket is not up yet the state is remembered and applied when
+    // it comes up, and the response's error field says so.
     rpc SetConnected(AunSetConnectedRequest) returns (AunSetConnectedResponse);
 
-    // Add an Econet address <-> UDP endpoint peer mapping.
+    // Add or replace this client's (Api) entry mapping an Econet address to a
+    // UDP endpoint. It takes precedence over every other source for that
+    // (net, stn) (see AunPeerSource).
     rpc AddPeer(AunAddPeerRequest) returns (AunAddPeerResponse);
 
-    // Remove a peer mapping by Econet address.
+    // Remove the Api entry AddPeer made for an Econet address. Entries from
+    // other sources are untouched, so a station also named by the launch
+    // config, the map file or mDNS falls back to that entry rather than
+    // disappearing. Always succeeds, including when there was no Api entry.
     rpc RemovePeer(AunRemovePeerRequest) returns (AunRemovePeerResponse);
 
-    // Enumerate all configured peers.
+    // Enumerate the resolved routing table: one entry per (net, stn), from
+    // whichever source won it (see AunPeer.source).
     rpc ListPeers(AunListPeersRequest) returns (AunListPeersResponse);
 
-    // Read the current AUN backend status (port, peer count, link state).
+    // Read the AUN transport status (link state, port, peer count, map file,
+    // discovery mode).
     rpc GetStatus(AunGetStatusRequest) returns (AunGetStatusResponse);
 
-    // Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-    // state (Api, Launch and Discovered are untouched). Normally a modification
-    // is picked up automatically on the poll; this forces it.
+    // Re-read the per-user aun-map.json now, replacing the map file's peers,
+    // its subnet rules and the Subnet peers materialised from subnet rules
+    // (Api, Launch and Discovered peers, and --aun subnet= rules, are
+    // untouched). A modification is picked up automatically by the mtime poll
+    // on the discovery sweep, which runs while discovery browses
+    // (discovery=on or browse); this forces it. Under discovery=announce or
+    // off there is no poll, so another instance's edit arrives only with a
+    // ReloadMap or this instance's own next map edit.
     rpc ReloadMap(AunReloadMapRequest) returns (AunReloadMapResponse);
 
     // Edit the per-user aun-map.json. The server owns the file (it may be on
     // another host): it writes its own file atomically, preserving entry order
     // and unknown keys, then applies the change to its own peer set at once;
-    // other instances pick it up from their poll. Add is add-or-replace.
+    // other instances pick it up from their poll (see ReloadMap). Add is
+    // add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+    // rule. Every edit fails with "the map file is disabled (map-file=none)"
+    // when it is.
     rpc AddMapPeer(AunAddMapPeerRequest) returns (AunAddMapPeerResponse);
     rpc RemoveMapPeer(AunRemoveMapPeerRequest) returns (AunRemoveMapPeerResponse);
     rpc AddMapSubnet(AunAddMapSubnetRequest) returns (AunAddMapSubnetResponse);
@@ -45,6 +70,7 @@ service AunService {
 
     // List the map file's entries (with labels and host-resolution state),
     // distinct from ListPeers which lists the live resolved routing table.
+    // Empty, with no error, when the map file is disabled.
     rpc ListMap(AunListMapRequest) returns (AunListMapResponse);
 }
 
@@ -55,30 +81,34 @@ message AunGetStatusRequest {
 }
 
 message AunGetStatusResponse {
-    // True if the AUN UDP socket is bound and the cable is connected.
+    // True if the AUN UDP socket is bound and the cable is connected; false
+    // while there is no socket.
     bool connected = 1;
 
     // The local UDP port the AUN backend is bound to (0 if none).
     uint32 local_port = 2;
 
-    // Number of peers configured in the peer table.
+    // Number of (net, stn) pairs in the resolved routing table (what ListPeers
+    // returns). Reported even before the socket is up.
     uint32 peer_count = 3;
 
-    // The per-user aun-map.json path on the server's host (empty when the map
-    // file is disabled with map-file=none).
+    // The map file's path on the server's host: --aun map-file=, else
+    // BEEBIUM_AUN_MAP_FILEPATH, else the per-user aun-map.json. Empty when
+    // the map file is disabled with map-file=none.
     string map_file_path = 4;
 
     // Number of entries (peers + subnets) read from the map file on the last
-    // load.
+    // load, including peers whose host did not resolve.
     uint32 map_file_entry_count = 5;
 
     // The last map-file load error, or empty when the last load succeeded (or
     // the file is absent, which is not an error).
     string map_file_error = 6;
 
-    // The mDNS discovery mode (issue #158): "on", "announce", "browse" or
-    // "off". A frontend shows it when it is not "on". (aun.proto is served over
-    // ExtensionRpc and is NOT part of the fingerprinted service protocol.)
+    // The mDNS discovery mode set by --aun discovery=: "on", "announce",
+    // "browse" or "off". A frontend shows it when it is not "on". (aun.proto
+    // is served over ExtensionRpc and is NOT part of the fingerprinted service
+    // protocol.)
     string discovery_mode = 7;
 }
 
@@ -102,7 +132,8 @@ message AunReloadMapResponse {
 message AunAddMapPeerRequest {
     uint32 net = 1;      // 0..255
     uint32 stn = 2;      // 1..254
-    string host = 3;     // IPv4 literal or DNS name
+    string host = 3;     // IPv4 literal or DNS name, resolved on the server's
+                         // host at each load
     uint32 port = 4;     // 1..65535
     string label = 5;    // optional note
 }
@@ -123,7 +154,7 @@ message AunRemoveMapPeerResponse {
 
 message AunAddMapSubnetRequest {
     uint32 net = 1;      // 0..255
-    string subnet = 2;   // a.b.c.0/24
+    string subnet = 2;   // a.b.c.0/24: station = last octet, port 32768
     string label = 3;    // optional note
 }
 message AunAddMapSubnetResponse {
@@ -191,7 +222,8 @@ message AunAddPeerRequest {
     // Econet station number (1-254).
     uint32 stn = 2;
 
-    // Dotted-quad IP address (e.g. "192.168.1.100").
+    // Dotted-quad IPv4 address (e.g. "192.168.1.100"); a DNS name is
+    // rejected (use AddMapPeer for a name).
     string ip_address = 3;
 
     // UDP port (0 = use AUN default 32768).
@@ -222,10 +254,12 @@ message AunListPeersResponse {
 }
 
 // Where a peer entry came from, mirroring the AunPeerProvenance the AUN
-// transport resolves by. The three operator sources (Launch, Api, MapFile)
-// all take precedence over Discovered, in the order Api > Launch > MapFile;
-// a discovered announcement that claims a (net, stn) an operator source
-// already holds is shadowed rather than displacing it. Named AunPeerSource
+// transport resolves by. Each (net, stn) resolves to one winner by
+// precedence, highest first: Api > Launch > MapFile > Discovered > Subnet.
+// The three operator sources (Api, Launch, MapFile) all beat Discovered, so a
+// discovered announcement that claims a (net, stn) an operator source already
+// holds is shadowed rather than displacing it. Removing the winner falls back
+// to the next source still present. Named AunPeerSource
 // so the proto-generated C++ symbol does not collide with the transport's
 // beebium::AunPeerProvenance enum class.
 enum AunPeerSource {
@@ -239,15 +273,17 @@ enum AunPeerSource {
     // Added at runtime via AunService::AddPeer.
     AUN_PEER_SOURCE_API = 2;
 
-    // Read from the per-user aun-map.json (reserved for the map-file step).
+    // Read from the map file (the per-user aun-map.json, or the file named
+    // by --aun map-file=): its peers[] entries whose host resolved.
     AUN_PEER_SOURCE_MAP_FILE = 3;
 
     // Added by the AUN extension's mDNS subscriber from a
     // _aun._udp announcement on the LAN.
     AUN_PEER_SOURCE_DISCOVERED = 4;
 
-    // Materialised from a subnets rule in the map file (an inbound sender
-    // identified, or an outbound guess). Lowest precedence; Discovered wins.
+    // Materialised from a subnet rule (the map file's subnets[] or
+    // --aun subnet=): an inbound sender identified by its address, or an
+    // outbound guess. Lowest precedence; every other source wins.
     AUN_PEER_SOURCE_SUBNET = 5;
 }
 
@@ -256,8 +292,7 @@ message AunPeer {
     uint32 stn = 2;
     string ip_address = 3;
     uint32 port = 4;
-    // Provenance of this resolved entry (the source it won from). Clients
-    // present it in the AUN panel's secondary text: "launch", "API",
-    // "map file" or "mDNS".
+    // Provenance of this resolved entry (the source it won from). The AUN
+    // panel captions it "launch", "API", "map file", "mDNS" or "subnet".
     AunPeerSource source = 5;
 }

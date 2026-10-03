@@ -39,10 +39,11 @@ if _version_not_supported:
 
 class EconetTransportServiceStub(object):
     """Transport-agnostic discovery service: tells clients which Econet
-    transport extension is currently active on this server. Lets a
-    client decide whether to use AunService, PiconetService, or some
-    future transport-specific service without having to probe via
-    trial-and-error or read transport-specific fields off other RPCs.
+    transport extension is loaded on this server, and the instance id that
+    addresses it. Lets a client decide whether to use AunService,
+    PiconetService, or some future transport-specific service without having
+    to probe via trial-and-error or read transport-specific fields off other
+    RPCs.
 
     Modelled on PeripheralExtensionService.ListExtensions for
     peripheral extensions; this is the equivalent for econet
@@ -69,10 +70,11 @@ class EconetTransportServiceStub(object):
 
 class EconetTransportServiceServicer(object):
     """Transport-agnostic discovery service: tells clients which Econet
-    transport extension is currently active on this server. Lets a
-    client decide whether to use AunService, PiconetService, or some
-    future transport-specific service without having to probe via
-    trial-and-error or read transport-specific fields off other RPCs.
+    transport extension is loaded on this server, and the instance id that
+    addresses it. Lets a client decide whether to use AunService,
+    PiconetService, or some future transport-specific service without having
+    to probe via trial-and-error or read transport-specific fields off other
+    RPCs.
 
     Modelled on PeripheralExtensionService.ListExtensions for
     peripheral extensions; this is the equivalent for econet
@@ -80,12 +82,11 @@ class EconetTransportServiceServicer(object):
     """
 
     def ListTransports(self, request, context):
-        """List all econet transports known to this server, with an "active"
-        flag indicating which (if any) is currently producing the
-        NetworkBackend behind EconetSocket. For BBC Micro / Master /
-        Master Compact machines at most one transport is active; future
-        multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-        multiple actives.
+        """List the econet transports loaded on this server, each with an
+        "active" flag. For BBC Micro / Master / Master Compact machines at
+        most one transport can be loaded (the server refuses more), and it is
+        always reported active; future multi-ADLC machine types (e.g. Acorn
+        Econet Bridge) may have several.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -123,10 +124,11 @@ def add_EconetTransportServiceServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class EconetTransportService(object):
     """Transport-agnostic discovery service: tells clients which Econet
-    transport extension is currently active on this server. Lets a
-    client decide whether to use AunService, PiconetService, or some
-    future transport-specific service without having to probe via
-    trial-and-error or read transport-specific fields off other RPCs.
+    transport extension is loaded on this server, and the instance id that
+    addresses it. Lets a client decide whether to use AunService,
+    PiconetService, or some future transport-specific service without having
+    to probe via trial-and-error or read transport-specific fields off other
+    RPCs.
 
     Modelled on PeripheralExtensionService.ListExtensions for
     peripheral extensions; this is the equivalent for econet

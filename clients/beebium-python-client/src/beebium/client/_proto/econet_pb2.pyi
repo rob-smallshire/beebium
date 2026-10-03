@@ -37,6 +37,9 @@ class _EconetEventTypeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Econe
     DESCRIPTOR: _descriptor.EnumDescriptor
     ECONET_EVENT_UNKNOWN: _EconetEventType.ValueType  # 0
     ECONET_EVENT_FRAME_SENT: _EconetEventType.ValueType  # 1
+    """HANDSHAKE_CHANGE is defined but not currently emitted; the stream
+    carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
+    """
     ECONET_EVENT_FRAME_RECEIVED: _EconetEventType.ValueType  # 2
     ECONET_EVENT_HANDSHAKE_CHANGE: _EconetEventType.ValueType  # 3
     ECONET_EVENT_CONNECTION_CHANGE: _EconetEventType.ValueType  # 4
@@ -45,6 +48,9 @@ class EconetEventType(_EconetEventType, metaclass=_EconetEventTypeEnumTypeWrappe
 
 ECONET_EVENT_UNKNOWN: EconetEventType.ValueType  # 0
 ECONET_EVENT_FRAME_SENT: EconetEventType.ValueType  # 1
+"""HANDSHAKE_CHANGE is defined but not currently emitted; the stream
+carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
+"""
 ECONET_EVENT_FRAME_RECEIVED: EconetEventType.ValueType  # 2
 ECONET_EVENT_HANDSHAKE_CHANGE: EconetEventType.ValueType  # 3
 ECONET_EVENT_CONNECTION_CHANGE: EconetEventType.ValueType  # 4
@@ -104,7 +110,10 @@ class GetEconetStatusResponse(_message.Message):
     station_id: _builtins.int
     """Station number (1-254, 0 if disabled)."""
     aun_mode: _builtins.bool
-    """True if AUN mode is active (FourWayHandshake present)."""
+    """True if the FourWayHandshake sits between the ADLC and the transport.
+    Every way of fitting the hardware installs it, so this is true whenever
+    enabled is.
+    """
     connected: _builtins.bool
     """True if network link is active (e.g. UDP socket bound + cable
     not "unplugged" via AunService.SetConnected for AUN, or USB
@@ -312,8 +321,8 @@ class EnableEconetRequest(_message.Message):
     station_id: _builtins.int
     """Station number (1-254)."""
     aun_port: _builtins.int
-    """UDP port to bind for AUN networking.
-    0 = use default (32768).
+    """UDP port for the AUN socket (0 = the AUN default, 32768). With a
+    transport configured it is passed to the transport as its port setting.
     Ignored when no_network is true.
     """
     no_network: _builtins.bool
@@ -345,7 +354,9 @@ class EnableEconetResponse(_message.Message):
     success: _builtins.bool
     error: _builtins.str
     actual_aun_port: _builtins.int
-    """Actual port bound (useful when 0/default was requested)."""
+    """The port the transport's backend reports as bound (useful when
+    0/default was requested); 0 when no_network was set.
+    """
     def __init__(
         self,
         *,

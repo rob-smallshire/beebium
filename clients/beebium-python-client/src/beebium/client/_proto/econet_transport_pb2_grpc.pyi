@@ -40,10 +40,11 @@ GRPC_VERSION: str
 
 class EconetTransportServiceStub:
     """Transport-agnostic discovery service: tells clients which Econet
-    transport extension is currently active on this server. Lets a
-    client decide whether to use AunService, PiconetService, or some
-    future transport-specific service without having to probe via
-    trial-and-error or read transport-specific fields off other RPCs.
+    transport extension is loaded on this server, and the instance id that
+    addresses it. Lets a client decide whether to use AunService,
+    PiconetService, or some future transport-specific service without having
+    to probe via trial-and-error or read transport-specific fields off other
+    RPCs.
 
     Modelled on PeripheralExtensionService.ListExtensions for
     peripheral extensions; this is the equivalent for econet
@@ -55,12 +56,11 @@ class EconetTransportServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> EconetTransportServiceAsyncStub: ...
     ListTransports: _grpc.UnaryUnaryMultiCallable[_econet_transport_pb2.ListTransportsRequest, _econet_transport_pb2.ListTransportsResponse]
-    """List all econet transports known to this server, with an "active"
-    flag indicating which (if any) is currently producing the
-    NetworkBackend behind EconetSocket. For BBC Micro / Master /
-    Master Compact machines at most one transport is active; future
-    multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-    multiple actives.
+    """List the econet transports loaded on this server, each with an
+    "active" flag. For BBC Micro / Master / Master Compact machines at
+    most one transport can be loaded (the server refuses more), and it is
+    always reported active; future multi-ADLC machine types (e.g. Acorn
+    Econet Bridge) may have several.
     """
     GetActiveTransport: _grpc.UnaryUnaryMultiCallable[_econet_transport_pb2.GetActiveTransportRequest, _econet_transport_pb2.GetActiveTransportResponse]
     """Convenience: return the single active transport, or an empty
@@ -71,10 +71,11 @@ class EconetTransportServiceStub:
 @_typing.type_check_only
 class EconetTransportServiceAsyncStub(EconetTransportServiceStub):
     """Transport-agnostic discovery service: tells clients which Econet
-    transport extension is currently active on this server. Lets a
-    client decide whether to use AunService, PiconetService, or some
-    future transport-specific service without having to probe via
-    trial-and-error or read transport-specific fields off other RPCs.
+    transport extension is loaded on this server, and the instance id that
+    addresses it. Lets a client decide whether to use AunService,
+    PiconetService, or some future transport-specific service without having
+    to probe via trial-and-error or read transport-specific fields off other
+    RPCs.
 
     Modelled on PeripheralExtensionService.ListExtensions for
     peripheral extensions; this is the equivalent for econet
@@ -83,12 +84,11 @@ class EconetTransportServiceAsyncStub(EconetTransportServiceStub):
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     ListTransports: _aio.UnaryUnaryMultiCallable[_econet_transport_pb2.ListTransportsRequest, _econet_transport_pb2.ListTransportsResponse]  # type: ignore[assignment]
-    """List all econet transports known to this server, with an "active"
-    flag indicating which (if any) is currently producing the
-    NetworkBackend behind EconetSocket. For BBC Micro / Master /
-    Master Compact machines at most one transport is active; future
-    multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-    multiple actives.
+    """List the econet transports loaded on this server, each with an
+    "active" flag. For BBC Micro / Master / Master Compact machines at
+    most one transport can be loaded (the server refuses more), and it is
+    always reported active; future multi-ADLC machine types (e.g. Acorn
+    Econet Bridge) may have several.
     """
     GetActiveTransport: _aio.UnaryUnaryMultiCallable[_econet_transport_pb2.GetActiveTransportRequest, _econet_transport_pb2.GetActiveTransportResponse]  # type: ignore[assignment]
     """Convenience: return the single active transport, or an empty
@@ -98,10 +98,11 @@ class EconetTransportServiceAsyncStub(EconetTransportServiceStub):
 
 class EconetTransportServiceServicer(metaclass=_abc_1.ABCMeta):
     """Transport-agnostic discovery service: tells clients which Econet
-    transport extension is currently active on this server. Lets a
-    client decide whether to use AunService, PiconetService, or some
-    future transport-specific service without having to probe via
-    trial-and-error or read transport-specific fields off other RPCs.
+    transport extension is loaded on this server, and the instance id that
+    addresses it. Lets a client decide whether to use AunService,
+    PiconetService, or some future transport-specific service without having
+    to probe via trial-and-error or read transport-specific fields off other
+    RPCs.
 
     Modelled on PeripheralExtensionService.ListExtensions for
     peripheral extensions; this is the equivalent for econet
@@ -114,12 +115,11 @@ class EconetTransportServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _econet_transport_pb2.ListTransportsRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_econet_transport_pb2.ListTransportsResponse, _abc.Awaitable[_econet_transport_pb2.ListTransportsResponse]]:
-        """List all econet transports known to this server, with an "active"
-        flag indicating which (if any) is currently producing the
-        NetworkBackend behind EconetSocket. For BBC Micro / Master /
-        Master Compact machines at most one transport is active; future
-        multi-ADLC machine types (e.g. Acorn Econet Bridge) may have
-        multiple actives.
+        """List the econet transports loaded on this server, each with an
+        "active" flag. For BBC Micro / Master / Master Compact machines at
+        most one transport can be loaded (the server refuses more), and it is
+        always reported active; future multi-ADLC machine types (e.g. Acorn
+        Econet Bridge) may have several.
         """
 
     @_abc_1.abstractmethod

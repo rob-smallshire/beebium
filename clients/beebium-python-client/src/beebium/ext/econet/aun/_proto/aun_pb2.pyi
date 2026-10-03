@@ -46,22 +46,27 @@ class _AunPeerSourceEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_AunPeer
     AUN_PEER_SOURCE_API: _AunPeerSource.ValueType  # 2
     """Added at runtime via AunService::AddPeer."""
     AUN_PEER_SOURCE_MAP_FILE: _AunPeerSource.ValueType  # 3
-    """Read from the per-user aun-map.json (reserved for the map-file step)."""
+    """Read from the map file (the per-user aun-map.json, or the file named
+    by --aun map-file=): its peers[] entries whose host resolved.
+    """
     AUN_PEER_SOURCE_DISCOVERED: _AunPeerSource.ValueType  # 4
     """Added by the AUN extension's mDNS subscriber from a
     _aun._udp announcement on the LAN.
     """
     AUN_PEER_SOURCE_SUBNET: _AunPeerSource.ValueType  # 5
-    """Materialised from a subnets rule in the map file (an inbound sender
-    identified, or an outbound guess). Lowest precedence; Discovered wins.
+    """Materialised from a subnet rule (the map file's subnets[] or
+    --aun subnet=): an inbound sender identified by its address, or an
+    outbound guess. Lowest precedence; every other source wins.
     """
 
 class AunPeerSource(_AunPeerSource, metaclass=_AunPeerSourceEnumTypeWrapper):
     """Where a peer entry came from, mirroring the AunPeerProvenance the AUN
-    transport resolves by. The three operator sources (Launch, Api, MapFile)
-    all take precedence over Discovered, in the order Api > Launch > MapFile;
-    a discovered announcement that claims a (net, stn) an operator source
-    already holds is shadowed rather than displacing it. Named AunPeerSource
+    transport resolves by. Each (net, stn) resolves to one winner by
+    precedence, highest first: Api > Launch > MapFile > Discovered > Subnet.
+    The three operator sources (Api, Launch, MapFile) all beat Discovered, so a
+    discovered announcement that claims a (net, stn) an operator source already
+    holds is shadowed rather than displacing it. Removing the winner falls back
+    to the next source still present. Named AunPeerSource
     so the proto-generated C++ symbol does not collide with the transport's
     beebium::AunPeerProvenance enum class.
     """
@@ -75,14 +80,17 @@ for this launch.
 AUN_PEER_SOURCE_API: AunPeerSource.ValueType  # 2
 """Added at runtime via AunService::AddPeer."""
 AUN_PEER_SOURCE_MAP_FILE: AunPeerSource.ValueType  # 3
-"""Read from the per-user aun-map.json (reserved for the map-file step)."""
+"""Read from the map file (the per-user aun-map.json, or the file named
+by --aun map-file=): its peers[] entries whose host resolved.
+"""
 AUN_PEER_SOURCE_DISCOVERED: AunPeerSource.ValueType  # 4
 """Added by the AUN extension's mDNS subscriber from a
 _aun._udp announcement on the LAN.
 """
 AUN_PEER_SOURCE_SUBNET: AunPeerSource.ValueType  # 5
-"""Materialised from a subnets rule in the map file (an inbound sender
-identified, or an outbound guess). Lowest precedence; Discovered wins.
+"""Materialised from a subnet rule (the map file's subnets[] or
+--aun subnet=): an inbound sender identified by its address, or an
+outbound guess. Lowest precedence; every other source wins.
 """
 Global___AunPeerSource: _TypeAlias = AunPeerSource  # noqa: Y015
 
@@ -118,27 +126,33 @@ class AunGetStatusResponse(_message.Message):
     MAP_FILE_ERROR_FIELD_NUMBER: _builtins.int
     DISCOVERY_MODE_FIELD_NUMBER: _builtins.int
     connected: _builtins.bool
-    """True if the AUN UDP socket is bound and the cable is connected."""
+    """True if the AUN UDP socket is bound and the cable is connected; false
+    while there is no socket.
+    """
     local_port: _builtins.int
     """The local UDP port the AUN backend is bound to (0 if none)."""
     peer_count: _builtins.int
-    """Number of peers configured in the peer table."""
+    """Number of (net, stn) pairs in the resolved routing table (what ListPeers
+    returns). Reported even before the socket is up.
+    """
     map_file_path: _builtins.str
-    """The per-user aun-map.json path on the server's host (empty when the map
-    file is disabled with map-file=none).
+    """The map file's path on the server's host: --aun map-file=, else
+    BEEBIUM_AUN_MAP_FILEPATH, else the per-user aun-map.json. Empty when
+    the map file is disabled with map-file=none.
     """
     map_file_entry_count: _builtins.int
     """Number of entries (peers + subnets) read from the map file on the last
-    load.
+    load, including peers whose host did not resolve.
     """
     map_file_error: _builtins.str
     """The last map-file load error, or empty when the last load succeeded (or
     the file is absent, which is not an error).
     """
     discovery_mode: _builtins.str
-    """The mDNS discovery mode (issue #158): "on", "announce", "browse" or
-    "off". A frontend shows it when it is not "on". (aun.proto is served over
-    ExtensionRpc and is NOT part of the fingerprinted service protocol.)
+    """The mDNS discovery mode set by --aun discovery=: "on", "announce",
+    "browse" or "off". A frontend shows it when it is not "on". (aun.proto
+    is served over ExtensionRpc and is NOT part of the fingerprinted service
+    protocol.)
     """
     def __init__(
         self,
@@ -221,9 +235,11 @@ class AunAddMapPeerRequest(_message.Message):
     stn: _builtins.int
     """1..254"""
     host: _builtins.str
-    """IPv4 literal or DNS name"""
+    """IPv4 literal or DNS name, resolved on the server's"""
     port: _builtins.int
-    """1..65535"""
+    """host at each load
+    1..65535
+    """
     label: _builtins.str
     """optional note"""
     def __init__(
@@ -323,7 +339,7 @@ class AunAddMapSubnetRequest(_message.Message):
     net: _builtins.int
     """0..255"""
     subnet: _builtins.str
-    """a.b.c.0/24"""
+    """a.b.c.0/24: station = last octet, port 32768"""
     label: _builtins.str
     """optional note"""
     def __init__(
@@ -582,7 +598,9 @@ class AunAddPeerRequest(_message.Message):
     stn: _builtins.int
     """Econet station number (1-254)."""
     ip_address: _builtins.str
-    """Dotted-quad IP address (e.g. "192.168.1.100")."""
+    """Dotted-quad IPv4 address (e.g. "192.168.1.100"); a DNS name is
+    rejected (use AddMapPeer for a name).
+    """
     port: _builtins.int
     """UDP port (0 = use AUN default 32768)."""
     def __init__(
@@ -718,9 +736,8 @@ class AunPeer(_message.Message):
     ip_address: _builtins.str
     port: _builtins.int
     source: Global___AunPeerSource.ValueType
-    """Provenance of this resolved entry (the source it won from). Clients
-    present it in the AUN panel's secondary text: "launch", "API",
-    "map file" or "mDNS".
+    """Provenance of this resolved entry (the source it won from). The AUN
+    panel captions it "launch", "API", "map file", "mDNS" or "subnet".
     """
     def __init__(
         self,

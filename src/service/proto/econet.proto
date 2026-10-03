@@ -2,43 +2,50 @@ syntax = "proto3";
 
 package beebium;
 
-// Econet/AUN networking management service.
+// Transport-agnostic Econet management service.
 //
-// Provides hardware configuration (enable/disable Econet), network status
-// queries (ADLC registers, handshake state), and AUN peer management.
+// Provides hardware configuration (fit/remove the Econet module, station
+// number), status queries (ADLC registers, handshake state, station
+// collisions) and a frame event stream. Transport-specific operations live
+// on the active transport's own service, found via EconetTransportService:
+// AUN peers, the cable plug and the AUN port on AunService
+// (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
 service EconetService {
-    // Query Econet hardware status (enabled, station ID, ADLC state, peers).
+    // Query Econet hardware status (enabled, station ID, ADLC and handshake
+    // state, link state, station collisions, diagnostic counters).
     rpc GetEconetStatus(GetEconetStatusRequest) returns (GetEconetStatusResponse);
 
-    // Fit Econet hardware: set station ID, optionally bind AUN socket.
+    // Fit Econet hardware with the given station number. Unless no_network is
+    // set, the configured transport (--aun / --piconet / a preset) brings up
+    // its backend through the transport extension; with no transport
+    // configured a bare AUN socket is bound on net 0. Fails if Econet is
+    // already fitted, as it is from launch whenever a station number is
+    // configured (--station, or a preset).
     rpc EnableEconet(EnableEconetRequest) returns (EnableEconetResponse);
 
-    // Remove Econet hardware (disable station, close AUN socket).
+    // Remove Econet hardware: drop the station and the transport's backend
+    // (for AUN, close the socket and stop announcing and browsing).
     rpc DisableEconet(DisableEconetRequest) returns (DisableEconetResponse);
 
-    // Set the station ID (takes effect on next machine reset).
+    // Set the station number, as if changing the station links. The guest
+    // reads it from &FE18 on its next Break; the transport is told at once
+    // (AUN re-announces the new number and re-runs its collision checks).
     rpc SetStationId(SetStationIdRequest) returns (SetStationIdResponse);
 
-    // Stream Econet events (frame activity, handshake changes, connection state).
-    // Reserved for future implementation.
+    // Stream frames as they cross the transport, and link up/down changes.
+    // Starts from the moment of subscription (no replay). Fails with
+    // FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+    // hardware is fitted.
     rpc SubscribeEconetEvents(SubscribeEconetEventsRequest) returns (stream EconetEvent);
 
     // Server-pushed status stream. Writes an initial GetEconetStatusResponse
     // as soon as the stream is established, then a fresh snapshot whenever
     // status visible on EconetService changes (enable/disable, station ID
-    // change, or transport backend connection toggle). The stream stays open
-    // until the client cancels; use this instead of polling GetEconetStatus.
+    // change, transport link up/down, or a change in the station collisions
+    // in effect). The stream stays open until the client cancels; use this
+    // instead of polling GetEconetStatus.
     rpc WatchEconetStatus(WatchEconetStatusRequest) returns (stream GetEconetStatusResponse);
 }
-
-// Note: The four AUN-specific RPCs (SetConnected, AddPeer, RemovePeer,
-// ListPeers) and their messages (SetConnectedRequest/Response,
-// AddPeerRequest/Response, RemovePeerRequest/Response,
-// ListPeersRequest/Response, EconetPeer) used to live here. They moved
-// to AunService in src/extensions/aun/aun.proto so EconetService can
-// stay transport-agnostic. AUN status fields (aun_port, peer_count) on
-// GetEconetStatusResponse below are likewise gone -- consult
-// AunService.GetStatus for them.
 
 // --- Status ---
 
@@ -56,7 +63,9 @@ message GetEconetStatusResponse {
     // Station number (1-254, 0 if disabled).
     uint32 station_id = 3;
 
-    // True if AUN mode is active (FourWayHandshake present).
+    // True if the FourWayHandshake sits between the ADLC and the transport.
+    // Every way of fitting the hardware installs it, so this is true whenever
+    // enabled is.
     bool aun_mode = 4;
 
     // True if network link is active (e.g. UDP socket bound + cable
@@ -65,8 +74,8 @@ message GetEconetStatusResponse {
     // is_connected().
     bool connected = 5;
 
-    // Field 6 (aun_port) and field 7 (peer_count) were removed; AUN
-    // status now lives on AunService.GetStatus.
+    // Fields 6 (aun_port) and 7 (peer_count) are reserved; that AUN status
+    // is on AunService.GetStatus.
     reserved 6, 7;
     reserved "aun_port", "peer_count";
 
@@ -124,7 +133,7 @@ message GetEconetStatusResponse {
     uint32 aun_station_collision_count = 28;
     string aun_last_station_collision = 29;
 
-    // Field 25 (piconet) was removed; Piconet status now lives on
+    // Field 25 (piconet) is reserved; Piconet status is on
     // PiconetService.GetStatus (in src/extensions/piconet/piconet_service.proto).
     reserved 25;
     reserved "piconet";
@@ -175,8 +184,8 @@ message EnableEconetRequest {
     // Station number (1-254).
     uint32 station_id = 1;
 
-    // UDP port to bind for AUN networking.
-    // 0 = use default (32768).
+    // UDP port for the AUN socket (0 = the AUN default, 32768). With a
+    // transport configured it is passed to the transport as its port setting.
     // Ignored when no_network is true.
     uint32 aun_port = 2;
 
@@ -189,7 +198,8 @@ message EnableEconetResponse {
     bool success = 1;
     string error = 2;
 
-    // Actual port bound (useful when 0/default was requested).
+    // The port the transport's backend reports as bound (useful when
+    // 0/default was requested); 0 when no_network was set.
     uint32 actual_aun_port = 3;
 }
 
@@ -213,14 +223,6 @@ message SetStationIdResponse {
     bool success = 1;
     string error = 2;
 }
-
-// --- Network Cable + Peer Management ---
-//
-// The SetConnected/AddPeer/RemovePeer/ListPeers RPCs and their
-// messages (SetConnectedRequest/Response, AddPeerRequest/Response,
-// RemovePeerRequest/Response, ListPeersRequest/Response, EconetPeer)
-// moved to AunService in src/extensions/aun/aun.proto. They were
-// always AUN-specific; their new home is the AUN extension's service.
 
 // --- Status Streaming ---
 
@@ -251,6 +253,8 @@ message SubscribeEconetEventsRequest {
 
 enum EconetEventType {
     ECONET_EVENT_UNKNOWN = 0;
+    // HANDSHAKE_CHANGE is defined but not currently emitted; the stream
+    // carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
     ECONET_EVENT_FRAME_SENT = 1;
     ECONET_EVENT_FRAME_RECEIVED = 2;
     ECONET_EVENT_HANDSHAKE_CHANGE = 3;

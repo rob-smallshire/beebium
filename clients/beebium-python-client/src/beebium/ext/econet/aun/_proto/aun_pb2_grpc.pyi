@@ -42,7 +42,15 @@ class AunServiceStub:
     """AUN-specific service. Lives alongside the AunEconetTransportExtension
     in src/extensions/aun/ and is served via that extension's AunDispatcher
     over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-    service block). It is reachable only when AUN is the active transport.
+    service block). It is reachable whenever the AUN transport is loaded
+    (--aun, or a preset whose econet.transport is aun), addressed by the
+    instance id EconetTransportService reports; with no AUN transport loaded,
+    ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+    before the AUN socket is up (before EnableEconet, or with port=none): the
+    edits are recorded and applied when the backend comes up.
+
+    Validation failures are reported in-band (success=false and an error
+    string) with an OK call status; only a malformed request is a non-OK status.
 
     EconetService remains the place for transport-agnostic Econet RPCs
     (status, station ID, enable/disable). Anything that only makes sense
@@ -56,26 +64,47 @@ class AunServiceStub:
     def __new__(cls, channel: _aio.Channel) -> AunServiceAsyncStub: ...
     SetConnected: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunSetConnectedRequest, _aun_pb2.AunSetConnectedResponse]
     """Connect or disconnect the simulated network cable. While
-    disconnected the ADLC sees DCD high (no carrier).
+    disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+    when the socket is not up yet the state is remembered and applied when
+    it comes up, and the response's error field says so.
     """
     AddPeer: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunAddPeerRequest, _aun_pb2.AunAddPeerResponse]
-    """Add an Econet address <-> UDP endpoint peer mapping."""
+    """Add or replace this client's (Api) entry mapping an Econet address to a
+    UDP endpoint. It takes precedence over every other source for that
+    (net, stn) (see AunPeerSource).
+    """
     RemovePeer: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunRemovePeerRequest, _aun_pb2.AunRemovePeerResponse]
-    """Remove a peer mapping by Econet address."""
+    """Remove the Api entry AddPeer made for an Econet address. Entries from
+    other sources are untouched, so a station also named by the launch
+    config, the map file or mDNS falls back to that entry rather than
+    disappearing. Always succeeds, including when there was no Api entry.
+    """
     ListPeers: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunListPeersRequest, _aun_pb2.AunListPeersResponse]
-    """Enumerate all configured peers."""
+    """Enumerate the resolved routing table: one entry per (net, stn), from
+    whichever source won it (see AunPeer.source).
+    """
     GetStatus: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunGetStatusRequest, _aun_pb2.AunGetStatusResponse]
-    """Read the current AUN backend status (port, peer count, link state)."""
+    """Read the AUN transport status (link state, port, peer count, map file,
+    discovery mode).
+    """
     ReloadMap: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunReloadMapRequest, _aun_pb2.AunReloadMapResponse]
-    """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-    state (Api, Launch and Discovered are untouched). Normally a modification
-    is picked up automatically on the poll; this forces it.
+    """Re-read the per-user aun-map.json now, replacing the map file's peers,
+    its subnet rules and the Subnet peers materialised from subnet rules
+    (Api, Launch and Discovered peers, and --aun subnet= rules, are
+    untouched). A modification is picked up automatically by the mtime poll
+    on the discovery sweep, which runs while discovery browses
+    (discovery=on or browse); this forces it. Under discovery=announce or
+    off there is no poll, so another instance's edit arrives only with a
+    ReloadMap or this instance's own next map edit.
     """
     AddMapPeer: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapPeerRequest, _aun_pb2.AunAddMapPeerResponse]
     """Edit the per-user aun-map.json. The server owns the file (it may be on
     another host): it writes its own file atomically, preserving entry order
     and unknown keys, then applies the change to its own peer set at once;
-    other instances pick it up from their poll. Add is add-or-replace.
+    other instances pick it up from their poll (see ReloadMap). Add is
+    add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+    rule. Every edit fails with "the map file is disabled (map-file=none)"
+    when it is.
     """
     RemoveMapPeer: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunRemoveMapPeerRequest, _aun_pb2.AunRemoveMapPeerResponse]
     AddMapSubnet: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapSubnetRequest, _aun_pb2.AunAddMapSubnetResponse]
@@ -83,6 +112,7 @@ class AunServiceStub:
     ListMap: _grpc.UnaryUnaryMultiCallable[_aun_pb2.AunListMapRequest, _aun_pb2.AunListMapResponse]
     """List the map file's entries (with labels and host-resolution state),
     distinct from ListPeers which lists the live resolved routing table.
+    Empty, with no error, when the map file is disabled.
     """
 
 @_typing.type_check_only
@@ -90,7 +120,15 @@ class AunServiceAsyncStub(AunServiceStub):
     """AUN-specific service. Lives alongside the AunEconetTransportExtension
     in src/extensions/aun/ and is served via that extension's AunDispatcher
     over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-    service block). It is reachable only when AUN is the active transport.
+    service block). It is reachable whenever the AUN transport is loaded
+    (--aun, or a preset whose econet.transport is aun), addressed by the
+    instance id EconetTransportService reports; with no AUN transport loaded,
+    ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+    before the AUN socket is up (before EnableEconet, or with port=none): the
+    edits are recorded and applied when the backend comes up.
+
+    Validation failures are reported in-band (success=false and an error
+    string) with an OK call status; only a malformed request is a non-OK status.
 
     EconetService remains the place for transport-agnostic Econet RPCs
     (status, station ID, enable/disable). Anything that only makes sense
@@ -101,26 +139,47 @@ class AunServiceAsyncStub(AunServiceStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     SetConnected: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunSetConnectedRequest, _aun_pb2.AunSetConnectedResponse]  # type: ignore[assignment]
     """Connect or disconnect the simulated network cable. While
-    disconnected the ADLC sees DCD high (no carrier).
+    disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+    when the socket is not up yet the state is remembered and applied when
+    it comes up, and the response's error field says so.
     """
     AddPeer: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunAddPeerRequest, _aun_pb2.AunAddPeerResponse]  # type: ignore[assignment]
-    """Add an Econet address <-> UDP endpoint peer mapping."""
+    """Add or replace this client's (Api) entry mapping an Econet address to a
+    UDP endpoint. It takes precedence over every other source for that
+    (net, stn) (see AunPeerSource).
+    """
     RemovePeer: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunRemovePeerRequest, _aun_pb2.AunRemovePeerResponse]  # type: ignore[assignment]
-    """Remove a peer mapping by Econet address."""
+    """Remove the Api entry AddPeer made for an Econet address. Entries from
+    other sources are untouched, so a station also named by the launch
+    config, the map file or mDNS falls back to that entry rather than
+    disappearing. Always succeeds, including when there was no Api entry.
+    """
     ListPeers: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunListPeersRequest, _aun_pb2.AunListPeersResponse]  # type: ignore[assignment]
-    """Enumerate all configured peers."""
+    """Enumerate the resolved routing table: one entry per (net, stn), from
+    whichever source won it (see AunPeer.source).
+    """
     GetStatus: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunGetStatusRequest, _aun_pb2.AunGetStatusResponse]  # type: ignore[assignment]
-    """Read the current AUN backend status (port, peer count, link state)."""
+    """Read the AUN transport status (link state, port, peer count, map file,
+    discovery mode).
+    """
     ReloadMap: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunReloadMapRequest, _aun_pb2.AunReloadMapResponse]  # type: ignore[assignment]
-    """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-    state (Api, Launch and Discovered are untouched). Normally a modification
-    is picked up automatically on the poll; this forces it.
+    """Re-read the per-user aun-map.json now, replacing the map file's peers,
+    its subnet rules and the Subnet peers materialised from subnet rules
+    (Api, Launch and Discovered peers, and --aun subnet= rules, are
+    untouched). A modification is picked up automatically by the mtime poll
+    on the discovery sweep, which runs while discovery browses
+    (discovery=on or browse); this forces it. Under discovery=announce or
+    off there is no poll, so another instance's edit arrives only with a
+    ReloadMap or this instance's own next map edit.
     """
     AddMapPeer: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapPeerRequest, _aun_pb2.AunAddMapPeerResponse]  # type: ignore[assignment]
     """Edit the per-user aun-map.json. The server owns the file (it may be on
     another host): it writes its own file atomically, preserving entry order
     and unknown keys, then applies the change to its own peer set at once;
-    other instances pick it up from their poll. Add is add-or-replace.
+    other instances pick it up from their poll (see ReloadMap). Add is
+    add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+    rule. Every edit fails with "the map file is disabled (map-file=none)"
+    when it is.
     """
     RemoveMapPeer: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunRemoveMapPeerRequest, _aun_pb2.AunRemoveMapPeerResponse]  # type: ignore[assignment]
     AddMapSubnet: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunAddMapSubnetRequest, _aun_pb2.AunAddMapSubnetResponse]  # type: ignore[assignment]
@@ -128,13 +187,22 @@ class AunServiceAsyncStub(AunServiceStub):
     ListMap: _aio.UnaryUnaryMultiCallable[_aun_pb2.AunListMapRequest, _aun_pb2.AunListMapResponse]  # type: ignore[assignment]
     """List the map file's entries (with labels and host-resolution state),
     distinct from ListPeers which lists the live resolved routing table.
+    Empty, with no error, when the map file is disabled.
     """
 
 class AunServiceServicer(metaclass=_abc_1.ABCMeta):
     """AUN-specific service. Lives alongside the AunEconetTransportExtension
     in src/extensions/aun/ and is served via that extension's AunDispatcher
     over the core's ExtensionRpc channel (no gRPC stub is compiled from this
-    service block). It is reachable only when AUN is the active transport.
+    service block). It is reachable whenever the AUN transport is loaded
+    (--aun, or a preset whose econet.transport is aun), addressed by the
+    instance id EconetTransportService reports; with no AUN transport loaded,
+    ExtensionRpc answers NOT_FOUND. AddPeer, RemovePeer and SetConnected work
+    before the AUN socket is up (before EnableEconet, or with port=none): the
+    edits are recorded and applied when the backend comes up.
+
+    Validation failures are reported in-band (success=false and an error
+    string) with an OK call status; only a malformed request is a non-OK status.
 
     EconetService remains the place for transport-agnostic Econet RPCs
     (status, station ID, enable/disable). Anything that only makes sense
@@ -149,7 +217,9 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunSetConnectedResponse, _abc.Awaitable[_aun_pb2.AunSetConnectedResponse]]:
         """Connect or disconnect the simulated network cable. While
-        disconnected the ADLC sees DCD high (no carrier).
+        disconnected the ADLC sees DCD high (no carrier). Always succeeds;
+        when the socket is not up yet the state is remembered and applied when
+        it comes up, and the response's error field says so.
         """
 
     @_abc_1.abstractmethod
@@ -158,7 +228,10 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _aun_pb2.AunAddPeerRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunAddPeerResponse, _abc.Awaitable[_aun_pb2.AunAddPeerResponse]]:
-        """Add an Econet address <-> UDP endpoint peer mapping."""
+        """Add or replace this client's (Api) entry mapping an Econet address to a
+        UDP endpoint. It takes precedence over every other source for that
+        (net, stn) (see AunPeerSource).
+        """
 
     @_abc_1.abstractmethod
     def RemovePeer(
@@ -166,7 +239,11 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _aun_pb2.AunRemovePeerRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunRemovePeerResponse, _abc.Awaitable[_aun_pb2.AunRemovePeerResponse]]:
-        """Remove a peer mapping by Econet address."""
+        """Remove the Api entry AddPeer made for an Econet address. Entries from
+        other sources are untouched, so a station also named by the launch
+        config, the map file or mDNS falls back to that entry rather than
+        disappearing. Always succeeds, including when there was no Api entry.
+        """
 
     @_abc_1.abstractmethod
     def ListPeers(
@@ -174,7 +251,9 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _aun_pb2.AunListPeersRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunListPeersResponse, _abc.Awaitable[_aun_pb2.AunListPeersResponse]]:
-        """Enumerate all configured peers."""
+        """Enumerate the resolved routing table: one entry per (net, stn), from
+        whichever source won it (see AunPeer.source).
+        """
 
     @_abc_1.abstractmethod
     def GetStatus(
@@ -182,7 +261,9 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _aun_pb2.AunGetStatusRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunGetStatusResponse, _abc.Awaitable[_aun_pb2.AunGetStatusResponse]]:
-        """Read the current AUN backend status (port, peer count, link state)."""
+        """Read the AUN transport status (link state, port, peer count, map file,
+        discovery mode).
+        """
 
     @_abc_1.abstractmethod
     def ReloadMap(
@@ -190,9 +271,14 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _aun_pb2.AunReloadMapRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_aun_pb2.AunReloadMapResponse, _abc.Awaitable[_aun_pb2.AunReloadMapResponse]]:
-        """Re-read the per-user aun-map.json now, replacing the MapFile and Subnet
-        state (Api, Launch and Discovered are untouched). Normally a modification
-        is picked up automatically on the poll; this forces it.
+        """Re-read the per-user aun-map.json now, replacing the map file's peers,
+        its subnet rules and the Subnet peers materialised from subnet rules
+        (Api, Launch and Discovered peers, and --aun subnet= rules, are
+        untouched). A modification is picked up automatically by the mtime poll
+        on the discovery sweep, which runs while discovery browses
+        (discovery=on or browse); this forces it. Under discovery=announce or
+        off there is no poll, so another instance's edit arrives only with a
+        ReloadMap or this instance's own next map edit.
         """
 
     @_abc_1.abstractmethod
@@ -204,7 +290,10 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
         """Edit the per-user aun-map.json. The server owns the file (it may be on
         another host): it writes its own file atomically, preserving entry order
         and unknown keys, then applies the change to its own peer set at once;
-        other instances pick it up from their poll. Add is add-or-replace.
+        other instances pick it up from their poll (see ReloadMap). Add is
+        add-or-replace, keyed by (net, stn) for a peer and by net for a subnet
+        rule. Every edit fails with "the map file is disabled (map-file=none)"
+        when it is.
         """
 
     @_abc_1.abstractmethod
@@ -236,6 +325,7 @@ class AunServiceServicer(metaclass=_abc_1.ABCMeta):
     ) -> _typing.Union[_aun_pb2.AunListMapResponse, _abc.Awaitable[_aun_pb2.AunListMapResponse]]:
         """List the map file's entries (with labels and host-resolution state),
         distinct from ListPeers which lists the live resolved routing table.
+        Empty, with no error, when the map file is disabled.
         """
 
 def add_AunServiceServicer_to_server(servicer: AunServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -39,10 +39,14 @@ GRPC_GENERATED_VERSION: str
 GRPC_VERSION: str
 
 class EconetServiceStub:
-    """Econet/AUN networking management service.
+    """Transport-agnostic Econet management service.
 
-    Provides hardware configuration (enable/disable Econet), network status
-    queries (ADLC registers, handshake state), and AUN peer management.
+    Provides hardware configuration (fit/remove the Econet module, station
+    number), status queries (ADLC registers, handshake state, station
+    collisions) and a frame event stream. Transport-specific operations live
+    on the active transport's own service, found via EconetTransportService:
+    AUN peers, the cable plug and the AUN port on AunService
+    (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
     """
 
     @_typing.overload
@@ -50,59 +54,99 @@ class EconetServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> EconetServiceAsyncStub: ...
     GetEconetStatus: _grpc.UnaryUnaryMultiCallable[_econet_pb2.GetEconetStatusRequest, _econet_pb2.GetEconetStatusResponse]
-    """Query Econet hardware status (enabled, station ID, ADLC state, peers)."""
+    """Query Econet hardware status (enabled, station ID, ADLC and handshake
+    state, link state, station collisions, diagnostic counters).
+    """
     EnableEconet: _grpc.UnaryUnaryMultiCallable[_econet_pb2.EnableEconetRequest, _econet_pb2.EnableEconetResponse]
-    """Fit Econet hardware: set station ID, optionally bind AUN socket."""
+    """Fit Econet hardware with the given station number. Unless no_network is
+    set, the configured transport (--aun / --piconet / a preset) brings up
+    its backend through the transport extension; with no transport
+    configured a bare AUN socket is bound on net 0. Fails if Econet is
+    already fitted, as it is from launch whenever a station number is
+    configured (--station, or a preset).
+    """
     DisableEconet: _grpc.UnaryUnaryMultiCallable[_econet_pb2.DisableEconetRequest, _econet_pb2.DisableEconetResponse]
-    """Remove Econet hardware (disable station, close AUN socket)."""
+    """Remove Econet hardware: drop the station and the transport's backend
+    (for AUN, close the socket and stop announcing and browsing).
+    """
     SetStationId: _grpc.UnaryUnaryMultiCallable[_econet_pb2.SetStationIdRequest, _econet_pb2.SetStationIdResponse]
-    """Set the station ID (takes effect on next machine reset)."""
+    """Set the station number, as if changing the station links. The guest
+    reads it from &FE18 on its next Break; the transport is told at once
+    (AUN re-announces the new number and re-runs its collision checks).
+    """
     SubscribeEconetEvents: _grpc.UnaryStreamMultiCallable[_econet_pb2.SubscribeEconetEventsRequest, _econet_pb2.EconetEvent]
-    """Stream Econet events (frame activity, handshake changes, connection state).
-    Reserved for future implementation.
+    """Stream frames as they cross the transport, and link up/down changes.
+    Starts from the moment of subscription (no replay). Fails with
+    FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+    hardware is fitted.
     """
     WatchEconetStatus: _grpc.UnaryStreamMultiCallable[_econet_pb2.WatchEconetStatusRequest, _econet_pb2.GetEconetStatusResponse]
     """Server-pushed status stream. Writes an initial GetEconetStatusResponse
     as soon as the stream is established, then a fresh snapshot whenever
     status visible on EconetService changes (enable/disable, station ID
-    change, or transport backend connection toggle). The stream stays open
-    until the client cancels; use this instead of polling GetEconetStatus.
+    change, transport link up/down, or a change in the station collisions
+    in effect). The stream stays open until the client cancels; use this
+    instead of polling GetEconetStatus.
     """
 
 @_typing.type_check_only
 class EconetServiceAsyncStub(EconetServiceStub):
-    """Econet/AUN networking management service.
+    """Transport-agnostic Econet management service.
 
-    Provides hardware configuration (enable/disable Econet), network status
-    queries (ADLC registers, handshake state), and AUN peer management.
+    Provides hardware configuration (fit/remove the Econet module, station
+    number), status queries (ADLC registers, handshake state, station
+    collisions) and a frame event stream. Transport-specific operations live
+    on the active transport's own service, found via EconetTransportService:
+    AUN peers, the cable plug and the AUN port on AunService
+    (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     GetEconetStatus: _aio.UnaryUnaryMultiCallable[_econet_pb2.GetEconetStatusRequest, _econet_pb2.GetEconetStatusResponse]  # type: ignore[assignment]
-    """Query Econet hardware status (enabled, station ID, ADLC state, peers)."""
+    """Query Econet hardware status (enabled, station ID, ADLC and handshake
+    state, link state, station collisions, diagnostic counters).
+    """
     EnableEconet: _aio.UnaryUnaryMultiCallable[_econet_pb2.EnableEconetRequest, _econet_pb2.EnableEconetResponse]  # type: ignore[assignment]
-    """Fit Econet hardware: set station ID, optionally bind AUN socket."""
+    """Fit Econet hardware with the given station number. Unless no_network is
+    set, the configured transport (--aun / --piconet / a preset) brings up
+    its backend through the transport extension; with no transport
+    configured a bare AUN socket is bound on net 0. Fails if Econet is
+    already fitted, as it is from launch whenever a station number is
+    configured (--station, or a preset).
+    """
     DisableEconet: _aio.UnaryUnaryMultiCallable[_econet_pb2.DisableEconetRequest, _econet_pb2.DisableEconetResponse]  # type: ignore[assignment]
-    """Remove Econet hardware (disable station, close AUN socket)."""
+    """Remove Econet hardware: drop the station and the transport's backend
+    (for AUN, close the socket and stop announcing and browsing).
+    """
     SetStationId: _aio.UnaryUnaryMultiCallable[_econet_pb2.SetStationIdRequest, _econet_pb2.SetStationIdResponse]  # type: ignore[assignment]
-    """Set the station ID (takes effect on next machine reset)."""
+    """Set the station number, as if changing the station links. The guest
+    reads it from &FE18 on its next Break; the transport is told at once
+    (AUN re-announces the new number and re-runs its collision checks).
+    """
     SubscribeEconetEvents: _aio.UnaryStreamMultiCallable[_econet_pb2.SubscribeEconetEventsRequest, _econet_pb2.EconetEvent]  # type: ignore[assignment]
-    """Stream Econet events (frame activity, handshake changes, connection state).
-    Reserved for future implementation.
+    """Stream frames as they cross the transport, and link up/down changes.
+    Starts from the moment of subscription (no replay). Fails with
+    FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+    hardware is fitted.
     """
     WatchEconetStatus: _aio.UnaryStreamMultiCallable[_econet_pb2.WatchEconetStatusRequest, _econet_pb2.GetEconetStatusResponse]  # type: ignore[assignment]
     """Server-pushed status stream. Writes an initial GetEconetStatusResponse
     as soon as the stream is established, then a fresh snapshot whenever
     status visible on EconetService changes (enable/disable, station ID
-    change, or transport backend connection toggle). The stream stays open
-    until the client cancels; use this instead of polling GetEconetStatus.
+    change, transport link up/down, or a change in the station collisions
+    in effect). The stream stays open until the client cancels; use this
+    instead of polling GetEconetStatus.
     """
 
 class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
-    """Econet/AUN networking management service.
+    """Transport-agnostic Econet management service.
 
-    Provides hardware configuration (enable/disable Econet), network status
-    queries (ADLC registers, handshake state), and AUN peer management.
+    Provides hardware configuration (fit/remove the Econet module, station
+    number), status queries (ADLC registers, handshake state, station
+    collisions) and a frame event stream. Transport-specific operations live
+    on the active transport's own service, found via EconetTransportService:
+    AUN peers, the cable plug and the AUN port on AunService
+    (src/extensions/aun/aun.proto), Piconet device state on PiconetService.
     """
 
     @_abc_1.abstractmethod
@@ -111,7 +155,9 @@ class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _econet_pb2.GetEconetStatusRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_econet_pb2.GetEconetStatusResponse, _abc.Awaitable[_econet_pb2.GetEconetStatusResponse]]:
-        """Query Econet hardware status (enabled, station ID, ADLC state, peers)."""
+        """Query Econet hardware status (enabled, station ID, ADLC and handshake
+        state, link state, station collisions, diagnostic counters).
+        """
 
     @_abc_1.abstractmethod
     def EnableEconet(
@@ -119,7 +165,13 @@ class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _econet_pb2.EnableEconetRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_econet_pb2.EnableEconetResponse, _abc.Awaitable[_econet_pb2.EnableEconetResponse]]:
-        """Fit Econet hardware: set station ID, optionally bind AUN socket."""
+        """Fit Econet hardware with the given station number. Unless no_network is
+        set, the configured transport (--aun / --piconet / a preset) brings up
+        its backend through the transport extension; with no transport
+        configured a bare AUN socket is bound on net 0. Fails if Econet is
+        already fitted, as it is from launch whenever a station number is
+        configured (--station, or a preset).
+        """
 
     @_abc_1.abstractmethod
     def DisableEconet(
@@ -127,7 +179,9 @@ class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _econet_pb2.DisableEconetRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_econet_pb2.DisableEconetResponse, _abc.Awaitable[_econet_pb2.DisableEconetResponse]]:
-        """Remove Econet hardware (disable station, close AUN socket)."""
+        """Remove Econet hardware: drop the station and the transport's backend
+        (for AUN, close the socket and stop announcing and browsing).
+        """
 
     @_abc_1.abstractmethod
     def SetStationId(
@@ -135,7 +189,10 @@ class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _econet_pb2.SetStationIdRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_econet_pb2.SetStationIdResponse, _abc.Awaitable[_econet_pb2.SetStationIdResponse]]:
-        """Set the station ID (takes effect on next machine reset)."""
+        """Set the station number, as if changing the station links. The guest
+        reads it from &FE18 on its next Break; the transport is told at once
+        (AUN re-announces the new number and re-runs its collision checks).
+        """
 
     @_abc_1.abstractmethod
     def SubscribeEconetEvents(
@@ -143,8 +200,10 @@ class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _econet_pb2.SubscribeEconetEventsRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_abc.Iterator[_econet_pb2.EconetEvent], _abc.AsyncIterator[_econet_pb2.EconetEvent]]:
-        """Stream Econet events (frame activity, handshake changes, connection state).
-        Reserved for future implementation.
+        """Stream frames as they cross the transport, and link up/down changes.
+        Starts from the moment of subscription (no replay). Fails with
+        FAILED_PRECONDITION when the machine has no Econet socket or no Econet
+        hardware is fitted.
         """
 
     @_abc_1.abstractmethod
@@ -156,8 +215,9 @@ class EconetServiceServicer(metaclass=_abc_1.ABCMeta):
         """Server-pushed status stream. Writes an initial GetEconetStatusResponse
         as soon as the stream is established, then a fresh snapshot whenever
         status visible on EconetService changes (enable/disable, station ID
-        change, or transport backend connection toggle). The stream stays open
-        until the client cancels; use this instead of polling GetEconetStatus.
+        change, transport link up/down, or a change in the station collisions
+        in effect). The stream stays open until the client cancels; use this
+        instead of polling GetEconetStatus.
         """
 
 def add_EconetServiceServicer_to_server(servicer: EconetServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...
