@@ -5,17 +5,34 @@ to communicate via AUN (Acorn Universal Networking over UDP) -- specifically,
 a Level 3 File Server running on one Beebium instance with a client station
 running on another.
 
-Status: **root cause identified**. Three bugs found:
+**Status (October 2026): resolved, and the scenario now works.** A Level 3
+File Server on one Beebium (the bundled `model-b-l3fs-aun` preset: SCSI
+disc, 65C02 second processor, station 254) serves Beebium clients over AUN:
+`clients/beebium-python-client/tests/test_aun_multiclient_fileserver.py`
+logs two client stations on and catalogues, under ANFS 4.18 and NFS 3.34.
+The R3 read stretch below was removed by the single-process Tube rework,
+not by the deferred-stretch proposal at the end of this document; a later
+defect, where a second client's first request was swallowed by the
+handshake's acked-handle memory, was fixed in #149 (see
+[`aun-robustness.md`](aun-robustness.md), defect 9). Since this was
+written, `--aun-map` became `--aun map=net.stn@ip@port` and the local net
+is configurable (`--aun net=N`); the FourWayHandshake trace file
+`/tmp/beebium-fwh-<PID>.log` no longer exists, and `BEEBIUM_AUN_TRACE=1`
+now logs AUN packets to stderr only. The "temporary" diagnostic counters
+listed near the end are still in the tree (the Tube read-stretch counter
+went with the stretch).
+
+Investigation status as written: **root cause identified**. Three bugs found:
 
 1. **Stale watchdog timer (FIXED):** FourWayHandshake watchdog from
    incoming RX handshake not cancelled on normal completion. Fix
    applied in `handle_tx_final_ack_from_beeb()`.
 
 2. **Inline R3 read stretch loop (ROOT CAUSE, since FIXED):** Fixed by the
-   single-process Tube migration. `TubeSocket::read()` no longer stretches at
+   single-process Tube migration. Host Tube reads no longer stretch at
    all -- reads complete immediately, an empty R3 P-to-H returning stale latch
-   data, which is what B2, BeebEm, jsbeeb and B-Em all do. The scenario below
-   has not been re-run since, so it is unverified rather than known-good.
+   data, which is what B2, BeebEm, jsbeeb and B-Em all do. The scenario has
+   since been verified end to end (see the status note above).
    Original diagnosis follows. The
    `TubeSocket::read()` inline stretch loop (TubeSocket.hpp lines
    124-136) ticks the parasite in a tight busy-wait without
@@ -167,8 +184,10 @@ Same failure mode as Scenario 2.
 
 ## AUN Map Configuration
 
-The AunBackend hardcodes `local_net = 0` (see `ServerMain.hpp` line 1167).
-All `--aun-map` entries must use network 0:
+At the time of this investigation the AunBackend hardcoded `local_net = 0`
+and the flag was `--aun-map`, so all entries had to use network 0. (Today
+the form is `--aun map=0.254@127.0.0.1@10254`, and `--aun net=N` sets the
+local net; see `docs/networking.md`.) As it was then:
 
 ```
 --aun-map 0.254:127.0.0.1:10254   # correct
@@ -727,8 +746,9 @@ Types: 2=Unicast, 3=Ack, 5=Immediate, 6=ImmReply.
 
 ### FourWayHandshake trace
 
-Also enabled by `BEEBIUM_AUN_TRACE=1`. Writes to
-`/tmp/beebium-fwh-<PID>.log` (one file per process):
+Was enabled by `BEEBIUM_AUN_TRACE=1` and wrote to
+`/tmp/beebium-fwh-<PID>.log` (one file per process). This trace file has
+since been removed; it looked like this:
 
 ```
 FWH TX: stage=idle data=6B
@@ -1385,8 +1405,9 @@ read after the stretch clears, before the CPU processes the result.
   gRPC (`GetEconetStatus`), and Python client. Counts writes of
   CR1=&82 (nmi_tx_complete and discard_reset_rx).
 - `BEEBIUM_AUN_TRACE=1` environment variable enables AUN packet
-  logging to stderr and FourWayHandshake trace to
-  `/tmp/beebium-fwh-<PID>.log`.
+  logging to stderr (it also wrote the FourWayHandshake trace to
+  `/tmp/beebium-fwh-<PID>.log` at the time; that file has since been
+  removed).
 - `tick_count` in EconetSocket, exposed via gRPC. Counts
   `tick_rising()` calls (half of CPU cycles, including stretch).
 
@@ -1484,8 +1505,8 @@ and has been modified before.
 
 - `docs/level-3-file-server-setup.md` -- L3FS hardware configuration
   and disc provisioning
-- `docs/local-beebem-econet-lessons.md` -- BeebEm Econet architecture
-  comparison (section 3b: emulated time vs wall-clock time)
+- `docs/local-beebem-econet-lessons.md` (a local, untracked note) -- BeebEm
+  Econet architecture comparison (section 3b: emulated time vs wall-clock time)
 - `docs/networking.md` -- Econet/AUN protocol and hardware documentation
 - `docs/econet-integration.md` -- gRPC integration work programme
 - `tests/test_econet_fileserver.cpp` -- C++ file server tests (uses

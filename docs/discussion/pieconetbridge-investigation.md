@@ -8,10 +8,19 @@ verified to do its job correctly. The drop happens after the kernel
 module receives our frames but before they reach the bridge's
 user-space process.
 
-We may revisit this with PiEconetBridge source-level help in the
-future. Until then, Beebium's `[needs-station-registered]` test tag
-documents that the wire-roundtrip test depends on a peer environment
-we can't yet make reliable.
+**Status (October 2026): partly resolved, cause still open.** The
+Piconet-to-bridge four-way handshake works against a freshly restarted
+bridge (see "Update 2026-04-17" below); what remains unexplained is the
+bridge-side wedge that later stops it scout-acking our station, cleared
+only by restarting `econet-hpbridge`. The hardware test that depends on it is `Piconet network: TX to the
+fileserver completes the wire handshake` in
+`tests/test_piconet_hardware_network.cpp` (tag
+`[piconet-hardware-network]`, skipped unless `BEEBIUM_PICONET_DEVICE`
+and `BEEBIUM_PICONET_NETWORK_AVAILABLE=1` are set), whose comment points here; the `[needs-station-registered]`
+tag this document originally named no longer exists. The AUN side of
+PiEconetBridge interop, which needs no Pi or kernel module, is covered
+separately by the containerised harness
+([`pieconetbridge-aun-interop-testing.md`](pieconetbridge-aun-interop-testing.md), #16, #143).
 
 ## Setup
 

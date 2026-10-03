@@ -1,5 +1,23 @@
 # PiEconetBridge AUN interop: an automated integration test programme
 
+**Status (October 2026): the foundation and part of the programme are
+built** (#16, #143). `integration_tests/pieb-aun/` has the `bridge` fixture
+with native and container flavours (`BEEBIUM_PIEB_FLAVOUR`,
+`BEEBIUM_PIEB_BIN`, `BEEBIUM_PIEB_SRC`, a `DYNAMIC` net on the NAT'd Docker
+Desktop path), the container image `docker/pieconetbridge/` at the pinned
+commit below, and the perturbation proxy. Built scenarios: 1, login at a
+flat and a non-zero net (`test_login.py`); 4, the repeated login loop
+(`test_repeated_login.py`) and a reply overtaking its ack through the proxy
+(`test_reordered_reply.py`); 7, transmission to an absent station
+(`test_unreachable_station.py`, passing); and the published bridge recipe
+(`test_bridge_recipe.py`). Not built: scenarios 2, 3, 5, 6, 8 and 9, and
+the synthetic AUN peer. The defects these tests targeted are all fixed
+([`aun-robustness.md`](aun-robustness.md)). In CI only the recipe test
+runs, in the opt-in `PiEconetBridge recipe` workflow
+(`.github/workflows/pieb-bridge-recipe.yml`, dispatch and a weekly
+schedule); the rest are `slow` tests run by hand (`integration_tests/` are
+not in CI, #47).
+
 Beebium's AUN transport serves two first-class use cases: Beebium instances
 talking to each other, on one host or across a LAN, and Beebium talking to
 other AUN implementations. The first is well served today — mDNS peer discovery
@@ -117,8 +135,8 @@ generate against itself.
    guest while it is mid-transaction and assert a reply comes back.
 7. **Transmission to a station that is not there.** Address a station the
    bridge knows nothing about and assert the guest sees a failure — not
-   `&00 Transmitted OK`. This is the acceptance test for defect 2 and it
-   currently cannot pass.
+   `&00 Transmitted OK`. This is the acceptance test for defect 2; it now
+   passes (the guest reports `Station 1.99 not present`).
 8. **Bridge stopped mid-session.** Kill the bridge process during a
    transaction and assert the guest recovers to a usable state within a bounded
    time, rather than hanging or reporting phantom success.
@@ -184,16 +202,14 @@ capture. That makes the suite expensive to own and easy to start ignoring.
 Two pieces of instrumentation should therefore land as part of the harness
 rather than after it:
 
-- **`SubscribeEconetEvents`** (defect 5 in `aun-robustness.md`) — currently
-  `UNIMPLEMENTED`. Frame send/receive, handshake stage transitions, and drops
-  with a reason. Built as an `ObservableBackend` decorator in the chain, as
-  already designed. This is the single most useful thing we can add before
-  writing any of these tests.
-- **Counters on `FourWayHandshake`** — frames parked, redelivered, expired,
-  dropped for want of queue space; synthetic acks issued. Exposed through the
-  existing diagnostic accessors. These let a test assert on the mechanism
-  rather than only on the outcome, so it cannot pass vacuously once the fix
-  lands.
+- **`SubscribeEconetEvents`** (defect 5 in `aun-robustness.md`) — since
+  built as an `ObservableBackend` decorator in the chain, as designed: frames
+  crossing the transport and link up/down changes. This is the single most
+  useful thing to have before writing any of these tests.
+- **Counters on `FourWayHandshake`** — frames held, redelivered, expired,
+  dropped for want of queue space. Since built and reported in
+  `GetEconetStatusResponse.handshake`. These let a test assert on the
+  mechanism rather than only on the outcome, so it cannot pass vacuously.
 
 ## Sequencing
 
@@ -213,10 +229,10 @@ can demonstrate the change was needed.
    Scenario 7 should fail immediately and unambiguously; scenario 4 should fail
    reliably through the proxy.
 6. **Fix, one defect at a time**, each turning its own red test green.
-   `tests/test_four_way_handshake.cpp:855` — which currently asserts that an
-   out-of-order Unicast is correctly discarded — gets inverted as part of the
+   The test in `tests/test_four_way_handshake.cpp` that asserted an
+   out-of-order Unicast is correctly discarded gets inverted as part of the
    defect-1 fix. That inversion is the clearest single marker that the fix has
-   landed.
+   landed. (Done: it is now "... is held, not dropped".)
 7. **Tier 3** last, once the behaviour is correct and there is something worth
    measuring.
 
