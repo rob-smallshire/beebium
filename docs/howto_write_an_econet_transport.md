@@ -113,12 +113,19 @@ beebium::RpcStatus invoke(std::string_view method, std::string_view request,
 }
 ```
 
-The core's `ExtensionRpcServiceImpl` routes a call to your dispatcher by its
-`service_name()` across **both** the peripheral and transport registries, so the
-service name must be unique. AUN registers `"AunService"`, Piconet
-`"PiconetService"`. Worked examples: `AunDispatcher` (peer table, cable plug,
-status — five unary methods, with in-band success/error) and `PiconetDispatcher`
-(a single status method).
+The core's `ExtensionRpcServiceImpl` routes a call to your dispatcher across
+**both** the peripheral and transport registries. The `Invoke` request's
+`extension_id` selects the instance: it is the id `EconetTransportService`
+reports for your transport, the same id `ExtensionUiService` uses for
+SubscribeView/Dispatch, so one id addresses a transport instance everywhere. An
+empty `extension_id` routes by `service_name()` alone, which the core accepts
+only while exactly one loaded instance offers that service; when more than one
+does (a future two-ADLC machine with two transports), an empty id is a
+`FAILED_PRECONDITION` whose message names the candidate ids. So `service_name()`
+need not be globally unique, but a single instance must not register the same
+service twice. AUN registers `"AunService"`, Piconet `"PiconetService"`. Worked
+examples: `AunDispatcher` (peer table, cable plug, status — five unary methods,
+with in-band success/error) and `PiconetDispatcher` (a single status method).
 
 > Both AUN and Piconet previously hosted their own gRPC services. That put a
 > second gRPC runtime in the plugin and corrupted the heap when a streaming

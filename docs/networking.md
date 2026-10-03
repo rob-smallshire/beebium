@@ -29,6 +29,10 @@ Beebium decouples the emulated ADLC from the underlying transport via the `Netwo
 
 **Mutual exclusion:** `--piconet` and `--aun` cannot both be specified. The choice of transport is established at server startup; runtime swapping is not supported. BBC Micro / Master / Master Compact machines accept at most one transport. (The transport registry is intentionally non-singleton so future machine types like the Acorn Econet Bridge — two memory-mapped ADLCs — could hold two; per-machine cardinality is enforced at machine-setup time.)
 
+### Routing a transport's typed RPCs (ExtensionRpc)
+
+A transport's typed RPCs — `AunService` for AUN, `PiconetService` for Piconet — are served over the core's generic `ExtensionRpc` channel by the extension's hand-written dispatcher, and routed by the `extension_id` on `ExtensionRpc.Invoke`. That id is the per-instance id `EconetTransportService` reports (`ListTransports`), the same id `ExtensionUiService` uses for SubscribeView/Dispatch, so one id addresses a transport instance across all three services. An empty `extension_id` routes by service name alone, which the core accepts only while exactly one loaded instance offers that service; once more than one does — the two-ADLC Econet Bridge shape — an empty id is a `FAILED_PRECONDITION` whose message names the candidate ids, and the caller must pick one. This matches how peripheral extensions already route (`PeripheralExtensionService` id → ExtensionRpc). The clients pass the id they already receive from the transport listing: the Python client binds `info.id` on `bbc.transport[Aun]`, and the TypeScript client discovers it lazily for `bbc.aun` / `bbc.piconet` (with `bbc.aunInstance(id)` / `bbc.piconetInstance(id)` to address one explicitly). No wire change was needed — `InvokeRequest.extension_id` already existed — so the protocol fingerprint is unchanged.
+
 **Configuration via preset JSON** mirrors the CLI through a single `econet.transport` object that names the transport extension and carries its parameters:
 
 ```json
