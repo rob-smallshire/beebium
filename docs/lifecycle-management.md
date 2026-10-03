@@ -232,6 +232,40 @@ attempt (the accelerant) — see [frontend-sleep-wake.md](frontend-sleep-wake.md
 The `unreachable`/`error` spinner therefore now genuinely reconnects rather than
 only waiting.
 
+### Sidebars and cached server state
+
+A front-end's side panels show state the server owns -- disc activity, sideways
+slots, the mixer, the Econet link. When the connection is lost that cached state
+must not keep reading as current, or a dead machine looks like a healthy one with
+an empty network (the symptom reported in #154). The rule is derived from the
+same liveness the emulator-area overlay uses (`died`, `stopped`, `unreachable`),
+combined with any active reconnect, into one *availability* the whole window
+shares, so a panel can never contradict the overlay beside it:
+
+- **live** -- panels show current state and accept input.
+- **not live** (died / stopped / unreachable / reconnecting / reconnect-failed)
+  -- a panel that shows or drives server state announces why in a banner, dims
+  its content as last-known, and disables its controls. A panel that only edits
+  this app's own settings (display style, keyboard mapping) is unaffected.
+
+Two finer rules keep a panel truthful even before the window-level verdict:
+
+- A streamed status that is **lost** (its stream ended for a non-cancellation
+  reason) is marked stale by its client: live gauges (a link's connected flag,
+  rate counters) are cleared, so nothing reads as a live link to a server that is
+  gone, while stable configuration (station number, fitted-or-not) is kept as
+  last-known for display. A fresh snapshot on a new stream clears the staleness,
+  and a superseded stream's late ending is ignored, so a reconnect is not
+  poisoned by the old stream it replaced.
+- A list that has **never loaded** -- e.g. the transports list, when its first
+  request met a dead server -- says "unavailable" rather than rendering as empty,
+  so a crash is not mistaken for a machine that simply has no such feature; a list
+  that loaded and then failed keeps its last contents.
+
+An editor that would dispatch to the server is disabled, and any open editor
+popover is dismissed, the moment availability leaves live, so the user cannot
+send a command to a server that is not there.
+
 ---
 
 ## 5. The protocol fingerprint
