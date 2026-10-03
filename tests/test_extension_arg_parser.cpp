@@ -164,6 +164,26 @@ TEST_CASE("defaults applied for missing optional params", "[extension][arg-parse
     REQUIRE(result.config.count("adapter-id") == 0);
 }
 
+TEST_CASE("explicit_keys records only the keys the user typed, not defaults",
+          "[extension][arg-parser]") {
+    // scsi-id is typed; its presence in explicit_keys must not be confused with
+    // the default that also lands in config. A preset merge relies on this to
+    // override only typed keys (#166).
+    auto typed = parse_extension_args("scsi-hdd", "5:/img", kScsiHddSchema);
+    REQUIRE(typed.ok);
+    CHECK(typed.explicit_keys.count("scsi-id") == 1);  // user typed it
+    CHECK(typed.explicit_keys.count("image") == 1);    // user typed it
+    CHECK(typed.explicit_keys.count("adapter-id") == 0);  // never given
+
+    // With nothing typed, scsi-id still gets its default in config but is NOT
+    // explicit -- the distinction the merge needs.
+    auto defaulted = parse_extension_args("scsi-hdd", "", kScsiHddSchema);
+    REQUIRE(defaulted.ok);
+    CHECK(defaulted.config.at("scsi-id") == "0");       // default filled
+    CHECK(defaulted.explicit_keys.count("scsi-id") == 0);  // but not explicit
+    CHECK(defaulted.explicit_keys.empty());
+}
+
 // ---------------------------------------------------------------------------
 // Framework-managed keys (id, label)
 // ---------------------------------------------------------------------------

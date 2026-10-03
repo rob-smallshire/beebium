@@ -14,6 +14,7 @@
 // Tests for server_main helper functions (validate_config, load_roms, etc.)
 
 #include <beebium/server/ServerMain.hpp>
+#include <beebium/server/BuiltinExtensions.hpp>
 #include <beebium/Machines.hpp>
 #include <beebium/TeletextGrid.hpp>
 #include <beebium/TeletextText.hpp>
@@ -212,7 +213,8 @@ TEST_CASE("merge_preset_econet_transport: a CLI --aun merges over the preset's a
     config.extension_instances.push_back(
         Inst{"aun", {{"net", "0"}, {"port", "32768"}}, {}, /*from_preset=*/true});
     config.extension_instances.push_back(
-        Inst{"aun", {{"port", "0"}, {"map-file", "none"}}, {}, false});
+        Inst{"aun", {{"port", "0"}, {"map-file", "none"}}, {}, false,
+             /*explicit_keys=*/{"port", "map-file"}});
 
     merge_preset_econet_transport(config);
 
@@ -234,7 +236,8 @@ TEST_CASE("merge_preset_econet_transport: a different CLI transport replaces the
     config.extension_instances.push_back(
         Inst{"aun", {{"net", "0"}}, {}, /*from_preset=*/true});
     config.extension_instances.push_back(
-        Inst{"piconet", {{"device_path", "/dev/ttyUSB0"}}, {}, false});
+        Inst{"piconet", {{"device_path", "/dev/ttyUSB0"}}, {}, false,
+             /*explicit_keys=*/{"device_path"}});
 
     merge_preset_econet_transport(config);
 
@@ -265,6 +268,7 @@ TEST_CASE("merge_preset_econet_transport: list parameters follow the CLI per key
     preset.list_config["subnet"] = {"128@192.168.5.0/24"};
     Inst cli{"aun", {}, {}, false};
     cli.list_config["map"] = {"0.80@127.0.0.1@40001"};  // CLI sets map
+    cli.explicit_keys = {"map"};                        // the user typed map=
     config.extension_instances.push_back(std::move(preset));
     config.extension_instances.push_back(std::move(cli));
 
@@ -291,6 +295,95 @@ TEST_CASE("merge_preset_econet_transport: two CLI transports are left for the on
     // No preset transport to reconcile: both stay, so install_econet still
     // reports "got 2".
     CHECK(config.extension_instances.size() == 2);
+}
+
+// #166: parse_extension_args fills every optional key with its default before
+// the merge runs, so the CLI instance carries a value for keys the user never
+// typed. Those DEFAULTED keys must not beat the preset -- only typed keys do.
+TEST_CASE("merge_preset_econet_transport: a CLI's defaulted keys do not mask the preset",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    // Preset carries a chosen port and net.
+    config.extension_instances.push_back(Inst{
+        "aun", {{"port", "0"}, {"net", "5"}, {"discovery", "off"}}, {},
+        /*from_preset=*/true});
+    // CLI as parse_extension_args would build it: the user typed only
+    // discovery=off:map-file=none, but port and net arrived as manifest
+    // defaults. Only the two typed keys are explicit.
+    config.extension_instances.push_back(Inst{
+        "aun",
+        {{"port", "32768"}, {"net", "0"}, {"discovery", "off"}, {"map-file", "none"}},
+        {},
+        false,
+        /*explicit_keys=*/{"discovery", "map-file"}});
+
+    merge_preset_econet_transport(config);
+
+    REQUIRE(config.extension_instances.size() == 1);
+    const auto& inst = config.extension_instances[0];
+    CHECK(inst.config.at("port") == "0");         // preset wins over the default
+    CHECK(inst.config.at("net") == "5");          // preset wins over the default
+    CHECK(inst.config.at("discovery") == "off");  // user typed it (same value)
+    CHECK(inst.config.at("map-file") == "none");  // user typed it
+}
+
+// #166: the headline symptom -- a preset with discovery=off plus any --aun used
+// to turn discovery back on, because discovery arrived defaulted as "on".
+TEST_CASE("merge_preset_econet_transport: a preset discovery=off survives an unrelated --aun",
+          "[server_main][preset][transport]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    config.extension_instances.push_back(
+        Inst{"aun", {{"discovery", "off"}, {"port", "0"}}, {}, /*from_preset=*/true});
+    // The user typed only port=0; discovery arrived as the default "on".
+    config.extension_instances.push_back(Inst{
+        "aun", {{"port", "0"}, {"discovery", "on"}}, {}, false,
+        /*explicit_keys=*/{"port"}});
+
+    merge_preset_econet_transport(config);
+
+    REQUIRE(config.extension_instances.size() == 1);
+    const auto& inst = config.extension_instances[0];
+    CHECK(inst.config.at("discovery") == "off");  // preset survives
+    CHECK(inst.config.at("port") == "0");          // user typed it
+}
+
+// #166 end-to-end against the REAL AUN manifest: parse the CLI exactly as
+// server_main does (defaults and all), then merge. This is the seam the #150
+// tests missed by using manifests without defaults. Reproduces the reported
+// `--preset model-b-disc-aun-auto --aun discovery=off:map-file=none` case.
+TEST_CASE("merge_preset_econet_transport: real AUN manifest, only typed keys beat the preset",
+          "[server_main][preset][transport]") {
+    const auto* aun = beebium::builtin_extensions::find("aun");
+    REQUIRE(aun != nullptr);
+
+    // The CLI as server_main builds it: parse the typed string against the real
+    // schema, so port/net arrive as manifest defaults and only discovery and
+    // map-file are explicit.
+    auto parsed = beebium::parse_extension_args(
+        "aun", "discovery=off:map-file=none", aun->manifest.parameters);
+    REQUIRE(parsed.ok);
+    CHECK(parsed.config.at("port") == "32768");  // default filled in
+    CHECK(parsed.explicit_keys.count("port") == 0);
+
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    // The preset chose port 0 and net 7.
+    config.extension_instances.push_back(
+        Inst{"aun", {{"port", "0"}, {"net", "7"}}, {}, /*from_preset=*/true});
+    config.extension_instances.push_back(Inst{"aun", std::move(parsed.config),
+                                              std::move(parsed.list_config), false,
+                                              std::move(parsed.explicit_keys)});
+
+    merge_preset_econet_transport(config);
+
+    REQUIRE(config.extension_instances.size() == 1);
+    const auto& inst = config.extension_instances[0];
+    CHECK(inst.config.at("port") == "0");         // preset, not the 32768 default
+    CHECK(inst.config.at("net") == "7");          // preset, not the 0 default
+    CHECK(inst.config.at("discovery") == "off");  // user typed it
+    CHECK(inst.config.at("map-file") == "none");  // user typed it
 }
 
 // ============================================================================

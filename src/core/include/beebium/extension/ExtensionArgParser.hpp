@@ -17,6 +17,7 @@
 #include "beebium/CliArgSplit.hpp"  // split_colon_args (shared tokenizer)
 
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -48,6 +49,11 @@ struct ParseResult {
     bool ok = false;
     std::map<std::string, std::string> config;
     std::map<std::string, std::vector<std::string>> list_config;
+    // Keys the caller actually supplied on the command line, before optional
+    // parameters' defaults are filled in. A later preset merge needs this to
+    // tell a typed value from a defaulted one, so only typed keys override a
+    // preset (#166).
+    std::set<std::string> explicit_keys;
     std::string error;          // populated when !ok
 };
 

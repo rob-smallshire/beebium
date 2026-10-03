@@ -114,14 +114,12 @@ CLI-overrides-preset applies to the Econet transport too. A `--aun` (or
 `--piconet`) on the command line overrides the preset's `econet.transport`
 rather than counting as a second transport: the same transport name merges
 parameters with the CLI winning per key, and a different transport name
-replaces the preset's outright. The CLI's `--aun` already carries the
-manifest default of every parameter it does not name (`port=32768`, `net=0`,
-`discovery=on`), and those defaults win too, so only the default-less keys
-(`map`, `subnet`, `map-file`) are kept from the preset. Repeat on the command
-line any defaulted key the preset sets: `--preset model-b-disc-aun-80 --aun
-port=0:discovery=off:map-file=none` takes all three from the CLI, while
-`--aun map-file=none` alone would also replace the preset's `port=0` with
-32768 and its discovery setting with `on`.
+replaces the preset's outright. Only the keys you actually type on the command
+line override the preset; keys you leave out keep the preset's value, even
+though the transport fills them with manifest defaults internally (#166). So
+`--preset model-b-disc-aun-80 --aun map-file=none` changes only `map-file` and
+leaves the preset's `port`, `net` and `discovery` intact, while
+`--aun port=0:discovery=off` overrides exactly those two.
 
 #### ROM Configuration
 

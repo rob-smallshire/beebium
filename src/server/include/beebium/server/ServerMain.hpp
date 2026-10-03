@@ -88,6 +88,7 @@
 #include <mutex>
 #include <optional>
 #include <random>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -538,6 +539,7 @@ struct ServerConfig {
         std::map<std::string, std::string> config;                      // parsed KV pairs (scalar params)
         std::map<std::string, std::vector<std::string>> list_config;    // list params (is_list=true)
         bool from_preset = false;                                       // supplied by a preset, overridable by the CLI
+        std::set<std::string> explicit_keys{};                          // keys the user typed (not defaulted); empty for preset insts (#166)
     };
     std::vector<ExtensionInstance> extension_instances;
 };
@@ -889,14 +891,23 @@ void merge_preset_econet_transport(ServerConfig<MachineType>& config) {
 
     if (insts[cli_idx].name == insts[preset_idx].name) {
         // Same transport: the preset's parameters are a baseline the CLI
-        // overrides per key. emplace() inserts only keys the CLI did not set.
+        // overrides per key -- but ONLY for keys the user actually typed. The
+        // CLI instance already carries a value for every manifest key, because
+        // parse_extension_args filled the optional ones with their defaults
+        // (#166); a plain emplace() would therefore let those defaults mask the
+        // preset. So take the preset's value for every key NOT in the CLI's
+        // explicit set, and keep the CLI's only for keys the user supplied.
         auto& cli = insts[cli_idx];
         const auto& preset = insts[preset_idx];
         for (const auto& [key, value] : preset.config) {
-            cli.config.emplace(key, value);
+            if (cli.explicit_keys.count(key) == 0) {
+                cli.config[key] = value;
+            }
         }
         for (const auto& [key, values] : preset.list_config) {
-            cli.list_config.emplace(key, values);
+            if (cli.explicit_keys.count(key) == 0) {
+                cli.list_config[key] = values;
+            }
         }
     }
     // A different name replaces the preset outright; either way drop the preset.
@@ -1257,7 +1268,9 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
                 config.extension_instances.push_back({
                     manifest->name,
                     std::move(parse_result.config),
-                    std::move(parse_result.list_config)
+                    std::move(parse_result.list_config),
+                    /*from_preset=*/false,
+                    std::move(parse_result.explicit_keys)
                 });
             } else {
                 std::cerr << "Unknown argument: " << arg << "\n";

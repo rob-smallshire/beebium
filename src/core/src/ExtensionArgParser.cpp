@@ -303,6 +303,15 @@ ParseResult parse_extension_args(
         }
     }
 
+    // Record which keys the caller actually supplied, before any defaults are
+    // filled in -- a preset merge uses this to override only typed keys (#166).
+    for (const auto& [key, value] : result.config) {
+        result.explicit_keys.insert(key);
+    }
+    for (const auto& [key, values] : result.list_config) {
+        result.explicit_keys.insert(key);
+    }
+
     // Apply defaults for missing optional parameters
     for (const auto& p : schema) {
         if (result.config.count(p.key) == 0) {

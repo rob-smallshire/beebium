@@ -27,6 +27,7 @@ import pytest
 
 from beebium.client import Beebium
 from beebium.client.installation import ServerInstallation
+from beebium.ext.econet.aun import Aun
 
 
 def test_auto_station_preset_comes_up_in_range(
@@ -135,3 +136,36 @@ def test_port_is_listening_before_auto_selection_finishes(
             time.sleep(0.25)
         assert status.enabled
         assert 1 <= status.station_id <= 253
+
+
+def test_cli_aun_overrides_only_typed_keys_over_a_preset(
+    mos_filepath: Path,
+    server_installation: ServerInstallation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Issue #166 on the real launch path: model-b-disc-aun-auto sets --aun
+    # port=0 (an OS-chosen ephemeral port). Adding --aun discovery=off:
+    # map-file=none must override ONLY those two keys and keep the preset's
+    # port=0 -- so the socket binds an ephemeral port, NOT the manifest default
+    # 32768. Before the fix the defaulted port masked the preset and the server
+    # bound 32768.
+    monkeypatch.setenv("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none")
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        preset="model-b-disc-aun-auto",
+        extra_args=["--aun", "discovery=off:map-file=none"],
+        startup_timeout=30.0,
+    ) as bbc:
+        aun = bbc.transport[Aun]
+        deadline = time.monotonic() + 30.0
+        status = aun.status
+        while time.monotonic() < deadline and not status.connected:
+            time.sleep(0.25)
+            status = aun.status
+        assert status.connected
+        # The typed keys took effect...
+        assert status.discovery_mode == "off"
+        # ...and the preset's port=0 survived (OS-chosen port, not the default).
+        assert status.local_port != 32768
+        assert status.local_port != 0
