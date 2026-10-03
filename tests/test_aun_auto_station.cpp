@@ -364,8 +364,12 @@ TEST_CASE("AUN auto station: selection hands its browse to the permanent subscri
     unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
 }
 
+// The 50-peer case is a benchmark, not a regression test, and registering 50
+// backends + 50 announcers is a heavy churn on the shared responder (#164). It
+// carries its own opt-in tag so the ordinary [.mdns] batch runs only the
+// 10-peer case; run it deliberately with `[.mdns-bench]`.
 TEST_CASE("AUN auto station: selection hands its browse to the permanent subscriber, 50 peers",
-          "[.mdns][aun][auto-station][bench160]") {
+          "[.mdns-bench][aun][auto-station][bench160]") {
     if (!platform_supports_mdns()) {
         SKIP("mDNS responder not available on this platform");
     }

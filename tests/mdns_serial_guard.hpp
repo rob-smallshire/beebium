@@ -58,15 +58,20 @@ inline std::filesystem::path mdns_responder_lock_filepath() {
     return std::filesystem::temp_directory_path() / "beebium-mdns-responder.lock";
 }
 
-// A test case needs the real responder when it is tagged [.mdns] or [stress].
-// Catch2 stores each tag without its brackets; the hidden marker keeps the tag
-// its leading dot (".mdns").
+// A test case needs the real responder when it is tagged [.mdns], a variant
+// such as [.mdns-bench] (the opt-in 50-peer benchmark), or [stress]. Catch2
+// stores each tag without its brackets; the hidden marker keeps the tag its
+// leading dot (".mdns"). Match the "mdns" family by prefix (after an optional
+// leading dot) so every variant is serialised, not only the plain tag.
 inline bool test_needs_real_responder(const Catch::TestCaseInfo& info) {
     for (const auto& tag : info.tags) {
         std::string text(tag.original.data(), tag.original.size());
         std::transform(text.begin(), text.end(), text.begin(),
                        [](unsigned char c) { return std::tolower(c); });
-        if (text == ".mdns" || text == "mdns" || text == "stress") {
+        if (!text.empty() && text.front() == '.') {
+            text.erase(text.begin());
+        }
+        if (text == "stress" || text.rfind("mdns", 0) == 0) {
             return true;
         }
     }
