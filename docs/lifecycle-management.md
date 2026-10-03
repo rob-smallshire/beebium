@@ -152,6 +152,20 @@ the teardown race whether the server exits cleanly or crashes.
 **Rule:** `disconnect()` closes the *channel* (best effort, off the main thread);
 it never shuts the group down.
 
+**Thread count (#152).** The group has several loops, not one -- one per core,
+capped at 4 (`VideoClient.eventLoopThreadCount`). Every window's whole channel
+(video, audio, all control streams) runs on this group, and gRPC-Swift pins a
+connection to one loop at creation, so a single loop makes every open machine's
+frame receive, HTTP/2 demux and protobuf decode share one core. Measured with a
+harness that opens N real video streams on a chosen loop count: in a Debug build
+one loop pins a core from three machines up and each window's frame latency rises
+together; a few loops spread the windows across cores. In a Release build one loop
+already copes with ten machines (about a fifth of a core), so the change is
+transparent there and only lifts the ceiling for heavier use. The cap sits below
+the core count on purpose -- the host also runs the emulator servers, so more
+loops than a handful merely compete with them for cores. The group is still never
+shut down, so more loops do not change the teardown rule above.
+
 ---
 
 ## 4. Orderly teardown and shutdown
