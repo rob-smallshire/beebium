@@ -111,7 +111,7 @@ def test_enable_with_port_binds_the_aun_transport(mos_filepath: Path, server_ins
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", "net=1"],
+        extra_args=["--aun", "net=1:discovery=off:map-file=none"],
     ) as bbc:
         assert bbc.transport[Aun].status.local_port == 0
         assert bbc.transport[Aun].status.connected is False
@@ -132,7 +132,7 @@ def test_add_peer_before_enable_survives_and_is_listed(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", "net=1"],
+        extra_args=["--aun", "net=1:discovery=off:map-file=none"],
     ) as bbc:
         aun = bbc.transport[Aun]
 
@@ -162,7 +162,7 @@ def test_api_peer_survives_disable_and_reenable(mos_filepath: Path, server_insta
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", "net=1"],
+        extra_args=["--aun", "net=1:discovery=off:map-file=none"],
     ) as bbc:
         aun = bbc.transport[Aun]
 
@@ -199,7 +199,7 @@ def test_map_file_peers_listed_with_provenance_and_reloaded(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", f"map-file={map_filepath}"],
+        extra_args=["--aun", f"map-file={map_filepath}:discovery=off"],
     ) as bbc:
         bbc.econet.enable(station_id=2, aun_port=32768)
         aun = bbc.transport[Aun]
@@ -231,7 +231,7 @@ def test_map_edit_rpcs_write_the_file_and_survive_a_hand_edit(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", f"map-file={map_filepath}"],
+        extra_args=["--aun", f"map-file={map_filepath}:discovery=off"],
     ) as bbc:
         bbc.econet.enable(station_id=2, aun_port=32768)
         aun = bbc.transport[Aun]
@@ -276,7 +276,7 @@ def test_running_instance_sees_a_subcommand_write_via_the_poll(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", f"map-file={map_filepath}"],
+        extra_args=["--aun", f"map-file={map_filepath}:discovery=off"],
     ) as bbc:
         bbc.econet.enable(station_id=2, aun_port=32768)
         aun = bbc.transport[Aun]
@@ -376,7 +376,7 @@ def test_poll_driven_reload_repushes_the_sidebar_view(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", f"map-file={map_filepath}"],
+        extra_args=["--aun", f"map-file={map_filepath}:discovery=off"],
     ) as bbc:
         bbc.econet.enable(station_id=2, aun_port=32768)
         ext_id = bbc.transport.active.id
@@ -424,7 +424,7 @@ def test_add_map_peer_in_one_instance_updates_a_second_instances_sidebar(
     launch_args = {
         "server": server_installation,
         "mos_filepath": mos_filepath,
-        "extra_args": ["--aun", f"map-file={map_filepath}"],
+        "extra_args": ["--aun", f"map-file={map_filepath}:discovery=off"],
     }
 
     with Beebium.launch(**launch_args) as bbc_a, Beebium.launch(**launch_args) as bbc_b:
@@ -452,11 +452,12 @@ def test_discovery_mode_reported_in_status(
     mos_filepath: Path, server_installation: ServerInstallation
 ) -> None:
     # #158: AunService.GetStatus reports the discovery mode. `off` neither
-    # announces nor browses, so this touches no network.
+    # announces nor browses, and map-file=none keeps the real per-user map out,
+    # so this is fully hermetic.
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", "net=1:discovery=off"],
+        extra_args=["--aun", "net=1:discovery=off:map-file=none"],
     ) as bbc:
         assert bbc.transport[Aun].status.discovery_mode == "off"
 
@@ -469,7 +470,7 @@ def test_peer_rpcs_validate_ranges_and_report_removals(
     with Beebium.launch(
         server=server_installation,
         mos_filepath=mos_filepath,
-        extra_args=["--aun", "net=1"],
+        extra_args=["--aun", "net=1:discovery=off:map-file=none"],
     ) as bbc:
         aun = bbc.transport[Aun]
 

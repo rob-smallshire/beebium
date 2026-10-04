@@ -231,7 +231,7 @@ def bbc_aun(mos_filepath: Path, basic_filepath, beebium_server_filepath):
             mos_filepath=mos_filepath,
             basic_filepath=basic_filepath,
             server_filepath=beebium_server_filepath,
-            extra_args=["--aun", "net=1"],
+            extra_args=["--aun", "net=1:discovery=off:map-file=none"],
         ) as instance:
             yield instance
     except ServerNotFoundError as e:

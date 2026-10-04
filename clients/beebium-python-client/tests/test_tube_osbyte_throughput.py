@@ -67,7 +67,7 @@ def bbc(
                 "--station",
                 "254",
                 "--aun",
-                "port=0",
+                "port=0:discovery=off:map-file=none",
             ],
             startup_timeout=20.0,
         ) as instance:

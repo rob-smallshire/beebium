@@ -44,6 +44,10 @@ def test_auto_station_preset_comes_up_in_range(
         server=server_installation,
         mos_filepath=mos_filepath,
         preset="model-b-disc-aun-auto",
+        # Keep the real per-user map file out; discovery stays on because
+        # --station auto needs mDNS to find a free number (this test tolerates
+        # other LAN peers via its range-only assertion).
+        extra_args=["--aun", "map-file=none"],
         startup_timeout=30.0,
     ) as bbc:
         # The station is chosen just after the port is up (deferred selection),
@@ -77,7 +81,9 @@ def test_run_during_auto_selection_starts_the_machine(
         server=server_installation,
         mos_filepath=mos_filepath,
         preset="model-b-disc-aun-auto",
-        extra_args=["--wait=api"],
+        # Keep the real per-user map file out; discovery stays on (--station
+        # auto needs it), isolated only by the range-tolerant assertion below.
+        extra_args=["--wait=api", "--aun", "map-file=none"],
         startup_timeout=3.0,  # port is up well before the 3 s selection ends
     ) as bbc:
         # Call Run now, while selection is still in progress. Post-fix this
