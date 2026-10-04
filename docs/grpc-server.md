@@ -754,39 +754,12 @@ For the complete matrix, see `docs/keyboard-and-display.md`.
 
 ## Testing
 
-### C++ Tests
-
-The test suite includes gRPC client tests for each service:
+Every service has C++ gRPC tests under `tests/` (`test_grpc_*.cpp`), which start a server in-process and exercise it as a client. The Python and TypeScript clients have their own suites, which run against the built servers. After building (see [building.md](building.md)):
 
 ```bash
-cd build
-./tests/test_grpc_video      # Video service tests
-./tests/test_grpc_keyboard   # Keyboard service tests
-./tests/test_grpc_debugger   # Debugger service tests (48 tests)
-./tests/test_grpc_indicator  # Indicator service tests
-./tests/test_expression      # Condition expression compiler tests
-```
-
-These tests start a local server, connect as a gRPC client, and verify the services work correctly.
-
-### Python Tests
-
-The Python client includes integration tests for the debugger:
-
-```bash
-cd clients/beebium-python-client
-source .venv/bin/activate
-python -m pytest tests/test_debugger.py -v
-```
-
-### TypeScript Tests
-
-The TypeScript client has integration tests for all services:
-
-```bash
-cd clients/beebium-typescript-client
-npx vitest run tests/integration.test.ts           # 48 general integration tests
-npx vitest run tests/debugger-integration.test.ts   # 24 debugger-specific tests
+ctest --test-dir build --output-on-failure                 # C++
+(cd clients/beebium-python-client && uv run pytest)        # Python client
+(cd clients/beebium-typescript-client && npm test)         # TypeScript client
 ```
 
 ## Architecture
