@@ -21,8 +21,9 @@
 // So Mode 7 draws whole glyphs however the 6845 is programmed. The standard
 // mode is interlace sync and video (R8=&93, R9=18), where the row address runs
 // 0,2,..18 on one field and 1,3,..19 on the other; a program that turns the
-// interlace off (R8=&92, R9=9, as *TV ,1 does and as Ant Attack does for its
-// title page) gets a row address of 0..9 and must still see every glyph line.
+// interlace off by programming the 6845 directly (R8=&92, R9=9, as Ant Attack
+// does for its title page) gets a row address of 0..9 and must still see every
+// glyph line.
 
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/Machines.hpp>

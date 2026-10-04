@@ -117,7 +117,7 @@ screen mode:
 The glyph line drawn is 2 x line + CRS of the twenty in the expanded font. With
 the standard interlace sync and video (R8=&93, R9=18) that equals the row
 address (0,2,..18 on one field, 1,3,..19 on the other). With the interlace off
-(R8=&92, R9=9, as `*TV ,1` gives and as Ant Attack uses) the row address runs
+(R8=&92, R9=9, programmed directly, as Ant Attack does) the row address runs
 0..9 and the chip still walks all ten font lines, CRS alternating each line.
 Because the count runs on through bitmap lines, a teletext band below a bitmap
 band (a split screen) begins at whatever line the bitmap lines left it on, as

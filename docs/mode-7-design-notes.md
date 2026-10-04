@@ -341,8 +341,9 @@ a character's ten lines itself -- cleared by the trailing edge of DEW (VSYNC),
 advanced by the trailing edge of LOSE (DISPTMG) -- and sees only RA0, on CRS,
 which picks a font line's rounded partner. In the standard mode the two agree:
 RA runs 0,2,..18 or 1,3,..19 and the glyph line 2 x line + CRS is the same
-number. A program that turns the interlace off for teletext (R8=&92, R9=9, as
-`*TV ,1` gives; Ant Attack does it for its title page) gets RA 0..9, and the
+number. A program that turns the interlace off for teletext by programming
+the 6845 directly (R8=&92, R9=9; Ant Attack does it for its title page --
+MOS 1.20 keeps MODE 7 interlaced even after `*TV ,1`) gets RA 0..9, and the
 chip still draws whole glyphs, ten lines to a row, with CRS alternating line by
 line. Taking the row address as the glyph line instead drew the top half of
 every character and never ended a row. See `video-subsystem.md` (SAA5050 Timing
