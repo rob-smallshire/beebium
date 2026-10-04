@@ -260,6 +260,7 @@ public:
         const uint8_t fg = m_fg;
 
         uint16_t data;  // 12-bit expanded font row
+        bool flashing;  // hidden by flash in this cell's phase
 
         if (value < 32) {
             // Control code - display as space (or held graphics)
@@ -269,8 +270,17 @@ public:
                 data = m_last_graphics_data;
             }
 
+            // A held mosaic flashes like the text around it. The flash state
+            // is the one before the code acts, so FLASH is Set-After, except
+            // that STEADY is Set-At: its own cell is already steady.
+            flashing = !m_text_visible && value != 0x09;
+
             // Process control code (may modify data for hold graphics)
             process_control_code(value, data);
+
+            if (flashing) {
+                data = 0;
+            }
 
             if (!m_hold) {
                 m_last_graphics_data = 0;
@@ -279,28 +289,31 @@ public:
             // Display character using pre-computed expanded AA font
             uint8_t glyph_raster = (glyph_line() + m_raster_offset) >> m_raster_shift;
 
-            if (glyph_raster < 20 && m_text_visible && !m_conceal) {
-                // Use pre-computed expanded AA font
+            uint16_t glyph = 0;
+            if (glyph_raster < 20) {
                 int charset_idx = static_cast<int>(m_charset);
-                data = TELETEXT_EXPANDED_FONT[1][charset_idx][value - 32][glyph_raster];
-            } else {
-                data = 0;
+                glyph = TELETEXT_EXPANDED_FONT[1][charset_idx][value - 32][glyph_raster];
             }
 
-            // Store graphics data for hold mode
+            // The held memory keeps the mosaic itself, whatever the flash
+            // phase, so a mosaic held while flashing is shown whole once
+            // STEADY is reached.
             if ((value & 0x20) && m_charset != TeletextCharset::Alpha) {
                 if (!m_conceal) {
-                    m_last_graphics_data = data;
+                    m_last_graphics_data = glyph;
                     m_last_graphics_char = value;
                 }
             }
+
+            flashing = !m_text_visible;
+            data = flashing || m_conceal ? 0 : glyph;
         }
 
         if (!dispen) {
             data = 0;
         }
 
-        capture_cell(value, dispen, cursor, fg);
+        capture_cell(value, dispen, cursor, fg, flashing);
 
         // Write 2 Output entries: left 6 bits and right 6 bits
         Output* output = &m_output[m_write_index & 7];
@@ -490,7 +503,7 @@ private:
     // start at different rasters, so a raster == 0 guard would silently capture
     // nothing on alternate fields. Correctness first; the writes are small and
     // land in cache.
-    void capture_cell(uint8_t value, uint8_t dispen, bool cursor, uint8_t fg) {
+    void capture_cell(uint8_t value, uint8_t dispen, bool cursor, uint8_t fg, bool flashing) {
         if (!m_teletext_grid || !dispen) {
             return;
         }
@@ -515,7 +528,7 @@ private:
         cell.fg = fg;
         cell.bg = m_bg;
         cell.concealed = m_conceal;
-        cell.flashing = !m_text_visible;
+        cell.flashing = flashing;
         cell.cursor = cursor;
         cell.double_height_top = (m_raster_shift == 1 && m_raster_offset == 0);
         cell.double_height_bottom = (m_raster_shift == 1 && m_raster_offset != 0);

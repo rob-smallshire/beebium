@@ -270,6 +270,41 @@ TEST_CASE("V3: an alpha colour code clears the held mosaic after its own cell",
               {blank(), block(W), block(W), block(W), blank()});
 }
 
+// --- Flash and steady (R4, R5, R7; study defects 6.2 and 6.3) --------------
+
+TEST_CASE("V4: a held flashing mosaic is remembered whole and steadied at the STEADY",
+          "[saa5050][attributes][hold][flash]") {
+    // Two spaces, two flashing blocks, two steady blocks. The held memory
+    // keeps the mosaic's bitmap whatever the flash phase, and STEADY is
+    // Set-At, so its cell shows the held block steadily.
+    const Row row = {GRAPHICS_WHITE, FLASH, BLOCK, HOLD, STEADY, BLOCK};
+
+    SECTION("flash visible") {
+        check_row(render_row(row, Flash::Visible),
+                  {blank(), blank(), block(W), block(W), block(W), block(W)});
+    }
+    SECTION("flash hidden") {
+        check_row(render_row(row, Flash::Hidden),
+                  {blank(), blank(), blank(), blank(), block(W), block(W)});
+    }
+}
+
+TEST_CASE("V5: a held mosaic flashes in control-code cells after FLASH",
+          "[saa5050][attributes][hold][flash]") {
+    // FLASH is Set-After: its own cell shows the held block steadily, and
+    // the held block in the cell after it flashes.
+    const Row row = {GRAPHICS_WHITE, BLOCK, HOLD, FLASH, BLACK_BACKGROUND};
+
+    SECTION("flash visible") {
+        check_row(render_row(row, Flash::Visible),
+                  {blank(), block(W), block(W), block(W), block(W)});
+    }
+    SECTION("flash hidden") {
+        check_row(render_row(row, Flash::Hidden),
+                  {blank(), block(W), block(W), block(W), blank()});
+    }
+}
+
 // --- What the held memory holds and what clears it (R14, R15, R16) ---------
 
 TEST_CASE("V7: a control code displayed while hold is off clears the held memory",
@@ -412,5 +447,21 @@ TEST_CASE("The grid records a held mosaic under a colour code in the old foregro
     CHECK(held.character == 0x7F);
     CHECK(held.fg == W);
     CHECK(grid.cell(0, 4).fg == Y);
+}
+
+TEST_CASE("The grid records flashing from the cell after FLASH and steady at STEADY",
+          "[saa5050][attributes][hold][grid][flash]") {
+    SECTION("FLASH") {
+        TeletextGrid grid;
+        render({{GRAPHICS_WHITE, BLOCK, HOLD, FLASH, BLACK_BACKGROUND}}, Flash::Hidden, &grid);
+        CHECK_FALSE(grid.cell(0, 3).flashing);
+        CHECK(grid.cell(0, 4).flashing);
+    }
+    SECTION("STEADY") {
+        TeletextGrid grid;
+        render({{GRAPHICS_WHITE, FLASH, BLOCK, HOLD, STEADY, BLOCK}}, Flash::Hidden, &grid);
+        CHECK(grid.cell(0, 3).flashing);
+        CHECK_FALSE(grid.cell(0, 4).flashing);
+    }
 }
 
