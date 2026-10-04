@@ -26,6 +26,26 @@ the extension editor forms (AUN add/edit peer and subnet sheets, ModalEditor tex
 inputs) all use it. Inline fields that live directly in a window (not in a
 popover or sheet) are unaffected.
 
+## Focus in a multi-field form
+
+When a popover or sheet has more than one field, three rules keep focus sane:
+
+- **Exactly one field claims initial focus.** Each `PopoverTextField` would
+  otherwise grab focus when the window becomes key, and the last one to run wins,
+  so focus jumps to the last field a few hundred milliseconds after opening. Only
+  the first editable field sets `autofocus: true` (the single-field default); the
+  rest pass `false` and are reached by Tab or a click.
+- **A delayed focus assertion must never override the user.** The take-focus step
+  runs when the window becomes key, which can be after the user has already
+  clicked another field; it must no-op if another field's editor is already first
+  responder, or it will yank focus back.
+- **Tab moves focus through the key-view loop, it does not type a tab.** A
+  single-line `NSTextView` is not a field editor, so the default action for Tab is
+  to insert a tab character (replacing a selected value). Handle Tab and
+  Shift-Tab explicitly with `selectNextKeyView` / `selectPreviousKeyView`; handle
+  Return as commit and Escape as cancel. Open with the value selected (select
+  all), as a native field does, so typing replaces it and a click places the caret.
+
 ## The regression check
 
 `FocusSelfTest` (macOS, debug-flagged) drives this visually: a caret cannot be
@@ -51,3 +71,27 @@ and show nothing against a disconnected client). Launch a server first, e.g.
 The `BEEBIUM_DEBUG_FOCUS=1` flag separately logs focus/first-responder and
 publish-rate diagnostics (`FocusDiagnostics`), which is how the cause was first
 narrowed.
+
+### Why a visual harness, and its gotchas
+
+A unit test cannot settle any of this: the `xcodebuild test` host never makes a
+window key (an app photographed by the harness does, because it activates
+itself), and a caret blinks, so the only reliable check is pixels. The harness
+earns its keep -- but it has sharp edges worth knowing before extending it:
+
+- **Capturing your own windows needs no Screen Recording permission.**
+  `CGWindowListCreateImage` with the window's number works for the app's own
+  windows; keep the `cacheDisplay` fallback for when it returns nil.
+- **Synthesise input by POSTING events, never by sending them.** A text field's
+  `mouseDown` enters a tracking loop that blocks until it sees the matching
+  `mouseUp`, so `window.sendEvent(mouseDown)` hangs the main thread forever.
+  Post both (down then up) with `NSApp.postEvent` and let the run loop drain
+  them; the same goes for a synthetic Tab key.
+- **Reproduce focus transients with the real presentation.** A popover's window
+  becomes key immediately; a sheet's becomes key a beat later, like the real
+  add-peer / add-subnet editors (EditableList uses a sheet). The "focus jumps to
+  the last field" transient only reproduces under the sheet's timing -- capture
+  the form the way it is actually presented.
+- **Find SwiftUI controls structurally.** A SwiftUI `Button` exposes no usable
+  `title`, so locate a placeholder chip by position in the view tree (the first
+  button that is not Cancel or Save), not by text.
