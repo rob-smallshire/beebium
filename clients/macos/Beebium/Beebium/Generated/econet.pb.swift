@@ -25,11 +25,9 @@ enum Beebium_EconetEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
   typealias RawValue = Int
   case econetEventUnknown // = 0
 
-  /// HANDSHAKE_CHANGE is defined but not currently emitted; the stream
-  /// carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
+  /// The stream carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
   case econetEventFrameSent // = 1
   case econetEventFrameReceived // = 2
-  case econetEventHandshakeChange // = 3
   case econetEventConnectionChange // = 4
   case UNRECOGNIZED(Int)
 
@@ -42,7 +40,6 @@ enum Beebium_EconetEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 0: self = .econetEventUnknown
     case 1: self = .econetEventFrameSent
     case 2: self = .econetEventFrameReceived
-    case 3: self = .econetEventHandshakeChange
     case 4: self = .econetEventConnectionChange
     default: self = .UNRECOGNIZED(rawValue)
     }
@@ -53,7 +50,6 @@ enum Beebium_EconetEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .econetEventUnknown: return 0
     case .econetEventFrameSent: return 1
     case .econetEventFrameReceived: return 2
-    case .econetEventHandshakeChange: return 3
     case .econetEventConnectionChange: return 4
     case .UNRECOGNIZED(let i): return i
     }
@@ -64,7 +60,6 @@ enum Beebium_EconetEventType: SwiftProtobuf.Enum, Swift.CaseIterable {
     .econetEventUnknown,
     .econetEventFrameSent,
     .econetEventFrameReceived,
-    .econetEventHandshakeChange,
     .econetEventConnectionChange,
   ]
 
@@ -542,7 +537,7 @@ struct Beebium_EconetEvent: Sendable {
 fileprivate let _protobuf_package = "beebium"
 
 extension Beebium_EconetEventType: SwiftProtobuf._ProtoNameProviding {
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ECONET_EVENT_UNKNOWN\0\u{1}ECONET_EVENT_FRAME_SENT\0\u{1}ECONET_EVENT_FRAME_RECEIVED\0\u{1}ECONET_EVENT_HANDSHAKE_CHANGE\0\u{1}ECONET_EVENT_CONNECTION_CHANGE\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ECONET_EVENT_UNKNOWN\0\u{1}ECONET_EVENT_FRAME_SENT\0\u{1}ECONET_EVENT_FRAME_RECEIVED\0\u{2}\u{2}ECONET_EVENT_CONNECTION_CHANGE\0")
 }
 
 extension Beebium_GetEconetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

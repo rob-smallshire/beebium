@@ -168,7 +168,6 @@ class EconetStatus:
 _EVENT_TYPE_NAMES = {
     econet_pb2.ECONET_EVENT_FRAME_SENT: "frame_sent",
     econet_pb2.ECONET_EVENT_FRAME_RECEIVED: "frame_received",
-    econet_pb2.ECONET_EVENT_HANDSHAKE_CHANGE: "handshake_change",
     econet_pb2.ECONET_EVENT_CONNECTION_CHANGE: "connection_change",
 }
 

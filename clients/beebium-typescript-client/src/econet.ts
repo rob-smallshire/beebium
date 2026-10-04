@@ -161,7 +161,6 @@ function toHandshakeStatus(proto: ProtoHandshakeStatus | undefined): HandshakeSt
 const EVENT_TYPE_NAMES: Record<number, string> = {
     [EconetEventType.ECONET_EVENT_FRAME_SENT]: "frameSent",
     [EconetEventType.ECONET_EVENT_FRAME_RECEIVED]: "frameReceived",
-    [EconetEventType.ECONET_EVENT_HANDSHAKE_CHANGE]: "handshakeChange",
     [EconetEventType.ECONET_EVENT_CONNECTION_CHANGE]: "connectionChange",
 };
 

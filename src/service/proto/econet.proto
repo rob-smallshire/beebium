@@ -267,11 +267,13 @@ message SubscribeEconetEventsRequest {
 
 enum EconetEventType {
     ECONET_EVENT_UNKNOWN = 0;
-    // HANDSHAKE_CHANGE is defined but not currently emitted; the stream
-    // carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
+    // The stream carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
     ECONET_EVENT_FRAME_SENT = 1;
     ECONET_EVENT_FRAME_RECEIVED = 2;
-    ECONET_EVENT_HANDSHAKE_CHANGE = 3;
+    // Value 3 was ECONET_EVENT_HANDSHAKE_CHANGE, which was never emitted. It is
+    // reserved so the number and name are never reused.
+    reserved 3;
+    reserved "ECONET_EVENT_HANDSHAKE_CHANGE";
     ECONET_EVENT_CONNECTION_CHANGE = 4;
 }
 

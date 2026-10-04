@@ -37,22 +37,16 @@ class _EconetEventTypeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Econe
     DESCRIPTOR: _descriptor.EnumDescriptor
     ECONET_EVENT_UNKNOWN: _EconetEventType.ValueType  # 0
     ECONET_EVENT_FRAME_SENT: _EconetEventType.ValueType  # 1
-    """HANDSHAKE_CHANGE is defined but not currently emitted; the stream
-    carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
-    """
+    """The stream carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE."""
     ECONET_EVENT_FRAME_RECEIVED: _EconetEventType.ValueType  # 2
-    ECONET_EVENT_HANDSHAKE_CHANGE: _EconetEventType.ValueType  # 3
     ECONET_EVENT_CONNECTION_CHANGE: _EconetEventType.ValueType  # 4
 
 class EconetEventType(_EconetEventType, metaclass=_EconetEventTypeEnumTypeWrapper): ...
 
 ECONET_EVENT_UNKNOWN: EconetEventType.ValueType  # 0
 ECONET_EVENT_FRAME_SENT: EconetEventType.ValueType  # 1
-"""HANDSHAKE_CHANGE is defined but not currently emitted; the stream
-carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE.
-"""
+"""The stream carries FRAME_SENT, FRAME_RECEIVED and CONNECTION_CHANGE."""
 ECONET_EVENT_FRAME_RECEIVED: EconetEventType.ValueType  # 2
-ECONET_EVENT_HANDSHAKE_CHANGE: EconetEventType.ValueType  # 3
 ECONET_EVENT_CONNECTION_CHANGE: EconetEventType.ValueType  # 4
 Global___EconetEventType: _TypeAlias = EconetEventType  # noqa: Y015
 
