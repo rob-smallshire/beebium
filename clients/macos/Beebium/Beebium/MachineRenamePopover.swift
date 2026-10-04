@@ -13,106 +13,6 @@
 import AppKit
 import SwiftUI
 
-/// Holds a weak reference to the live NSTextField behind the template editor so
-/// the placeholder picker can insert text at the caret. SwiftUI's `TextField`
-/// exposes no caret, so the editor uses an AppKit field and reaches it through
-/// this controller.
-@MainActor
-final class TemplateFieldController: ObservableObject {
-    weak var field: NSTextField?
-
-    /// Insert `insertion` at the field's caret, or over its current selection,
-    /// then update `text` and leave the caret just after the inserted text with
-    /// focus held. Falls back to appending if the field is not available yet.
-    func insertAtCaret(_ insertion: String, text: Binding<String>) {
-        guard let field else {
-            text.wrappedValue += insertion
-            return
-        }
-        let current = field.stringValue
-        let selected = field.currentEditor()?.selectedRange
-            ?? NSRange(location: (current as NSString).length, length: 0)
-        let range = selected.location ..< (selected.location + selected.length)
-        let (newText, caret) = NameTemplateEditing.insert(
-            insertion, into: current, replacingUTF16: range)
-        field.stringValue = newText
-        text.wrappedValue = newText
-        field.window?.makeFirstResponder(field)
-        field.currentEditor()?.selectedRange = NSRange(location: caret, length: 0)
-    }
-}
-
-/// A single-line AppKit text field for the template, wrapped for SwiftUI so the
-/// picker can know the caret. Return commits, Escape abandons.
-private struct TemplateTextField: NSViewRepresentable {
-    @Binding var text: String
-    let controller: TemplateFieldController
-    let onSubmit: () -> Void
-    let onCancel: () -> Void
-
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
-        field.placeholderString = "Name template"
-        field.stringValue = text
-        field.delegate = context.coordinator
-        field.usesSingleLineMode = true
-        field.cell?.wraps = false
-        field.cell?.isScrollable = true
-        // Draw an opaque bezeled field. Inside a popover's vibrant material a
-        // field with no background lets the cell draw its own (unscrolled) text
-        // while the field editor draws the scrolled text over it -- two copies at
-        // different offsets once the caret reaches the right end. An opaque
-        // background masks the cell so only the field editor shows.
-        field.isBezeled = true
-        field.bezelStyle = .roundedBezel
-        field.drawsBackground = true
-        field.backgroundColor = .textBackgroundColor
-        controller.field = field
-        // Take focus once the hosting window is key; the insertion point only
-        // blinks in the key window, so focusing before the window is key leaves a
-        // field that looks focused but shows no caret.
-        DispatchQueue.main.async { [weak field] in
-            guard let field, let window = field.window else { return }
-            window.makeKey()
-            window.makeFirstResponder(field)
-        }
-        return field
-    }
-
-    func updateNSView(_ nsView: NSTextField, context: Context) {
-        if nsView.stringValue != text {
-            nsView.stringValue = text
-        }
-        context.coordinator.parent = self
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: TemplateTextField
-        init(_ parent: TemplateTextField) { self.parent = parent }
-
-        func controlTextDidChange(_ obj: Notification) {
-            guard let field = obj.object as? NSTextField else { return }
-            parent.text = field.stringValue
-        }
-
-        func control(_ control: NSControl,
-                     textView: NSTextView,
-                     doCommandBy commandSelector: Selector) -> Bool {
-            switch commandSelector {
-            case #selector(NSResponder.insertNewline(_:)):
-                parent.onSubmit()
-                return true
-            case #selector(NSResponder.cancelOperation(_:)):
-                parent.onCancel()
-                return true
-            default:
-                return false
-            }
-        }
-    }
-}
 
 /// The rename editor: the machine's name *template*, a picker of the server's
 /// placeholders, and a live preview of the rendered name (#153).
@@ -135,16 +35,20 @@ private struct MachineRenameEditor: View {
     @State private var preview: String = ""
     @State private var note: String = ""
     @State private var didLoad = false
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     @StateObject private var fieldController = TemplateFieldController()
     @State private var previewDebouncer = Debouncer(delay: 0.25)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TemplateTextField(text: $draft,
-                              controller: fieldController,
-                              onSubmit: { commit() },
-                              onCancel: { dismiss() })
+            PopoverTextField(text: $draft,
+                             placeholder: "Name template",
+                             controller: fieldController,
+                             diagnosticsLabel: "rename",
+                             onSubmit: { save() },
+                             onCancel: { dismiss() })
                 .frame(maxWidth: .infinity)
 
             if pickerAvailable {
@@ -155,17 +59,46 @@ private struct MachineRenameEditor: View {
                 Divider()
                 previewSection
             }
+
+            if let saveError {
+                Text(saveError)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Explicit, visible commit, matching the Econet station editor. The
+            // only way to commit is Save (or Return); Cancel, Escape and clicking
+            // outside the transient popover all discard.
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSaving || !isDirty)
+            }
         }
         .padding(12)
         .frame(width: 440)
         .activatesHostingWindow()
+        .focusDiagnostics("rename")
         .onAppear(perform: load)
         .onDisappear { previewDebouncer.cancel() }
         .onChange(of: draft) { _ in
+            saveError = nil
             previewDebouncer.schedule {
                 Task { await refreshPreview() }
             }
         }
+    }
+
+    /// Save is offered only for a non-empty template that differs from the one
+    /// the machine already has: an empty template is refused by the server and an
+    /// unchanged one is a wasted round trip.
+    private var isDirty: Bool {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != originalTemplate
     }
 
     // MARK: - Picker
@@ -221,6 +154,10 @@ private struct MachineRenameEditor: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            // Non-activating: a chip must not pull focus out of the template
+            // field (the picker keeps the editing session). insertAtCaret also
+            // re-asserts first responder afterwards as a belt-and-braces.
+            .focusable(false)
             .help(NameTemplatePlaceholderTooltip.text(label: item.label,
                                                       description: item.description_p))
             Text(item.applicable ? item.value : "not applicable")
@@ -286,14 +223,25 @@ private struct MachineRenameEditor: View {
                                      malformed: result.report.malformed)
     }
 
-    private func commit() {
+    /// Commit the template. On success the popover closes and the window title
+    /// updates from the applied identity (and again from the status stream's
+    /// IDENTITY_CHANGED). On failure the popover stays open and shows the reason,
+    /// the way the station editor does.
+    private func save() {
+        guard isDirty, !isSaving else { return }
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        // An empty template is refused by the server, and an unchanged one is a
-        // wasted round trip.
-        if !trimmed.isEmpty, trimmed != originalTemplate {
-            systemClient.setMachineName(trimmed)
+        isSaving = true
+        saveError = nil
+        Task {
+            let result = await systemClient.setMachineName(trimmed)
+            isSaving = false
+            switch result {
+            case .success:
+                dismiss()
+            case .failure(let error):
+                saveError = error.localizedDescription
+            }
         }
-        dismiss()
     }
 }
 

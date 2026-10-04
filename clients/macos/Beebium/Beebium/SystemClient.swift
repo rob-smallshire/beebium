@@ -155,27 +155,36 @@ final class SystemClient: ObservableObject, Disconnectable {
         errorMessage = nil
     }
 
-    /// Set the machine's name template. A plain name is a template with no
-    /// placeholders; an empty one is refused by the server. The response's
-    /// identity (with the new rendered name) is applied at once so the window
-    /// updates without waiting for the next status event.
-    func setMachineName(_ template: String) {
-        guard let client = client else { return }
+    /// A failure to set the machine name, surfaced to the rename popover so it
+    /// can stay open and show the reason, the way the station editor does.
+    enum MachineNameError: Error, LocalizedError {
+        case notConnected
+        case operationFailed(String)
 
-        Task { [weak self] in
-            do {
-                var request = Beebium_SetMachineNameRequest()
-                request.nameTemplate = template
-                let response = try await client.setMachineName(request).response.get()
-
-                await MainActor.run {
-                    self?.updateIdentity(response.identity)
-                }
-            } catch {
-                await MainActor.run {
-                    self?.errorMessage = error.localizedDescription
-                }
+        var errorDescription: String? {
+            switch self {
+            case .notConnected:            return "Not connected to the server."
+            case .operationFailed(let m):  return m
             }
+        }
+    }
+
+    /// Set the machine's name template. A plain name is a template with no
+    /// placeholders; an empty one is refused by the server. On success the
+    /// response's identity (with the new rendered name) is applied at once so the
+    /// window title updates without waiting for the next status event, and the
+    /// server also emits an IDENTITY_CHANGED event that reaches updateIdentity by
+    /// the same path. Returns the outcome so the caller can stay open on failure.
+    func setMachineName(_ template: String) async -> Result<Void, MachineNameError> {
+        guard let client = client else { return .failure(.notConnected) }
+        do {
+            var request = Beebium_SetMachineNameRequest()
+            request.nameTemplate = template
+            let response = try await client.setMachineName(request).response.get()
+            updateIdentity(response.identity)
+            return .success(())
+        } catch {
+            return .failure(.operationFailed(error.localizedDescription))
         }
     }
 
@@ -443,8 +452,11 @@ final class SystemClient: ObservableObject, Disconnectable {
         }
     }
 
-    /// Update local identity state from server response
-    private func updateIdentity(_ identity: Beebium_MachineIdentity) {
+    /// Update local identity state from a server response or an IDENTITY_CHANGED
+    /// status event -- the single sink both paths use, so a renamed machine's new
+    /// rendered name reaches the window title whichever arrives first. Not private
+    /// so the identity-to-published-state mapping can be unit-tested.
+    func updateIdentity(_ identity: Beebium_MachineIdentity) {
         machineUUID = identity.uuid
         machineName = identity.name
         machineNameTemplate = identity.nameTemplate

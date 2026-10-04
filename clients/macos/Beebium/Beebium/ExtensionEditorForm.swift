@@ -52,6 +52,7 @@ struct ExtensionEditorForm: View {
             }
         }
         .activatesHostingWindow()
+        .focusDiagnostics("extension-editor")
         .onAppear { buffers = collectInitialBuffers(editor) }
     }
 

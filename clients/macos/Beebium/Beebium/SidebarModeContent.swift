@@ -757,10 +757,16 @@ private struct StationIdPopover: View {
             Text("Econet Station")
                 .font(.headline)
 
-            TextField("1\u{2013}254", text: $stationIdText)
-                .textFieldStyle(.roundedBorder)
+            // AppKit-backed like the rename field so focus is deterministic: it
+            // takes first responder from the window becoming key, so the caret
+            // shows reliably, and it survives the Network sidebar re-rendering on
+            // every status event (#153 caret fix).
+            PopoverTextField(text: $stationIdText,
+                             placeholder: "1\u{2013}254",
+                             diagnosticsLabel: "station",
+                             onSubmit: { save() },
+                             onCancel: { isPresented = false })
                 .frame(width: 120)
-                .onSubmit { save() }
 
             if let error = validationError {
                 Text(error)
@@ -797,6 +803,7 @@ private struct StationIdPopover: View {
         .padding(16)
         .frame(width: 240)
         .activatesHostingWindow()
+        .focusDiagnostics("station")
         .onAppear {
             stationIdText = "\(currentStationId)"
         }
