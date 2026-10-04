@@ -73,11 +73,14 @@ struct PopoverTextField: NSViewRepresentable {
         textView.isFieldEditor = false
         textView.allowsUndo = true
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
-        textView.textColor = .textColor
-        textView.insertionPointColor = .textColor
-        textView.drawsBackground = true
-        textView.backgroundColor = .textBackgroundColor
-        textView.textContainerInset = NSSize(width: 2, height: 3)
+        textView.textColor = .controlTextColor
+        textView.insertionPointColor = .controlTextColor
+        // The rounded bezel is drawn by the enclosing scroll view's layer; the
+        // text view itself is transparent so its text sits on that background and
+        // the corners stay rounded.
+        textView.drawsBackground = false
+        // Inset so the single line's baseline sits where an NSTextField's does.
+        textView.textContainerInset = NSSize(width: 3, height: 3)
         textView.isVerticallyResizable = false
         textView.isHorizontallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
@@ -93,13 +96,13 @@ struct PopoverTextField: NSViewRepresentable {
 
         let scroll = BezelTextFieldScrollView()
         scroll.documentView = textView
-        scroll.borderType = .bezelBorder
+        scroll.borderType = .noBorder          // the layer draws the bezel instead
         scroll.hasVerticalScroller = false
         scroll.hasHorizontalScroller = false
         scroll.autohidesScrollers = true
         scroll.verticalScrollElasticity = .none
-        scroll.drawsBackground = true
-        scroll.backgroundColor = .textBackgroundColor
+        scroll.drawsBackground = false
+        scroll.contentView.drawsBackground = false
 
         controller?.textView = textView
         context.coordinator.textView = textView
@@ -153,6 +156,11 @@ struct PopoverTextField: NSViewRepresentable {
         private func focus(in window: NSWindow) {
             guard let textView else { return }
             window.makeFirstResponder(textView)
+            // Select all on open, as a freshly-focused NSTextField does, so typing
+            // replaces the value; a click then places the caret.
+            if !userBeganEditing {
+                textView.selectedRange = NSRange(location: 0, length: (textView.string as NSString).length)
+            }
             if let label = diagnosticsLabel {
                 FocusDiagnostics.snapshot("\(label) focus()", window: window)
             }
@@ -192,11 +200,29 @@ struct PopoverTextField: NSViewRepresentable {
 }
 
 /// A single-line NSTextView: it refuses newlines (handled as commit by the
-/// delegate), keeps everything on one line, and draws a placeholder when empty.
+/// delegate), keeps everything on one line, draws a placeholder when empty, and
+/// tells its enclosing bezel when it starts and stops editing so the bezel can
+/// show the focus ring.
 final class SingleLineTextView: NSTextView {
     var placeholder: String = ""
     var onSubmit: (() -> Void)?
     var onCancel: (() -> Void)?
+
+    private var bezel: BezelTextFieldScrollView? {
+        enclosingScrollView as? BezelTextFieldScrollView
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { bezel?.isEditing = true }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { bezel?.isEditing = false }
+        return resigned
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -211,11 +237,50 @@ final class SingleLineTextView: NSTextView {
     }
 }
 
-/// An NSScrollView sized like a single-line text field, so SwiftUI gives it a
-/// field's height without an explicit frame.
+/// Draws the rounded bezel, background and focus ring of a native single-line
+/// text field around the text view it scrolls, and sizes itself to a field's
+/// height so SwiftUI lays it out without an explicit frame. Layer-backed so the
+/// text view's content is clipped to the rounded corners.
 final class BezelTextFieldScrollView: NSScrollView {
+    var isEditing = false {
+        didSet {
+            guard isEditing != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+
     override var intrinsicContentSize: NSSize {
-        let height = ceil((documentView?.intrinsicContentSize.height ?? 0)) + 6
-        return NSSize(width: NSView.noIntrinsicMetric, height: max(height, 22))
+        NSSize(width: NSView.noIntrinsicMetric, height: 22)
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        wantsLayer = true
+        needsDisplay = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        // Resolve colours in this view's effective appearance so light and dark
+        // both look native.
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer.cornerRadius = 5
+            layer.masksToBounds = true
+            layer.backgroundColor = NSColor.textBackgroundColor.cgColor
+            if isEditing {
+                layer.borderWidth = 2
+                layer.borderColor = NSColor.controlAccentColor.cgColor
+            } else {
+                layer.borderWidth = 1
+                layer.borderColor = NSColor.separatorColor.cgColor
+            }
+        }
     }
 }
