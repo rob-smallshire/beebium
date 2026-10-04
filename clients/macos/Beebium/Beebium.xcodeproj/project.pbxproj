@@ -33,6 +33,7 @@
 		150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADC7C5C44D2AAF8D8920E36 /* VideoSettingsCache.swift */; };
 		15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */; };
 		162D791FD0BE2D5F6E75CB72 /* FloppyDriveConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */; };
+		18076BDCC5AC917FB887DC99 /* EconetStationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */; };
 		1AE92C3076119A47291BD4D7 /* NewMachineDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */; };
 		1AEDEA9B5B2CA4CC55909B84 /* BBCKeyCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152853E7E4735D1E7994275 /* BBCKeyCache.swift */; };
 		1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */; };
@@ -49,6 +50,7 @@
 		2883A894AD63C6DEF4FD0046 /* TransientMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EE051165760A831AA7396F /* TransientMessage.swift */; };
 		2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */; };
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
+		30ACE9109C0CD0CFC4CAFC47 /* EconetStationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22FC5E47C7A9D0A75ABD0E0C /* EconetStationPresentation.swift */; };
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
 		345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */; };
 		361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */; };
@@ -156,12 +158,14 @@
 		BB826699AAD95D5477C0D88F /* peripheral_extension.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */; };
 		BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CA435023B19D31740E399C /* ColorExtensionsTests.swift */; };
 		BE8551008B3836CA24806130 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */; };
+		C19767F534EBBAEAB5F75148 /* MachineNameTemplateSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */; };
 		C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12818B1698A8D15AE8A63653 /* DeepLink.swift */; };
 		C29A1601A7336A71D236BAFB /* sideways.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC4EB31EFDD95098F6DE936 /* sideways.grpc.swift */; };
 		C33A98EC584EB6432A7CE7AD /* Atomics in Frameworks */ = {isa = PBXBuildFile; productRef = CDFCBD9064C78D1ABC230708 /* Atomics */; };
 		C39DF4B1A3101F1124458288 /* MachineNamesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */; };
 		C3ED514E6ED1E2D44FD407BF /* StandardDisplayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B7611FB75A31FE7201B3F30 /* StandardDisplayStyle.swift */; };
 		C3F9E318AA63A0215FDA1793 /* BeebiumTouchBarEscapeKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C179B6CADA71E65979BE60C /* BeebiumTouchBarEscapeKey.swift */; };
+		C4C6DB5BB267DF75EE940A1D /* MachineNameTemplateSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3922D45B57369B7E5AB9B44 /* MachineNameTemplateSupport.swift */; };
 		C599157D780809D56EB1A802 /* ServerAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33DB174D4636C866C169ACC /* ServerAvailability.swift */; };
 		C5D7C5C9382566ADEAA92341 /* video.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B269A5937DAC1914CA8BF39 /* video.grpc.swift */; };
 		C6AED867FD53B569CAD5A945 /* ConfigurationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */; };
@@ -254,6 +258,7 @@
 		21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumSvgGlyphRenderer.swift; sourceTree = "<group>"; };
 		22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.grpc.swift; sourceTree = "<group>"; };
 		22EE051165760A831AA7396F /* TransientMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientMessage.swift; sourceTree = "<group>"; };
+		22FC5E47C7A9D0A75ABD0E0C /* EconetStationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetStationPresentation.swift; sourceTree = "<group>"; };
 		25D1F9F6D43714BB3F5B5CEB /* AudioMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerView.swift; sourceTree = "<group>"; };
 		27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinatorTests.swift; sourceTree = "<group>"; };
 		28ED949DB593C8353954F7B1 /* MachinePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePreset.swift; sourceTree = "<group>"; };
@@ -370,6 +375,7 @@
 		A7386122C0E5009AE250FECD /* SidebarModeContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarModeContent.swift; sourceTree = "<group>"; };
 		A9DC98B37B62CE999A94A076 /* LockStateReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockStateReconciler.swift; sourceTree = "<group>"; };
 		AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailabilityTests.swift; sourceTree = "<group>"; };
+		ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNameTemplateSupportTests.swift; sourceTree = "<group>"; };
 		AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileReferenceMenuTests.swift; sourceTree = "<group>"; };
 		AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.grpc.swift; sourceTree = "<group>"; };
 		B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+DiscImageReference.swift"; sourceTree = "<group>"; };
@@ -394,6 +400,7 @@
 		CA006204A482FCD8B77F7549 /* EconetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetClient.swift; sourceTree = "<group>"; };
 		CB59783F295E0122C4DF3A8D /* AudioRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRendererTests.swift; sourceTree = "<group>"; };
 		CC51B6CDDCA00180CC81969A /* serial.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = serial.grpc.swift; sourceTree = "<group>"; };
+		CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetStationPresentationTests.swift; sourceTree = "<group>"; };
 		CF33113C39D9E1D2BE649FF6 /* system.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.grpc.swift; sourceTree = "<group>"; };
 		CF6562062957B62B8C099A42 /* DiscClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscClient.swift; sourceTree = "<group>"; };
 		D0D01B8A395DCAD93419F4DD /* AudioMixerStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerStateTests.swift; sourceTree = "<group>"; };
@@ -401,6 +408,7 @@
 		D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelShape.swift; sourceTree = "<group>"; };
 		D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryClient.swift; sourceTree = "<group>"; };
 		D33DB174D4636C866C169ACC /* ServerAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailability.swift; sourceTree = "<group>"; };
+		D3922D45B57369B7E5AB9B44 /* MachineNameTemplateSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNameTemplateSupport.swift; sourceTree = "<group>"; };
 		D6020BCD62F9F79F3019AB3D /* econet_transport.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet_transport.pb.swift; sourceTree = "<group>"; };
 		D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscErrorKindLabelTests.swift; sourceTree = "<group>"; };
 		D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -617,6 +625,7 @@
 				D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */,
 				750FA727EAFD38FAE34EA7C7 /* DriveStatusLine.swift */,
 				CA006204A482FCD8B77F7549 /* EconetClient.swift */,
+				22FC5E47C7A9D0A75ABD0E0C /* EconetStationPresentation.swift */,
 				7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */,
 				899F340E434ACDCAA75F913F /* EditableChoiceField.swift */,
 				90FE057F6229AF873816D708 /* EditableListView.swift */,
@@ -645,6 +654,7 @@
 				931AE2E6A601AA13D780FC6A /* LockSyncPolicy.swift */,
 				7319BB6A760A9042161B98EB /* MachineManager.swift */,
 				4F12FAA03C7C95012C4CD79D /* MachineNames.swift */,
+				D3922D45B57369B7E5AB9B44 /* MachineNameTemplateSupport.swift */,
 				6FBA42BF406ACEC8EC19CA2F /* MachineRenamePopover.swift */,
 				8502E9114AB10B2200A2F6F9 /* MacKeyCode.swift */,
 				F309AF35B280ABE8DDCE6E15 /* MemoryModeView.swift */,
@@ -725,6 +735,7 @@
 				2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */,
 				6378C40652987D58945A27B7 /* DiscImageReferenceTests.swift */,
 				115851A5C42EB33AAB063B35 /* EconetClientTests.swift */,
+				CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */,
 				3199BC9BC5BDBE72ADCAF7B1 /* EditableListViewModelTests.swift */,
 				B570706C1BCFCAE564221FBC /* EventLoopScalingMeasurement.swift */,
 				F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */,
@@ -735,6 +746,7 @@
 				A452738F56C6C80444FBD7B3 /* LockSyncPolicyTests.swift */,
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
 				B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */,
+				ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */,
 				BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */,
 				7D2677DED8933B5E1A7D11D4 /* ModifierKeyStateTests.swift */,
 				D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */,
@@ -899,6 +911,7 @@
 				8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */,
 				DA8B66BA897FDC6A944A0603 /* DiscImageReferenceTests.swift in Sources */,
 				CC3CDA8C1FB5B978B592EADE /* EconetClientTests.swift in Sources */,
+				18076BDCC5AC917FB887DC99 /* EconetStationPresentationTests.swift in Sources */,
 				630B9079508DE55EB905DC5D /* EditableListViewModelTests.swift in Sources */,
 				FBCF1BC08E2089AED97EC3F1 /* EventLoopScalingMeasurement.swift in Sources */,
 				95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */,
@@ -908,6 +921,7 @@
 				9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */,
 				582166736131C819C1974BDE /* LockSyncPolicyTests.swift in Sources */,
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
+				C19767F534EBBAEAB5F75148 /* MachineNameTemplateSupportTests.swift in Sources */,
 				C39DF4B1A3101F1124458288 /* MachineNamesTests.swift in Sources */,
 				D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */,
 				6686F47B251CF78AF9C5F329 /* ModifierKeyStateTests.swift in Sources */,
@@ -969,6 +983,7 @@
 				674B7623816974BB8C3E2255 /* DisplayStyle.swift in Sources */,
 				05D71668C0E59AA851697A16 /* DriveStatusLine.swift in Sources */,
 				23F3E03B298F6AB8A9B9924E /* EconetClient.swift in Sources */,
+				30ACE9109C0CD0CFC4CAFC47 /* EconetStationPresentation.swift in Sources */,
 				317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */,
 				B18E97257A891E2AC24129ED /* EditableChoiceField.swift in Sources */,
 				57D3BA2925862BEEDF4F6316 /* EditableListView.swift in Sources */,
@@ -999,6 +1014,7 @@
 				F9DCB28FBA6728EEC04A0D6D /* LockSyncPolicy.swift in Sources */,
 				F8E43B3F7BBA3554BE190043 /* MacKeyCode.swift in Sources */,
 				0DA8A667A8A7A3861F00B88F /* MachineManager.swift in Sources */,
+				C4C6DB5BB267DF75EE940A1D /* MachineNameTemplateSupport.swift in Sources */,
 				A16526EF2B425C9CE263353C /* MachineNames.swift in Sources */,
 				82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */,
 				9F092012B533B1C03B7F4F43 /* MachineRenamePopover.swift in Sources */,
