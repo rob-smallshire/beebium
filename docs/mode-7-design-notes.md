@@ -325,13 +325,28 @@ Without field interleaving, both fields overwrite the same framebuffer lines, re
 | Component | Responsibility |
 |-----------|---------------|
 | **Crtc6845** | Raster increment by 2, field-based start, end-of-row detection |
-| **VideoRenderer** | Propagate VIDEO_FLAG_INTERLACE during odd field |
+| **Saa5050** | Its own line count (DEW, LOSE), RA0 as CRS: glyph line 2 x line + CRS |
+| **VideoRenderer** | Propagate VIDEO_FLAG_INTERLACE during odd field; drive the SAA5050's pins |
 | **FrameRenderer** | Count fields, swap every 2nd VSYNC, interleave Y positions |
 
 The implementation correctly handles the BBC Micro's interlace mode, producing:
 - 50 Hz field rate for correct cursor blink timing
 - Proper field interleaving for 2-pixel cursor thickness
 - Full-height text (not half-height from field overwriting)
+
+### Mode 7 Without Interlace
+
+The SAA5050 does not take its glyph line from the CRTC's row address. It counts
+a character's ten lines itself -- cleared by the trailing edge of DEW (VSYNC),
+advanced by the trailing edge of LOSE (DISPTMG) -- and sees only RA0, on CRS,
+which picks a font line's rounded partner. In the standard mode the two agree:
+RA runs 0,2,..18 or 1,3,..19 and the glyph line 2 x line + CRS is the same
+number. A program that turns the interlace off for teletext (R8=&92, R9=9, as
+`*TV ,1` gives; Ant Attack does it for its title page) gets RA 0..9, and the
+chip still draws whole glyphs, ten lines to a row, with CRS alternating line by
+line. Taking the row address as the glyph line instead drew the top half of
+every character and never ended a row. See `video-subsystem.md` (SAA5050 Timing
+Integration) and `tests/test_saa5050_line_counter.cpp`.
 
 ---
 

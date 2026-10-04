@@ -100,9 +100,28 @@ Control codes change rendering state but display as spaces:
 
 **Line/Frame Management:**
 
-- `start_of_line()`: Reset per-line state (colors, charset, hold)
-- `end_of_line()`: Advance raster counter by 2 (10 font rows → 20 scanlines)
-- `vsync()`: Reset raster to 0, increment frame counter
+The chip counts a character's ten lines itself; of the 6845's row address it
+sees only RA0. Three 6845 outputs drive it, wired on the board rather than
+through the Video ULA, so they are delivered on every character clock in every
+screen mode:
+
+- DEW (from VSYNC): `vsync()` on the leading edge publishes the captured page
+  and steps the flash cycle; `end_of_vsync()` on the trailing edge clears the
+  line count and returns double height to its top half.
+- LOSE (from DISPTMG): `start_of_line()` on the leading edge resets per-line
+  state (colours, charset, hold); `end_of_line()` on the trailing edge advances
+  the line count, and the tenth line ends the character row (the next grid row,
+  and the bottom half of any double height).
+- CRS (from RA0): `set_crs()` picks a font line's rounded partner.
+
+The glyph line drawn is 2 x line + CRS of the twenty in the expanded font. With
+the standard interlace sync and video (R8=&93, R9=18) that equals the row
+address (0,2,..18 on one field, 1,3,..19 on the other). With the interlace off
+(R8=&92, R9=9, as `*TV ,1` gives and as Ant Attack uses) the row address runs
+0..9 and the chip still walks all ten font lines, CRS alternating each line.
+Because the count runs on through bitmap lines, a teletext band below a bitmap
+band (a split screen) begins at whatever line the bitmap lines left it on, as
+on the real machine.
 
 **Font Data:**
 
@@ -255,10 +274,15 @@ The SAA5050 requires specific timing signals derived from CRTC output:
 
 | CRTC Event | SAA5050 Call | Effect |
 |------------|--------------|--------|
-| VSYNC rising edge | `vsync()` | Reset raster, increment frame counter |
-| HSYNC rising edge | `end_of_line()` | Advance raster by 2 |
-| Display area start | `start_of_line()` | Reset per-line state |
-| Each character | `byte()` + `emit_pixels()` | Feed char, get pixels |
+| VSYNC leading edge (DEW) | `vsync()` | Publish the captured page, step the flash cycle |
+| VSYNC trailing edge (DEW) | `end_of_vsync()` | Clear the line count, top half of double height |
+| RA0, every clock (CRS) | `set_crs()` | Choose the rounded partner of the font line |
+| Display enable leading edge (LOSE) | `start_of_line()` | Reset per-line state |
+| Display enable trailing edge (LOSE) | `end_of_line()` | Advance the line count; the tenth ends the row |
+| Each character, teletext selected | `byte()` + `emit_pixels()` | Feed char, get pixels |
+
+The edges are delivered whatever the Video ULA selects; only the character
+feed depends on teletext being selected.
 
 ## Current Status
 
