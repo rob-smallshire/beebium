@@ -31,6 +31,8 @@
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/FrameRenderer.hpp>
 #include <beebium/devices/Crtc6845.hpp>
+
+#include <utility>
 #include <beebium/TeletextFont.hpp>
 #include <filesystem>
 #include <fstream>
@@ -154,21 +156,22 @@ size_t compare_frames(const uint32_t* a, const uint32_t* b, size_t count) {
     return diff;
 }
 
-// Compare with tolerance (for anti-aliasing variations)
-size_t compare_frames_tolerant(const uint32_t* a, const uint32_t* b, size_t count, int tolerance) {
+// Count pixels that differ, comparing RGB exactly, outside one MODE 7
+// character cell (16 x 20 pixels). The golden masters are compared exactly
+// except under the cursor: its blink phase follows how long the boot took,
+// not anything teletext does.
+size_t count_differences_outside_cell(const uint32_t* a, const uint32_t* b, size_t width,
+                                      size_t height, size_t cell_row, size_t cell_column) {
     size_t diff = 0;
-    for (size_t i = 0; i < count; ++i) {
-        int ra = (a[i] >> 16) & 0xFF;
-        int ga = (a[i] >> 8) & 0xFF;
-        int ba = a[i] & 0xFF;
-        int rb = (b[i] >> 16) & 0xFF;
-        int gb = (b[i] >> 8) & 0xFF;
-        int bb = b[i] & 0xFF;
-
-        if (std::abs(ra - rb) > tolerance ||
-            std::abs(ga - gb) > tolerance ||
-            std::abs(ba - bb) > tolerance) {
-            ++diff;
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < width; ++x) {
+            if (y / 20 == cell_row && x / 16 == cell_column) {
+                continue;
+            }
+            const size_t i = y * width + x;
+            if ((a[i] & 0x00FFFFFF) != (b[i] & 0x00FFFFFF)) {
+                ++diff;
+            }
         }
     }
     return diff;
@@ -212,6 +215,14 @@ const std::filesystem::path GOLDEN_BASE = std::filesystem::path(BEEBIUM_ROM_DIR)
 template<typename MachineType>
 std::filesystem::path golden_dir(const std::string& mode_name) {
     return GOLDEN_BASE / GoldenConfig<MachineType>::subdir / mode_name;
+}
+
+// The MODE 7 character cell, as (row, column), that the CRTC cursor is on.
+template<typename MachineType>
+std::pair<size_t, size_t> cursor_cell(const MachineType& machine) {
+    const auto& crtc = machine.memory().crtc;
+    const size_t offset = static_cast<size_t>((crtc.cursor_position() - crtc.screen_start()) & 0x3FFF);
+    return {offset / 40, offset % 40};
 }
 #endif
 
@@ -924,11 +935,11 @@ TEMPLATE_TEST_CASE("MODE 7 test card colors", "[mode7][testcard][golden]",
         REQUIRE(golden_w == fb.width());
         REQUIRE(golden_h == fb.height());
 
-        size_t diff = compare_frames_tolerant(frame.data(), golden.data(),
-                                               fb.width() * fb.height(), 16);
-        double diff_percent = 100.0 * diff / (fb.width() * fb.height());
-        INFO("Pixel difference: " << diff << " (" << diff_percent << "%)");
-        CHECK(diff_percent < 0.1);
+        const auto [cursor_row, cursor_column] = cursor_cell(machine);
+        size_t diff = count_differences_outside_cell(frame.data(), golden.data(), fb.width(),
+                                                     fb.height(), cursor_row, cursor_column);
+        INFO("Pixels differing outside the cursor cell: " << diff);
+        CHECK(diff == 0);
     } else {
         auto output_filepath = golden_dirpath / "testcard_colors_candidate.ppm";
         REQUIRE(write_ppm(output_filepath, frame.data(), fb.width(), fb.height()));
@@ -1025,11 +1036,11 @@ TEMPLATE_TEST_CASE("MODE 7 sixel graphics test card contiguous", "[mode7][testca
         REQUIRE(golden_w == fb.width());
         REQUIRE(golden_h == fb.height());
 
-        size_t diff = compare_frames_tolerant(frame.data(), golden.data(),
-                                               fb.width() * fb.height(), 16);
-        double diff_percent = 100.0 * diff / (fb.width() * fb.height());
-        INFO("Pixel difference: " << diff << " (" << diff_percent << "%)");
-        CHECK(diff_percent < 0.1);
+        const auto [cursor_row, cursor_column] = cursor_cell(machine);
+        size_t diff = count_differences_outside_cell(frame.data(), golden.data(), fb.width(),
+                                                     fb.height(), cursor_row, cursor_column);
+        INFO("Pixels differing outside the cursor cell: " << diff);
+        CHECK(diff == 0);
     } else {
         auto output_filepath = golden_dirpath / "testcard_sixels_contiguous_candidate.ppm";
         REQUIRE(write_ppm(output_filepath, frame.data(), fb.width(), fb.height()));
@@ -1127,11 +1138,11 @@ TEMPLATE_TEST_CASE("MODE 7 sixel graphics test card separated", "[mode7][testcar
         REQUIRE(golden_w == fb.width());
         REQUIRE(golden_h == fb.height());
 
-        size_t diff = compare_frames_tolerant(frame.data(), golden.data(),
-                                               fb.width() * fb.height(), 16);
-        double diff_percent = 100.0 * diff / (fb.width() * fb.height());
-        INFO("Pixel difference: " << diff << " (" << diff_percent << "%)");
-        CHECK(diff_percent < 0.1);
+        const auto [cursor_row, cursor_column] = cursor_cell(machine);
+        size_t diff = count_differences_outside_cell(frame.data(), golden.data(), fb.width(),
+                                                     fb.height(), cursor_row, cursor_column);
+        INFO("Pixels differing outside the cursor cell: " << diff);
+        CHECK(diff == 0);
     } else {
         auto output_filepath = golden_dirpath / "testcard_sixels_separated_candidate.ppm";
         REQUIRE(write_ppm(output_filepath, frame.data(), fb.width(), fb.height()));
@@ -1234,11 +1245,11 @@ TEMPLATE_TEST_CASE("MODE 7 printable characters test card", "[mode7][testcard][c
         REQUIRE(golden_w == fb.width());
         REQUIRE(golden_h == fb.height());
 
-        size_t diff = compare_frames_tolerant(frame.data(), golden.data(),
-                                               fb.width() * fb.height(), 16);
-        double diff_percent = 100.0 * diff / (fb.width() * fb.height());
-        INFO("Pixel difference: " << diff << " (" << diff_percent << "%)");
-        CHECK(diff_percent < 0.1);
+        const auto [cursor_row, cursor_column] = cursor_cell(machine);
+        size_t diff = count_differences_outside_cell(frame.data(), golden.data(), fb.width(),
+                                                     fb.height(), cursor_row, cursor_column);
+        INFO("Pixels differing outside the cursor cell: " << diff);
+        CHECK(diff == 0);
     } else {
         auto output_filepath = golden_dirpath / "testcard_printable_chars_candidate.ppm";
         REQUIRE(write_ppm(output_filepath, frame.data(), fb.width(), fb.height()));
@@ -1460,11 +1471,11 @@ TEMPLATE_TEST_CASE("MODE 7 double height text", "[mode7][doubleheight][golden]",
         REQUIRE(golden_w == fb.width());
         REQUIRE(golden_h == fb.height());
 
-        size_t diff = compare_frames_tolerant(frame.data(), golden.data(),
-                                               fb.width() * fb.height(), 16);
-        double diff_percent = 100.0 * diff / (fb.width() * fb.height());
-        INFO("Pixel difference: " << diff << " (" << diff_percent << "%)");
-        CHECK(diff_percent < 0.1);
+        const auto [cursor_row, cursor_column] = cursor_cell(machine);
+        size_t diff = count_differences_outside_cell(frame.data(), golden.data(), fb.width(),
+                                                     fb.height(), cursor_row, cursor_column);
+        INFO("Pixels differing outside the cursor cell: " << diff);
+        CHECK(diff == 0);
     } else {
         auto output_filepath = golden_dirpath / "double_height_candidate.ppm";
         REQUIRE(write_ppm(output_filepath, frame.data(), fb.width(), fb.height()));
@@ -1552,11 +1563,11 @@ TEMPLATE_TEST_CASE("MODE 7 hold graphics mode", "[mode7][hold][golden]",
         REQUIRE(golden_w == fb.width());
         REQUIRE(golden_h == fb.height());
 
-        size_t diff = compare_frames_tolerant(frame.data(), golden.data(),
-                                               fb.width() * fb.height(), 16);
-        double diff_percent = 100.0 * diff / (fb.width() * fb.height());
-        INFO("Pixel difference: " << diff << " (" << diff_percent << "%)");
-        CHECK(diff_percent < 0.1);
+        const auto [cursor_row, cursor_column] = cursor_cell(machine);
+        size_t diff = count_differences_outside_cell(frame.data(), golden.data(), fb.width(),
+                                                     fb.height(), cursor_row, cursor_column);
+        INFO("Pixels differing outside the cursor cell: " << diff);
+        CHECK(diff == 0);
     } else {
         auto output_filepath = golden_dirpath / "hold_graphics_candidate.ppm";
         REQUIRE(write_ppm(output_filepath, frame.data(), fb.width(), fb.height()));
