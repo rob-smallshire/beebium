@@ -176,6 +176,7 @@
 		D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */; };
 		D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */; };
 		D5072BCBDC5F2D2DBAFFAF87 /* PixelShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */; };
+		D68AE50897EB5CBD1070CC1E /* WindowKeyActivator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */; };
 		D74BF8677E5A5731DC06D3FD /* keyboard.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */; };
 		D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */; };
 		D9718E6F6B0170B2E3BDDD45 /* extension_ui.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */; };
@@ -270,6 +271,7 @@
 		3199BC9BC5BDBE72ADCAF7B1 /* EditableListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableListViewModelTests.swift; sourceTree = "<group>"; };
 		31CA435023B19D31740E399C /* ColorExtensionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtensionsTests.swift; sourceTree = "<group>"; };
 		3295FC427F5DC583E764C83B /* ExtensionUiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionUiClient.swift; sourceTree = "<group>"; };
+		33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowKeyActivator.swift; sourceTree = "<group>"; };
 		38117A6A03CE78C8AC64C4C5 /* VideoClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClientTests.swift; sourceTree = "<group>"; };
 		3A63D58ABA4C03E6D3AE1D51 /* KeyboardClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardClient.swift; sourceTree = "<group>"; };
 		3B7611FB75A31FE7201B3F30 /* StandardDisplayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardDisplayStyle.swift; sourceTree = "<group>"; };
@@ -691,6 +693,7 @@
 				B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */,
 				08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */,
 				2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */,
+				33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */,
 				8BE2CECB7FD5D0AF509AAE1C /* Configuration */,
 				1A7BF42560C65CD6EC8AD027 /* Display */,
 				302A817E494E35F2A03C8A10 /* Generated */,
@@ -1069,6 +1072,7 @@
 				150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */,
 				0C9F21B8F3D60663F6BC11BD /* VideoSettingsPane.swift in Sources */,
 				E89BC098B23BC7953F1F7317 /* WelcomeWindow.swift in Sources */,
+				D68AE50897EB5CBD1070CC1E /* WindowKeyActivator.swift in Sources */,
 				03F8C1AF54A149B3750029EE /* audio.grpc.swift in Sources */,
 				A005244A2347799984C194E6 /* audio.pb.swift in Sources */,
 				03B945147D637860AEC9B652 /* aun.grpc.swift in Sources */,

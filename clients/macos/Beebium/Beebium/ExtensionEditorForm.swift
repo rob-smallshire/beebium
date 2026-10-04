@@ -51,6 +51,7 @@ struct ExtensionEditorForm: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
+        .activatesHostingWindow()
         .onAppear { buffers = collectInitialBuffers(editor) }
     }
 

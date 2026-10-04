@@ -58,7 +58,24 @@ private struct TemplateTextField: NSViewRepresentable {
         field.usesSingleLineMode = true
         field.cell?.wraps = false
         field.cell?.isScrollable = true
+        // Draw an opaque bezeled field. Inside a popover's vibrant material a
+        // field with no background lets the cell draw its own (unscrolled) text
+        // while the field editor draws the scrolled text over it -- two copies at
+        // different offsets once the caret reaches the right end. An opaque
+        // background masks the cell so only the field editor shows.
+        field.isBezeled = true
+        field.bezelStyle = .roundedBezel
+        field.drawsBackground = true
+        field.backgroundColor = .textBackgroundColor
         controller.field = field
+        // Take focus once the hosting window is key; the insertion point only
+        // blinks in the key window, so focusing before the window is key leaves a
+        // field that looks focused but shows no caret.
+        DispatchQueue.main.async { [weak field] in
+            guard let field, let window = field.window else { return }
+            window.makeKey()
+            window.makeFirstResponder(field)
+        }
         return field
     }
 
@@ -121,7 +138,6 @@ private struct MachineRenameEditor: View {
 
     @StateObject private var fieldController = TemplateFieldController()
     @State private var previewDebouncer = Debouncer(delay: 0.25)
-    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -129,8 +145,7 @@ private struct MachineRenameEditor: View {
                               controller: fieldController,
                               onSubmit: { commit() },
                               onCancel: { dismiss() })
-                .focused($focused)
-                .frame(width: 260)
+                .frame(maxWidth: .infinity)
 
             if pickerAvailable {
                 placeholderPicker
@@ -142,7 +157,8 @@ private struct MachineRenameEditor: View {
             }
         }
         .padding(12)
-        .frame(width: 300)
+        .frame(width: 440)
+        .activatesHostingWindow()
         .onAppear(perform: load)
         .onDisappear { previewDebouncer.cancel() }
         .onChange(of: draft) { _ in
@@ -173,11 +189,11 @@ private struct MachineRenameEditor: View {
 
     private var placeholderPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Insert a field")
+            Text("Insert a field at the caret")
                 .font(.caption)
                 .foregroundColor(.secondary)
             ForEach(groupedPlaceholders) { group in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(group.id)
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -189,25 +205,32 @@ private struct MachineRenameEditor: View {
         }
     }
 
-    // A placeholder currently without a value on this machine (an Econet field
-    // on a machine with no Econet) is dimmed, not hidden: it is still a valid
-    // template key, and may gain a value later.
+    // Each row is a button-like chip whose text is the template insertion string
+    // ("{econet-station}"), so the row shows exactly what it inserts and reads as
+    // clickable; the current value sits beside it and the human label and
+    // description are the tooltip. A placeholder with no value on this machine
+    // (an Econet field with no Econet fitted) is dimmed, not hidden: it is still
+    // a valid template key and may gain a value later, so it stays insertable.
     private func placeholderRow(_ item: Beebium_NamePlaceholder) -> some View {
-        Button {
-            fieldController.insertAtCaret(item.insertion, text: $draft)
-        } label: {
-            HStack {
-                Text(item.label)
-                Spacer()
-                Text(item.applicable ? item.value : "not applicable")
-                    .foregroundColor(.secondary)
+        HStack(spacing: 8) {
+            Button {
+                fieldController.insertAtCaret(item.insertion, text: $draft)
+            } label: {
+                Text(item.insertion)
+                    .font(.caption.monospaced())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help(NameTemplatePlaceholderTooltip.text(label: item.label,
+                                                      description: item.description_p))
+            Text(item.applicable ? item.value : "not applicable")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .font(.caption)
         .opacity(item.applicable ? 1.0 : 0.5)
-        .help(item.description_p)
     }
 
     // MARK: - Preview
@@ -243,7 +266,6 @@ private struct MachineRenameEditor: View {
             : systemClient.machineNameTemplate
         draft = template
         originalTemplate = template
-        focused = true
         Task {
             if let list = await systemClient.listNamePlaceholders() {
                 placeholders = list

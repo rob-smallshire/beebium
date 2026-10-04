@@ -82,6 +82,29 @@ final class NameTemplateNoteTests: XCTestCase {
     }
 }
 
+final class NameTemplatePlaceholderTooltipTests: XCTestCase {
+
+    func testLabelAndDescriptionAreJoined() {
+        XCTAssertEqual(
+            NameTemplatePlaceholderTooltip.text(
+                label: "Econet station",
+                description: "The station number in force."),
+            "Econet station: The station number in force.")
+    }
+
+    func testLabelOnlyWhenNoDescription() {
+        XCTAssertEqual(
+            NameTemplatePlaceholderTooltip.text(label: "Preset", description: ""),
+            "Preset")
+    }
+
+    func testDescriptionOnlyWhenNoLabel() {
+        XCTAssertEqual(
+            NameTemplatePlaceholderTooltip.text(label: "", description: "Just this."),
+            "Just this.")
+    }
+}
+
 @MainActor
 final class DebouncerTests: XCTestCase {
 

@@ -62,6 +62,18 @@ enum NameTemplateNote {
     }
 }
 
+/// The placeholder picker's rows show the template insertion text ("{econet-
+/// station}") as a button, with the human label and description moved to the
+/// tooltip (#153 refinement). This composes that tooltip. Pure, so the wording
+/// is testable.
+enum NameTemplatePlaceholderTooltip {
+    static func text(label: String, description: String) -> String {
+        if description.isEmpty { return label }
+        if label.isEmpty { return description }
+        return "\(label): \(description)"
+    }
+}
+
 /// Coalesces rapidly repeated work into a single call after a quiet interval --
 /// the rename popover's live preview waits for the user to stop typing before it
 /// asks the server to render (#153). Each `schedule` cancels the previous

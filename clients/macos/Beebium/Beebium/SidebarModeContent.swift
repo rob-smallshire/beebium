@@ -796,6 +796,7 @@ private struct StationIdPopover: View {
         }
         .padding(16)
         .frame(width: 240)
+        .activatesHostingWindow()
         .onAppear {
             stationIdText = "\(currentStationId)"
         }
