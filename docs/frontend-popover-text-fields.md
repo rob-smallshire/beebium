@@ -34,12 +34,19 @@ run it with the flag set to an output directory:
 
     BEEBIUM_DEBUG_FOCUS_SELFTEST=/tmp/caret /path/to/Beebium.app/Contents/MacOS/Beebium
 
-It activates itself, opens the station editor four times, the rename popover and
-an add-peer sheet, synthesises a real click into each field, captures each
-popover window several times across the caret's blink (CGWindowListCreateImage,
-falling back to `cacheDisplay`), writes `*_frameN.png`, and quits. Look at the
-PNGs: a healthy field shows a thin vertical caret bar in some frames of every
-open. If later opens never show one, the shared-editor regression is back.
+It activates itself, opens the station editor (light and dark), the rename
+popover and (when a server is given) the picker, synthesises a real click into
+each field, captures each popover window several times across the caret's blink
+(CGWindowListCreateImage, falling back to `cacheDisplay`), writes `*_frameN.png`,
+and quits. Look at the PNGs: a healthy field shows a thin vertical caret bar in
+some frames of every open. If later opens never show one, the shared-editor
+regression is back.
+
+Set `BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT` to a running server's port as well, and
+the rename popover is shown against a real `SystemClient`, so its placeholder
+chips and live preview load (they need `ListNamePlaceholders`/`PreviewMachineName`
+and show nothing against a disconnected client). Launch a server first, e.g.
+`beebium-model-b start --preset <auto-station preset> --port 55123 --wait=api`.
 
 The `BEEBIUM_DEBUG_FOCUS=1` flag separately logs focus/first-responder and
 publish-rate diagnostics (`FocusDiagnostics`), which is how the cause was first
