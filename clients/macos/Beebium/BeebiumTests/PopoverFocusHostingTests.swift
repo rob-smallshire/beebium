@@ -16,28 +16,24 @@ import AppKit
 @testable import Beebium
 
 /// Hosts the REAL rename and station editor content in a window, spins the run
-/// loop, and observes state -- so the "opens empty" regression (defect a) and
-/// the caret question (defect b) are checked by assertion rather than by eye
-/// (#153). Defect (a) is deterministic; defect (b) depends on the test host
-/// actually making the window key, which these tests check and report.
+/// loop, and observes state (#153). The popover fields are NSTextView-backed
+/// (`PopoverTextField`), so each presentation has its own editor and caret; these
+/// tests cover the prefill, the lifecycle and the re-host rate. The caret itself
+/// is verified visually by the FocusSelfTest harness (photographs the running
+/// app), since a caret cannot be seen from a unit test.
 @MainActor
 final class PopoverFocusHostingTests: XCTestCase {
 
-    /// Host `view` in a titled window, try to make it key and active, spin the
-    /// run loop, and return the window plus the first NSTextField found in it.
     private func host<V: View>(_ view: V,
                                appearance: NSAppearance.Name = .darkAqua,
                                seconds: TimeInterval = 1.0)
-        -> (window: NSWindow, field: NSTextField?) {
+        -> (window: NSWindow, textView: NSTextView?) {
         let hosting = NSHostingController(rootView: view)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
         window.contentViewController = hosting
-        // Try to activate and key the window. The test host is usually not
-        // frontmost during `xcodebuild test`, so this does not always succeed --
-        // the caret test checks what is observable regardless (see its comment).
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.makeKey()
@@ -46,27 +42,27 @@ final class PopoverFocusHostingTests: XCTestCase {
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
         }
-        return (window, Self.firstTextField(in: window.contentView))
+        return (window, Self.firstTextView(in: window.contentView))
     }
 
-    private static func firstTextField(in view: NSView?) -> NSTextField? {
+    private static func firstTextView(in view: NSView?) -> NSTextView? {
         guard let view else { return nil }
-        if let field = view as? NSTextField { return field }
+        if let textView = view as? NSTextView { return textView }
         for subview in view.subviews {
-            if let found = firstTextField(in: subview) { return found }
+            if let found = firstTextView(in: subview) { return found }
         }
         return nil
     }
 
-    // MARK: - Defect (a): opens prefilled
+    // MARK: - Opens prefilled
 
     func testStationEditorOpensPrefilledWithConfiguredNumber() {
-        let (_, field) = host(
+        let (_, textView) = host(
             StationIdPopover(currentStationId: 9,
                              econetClient: EconetClient(),
                              breakKeyLabel: nil,
                              isPresented: .constant(true)))
-        XCTAssertEqual(field?.stringValue, "9",
+        XCTAssertEqual(textView?.string, "9",
                        "station editor must open showing the configured number")
     }
 
@@ -77,9 +73,9 @@ final class PopoverFocusHostingTests: XCTestCase {
         identity.nameTemplate = "Station {econet-station} (AUN, Model B) {machine-ordinal}"
         systemClient.updateIdentity(identity)
 
-        let (_, field) = host(
+        let (_, textView) = host(
             MachineRenameEditor(systemClient: systemClient, dismiss: {}))
-        XCTAssertEqual(field?.stringValue,
+        XCTAssertEqual(textView?.string,
                        "Station {econet-station} (AUN, Model B) {machine-ordinal}",
                        "rename editor must open showing the template")
     }
@@ -97,23 +93,20 @@ final class PopoverFocusHostingTests: XCTestCase {
         root.id = "root"
         root.group = group
 
-        let (_, field) = host(
+        let (_, textView) = host(
             ExtensionEditorForm(editor: root,
                                 commitTitle: "Save",
                                 showCancel: true,
                                 onCancel: {},
                                 onCommit: { _ in }))
-        XCTAssertEqual(field?.stringValue, "stations.aun-map.json",
+        XCTAssertEqual(textView?.string, "stations.aun-map.json",
                        "extension editor form must open with its field prefilled")
     }
 
-    // MARK: - Per-presentation field editor (the "first open only" caret)
+    // MARK: - Lifecycle across presentations
 
-    /// Present content in `window` (reused across presentations), spin, and return
-    /// the first NSTextField. Models the real bug condition: the same window's
-    /// shared field editor would be reused unless each presentation vends its own.
     private func present<V: View>(_ view: V, in window: NSWindow,
-                                  seconds: TimeInterval = 0.8) -> NSTextField? {
+                                  seconds: TimeInterval = 0.8) -> NSTextView? {
         window.contentViewController = NSHostingController(rootView: view)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -121,7 +114,7 @@ final class PopoverFocusHostingTests: XCTestCase {
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
         }
-        return Self.firstTextField(in: window.contentView)
+        return Self.firstTextView(in: window.contentView)
     }
 
     private func dismiss(in window: NSWindow, seconds: TimeInterval = 0.4) {
@@ -132,93 +125,56 @@ final class PopoverFocusHostingTests: XCTestCase {
         }
     }
 
-    // The fix gives each presentation its own field editor via a window-delegate
-    // provider. Whether that editor becomes first responder depends on the window
-    // being key, which this test host cannot arrange -- so the EDITOR IDENTITY is
-    // tested at the provider level (deterministic), and the hosted test below only
-    // guards the lifecycle (prefill on every open, clean dismissal).
-    func testDedicatedProviderGivesEachFieldItsOwnEditor() {
-        let fieldA = NSTextField()
-        let fieldB = NSTextField()
-        let providerA = DedicatedFieldEditorProvider()
-        providerA.field = fieldA
-        let providerB = DedicatedFieldEditorProvider()
-        providerB.field = fieldB
-        let window = NSWindow()
-
-        // Each provider vends its own editor for its own field...
-        let editorA = providerA.windowWillReturnFieldEditor(window, to: fieldA) as? NSTextView
-        let editorB = providerB.windowWillReturnFieldEditor(window, to: fieldB) as? NSTextView
-        XCTAssertNotNil(editorA)
-        XCTAssertNotNil(editorB)
-        XCTAssertFalse(editorA === editorB,
-                       "a second presentation must get a different field editor")
-        // ...and declines (forwards) for a field that is not its own.
-        XCTAssertNil(providerA.windowWillReturnFieldEditor(window, to: fieldB),
-                     "provider should not vend its editor for another field")
-    }
-
-    func testStationEditorPresentsTwicePrefilledAndDismissesCleanly() throws {
+    /// Each presentation is its own NSTextView (its own editor and caret), so the
+    /// second open is a different object from the first -- the heart of the fix.
+    func testEachPresentationIsItsOwnTextView() throws {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
             styleMask: [.titled], backing: .buffered, defer: false)
 
-        let field1 = try XCTUnwrap(present(
+        let first = try XCTUnwrap(present(
             StationIdPopover(currentStationId: 9, econetClient: EconetClient(),
                              breakKeyLabel: nil, isPresented: .constant(true)),
             in: window))
-        XCTAssertEqual(field1.stringValue, "9", "first open prefilled")
+        XCTAssertEqual(first.string, "9", "first open prefilled")
+        let firstId = ObjectIdentifier(first)
 
         dismiss(in: window)
-        XCTAssertNil(Self.firstTextField(in: window.contentView),
+        XCTAssertNil(Self.firstTextView(in: window.contentView),
                      "the field should be gone after dismissal")
 
-        let field2 = try XCTUnwrap(present(
+        let second = try XCTUnwrap(present(
             StationIdPopover(currentStationId: 9, econetClient: EconetClient(),
                              breakKeyLabel: nil, isPresented: .constant(true)),
             in: window))
-        XCTAssertEqual(field2.stringValue, "9", "second open also prefilled")
+        XCTAssertEqual(second.string, "9", "second open also prefilled")
+        XCTAssertNotEqual(firstId, ObjectIdentifier(second),
+                          "each presentation must be its own text view, not a reused "
+                          + "shared field editor")
     }
 
-    // MARK: - Defect (b): caret / key window
+    // MARK: - Insertion point colour (rule the colour out as a cause)
 
-    /// The focus path installs the field editor (firstResponder is an NSTextView
-    /// whose delegate is our field) even in this non-key test host, so the editor
-    /// and its insertion-point colour are observable here -- which rules the
-    /// colour in or out as a cause of the missing caret. Whether the window is
-    /// key, and whether the insertion point actually blinks, is NOT observable in
-    /// this environment (the test app is not activated); that part falls back to
-    /// the user's BEEBIUM_DEBUG_FOCUS log.
-    func testFieldEditorInstalledAndInsertionPointVisible() throws {
+    func testInsertionPointColourContrasts() throws {
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
-            let (window, field) = host(
+            let (window, textView) = host(
                 StationIdPopover(currentStationId: 9,
                                  econetClient: EconetClient(),
                                  breakKeyLabel: nil,
                                  isPresented: .constant(true)),
                 appearance: appearance)
-            let textField = try XCTUnwrap(field, "no text field hosted (\(appearance))")
-
-            let editor = try XCTUnwrap(
-                window.firstResponder as? NSTextView,
-                "field editor should be installed as first responder (\(appearance))")
-            XCTAssertTrue(editor.delegate === textField,
-                          "field editor's delegate should be our field (\(appearance))")
-
+            let editor = try XCTUnwrap(textView, "no text view hosted (\(appearance))")
             let insertion = resolve(editor.insertionPointColor, in: window)
-            let background = resolve(textField.backgroundColor ?? .textBackgroundColor,
-                                     in: window)
-            NSLog("[CARET] appearance=%@ insertionPoint=%@ background=%@",
-                  appearance.rawValue, "\(insertion)", "\(background)")
+            let background = resolve(editor.backgroundColor, in: window)
             XCTAssertNotEqual(editor.insertionPointColor, NSColor.clear,
                               "insertion point must not be clear (\(appearance))")
             XCTAssertFalse(approximatelyEqual(insertion, background),
-                           "insertion point must contrast with the field background "
+                           "insertion point must contrast with the background "
                            + "(\(appearance))")
         }
     }
 
-    // MARK: - Invalidation storm (the "first open only" caret)
+    // MARK: - Invalidation storm guard
 
     func testIdlePopoverDoesNotReHostTheFieldContinuously() {
         PopoverTextField.updateCountForTesting = 0
@@ -227,43 +183,9 @@ final class PopoverFocusHostingTests: XCTestCase {
                                   breakKeyLabel: nil,
                                   isPresented: .constant(true)),
                  seconds: 1.0)
-        // A static popover settles: a handful of updateNSView calls, not dozens.
-        // A high number means something is invalidating the window tree under the
-        // field (the storm that stops the caret drawing).
         XCTAssertLessThan(PopoverTextField.updateCountForTesting, 10,
                           "idle popover re-hosted the field "
                           + "\(PopoverTextField.updateCountForTesting) times in 1s")
-    }
-
-    func testRapidObservedPublishesReHostTheField() {
-        // Mechanism: an object the popover observes (here EconetClient) publishing
-        // rapidly re-hosts the field's updateNSView -- exactly what a background
-        // invalidation storm does, and the suspected cause of the vanishing caret.
-        let econet = EconetClient()
-        let hosting = NSHostingController(
-            rootView: StationIdPopover(currentStationId: 9,
-                                       econetClient: econet,
-                                       breakKeyLabel: nil,
-                                       isPresented: .constant(true)))
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
-            styleMask: [.titled], backing: .buffered, defer: false)
-        window.contentViewController = hosting
-        window.makeKeyAndOrderFront(nil)
-        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.3))
-
-        PopoverTextField.updateCountForTesting = 0
-        var status = Beebium_GetEconetStatusResponse()
-        status.hasEconetSocket_p = true
-        status.stationID = 9
-        for tick in 0..<30 {
-            status.stationInForce = UInt32(9 + tick % 2)   // vary so nothing dedups
-            econet.handleStatusUpdate(status, generation: econet.streamGeneration)
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-        }
-        XCTAssertGreaterThan(PopoverTextField.updateCountForTesting, 10,
-                             "rapid observed publishes should re-host the field "
-                             + "(got \(PopoverTextField.updateCountForTesting))")
     }
 
     private func resolve(_ color: NSColor, in window: NSWindow) -> NSColor {

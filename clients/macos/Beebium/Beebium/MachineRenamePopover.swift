@@ -64,6 +64,7 @@ struct MachineRenameEditor: View {
                              onSubmit: { save() },
                              onCancel: { dismiss() })
                 .frame(maxWidth: .infinity)
+                .frame(height: 22)
 
             if pickerAvailable {
                 placeholderPicker

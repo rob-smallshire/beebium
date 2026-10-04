@@ -159,6 +159,7 @@
 		BB826699AAD95D5477C0D88F /* peripheral_extension.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */; };
 		BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CA435023B19D31740E399C /* ColorExtensionsTests.swift */; };
 		BE8551008B3836CA24806130 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */; };
+		C0FE51C252E4FBB01738A7B3 /* FocusSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A66F734ABCE79C5640EFC0 /* FocusSelfTest.swift */; };
 		C19767F534EBBAEAB5F75148 /* MachineNameTemplateSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */; };
 		C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12818B1698A8D15AE8A63653 /* DeepLink.swift */; };
 		C29A1601A7336A71D236BAFB /* sideways.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC4EB31EFDD95098F6DE936 /* sideways.grpc.swift */; };
@@ -443,6 +444,7 @@
 		F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLimiterTests.swift; sourceTree = "<group>"; };
 		F4F91689B09CACC55C956BA2 /* PeripheralsModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralsModeView.swift; sourceTree = "<group>"; };
 		F6A0228B7AD63C2E38A63080 /* StorageModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageModeView.swift; sourceTree = "<group>"; };
+		F6A66F734ABCE79C5640EFC0 /* FocusSelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSelfTest.swift; sourceTree = "<group>"; };
 		F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FailurePopoverDecisionTests.swift; sourceTree = "<group>"; };
 		F8C4007152A43F9E94FB30A5 /* system.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.pb.swift; sourceTree = "<group>"; };
 		F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorClient.swift; sourceTree = "<group>"; };
@@ -651,6 +653,7 @@
 				B74BC34119DE428F9D633CD8 /* FileReferenceView.swift */,
 				DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */,
 				C432ADD4B509CA5A4D3462C0 /* FocusedDialogKeys.swift */,
+				F6A66F734ABCE79C5640EFC0 /* FocusSelfTest.swift */,
 				66676E0A17481C9E2BE66969 /* HostFingerprint.swift */,
 				93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */,
 				F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */,
@@ -1016,6 +1019,7 @@
 				CCF53B2BFF28A41B641DEA7A /* FileReferenceView.swift in Sources */,
 				162D791FD0BE2D5F6E75CB72 /* FloppyDriveConfigView.swift in Sources */,
 				CC184BBA4B126032E36F04DB /* FocusDiagnostics.swift in Sources */,
+				C0FE51C252E4FBB01738A7B3 /* FocusSelfTest.swift in Sources */,
 				B41DE38A258D6C2E68314C5D /* FocusedDialogKeys.swift in Sources */,
 				6115EAB5B469DD1B9242F92E /* GeneralSettingsPane.swift in Sources */,
 				089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */,

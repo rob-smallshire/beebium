@@ -781,7 +781,7 @@ struct StationIdPopover: View {
                              diagnosticsLabel: "station",
                              onSubmit: { save() },
                              onCancel: { isPresented = false })
-                .frame(width: 120)
+                .frame(width: 120, height: 22)
 
             if let error = validationError {
                 Text(error)

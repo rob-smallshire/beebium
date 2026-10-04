@@ -34,6 +34,10 @@ class BeebiumAppDelegate: NSObject, NSApplicationDelegate {
         // machine created.
         DiscoveryClient.shared.startDiscovery()
 
+        // Self-driving popover caret capture (#153), inert unless
+        // BEEBIUM_DEBUG_FOCUS_SELFTEST names an output directory.
+        FocusSelfTest.startIfRequested()
+
         // Tooltips drive much of Beebium's secondary information (per-row
         // socket details in the Memory sidebar, parsed ROM kinds, slot
         // numbers, source filepaths). macOS's default tooltip delay is

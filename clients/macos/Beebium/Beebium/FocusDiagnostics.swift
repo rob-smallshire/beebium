@@ -90,66 +90,6 @@ extension FocusDiagnostics {
             .receive(on: DispatchQueue.main)
             .sink { _ in MainActor.assumeIsolated { FocusRates.tick("pub:\(name)") } }
     }
-
-    /// Dump the field editor behind `field` and its insertion indicator -- the
-    /// macOS 14 caret is an NSTextInsertionIndicator subview, so a reused editor
-    /// whose indicator was left hidden, or one pushed outside the clip, shows no
-    /// caret though first responder and colours look right. Logs pointers so
-    /// reuse across opens is visible.
-    static func dumpEditor(_ label: String, field: NSTextField) {
-        guard isEnabled else { return }
-        guard let editor = field.currentEditor() as? NSTextView else {
-            NSLog("[EDITOR] %@", "\(label) | no field editor")
-            return
-        }
-        let subviews = editor.subviews.map { view -> String in
-            "\(String(describing: type(of: view)))(hidden=\(view.isHidden) "
-            + "alpha=\(view.alphaValue) frame=\(NSStringFromRect(view.frame)))"
-        }.joined(separator: ", ")
-        let message = "\(label) | editor=\(ObjectIdentifier(editor)) "
-            + "field=\(ObjectIdentifier(field)) sel=\(NSStringFromRange(editor.selectedRange())) "
-            + "shouldDrawIP=\(editor.shouldDrawInsertionPoint) "
-            + "editorWindow=\(editor.window.map { ObjectIdentifier($0) }.map { "\($0)" } ?? "nil") "
-            + "visibleRect=\(NSStringFromRect(editor.visibleRect)) "
-            + "subviews=[\(subviews.isEmpty ? "none" : subviews)]"
-        NSLog("[EDITOR] %@", message)
-    }
-
-    /// Walk the whole window tree for any view that looks like a caret (class name
-    /// contains Insertion, Caret or Cursor), logging where it lives, whether it is
-    /// in this window, and whether it is hidden/clear/off-screen -- the macOS 14
-    /// caret is not a direct subview of the field editor, so this finds where it
-    /// actually is. Also logs the popover window's identity so window reuse across
-    /// opens is visible. See `FocusDiagnostics`.
-    static func locateCaret(_ label: String, field: NSTextField) {
-        guard isEnabled else { return }
-        guard let window = field.window else {
-            NSLog("[CARETVIEW] %@", "\(label) | field has no window")
-            return
-        }
-        NSLog("[CARETVIEW] %@", "\(label) | window=\(ObjectIdentifier(window)) "
-            + "class=\(String(describing: type(of: window)))")
-        var found = 0
-        func walk(_ view: NSView) {
-            let cls = String(describing: type(of: view))
-            if cls.contains("Insertion") || cls.contains("Caret") || cls.contains("Cursor") {
-                found += 1
-                let inWindow = view.window.map { ObjectIdentifier($0) == ObjectIdentifier(window) }
-                let frameInWindow = view.superview?.convert(view.frame, to: nil) ?? view.frame
-                NSLog("[CARETVIEW] %@", "\(label) | FOUND \(cls) "
-                    + "super=\(view.superview.map { String(describing: type(of: $0)) } ?? "nil") "
-                    + "inThisWindow=\(inWindow.map { "\($0)" } ?? "nil(no window)") "
-                    + "hidden=\(view.isHidden) alpha=\(view.alphaValue) "
-                    + "frameInWindow=\(NSStringFromRect(frameInWindow)) "
-                    + "hasLayer=\(view.layer != nil)")
-            }
-            view.subviews.forEach(walk)
-        }
-        if let content = window.contentView { walk(content) }
-        if found == 0 {
-            NSLog("[CARETVIEW] %@", "\(label) | no Insertion/Caret/Cursor view in the window tree")
-        }
-    }
 }
 
 /// Attaches focus logging to a view's hosting window: a snapshot at appear and
