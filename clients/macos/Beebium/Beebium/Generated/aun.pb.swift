@@ -467,6 +467,9 @@ struct Beebium_AunRemovePeerResponse: Sendable {
 
   var error: String = String()
 
+  /// false if there was no such entry
+  var removed: Bool = false
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -1304,7 +1307,7 @@ extension Beebium_AunRemovePeerRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 extension Beebium_AunRemovePeerResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".AunRemovePeerResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}success\0\u{1}error\0\u{1}removed\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1314,6 +1317,7 @@ extension Beebium_AunRemovePeerResponse: SwiftProtobuf.Message, SwiftProtobuf._M
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.success) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.removed) }()
       default: break
       }
     }
@@ -1326,12 +1330,16 @@ extension Beebium_AunRemovePeerResponse: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.error.isEmpty {
       try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
     }
+    if self.removed != false {
+      try visitor.visitSingularBoolField(value: self.removed, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_AunRemovePeerResponse, rhs: Beebium_AunRemovePeerResponse) -> Bool {
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
+    if lhs.removed != rhs.removed {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
