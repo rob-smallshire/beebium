@@ -133,3 +133,39 @@ class TestAntAttackTeletext:
         text = bbc.video.screen_text().text
         for expected in PLAY_PANEL_TEXT:
             assert expected in text, f"{expected!r} not read from the teletext panel"
+
+    def test_selection_over_the_panel_reads_the_line_under_it(self, bbc_ant_attack: Beebium) -> None:
+        # The teletext panel starts 128 lines down, part way through one of the
+        # SAA5050's character rows, so its first whole row (SCORE) begins two
+        # lines below the band's top. A selection over the SCORE line's pixels
+        # must read SCORE, not the partial row above it.
+        bbc = bbc_ant_attack
+        _advance_to_title(bbc)
+        bbc.keyboard.type("g")
+        _run_until_on_screen(bbc, PRESS_ANY_KEY)
+        bbc.run_for_emulated_seconds(0.5)
+        bbc.keyboard.type(" ")
+        bbc.run_for_emulated_seconds(6.0)
+        bbc.debugger.ensure_stopped()
+
+        frame = bbc.video.capture_frame()
+        assert len(frame.regions) >= 2, f"no split screen: {frame.regions}"
+        band_top = frame.regions[1].start_line
+
+        # The grid of the band begins where the chip's row began, above the band.
+        bands = bbc.video.screen_geometry().bands
+        panel = next(band for band in bands if band.top == band_top)
+        assert panel.origin_y < panel.top, (panel.origin_y, panel.top)
+        assert (panel.top - panel.origin_y) < panel.row_pitch
+
+        # Find the SCORE line in the pixels themselves: the first lit scan line
+        # of the panel.
+        stride = frame.width * 4
+
+        def lit(y: int) -> bool:
+            row = frame.pixels[y * stride : (y + 1) * stride]
+            return any(row[i] or row[i + 1] or row[i + 2] for i in range(0, len(row), 4))
+
+        first_lit = next(y for y in range(band_top, frame.height) if lit(y))
+        selected = bbc.video.screen_text(region=(0, first_lit, frame.width, 3)).text
+        assert "SCORE" in selected, f"selection at line {first_lit} read {selected!r}"
