@@ -263,7 +263,7 @@ ServerMain
 | `CoprocessorClock` | `beebium/tube/CoprocessorClock.hpp` | Exact conversion of host cycles to coprocessor crystal ticks for a `ClockRatio` (BoardTiming.ticks_per_host_cycle), carrying the remainder, with no origin until the first call. |
 | `CoprocessorRunner` | `beebium/tube/CoprocessorRunner.hpp` | The 6502-family coprocessor: implements `Coprocessor` and `CpuDebugTarget`; owns the CPU, memory map and clock; breakpoints and watchpoints. |
 | `CoprocessorCpu`, `CoprocessorMemoryMap` | `beebium/tube/` | The 65C02 core wrapper (cycle-stepped `M6502`, with page-cross dummy reads routed through `peek` so they cannot consume Tube data) and the memory map. |
-| `CoprocessorExtension` | `beebium/extension/CoprocessorExtension.hpp` | The extension contract: `coprocessor()`, `tube_backend()`, `debug_target()`. |
+| `CoprocessorExtension` | `beebium/extension/CoprocessorExtension.hpp` | The extension contract: `coprocessor()`, `tube_backend()`, `debug_target()`, and the identity it reports, `cpu_name()` and `clock_hz()`. |
 | `CpuDebugTarget`, `CpuDescriptor` | `beebium/extension/` | The family-agnostic debugger contract and the description of a CPU it serves. |
 | `SecondProcessor65C02Extension` | `src/extensions/acorn-65c02-coprocessor/` | The shipped coprocessor; both plugins construct it. |
 

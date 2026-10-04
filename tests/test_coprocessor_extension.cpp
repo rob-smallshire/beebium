@@ -87,6 +87,8 @@ public:
     Coprocessor* coprocessor() override { return &cop; }
     TubeHostBackend* tube_backend() override { return &backend; }
     // debug_target() defaults to nullptr: this stub offers no debugger.
+    std::string cpu_name() const override { return "Z80"; }
+    uint64_t clock_hz() const override { return 6'000'000; }
 };
 
 }  // namespace

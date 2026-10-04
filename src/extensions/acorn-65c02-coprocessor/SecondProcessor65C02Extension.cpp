@@ -12,6 +12,7 @@
 
 #include "SecondProcessor65C02Extension.hpp"
 
+#include "beebium/ClockText.hpp"
 #include "beebium/extension/ExtensionContext.hpp"
 
 #include <filesystem>
@@ -50,7 +51,8 @@ void SecondProcessor65C02Extension::init(ExtensionContext& ctx)
     // against the abstract interface and registers the CoprocessorDebuggerControl
     // service. The extension hosts no gRPC service itself.
 
-    std::cout << "  " << cpu_label_ << " coprocessor (single-threaded)\n";
+    std::cout << "  " << cpu_name_ << " (" << format_clock_mhz(clock_hz())
+              << ") coprocessor (single-threaded)\n";
 }
 
 void SecondProcessor65C02Extension::shutdown()

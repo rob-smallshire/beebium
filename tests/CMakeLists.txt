@@ -1251,6 +1251,17 @@ target_compile_definitions(test_debugger_entry_race PRIVATE
 )
 catch_discover_tests(test_debugger_entry_race)
 
+# A coprocessor's identity (CPU name and clock) as its plugins report it (#173).
+add_executable(test_coprocessor_identity test_coprocessor_identity.cpp)
+target_include_directories(test_coprocessor_identity PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/extensions/acorn-65c02-coprocessor
+)
+target_link_libraries(test_coprocessor_identity PRIVATE
+    beebium_ext_acorn_65c02
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_coprocessor_identity)
+
 # The 4 KB Tube client ROM: a synthetic client image executing from the lower
 # half, driven through the real 65C02 coprocessor extension.
 add_executable(test_4k_client_rom test_4k_client_rom.cpp)

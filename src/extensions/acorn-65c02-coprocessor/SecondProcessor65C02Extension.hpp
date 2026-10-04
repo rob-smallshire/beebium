@@ -40,9 +40,10 @@ namespace beebium {
 // processor (ratio 3/2) and the 4 MHz 65C102 second processor (ratio 2/1).
 // They are structurally identical -- a 4 KB Tube client ROM (each its own
 // build), 64 KB RAM --
-// so only the clock ratio and the display identity differ, and each plugin
-// entry point constructs this class with the right pair. The clock ratio lives
-// with the runner.
+// so only the board timing and the CPU's name differ, and each plugin entry
+// point constructs this class with the right pair through make_65c02() or
+// make_65c102(). The clock ratio lives with the runner; the nominal clock
+// reported by clock_hz() follows from the same timing.
 //
 // Lifecycle:
 //   init()     -- load ROM, create components, install backend + coprocessor
@@ -50,13 +51,26 @@ namespace beebium {
 
 class SecondProcessor65C02Extension : public CoprocessorExtension {
 public:
-    // board_timing: per-board crystal-tick timing (issue #70). The default is
-    // the 3 MHz cheese-wedge second processor; the 65C102 plugin passes its own.
-    // cpu_label: short identity for the startup log line.
-    explicit SecondProcessor65C02Extension(
-            BoardTiming board_timing = BoardTiming{ClockRatio{6, 1}, 4, 5, 176, 1},
-            std::string cpu_label = "65C02 (3 MHz)")
-        : board_timing_(board_timing), cpu_label_(std::move(cpu_label)) {}
+    // The Acorn 6502 Second Processor (the 3 MHz cheese wedge).
+    static constexpr BoardTiming kSecondProcessorTiming{ClockRatio{6, 1}, 4, 5, 176, 1};
+    // The Acorn 65C102 Co-processor (4 MHz internal): 2 ticks per 2 MHz host
+    // cycle, one tick per cycle, DRAM refresh one in 64, no write stretch.
+    static constexpr BoardTiming kCoprocessor65C102Timing{ClockRatio{2, 1}, 1, 1, 64, 1};
+
+    // board_timing: per-board crystal-tick timing (issue #70). cpu_name: the
+    // CPU as people name it. The defaults are the 6502 Second Processor's.
+    explicit SecondProcessor65C02Extension(BoardTiming board_timing = kSecondProcessorTiming,
+                                           std::string cpu_name = "65C02")
+        : board_timing_(board_timing), cpu_name_(std::move(cpu_name)) {}
+
+    // The two members of the family, as their plugins construct them.
+    static std::unique_ptr<SecondProcessor65C02Extension> make_65c02() {
+        return std::make_unique<SecondProcessor65C02Extension>(kSecondProcessorTiming, "65C02");
+    }
+    static std::unique_ptr<SecondProcessor65C02Extension> make_65c102() {
+        return std::make_unique<SecondProcessor65C02Extension>(kCoprocessor65C102Timing,
+                                                               "65C102");
+    }
     ~SecondProcessor65C02Extension() override { shutdown(); }
 
     // --- PeripheralExtension interface ---
@@ -78,6 +92,8 @@ public:
     Coprocessor* coprocessor() override { return runner_.get(); }
     TubeHostBackend* tube_backend() override { return tube_ula_.get(); }
     CpuDebugTarget* debug_target() override { return runner_.get(); }
+    std::string cpu_name() const override { return cpu_name_; }
+    uint64_t clock_hz() const override { return nominal_clock_hz(board_timing_); }
 
     // --- Accessors (for tests linking the extension directly) ---
 
@@ -91,7 +107,7 @@ private:
     bool load_client_rom(std::array<uint8_t, 4096>& rom) const;
 
     BoardTiming board_timing_;
-    std::string cpu_label_;
+    std::string cpu_name_;
     std::unique_ptr<TubeUla> tube_ula_;
     std::unique_ptr<CoprocessorRunner> runner_;
     TubeSocket* tube_socket_ = nullptr;  // non-owning, from ExtensionContext

@@ -15,6 +15,9 @@
 #include "Export.hpp"
 #include "PeripheralExtension.hpp"
 
+#include <cstdint>
+#include <string>
+
 namespace beebium {
 
 class Coprocessor;
@@ -50,6 +53,16 @@ public:
     // describes its own CPU (CpuDebugTarget::cpu_descriptor()), so the server
     // serves any family through the one debugger service.
     virtual CpuDebugTarget* debug_target() { return nullptr; }
+
+    // The coprocessor's CPU as people name it: "65C02", "65C102", later
+    // "Z80", "80186", "32016". Shown by the coprocessor-cpu name placeholder.
+    // Valid before init(): it describes the board, not its running state.
+    virtual std::string cpu_name() const = 0;
+
+    // The CPU's nominal clock in hertz (3'000'000 for the 6502 Second
+    // Processor). The core formats it for the coprocessor-clock name
+    // placeholder ("3 MHz"). Valid before init().
+    virtual uint64_t clock_hz() const = 0;
 };
 
 }  // namespace beebium

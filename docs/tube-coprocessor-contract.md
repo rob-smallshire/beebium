@@ -449,6 +449,11 @@ public:
     // returned object is family-agnostic; the server asks it for the
     // families it can serve (see Cpu6502DebugTarget).
     virtual CoprocessorDebugTarget* debug_target() { return nullptr; }
+
+    // The CPU's short name ("65C02") and nominal clock in hertz, which the
+    // server formats for the machine name placeholders (added by #173).
+    virtual std::string cpu_name() const = 0;
+    virtual uint64_t clock_hz() const = 0;
 };
 ```
 

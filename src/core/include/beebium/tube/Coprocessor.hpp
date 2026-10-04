@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "beebium/ClockTypes.hpp"
+
 #include <cstdint>
 
 namespace beebium {
@@ -44,6 +46,15 @@ struct BoardTiming {
     uint32_t refresh_period_ticks;    // ticks between refreshes; 0 = no refresh
     uint32_t refresh_hold_cycles;     // cycles the CPU is held for a refresh
 };
+
+// The board's nominal CPU clock in hertz: its crystal ticks per second (host
+// cycles at timing::CPU_HZ times the tick ratio) over the ticks of an
+// unstretched (read) cycle. 3 MHz for the 6502 Second Processor's
+// {6,1}/4 ticks, 4 MHz for the 65C102's {2,1}/1.
+constexpr uint64_t nominal_clock_hz(const BoardTiming& board) {
+    return timing::CPU_HZ * board.ticks_per_host_cycle.numerator /
+           board.ticks_per_host_cycle.denominator / board.read_cycle_ticks;
+}
 
 // A Tube coprocessor: everything on the far side of the Tube cable, driven
 // by the host's clock. Supplied by an extension, installed in the TubeSocket

@@ -23,7 +23,7 @@
 extern "C" {
 BEEBIUM_PLUGIN_EXPORT
 beebium::Extension* beebium_create_extension(const beebium::ExtensionManifest& manifest) {
-    auto* ext = new beebium::SecondProcessor65C02Extension();
+    auto* ext = beebium::SecondProcessor65C02Extension::make_65c02().release();
     ext->set_manifest(manifest);
     return ext;
 }

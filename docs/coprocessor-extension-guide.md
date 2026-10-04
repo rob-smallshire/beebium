@@ -90,6 +90,8 @@ public:
     Coprocessor*     coprocessor()  override { return runner_.get(); }
     TubeHostBackend* tube_backend() override { return bridge_.get(); }
     CpuDebugTarget*  debug_target() override { return runner_.get(); }
+    std::string      cpu_name() const override { return "Z80"; }
+    uint64_t         clock_hz() const override { return 6'000'000; }
     // ...
 };
 ```
@@ -104,6 +106,13 @@ Rules the server relies on:
   and serves the debugger itself.
 - Only one coprocessor may attach to `tube`; the server refuses to start
   with two.
+- `cpu_name()` is the CPU's short name ("65C02", "Z80") and `clock_hz()` its
+  nominal clock in hertz. They are facts, not text for display: the server
+  formats them for the `{coprocessor-cpu}` and `{coprocessor-clock}` machine
+  name placeholders ("6 MHz"), so a new coprocessor needs no change to the
+  core to be named. Derive the clock from the same figures the runner is
+  driven by (the Acorn boards use `nominal_clock_hz(BoardTiming)`), not a
+  separate constant.
 
 ## 3. The coprocessor: `Coprocessor`
 
