@@ -1,7 +1,9 @@
 # SAA5050 conformance study: MODE7DEM against real-BBC captures
 
 Status: study only, no code changed. Measured against master at f7302fd7
-(`Saa5050.hpp` unchanged since 5ea20577). Date: 2026-10-05.
+(`Saa5050.hpp` unchanged since 5ea20577), then re-measured at 31b71c70
+(glyph lines counted on the chip) with identical per-cell results. Date:
+2026-10-05.
 
 This study runs the MODE7DEM teletext test pages in Beebium and compares
 every frame, pixel for pixel, with captures taken from a real BBC Micro. It
