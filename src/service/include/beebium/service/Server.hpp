@@ -103,6 +103,13 @@ public:
         impl_->machine_name_placeholders.set_preset_name(std::move(preset_name));
     }
 
+    /// The Tube coprocessor fitted at launch, for the coprocessor-cpu and
+    /// coprocessor-clock placeholders, or nullptr. Call before start(); it
+    /// must outlive the server.
+    void set_launch_coprocessor(const CoprocessorExtension* coprocessor) {
+        impl_->coprocessor_name_placeholders.set_coprocessor(coprocessor);
+    }
+
     /// The launcher's instance number for this machine, for the
     /// machine-ordinal placeholder ("#3"). Call before start().
     void set_launch_ordinal(unsigned ordinal) {
@@ -176,6 +183,8 @@ private:
         MachineNamePlaceholders machine_name_placeholders{
             std::string(MachineType::Memory::MACHINE_DISPLAY_NAME)};
         EconetNamePlaceholders<MachineType> econet_name_placeholders{machine};
+        StorageNamePlaceholders<MachineType> storage_name_placeholders{machine};
+        CoprocessorNamePlaceholders coprocessor_name_placeholders;
         NamePlaceholderRegistry name_placeholders;
 
         TeletextGrid teletext_grid;
@@ -208,6 +217,8 @@ private:
             frame_renderer.set_field_cycles(&machine.video_binding().renderer.field_cycles());
             name_placeholders.add(machine_name_placeholders, "machine");
             name_placeholders.add(econet_name_placeholders, "econet socket");
+            name_placeholders.add(storage_name_placeholders, "disc controller socket");
+            name_placeholders.add(coprocessor_name_placeholders, "tube coprocessor");
         }
 
         // Background thread that consumes video_output queue and renders to frame_buffer

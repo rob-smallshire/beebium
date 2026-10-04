@@ -391,7 +391,9 @@ add_system_preset(beebium-model-b "model-b-disc-aun-auto"
 # Tube coprocessor presets, so users can try the second processors (the machine
 # config UI has no Tube axis yet). Each is its disc-capable sibling plus a Tube
 # coprocessor plugin; both boot to the Tube banner (the DFS ROM carries the Tube
-# host code). The 3 MHz / 4 MHz speeds are inherent to the variants. Generated
+# host code). The 3 MHz / 4 MHz speeds are inherent to the variants. Each
+# machine's name takes the CPU and clock from the coprocessor's own report
+# (#173), rendering to the preset's title. Generated
 # with add_plugin_preset (depends on the coprocessor plugin so it is deployed
 # before create-preset resolves --tube-*). The plugin targets exist only when the
 # servers are built (src/extensions is configured before src/server).
@@ -401,6 +403,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin)
         "Model B (Disc), 65C02 Copro (3 MHz)" "1984"
         DESCRIPTION "Model B disc, 65C02 copro (3 MHz)"
         THUMBNAIL_DELAY 6
+        --machine-name "Model B (Disc), {coprocessor-cpu} Copro ({coprocessor-clock})"
         --fdc acorn-1770 --sideways slot=14:type=rom:image=acorn-dfs_2_26.rom --tube-65c02)
 endif()
 if(TARGET beebium_ext_acorn_65c102_plugin)
@@ -409,6 +412,7 @@ if(TARGET beebium_ext_acorn_65c102_plugin)
         "Model B+ 128K, 65C102 Copro (4 MHz)" "1986"
         DESCRIPTION "128K B+, 65C102 copro (4 MHz)"
         THUMBNAIL_DELAY 6
+        --machine-name "Model B+ 128K, {coprocessor-cpu} Copro ({coprocessor-clock})"
         --tube-65c102)
 endif()
 

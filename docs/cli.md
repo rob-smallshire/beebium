@@ -214,7 +214,9 @@ beebium-model-b --machine-name "Station {econet-station} (AUN, Model B)" \
 - An unknown key renders as written, braces included, so a template written
   for a newer server or a plugin that is not loaded degrades visibly.
 - A placeholder that does not apply to this machine (an Econet placeholder with
-  no Econet fitted, or `{machine-ordinal}` with no `--machine-ordinal`)
+  no Econet fitted, `{fdc-controller}` with no disc controller,
+  `{coprocessor-cpu}` with no Tube coprocessor, or `{machine-ordinal}` with no
+  `--machine-ordinal`)
   renders empty. The rendering is trimmed of leading and trailing whitespace,
   so `"X {machine-ordinal}"` is "X #3" with `--machine-ordinal 3` and "X"
   without; a name that renders blank falls back to the model's name.
@@ -553,6 +555,14 @@ Econet:
       The station number in force: ...
   {econet-net}  Econet net
   {econet-transport}  Econet transport
+Storage:
+  {fdc-controller}  Floppy disc controller
+      The fitted floppy disc controller's chip ("WD1770"); ...
+Coprocessor:
+  {coprocessor-cpu}  Coprocessor CPU
+      The Tube coprocessor's CPU, as its plugin names it ("65C02", "65C102"); ...
+  {coprocessor-clock}  Coprocessor clock
+      The Tube coprocessor's clock ("3 MHz"), from the figure its plugin reports; ...
 ```
 
 `tsv` carries `key`, `label`, `group`, `value` and `description`; `jsonl` the

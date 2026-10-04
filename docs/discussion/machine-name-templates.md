@@ -111,6 +111,9 @@ machine chooses for itself.
 | `machine-model` | Machine | The machine model's display name, as the server reports it in `SystemInfo` ("BBC Model B"): one name for a model. | Never; included because it differs between machines sharing a hand-written template, and costs nothing. |
 | `machine-preset` | Machine | The name of the preset the machine was launched from. Not applicable, so empty, when it was launched without one. | Never; as above. |
 | `machine-ordinal` | Machine | This machine's instance number among those its launcher started, as "#" and the number ("#3"), supplied by the launcher with `--machine-ordinal <n>`. Not applicable, so empty, when none was given. | Never; set at launch. |
+| `fdc-controller` | Storage | The fitted floppy disc controller's chip, as the device names itself ("WD1770"). Not applicable, so empty, when the controller socket is empty. | A controller fitted or removed at runtime. |
+| `coprocessor-cpu` | Coprocessor | The Tube coprocessor's CPU, as its plugin reports it (`CoprocessorExtension::cpu_name()`: "65C02", "65C102"). Not applicable, so empty, with no coprocessor. | Never; set at launch. |
+| `coprocessor-clock` | Coprocessor | The coprocessor's clock, from the frequency its plugin reports (`clock_hz()`), as whole megahertz ("3 MHz") or the shortest decimal ("3.5 MHz"). Not applicable, so empty, with no coprocessor. | Never; set at launch. |
 
 `machine-ordinal` was first left out, as the launcher's state rather than
 the machine's, with the app writing "#2" into the template as literal text.

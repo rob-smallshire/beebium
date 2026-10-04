@@ -2844,6 +2844,7 @@ public:
                 register_extension_name_placeholders(server, *transport);
             }
             server.set_launch_preset_name(config.preset_name);
+            server.set_launch_coprocessor(am.coprocessor);
             if (config.machine_ordinal) {
                 server.set_launch_ordinal(*config.machine_ordinal);
             }
@@ -3619,6 +3620,12 @@ public:
         std::vector<beebium::NamePlaceholderInfo> infos =
             beebium::service::machine_name_placeholder_infos();
         for (auto& info : beebium::service::econet_name_placeholder_infos()) {
+            infos.push_back(std::move(info));
+        }
+        for (auto& info : beebium::service::storage_name_placeholder_infos()) {
+            infos.push_back(std::move(info));
+        }
+        for (auto& info : beebium::service::coprocessor_name_placeholder_infos()) {
             infos.push_back(std::move(info));
         }
         // The one value fixed before launch.

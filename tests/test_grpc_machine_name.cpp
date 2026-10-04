@@ -17,6 +17,7 @@
 
 #include "beebium/Machines.hpp"
 #include "beebium/econet/TestBackend.hpp"
+#include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/NamePlaceholderProvider.hpp"
 #include "beebium/service/ReannounceLimiter.hpp"
@@ -55,20 +56,49 @@ public:
     }
 };
 
+// A coprocessor plugin reduced to the identity it reports: the CPU's name and
+// its clock. The name placeholders use nothing else.
+class IdentityOnlyCoprocessor : public beebium::CoprocessorExtension {
+public:
+    IdentityOnlyCoprocessor(std::string cpu_name, uint64_t clock_hz)
+        : cpu_name_(std::move(cpu_name)), clock_hz_(clock_hz) {}
+    std::span<const std::string_view> attaches_to() const override { return {}; }
+    std::span<const std::string_view> provides() const override { return {}; }
+    void init(beebium::ExtensionContext&) override {}
+    void shutdown() override {}
+    beebium::Coprocessor* coprocessor() override { return nullptr; }
+    beebium::TubeHostBackend* tube_backend() override { return nullptr; }
+    std::string cpu_name() const override { return cpu_name_; }
+    uint64_t clock_hz() const override { return clock_hz_; }
+
+private:
+    std::string cpu_name_;
+    uint64_t clock_hz_;
+};
+
+struct Fitted {
+    bool fdc = false;
+    const beebium::CoprocessorExtension* coprocessor = nullptr;
+};
+
 class NameFixture {
 public:
     explicit NameFixture(std::string name_template, bool fit_econet = true,
                          std::string preset_name = "Station 80 (AUN, Model B)",
-                         std::optional<unsigned> ordinal = std::nullopt) {
+                         std::optional<unsigned> ordinal = std::nullopt, Fitted fitted = {}) {
         machine_.reset();
         if (fit_econet) {
             machine_.state().memory.econet_socket.enable(
                 80, std::make_unique<beebium::TestBackend>());
         }
+        if (fitted.fdc) {
+            machine_.state().memory.install_acorn_1770();
+        }
         server_ = std::make_unique<beebium::service::Server<beebium::ModelB>>(
             machine_, "127.0.0.1", 0);
         server_->name_placeholders().add_extension(gizmo_);
         server_->set_launch_preset_name(std::move(preset_name));
+        server_->set_launch_coprocessor(fitted.coprocessor);
         if (ordinal) {
             server_->set_launch_ordinal(*ordinal);
         }
@@ -84,6 +114,7 @@ public:
     ~NameFixture() { server_->stop(); }
 
     beebium::ModelB& machine() { return machine_; }
+    beebium::service::Server<beebium::ModelB>& server() { return *server_; }
     beebium::SystemService::Stub& system() { return *stub_; }
 
     beebium::MachineIdentity identity() {
@@ -189,7 +220,9 @@ TEST_CASE("ListNamePlaceholders lists every provider's placeholders with values"
     for (const auto& p : response.placeholders()) keys.push_back(p.key());
     CHECK(keys == std::vector<std::string>{"machine-model", "machine-preset", "machine-ordinal",
                                            "econet-station",
-                                           "econet-net", "econet-transport", "gizmo-colour"});
+                                           "econet-net", "econet-transport",
+                                           "fdc-controller", "coprocessor-cpu",
+                                           "coprocessor-clock", "gizmo-colour"});
     for (const auto& p : response.placeholders()) {
         INFO(p.key());
         CHECK_FALSE(p.label().empty());
@@ -220,6 +253,7 @@ TEST_CASE("Econet placeholders are not applicable with no Econet fitted",
     for (const auto& p : response.placeholders()) {
         INFO(p.key());
         if (p.key().rfind("econet-", 0) == 0 || p.key() == "machine-preset" ||
+            p.key().rfind("fdc-", 0) == 0 || p.key().rfind("coprocessor-", 0) == 0 ||
             p.key() == "machine-ordinal") {
             CHECK_FALSE(p.applicable());
             CHECK(p.value().empty());
@@ -288,4 +322,85 @@ TEST_CASE("Re-announcements of a changing name are rate limited",
     limiter.request();
     CHECK_FALSE(limiter.take(t0 + 25s));
     CHECK(limiter.take(t0 + 26s));
+}
+
+namespace {
+
+beebium::PreviewMachineNameResponse preview(NameFixture& fixture, const std::string& name_template) {
+    grpc::ClientContext context;
+    beebium::PreviewMachineNameRequest request;
+    request.set_name_template(name_template);
+    beebium::PreviewMachineNameResponse response;
+    REQUIRE(fixture.system().PreviewMachineName(&context, request, &response).ok());
+    return response;
+}
+
+}  // namespace
+
+TEST_CASE("fdc-controller names the fitted floppy controller's chip",
+          "[grpc][system][name-template][fdc]") {
+    NameFixture fixture("Plain", /*fit_econet=*/false, "", std::nullopt, Fitted{.fdc = true});
+    auto response = preview(fixture, "Model B ({fdc-controller})");
+    CHECK(response.name() == "Model B (WD1770)");
+    CHECK(response.report().inapplicable_keys().empty());
+}
+
+TEST_CASE("fdc-controller is not applicable with no floppy controller",
+          "[grpc][system][name-template][fdc]") {
+    NameFixture fixture("Plain", /*fit_econet=*/false, "");
+    auto response = preview(fixture, "Model B [{fdc-controller}]");
+    CHECK(response.name() == "Model B []");
+    CHECK(strings(response.report().inapplicable_keys()) ==
+          std::vector<std::string>{"fdc-controller"});
+}
+
+TEST_CASE("fdc-controller follows a controller removed at runtime",
+          "[grpc][system][name-template][fdc]") {
+    NameFixture fixture("Plain", /*fit_econet=*/false, "", std::nullopt, Fitted{.fdc = true});
+    CHECK(preview(fixture, "{fdc-controller}").name() == "WD1770");
+    fixture.machine().state().memory.remove_disc_controller();
+    CHECK(preview(fixture, "[{fdc-controller}]").name() == "[]");
+}
+
+TEST_CASE("coprocessor placeholders come from the coprocessor's own report",
+          "[grpc][system][name-template][coprocessor]") {
+    IdentityOnlyCoprocessor z80("Z80", 6'000'000);
+    NameFixture fixture("Plain", /*fit_econet=*/false, "", std::nullopt,
+                        Fitted{.coprocessor = &z80});
+    auto response = preview(fixture, "{coprocessor-cpu} Copro ({coprocessor-clock})");
+    CHECK(response.name() == "Z80 Copro (6 MHz)");
+    CHECK(response.report().inapplicable_keys().empty());
+
+    IdentityOnlyCoprocessor fractional("Z80", 3'500'000);
+    NameFixture fixture2("Plain", /*fit_econet=*/false, "", std::nullopt,
+                         Fitted{.coprocessor = &fractional});
+    CHECK(preview(fixture2, "{coprocessor-clock}").name() == "3.5 MHz");
+}
+
+TEST_CASE("coprocessor placeholders are not applicable with no coprocessor",
+          "[grpc][system][name-template][coprocessor]") {
+    NameFixture fixture("Plain", /*fit_econet=*/false, "");
+    auto response = preview(fixture, "B [{coprocessor-cpu}] [{coprocessor-clock}]");
+    CHECK(response.name() == "B [] []");
+    CHECK(strings(response.report().inapplicable_keys()) ==
+          std::vector<std::string>{"coprocessor-cpu", "coprocessor-clock"});
+}
+
+TEST_CASE("The B+ names its built-in WD1770", "[grpc][system][name-template][fdc]") {
+    beebium::ModelBPlus machine;
+    machine.reset();
+    beebium::service::Server<beebium::ModelBPlus> server(machine, "127.0.0.1", 0);
+    beebium::service::MachineIdentity identity{"00000000-0000-4000-8000-000000000173", "Plain",
+                                               "ModelBPlus", "BBC Model B+", "Plain"};
+    server.start({}, identity);
+    auto channel = grpc::CreateChannel("127.0.0.1:" + std::to_string(server.port()),
+                                       grpc::InsecureChannelCredentials());
+    auto stub = beebium::SystemService::NewStub(channel);
+    grpc::ClientContext context;
+    beebium::PreviewMachineNameRequest request;
+    request.set_name_template("B+ ({fdc-controller})");
+    beebium::PreviewMachineNameResponse response;
+    REQUIRE(stub->PreviewMachineName(&context, request, &response).ok());
+    CHECK(response.name() == "B+ (WD1770)");
+    server.stop();
 }

@@ -188,3 +188,21 @@ def test_machine_ordinal_renders_the_launch_ordinal(
         assert bbc.system.identity.name == expected
         ordinal = {p.key: p for p in bbc.system.list_name_placeholders()}["machine-ordinal"]
         assert ordinal.applicable == bool(extra_args)
+
+
+@pytest.mark.parametrize(
+    ("preset", "variant", "expected"),
+    [
+        ("model-b-disc-65c02-copro", "model-b", "Model B (Disc), 65C02 Copro (3 MHz)"),
+        ("model-b-plus-128k-65c102-copro", "model-b-plus-128k", "Model B+ 128K, 65C102 Copro (4 MHz)"),
+    ],
+)
+def test_a_coprocessor_preset_names_the_machine_from_its_coprocessor(
+    launch_bbc, preset: str, variant: str, expected: str
+) -> None:
+    # The template takes the CPU and clock from the coprocessor plugin
+    # (#173), so the name equals the preset's title.
+    bbc = launch_bbc(preset=preset, variant=variant, startup_timeout=30.0)
+    identity = bbc.system.identity
+    assert "{coprocessor-cpu}" in identity.name_template
+    assert identity.name == expected

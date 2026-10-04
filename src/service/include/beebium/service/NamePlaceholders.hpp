@@ -16,7 +16,10 @@
 #ifndef BEEBIUM_SERVICE_NAME_PLACEHOLDERS_HPP
 #define BEEBIUM_SERVICE_NAME_PLACEHOLDERS_HPP
 
+#include "beebium/ClockText.hpp"
+#include "beebium/disc/DiscConcepts.hpp"
 #include "beebium/econet/AunBackend.hpp"
+#include "beebium/extension/CoprocessorExtension.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
 #include "beebium/extension/NamePlaceholderProvider.hpp"
 
@@ -64,6 +67,29 @@ inline std::vector<NamePlaceholderInfo> econet_name_placeholder_infos() {
          "sidebar labels it; empty when Econet is fitted with no "
          "transport. Changes when Econet is enabled or disabled.",
          "Econet"},
+    };
+}
+
+inline std::vector<NamePlaceholderInfo> storage_name_placeholder_infos() {
+    return {
+        {"fdc-controller", "Floppy disc controller",
+         "The fitted floppy disc controller's chip (\"WD1770\"); not "
+         "applicable when none is fitted. Changes if a controller is fitted "
+         "or removed.",
+         "Storage"},
+    };
+}
+
+inline std::vector<NamePlaceholderInfo> coprocessor_name_placeholder_infos() {
+    return {
+        {"coprocessor-cpu", "Coprocessor CPU",
+         "The Tube coprocessor's CPU, as its plugin names it (\"65C02\", "
+         "\"65C102\"); not applicable with no coprocessor. Set at launch.",
+         "Coprocessor"},
+        {"coprocessor-clock", "Coprocessor clock",
+         "The Tube coprocessor's clock (\"3 MHz\"), from the figure its "
+         "plugin reports; not applicable with no coprocessor. Set at launch.",
+         "Coprocessor"},
     };
 }
 
@@ -161,6 +187,70 @@ public:
 private:
     MachineType& machine_;
     std::atomic<const EconetTransportRegistry*> transport_registry_{nullptr};
+};
+
+// The `fdc` domain: the fitted floppy disc controller. A socketed controller
+// (Model B and its boards) can be fitted or removed at runtime, so its chip is
+// read from the socket's thread-safe record; the B+'s built-in WD1770 never
+// changes. Not applicable when the socket is empty.
+template <typename MachineType>
+class StorageNamePlaceholders final : public NamePlaceholderProvider {
+public:
+    explicit StorageNamePlaceholders(MachineType& machine) : machine_(machine) {}
+
+    std::vector<std::string> placeholder_domains() const override { return {"fdc"}; }
+
+    std::vector<NamePlaceholderInfo> placeholders() const override {
+        return storage_name_placeholder_infos();
+    }
+
+    NamePlaceholderValue placeholder_value(std::string_view key) const override {
+        if (key != "fdc-controller") return {"", false};
+        using Memory = typename MachineType::Memory;
+        const auto& memory = machine_.state().memory;
+        if constexpr (HasOptionalDiscController<Memory>) {
+            // An empty socket is not applicable.
+            std::string chip = memory.disc_socket.fdc_chip();
+            return {chip, !chip.empty()};
+        } else {
+            static_assert(requires { memory.disc_controller.name(); },
+                          "a machine has a disc controller socket or a built-in controller");
+            return {std::string(memory.disc_controller.name()), true};
+        }
+    }
+
+private:
+    MachineType& machine_;
+};
+
+// The `coprocessor` domain: the Tube coprocessor fitted at launch, which
+// reports its own CPU name and clock (CoprocessorExtension), so a new
+// coprocessor plugin supplies its values with no change here. Not applicable
+// with no coprocessor.
+class CoprocessorNamePlaceholders final : public NamePlaceholderProvider {
+public:
+    // The coprocessor fitted at launch, or nullptr. Set before the server
+    // starts; it must outlive the server.
+    void set_coprocessor(const CoprocessorExtension* coprocessor) {
+        coprocessor_.store(coprocessor, std::memory_order_release);
+    }
+
+    std::vector<std::string> placeholder_domains() const override { return {"coprocessor"}; }
+
+    std::vector<NamePlaceholderInfo> placeholders() const override {
+        return coprocessor_name_placeholder_infos();
+    }
+
+    NamePlaceholderValue placeholder_value(std::string_view key) const override {
+        const auto* coprocessor = coprocessor_.load(std::memory_order_acquire);
+        if (coprocessor == nullptr) return {"", false};
+        if (key == "coprocessor-cpu") return {coprocessor->cpu_name(), true};
+        if (key == "coprocessor-clock") return {format_clock_mhz(coprocessor->clock_hz()), true};
+        return {"", false};
+    }
+
+private:
+    std::atomic<const CoprocessorExtension*> coprocessor_{nullptr};
 };
 
 }  // namespace beebium::service
