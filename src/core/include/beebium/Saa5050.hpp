@@ -253,6 +253,12 @@ public:
     void byte(uint8_t value, uint8_t dispen, bool cursor = false) {
         value &= 0x7F;
 
+        // The foreground is latched before a control code acts, so colour
+        // codes are Set-After: a held mosaic in a colour code's own cell is
+        // drawn in the old colour. The background is taken after, so the
+        // background codes are Set-At.
+        const uint8_t fg = m_fg;
+
         uint16_t data;  // 12-bit expanded font row
 
         if (value < 32) {
@@ -294,11 +300,11 @@ public:
             data = 0;
         }
 
-        capture_cell(value, dispen, cursor);
+        capture_cell(value, dispen, cursor, fg);
 
         // Write 2 Output entries: left 6 bits and right 6 bits
         Output* output = &m_output[m_write_index & 7];
-        output->fg = m_fg;
+        output->fg = fg;
         output->bg = m_bg;
         output->data = static_cast<uint8_t>(data & 0x3F);  // Left 6 bits
         output->cursor = cursor;
@@ -306,7 +312,7 @@ public:
         m_write_index = (m_write_index + 1) & 7;
 
         output = &m_output[m_write_index & 7];
-        output->fg = m_fg;
+        output->fg = fg;
         output->bg = m_bg;
         output->data = static_cast<uint8_t>((data >> 6) & 0x3F);  // Right 6 bits
         output->cursor = cursor;
@@ -484,7 +490,7 @@ private:
     // start at different rasters, so a raster == 0 guard would silently capture
     // nothing on alternate fields. Correctness first; the writes are small and
     // land in cache.
-    void capture_cell(uint8_t value, uint8_t dispen, bool cursor) {
+    void capture_cell(uint8_t value, uint8_t dispen, bool cursor, uint8_t fg) {
         if (!m_teletext_grid || !dispen) {
             return;
         }
@@ -506,7 +512,7 @@ private:
         }
 
         TeletextCell cell;
-        cell.fg = m_fg;
+        cell.fg = fg;
         cell.bg = m_bg;
         cell.concealed = m_conceal;
         cell.flashing = !m_text_visible;

@@ -248,6 +248,28 @@ enum Code : uint8_t {
 
 } // namespace
 
+// --- Colour codes (R2, R3; study defect 6.1) -------------------------------
+
+TEST_CASE("V1: a graphics colour code shows the held mosaic in the old colour",
+          "[saa5050][attributes][hold]") {
+    // The code is Set-After for the foreground: the held block in its cell
+    // is still white, and only the block after it is yellow.
+    check_row(render_row({GRAPHICS_WHITE, BLOCK, HOLD, GRAPHICS_YELLOW, BLOCK}),
+              {blank(), block(W), block(W), block(W), block(Y)});
+}
+
+TEST_CASE("V2: an alpha colour code shows the held mosaic in the old colour",
+          "[saa5050][attributes][hold]") {
+    check_row(render_row({GRAPHICS_WHITE, BLOCK, HOLD, ALPHA_YELLOW, 'A' | 0x80}),
+              {blank(), block(W), block(W), block(W), text('A', Y)});
+}
+
+TEST_CASE("V3: an alpha colour code clears the held mosaic after its own cell",
+          "[saa5050][attributes][hold]") {
+    check_row(render_row({GRAPHICS_WHITE, BLOCK, HOLD, ALPHA_MAGENTA, BLACK_BACKGROUND}),
+              {blank(), block(W), block(W), block(W), blank()});
+}
+
 // --- What the held memory holds and what clears it (R14, R15, R16) ---------
 
 TEST_CASE("V7: a control code displayed while hold is off clears the held memory",
@@ -377,5 +399,18 @@ TEST_CASE("V18: every row starts alpha white on black, steady, revealed, unheld"
         // BLOCK in alpha mode is the alpha block glyph, not a mosaic.
         check_row(page[2], {text('A', W), text(0x7F, W)});
     }
+}
+
+// --- What the screen-text grid records -------------------------------------
+
+TEST_CASE("The grid records a held mosaic under a colour code in the old foreground",
+          "[saa5050][attributes][hold][grid]") {
+    TeletextGrid grid;
+    render({{GRAPHICS_WHITE, BLOCK, HOLD, GRAPHICS_YELLOW, BLOCK}}, Flash::Visible, &grid);
+    const TeletextCell& held = grid.cell(0, 3);
+    CHECK(held.is_control_code);
+    CHECK(held.character == 0x7F);
+    CHECK(held.fg == W);
+    CHECK(grid.cell(0, 4).fg == Y);
 }
 
