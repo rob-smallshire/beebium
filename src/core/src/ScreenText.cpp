@@ -94,9 +94,20 @@ CellRange cells_covered(const Band& band,
     range.first_column = (covered.x - band.origin_x) / band.column_pitch;
     range.last_column =
         (covered.right() - band.origin_x + band.column_pitch - 1) / band.column_pitch;
-    range.first_row = (covered.y - band.origin_y) / band.row_pitch;
-    range.last_row =
-        (covered.bottom() - band.origin_y + band.row_pitch - 1) / band.row_pitch;
+
+    // Rows in grid numbering. A grid row can begin above the band, and so
+    // above the grid's origin within it, so the arithmetic is signed and
+    // floors: lines above the origin belong to the rows before first_grid_row.
+    const auto grid_row_at = [&](int64_t y, bool round_up) {
+        const int64_t from_origin = y - static_cast<int64_t>(band.origin_y);
+        const int64_t pitch = band.row_pitch;
+        int64_t band_row = from_origin >= 0
+            ? (round_up ? (from_origin + pitch - 1) / pitch : from_origin / pitch)
+            : -((-from_origin + (round_up ? 0 : pitch - 1)) / pitch);
+        return std::max<int64_t>(0, band_row + band.first_grid_row);
+    };
+    range.first_row = static_cast<uint32_t>(grid_row_at(covered.y, false));
+    range.last_row = static_cast<uint32_t>(grid_row_at(covered.bottom(), true));
 
     range.last_column = std::min(range.last_column, columns);
     range.last_row = std::min(range.last_row, rows);
@@ -160,12 +171,20 @@ BandReading read_teletext_band(const Band& band,
         // A run per row of the region, blank rows included. The blank rows are
         // part of what a selection captured, and carrying them is what lets
         // the layouts reproduce the shape of the screen.
+        // Where the row was drawn, clipped to the band: a band's first or
+        // last row can be only partly inside it.
+        const int64_t row_top = static_cast<int64_t>(band.origin_y) +
+            (static_cast<int64_t>(row) - band.first_grid_row) * band.row_pitch;
+        const int64_t visible_top = std::max<int64_t>(row_top, band.top);
+        const int64_t visible_bottom =
+            std::min<int64_t>(row_top + band.row_pitch, band.bottom);
+
         TextRun run;
         run.text = std::move(line);
         run.bounds = {band.origin_x + range.first_column * band.column_pitch,
-                      band.origin_y + row * band.row_pitch,
+                      static_cast<uint32_t>(visible_top),
                       cells * band.column_pitch,
-                      band.row_pitch};
+                      static_cast<uint32_t>(std::max<int64_t>(0, visible_bottom - visible_top))};
         run.cell_width = band.cell_width;
         run.cell_height = band.cell_height;
         run.reached_right_edge = reached_the_edge;
@@ -442,7 +461,8 @@ PixelRect PixelRect::intersected(const PixelRect& other) const {
     return {left, top, right - left, bottom - top};
 }
 
-std::vector<Band> bands_of(const FrameMetadata& metadata) {
+std::vector<Band> bands_of(const FrameMetadata& metadata,
+                           std::optional<int32_t> teletext_row_origin) {
     std::vector<Band> bands;
     bands.reserve(metadata.regions.size());
 
@@ -471,6 +491,29 @@ std::vector<Band> bands_of(const FrameMetadata& metadata) {
             const uint32_t interlace_factor = metadata.interlaced ? 2u : 1u;
             band.row_pitch = TELETEXT_FONT_ROWS * interlace_factor;
             band.cell_height = band.row_pitch;
+
+            // The chip ends a row every ten displayed lines across the whole
+            // picture, bitmap bands included, so a band need not open on a row
+            // boundary. Place its grid where the chip put the row the band's
+            // first line belongs to -- possibly above the band, whose top then
+            // shows only that row's last lines.
+            if (teletext_row_origin.has_value()) {
+                const int32_t rows = static_cast<int32_t>(TELETEXT_FONT_ROWS);
+                const int32_t top_line =
+                    static_cast<int32_t>(region.start_line / interlace_factor);
+                const int32_t from_origin = top_line - *teletext_row_origin;
+                int32_t row = from_origin >= 0 ? from_origin / rows : 0;
+                int32_t origin_line = *teletext_row_origin + row * rows;
+                if (origin_line < 0) {
+                    // A row begun above the picture: anchor on the next one,
+                    // whose rows the lines above still map to (see
+                    // cells_covered).
+                    ++row;
+                    origin_line += rows;
+                }
+                band.first_grid_row = static_cast<uint32_t>(row);
+                band.origin_y = static_cast<uint32_t>(origin_line) * interlace_factor;
+            }
         } else {
             band.cell_width = BITMAP_CELL_WIDTH;
             band.column_pitch = BITMAP_CELL_WIDTH;

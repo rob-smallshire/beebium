@@ -1163,6 +1163,11 @@ target_compile_definitions(test_saa5050_line_counter PRIVATE
 )
 catch_discover_tests(test_saa5050_line_counter)
 
+# Teletext band geometry: a band's grid sits where the SAA5050's rows are
+add_executable(test_teletext_band_geometry test_teletext_band_geometry.cpp)
+target_link_libraries(test_teletext_band_geometry PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_teletext_band_geometry)
+
 # Bitmap modes (0-6) diagnostic tests
 add_executable(test_bitmap_modes test_bitmap_modes.cpp)
 target_link_libraries(test_bitmap_modes PRIVATE beebium_core Catch2::Catch2WithMain)

@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <optional>
 #include <vector>
 
 // Reading text off the display, whatever mode is producing it.
@@ -164,6 +165,11 @@ struct Band {
     uint32_t origin_x = 0;
     uint32_t origin_y = 0;
 
+    // The teletext grid row the band's first row is, for a band the SAA5050
+    // was driving: the chip numbers its rows across the whole picture, so a
+    // band that is not the first does not start at grid row 0.
+    uint32_t first_grid_row = 0;
+
     // True when the SAA5050 was driving these scanlines.
     bool is_teletext = false;
 
@@ -171,7 +177,13 @@ struct Band {
 };
 
 // The bands of a completed frame, derived from what the renderer recorded.
-std::vector<Band> bands_of(const FrameMetadata& metadata);
+//
+// `teletext_row_origin` is the picture line on which the teletext grid's row 0
+// begins (TeletextGrid::row_origin()), which places the rows of every teletext
+// band where the SAA5050 drew them. Without it a teletext band's rows are taken
+// to start at its top.
+std::vector<Band> bands_of(const FrameMetadata& metadata,
+                           std::optional<int32_t> teletext_row_origin = std::nullopt);
 
 // The rendered pixels of a frame, as the framebuffer holds them: logical
 // pixels, BGRA32, row-major, `stride` pixels between one row and the next.

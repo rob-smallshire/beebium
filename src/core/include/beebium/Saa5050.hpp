@@ -236,6 +236,8 @@ public:
         m_capture_row = 0;
         m_capture_column = 0;
         m_display_started = false;
+        m_picture_started = false;
+        m_picture_line = 0;
         m_write_index = 0;  // No pipeline delay - output immediately
         m_read_index = 0;
         std::memset(m_output, 0, sizeof(m_output));
@@ -362,6 +364,11 @@ public:
 
     // LOSE leading edge: the start of a displayed line.
     void start_of_line() {
+        if (!m_picture_started) {
+            // The first displayed line of the frame: the picture's line 0.
+            m_picture_started = true;
+            m_picture_line = 0;
+        }
         m_capture_column = 0;
         m_conceal = false;
         m_fg = 7;
@@ -385,6 +392,7 @@ public:
     // height is followed by its bottom half.
     void end_of_line() {
         m_bg = 0;
+        ++m_picture_line;
 
         if (++m_line < ROW_LINES) {
             return;
@@ -412,6 +420,7 @@ public:
         }
         m_capture_row = 0;
         m_display_started = false;
+        m_picture_started = false;
         ++m_frame;
         if (m_frame >= 64) {
             m_frame = 0;
@@ -490,6 +499,10 @@ private:
         if (!m_display_started) {
             m_capture_row = 0;
             m_display_started = true;
+            // Say where that row began on the picture: this line, less the
+            // lines of the row already drawn. The band need not start on a
+            // row boundary, so its grid cannot be assumed to start at its top.
+            m_teletext_grid->set_row_origin(m_picture_line - m_line);
         }
 
         TeletextCell cell;
@@ -700,6 +713,12 @@ private:
     // set_raster() counted before the picture began can be discounted (see
     // capture_cell). Reset at vsync and in reset().
     bool m_display_started = false;
+    // Displayed lines since the first displayed line of the frame -- the
+    // picture line the frame renderer counts as y -- so the grid can say where
+    // its rows lie. Restarts at the first displayed line after DEW's leading
+    // edge.
+    bool m_picture_started = false;
+    int32_t m_picture_line = 0;
 
     // Double height state
     uint8_t m_raster_shift = 0;

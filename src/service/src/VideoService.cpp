@@ -80,8 +80,10 @@ void to_proto_region(const screen::PixelRect& rect, PixelRegion* out) {
 // The grid every band implies, reported whether or not text can be read from
 // it: where the cells are and what is in them are separate questions, and
 // snapping a drag needs only the first.
-void to_proto_geometry(const FrameMetadata& meta, ScreenGeometry* out) {
-    for (const screen::Band& band : screen::bands_of(meta)) {
+void to_proto_geometry(const FrameMetadata& meta,
+                       std::optional<int32_t> teletext_row_origin,
+                       ScreenGeometry* out) {
+    for (const screen::Band& band : screen::bands_of(meta, teletext_row_origin)) {
         auto* band_out = out->add_bands();
         band_out->set_top(band.top);
         band_out->set_bottom(band.bottom);
@@ -230,7 +232,8 @@ grpc::Status VideoServiceImpl::HoldScreen(
     }
 
     response->set_hold_id(hold_id);
-    to_proto_geometry(capture->metadata, response->mutable_geometry());
+    to_proto_geometry(capture->metadata, capture->teletext.row_origin,
+                      response->mutable_geometry());
     if (request->include_frame()) {
         to_proto_frame(capture->metadata, capture->pixels, capture->stride,
                        response->mutable_frame());
@@ -300,7 +303,7 @@ grpc::Status VideoServiceImpl::GetScreenText(
     const TeletextCharacters characters = to_screen_characters(request->characters());
 
     std::vector<screen::BandReading> readings;
-    for (const screen::Band& band : screen::bands_of(meta)) {
+    for (const screen::Band& band : screen::bands_of(meta, capture->teletext.row_origin)) {
         // A band the region does not touch is not part of this request at all,
         // so it neither contributes runs nor votes on whether the request
         // could be read.
@@ -349,11 +352,24 @@ grpc::Status VideoServiceImpl::GetScreenGeometry(
                 grpc::StatusCode::NOT_FOUND,
                 "no such screen hold: it was released or has expired");
         }
-        to_proto_geometry(capture->metadata, response);
+        to_proto_geometry(capture->metadata, capture->teletext.row_origin, response);
         return grpc::Status::OK;
     }
 
-    to_proto_geometry(frame_buffer_.metadata(), response);
+    // The teletext rows are placed from the grid, a separate source from the
+    // frame's metadata, so read the pair as capture_screen() does: again if a
+    // frame completes between the two reads.
+    FrameMetadata meta;
+    std::optional<int32_t> teletext_row_origin;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        const uint64_t before = frame_buffer_.version();
+        teletext_row_origin = teletext_grid_.snapshot().row_origin;
+        meta = frame_buffer_.metadata();
+        if (frame_buffer_.version() == before) {
+            break;
+        }
+    }
+    to_proto_geometry(meta, teletext_row_origin, response);
     return grpc::Status::OK;
 }
 

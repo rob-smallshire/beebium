@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace beebium {
@@ -111,6 +112,24 @@ public:
     // captured and the frame is inactive.
     [[nodiscard]] bool active() const { return m_active; }
 
+    // The picture line on which the completed frame's grid row 0 begins, in
+    // field lines counted from the first displayed line of the frame -- the
+    // count the frame renderer's y keeps -- so row r begins on line
+    // row_origin + 10r. It can lie above the first captured line: a teletext
+    // band that opens part way through a character row (below a bitmap band
+    // whose height is not a multiple of ten) shows only that row's last lines.
+    // Empty when nothing was captured.
+    //
+    // One origin places every row because the chip's rows run every ten
+    // displayed lines from the end of VSYNC, the same lines the picture's y
+    // counts; changes to R4 or R5 move only undisplayed lines. The exception
+    // is a picture displayed during VSYNC: the end of VSYNC then restarts the
+    // count part way down it, which this single origin does not describe.
+    [[nodiscard]] std::optional<int32_t> row_origin() const { return m_row_origin; }
+
+    // Where grid row 0 of the frame being captured begins; see row_origin().
+    void set_row_origin(int32_t picture_line) { m_back_row_origin = picture_line; }
+
     // Record a cell into the frame being captured, growing the grid to include
     // it. A position beyond the addressable maximum is dropped rather than
     // clamped onto the edge, which would corrupt real cells.
@@ -143,6 +162,7 @@ public:
         }
 
         m_active = m_captured_any;
+        m_row_origin = m_back_row_origin;
         ++m_frame_number;
 
         // Wipe only what this frame wrote, keeping the allocation, so the next
@@ -155,6 +175,7 @@ public:
         m_back_rows = 0;
         m_back_columns = 0;
         m_captured_any = false;
+        m_back_row_origin.reset();
     }
 
     // A whole completed frame, taken atomically with respect to the swap. Its
@@ -165,6 +186,7 @@ public:
         size_t columns = 0;
         uint64_t frame_number = 0;
         bool active = false;
+        std::optional<int32_t> row_origin;  // see TeletextGrid::row_origin()
 
         [[nodiscard]] const TeletextCell& cell(size_t row, size_t column) const {
             static const TeletextCell blank;
@@ -183,6 +205,7 @@ public:
         taken.columns = m_columns;
         taken.frame_number = m_frame_number;
         taken.active = m_active;
+        taken.row_origin = m_row_origin;
         return taken;
     }
 
@@ -199,6 +222,8 @@ public:
         m_frame_number = 0;
         m_active = false;
         m_captured_any = false;
+        m_row_origin.reset();
+        m_back_row_origin.reset();
     }
 
 private:
@@ -237,6 +262,8 @@ private:
     uint64_t m_frame_number = 0;
     bool m_active = false;
     bool m_captured_any = false;
+    std::optional<int32_t> m_row_origin;
+    std::optional<int32_t> m_back_row_origin;
 };
 
 } // namespace beebium
