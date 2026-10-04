@@ -1,7 +1,8 @@
 # Machine names as templates
 
-Status: server and client libraries built (2026-10-03, issue #153); the
-macOS rename popover (section 8) is still to come. Decisions marked (user)
+Status: built (issue #153): the server, the client libraries, and the
+macOS rename popover (section 8). Issue #173 added the fdc-controller,
+coprocessor-cpu and coprocessor-clock placeholders. Decisions marked (user)
 come from the user's comments on the issue. This document describes the
 design as built; where building it settled a point the first draft left open
 or had wrong, the section says so.
