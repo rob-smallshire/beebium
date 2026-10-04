@@ -12,4 +12,4 @@
 
 """Single source of truth for the beebium version (bumped by bump-my-version)."""
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
