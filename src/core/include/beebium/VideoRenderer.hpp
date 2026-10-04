@@ -57,28 +57,35 @@ public:
         uint16_t screen_addr = translate_screen_address(crtc_output.address, crtc_output.raster);
         uint8_t screen_byte = crtc_output.display ? hardware_.peek_video(screen_addr) : 0;
 
+        // The SAA5050's line timing is wired to the 6845 on the board, not
+        // routed through the Video ULA, so it is driven on every character
+        // clock whatever the ULA shows: the chip's line count runs on through
+        // a bitmap band above the teletext, as on the real machine.
+        begin_saa5050_clock(crtc_output);
+
         // Generate PixelBatch
         PixelBatch batch;
 
         if (hardware_.video_ula.teletext_mode()) {
-            render_teletext(batch, crtc_output, screen_byte);
-            return;  // Teletext pushes its own batches
+            render_teletext(batch, crtc_output, screen_byte);  // pushes its own batches
         } else {
             render_bitmap(batch, crtc_output, screen_byte);
+
+            // Set sync flags
+            uint8_t flags = VIDEO_FLAG_NONE;
+            if (crtc_output.hsync) flags |= VIDEO_FLAG_HSYNC;
+            if (crtc_output.vsync) flags |= VIDEO_FLAG_VSYNC;
+            if (crtc_output.display) flags |= VIDEO_FLAG_DISPLAY;
+            if (crtc_output.interlace) flags |= VIDEO_FLAG_INTERLACE;
+            if (crtc_output.odd_field) flags |= VIDEO_FLAG_ODD_FIELD;
+            batch.set_flags(flags);
+            batch.set_char_scanlines(char_scanlines());
+            batch.set_display_clocks(display_clocks());
+
+            deliver(batch);
         }
 
-        // Set sync flags
-        uint8_t flags = VIDEO_FLAG_NONE;
-        if (crtc_output.hsync) flags |= VIDEO_FLAG_HSYNC;
-        if (crtc_output.vsync) flags |= VIDEO_FLAG_VSYNC;
-        if (crtc_output.display) flags |= VIDEO_FLAG_DISPLAY;
-        if (crtc_output.interlace) flags |= VIDEO_FLAG_INTERLACE;
-        if (crtc_output.odd_field) flags |= VIDEO_FLAG_ODD_FIELD;
-        batch.set_flags(flags);
-        batch.set_char_scanlines(char_scanlines());
-        batch.set_display_clocks(display_clocks());
-
-        deliver(batch);
+        end_saa5050_clock(crtc_output);
     }
 
     // The machine's cycle counter, read to stamp each vsync rising edge.
@@ -95,7 +102,6 @@ public:
         last_hsync_ = false;
         last_vsync_ = false;
         last_display_ = false;
-        teletext_column_ = 0;
     }
 
     // Translate CRTC address and raster to BBC memory address
@@ -146,25 +152,36 @@ public:
     }
 
 private:
-    void render_teletext(PixelBatch& batch, const Crtc6845::Output& crtc_output, uint8_t screen_byte) {
-        // VSYNC drives the SAA5050's DEW: the leading edge ends a field, the
-        // trailing edge starts the next one on its first character row.
+    // The leading half of the SAA5050's pins for this character clock, before
+    // the character is drawn: VSYNC drives DEW, whose leading edge ends a field
+    // and whose trailing edge starts the next on its first character row; RA0
+    // drives CRS; DISPTMG drives LOSE, whose leading edge starts a line.
+    void begin_saa5050_clock(const Crtc6845::Output& crtc_output) {
+        auto& saa5050 = hardware_.saa5050;
         if (crtc_output.vsync && !last_vsync_) {
-            hardware_.saa5050.vsync();
-            teletext_column_ = 0;
+            saa5050.vsync();
         }
         if (!crtc_output.vsync && last_vsync_) {
-            hardware_.saa5050.end_of_vsync();
+            saa5050.end_of_vsync();
         }
-
-        // RA0 drives the SAA5050's CRS; the chip counts its own glyph lines.
-        hardware_.saa5050.set_crs((crtc_output.raster & 1) != 0);
-
-        // Start of display area - reset per-line state
-        if (crtc_output.display && teletext_column_ == 0) {
-            hardware_.saa5050.start_of_line();
+        saa5050.set_crs((crtc_output.raster & 1) != 0);
+        if (crtc_output.display && !last_display_) {
+            saa5050.start_of_line();
         }
+    }
 
+    // The trailing half, after the character is drawn: LOSE's trailing edge
+    // ends a displayed line and advances the chip's line count.
+    void end_saa5050_clock(const Crtc6845::Output& crtc_output) {
+        if (!crtc_output.display && last_display_) {
+            hardware_.saa5050.end_of_line();
+        }
+        last_display_ = crtc_output.display;
+        last_hsync_ = crtc_output.hsync;
+        last_vsync_ = crtc_output.vsync;
+    }
+
+    void render_teletext(PixelBatch& batch, const Crtc6845::Output& crtc_output, uint8_t screen_byte) {
         // Feed byte to SAA5050
         hardware_.saa5050.byte(screen_byte, crtc_output.display ? 1 : 0, crtc_output.cursor != 0);
 
@@ -194,20 +211,6 @@ private:
         batch2.set_char_scanlines(char_scanlines());
         batch2.set_display_clocks(8);
         deliver(batch2);
-
-        if (crtc_output.display) {
-            ++teletext_column_;
-        }
-
-        // Reset column counter when leaving display area
-        if (!crtc_output.display && last_display_ && teletext_column_ > 0) {
-            hardware_.saa5050.end_of_line();
-            teletext_column_ = 0;
-        }
-
-        last_display_ = crtc_output.display;
-        last_hsync_ = crtc_output.hsync;
-        last_vsync_ = crtc_output.vsync;
     }
 
     // Scanlines per character row, from CRTC R9 + 1.
@@ -277,11 +280,10 @@ private:
     uint64_t next_edge_ = 0;
     bool last_delivered_vsync_ = false;
 
-    // Teletext state tracking
+    // Edge tracking for the SAA5050's DEW and LOSE
     bool last_hsync_ = false;
     bool last_vsync_ = false;
     bool last_display_ = false;
-    uint8_t teletext_column_ = 0;
 };
 
 // Factory function to create VideoRenderer with type deduction

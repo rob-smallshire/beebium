@@ -31,6 +31,9 @@
 #include <beebium/FrameAllocator.hpp>
 #include <beebium/FrameBuffer.hpp>
 #include <beebium/FrameRenderer.hpp>
+#include <beebium/ModelBHardware.hpp>
+#include <beebium/VideoRenderer.hpp>
+#include <beebium/devices/Crtc6845.hpp>
 
 #include "test_mode7_helpers.hpp"
 
@@ -40,6 +43,44 @@
 
 using namespace beebium;
 using namespace beebium::test;
+
+// DEW and LOSE are wired from the 6845 to the SAA5050 on the board, not routed
+// through the Video ULA, so the chip keeps counting displayed lines while the
+// ULA shows a bitmap. A screen split into a bitmap band above a teletext band
+// (Ant Attack's playing screen) therefore starts its teletext with the count
+// left by the bitmap lines, as on the real machine.
+TEST_CASE("The SAA5050 counts displayed lines whatever the Video ULA shows",
+          "[saa5050][mode7][split-screen]") {
+    ModelBHardware hardware;
+    hardware.enable_video_output();
+    VideoRenderer<ModelBHardware> renderer(hardware);
+
+    hardware.video_ula.write(0, 0x88);  // MODE 4: teletext not selected
+    REQUIRE_FALSE(hardware.video_ula.teletext_mode());
+
+    auto clock = [&](bool vsync, bool display, uint8_t raster) {
+        Crtc6845::Output output{};
+        output.vsync = vsync;
+        output.display = display;
+        output.raster = raster;
+        renderer.render(output);
+    };
+
+    // A field begins at the trailing edge of VSYNC...
+    for (int i = 0; i < 3; ++i) {
+        clock(false, false, 0);
+        clock(true, false, 0);
+    }
+    clock(false, false, 0);
+
+    // ...then seven displayed lines of bitmap.
+    for (uint8_t line = 0; line < 7; ++line) {
+        clock(false, true, line);
+        clock(false, false, line);
+    }
+
+    CHECK(hardware.saa5050.line() == 7);
+}
 
 #ifdef BEEBIUM_ROM_DIR
 

@@ -106,9 +106,9 @@ public:
 
     // True when the completed frame was captured from a teletext display.
     //
-    // A reader must check this: in any other screen mode the SAA5050 is not
-    // fed, so the grid holds whatever was last displayed in teletext rather
-    // than anything current.
+    // A reader must check this: in any other screen mode the SAA5050 is still
+    // clocked by VSYNC, so the grid is published every field, but no cell is
+    // captured and the frame is inactive.
     [[nodiscard]] bool active() const { return m_active; }
 
     // Record a cell into the frame being captured, growing the grid to include

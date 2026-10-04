@@ -122,8 +122,8 @@ BandReading read_teletext_band(const Band& band,
                                TeletextCharacters characters) {
     BandReading reading;
     if (!teletext.active) {
-        // The grid holds whatever was last shown in MODE 7. A band the
-        // SAA5050 was not driving must not be read from it.
+        // The SAA5050 drove no cell this frame. A band it was not driving
+        // must not be read from the grid.
         return reading;
     }
 
