@@ -159,6 +159,10 @@ Beebium has implemented B2-quality Mode 7 rendering:
    - Black/new background (0x1C, 0x1D)
    - Hold/release graphics (0x1E, 0x1F)
    - Conceal display (0x18)
+   - Each code's Set-At or Set-After timing and the hold-graphics memory
+     follow the real chip, as measured against real-BBC captures: see the
+     rules in `docs/video-subsystem.md` and
+     `docs/discussion/saa5050-conformance-study.md`
 
 ### Architectural Notes
 

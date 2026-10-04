@@ -1,9 +1,9 @@
 # SAA5050 conformance study: MODE7DEM against real-BBC captures
 
-Status: study only, no code changed. Measured against master at f7302fd7
-(`Saa5050.hpp` unchanged since 5ea20577), then re-measured at 31b71c70
-(glyph lines counted on the chip) with identical per-cell results. Date:
-2026-10-05.
+Status: the five defects are fixed (issue #175); MODE7DEM now matches all
+47 captures exactly. Sections 5 and 6 record the state before the fixes,
+measured at f7302fd7 and again at 31b71c70 with identical per-cell
+results; section 7 gives the state after them. Date: 2026-10-05.
 
 This study runs the MODE7DEM teletext test pages in Beebium and compares
 every frame, pixel for pixel, with captures taken from a real BBC Micro. It
@@ -11,9 +11,10 @@ then sets out the SAA5050 attribute rules as the real chip behaves, says
 which of them `Saa5050.hpp` gets wrong, and proposes a test suite of our own
 that pins every rule down without depending on third-party material.
 
-Headline: 35 of the 47 reference captures match exactly; all 12 that do not
-are explained by five defects, the worst of which (colour codes acting
-Set-At on held graphics) is common in real Prestel art.
+Headline: before #175, 35 of the 47 reference captures matched exactly,
+and all 12 that did not were explained by five defects, the worst of which
+(colour codes acting Set-At on held graphics) is common in real Prestel
+art. After #175 all 47 match.
 
 ## 1. Sources
 
@@ -195,17 +196,14 @@ workaround: the byte at row 10, column 2 (NEW BG) is replaced by `A`.
 
 ### 4.4 Tolerance
 
-Exact RGB equality per pixel, excluding only:
+Exact RGB equality per pixel, excluding only b2's 139 pixels of capture
+noise. These are RGBtoHDMI sampling errors on strokes of N, K and m. Greg
+Cook confirms they are not in the analogue signal (p480695). They include
+the top-left notch of the double-height "m"s, which his BBC B lacks and Tom
+Seddon's B+ 128 shows (p480685).
 
-- The 24 cursor pixels. Our cursor is off; the capture's blinks. On the
-  capture the cursor is at y=58..59, x=168..179 (see section 9.1).
-- b2's 139 pixels of capture noise. These are RGBtoHDMI sampling errors on
-  strokes of N, K and m. Greg Cook confirms they are not in the analogue
-  signal (p480695). They include the top-left notch of the double-height
-  "m"s, which his BBC B lacks and Tom Seddon's B+ 128 shows (p480685).
-
-Nothing else is excluded. The comparison is pixel-exact; it is not done by
-eye.
+No capture shows a cursor (section 9.1); ours is turned off. Nothing else
+is excluded. The comparison is pixel-exact; it is not done by eye.
 
 ## 5. Results
 
@@ -351,13 +349,13 @@ which passes all 47 captures; **mdfs** = mdfs.net error images.
 | # | Rule | Real SAA5050 (BBC) | Source | Saa5050.hpp |
 |---|---|---|---|---|
 | R1 | Row start state | Alpha white, black background, contiguous, steady, normal height, not concealed, hold off, held memory empty | S, b2, C (every page) | Matches |
-| R2 | Alpha colour &81-&87 | Foreground Set-After, also for a held glyph in the code's cell. Selects alpha, cancels conceal (Set-After) and clears the held memory (Set-After) | C p11 r15, p13; T p480826; b2 | **No**: foreground Set-At (6.1); clearing and conceal correct |
-| R3 | Graphics colour &91-&97 | Foreground Set-After as R2. Selects graphics, cancels conceal (Set-After) | C p11, p13, p15, p16, p19, p20, p28; b2 | **No**: foreground Set-At (6.1) |
-| R4 | FLASH &88 | Set-After, for characters and held glyphs | S; C p6, p30 r10 c10; b2 | Characters yes; held glyphs never flash (6.3) |
-| R5 | STEADY &89 | Set-At, for characters and held glyphs | T p480577, p480780; C p20 r3 c27 | Characters yes; held glyphs wrong via 6.2 |
+| R2 | Alpha colour &81-&87 | Foreground Set-After, also for a held glyph in the code's cell. Selects alpha, cancels conceal (Set-After) and clears the held memory (Set-After) | C p11 r15, p13; T p480826; b2 | Matches since #175 (was Set-At, 6.1) |
+| R3 | Graphics colour &91-&97 | Foreground Set-After as R2. Selects graphics, cancels conceal (Set-After) | C p11, p13, p15, p16, p19, p20, p28; b2 | Matches since #175 (was Set-At, 6.1) |
+| R4 | FLASH &88 | Set-After, for characters and held glyphs | S; C p6, p30 r10 c10; b2 | Matches since #175 (held glyphs did not flash, 6.3) |
+| R5 | STEADY &89 | Set-At, for characters and held glyphs | T p480577, p480780; C p20 r3 c27 | Matches since #175 (held glyphs wrong via 6.2) |
 | R6 | Flash timing | 64-field cycle, hidden for fields 0-15 (3:1 visible:hidden), counted at vsync | b2 constants only; **not verifiable from stills** | Same constants; unverified |
-| R7 | Flash memory | The held memory stores the glyph bitmap regardless of flash phase | b2 ec7a10c9; T p480574; C p20 off | **No** (6.2) |
-| R8 | CONCEAL &98 | Set-At; held glyphs are blanked in its cell too. Lasts until the next colour code, whose cell is still concealed | C p8, p13 r5 c32..c37; b2 | Set-At for characters; **not** for a held glyph in its own cell (6.4) |
+| R7 | Flash memory | The held memory stores the glyph bitmap regardless of flash phase | b2 ec7a10c9; T p480574; C p20 off | Matches since #175 (6.2) |
+| R8 | CONCEAL &98 | Set-At; held glyphs are blanked in its cell too. Lasts until the next colour code, whose cell is still concealed | C p8, p13 r5 c32..c37; b2 | Matches since #175 (was not Set-At for a held glyph, 6.4) |
 | R9 | Hold memory under conceal | The memory survives conceal and shows again after it | C p13 r5 c34 | Matches here (memory is not stored while concealed; untested where a mosaic is drawn under conceal and then held) |
 | R10 | Reveal | Not a chip function on the BBC; software rewrites &98 to &9B (ESC, ignored) | Program listing | n/a (ESC is a no-op: matches) |
 | R11 | BLACK BG &9C, NEW BG &9D | Set-At (the code's cell takes the new background). NEW BG copies the current foreground | S; C p5 | Matches |
@@ -370,7 +368,7 @@ which passes all 47 captures; **mdfs** = mdfs.net error images.
 | R18 | NORMAL HEIGHT &8C | As R17 for its own cell. Set-At versus Set-After is not observable apart from the height change (p480821) | S; T p480780-p480822; C p10, p11 | Matches |
 | R19 | Double-height rows | A row with DH shows the top halves. The next row is the lower half, read from **its own RAM**, not copied from the top row: its codes and colours apply. Normal-height text in the lower row is blank. The lower row's background follows its own codes | T p480084, p480091, p480232, p492606; C p1, p9, p10, p15, p20 r19-22 | Matches |
 | R20 | Level-2 codes | &80, &90, &8A/&8B (box), &8E/&8F (SO/SI), &9B (ESC), &90 (DLE) are no-ops displayed as control-code spaces | C p12, p13; b2 | Matches |
-| R21 | Glyphs and rounding | 5x9 font with character rounding (the b2 formula). Real BBCs differ in the double-height `m` notch (B versus B+) | C all pages; T p480685 | &7D wrong (6.5); otherwise matches |
+| R21 | Glyphs and rounding | 5x9 font with character rounding (the b2 formula). Real BBCs differ in the double-height `m` notch (B versus B+) | C all pages; T p480685 | Matches since #175 (&7D was wrong, 6.5) |
 
 ## 8. Proposed test plan
 
@@ -388,10 +386,13 @@ Coverage as committed at f7302fd7.
   Set-After. Also separated mode, background codes, the flash state
   machine, start-of-line reset, cursor XOR and the gamma blend table.
 - **`tests/test_mode7.cpp`**, machine level: golden-master PPMs for colours,
-  sixels, the printable set, double height and hold, at a 0.1% diff
-  tolerance. One differing cell (320 px of a 640x512 frame, 0.098%)
-  passes, so the hold golden master cannot see 6.1. Its own comment, "held
-  red block shown", describes the correct behaviour.
+  sixels, the printable set, double height and hold, compared with a
+  per-channel tolerance of 16 and passing with up to 0.1% of the frame
+  different. Fixing 6.1 changed 440 px (0.14%) of the hold master, so
+  that change would have been caught; but the tolerance had hidden a
+  stale hold master (its RELEASE cell still truncated as before the #57
+  fix) and drift in the B+ cursor's blink phase. Since #175 the masters
+  are compared exactly outside the cursor's cell.
 - **`tests/test_teletext_grid.cpp`**: the semantic capture grid (colours,
   conceal, double height, flash flags), not pixels.
 
@@ -399,6 +400,9 @@ None of these exercises R2/R3 under hold, R5, R7, R8 under hold, R15, R17
 under hold, R19's split rows or glyph &7D.
 
 ### 8.2 New vectors (authored by us)
+
+These are implemented in `tests/test_saa5050_attribute_rules.cpp` (#175),
+with further checks that the screen-text grid records what each cell shows.
 
 Each vector is one or two rows of screen bytes. Expected output is stated per
 cell as (glyph, foreground, background), in both flash phases where flash is
@@ -451,30 +455,26 @@ otherwise.
 
 It should do exactly what section 4 did: poke the bytes, collect a flash
 cycle's frames, decode to 12 dots, align at (156,38) and compare with the
-cursor and the 139 b2 noise pixels excluded. It must never be committed;
+139 b2 noise pixels excluded. It must never be committed;
 see section 10. It is the ultimate whole-chip regression, but the V-vectors
 above are what should gate CI.
 
 ## 9. Observations outside the SAA5050
 
-### 9.1 Cursor position relative to the text
+### 9.1 Cursor position: retracted
 
-In every capture showing it, the cursor for logical position (0,0) sits at
-x=168..179, y=58..59. That is cell (0,1) horizontally, and the two lines
-just *below* row 0 vertically (rows start at y=38).
-
-Beebium draws the cursor at the logical column, on lines 18-19 of the cell
-(measured: BASIC's cursor at column 1, frame lines 18-19). Relative to the
-text, the hardware's cursor is therefore one cell right and two lines down
-from ours.
-
-This is CRTC cursor skew (R8) and row counting, not the SAA5050. It is
-unverified beyond these captures, and it overlaps the line-counting work in
-progress, so it is noted here rather than raised as a defect.
+An earlier version of this section reported the hardware cursor one cell
+right and two lines lower relative to the text than ours. That was wrong.
+No capture shows a cursor at all: what was measured, at capture y=58..59,
+x=168..179, is the top of row 1's yellow NEW BACKGROUND band, seen through
+a crop two lines off the true alignment. Our cursor-off frames match every
+capture exactly, those pixels included. The captures say nothing about the
+cursor's position.
 
 ### 9.2 Golden-master tolerance
 
-See section 8.1: a 0.1% tolerance passes one wrong cell.
+See section 8.1: the tolerance hid stale masters rather than this
+defect. The masters are now compared exactly outside the cursor's cell.
 
 ## 10. Licence position
 

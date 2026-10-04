@@ -98,6 +98,30 @@ Control codes change rendering state but display as spaces:
 - 0x1C: Black background, 0x1D: New background
 - 0x1E: Hold graphics, 0x1F: Release graphics
 
+When a code takes effect matters wherever a control code's cell shows
+something other than a space, i.e. under Hold Graphics. The chip, as
+captured from a real BBC (MODE7DEM; see
+`docs/discussion/saa5050-conformance-study.md`, section 7):
+
+- **Set-At** (the code's own cell takes the new state): black and new
+  background, Hold Graphics, Steady, Conceal, and a change of height,
+  whose cell is blank.
+- **Set-After** (from the next cell): every foreground colour code
+  (alpha and graphics) -- a held mosaic in a colour code's cell keeps
+  the old colour -- and Flash, Release Graphics and the end of
+  concealment by a colour code.
+- **The held mosaic** is the bitmap the last mosaic drew, with its own
+  separation, whatever the flash phase. The SAA5050 forgets it at any
+  control code shown while hold is off, after an alpha colour code's
+  cell, at a change of height and at the start of each row; an
+  alphanumeric in graphics mode does not clear it. Shown in a control
+  code's cell it flashes and is concealed like the text around it.
+
+`test_saa5050_attribute_rules.cpp` pins each rule with a vector of screen
+bytes. The teletext grid (screen text) records the same resolved
+attributes per cell, including the held mosaic a control code's cell
+shows.
+
 **Line/Frame Management:**
 
 The chip counts a character's ten lines itself; of the 6845's row address it
