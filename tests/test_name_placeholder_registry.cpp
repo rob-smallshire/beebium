@@ -43,11 +43,12 @@ public:
         return it == values_.end() ? NamePlaceholderValue{"", false} : it->second;
     }
 
-    std::map<std::string, NamePlaceholderValue> values_;
-
 private:
     std::vector<std::string> domains_;
     std::vector<NamePlaceholderInfo> infos_;
+
+public:
+    std::map<std::string, NamePlaceholderValue> values_;
 };
 
 NamePlaceholderInfo info(std::string key, std::string group = "Test") {
