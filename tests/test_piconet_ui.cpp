@@ -91,6 +91,11 @@ public:
     // closes its serial port, flipping is_serial_open() to false.
     void simulate_hot_unplug() { fake_.reset(); }
 
+    // Free the backend exactly as EconetSocket does on DisableEconet (#167):
+    // the backend's destructor fires its destroyed callback, which the
+    // extension uses to drop its non-owning pointer.
+    void destroy_backend() { backend_owner_.reset(); }
+
     // Block until is_serial_open() returns false, up to 3 seconds.
     // Used after simulate_hot_unplug() to wait for the reader thread
     // to react. Returns true if observed, false on timeout.
@@ -468,4 +473,32 @@ TEST_CASE("PiconetUi EditorCommit with empty commit is a safe no-op",
 
     REQUIRE(fixture.backend().config().device_path == before_path);
     REQUIRE(ui->current_revision() > before_rev);  // mark_dirty was called.
+}
+
+// #167: when EconetSocket frees the backend, the extension's destroyed callback
+// drops its raw pointer, so PiconetUi and retry_discovery report "not
+// connected" rather than touch freed memory. Run under the ASan build to prove
+// no use-after-free.
+TEST_CASE("PiconetUi and retry tolerate the backend being destroyed",
+          "[piconet][extension-ui]") {
+    PiconetUiFixture fixture;
+    auto& ext = fixture.extension();
+    auto* ui = ext.ui();
+    REQUIRE(ui != nullptr);
+    REQUIRE(ext.backend() != nullptr);
+
+    // EconetSocket frees the backend on DisableEconet.
+    fixture.destroy_backend();
+    CHECK(ext.backend() == nullptr);  // destroyed callback dropped the pointer
+
+    // retry_discovery with no backend is a no-op, not a crash through a
+    // dangling pointer.
+    ext.retry_discovery();
+    CHECK(ext.backend() == nullptr);
+
+    // build_view renders the no-backend state (Retry offered, nothing
+    // dereferenced through the freed backend).
+    beebium::View view;
+    ui->build_view(&view);
+    CHECK(view.root().group().controls_size() >= 1);
 }

@@ -67,11 +67,19 @@ Key differences from a peripheral extension:
   raw `backend_` pointer for your UI and dispatcher to read. The backend does
   not live only until process exit: `EconetService.DisableEconet` frees it at
   runtime, and a later `EconetService.EnableEconet` calls `create_backend`
-  again for a new one. Clear your raw pointer when the backend is destroyed --
-  AUN does this with `AunBackend::set_destroyed_callback`, guarded by a weak
-  liveness token and a check that the backend being destroyed is still the one
-  it holds (see `AunEconetTransportExtension::create_backend`). Never
-  dereference the pointer from a destructor.
+  again for a new one. Clear your raw pointer when the backend is destroyed, or
+  your UI, dispatcher and any background work will read freed memory. Use the
+  shared helper rather than rolling your own: in `create_backend`, right after
+  you store `backend_`, call
+  `arm_backend_destroyed(backend_, teardown)` (on the `EconetTransportExtension`
+  base). It holds a liveness token, so your `teardown` never runs after the
+  extension itself is gone; `teardown` does the transport-specific work -- a
+  check that `backend_` is still the one being freed (not a newer one a
+  re-Enable installed), nulling `backend_`, and joining any thread you own. The
+  mechanism is `NetworkBackend::set_destroyed_callback`, fired from every
+  concrete backend's destructor before its members are torn down; AUN and
+  Piconet both go through `arm_backend_destroyed`. Never dereference the pointer
+  from a destructor.
 - **Keep desired state in the extension, not the backend.** Anything a client
   can set before the backend exists, or that must survive the backend being
   recreated, belongs to the extension. AUN's `AunPeerSet` (the desired peer

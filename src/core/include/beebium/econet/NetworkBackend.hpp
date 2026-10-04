@@ -14,6 +14,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -150,13 +152,42 @@ public:
         return backend_status_sequence_.load(std::memory_order_acquire);
     }
 
+    // Register a callback invoked exactly once when this backend is destroyed,
+    // so the transport extension that produced it can drop its non-owning
+    // pointer and stop writing through freed memory. EconetSocket owns the
+    // backend and frees it on DisableEconet; without this notification the
+    // extension's UI, dispatcher and background work would use-after-free (the
+    // #55 defect for AUN, #167 for every transport). Each concrete backend must
+    // call fire_destroyed_callback() at the TOP of its destructor, before any
+    // of its own members are torn down, so the callback runs while the state a
+    // still-running background thread touches is alive until that thread joins.
+    void set_destroyed_callback(std::function<void()> callback) {
+        std::lock_guard<std::mutex> lock(destroyed_callback_mutex_);
+        destroyed_callback_ = std::move(callback);
+    }
+
 protected:
     void bump_backend_status_sequence() {
         backend_status_sequence_.fetch_add(1, std::memory_order_acq_rel);
     }
 
+    // Run the destroyed callback once (a second call is a no-op). A concrete
+    // backend calls this first thing in its destructor.
+    void fire_destroyed_callback() {
+        std::function<void()> on_destroyed;
+        {
+            std::lock_guard<std::mutex> lock(destroyed_callback_mutex_);
+            on_destroyed = std::move(destroyed_callback_);
+        }
+        if (on_destroyed) {
+            on_destroyed();
+        }
+    }
+
 private:
     std::atomic<uint64_t> backend_status_sequence_{0};
+    std::mutex destroyed_callback_mutex_;
+    std::function<void()> destroyed_callback_;
 };
 
 }  // namespace beebium

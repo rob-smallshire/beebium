@@ -39,6 +39,25 @@ EconetTransportExtension::select_auto_station(econet::StationRange /*range*/) {
     return outcome;
 }
 
+void EconetTransportExtension::arm_backend_destroyed(
+    NetworkBackend* backend, std::function<void()> teardown) {
+    // A fresh token per arm: an earlier backend's callback, should its
+    // destruction be deferred past a re-Enable that armed a new backend, finds
+    // this expired and does nothing (so does the identity check the teardown
+    // makes). The weak capture makes the callback a no-op once the extension is
+    // gone, whatever order the extension and a reader-co-owned backend tear down.
+    backend_destroyed_token_ = std::make_shared<bool>(true);
+    std::weak_ptr<bool> alive = backend_destroyed_token_;
+    backend->set_destroyed_callback(
+        [alive, teardown = std::move(teardown)]() {
+            auto keep_alive = alive.lock();
+            if (!keep_alive) {
+                return;  // the extension is gone
+            }
+            teardown();
+        });
+}
+
 EconetTransportRegistry::~EconetTransportRegistry() = default;
 
 }  // namespace beebium

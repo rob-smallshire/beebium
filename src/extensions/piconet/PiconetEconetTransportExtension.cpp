@@ -53,7 +53,13 @@ std::unique_ptr<piconet::SerialPort> make_platform_serial(
 }  // namespace
 
 PiconetEconetTransportExtension::PiconetEconetTransportExtension() = default;
-PiconetEconetTransportExtension::~PiconetEconetTransportExtension() = default;
+
+PiconetEconetTransportExtension::~PiconetEconetTransportExtension() {
+    // Expire the destroyed-callback token before members tear down, uniformly
+    // with AUN (#167). Piconet's teardown only nulls a raw pointer, so this is
+    // defensive today, but it keeps the pattern identical across transports.
+    disarm_backend_destroyed();
+}
 
 std::vector<ExtensionRpcDispatcher*>
 PiconetEconetTransportExtension::rpc_dispatchers() {
@@ -111,6 +117,13 @@ PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
             &make_platform_serial,
             [this]{ ui_.mark_dirty(); });
         backend_ = backend.get();
+        arm_backend_destroyed(backend_, [this, released = backend_]() {
+            // EconetSocket freed the backend (DisableEconet). Drop the dangling
+            // pointer so retry_discovery, PiconetUi and PiconetDispatcher report
+            // "not connected" rather than touch freed memory (#167). The
+            // identity check leaves a newer backend from a re-Enable intact.
+            if (backend_ == released) backend_ = nullptr;
+        });
         return backend;
     }
     std::cout << "Piconet extension: " << discovery.message << "\n";
@@ -144,6 +157,11 @@ PiconetEconetTransportExtension::create_backend(std::uint8_t station) {
         &make_platform_serial,
         [this]{ ui_.mark_dirty(); });
     backend_ = backend.get();  // non-owning; ownership goes to EconetSocket
+    arm_backend_destroyed(backend_, [this, released = backend_]() {
+        // See the no-device branch above: drop the pointer when the backend is
+        // freed so the UI, dispatcher and retry report "not connected" (#167).
+        if (backend_ == released) backend_ = nullptr;
+    });
     open_error_message_.clear();
     return backend;
 }

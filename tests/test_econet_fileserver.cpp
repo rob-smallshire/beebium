@@ -135,7 +135,7 @@ public:
 
     bool is_connected() const override { return inner_->is_connected(); }
 
-    uint16_t local_port() const { return inner_->local_port(); }
+    uint16_t local_port() const override { return inner_->local_port(); }
     void add_peer(uint8_t net, uint8_t stn, uint32_t ip, uint16_t port) {
         inner_->add_peer(net, stn, ip, port);
     }

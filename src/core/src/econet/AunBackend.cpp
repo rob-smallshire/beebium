@@ -256,15 +256,8 @@ AunBackend::~AunBackend() {
     // is torn down, so it can drop its raw pointer and stop writing through it.
     // The callback runs with this backend's members (peer_table_mutex_, maps)
     // still alive, so an in-flight apply from a discovery thread it is about to
-    // stop remains safe until it joins.
-    std::function<void()> on_destroyed;
-    {
-        std::lock_guard<std::mutex> lock(destroyed_callback_mutex_);
-        on_destroyed = std::move(destroyed_callback_);
-    }
-    if (on_destroyed) {
-        on_destroyed();
-    }
+    // stop remains safe until it joins. The mechanism is NetworkBackend's.
+    fire_destroyed_callback();
     close_socket();
 }
 
@@ -727,11 +720,6 @@ void AunBackend::set_station_changed_callback(
         std::function<void(uint8_t)> callback) {
     std::lock_guard<std::mutex> lock(station_callback_mutex_);
     station_changed_callback_ = std::move(callback);
-}
-
-void AunBackend::set_destroyed_callback(std::function<void()> callback) {
-    std::lock_guard<std::mutex> lock(destroyed_callback_mutex_);
-    destroyed_callback_ = std::move(callback);
 }
 
 std::optional<std::pair<uint32_t, uint16_t>>

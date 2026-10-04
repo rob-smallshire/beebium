@@ -193,6 +193,12 @@ PiconetBackend::PiconetBackend(piconet::PiconetConfig config,
 }
 
 PiconetBackend::~PiconetBackend() {
+    // Tell the transport extension this backend is going away before any member
+    // is torn down, so it drops its non-owning pointer (#167). NetworkBackend's
+    // mechanism; the extension's teardown only nulls that pointer, so it is
+    // safe while the reader thread (which touches the extension's UI, not this)
+    // is still running and about to be joined below.
+    fire_destroyed_callback();
     shutdown_.store(true, std::memory_order_relaxed);
     if (serial_) {
         // Closing the serial port unblocks the reader's timed read by

@@ -456,6 +456,14 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     // local destroyed first). If the token has expired the extension is gone
     // and the callback does nothing. The gRPC server is stopped before either
     // is destroyed, so no callback is ever in flight during teardown.
+    //
+    // This token MUST be rotated (freshly made) on every create_backend, and
+    // that rotation is load-bearing: unlike the destroyed callback, the
+    // station-changed callback has no backend-identity check, so after a
+    // Disable/re-Enable an OLD backend's late station change would otherwise run
+    // against the NEW backend's state. Replacing callback_alive_ here expires
+    // the old backend's captured weak token, neutralising it. (Regression:
+    // "a station change from a replaced backend is ignored".)
     callback_alive_ = std::make_shared<bool>(true);
     std::weak_ptr<bool> alive = callback_alive_;
     backend_->set_station_changed_callback(
@@ -491,17 +499,15 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
     // EconetSocket's reference; nothing else notifies us). Drop our raw pointer
     // and detach the peer set FIRST, so any discovery write still in flight
     // becomes a no-op rather than a use-after-free, then stop announcing and
-    // browsing -- Disable means off the network. The weak token guards against
-    // the extension having been destroyed first (machine teardown), and the
-    // backend-identity check guards against a late, reader-deferred destruction
-    // of an OLD backend clobbering a NEW one created by a re-Enable: we act only
+    // browsing -- Disable means off the network. arm_backend_destroyed (the
+    // shared transport mechanism, #167) holds the liveness token; the backend-
+    // identity check here guards against a late, reader-deferred destruction of
+    // an OLD backend clobbering a NEW one created by a re-Enable: we act only
     // while the backend being destroyed is still the one we hold. A later
     // create_backend re-seeds Launch/Discovered, re-attaches, and re-announces,
     // keeping the Api layer (so an added peer is routed again after re-Enable).
     AunBackend* released = backend_;
-    backend_->set_destroyed_callback([this, alive, released]() {
-        auto keep_alive = alive.lock();
-        if (!keep_alive) return;
+    arm_backend_destroyed(backend_, [this, released]() {
         std::lock_guard<std::mutex> lock(discovery_mutex_);
         if (backend_ != released) return;  // already replaced by a re-Enable
         peer_set_.attach(nullptr);  // future applies no-op; closes the UAF
@@ -757,6 +763,12 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
 AunEconetTransportExtension::AunEconetTransportExtension() = default;
 
 AunEconetTransportExtension::~AunEconetTransportExtension() {
+    // Expire the destroyed-callback token FIRST: an extension-owned backend
+    // still held here (preselected_backend_ when select_auto_station ran
+    // without the follow-up create_backend) is destroyed as a member below, and
+    // its callback would otherwise lock discovery_mutex_ after it is gone (the
+    // token lives in the base, which outlives these members). #167.
+    disarm_backend_destroyed();
     // Stop and join the map-file poll before any member it touches is
     // destroyed. The backend's destroyed callback does this on Disable; this is
     // the teardown-without-Disable safety net.

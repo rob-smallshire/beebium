@@ -78,6 +78,37 @@ TEST_CASE("Piconet dispatcher rejects an unknown method",
     CHECK(status.code == kRpcUnimplemented);
 }
 
+TEST_CASE("Piconet dispatcher reports closed after the backend is destroyed",
+          "[piconet][extension-rpc]") {
+    // #167: when EconetSocket frees the backend on DisableEconet, the
+    // extension's destroyed callback drops its raw pointer, so the dispatcher
+    // falls back to the no-backend ("closed") branch rather than reading freed
+    // memory. Run under the ASan build to prove no use-after-free.
+    PiconetEconetTransportExtension ext;
+    // An explicit, absent path makes discovery deterministic (no auto-probe of
+    // the host's real serial ports) and yields a closed backend to free.
+    ext.set_config({{"device_path", "/dev/beebium-nonexistent-piconet"}});
+
+    auto backend = ext.create_backend(/*station=*/1);
+    REQUIRE(backend != nullptr);
+    REQUIRE(ext.backend() != nullptr);
+
+    backend.reset();  // EconetSocket frees it
+    CHECK(ext.backend() == nullptr);  // destroyed callback dropped the pointer
+
+    auto* dispatcher = ext.rpc_dispatchers()[0];
+    TestRpcContext ctx;
+    PiconetGetStatusRequest req;
+    std::string out;
+    RpcStatus status =
+        dispatcher->invoke("GetStatus", req.SerializeAsString(), out, ctx);
+    REQUIRE(status.is_ok());
+    PiconetGetStatusResponse resp;
+    REQUIRE(resp.ParseFromString(out));
+    CHECK(resp.device_path().empty());
+    CHECK_FALSE(resp.serial_open());
+}
+
 TEST_CASE("PiconetEconetTransportExtension requires real-time pacing",
           "[piconet][transport]") {
     // Piconet bridges to a real Econet line, so it only works at 1x and the

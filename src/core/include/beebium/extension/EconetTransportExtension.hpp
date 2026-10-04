@@ -19,6 +19,7 @@
 #include "../econet/StationSelection.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -99,6 +100,35 @@ public:
     // not available for it. AUN overrides this with a browse-and-claim. Defined
     // out-of-line in EconetTransportExtension.cpp.
     virtual AutoStationOutcome select_auto_station(econet::StationRange range);
+
+protected:
+    // Wire `backend`'s destroyed notification so `teardown` runs once when
+    // EconetSocket frees the backend, giving every transport the same safe
+    // drop-the-pointer mechanism (#167; the #55 fix generalised). `teardown`
+    // supplies the transport's own work: an identity check against its typed
+    // backend pointer, nulling it, detaching peer sets, and joining any
+    // background thread it owns. The base holds the liveness token so the
+    // teardown is a no-op once this extension is destroyed (the gRPC server is
+    // stopped before either is torn down, but destruction order between the
+    // extension and a reader-co-owned backend is not fixed). The token is fresh
+    // per arm, so an earlier backend's destruction, deferred past a re-Enable,
+    // sees an expired token and does nothing -- alongside the identity check
+    // the teardown itself makes. Call once, in create_backend, right after the
+    // backend is built.
+    void arm_backend_destroyed(NetworkBackend* backend,
+                               std::function<void()> teardown);
+
+    // Expire the armed token so a still-armed backend's destroyed callback
+    // becomes a no-op. A derived destructor MUST call this first thing, because
+    // this token lives in the base and so outlives the derived members the
+    // teardown touches: an extension-owned backend (e.g. AUN's
+    // preselected_backend_) destroyed during derived teardown would otherwise
+    // run the teardown against members (mutexes, the peer set) already gone.
+    void disarm_backend_destroyed() { backend_destroyed_token_.reset(); }
+
+private:
+    // Liveness token for arm_backend_destroyed's callback, replaced on each arm.
+    std::shared_ptr<bool> backend_destroyed_token_;
 };
 
 }  // namespace beebium

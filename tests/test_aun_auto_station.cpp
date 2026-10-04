@@ -377,3 +377,68 @@ TEST_CASE("AUN auto station: selection hands its browse to the permanent subscri
     bench_auto_selection(50);
     unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
 }
+
+// #167 regression: AUN's station-changed callback has no backend-identity
+// check, so it relies on the per-create_backend rotation of its liveness token
+// to neutralise an OLD backend's late station change after a re-Enable. Prove
+// it: bring up backend A (station 1), then a second backend B (station 2) --
+// which rotates the token -- while A still lingers, then fire A's station
+// change to 99. A watcher must keep seeing the live backend at 2 and never 99.
+TEST_CASE("AUN: a replaced backend's late station change is ignored",
+          "[.mdns][aun][auto-station]") {
+    if (!platform_supports_mdns()) {
+        SKIP("mDNS responder not available on this platform");
+    }
+    set_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH", "none");
+    const std::string svc = aun_unique_service_type();
+
+    // A bystander, built the normal way (a browse-only transport), that just
+    // watches what is advertised on this type.
+    AunEconetTransportExtension watcher_ext;
+    watcher_ext.set_discovery_service_type(svc);
+    watcher_ext.set_config({{"port", "0"},
+                            {"net", "0"},
+                            {"map-file", "none"},
+                            {"discovery", "browse"},
+                            {"machine_uuid", "watcher"}});
+    auto watcher_backend = watcher_ext.create_backend(/*station=*/200);
+    REQUIRE(watcher_backend != nullptr);
+
+    AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(svc);
+    ext.set_config({{"port", "0"},
+                    {"net", "0"},
+                    {"map-file", "none"},
+                    {"machine_uuid", "replaced-backend-subject"}});
+
+    auto backend_a = ext.create_backend(/*station=*/1);
+    REQUIRE(backend_a != nullptr);
+    // Re-Enable while A lingers: B becomes the live backend and the token
+    // rotates, which is what must neutralise A's callback.
+    auto backend_b = ext.create_backend(/*station=*/2);
+    REQUIRE(backend_b != nullptr);
+
+    auto poll_until = [](auto pred) {
+        const auto deadline = std::chrono::steady_clock::now() + 8000ms;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (pred()) return true;
+            std::this_thread::sleep_for(50ms);
+        }
+        return pred();
+    };
+
+    // The watcher converges on the live backend, station 2.
+    REQUIRE(poll_until(
+        [&] { return watcher_ext.peer_set().resolve(0, 2).has_value(); }));
+
+    // A's late station change: its callback is the extension's lambda holding
+    // the now-expired token, so it must be a no-op -- the live announcer stays
+    // at 2 and 99 is never advertised.
+    backend_a->on_station_id_changed(99);
+
+    std::this_thread::sleep_for(2000ms);  // ample time for a bad re-announce
+    CHECK_FALSE(watcher_ext.peer_set().resolve(0, 99).has_value());
+    CHECK(watcher_ext.peer_set().resolve(0, 2).has_value());
+
+    unset_env("BEEBIUM_AUN_AUTO_STATE_FILEPATH");
+}
