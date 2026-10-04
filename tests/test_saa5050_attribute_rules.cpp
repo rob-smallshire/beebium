@@ -514,3 +514,48 @@ TEST_CASE("The grid records concealment from CONCEAL to the colour code that end
     CHECK(grid.cell(0, 5).concealed);
     CHECK_FALSE(grid.cell(0, 6).concealed);
 }
+
+TEST_CASE("The grid records a control code, not a forgotten mosaic, when nothing is held",
+          "[saa5050][attributes][hold][grid]") {
+    SECTION("cleared by a code shown without hold") {
+        TeletextGrid grid;
+        render({{GRAPHICS_WHITE, BLOCK, NEW_BACKGROUND, HOLD, BLACK_BACKGROUND}}, Flash::Visible,
+               &grid);
+        CHECK(grid.cell(0, 3).character == (HOLD & 0x7F));
+        CHECK(grid.cell(0, 4).character == (BLACK_BACKGROUND & 0x7F));
+    }
+    SECTION("cleared by a change of height") {
+        TeletextGrid grid;
+        render({{GRAPHICS_WHITE, BLOCK, HOLD, DOUBLE_HEIGHT, BLACK_BACKGROUND}, {}}, Flash::Visible,
+               &grid);
+        CHECK(grid.cell(0, 2).character == 0x7F);
+        CHECK(grid.cell(0, 3).character == (DOUBLE_HEIGHT & 0x7F));
+        CHECK(grid.cell(0, 4).character == (BLACK_BACKGROUND & 0x7F));
+    }
+    SECTION("an alpha colour code still shows the mosaic it clears afterwards") {
+        TeletextGrid grid;
+        render({{GRAPHICS_WHITE, BLOCK, HOLD, ALPHA_MAGENTA, BLACK_BACKGROUND}}, Flash::Visible,
+               &grid);
+        CHECK(grid.cell(0, 3).character == 0x7F);
+        CHECK(grid.cell(0, 4).character == (BLACK_BACKGROUND & 0x7F));
+    }
+}
+
+TEST_CASE("The grid records a held mosaic with the separation it was drawn with",
+          "[saa5050][attributes][hold][grid]") {
+    TeletextGrid grid;
+    render({{GRAPHICS_WHITE, SEPARATED, BLOCK, HOLD, CONTIGUOUS, BLACK_BACKGROUND}}, Flash::Visible,
+           &grid);
+    for (size_t column : {2, 3, 4, 5}) {
+        INFO("column " << column);
+        CHECK(grid.cell(0, column).charset == TeletextCellCharset::SeparatedGraphics);
+    }
+}
+
+TEST_CASE("The grid records the RELEASE cell as the held mosaic it still shows",
+          "[saa5050][attributes][hold][grid]") {
+    TeletextGrid grid;
+    render({{GRAPHICS_WHITE, BLOCK, HOLD, RELEASE, BLACK_BACKGROUND}}, Flash::Visible, &grid);
+    CHECK(grid.cell(0, 3).character == 0x7F);
+    CHECK(grid.cell(0, 4).character == (BLACK_BACKGROUND & 0x7F));
+}

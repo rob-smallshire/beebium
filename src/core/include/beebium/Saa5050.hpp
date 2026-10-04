@@ -231,8 +231,7 @@ public:
         m_any_double_height = false;
         m_raster_shift = 0;
         m_raster_offset = 0;
-        m_last_graphics_data = 0;
-        m_last_graphics_char = 0;
+        m_held = {};
         m_capture_row = 0;
         m_capture_column = 0;
         m_display_started = false;
@@ -262,14 +261,14 @@ public:
         uint16_t data;  // 12-bit expanded font row
         bool flashing;  // hidden by flash in this cell's phase
         bool concealed;
+        // For a control code showing a held mosaic, that mosaic's code and
+        // character set; 0 when the cell shows a space.
+        uint8_t shown_character = 0;
+        TeletextCharset shown_charset = m_charset;
 
         if (value < 32) {
             // Control code - display as space (or held graphics)
-            if (m_conceal || !m_hold) {
-                data = 0;
-            } else {
-                data = m_last_graphics_data;
-            }
+            HeldMosaic shown = m_hold ? m_held : HeldMosaic{};
 
             // A held mosaic flashes like the text around it. The flash state
             // is the one before the code acts, so FLASH is Set-After, except
@@ -280,18 +279,19 @@ public:
             // stays concealed; CONCEAL conceals its own cell too.
             const bool concealed_before = m_conceal;
 
-            // Process control code (may modify data for hold graphics)
-            process_control_code(value, data);
+            // Process control code (may change what the cell shows)
+            process_control_code(value, shown);
 
             concealed = concealed_before || m_conceal;
+            data = flashing || concealed ? 0 : shown.data;
 
-            if (flashing) {
-                data = 0;
-            }
-
+            // The SAA5050 forgets the held mosaic at any control code shown
+            // while hold is off.
             if (!m_hold) {
-                m_last_graphics_data = 0;
+                m_held = {};
             }
+            shown_character = shown.character;
+            shown_charset = shown.charset;
         } else {
             // Display character using pre-computed expanded AA font
             uint8_t glyph_raster = (glyph_line() + m_raster_offset) >> m_raster_shift;
@@ -307,8 +307,7 @@ public:
             // STEADY is reached.
             if ((value & 0x20) && m_charset != TeletextCharset::Alpha) {
                 if (!m_conceal) {
-                    m_last_graphics_data = glyph;
-                    m_last_graphics_char = value;
+                    m_held = {glyph, value, m_charset};
                 }
             }
 
@@ -321,7 +320,7 @@ public:
             data = 0;
         }
 
-        capture_cell(value, dispen, cursor, fg, flashing, concealed);
+        capture_cell(value, dispen, cursor, fg, flashing, concealed, shown_character, shown_charset);
 
         // Write 2 Output entries: left 6 bits and right 6 bits
         Output* output = &m_output[m_write_index & 7];
@@ -402,8 +401,7 @@ public:
         m_bg = 0;
         m_graphics_charset = TeletextCharset::ContiguousGraphics;
         m_charset = TeletextCharset::Alpha;
-        m_last_graphics_data = 0;
-        m_last_graphics_char = 0;
+        m_held = {};
         m_hold = false;
         m_text_visible = true;
         m_raster_shift = 0;
@@ -489,6 +487,15 @@ public:
     [[nodiscard]] bool is_flash_enabled() const { return !m_text_visible; }
 
 private:
+    // The mosaic Hold Graphics shows: the glyph line it drew, its code and
+    // the character set it was drawn in, which keeps its separation. A
+    // character of 0 means nothing is held.
+    struct HeldMosaic {
+        uint16_t data = 0;  // 12-bit expanded font row
+        uint8_t character = 0;
+        TeletextCharset charset = TeletextCharset::ContiguousGraphics;
+    };
+
     // Output entry stores 6 bits of font data plus colors and cursor state
     // Each character produces 2 Output entries (left half and right half)
     struct Output {
@@ -512,7 +519,7 @@ private:
     // nothing on alternate fields. Correctness first; the writes are small and
     // land in cache.
     void capture_cell(uint8_t value, uint8_t dispen, bool cursor, uint8_t fg, bool flashing,
-                      bool concealed) {
+                      bool concealed, uint8_t shown_character, TeletextCharset shown_charset) {
         if (!m_teletext_grid || !dispen) {
             return;
         }
@@ -544,10 +551,11 @@ private:
 
         if (value < 32) {
             cell.is_control_code = true;
-            if (m_hold) {
-                // Displaying the held graphics character rather than a space.
-                cell.character = m_last_graphics_char;
-                cell.charset = to_cell_charset(m_graphics_charset);
+            if (shown_character != 0) {
+                // Displaying the held mosaic rather than a space, in the
+                // character set it was drawn in.
+                cell.character = shown_character;
+                cell.charset = to_cell_charset(shown_charset);
             } else {
                 cell.character = value;
                 cell.charset = to_cell_charset(m_charset);
@@ -573,7 +581,9 @@ private:
         }
     }
 
-    void process_control_code(uint8_t code, uint16_t& data) {
+    // Act on a control code. `shown` is what the code's own cell shows:
+    // the held mosaic, or nothing.
+    void process_control_code(uint8_t code, HeldMosaic& shown) {
         switch (code) {
             case 0x01: case 0x02: case 0x03:
             case 0x04: case 0x05: case 0x06: case 0x07:
@@ -581,7 +591,8 @@ private:
                 m_fg = code;
                 m_charset = TeletextCharset::Alpha;
                 m_conceal = false;
-                m_last_graphics_data = 0;
+                // Forgets the held mosaic after showing it in this cell.
+                m_held = {};
                 break;
 
             case 0x08:
@@ -596,9 +607,10 @@ private:
 
             case 0x0C:
                 // Normal Height
+                // A change of height forgets the held mosaic, in this cell.
                 if (m_raster_shift != 0) {
-                    data = 0;
-                    m_last_graphics_data = 0;
+                    shown = {};
+                    m_held = {};
                 }
                 m_raster_shift = 0;
                 break;
@@ -606,8 +618,8 @@ private:
             case 0x0D:
                 // Double Height
                 if (m_raster_shift != 1) {
-                    data = 0;
-                    m_last_graphics_data = 0;
+                    shown = {};
+                    m_held = {};
                 }
                 m_any_double_height = true;
                 m_raster_shift = 1;
@@ -623,9 +635,8 @@ private:
 
             case 0x18:
                 // Conceal Display: Set-At, so a held mosaic in this cell is
-                // concealed too.
+                // concealed too (see byte()).
                 m_conceal = true;
-                data = 0;
                 break;
 
             case 0x19:
@@ -657,7 +668,7 @@ private:
             case 0x1E:
                 // Hold Graphics
                 m_hold = true;
-                data = m_last_graphics_data;
+                shown = m_held;
                 break;
 
             case 0x1F:
@@ -733,8 +744,7 @@ private:
     TeletextCharset m_graphics_charset = TeletextCharset::ContiguousGraphics;
 
     // Graphics hold state
-    uint16_t m_last_graphics_data = 0;  // 12-bit expanded font row
-    uint8_t m_last_graphics_char = 0;   // the code that produced that row
+    HeldMosaic m_held;
 
     TeletextGrid* m_teletext_grid = nullptr;
     uint8_t m_capture_row = 0;
