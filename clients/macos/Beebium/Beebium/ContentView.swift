@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import AppKit
+import Combine
 import SwiftUI
 
 /// Identity of the Welcome window, shared so a beebium:// launch can find and
@@ -121,6 +122,10 @@ struct ContentView: View {
     /// Actively re-establishes the connection after an unexpected drop (a wake
     /// from sleep, a network blip, a server bounce). Configured in onAppear.
     @StateObject private var reconnectCoordinator = ReconnectCoordinator()
+
+    /// Combine subscriptions for the focus-storm diagnostics (#153); empty unless
+    /// BEEBIUM_DEBUG_FOCUS=1.
+    @State private var focusDiagnosticsCancellables: [AnyCancellable] = []
     private let selectionPasteboard = SystemSelectionPasteboard()
     let initialTarget: ConnectionTarget
     let initialNeedsRun: Bool
@@ -455,6 +460,25 @@ struct ContentView: View {
 
             // Wire the speed control to the system client for its RPCs.
             speedModel.bind(to: systemClient)
+
+            // Focus-storm diagnostics (#153): count how often each object the
+            // sidebar observes publishes, so a [RATE] line while a popover is open
+            // names what is re-evaluating it. No-op unless BEEBIUM_DEBUG_FOCUS=1.
+            focusDiagnosticsCancellables = [
+                FocusDiagnostics.observePublisher(econetClient, named: "EconetClient"),
+                FocusDiagnostics.observePublisher(audioClient, named: "AudioClient"),
+                FocusDiagnostics.observePublisher(audioMixerState, named: "AudioMixerState"),
+                FocusDiagnostics.observePublisher(systemClient, named: "SystemClient"),
+                FocusDiagnostics.observePublisher(indicatorClient, named: "IndicatorClient"),
+                FocusDiagnostics.observePublisher(videoClient, named: "VideoClient"),
+                FocusDiagnostics.observePublisher(serialClient, named: "SerialClient"),
+                FocusDiagnostics.observePublisher(transportsClient, named: "EconetTransportsClient"),
+                FocusDiagnostics.observePublisher(extensionUiClient, named: "ExtensionUiClient"),
+                FocusDiagnostics.observePublisher(discClient, named: "DiscClient"),
+                FocusDiagnostics.observePublisher(peripheralsClient, named: "PeripheralsClient"),
+                FocusDiagnostics.observePublisher(sidewaysClient, named: "SidewaysClient"),
+                FocusDiagnostics.observePublisher(speedModel, named: "SpeedControlModel"),
+            ].compactMap { $0 }
 
             // Register clients with ClientGroup for bulk disconnect
             clientGroup.register(keyboardClient)

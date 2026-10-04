@@ -74,6 +74,11 @@ struct PopoverTextField: NSViewRepresentable {
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
+    /// How many times updateNSView has run, for the invalidation-storm tests to
+    /// read. A re-host per frame means the window tree is being invalidated under
+    /// the field (#153). Always compiled so the Release test target can read it.
+    @MainActor static var updateCountForTesting = 0
+
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField()
         field.placeholderString = placeholder
@@ -95,6 +100,8 @@ struct PopoverTextField: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSTextField, context: Context) {
         context.coordinator.parent = self
+        Self.updateCountForTesting += 1
+        FocusRates.tick("updateNSView")
         // Apply the model value until the user starts typing -- the initial value
         // must land even though the field has already taken focus (its field
         // editor exists), which a plain "don't touch while an editor exists" guard
@@ -149,6 +156,13 @@ struct PopoverTextField: NSViewRepresentable {
             window.makeFirstResponder(field)
             if let label = diagnosticsLabel {
                 FocusDiagnostics.snapshot("\(label) focus()", window: window)
+                FocusDiagnostics.dumpEditor("\(label) focus()", field: field)
+                for delay in [0.5, 1.5] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak field] in
+                        guard let field else { return }
+                        FocusDiagnostics.dumpEditor("\(label)+\(Int(delay * 1000))ms", field: field)
+                    }
+                }
             }
         }
 

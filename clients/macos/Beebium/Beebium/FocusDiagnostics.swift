@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 import AppKit
+import Combine
 import SwiftUI
 
 /// Opt-in logging for the popover/sheet caret problem (#153). Compiled in but
@@ -43,6 +44,74 @@ enum FocusDiagnostics {
             firstResponder.map { String(describing: type(of: $0)) } ?? "nil",
             fieldEditor != nil ? 1 : 0,
             fieldEditor?.delegate.map { String(describing: type(of: $0)) } ?? "nil")
+    }
+}
+
+/// Per-second rate counting for the invalidation-storm investigation (#153): a
+/// caret that draws on the first popover open but never after fits SwiftUI
+/// re-evaluating the open popover continuously (a high-rate @Published observed
+/// by the window tree), so updateNSView runs many times a second and the field
+/// editor's insertion indicator never gets to draw. `tick` counts labelled
+/// events; once a second the totals are logged as one [RATE] line and reset.
+/// No-op unless BEEBIUM_DEBUG_FOCUS=1.
+@MainActor
+enum FocusRates {
+    private static var counts: [String: Int] = [:]
+    private static var timer: Timer?
+
+    static func tick(_ label: String) {
+        guard FocusDiagnostics.isEnabled else { return }
+        counts[label, default: 0] += 1
+        ensureTimer()
+    }
+
+    private static func ensureTimer() {
+        guard timer == nil else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                guard !counts.isEmpty else { return }
+                let line = counts.sorted { $0.key < $1.key }
+                    .map { "\($0.key)=\($0.value)" }
+                    .joined(separator: " ")
+                NSLog("[RATE] %@", line)
+                counts.removeAll()
+            }
+        }
+    }
+}
+
+extension FocusDiagnostics {
+    /// Count how often `object` publishes a change, under `pub:<name>`, so the
+    /// [RATE] line names which observable is storming while a popover is open.
+    static func observePublisher<O: ObservableObject>(_ object: O,
+                                                      named name: String) -> AnyCancellable? {
+        guard isEnabled else { return nil }
+        return object.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { _ in MainActor.assumeIsolated { FocusRates.tick("pub:\(name)") } }
+    }
+
+    /// Dump the field editor behind `field` and its insertion indicator -- the
+    /// macOS 14 caret is an NSTextInsertionIndicator subview, so a reused editor
+    /// whose indicator was left hidden, or one pushed outside the clip, shows no
+    /// caret though first responder and colours look right. Logs pointers so
+    /// reuse across opens is visible.
+    static func dumpEditor(_ label: String, field: NSTextField) {
+        guard isEnabled else { return }
+        guard let editor = field.currentEditor() as? NSTextView else {
+            NSLog("[EDITOR] %@", "\(label) | no field editor")
+            return
+        }
+        let subviews = editor.subviews.map { view -> String in
+            "\(String(describing: type(of: view)))(hidden=\(view.isHidden) "
+            + "alpha=\(view.alphaValue) frame=\(NSStringFromRect(view.frame)))"
+        }.joined(separator: ", ")
+        let message = "\(label) | editor=\(ObjectIdentifier(editor)) "
+            + "field=\(ObjectIdentifier(field)) sel=\(NSStringFromRange(editor.selectedRange())) "
+            + "shouldDrawIP=\(editor.shouldDrawInsertionPoint) "
+            + "visibleRect=\(NSStringFromRect(editor.visibleRect)) "
+            + "subviews=[\(subviews.isEmpty ? "none" : subviews)]"
+        NSLog("[EDITOR] %@", message)
     }
 }
 

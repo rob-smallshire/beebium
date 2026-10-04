@@ -145,6 +145,54 @@ final class PopoverFocusHostingTests: XCTestCase {
         }
     }
 
+    // MARK: - Invalidation storm (the "first open only" caret)
+
+    func testIdlePopoverDoesNotReHostTheFieldContinuously() {
+        PopoverTextField.updateCountForTesting = 0
+        _ = host(StationIdPopover(currentStationId: 9,
+                                  econetClient: EconetClient(),
+                                  breakKeyLabel: nil,
+                                  isPresented: .constant(true)),
+                 seconds: 1.0)
+        // A static popover settles: a handful of updateNSView calls, not dozens.
+        // A high number means something is invalidating the window tree under the
+        // field (the storm that stops the caret drawing).
+        XCTAssertLessThan(PopoverTextField.updateCountForTesting, 10,
+                          "idle popover re-hosted the field "
+                          + "\(PopoverTextField.updateCountForTesting) times in 1s")
+    }
+
+    func testRapidObservedPublishesReHostTheField() {
+        // Mechanism: an object the popover observes (here EconetClient) publishing
+        // rapidly re-hosts the field's updateNSView -- exactly what a background
+        // invalidation storm does, and the suspected cause of the vanishing caret.
+        let econet = EconetClient()
+        let hosting = NSHostingController(
+            rootView: StationIdPopover(currentStationId: 9,
+                                       econetClient: econet,
+                                       breakKeyLabel: nil,
+                                       isPresented: .constant(true)))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentViewController = hosting
+        window.makeKeyAndOrderFront(nil)
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.3))
+
+        PopoverTextField.updateCountForTesting = 0
+        var status = Beebium_GetEconetStatusResponse()
+        status.hasEconetSocket_p = true
+        status.stationID = 9
+        for tick in 0..<30 {
+            status.stationInForce = UInt32(9 + tick % 2)   // vary so nothing dedups
+            econet.handleStatusUpdate(status, generation: econet.streamGeneration)
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
+        XCTAssertGreaterThan(PopoverTextField.updateCountForTesting, 10,
+                             "rapid observed publishes should re-host the field "
+                             + "(got \(PopoverTextField.updateCountForTesting))")
+    }
+
     private func resolve(_ color: NSColor, in window: NSWindow) -> NSColor {
         var resolved = color
         window.appearance?.performAsCurrentDrawingAppearance {
