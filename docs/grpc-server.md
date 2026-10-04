@@ -4,25 +4,11 @@ Beebium provides model-specific server executables that run the BBC Micro emulat
 
 ## Available Executables
 
-| Executable | Machine | MOS ROM | Description |
-|------------|---------|---------|-------------|
-| `beebium-model-b` | BBC Model B | MOS 1.20 | Original 32K BBC Micro |
-| `beebium-model-b-plus` | BBC Model B+ 64K | MOS 2.0 | Enhanced 64K model |
-
-Each executable contains only the hardware emulation needed for that machine type.
+There is one server executable per machine variant (`beebium-model-b`, `beebium-model-b-plus`, `beebium-model-b-integra-b` and so on), each containing only the hardware emulation for that machine. The full list, with what each machine provides, is in [cli.md](cli.md); the ROMs each loads by default are in [deployment.md](deployment.md).
 
 ## Building
 
-```bash
-mkdir build && cd build
-cmake .. -DCMAKE_PREFIX_PATH=/opt/homebrew  # macOS with Homebrew
-make -j4
-```
-
-Requires gRPC and Protobuf installed:
-```bash
-brew install grpc protobuf  # macOS
-```
+See [building.md](building.md).
 
 ## Running the Server
 

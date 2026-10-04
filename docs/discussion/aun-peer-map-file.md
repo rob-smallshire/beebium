@@ -349,7 +349,7 @@ All four were addressed with step 1 (#55), which moved the peer table into
 - ~~`AunService.AddPeer` documents `net` as 0..127 but accepts up to 255.~~
   Done: the dispatcher then rejected `net > 127`; #139 later widened every
   net field to 0..255 (section 8), and it now rejects `net > 255`.
-- ~~`econet-integration.md` says `AunService` is contributed through
+- ~~The Econet integration document (since folded into `networking.md`) says `AunService` is contributed through
   `grpc_services()`; it is served over ExtensionRpc.~~ Done: that doc now
   describes the `AunDispatcher` over `ExtensionRpc`.
 

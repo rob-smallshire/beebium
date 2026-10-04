@@ -445,7 +445,6 @@ Boot tests with Econet fitted, verifying NFS ROM loading.
 
 - `docs/FileServer-RTC-and-Timekeeping.md` — RTC dongle and timekeeping
 - `docs/acorn-user-port-rtc.md` — SAF3019P hardware details
-- `docs/econet-integration.md` — Econet/AUN integration across the stack
 - `docs/networking.md` — Econet transports, AUN map file and discovery
 - `docs/deployment.md` — bundled discs and per-user working copies
 - AFS0 format: `http://mdfs.net/Docs/Comp/Disk/Format/AFS0`

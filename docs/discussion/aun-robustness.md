@@ -460,7 +460,7 @@ quietly rather than reported to the guest.
 **Status:** FIXED. **Severity:** low, but misleading.
 
 `EconetService.hpp:283-293` returns `UNIMPLEMENTED`, and no `ObservableBackend`
-exists in the tree. `docs/econet-integration.md` presents both the streaming
+exists in the tree. The integration plan of the time (since folded into `docs/networking.md`) presented both the streaming
 RPC and the observable decorator as settled design decisions, and
 `docs/networking.md` refers to the stream when describing a possible
 Piconet MONITOR-mode traffic analyser. A reader of either document would

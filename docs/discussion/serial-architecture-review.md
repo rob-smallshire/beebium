@@ -255,7 +255,7 @@ The detailed, phased, cross-platform-first execution plan lives in
 - `docs/serial-acia.md` (contributor's reference for registers/timing/transport).
 - `docs/discussion/extension-ui-architecture.md`
 - `docs/discussion/serial-port-selector-control.md`
-- `docs/econet-integration.md` (the ADLC-core / backend-extension precedent).
+- `docs/networking.md`, "Econet Across the Stack" (the ADLC-core / backend-extension precedent).
 - The external-port device convention to mirror:
   `src/core/include/beebium/extension/UserPortDevice.hpp` + `UserPort.hpp`,
   `OneMHzBusDevice.hpp` + `OneMHzBusPort.hpp`, `PeripheralExtension.hpp`.

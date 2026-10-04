@@ -1505,10 +1505,9 @@ and has been modified before.
 
 - `docs/level-3-file-server-setup.md` -- L3FS hardware configuration
   and disc provisioning
-- `docs/local-beebem-econet-lessons.md` (a local, untracked note) -- BeebEm
+- The author's unpublished "BeebEm Econet lessons" note -- BeebEm
   Econet architecture comparison (section 3b: emulated time vs wall-clock time)
 - `docs/networking.md` -- Econet/AUN protocol and hardware documentation
-- `docs/econet-integration.md` -- gRPC integration work programme
 - `tests/test_econet_fileserver.cpp` -- C++ file server tests (uses
   external BeebEm server)
 - `tests/test_boot_econet.cpp` -- Econet boot tests including "NFS *.

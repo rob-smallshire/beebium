@@ -42,8 +42,7 @@ Manual assignment breaks down when:
 - Mixed networks include both emulators and real hardware with pre-assigned
   station numbers that must be respected
 
-BeebEm's self-assignment (see `docs/local-beebem-econet-lessons.md` section 0, a local, untracked
-note)
+BeebEm's self-assignment (see section 0 of the author's unpublished "BeebEm Econet lessons" note)
 is purely emulator-to-emulator, incompatible with real hardware, uses a
 non-standard port formula, and has destructive collision resolution. It
 demonstrates the need but not a viable solution.

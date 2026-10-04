@@ -1,6 +1,6 @@
 # Econet and AUN Networking Support
 
-This document covers the design, research, and implementation of Econet and AUN (Acorn Universal Networking) support in Beebium. The core networking implementation (MC68B54 ADLC emulation, EconetSocket, FourWayHandshake) is complete, with the wire-side transport pluggable through the `EconetTransportExtension` extension point: AUN ships as a built-in extension, Piconet as a discoverable plugin, and `TestBackend` as the in-process test double. The architecture has been validated end-to-end with a real BBC Microcomputer talking via real Econet to a Beebium-emulated Level 3 File Server. The work programme that exposed Econet through presets, gRPC and the clients is recorded in `docs/econet-integration.md`.
+This document covers the design, research, and implementation of Econet and AUN (Acorn Universal Networking) support in Beebium. The core networking implementation (MC68B54 ADLC emulation, EconetSocket, FourWayHandshake) is complete, with the wire-side transport pluggable through the `EconetTransportExtension` extension point: AUN ships as a built-in extension, Piconet as a discoverable plugin, and `TestBackend` as the in-process test double. The architecture has been validated end-to-end with a real BBC Microcomputer talking via real Econet to a Beebium-emulated Level 3 File Server. How Econet is reached from presets, gRPC and the clients is described under [Econet Across the Stack](#econet-across-the-stack).
 
 ## Overview
 
@@ -456,6 +456,77 @@ The transport panel is rendered through the **Extension UI framework** (see [`do
 The sidebar's peer editing is over the map file. The per-process `Api` layer has no sidebar control; scripts manipulate it via `AunService.AddPeer` / `RemovePeer` / `SetConnected` / `ListPeers`.
 
 When the device is unplugged mid-session, Piconet transitions to the offline state; it does not reconnect by itself when the device returns, but `Retry` brings it back without a restart. Automatic re-attachment is discussed in [`docs/discussion/piconet-device-discovery.md`](discussion/piconet-device-discovery.md).
+
+## Econet Across the Stack
+
+How Econet is reached from a preset, over gRPC, and from the clients.
+
+### Presets
+
+A preset configures Econet with one `econet` object: a `station`, and a single `transport` naming the transport extension and carrying its parameters as a flat key/value map.
+
+```json
+{
+  "econet": {
+    "station": 5,
+    "transport": {
+      "name": "aun",
+      "parameters": { "port": "32768", "map": "0.254@127.0.0.1@32769" }
+    }
+  }
+}
+```
+
+```json
+{
+  "econet": {
+    "station": 32,
+    "transport": {
+      "name": "piconet",
+      "parameters": { "device_path": "/dev/tty.usbmodem101" }
+    }
+  }
+}
+```
+
+- `name` selects the transport extension (`aun`, `piconet`, or any future extension).
+- `parameters` is the same key/value map the command line populates from `--<extension> key=value:key=value`. A repeatable (list) parameter such as AUN's `map` or `subnet` takes either a single string or a JSON array of strings.
+- Only one `transport` is permitted per `econet` block on BBC machine variants. The limit is enforced at machine-setup time, not in the preset loader.
+- `station` is an integer 1-254, or the string `"auto"` / `"auto:<lo>-<hi>"` to choose a free number at launch (AUN only; the bundled `model-b-disc-aun-auto` preset uses it).
+- A `--aun` (or `--piconet`) on the command line overrides the preset's transport. With the same transport name the parameters merge, the command line winning key by key, and only the keys typed on the command line override the preset. With a different name the command line's transport replaces the preset's. See [cli.md](cli.md).
+- The legacy preset keys `econet.aun_port` and `econet.piconet` are rejected with a message pointing at this shape. Other unknown keys in the `econet` section, including the old `econet.aun_map`, are ignored.
+
+The parsing is in `src/server/include/beebium/server/PresetLoader.hpp` (`parse_econet_section()`); `merge_preset_econet_transport` in `ServerMain.hpp` combines the preset's transport with the command line's, and the result goes through the same dispatch as a command-line transport.
+
+### gRPC services
+
+The services split between what every transport shares and what belongs to one transport.
+
+| Service | Defined in | Covers |
+|---------|------------|--------|
+| `EconetService` | `src/service/proto/econet.proto` | Transport-agnostic: `GetEconetStatus`, `EnableEconet`, `DisableEconet`, `SetStationId`, `SubscribeEconetEvents`, `WatchEconetStatus` |
+| `EconetTransportService` | `src/service/proto/econet_transport.proto` | Which transport extensions are loaded and which is active (`ListTransports`, `GetActiveTransport`), each with its instance id |
+| `AunService` | `src/extensions/aun/aun.proto` | AUN only: `SetConnected`, `AddPeer`, `RemovePeer`, `ListPeers`, `GetStatus`, and the map-file methods |
+| `PiconetService` | the `piconet` extension | Piconet only: `GetStatus` |
+
+The two transport services are not gRPC services in their own right. They are served over the core's `ExtensionRpc` channel by the extension's hand-written dispatcher (`AunDispatcher`, `PiconetDispatcher`), so the transport libraries link protobuf but not gRPC; see [Routing a transport's typed RPCs](#routing-a-transports-typed-rpcs-extensionrpc).
+
+Points of design that hold across these services:
+
+- **Status is pushed, not polled.** `WatchEconetStatus` sends a fresh status snapshot on every change. `GetEconetStatusResponse` includes the ADLC's registers and FIFO state and the handshake's stage.
+- **Frame events come from a decorator above the wire.** `SubscribeEconetEvents` streams frame send and receive events and connection-state changes. They are recorded by `ObservableBackend`, a decorator in the backend chain, rather than by a change to the `NetworkBackend` interface. `EconetSocket::enable` builds the chain `Mc6854 -> FourWayHandshake -> [SpeedGate] -> ObservableBackend -> <transport backend>`. The `SpeedGate` is present only for a transport that requires real-time pacing (Piconet). Observation sits directly above the wire, so it records what actually crossed the transport.
+- **Enabling goes through the transport.** `EnableEconet` brings the network up through the configured transport's `create_backend`, so the extension owns the backend it reports on. A service reaches the live backend through `EconetSocket::backend()`, or through the co-owning `backend_shared()` from a thread other than the emulation thread.
+- **Peer addresses are strings.** A peer's address travels as a string (`"192.168.1.100"`), not a packed integer, for client ergonomics.
+
+### Clients
+
+The Python client splits along the same line as the services:
+
+- `bbc.econet` wraps `EconetService` (`Econet`: `status`, `watch_status()`, `enable()`, `set_station_id()`, `disable()`, `events()`).
+- `bbc.transport` wraps `EconetTransportService` (`EconetTransport`).
+- Each transport has an adapter for its own service, reached with `bbc.transport[Aun]` or `Aun.attach(bbc)` and routed by the transport's instance id. `Aun` (package `beebium.ext.econet.aun`) offers `status`, `peers`, `set_connected()`, `add_peer()`, `remove_peer()`, `reload_map()` and the map-editing calls; the Piconet adapter is `beebium.ext.econet.piconet`.
+
+The TypeScript client offers the same services. The macOS app's use of them is described under [Network sidebar (macOS GUI)](#network-sidebar-macos-gui); its configuration editor has no Econet section, so Econet is configured through presets and the command line.
 
 ## Hardware Architecture
 
@@ -1521,7 +1592,7 @@ Note: NFS can coexist with DFS/ADFS - users select filing system with *DISC, *NE
 
 ## Implementation Status
 
-The core Econet/AUN implementation is complete. This section summarises what was planned, what was built, and what differs from the original design. The integration programme (presets, gRPC, service discovery, clients) is recorded in `docs/econet-integration.md`.
+The core Econet/AUN implementation is complete. This section summarises what was planned, what was built, and what differs from the original design. The integration with presets, gRPC and the clients is described under [Econet Across the Stack](#econet-across-the-stack).
 
 ### Completed: ADLC Hardware Emulation (Mc6854.hpp)
 
@@ -1728,7 +1799,7 @@ The flag fill and idle detection are also in `FourWayHandshake` (via `is_receivi
    - `--piconet [device_path=<path>|auto]` - Piconet USB-CDC bridge to a real Econet wire
    - Both transports flow through the generic extension dispatch (see "Econet Transport Extensions" above).
 
-2. **Frontend integration** — preset `econet` section, `EconetService` / `EconetTransportService` over gRPC, the AUN and Piconet typed RPCs over `ExtensionRpc`, the Python and TypeScript clients, and the macOS Network sidebar. See `docs/econet-integration.md` for the programme.
+2. **Frontend integration** — preset `econet` section, `EconetService` / `EconetTransportService` over gRPC, the AUN and Piconet typed RPCs over `ExtensionRpc`, the Python and TypeScript clients, and the macOS Network sidebar. See [Econet Across the Stack](#econet-across-the-stack).
 
 3. **ROM management** — NFS/ANFS ROMs load into a sideways slot like any other, e.g. `--sideways slot=14:type=rom:image=acorn-anfs_4_18.rom`; the Econet presets carry DFS 2.26 and ANFS 4.18.
 
