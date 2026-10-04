@@ -86,8 +86,15 @@ struct ExtensionEditorForm: View {
             )
             return AnyView(VStack(alignment: .leading, spacing: 4) {
                 ExtensionFieldLabel(text: ti.label, help: ti.help)
-                TextField(ti.placeholder, text: binding)
-                    .textFieldStyle(.roundedBorder)
+                // AppKit-backed field with a dedicated per-presentation editor,
+                // so its caret shows on every open of the add/edit sheet, not
+                // only the first (#153). Return commits the form, Escape cancels.
+                PopoverTextField(text: binding,
+                                 placeholder: ti.placeholder,
+                                 diagnosticsLabel: "extension-editor",
+                                 onSubmit: { onCommit(buildFields()) },
+                                 onCancel: { if showCancel { onCancel() } })
+                    .frame(height: 22)
                 ExtensionFieldNote(note: ti.note)
             }
             .id(control.id))

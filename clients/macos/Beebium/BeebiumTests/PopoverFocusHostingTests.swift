@@ -107,6 +107,79 @@ final class PopoverFocusHostingTests: XCTestCase {
                        "extension editor form must open with its field prefilled")
     }
 
+    // MARK: - Per-presentation field editor (the "first open only" caret)
+
+    /// Present content in `window` (reused across presentations), spin, and return
+    /// the first NSTextField. Models the real bug condition: the same window's
+    /// shared field editor would be reused unless each presentation vends its own.
+    private func present<V: View>(_ view: V, in window: NSWindow,
+                                  seconds: TimeInterval = 0.8) -> NSTextField? {
+        window.contentViewController = NSHostingController(rootView: view)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
+        return Self.firstTextField(in: window.contentView)
+    }
+
+    private func dismiss(in window: NSWindow, seconds: TimeInterval = 0.4) {
+        window.contentViewController = NSHostingController(rootView: EmptyView())
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
+    }
+
+    // The fix gives each presentation its own field editor via a window-delegate
+    // provider. Whether that editor becomes first responder depends on the window
+    // being key, which this test host cannot arrange -- so the EDITOR IDENTITY is
+    // tested at the provider level (deterministic), and the hosted test below only
+    // guards the lifecycle (prefill on every open, clean dismissal).
+    func testDedicatedProviderGivesEachFieldItsOwnEditor() {
+        let fieldA = NSTextField()
+        let fieldB = NSTextField()
+        let providerA = DedicatedFieldEditorProvider()
+        providerA.field = fieldA
+        let providerB = DedicatedFieldEditorProvider()
+        providerB.field = fieldB
+        let window = NSWindow()
+
+        // Each provider vends its own editor for its own field...
+        let editorA = providerA.windowWillReturnFieldEditor(window, to: fieldA) as? NSTextView
+        let editorB = providerB.windowWillReturnFieldEditor(window, to: fieldB) as? NSTextView
+        XCTAssertNotNil(editorA)
+        XCTAssertNotNil(editorB)
+        XCTAssertFalse(editorA === editorB,
+                       "a second presentation must get a different field editor")
+        // ...and declines (forwards) for a field that is not its own.
+        XCTAssertNil(providerA.windowWillReturnFieldEditor(window, to: fieldB),
+                     "provider should not vend its editor for another field")
+    }
+
+    func testStationEditorPresentsTwicePrefilledAndDismissesCleanly() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+            styleMask: [.titled], backing: .buffered, defer: false)
+
+        let field1 = try XCTUnwrap(present(
+            StationIdPopover(currentStationId: 9, econetClient: EconetClient(),
+                             breakKeyLabel: nil, isPresented: .constant(true)),
+            in: window))
+        XCTAssertEqual(field1.stringValue, "9", "first open prefilled")
+
+        dismiss(in: window)
+        XCTAssertNil(Self.firstTextField(in: window.contentView),
+                     "the field should be gone after dismissal")
+
+        let field2 = try XCTUnwrap(present(
+            StationIdPopover(currentStationId: 9, econetClient: EconetClient(),
+                             breakKeyLabel: nil, isPresented: .constant(true)),
+            in: window))
+        XCTAssertEqual(field2.stringValue, "9", "second open also prefilled")
+    }
+
     // MARK: - Defect (b): caret / key window
 
     /// The focus path installs the field editor (firstResponder is an NSTextView

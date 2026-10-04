@@ -49,21 +49,68 @@ final class TemplateFieldController: ObservableObject {
     }
 }
 
+/// Gives one text field its OWN field editor for the lifetime of a single
+/// popover or sheet presentation (#153).
+///
+/// A window has one shared field editor it lends to every control that edits
+/// text. On macOS 14 the caret's rendering state on that shared editor goes
+/// stale after its first use, so the SECOND and later presentations of a popover
+/// whose field reuses it show no caret even though the field is first responder
+/// (proven from the user's focus log: the field editor is the same object across
+/// every open while the field is new each time). Vending a dedicated editor per
+/// presentation makes every open behave like the first.
+///
+/// Installed as the hosting window's delegate; every call other than the field
+/// editor request is forwarded to the delegate it replaced, and the original is
+/// restored on teardown.
+final class DedicatedFieldEditorProvider: NSObject, NSWindowDelegate {
+    weak var field: NSTextField?
+    weak var previousDelegate: NSWindowDelegate?
+
+    /// The field's own editor. A plain field editor the window configures when it
+    /// vends it; created once per presentation and discarded with this provider.
+    private(set) lazy var editor: NSTextView = {
+        let editor = NSTextView()
+        editor.isFieldEditor = true
+        return editor
+    }()
+
+    func windowWillReturnFieldEditor(_ sender: NSWindow, to client: Any?) -> Any? {
+        if let field, client as AnyObject? === field {
+            return editor
+        }
+        return previousDelegate?.windowWillReturnFieldEditor?(sender, to: client)
+    }
+
+    // Forward every other NSWindowDelegate call to the delegate we replaced, so
+    // the popover/sheet's own window behaviour is preserved.
+    override func responds(to aSelector: Selector!) -> Bool {
+        if super.responds(to: aSelector) { return true }
+        return previousDelegate?.responds(to: aSelector) ?? false
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if let previousDelegate, previousDelegate.responds(to: aSelector) {
+            return previousDelegate
+        }
+        return super.forwardingTarget(for: aSelector)
+    }
+}
+
 /// A single-line AppKit text field for use inside popovers and sheets, where a
-/// SwiftUI `TextField` has two problems (#153):
+/// SwiftUI `TextField` has three problems (#153):
 ///
 /// - Overprint: in a popover's vibrant material a field with no opaque
 ///   background lets the cell draw its own unscrolled text under the field
 ///   editor's scrolled text. This field draws an opaque bezeled background.
-/// - Invisible caret: a field's insertion point blinks only in the key window,
-///   and a popover/sheet does not reliably become key before a field takes
-///   focus. This field takes focus from the window becoming key -- it watches
-///   `didBecomeKeyNotification` and (re-)makes itself first responder then,
-///   clearing focus first so the insertion-point timer restarts even if it had
-///   focus while the window was not key -- rather than racing focus on appear.
-///   Because it is AppKit it also survives a parent re-render (the Network
+/// - Invisible caret, later opens: the window's shared field editor is reused
+///   across presentations and its caret state goes stale, so only the first
+///   presentation shows a caret. This field vends a dedicated editor per
+///   presentation (see `DedicatedFieldEditorProvider`) and ends editing cleanly
+///   on dismissal, so every open is a first open.
+/// - Because it is AppKit it also survives a parent re-render (the Network
 ///   sidebar rebuilds on every status event): `updateNSView` leaves the field
-///   editor alone while the user is typing.
+///   editor alone once the user is typing.
 struct PopoverTextField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String = ""
@@ -113,6 +160,10 @@ struct PopoverTextField: NSViewRepresentable {
         }
     }
 
+    static func dismantleNSView(_ nsView: NSTextField, coordinator: Coordinator) {
+        coordinator.teardown(field: nsView)
+    }
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
@@ -124,17 +175,18 @@ struct PopoverTextField: NSViewRepresentable {
         /// to apply the initial/changed value even though the editor exists.
         var userBeganEditing = false
         private var keyObserver: NSObjectProtocol?
+        private var editorProvider: DedicatedFieldEditorProvider?
+        private weak var editorWindow: NSWindow?
 
         init(_ parent: PopoverTextField) { self.parent = parent }
 
-        /// Take focus in the key window now if the window is already key, and
-        /// again whenever it becomes key. Making the field first responder in a
-        /// non-key window does not start its insertion-point timer, so we wait
-        /// for the window to be key -- and re-assert on didBecomeKey so a field
-        /// focused earlier (in a not-yet-key window) still starts blinking.
+        /// Install the dedicated field editor, then take focus -- in the key
+        /// window now if the window is already key, and again whenever it becomes
+        /// key (the popover/sheet may not be key when the field first appears).
         func beginTakingFocus() {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let field = self.field, let window = field.window else { return }
+                self.installDedicatedEditor(in: window, for: field)
                 if window.isKeyWindow {
                     self.focus(in: window)
                 } else {
@@ -148,22 +200,65 @@ struct PopoverTextField: NSViewRepresentable {
             }
         }
 
+        private func installDedicatedEditor(in window: NSWindow, for field: NSTextField) {
+            let provider = DedicatedFieldEditorProvider()
+            provider.field = field
+            provider.previousDelegate = window.delegate
+            window.delegate = provider
+            editorProvider = provider
+            editorWindow = window
+        }
+
         private func focus(in window: NSWindow) {
             guard let field else { return }
-            // Clear then set so the insertion-point timer restarts even if this
-            // field already held first responder in the not-yet-key window.
-            window.makeFirstResponder(nil)
+            // Make the field first responder so the window vends our dedicated
+            // editor. If the shared editor was somehow installed first, clear
+            // first responder so the window re-vends through our provider.
+            if let provider = editorProvider, field.currentEditor() !== provider.editor {
+                window.makeFirstResponder(nil)
+            }
             window.makeFirstResponder(field)
             if let label = diagnosticsLabel {
                 FocusDiagnostics.snapshot("\(label) focus()", window: window)
                 FocusDiagnostics.dumpEditor("\(label) focus()", field: field)
+                FocusDiagnostics.locateCaret("\(label) focus()", field: field)
                 for delay in [0.5, 1.5] {
                     DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak field] in
                         guard let field else { return }
                         FocusDiagnostics.dumpEditor("\(label)+\(Int(delay * 1000))ms", field: field)
+                        FocusDiagnostics.locateCaret("\(label)+\(Int(delay * 1000))ms", field: field)
                     }
                 }
             }
+        }
+
+        /// End the editing session and restore the window delegate when the field
+        /// goes away, so nothing is left mid-session on the shared machinery and
+        /// the next presentation starts clean.
+        func teardown(field: NSTextField) {
+            if let keyObserver {
+                NotificationCenter.default.removeObserver(keyObserver)
+                self.keyObserver = nil
+            }
+            // End the editing session on the window we captured (the field's own
+            // window pointer may already be nil by dismantle time), so the shared
+            // field editor is not left bound to this dead presentation -- the
+            // "nothing left mid-session" the next open needs.
+            let window = editorWindow ?? field.window
+            if let window {
+                if let editor = field.currentEditor() {
+                    window.endEditing(for: editor)
+                }
+                field.abortEditing()
+                // Resign first responder if it is still our field or its editor.
+                if window.firstResponder === field || window.firstResponder === field.currentEditor() {
+                    window.makeFirstResponder(window)
+                }
+                if let provider = editorProvider, window.delegate === provider {
+                    window.delegate = provider.previousDelegate
+                }
+            }
+            editorProvider = nil
         }
 
         deinit {
