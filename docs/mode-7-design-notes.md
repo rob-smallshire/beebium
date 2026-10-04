@@ -349,6 +349,27 @@ line. Taking the row address as the glyph line instead drew the top half of
 every character and never ended a row. See `video-subsystem.md` (SAA5050 Timing
 Integration) and `tests/test_saa5050_line_counter.cpp`.
 
+### Which Edge of DEW Steps the Flash Cycle
+
+The SAA5050 counts fields on DEW (the 6845's VSYNC) to time its flash cycle: 64
+fields, the flashing text hidden for 16 of them. Beebium steps the count on
+DEW's leading edge, as b2 does; jsbeeb steps it on the trailing edge, where it
+also clears the line count. The datasheet was not to hand and the real-BBC
+captures available are stills of ordinary frames, so neither source settles it.
+
+It is left on the leading edge because the choice is invisible except in a
+contrived case. The count changes once per field either way, and in any frame
+whose VSYNC falls in the vertical blanking -- every MOS mode and every program
+we know of -- no line is displayed between the two edges. Measured by rendering
+MODE 7 both ways for 70 frames (more than one whole flash cycle) with flashing
+graphics blocks on screen: the standard frames are byte for byte identical.
+Moving VSYNC into the displayed rows (R7=20) and putting the flashing blocks on
+the VSYNC row makes 4 of the 70 frames differ -- exactly the frames where the
+flash state changes, and only the two lines displayed while VSYNC is high. So
+the edge would matter only to a program that displays flashing text during
+VSYNC, and then for two lines of one field at each flash change. Revisit if
+hardware evidence of either edge turns up.
+
 ---
 
 ## Character-Based Output Mode
