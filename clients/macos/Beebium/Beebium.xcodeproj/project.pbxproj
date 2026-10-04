@@ -37,6 +37,7 @@
 		1AE92C3076119A47291BD4D7 /* NewMachineDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */; };
 		1AEDEA9B5B2CA4CC55909B84 /* BBCKeyCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152853E7E4735D1E7994275 /* BBCKeyCache.swift */; };
 		1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */; };
+		1D4EF3D9B6F79DD6EBC15905 /* PopoverFocusHostingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */; };
 		1D93F9B8DDEB19B857927731 /* AudioPreRoll.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BC15A775463F7A0F66447C8 /* AudioPreRoll.swift */; };
 		1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E556C71961C889896FAB4BD /* KeyboardSettingsPane.swift */; };
 		1FE8AE12703189FD243A6977 /* FileReferenceMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */; };
@@ -235,6 +236,7 @@
 
 /* Begin PBXFileReference section */
 		028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewMachineDialog.swift; sourceTree = "<group>"; };
+		02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverFocusHostingTests.swift; sourceTree = "<group>"; };
 		0380D979784116B4110F8904 /* ConnectionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionRegistry.swift; sourceTree = "<group>"; };
 		03C4898953F0003B85113EC0 /* indicator.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = indicator.grpc.swift; sourceTree = "<group>"; };
 		063CC2272D058D46784E181A /* BBCModifierState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCModifierState.swift; sourceTree = "<group>"; };
@@ -763,6 +765,7 @@
 				D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */,
 				4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */,
 				2D1D75896DF179CEC420018F /* PixelShapeTests.swift */,
+				02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
 				27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */,
 				58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */,
@@ -940,6 +943,7 @@
 				406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */,
 				934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */,
 				A994E213FE38477C0CF26811 /* PixelShapeTests.swift in Sources */,
+				1D4EF3D9B6F79DD6EBC15905 /* PopoverFocusHostingTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
 				4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */,
 				AC8547463BFF17B483A076FA /* ScreenSelectionGeometryTests.swift in Sources */,

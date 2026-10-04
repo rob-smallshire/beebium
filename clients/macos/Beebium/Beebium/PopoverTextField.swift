@@ -95,10 +95,13 @@ struct PopoverTextField: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSTextField, context: Context) {
         context.coordinator.parent = self
-        // Only overwrite when the model truly diverges and the field is not being
-        // edited, so a parent re-render (the Network sidebar on a status event)
-        // cannot disrupt the field editor or move the caret while the user types.
-        if nsView.stringValue != text && nsView.currentEditor() == nil {
+        // Apply the model value until the user starts typing -- the initial value
+        // must land even though the field has already taken focus (its field
+        // editor exists), which a plain "don't touch while an editor exists" guard
+        // wrongly blocked, opening the field empty. Once the user has typed, their
+        // text wins, so a parent re-render (the Network sidebar on a status event)
+        // cannot clobber it or move the caret.
+        if !context.coordinator.userBeganEditing && nsView.stringValue != text {
             nsView.stringValue = text
         }
     }
@@ -109,6 +112,10 @@ struct PopoverTextField: NSViewRepresentable {
         var parent: PopoverTextField
         weak var field: NSTextField?
         var diagnosticsLabel: String?
+        /// True once the user has actually edited the field, after which the model
+        /// no longer overwrites what they typed. Before that, updateNSView is free
+        /// to apply the initial/changed value even though the editor exists.
+        var userBeganEditing = false
         private var keyObserver: NSObjectProtocol?
 
         init(_ parent: PopoverTextField) { self.parent = parent }
@@ -153,6 +160,7 @@ struct PopoverTextField: NSViewRepresentable {
 
         func controlTextDidChange(_ obj: Notification) {
             guard let field = obj.object as? NSTextField else { return }
+            userBeganEditing = true
             parent.text = field.stringValue
         }
 

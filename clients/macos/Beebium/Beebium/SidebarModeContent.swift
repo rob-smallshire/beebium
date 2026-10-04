@@ -743,14 +743,29 @@ struct NetworkModeView: View {
 }
 
 /// Popover for editing the Econet station ID
-private struct StationIdPopover: View {
+// Not private so a hosted test can open the real editor and observe its field.
+struct StationIdPopover: View {
     let currentStationId: UInt32
     @ObservedObject var econetClient: EconetClient
     let breakKeyLabel: String?
     @Binding var isPresented: Bool
-    @State private var stationIdText: String = ""
+    @State private var stationIdText: String
     @State private var isSaving: Bool = false
     @State private var validationError: String?
+
+    init(currentStationId: UInt32,
+         econetClient: EconetClient,
+         breakKeyLabel: String?,
+         isPresented: Binding<Bool>) {
+        self.currentStationId = currentStationId
+        self._econetClient = ObservedObject(wrappedValue: econetClient)
+        self.breakKeyLabel = breakKeyLabel
+        self._isPresented = isPresented
+        // Seed the field BEFORE it is created, so it opens showing the configured
+        // number rather than empty: the AppKit field takes its initial string in
+        // makeNSView, which runs before any onAppear could fill a binding (#153).
+        self._stationIdText = State(initialValue: "\(currentStationId)")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -804,9 +819,6 @@ private struct StationIdPopover: View {
         .frame(width: 240)
         .activatesHostingWindow()
         .focusDiagnostics("station")
-        .onAppear {
-            stationIdText = "\(currentStationId)"
-        }
     }
 
     private func save() {

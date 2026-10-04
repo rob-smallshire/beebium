@@ -23,12 +23,13 @@ import SwiftUI
 /// of placeholder keys. If the server is too old to offer the placeholder and
 /// preview RPCs, this degrades to a plain name field with neither picker nor
 /// preview.
-private struct MachineRenameEditor: View {
+// Not private so a hosted test can open the real editor and observe its field.
+struct MachineRenameEditor: View {
     @ObservedObject var systemClient: SystemClient
     let dismiss: () -> Void
 
-    @State private var draft: String = ""
-    @State private var originalTemplate: String = ""
+    @State private var draft: String
+    @State private var originalTemplate: String
     @State private var placeholders: [Beebium_NamePlaceholder] = []
     @State private var pickerAvailable = false
     @State private var previewAvailable = false
@@ -40,6 +41,19 @@ private struct MachineRenameEditor: View {
 
     @StateObject private var fieldController = TemplateFieldController()
     @State private var previewDebouncer = Debouncer(delay: 0.25)
+
+    init(systemClient: SystemClient, dismiss: @escaping () -> Void) {
+        self._systemClient = ObservedObject(wrappedValue: systemClient)
+        self.dismiss = dismiss
+        // Seed the field BEFORE it is created so it opens showing the template
+        // rather than empty. An empty template means a server too old to carry
+        // one; fall back to the rendered name so the plain field is not blank.
+        let template = systemClient.machineNameTemplate.isEmpty
+            ? systemClient.machineName
+            : systemClient.machineNameTemplate
+        self._draft = State(initialValue: template)
+        self._originalTemplate = State(initialValue: template)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -196,13 +210,8 @@ private struct MachineRenameEditor: View {
     private func load() {
         guard !didLoad else { return }
         didLoad = true
-        // Show the template. An empty template means a server too old to carry
-        // one; fall back to the rendered name so the plain field is not blank.
-        let template = systemClient.machineNameTemplate.isEmpty
-            ? systemClient.machineName
-            : systemClient.machineNameTemplate
-        draft = template
-        originalTemplate = template
+        // draft and originalTemplate are seeded in init so the field opens filled;
+        // here we only fetch the server-driven picker and the initial preview.
         Task {
             if let list = await systemClient.listNamePlaceholders() {
                 placeholders = list
