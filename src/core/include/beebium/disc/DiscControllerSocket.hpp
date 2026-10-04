@@ -15,6 +15,8 @@
 #include "DiscControllerInterface.hpp"
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <string>
 
 namespace beebium {
 
@@ -50,13 +52,12 @@ public:
     // Construct an empty socket
     DiscControllerSocket() = default;
 
-    // Non-copyable (owns unique_ptr)
+    // Non-copyable and non-movable: it owns the controller, and other threads
+    // read its recorded chip name under a mutex.
     DiscControllerSocket(const DiscControllerSocket&) = delete;
     DiscControllerSocket& operator=(const DiscControllerSocket&) = delete;
-
-    // Movable
-    DiscControllerSocket(DiscControllerSocket&&) = default;
-    DiscControllerSocket& operator=(DiscControllerSocket&&) = default;
+    DiscControllerSocket(DiscControllerSocket&&) = delete;
+    DiscControllerSocket& operator=(DiscControllerSocket&&) = delete;
 
     ~DiscControllerSocket() = default;
 
@@ -122,6 +123,7 @@ public:
             controller_->detach_drives();
         }
         controller_ = std::move(controller);
+        set_fdc_chip(controller_ ? std::string(controller_->fdc_chip()) : std::string());
     }
 
     // Remove and return the installed controller
@@ -130,7 +132,19 @@ public:
         if (controller_) {
             controller_->detach_drives();
         }
+        set_fdc_chip({});
         return std::move(controller_);
+    }
+
+    // The fitted controller's chip name ("WD1770"), or empty with the socket
+    // empty. Safe from any thread: the controller can be installed or removed
+    // at runtime (DiscService, with the emulation thread parked), so a server
+    // thread reads this copy, recorded at install and removal, rather than
+    // the controller itself. The emulation thread's per-cycle path never
+    // touches it.
+    std::string fdc_chip() const {
+        std::lock_guard<std::mutex> lock(fdc_chip_mutex_);
+        return fdc_chip_;
     }
 
     // Check if a controller is installed
@@ -188,7 +202,14 @@ public:
     }
 
 private:
+    void set_fdc_chip(std::string chip) {
+        std::lock_guard<std::mutex> lock(fdc_chip_mutex_);
+        fdc_chip_ = std::move(chip);
+    }
+
     std::unique_ptr<DiscControllerInterface> controller_;
+    mutable std::mutex fdc_chip_mutex_;
+    std::string fdc_chip_;
 };
 
 } // namespace beebium

@@ -103,6 +103,11 @@ public:
     // @return Controller name (e.g., "Acorn 1770", "Opus DDOS")
     virtual std::string_view name() const = 0;
 
+    // The floppy controller chip's short name, from the device itself
+    // ("WD1770"; "8271" for an 8271 board). Shown by the fdc-controller name
+    // placeholder.
+    virtual std::string_view fdc_chip() const = 0;
+
     // =========================================================================
     // Configuration (for testing/automation)
     // =========================================================================

@@ -177,3 +177,21 @@ TEST_CASE("DiscControllerSocket delegates to controller", "[disc][socket]") {
         CHECK(ctrl->control() == 0x00);
     }
 }
+
+TEST_CASE("DiscControllerSocket reports the fitted controller's chip (#173)",
+          "[disc][socket][fdc-chip]") {
+    DiscControllerSocket socket;
+    CHECK(socket.fdc_chip().empty());
+
+    socket.install(std::make_unique<Acorn1770DiscController>());
+    CHECK(socket.fdc_chip() == "WD1770");
+
+    socket.remove();
+    CHECK(socket.fdc_chip().empty());
+}
+
+TEST_CASE("The Acorn 1770 controller names its chip from the device", "[disc][fdc-chip]") {
+    Acorn1770DiscController controller;
+    CHECK(controller.fdc_chip() == controller.wd1770().name());
+    CHECK(controller.fdc_chip() == "WD1770");
+}
