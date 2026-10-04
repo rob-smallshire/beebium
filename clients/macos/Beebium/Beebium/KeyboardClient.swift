@@ -456,6 +456,19 @@ final class KeyboardClient: ObservableObject, Disconnectable {
         }
     }
 
+    /// Press and release BREAK, as a tap, to reset the machine (#172). Used by
+    /// UI that needs to trigger a Break without a key event -- adopting a
+    /// configured Econet station number, which takes effect only at the next
+    /// Break. Goes through the same serialised send chain as a physical BREAK, so
+    /// the down and up reach the BBC in order and after anything already queued.
+    func pressBreak() {
+        enqueueSend { [weak self] in
+            guard let self = self else { return }
+            await self.sendBreakDown()
+            await self.sendBreakUp()
+        }
+    }
+
     /// Append a gRPC-send job to the serialised tail. Each job awaits the
     /// previous one so the wire sees the events in submission order.
     private func enqueueSend(_ work: @escaping @MainActor () async -> Void) {

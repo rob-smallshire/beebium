@@ -194,7 +194,8 @@ struct ContentView: View {
                 sidewaysClient: sidewaysClient,
                 systemClient: systemClient,
                 videoSettings: videoSettings,
-                speedModel: speedModel
+                speedModel: speedModel,
+                pressBreak: { keyboardClient.pressBreak() }
             )
         }
         .background(Color(nsColor: .windowBackgroundColor))
@@ -235,9 +236,7 @@ struct ContentView: View {
     /// Open the rename popover on the window showing this machine.
     private func beginRenamingMachine() {
         guard let window = currentWindow else { return }
-        renamePopover.show(in: window, currentName: systemClient.machineName) { newName in
-            systemClient.setMachineName(newName)
-        }
+        renamePopover.show(in: window, systemClient: systemClient)
     }
 
     private var emulatorView: some View {

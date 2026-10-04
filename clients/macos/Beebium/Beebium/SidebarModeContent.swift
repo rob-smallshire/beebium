@@ -90,6 +90,10 @@ struct SidebarModeContent: View {
     @ObservedObject var systemClient: SystemClient
     @ObservedObject var videoSettings: VideoSettings
     @ObservedObject var speedModel: SpeedControlModel
+    /// Presses Break on this machine. Used by the Econet station row to adopt a
+    /// configured station number, which takes effect only at the next Break
+    /// (#172). Defaults to a no-op for previews.
+    var pressBreak: () -> Void = {}
 
     var body: some View {
         let stale = SidebarStalePresentation(mode: mode, availability: serverAvailability)
@@ -136,7 +140,8 @@ struct SidebarModeContent: View {
                             extensionUiClient: extensionUiClient,
                             transportsClient: transportsClient,
                             serverAvailability: serverAvailability,
-                            isServerLocal: systemClient.isServerLocal)
+                            isServerLocal: systemClient.isServerLocal,
+                            pressBreak: pressBreak)
         }
     }
 }
@@ -416,6 +421,8 @@ struct NetworkModeView: View {
     /// Whether the server shares this host's filesystem; passed to a transport
     /// extension panel so a FileReference can gate "Reveal in Finder".
     var isServerLocal: Bool = false
+    /// Presses Break on this machine, to adopt a configured station number (#172).
+    var pressBreak: () -> Void = {}
     @State private var showStationIdPopover = false
 
     /// Every decision about what to show, taken from the cached client state
@@ -444,6 +451,34 @@ struct NetworkModeView: View {
         case .status:
             econetContentView
         }
+    }
+
+    /// The station row's state: the number in force, and whether a configured
+    /// change is pending its next Break (#172).
+    private var stationPresentation: EconetStationPresentation {
+        EconetStationPresentation(configured: econetClient.stationId,
+                                  inForce: econetClient.stationInForce)
+    }
+
+    /// The Break button shown only while a station change is pending. It presses
+    /// Break to adopt the configured number, is labelled with the host Break key
+    /// (the same symbol the edit popover's hint uses) and carries a tooltip
+    /// naming the configured number. Disabled with the rest of the editor when
+    /// the server is not live.
+    private var breakButton: some View {
+        Button {
+            pressBreak()
+        } label: {
+            if let label = keyboardMappingManager.breakKeyLabel {
+                Text(label)
+                    .font(.caption.monospaced())
+            } else {
+                Image(systemName: "restart")
+            }
+        }
+        .buttonStyle(.borderless)
+        .disabled(!presentation.isStationEditorEnabled)
+        .help(stationPresentation.breakTooltip ?? "")
     }
 
     /// The station-collision warning text: the server's description of the most
@@ -631,13 +666,24 @@ struct NetworkModeView: View {
                     .foregroundColor(presentation.isStatusStale ? .secondary : .primary)
             }
 
-            HStack {
+            HStack(spacing: 6) {
                 Text("Econet Station")
                     .foregroundColor(.secondary)
                 Spacer()
-                Text("\(econetClient.stationId)")
+                // The value carries the state (#172): the number in use in the
+                // normal style, and -- while a configured change awaits its next
+                // Break -- the configured number after an arrow in the secondary
+                // colour. The whole thing collapses to one number once they
+                // converge, which the status stream pushes at adoption.
+                Text(stationPresentation.inForceText)
                     .fontWeight(.medium)
                     .foregroundColor(presentation.isStatusStale ? .secondary : .primary)
+                if stationPresentation.isPending {
+                    Text(stationPresentation.pendingSuffixText)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    breakButton
+                }
                 Button {
                     showStationIdPopover = true
                 } label: {

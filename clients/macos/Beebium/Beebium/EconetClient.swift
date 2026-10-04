@@ -33,6 +33,12 @@ final class EconetClient: ObservableObject, Disconnectable {
     @Published private(set) var hasEconetSocket: Bool = false
     @Published private(set) var enabled: Bool = false
     @Published private(set) var stationId: UInt32 = 0
+    /// The station number currently **in force**: the number the guest read from
+    /// the station links on its first read since the last reset, which is the
+    /// number its filing system is using. It equals `stationId` until a change
+    /// is configured and then differs until the next Break adopts it (#172).
+    /// Zero before the first report, or from a server too old to carry it.
+    @Published private(set) var stationInForce: UInt32 = 0
     @Published private(set) var aunMode: Bool = false
     @Published private(set) var connected: Bool = false
     /// The active transport requires real-time (1x) emulation (e.g. Piconet).
@@ -87,6 +93,7 @@ final class EconetClient: ObservableObject, Disconnectable {
         hasEconetSocket = false
         enabled = false
         stationId = 0
+        stationInForce = 0
         aunMode = false
         connected = false
         requiresRealTime = false
@@ -199,6 +206,7 @@ final class EconetClient: ObservableObject, Disconnectable {
         hasEconetSocket = response.hasEconetSocket_p
         enabled = response.enabled
         stationId = response.stationID
+        stationInForce = response.stationInForce
         aunMode = response.aunMode
         connected = response.connected
         requiresRealTime = response.requiresRealTime
