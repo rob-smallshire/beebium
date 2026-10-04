@@ -91,6 +91,7 @@ struct ExtensionEditorForm: View {
                 // only the first (#153). Return commits the form, Escape cancels.
                 PopoverTextField(text: binding,
                                  placeholder: ti.placeholder,
+                                 autofocus: control.id == firstTextInputID,
                                  diagnosticsLabel: "extension-editor",
                                  onSubmit: { onCommit(buildFields()) },
                                  onCancel: { if showCancel { onCancel() } })
@@ -149,6 +150,29 @@ struct ExtensionEditorForm: View {
             // discouraged; skip rather than add speculative surface for shapes we
             // do not ship.
             return AnyView(EmptyView())
+        }
+    }
+
+    // MARK: - Focus
+
+    /// The id of the first text input in document order, which is the one field
+    /// that claims initial focus; every other field waits for a Tab or a click so
+    /// focus does not jump to the last field (#153).
+    private var firstTextInputID: String? {
+        firstTextInput(in: editor)
+    }
+
+    private func firstTextInput(in control: Beebium_Control) -> String? {
+        switch control.control {
+        case .textInput:
+            return control.id
+        case .group(let group):
+            for child in group.controls {
+                if let found = firstTextInput(in: child) { return found }
+            }
+            return nil
+        default:
+            return nil
         }
     }
 

@@ -61,21 +61,92 @@ final class FocusSelfTest {
             atPath: outputDirpath, withIntermediateDirectories: true)
         setUpHostWindow()
 
-        // Station editor, restyled field, in dark and light appearances.
-        await captureStation(name: "station_dark", appearance: .darkAqua)
-        await captureStation(name: "station_light", appearance: .aqua)
+        // Multi-field form (like add-peer / add-subnet): focus must settle on the
+        // FIRST field and stay there, not jump to the last field (#153).
+        await captureFormFocusOverTime(name: "form_settle", clickSecondAfter: nil)
+        // A click on the second field at ~150 ms must not be overridden by the
+        // delayed focus assertion.
+        await captureFormFocusOverTime(name: "form_click2", clickSecondAfter: 0.15)
+        // Tab should walk the fields in order.
+        await captureFormTabOrder(name: "form_tab")
+        // Single-field popover is unaffected (focus stays on its one field).
+        await captureStation(name: "station_settle", appearance: .darkAqua)
 
-        // Rename popover against a real server so the picker chips and the live
-        // preview load, in dark and light; the dark pass also clicks a chip.
+        // With a server port, also capture the rename popover's chips and preview.
         if let port = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT"],
            let portNumber = Int(port) {
             await connectServer(port: portNumber)
-            await sleep(1.8)   // GetSystemInfo -> machineNameTemplate
+            await sleep(1.8)
             await captureRename(name: "rename_dark", appearance: .darkAqua, clickChip: true)
-            await captureRename(name: "rename_light", appearance: .aqua, clickChip: false)
-        } else {
-            NSLog("[SELFTEST] no server port; skipping rename-with-chips capture")
         }
+    }
+
+    // MARK: - Multi-field form focus
+
+    private func multiFieldEditor() -> Beebium_Control {
+        func textInput(_ id: String, _ label: String, _ value: String) -> Beebium_Control {
+            var input = Beebium_TextInput()
+            input.label = label
+            input.value = value
+            var control = Beebium_Control()
+            control.id = id
+            control.textInput = input
+            return control
+        }
+        var group = Beebium_Group()
+        group.label = "Add peer"
+        group.controls = [
+            textInput("host", "Host", "192.168.0.10"),
+            textInput("port", "Port", "32768"),
+            textInput("station", "Station", "101"),
+            textInput("remark", "Remark", "File server"),
+        ]
+        var root = Beebium_Control()
+        root.id = "root"
+        root.group = group
+        return root
+    }
+
+    /// Present the multi-field form as a sheet on the host window -- the same way
+    /// the add-peer / add-subnet editors are presented (EditableList uses a sheet),
+    /// so its window-becomes-key timing matches and the focus behaviour is faithful.
+    private func presentFormSheet() -> NSWindow {
+        bringHostToFront()
+        let content = ExtensionEditorForm(editor: multiFieldEditor(), commitTitle: "Add",
+                                          showCancel: true, onCancel: {}, onCommit: { _ in })
+            .padding()
+            .frame(width: 340)
+        let sheet = NSWindow(contentViewController: NSHostingController(rootView: content))
+        sheet.styleMask = [.titled]
+        hostWindow?.beginSheet(sheet) { _ in }
+        return sheet
+    }
+
+    private func captureFormFocusOverTime(name: String, clickSecondAfter: TimeInterval?) async {
+        let sheet = presentFormSheet()
+        let clickFrame = clickSecondAfter.map { Int(($0 / frameInterval).rounded()) }
+        for frame in 0..<16 {
+            if let clickFrame, frame == clickFrame, let root = sheet.contentView {
+                clickTextView(index: 1, in: root)
+            }
+            capture(window: sheet, name: "\(name)_frame\(frame)")
+            await sleep(frameInterval)
+        }
+        hostWindow?.endSheet(sheet)
+        await sleep(0.4)
+    }
+
+    private func captureFormTabOrder(name: String) async {
+        let sheet = presentFormSheet()
+        await sleep(0.6)
+        capture(window: sheet, name: "\(name)_0_initial")
+        for step in 1...3 {
+            sendTab(to: sheet, shift: false)
+            await sleep(0.25)
+            capture(window: sheet, name: "\(name)_\(step)_tab")
+        }
+        hostWindow?.endSheet(sheet)
+        await sleep(0.4)
     }
 
     // MARK: - Host window
@@ -204,8 +275,11 @@ final class FocusSelfTest {
     }
 
     private func capture(_ popover: NSPopover, name: String) {
-        guard let view = popover.contentViewController?.view,
-              let window = view.window else { return }
+        guard let window = popover.contentViewController?.view.window else { return }
+        capture(window: window, name: name)
+    }
+
+    private func capture(window: NSWindow, name: String) {
         let path = "\(outputDirpath)/\(name).png"
         let windowID = CGWindowID(window.windowNumber)
         if let image = CGWindowListCreateImage(
@@ -213,7 +287,8 @@ final class FocusSelfTest {
            writePNG(cgImage: image, to: path) {
             return
         }
-        if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+        if let view = window.contentView,
+           let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
             view.cacheDisplay(in: view.bounds, to: rep)
             if let data = rep.representation(using: .png, properties: [:]) {
                 try? data.write(to: URL(fileURLWithPath: path))
@@ -230,11 +305,38 @@ final class FocusSelfTest {
     // MARK: - View tree
 
     private static func firstTextView(in view: NSView) -> NSTextView? {
-        if let textView = view as? NSTextView { return textView }
+        allTextViews(in: view).first
+    }
+
+    private static func allTextViews(in view: NSView) -> [NSTextView] {
+        var found: [NSTextView] = []
+        if let textView = view as? NSTextView { found.append(textView) }
         for subview in view.subviews {
-            if let found = firstTextView(in: subview) { return found }
+            found.append(contentsOf: allTextViews(in: subview))
         }
-        return nil
+        return found
+    }
+
+    private func clickTextView(index: Int, in root: NSView) {
+        let textViews = Self.allTextViews(in: root)
+        guard index < textViews.count else { return }
+        let field = textViews[index]
+        postClick(on: field, at: NSPoint(x: 6, y: field.bounds.midY))
+    }
+
+    private func sendTab(to window: NSWindow, shift: Bool) {
+        let tabKeyCode: UInt16 = 48
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            if let event = NSEvent.keyEvent(
+                with: type, location: .zero,
+                modifierFlags: shift ? [.shift] : [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil,
+                characters: "\t", charactersIgnoringModifiers: "\t",
+                isARepeat: false, keyCode: tabKeyCode) {
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
     }
 
     /// The first placeholder chip -- a button whose title is an insertion string

@@ -55,6 +55,12 @@ final class TemplateFieldController: ObservableObject {
 struct PopoverTextField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String = ""
+    /// Whether this field claims initial focus when its window becomes key. Exactly
+    /// one field per popover/sheet should: a single-field popover's field (the
+    /// default), or, in a multi-field form, only the first editable field. The rest
+    /// pass false so focus does not jump to the last field that happens to run
+    /// (#153). A field that does not autofocus is still reachable by Tab and click.
+    var autofocus: Bool = true
     /// Optional controller exposing caret insertion (the rename picker uses it).
     var controller: TemplateFieldController?
     /// When set and BEEBIUM_DEBUG_FOCUS=1, logs focus transitions.
@@ -107,7 +113,11 @@ struct PopoverTextField: NSViewRepresentable {
         controller?.textView = textView
         context.coordinator.textView = textView
         context.coordinator.diagnosticsLabel = diagnosticsLabel
-        context.coordinator.beginTakingFocus()
+        // Only the designated field claims initial focus; the others wait for a
+        // Tab or a click so focus does not land on the last field in the form.
+        if autofocus {
+            context.coordinator.beginTakingFocus()
+        }
         return scroll
     }
 
@@ -155,6 +165,13 @@ struct PopoverTextField: NSViewRepresentable {
 
         private func focus(in window: NSWindow) {
             guard let textView else { return }
+            // Never override a focus change the user has already made: if another
+            // field's editor is first responder (a click landed there within the
+            // window-becomes-key delay), leave it. Only claim focus when nothing is
+            // being edited yet, or we already hold it.
+            if let current = window.firstResponder as? NSTextView, current !== textView {
+                return
+            }
             window.makeFirstResponder(textView)
             // Select all on open, as a freshly-focused NSTextField does, so typing
             // replaces the value; a click then places the caret.
@@ -188,10 +205,15 @@ struct PopoverTextField: NSViewRepresentable {
             case #selector(NSResponder.cancelOperation(_:)):
                 parent.onCancel()
                 return true
-            case #selector(NSResponder.insertTab(_:)),
-                 #selector(NSResponder.insertBacktab(_:)):
-                // Let the window move focus rather than inserting a tab.
-                return false
+            case #selector(NSResponder.insertTab(_:)):
+                // Move focus to the next field rather than inserting a tab (a
+                // non-field-editor text view would otherwise replace the selection
+                // with a tab character).
+                textView.window?.selectNextKeyView(nil)
+                return true
+            case #selector(NSResponder.insertBacktab(_:)):
+                textView.window?.selectPreviousKeyView(nil)
+                return true
             default:
                 return false
             }
