@@ -517,6 +517,10 @@ struct ServerConfig {
     // The launching preset's display name ("" without a preset), for the
     // machine-preset name placeholder.
     std::string preset_name;
+    // The launcher's instance number for this machine (--machine-ordinal),
+    // for the machine-ordinal name placeholder. Launch state, not preset
+    // state: a preset cannot set it.
+    std::optional<unsigned> machine_ordinal;
 
     // Extension configuration: search paths added via --extension-dir, in order.
     // Later paths override earlier ones (and the auto-resolved default
@@ -635,6 +639,8 @@ void print_usage(const char* program_name) {
               << "                           filled from the machine's state, e.g.\n"
               << "                           'Station {econet-station}'; see\n"
               << "                           list-name-placeholders (default: from model)\n"
+              << "  --machine-ordinal <n>    This machine's instance number from its\n"
+              << "                           launcher, shown by {machine-ordinal} as '#n'\n"
               << "  --allow-shutdown         Allow any client to shut down the server\n"
               << "  --advertise              Enable mDNS service advertisement\n"
               << "  --extension-dir <path>   Add an extension search directory. Repeatable;\n"
@@ -1247,6 +1253,25 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             }
         } else if (arg == "--machine-name" && i + 1 < argc) {
             config.machine_name = argv[++i];
+        } else if (arg == "--machine-ordinal") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --machine-ordinal requires a positive integer\n";
+                return ExitCode::USAGE;
+            }
+            const std::string value = argv[++i];
+            unsigned long ordinal = 0;
+            const bool digits = !value.empty() &&
+                value.find_first_not_of("0123456789") == std::string::npos &&
+                value.size() <= 9;
+            if (digits) {
+                ordinal = std::stoul(value);
+            }
+            if (!digits || ordinal == 0) {
+                std::cerr << "Error: --machine-ordinal must be a positive integer, got '"
+                          << value << "'\n";
+                return ExitCode::USAGE;
+            }
+            config.machine_ordinal = static_cast<unsigned>(ordinal);
         } else if (arg == "--allow-shutdown") {
             config.allow_shutdown = true;
         } else if (arg == "--advertise") {
@@ -2819,6 +2844,9 @@ public:
                 register_extension_name_placeholders(server, *transport);
             }
             server.set_launch_preset_name(config.preset_name);
+            if (config.machine_ordinal) {
+                server.set_launch_ordinal(*config.machine_ordinal);
+            }
 
             server.start(std::move(provenance), std::move(identity),
                         config.advertise, shutdown_policy_config, std::move(shutdown_callback),

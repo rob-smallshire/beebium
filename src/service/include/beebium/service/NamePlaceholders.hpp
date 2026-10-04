@@ -21,6 +21,7 @@
 #include "beebium/extension/NamePlaceholderProvider.hpp"
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -38,6 +39,11 @@ inline std::vector<NamePlaceholderInfo> machine_name_placeholder_infos() {
         {"machine-preset", "Preset",
          "The name of the preset the machine was launched from; not "
          "applicable when it was launched without one. Never changes.",
+         "Machine"},
+        {"machine-ordinal", "Instance number",
+         "This machine's instance number among those its launcher started "
+         "(\"#3\"), supplied by the launcher with --machine-ordinal; not "
+         "applicable when none was given. Never changes.",
          "Machine"},
     };
 }
@@ -73,6 +79,11 @@ public:
     // before the server starts; read-only afterwards.
     void set_preset_name(std::string preset_name) { preset_name_ = std::move(preset_name); }
 
+    // The launcher's instance number for this machine (--machine-ordinal), or
+    // nullopt when it gave none. Set before the server starts; read-only
+    // afterwards.
+    void set_ordinal(std::optional<unsigned> ordinal) { ordinal_ = ordinal; }
+
     std::vector<std::string> placeholder_domains() const override { return {"machine"}; }
 
     std::vector<NamePlaceholderInfo> placeholders() const override {
@@ -82,12 +93,17 @@ public:
     NamePlaceholderValue placeholder_value(std::string_view key) const override {
         if (key == "machine-model") return {model_name_, true};
         if (key == "machine-preset") return {preset_name_, !preset_name_.empty()};
+        if (key == "machine-ordinal") {
+            if (!ordinal_) return {"", false};
+            return {"#" + std::to_string(*ordinal_), true};
+        }
         return {"", false};
     }
 
 private:
     const std::string model_name_;
     std::string preset_name_;
+    std::optional<unsigned> ordinal_;
 };
 
 // The `econet` domain: the Econet socket and its transport. Every value is

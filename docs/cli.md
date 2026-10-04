@@ -192,6 +192,7 @@ Scripts can parse the `Listening on port <N>` line to discover the allocated por
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--machine-name <template>` | the preset's `machine_name`, else the model's name | The machine's name: text in which `{key}` placeholders are filled from the machine's state |
+| `--machine-ordinal <n>` | none | This machine's instance number from its launcher (a positive integer), shown by `{machine-ordinal}` as `#n`. Launch state: a preset cannot set it |
 
 The name is a **template** (#153). Ordinary text is a plain name, as before;
 `{key}` stands for a placeholder's current value, and the server keeps the
@@ -213,8 +214,10 @@ beebium-model-b --machine-name "Station {econet-station} (AUN, Model B)" \
 - An unknown key renders as written, braces included, so a template written
   for a newer server or a plugin that is not loaded degrades visibly.
 - A placeholder that does not apply to this machine (an Econet placeholder with
-  no Econet fitted) renders empty; a name that renders blank falls back to the
-  model's name.
+  no Econet fitted, or `{machine-ordinal}` with no `--machine-ordinal`)
+  renders empty. The rendering is trimmed of leading and trailing whitespace,
+  so `"X {machine-ordinal}"` is "X #3" with `--machine-ordinal 3` and "X"
+  without; a name that renders blank falls back to the model's name.
 - `:` `|` `?` `!` inside braces are reserved for future formatting and
   fallbacks; today they make the placeholder unknown.
 
@@ -543,6 +546,8 @@ Machine:
       The machine's model, as the server reports it ("BBC Model B"). Never changes.
   {machine-preset}  Preset
       The name of the preset the machine was launched from; ...
+  {machine-ordinal}  Instance number
+      This machine's instance number among those its launcher started ("#3"), ...
 Econet:
   {econet-station}  Econet station
       The station number in force: ...

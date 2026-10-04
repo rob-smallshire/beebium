@@ -58,6 +58,9 @@ asks.
   empty string, and the picker shows it as not applicable.
 - A value is inserted as it is, never parsed again, so a value containing
   braces cannot inject a placeholder.
+- The finished rendering is trimmed of leading and trailing whitespace, so a
+  placeholder that renders empty at either end ("X {machine-ordinal}" with no
+  ordinal) leaves no stray space; interior whitespace is kept.
 - Rendering is a single left-to-right pass, linear in the template's length.
 - A template that renders blank (`{econet-station}` with no Econet fitted)
   gives the model's display name instead: a machine always has a name to
@@ -107,13 +110,18 @@ machine chooses for itself.
 | `econet-transport` | Econet | The transport's display name, the label its sidebar panel carries ("AUN", "Piconet"); empty when Econet is fitted with no transport. | Econet enabled or disabled at runtime. |
 | `machine-model` | Machine | The machine model's display name, as the server reports it in `SystemInfo` ("BBC Model B"): one name for a model. | Never; included because it differs between machines sharing a hand-written template, and costs nothing. |
 | `machine-preset` | Machine | The name of the preset the machine was launched from. Not applicable, so empty, when it was launched without one. | Never; as above. |
+| `machine-ordinal` | Machine | This machine's instance number among those its launcher started, as "#" and the number ("#3"), supplied by the launcher with `--machine-ordinal <n>`. Not applicable, so empty, when none was given. | Never; set at launch. |
+
+`machine-ordinal` was first left out, as the launcher's state rather than
+the machine's, with the app writing "#2" into the template as literal text.
+It is included because the user wants the ordinal visible and placeable in
+the template like any other value, and a launch option keeps the launcher's
+state out of the protocol: the launcher passes `--machine-ordinal`, the
+placeholder renders it, and no client-to-server variable mechanism is
+needed.
 
 Not included, with reasons:
 
-- **The launcher's ordinal** ("#2"). It is the launcher's state, not the
-  machine's. The app writes it into the template as literal text at
-  launch (section 8), so no placeholder and no client-to-server variable
-  mechanism is needed.
 - **Host, gRPC port, UUID.** Useful for remote and multi-host work, but
   nobody has asked; the registry makes them a later, isolated addition.
 - **Disc titles, ROM names, coprocessor.** Plausible; each is one provider
@@ -180,8 +188,10 @@ before launch), for people writing presets.
   can change server-side (the record carries the insertion text).
 - **Launch.** The app builds the machine's template from the preset's
   `machine_name` if it has one, otherwise the preset's display name with
-  braces escaped, and appends its per-launch ordinal as literal text:
-  `Station {econet-station} (AUN, Model B) #2`.
+  braces escaped, ends it with `{machine-ordinal}` (unless the template
+  already places it), and passes its per-launch ordinal with
+  `--machine-ordinal`: `Station {econet-station} (AUN, Model B)
+  {machine-ordinal}` renders "Station 80 (AUN, Model B) #2".
 - Window titles, the Window menu and the connection registry use the
   rendered name from the status stream, as now.
 

@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -57,7 +58,8 @@ public:
 class NameFixture {
 public:
     explicit NameFixture(std::string name_template, bool fit_econet = true,
-                         std::string preset_name = "Station 80 (AUN, Model B)") {
+                         std::string preset_name = "Station 80 (AUN, Model B)",
+                         std::optional<unsigned> ordinal = std::nullopt) {
         machine_.reset();
         if (fit_econet) {
             machine_.state().memory.econet_socket.enable(
@@ -67,6 +69,9 @@ public:
             machine_, "127.0.0.1", 0);
         server_->name_placeholders().add_extension(gizmo_);
         server_->set_launch_preset_name(std::move(preset_name));
+        if (ordinal) {
+            server_->set_launch_ordinal(*ordinal);
+        }
         beebium::service::MachineIdentity identity{
             "00000000-0000-4000-8000-000000000153", name_template,
             "ModelB", "BBC Model B", name_template};
@@ -155,6 +160,24 @@ TEST_CASE("A blank rendering falls back to the model's name", "[grpc][system][na
     CHECK(fixture.identity().name_template() == "{econet-station}");
 }
 
+TEST_CASE("A name that renders only whitespace falls back to the model's name",
+          "[grpc][system][name-template]") {
+    NameFixture fixture("  {econet-station}  ", /*fit_econet=*/false);
+    CHECK(fixture.identity().name() == "BBC Model B");
+}
+
+TEST_CASE("machine-ordinal renders '#N' when the launch gave one, and nothing otherwise",
+          "[grpc][system][name-template][ordinal]") {
+    {
+        NameFixture fixture("X {machine-ordinal}", true, "Preset", /*ordinal=*/3);
+        CHECK(fixture.identity().name() == "X #3");
+    }
+    {
+        NameFixture fixture("X {machine-ordinal}");
+        CHECK(fixture.identity().name() == "X");
+    }
+}
+
 TEST_CASE("ListNamePlaceholders lists every provider's placeholders with values",
           "[grpc][system][name-template]") {
     NameFixture fixture("Plain");
@@ -164,7 +187,8 @@ TEST_CASE("ListNamePlaceholders lists every provider's placeholders with values"
 
     std::vector<std::string> keys;
     for (const auto& p : response.placeholders()) keys.push_back(p.key());
-    CHECK(keys == std::vector<std::string>{"machine-model", "machine-preset", "econet-station",
+    CHECK(keys == std::vector<std::string>{"machine-model", "machine-preset", "machine-ordinal",
+                                           "econet-station",
                                            "econet-net", "econet-transport", "gizmo-colour"});
     for (const auto& p : response.placeholders()) {
         INFO(p.key());
@@ -195,7 +219,8 @@ TEST_CASE("Econet placeholders are not applicable with no Econet fitted",
     REQUIRE(fixture.system().ListNamePlaceholders(&context, {}, &response).ok());
     for (const auto& p : response.placeholders()) {
         INFO(p.key());
-        if (p.key().rfind("econet-", 0) == 0 || p.key() == "machine-preset") {
+        if (p.key().rfind("econet-", 0) == 0 || p.key() == "machine-preset" ||
+            p.key() == "machine-ordinal") {
             CHECK_FALSE(p.applicable());
             CHECK(p.value().empty());
         }

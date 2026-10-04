@@ -103,6 +103,12 @@ public:
         impl_->machine_name_placeholders.set_preset_name(std::move(preset_name));
     }
 
+    /// The launcher's instance number for this machine, for the
+    /// machine-ordinal placeholder ("#3"). Call before start().
+    void set_launch_ordinal(unsigned ordinal) {
+        impl_->machine_name_placeholders.set_ordinal(ordinal);
+    }
+
     /// Get the address the server is bound to
     std::string address() const;
 

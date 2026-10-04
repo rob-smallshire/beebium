@@ -110,6 +110,15 @@ NameRendering render_name_template(std::string_view text,
         out.text += text.substr(i, end - i);
         i = end;
     }
+    // No stray space where a placeholder at either end rendered empty.
+    constexpr const char* kWhitespace = " \t\r\n\f\v";
+    const std::size_t first = out.text.find_first_not_of(kWhitespace);
+    if (first == std::string::npos) {
+        out.text.clear();
+    } else {
+        out.text.erase(out.text.find_last_not_of(kWhitespace) + 1);
+        out.text.erase(0, first);
+    }
     return out;
 }
 

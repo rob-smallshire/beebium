@@ -162,3 +162,29 @@ def test_a_placeholder_without_econet_is_inapplicable_and_renders_empty(
         assert preview.name == "Station []"
         assert preview.report.inapplicable_keys == ("econet-station",)
         assert preview.report.unknown_keys == ()
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected"),
+    [
+        (["--machine-ordinal", "3"], "X #3"),
+        # No ordinal: the placeholder renders empty and the trailing space is
+        # trimmed.
+        ([], "X"),
+    ],
+)
+def test_machine_ordinal_renders_the_launch_ordinal(
+    mos_filepath: Path,
+    server_installation: ServerInstallation,
+    extra_args: list[str],
+    expected: str,
+) -> None:
+    with Beebium.launch(
+        server=server_installation,
+        mos_filepath=mos_filepath,
+        extra_args=["--machine-name", "X {machine-ordinal}", *extra_args],
+        startup_timeout=30.0,
+    ) as bbc:
+        assert bbc.system.identity.name == expected
+        ordinal = {p.key: p for p in bbc.system.list_name_placeholders()}["machine-ordinal"]
+        assert ordinal.applicable == bool(extra_args)

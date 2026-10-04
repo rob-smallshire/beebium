@@ -236,3 +236,20 @@ TEST_CASE("Placeholder key and domain grammar", "[name][template]") {
     CHECK_FALSE(is_valid_placeholder_domain("Econet"));
     CHECK_FALSE(is_valid_placeholder_domain("2scsi"));
 }
+
+TEST_CASE("The rendered name is trimmed of leading and trailing whitespace",
+          "[name][template][trim]") {
+    // A placeholder that renders empty at either end leaves no stray space.
+    CHECK(render("Station {econet-station} {econet-net}").text == "Station 80");
+    CHECK(render("{econet-net} Station").text == "Station");
+    CHECK(render("  plain name \t\r\n").text == "plain name");
+    // Interior whitespace is the user's and is kept.
+    CHECK(render("a  {econet-net}  b").text == "a    b");
+    CHECK(render("Station\t{econet-station}").text == "Station\t80");
+    // A rendering that is nothing but whitespace trims to empty (the server
+    // then shows the model's name).
+    CHECK(render(" {econet-net} ").text.empty());
+    CHECK(render("   ").text.empty());
+    // Non-ASCII spacing is text, not trimmed.
+    CHECK(render("\xC2\xA0x").text == "\xC2\xA0x");
+}

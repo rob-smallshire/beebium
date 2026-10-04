@@ -43,7 +43,13 @@
 //     reported as "}".
 //
 // Values are inserted as they are, never parsed again, so a value containing
-// braces cannot inject a placeholder. Text other than braces -- including
+// braces cannot inject a placeholder.
+//
+// The finished rendering is trimmed of leading and trailing ASCII whitespace
+// (space, tab, CR, LF, FF, VT), so a placeholder that renders empty at either
+// end -- "Station {econet-station} {machine-ordinal}" with no ordinal --
+// leaves no stray space. Interior whitespace is kept, and a rendering that is
+// all whitespace becomes empty. Text other than braces -- including
 // non-ASCII UTF-8 -- passes through byte for byte.
 //
 // Rendering is a single left-to-right pass: time and space are linear in the
