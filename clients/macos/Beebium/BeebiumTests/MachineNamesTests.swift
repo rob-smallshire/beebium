@@ -56,23 +56,22 @@ final class MachineNameSequenceTests: XCTestCase {
 }
 
 final class MachineLaunchNameTests: XCTestCase {
-    func testPlainDisplayNameGainsOrdinal() {
+    func testPlainDisplayNameGainsOrdinalPlaceholder() {
         // No preset machine_name: the display name is the template, and the
-        // ordinal is literal text appended after it.
+        // ordinal placeholder is appended. Its value travels as --machine-ordinal
+        // and the server renders it ("#2"), trimming any trailing space.
         XCTAssertEqual(
             MachineLaunchName.template(presetMachineName: nil,
-                                       presetDisplayName: "BBC Model B",
-                                       ordinal: 2),
-            "BBC Model B #2")
+                                       presetDisplayName: "BBC Model B"),
+            "BBC Model B {machine-ordinal}")
     }
 
     func testEmptyMachineNameFallsBackToDisplayName() {
         // An empty machine_name is treated as absent.
         XCTAssertEqual(
             MachineLaunchName.template(presetMachineName: "",
-                                       presetDisplayName: "BBC Model B",
-                                       ordinal: 1),
-            "BBC Model B #1")
+                                       presetDisplayName: "BBC Model B"),
+            "BBC Model B {machine-ordinal}")
     }
 
     func testPresetMachineNameTemplateIsUsedVerbatim() {
@@ -81,19 +80,17 @@ final class MachineLaunchNameTests: XCTestCase {
         XCTAssertEqual(
             MachineLaunchName.template(
                 presetMachineName: "Station {econet-station} (AUN, Model B)",
-                presetDisplayName: "Station 80 (AUN, Model B)",
-                ordinal: 3),
-            "Station {econet-station} (AUN, Model B) #3")
+                presetDisplayName: "Station 80 (AUN, Model B)"),
+            "Station {econet-station} (AUN, Model B) {machine-ordinal}")
     }
 
     func testBracesInADisplayNameAreEscaped() {
         // A literal name containing braces must not be read as a placeholder,
-        // so the braces are doubled.
+        // so the braces are doubled. The ordinal placeholder is left intact.
         XCTAssertEqual(
             MachineLaunchName.template(presetMachineName: nil,
-                                       presetDisplayName: "Model {B}",
-                                       ordinal: 1),
-            "Model {{B}} #1")
+                                       presetDisplayName: "Model {B}"),
+            "Model {{B}} {machine-ordinal}")
     }
 
     func testEscapingBracesDoublesBoth() {

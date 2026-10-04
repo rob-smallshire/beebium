@@ -749,14 +749,14 @@ class PresetManager: ObservableObject {
         // nothing needs handing back, because numbers are never reused.
         //
         // The name is a template: the preset's own `machine_name` when it has
-        // one, otherwise its display name with braces escaped, plus this
-        // launch's ordinal as literal text. The server renders the placeholders
-        // (e.g. {econet-station}) and re-renders them as that state changes.
+        // one, otherwise its display name with braces escaped, ending in the
+        // {machine-ordinal} placeholder. The server renders the placeholders
+        // (e.g. {econet-station}, {machine-ordinal}) and re-renders them as that
+        // state changes; the ordinal's value is supplied below.
         let ordinal = nameSequence.nextOrdinal(forPreset: preset.name)
         let machineName = MachineLaunchName.template(
             presetMachineName: preset.machineName,
-            presetDisplayName: preset.name,
-            ordinal: ordinal)
+            presetDisplayName: preset.name)
 
         var arguments = [
             "start",
@@ -765,6 +765,7 @@ class PresetManager: ObservableObject {
             "--advertise",
             "--wait=api",
             "--machine-name", machineName,
+            "--machine-ordinal", "\(ordinal)",
             "--provenance-type", "macos-gui",
             "--provenance-uuid", provenanceUUID
         ]
