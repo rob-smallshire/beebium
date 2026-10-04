@@ -23,6 +23,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/presets/bbc-model-b.preset.beebium",
             source: .systemPreset,
+            machineName: nil,
             modelName: "BBC Model B",
             modelDescription: "The original BBC Micro",
             releaseDate: "1981-12",
@@ -41,6 +42,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/user/presets/my-custom-setup.preset.beebium",
             source: .userPreset,
+            machineName: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
             releaseDate: nil,
@@ -60,6 +62,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/presets/bbc-model-b.preset.beebium",
             source: .systemPreset,
+            machineName: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
             releaseDate: nil,
@@ -72,6 +75,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/different/path",
             presetFilepath: "/different/path/preset.preset.beebium",
             source: .userPreset,
+            machineName: nil,
             modelName: "Different Model",
             modelDescription: nil,
             releaseDate: nil,
@@ -90,6 +94,7 @@ final class MachinePresetTests: XCTestCase {
             coreExecutablePath: "/path/to/beebium-model-b",
             presetFilepath: "/path/to/presets/bbc-model-b.preset.beebium",
             source: .systemPreset,
+            machineName: nil,
             modelName: "BBC Model B",
             modelDescription: nil,
             releaseDate: nil,
@@ -116,8 +121,24 @@ final class PresetFileDataTests: XCTestCase {
 
         XCTAssertEqual(preset.model, "model-b")
         XCTAssertNil(preset.name)
+        XCTAssertNil(preset.machineName)
         XCTAssertNil(preset.description)
         XCTAssertNil(preset.releaseDate)
+    }
+
+    func testDecodeMachineNameTemplate() throws {
+        let json = """
+        {
+            "model": "model-b",
+            "name": "Station 80 (AUN, Model B)",
+            "machine_name": "Station {econet-station} (AUN, Model B)"
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let preset = try JSONDecoder().decode(PresetFileData.self, from: data)
+
+        XCTAssertEqual(preset.machineName, "Station {econet-station} (AUN, Model B)")
     }
 
     func testDecodeFullPreset() throws {

@@ -15,11 +15,11 @@ import XCTest
 
 @MainActor
 final class MachineNameSequenceTests: XCTestCase {
-    func testNamesArePresetPlusOrdinal() {
+    func testOrdinalsCountUpPerPreset() {
         let names = MachineNameSequence()
 
-        XCTAssertEqual(names.next(forPreset: "BBC Model B"), "BBC Model B #1")
-        XCTAssertEqual(names.next(forPreset: "BBC Model B"), "BBC Model B #2")
+        XCTAssertEqual(names.nextOrdinal(forPreset: "BBC Model B"), 1)
+        XCTAssertEqual(names.nextOrdinal(forPreset: "BBC Model B"), 2)
     }
 
     func testEachPresetCountsSeparately() {
@@ -27,22 +27,22 @@ final class MachineNameSequenceTests: XCTestCase {
         // kind; sharing one counter would make the numbers say otherwise.
         let names = MachineNameSequence()
 
-        XCTAssertEqual(names.next(forPreset: "BBC Model B"), "BBC Model B #1")
-        XCTAssertEqual(names.next(forPreset: "BBC Model B (Disc)"), "BBC Model B (Disc) #1")
-        XCTAssertEqual(names.next(forPreset: "BBC Model B"), "BBC Model B #2")
-        XCTAssertEqual(names.next(forPreset: "BBC Model B (Disc)"), "BBC Model B (Disc) #2")
+        XCTAssertEqual(names.nextOrdinal(forPreset: "BBC Model B"), 1)
+        XCTAssertEqual(names.nextOrdinal(forPreset: "BBC Model B (Disc)"), 1)
+        XCTAssertEqual(names.nextOrdinal(forPreset: "BBC Model B"), 2)
+        XCTAssertEqual(names.nextOrdinal(forPreset: "BBC Model B (Disc)"), 2)
     }
 
     func testNumbersAreNeverReused() {
-        // Nothing hands a number back: a name that has been on screen should
+        // Nothing hands a number back: a number that has been on screen should
         // not reappear on a different machine later in the session.
         let names = MachineNameSequence()
-        var seen: Set<String> = []
+        var seen: Set<Int> = []
 
         for _ in 0..<50 {
-            let name = names.next(forPreset: "BBC Model B")
-            XCTAssertFalse(seen.contains(name), "reissued \(name)")
-            seen.insert(name)
+            let ordinal = names.nextOrdinal(forPreset: "BBC Model B")
+            XCTAssertFalse(seen.contains(ordinal), "reissued \(ordinal)")
+            seen.insert(ordinal)
         }
         XCTAssertEqual(seen.count, 50)
     }
@@ -50,9 +50,54 @@ final class MachineNameSequenceTests: XCTestCase {
     func testANewSessionStartsAgainAtOne() {
         // Counters are per run of the app and not persisted, so a fresh
         // sequence -- as a relaunch creates -- begins at #1.
-        XCTAssertEqual(MachineNameSequence().next(forPreset: "BBC Model B"),
-                       "BBC Model B #1")
-        XCTAssertEqual(MachineNameSequence().next(forPreset: "BBC Model B"),
-                       "BBC Model B #1")
+        XCTAssertEqual(MachineNameSequence().nextOrdinal(forPreset: "BBC Model B"), 1)
+        XCTAssertEqual(MachineNameSequence().nextOrdinal(forPreset: "BBC Model B"), 1)
+    }
+}
+
+final class MachineLaunchNameTests: XCTestCase {
+    func testPlainDisplayNameGainsOrdinal() {
+        // No preset machine_name: the display name is the template, and the
+        // ordinal is literal text appended after it.
+        XCTAssertEqual(
+            MachineLaunchName.template(presetMachineName: nil,
+                                       presetDisplayName: "BBC Model B",
+                                       ordinal: 2),
+            "BBC Model B #2")
+    }
+
+    func testEmptyMachineNameFallsBackToDisplayName() {
+        // An empty machine_name is treated as absent.
+        XCTAssertEqual(
+            MachineLaunchName.template(presetMachineName: "",
+                                       presetDisplayName: "BBC Model B",
+                                       ordinal: 1),
+            "BBC Model B #1")
+    }
+
+    func testPresetMachineNameTemplateIsUsedVerbatim() {
+        // A preset's own template carries placeholders the server will render;
+        // the app passes it through unchanged but for the appended ordinal.
+        XCTAssertEqual(
+            MachineLaunchName.template(
+                presetMachineName: "Station {econet-station} (AUN, Model B)",
+                presetDisplayName: "Station 80 (AUN, Model B)",
+                ordinal: 3),
+            "Station {econet-station} (AUN, Model B) #3")
+    }
+
+    func testBracesInADisplayNameAreEscaped() {
+        // A literal name containing braces must not be read as a placeholder,
+        // so the braces are doubled.
+        XCTAssertEqual(
+            MachineLaunchName.template(presetMachineName: nil,
+                                       presetDisplayName: "Model {B}",
+                                       ordinal: 1),
+            "Model {{B}} #1")
+    }
+
+    func testEscapingBracesDoublesBoth() {
+        XCTAssertEqual(MachineLaunchName.escapingBraces("a{b}c"), "a{{b}}c")
+        XCTAssertEqual(MachineLaunchName.escapingBraces("no braces"), "no braces")
     }
 }

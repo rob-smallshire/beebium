@@ -33,6 +33,10 @@ struct MachinePreset: Identifiable, Hashable {
     /// Path to the preset file on disk
     let presetFilepath: String
     let source: Source
+    /// The preset's own `machine_name` template, if it declares one (e.g.
+    /// "Station {econet-station} (AUN, Model B)"). nil when the preset has none,
+    /// in which case the launcher builds a template from the display name.
+    let machineName: String?
     let modelName: String
     let modelDescription: String?
     /// Release date for sorting, format: YYYY, YYYY-MM, or YYYY-MM-DD

@@ -147,6 +147,7 @@ class PresetManager: ObservableObject {
             coreExecutablePath: executablePath,
             presetFilepath: presetFilepath,
             source: source,
+            machineName: presetData.machineName,
             modelName: schema.model.name,
             modelDescription: presetData.description ?? schema.model.description,
             releaseDate: presetData.releaseDate,
@@ -746,7 +747,16 @@ class PresetManager: ObservableObject {
         //
         // A number that fails to become a running machine is simply skipped;
         // nothing needs handing back, because numbers are never reused.
-        let machineName = nameSequence.next(forPreset: preset.name)
+        //
+        // The name is a template: the preset's own `machine_name` when it has
+        // one, otherwise its display name with braces escaped, plus this
+        // launch's ordinal as literal text. The server renders the placeholders
+        // (e.g. {econet-station}) and re-renders them as that state changes.
+        let ordinal = nameSequence.nextOrdinal(forPreset: preset.name)
+        let machineName = MachineLaunchName.template(
+            presetMachineName: preset.machineName,
+            presetDisplayName: preset.name,
+            ordinal: ordinal)
 
         var arguments = [
             "start",

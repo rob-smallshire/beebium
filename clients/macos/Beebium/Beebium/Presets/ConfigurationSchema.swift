@@ -53,6 +53,10 @@ struct PresetFileData: Codable {
     let model: String
     /// Optional display name (if absent, use name from executable's schema)
     let name: String?
+    /// Optional name template (e.g. "Station {econet-station} (AUN, Model B)").
+    /// The server treats `--machine-name` and this as templates; the app reads
+    /// it so a launched machine inherits the preset author's placeholders.
+    let machineName: String?
     /// Optional description (if absent, use description from executable's schema)
     let description: String?
     /// Release date for sorting, format: YYYY, YYYY-MM, or YYYY-MM-DD
@@ -62,6 +66,7 @@ struct PresetFileData: Codable {
 
     enum CodingKeys: String, CodingKey {
         case model, name, description
+        case machineName = "machine_name"
         case releaseDate = "release_date"
         case sidewaysBank = "sideways_bank"
     }
