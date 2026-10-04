@@ -261,6 +261,7 @@ public:
 
         uint16_t data;  // 12-bit expanded font row
         bool flashing;  // hidden by flash in this cell's phase
+        bool concealed;
 
         if (value < 32) {
             // Control code - display as space (or held graphics)
@@ -275,8 +276,14 @@ public:
             // that STEADY is Set-At: its own cell is already steady.
             flashing = !m_text_visible && value != 0x09;
 
+            // A colour code ends concealment only after its own cell, which
+            // stays concealed; CONCEAL conceals its own cell too.
+            const bool concealed_before = m_conceal;
+
             // Process control code (may modify data for hold graphics)
             process_control_code(value, data);
+
+            concealed = concealed_before || m_conceal;
 
             if (flashing) {
                 data = 0;
@@ -306,14 +313,15 @@ public:
             }
 
             flashing = !m_text_visible;
-            data = flashing || m_conceal ? 0 : glyph;
+            concealed = m_conceal;
+            data = flashing || concealed ? 0 : glyph;
         }
 
         if (!dispen) {
             data = 0;
         }
 
-        capture_cell(value, dispen, cursor, fg, flashing);
+        capture_cell(value, dispen, cursor, fg, flashing, concealed);
 
         // Write 2 Output entries: left 6 bits and right 6 bits
         Output* output = &m_output[m_write_index & 7];
@@ -503,7 +511,8 @@ private:
     // start at different rasters, so a raster == 0 guard would silently capture
     // nothing on alternate fields. Correctness first; the writes are small and
     // land in cache.
-    void capture_cell(uint8_t value, uint8_t dispen, bool cursor, uint8_t fg, bool flashing) {
+    void capture_cell(uint8_t value, uint8_t dispen, bool cursor, uint8_t fg, bool flashing,
+                      bool concealed) {
         if (!m_teletext_grid || !dispen) {
             return;
         }
@@ -527,7 +536,7 @@ private:
         TeletextCell cell;
         cell.fg = fg;
         cell.bg = m_bg;
-        cell.concealed = m_conceal;
+        cell.concealed = concealed;
         cell.flashing = flashing;
         cell.cursor = cursor;
         cell.double_height_top = (m_raster_shift == 1 && m_raster_offset == 0);
@@ -613,8 +622,10 @@ private:
                 break;
 
             case 0x18:
-                // Conceal Display
+                // Conceal Display: Set-At, so a held mosaic in this cell is
+                // concealed too.
                 m_conceal = true;
+                data = 0;
                 break;
 
             case 0x19:

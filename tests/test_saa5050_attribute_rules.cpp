@@ -305,6 +305,26 @@ TEST_CASE("V5: a held mosaic flashes in control-code cells after FLASH",
     }
 }
 
+// --- Conceal (R8, R9, R10; study defect 6.4) -------------------------------
+
+TEST_CASE("V6: CONCEAL hides the held mosaic in its own cell",
+          "[saa5050][attributes][hold][conceal]") {
+    SECTION("concealed") {
+        // CONCEAL is Set-At. The colour code that ends it is Set-After, so
+        // its own cell is still concealed; the held memory survives.
+        check_row(render_row({GRAPHICS_WHITE, BLOCK, HOLD, CONCEAL, BLACK_BACKGROUND,
+                              GRAPHICS_WHITE, BLACK_BACKGROUND}),
+                  {blank(), block(W), block(W), blank(), blank(), blank(), block(W)});
+    }
+    SECTION("revealed") {
+        // The BBC has no reveal in hardware: software rewrites CONCEAL as
+        // ESC, which the chip ignores.
+        check_row(render_row({GRAPHICS_WHITE, BLOCK, HOLD, ESCAPE, BLACK_BACKGROUND,
+                              GRAPHICS_WHITE, BLACK_BACKGROUND}),
+                  {blank(), block(W), block(W), block(W), block(W), block(W), block(W)});
+    }
+}
+
 // --- What the held memory holds and what clears it (R14, R15, R16) ---------
 
 TEST_CASE("V7: a control code displayed while hold is off clears the held memory",
@@ -465,3 +485,15 @@ TEST_CASE("The grid records flashing from the cell after FLASH and steady at STE
     }
 }
 
+TEST_CASE("The grid records concealment from CONCEAL to the colour code that ends it",
+          "[saa5050][attributes][hold][grid][conceal]") {
+    TeletextGrid grid;
+    render({{GRAPHICS_WHITE, BLOCK, HOLD, CONCEAL, BLACK_BACKGROUND, GRAPHICS_WHITE,
+             BLACK_BACKGROUND}},
+           Flash::Visible, &grid);
+    CHECK_FALSE(grid.cell(0, 2).concealed);
+    CHECK(grid.cell(0, 3).concealed);
+    CHECK(grid.cell(0, 4).concealed);
+    CHECK(grid.cell(0, 5).concealed);
+    CHECK_FALSE(grid.cell(0, 6).concealed);
+}
