@@ -387,12 +387,15 @@ TEST_CASE("SAA5050 start_of_line resets state", "[saa5050][mode7][state]") {
 TEST_CASE("SAA5050 vsync resets frame state", "[saa5050][mode7][sync]") {
     Saa5050 chip;
 
-    SECTION("vsync resets raster") {
-        chip.set_raster(10);
-        CHECK(chip.raster() == 10);
+    SECTION("the end of vsync starts the field on its first line") {
+        for (int i = 0; i < 5; ++i) {
+            chip.end_of_line();
+        }
+        CHECK(chip.line() == 5);
 
         chip.vsync();
-        CHECK(chip.raster() == 0);
+        chip.end_of_vsync();
+        CHECK(chip.line() == 0);
     }
 }
 
@@ -761,9 +764,13 @@ TEST_CASE("SAA5050 sixel graphics patterns", "[saa5050][mode7][graphics]") {
         chip.reset();
 
         // Test at different rasters (top, middle, bottom of character)
-        for (int raster : {1, 4, 8}) {
+        for (int line : {1, 4, 8}) {
+            chip.vsync();
+            chip.end_of_vsync();
+            for (int i = 0; i < line; ++i) {
+                chip.end_of_line();
+            }
             chip.start_of_line();
-            chip.set_raster(raster);
 
             // Enter graphics mode and feed graphics char
             chip.byte(0x11, 1);  // Graphics red
@@ -1563,22 +1570,25 @@ TEMPLATE_TEST_CASE("MODE 7 hold graphics mode", "[mode7][hold][golden]",
 // VideoRenderer Integration Tests (no ROMs required)
 // ============================================================================
 
-TEST_CASE("SAA5050 raster from CRTC is used", "[saa5050][mode7][integration]") {
+TEST_CASE("SAA5050 glyph line comes from its own line count and CRS",
+          "[saa5050][mode7][integration]") {
+    // Of the 6845's row address the chip sees only RA0, on CRS. The font line
+    // is the chip's own count of displayed lines since the end of VSYNC.
     Saa5050 chip;
 
-    SECTION("set_raster affects glyph row selection") {
-        chip.start_of_line();
+    SECTION("CRS selects between a font line and its rounded partner") {
+        chip.set_crs(false);
+        CHECK(chip.glyph_line() == 0);
+        chip.set_crs(true);
+        CHECK(chip.glyph_line() == 1);
+    }
 
-        // At raster 0-1, should use font row 0
-        chip.set_raster(0);
-        CHECK(chip.raster() == 0);
-
-        chip.set_raster(1);
-        CHECK(chip.raster() == 1);
-
-        // At raster 18-19, should use font row 9
-        chip.set_raster(18);
-        CHECK(chip.raster() == 18);
+    SECTION("the last line of the character is font row 9") {
+        for (int i = 0; i < 9; ++i) {
+            chip.end_of_line();
+        }
+        chip.set_crs(false);
+        CHECK(chip.glyph_line() == 18);
     }
 }
 

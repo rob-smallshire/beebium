@@ -147,14 +147,18 @@ public:
 
 private:
     void render_teletext(PixelBatch& batch, const Crtc6845::Output& crtc_output, uint8_t screen_byte) {
-        // Handle VSYNC rising edge
+        // VSYNC drives the SAA5050's DEW: the leading edge ends a field, the
+        // trailing edge starts the next one on its first character row.
         if (crtc_output.vsync && !last_vsync_) {
             hardware_.saa5050.vsync();
             teletext_column_ = 0;
         }
+        if (!crtc_output.vsync && last_vsync_) {
+            hardware_.saa5050.end_of_vsync();
+        }
 
-        // Pass CRTC raster to SAA5050
-        hardware_.saa5050.set_raster(crtc_output.raster);
+        // RA0 drives the SAA5050's CRS; the chip counts its own glyph lines.
+        hardware_.saa5050.set_crs((crtc_output.raster & 1) != 0);
 
         // Start of display area - reset per-line state
         if (crtc_output.display && teletext_column_ == 0) {

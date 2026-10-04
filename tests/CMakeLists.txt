@@ -1155,6 +1155,14 @@ target_compile_definitions(test_mode7 PRIVATE
 )
 catch_discover_tests(test_mode7)
 
+# SAA5050 line counter: whole glyphs and row capture whatever the 6845 interlace
+add_executable(test_saa5050_line_counter test_saa5050_line_counter.cpp)
+target_link_libraries(test_saa5050_line_counter PRIVATE beebium_core Catch2::Catch2WithMain)
+target_compile_definitions(test_saa5050_line_counter PRIVATE
+    BEEBIUM_ROM_DIR="${BEEBIUM_ROM_DIR}"
+)
+catch_discover_tests(test_saa5050_line_counter)
+
 # Bitmap modes (0-6) diagnostic tests
 add_executable(test_bitmap_modes test_bitmap_modes.cpp)
 target_link_libraries(test_bitmap_modes PRIVATE beebium_core Catch2::Catch2WithMain)

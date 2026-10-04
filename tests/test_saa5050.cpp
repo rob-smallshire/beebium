@@ -68,18 +68,19 @@ TEST_CASE("SAA5050 construction and reset", "[saa5050]") {
         CHECK(chip.foreground() == 7);
         CHECK(chip.background() == 0);
         CHECK(chip.charset() == TeletextCharset::Alpha);
-        CHECK(chip.raster() == 0);
+        CHECK(chip.line() == 0);
     }
 
     SECTION("reset restores default state") {
         // Modify state
         chip.vsync();  // Increments frame counter
+        chip.end_of_line();  // Advances the line count
 
         // Reset should restore defaults
         chip.reset();
         CHECK(chip.foreground() == 7);
         CHECK(chip.background() == 0);
-        CHECK(chip.raster() == 0);
+        CHECK(chip.line() == 0);
     }
 }
 
@@ -94,23 +95,46 @@ TEST_CASE("SAA5050 line management", "[saa5050]") {
         CHECK(chip.charset() == TeletextCharset::Alpha);
     }
 
-    SECTION("set_raster updates raster") {
-        chip.start_of_line();
-        CHECK(chip.raster() == 0);
-
-        chip.set_raster(5);
-        CHECK(chip.raster() == 5);
-
-        chip.set_raster(18);
-        CHECK(chip.raster() == 18);
+    SECTION("the end of each displayed line advances the line count") {
+        // LOSE's trailing edge, not the 6845's row address, moves the chip
+        // down the character.
+        CHECK(chip.line() == 0);
+        chip.end_of_line();
+        CHECK(chip.line() == 1);
+        for (int i = 0; i < 4; ++i) {
+            chip.end_of_line();
+        }
+        CHECK(chip.line() == 5);
     }
 
-    SECTION("vsync resets raster to 0") {
-        chip.set_raster(10);
-        CHECK(chip.raster() == 10);
+    SECTION("a character row is ten lines") {
+        for (int i = 0; i < Saa5050::ROW_LINES - 1; ++i) {
+            chip.end_of_line();
+        }
+        CHECK(chip.line() == 9);
+        chip.end_of_line();
+        CHECK(chip.line() == 0);
+    }
 
+    SECTION("CRS picks the rounded partner of the font line") {
+        // Glyph line 2 x line + CRS of the twenty in the expanded font.
+        chip.end_of_line();
+        chip.end_of_line();
+        chip.set_crs(false);
+        CHECK(chip.glyph_line() == 4);
+        chip.set_crs(true);
+        CHECK(chip.glyph_line() == 5);
+    }
+
+    SECTION("the end of VSYNC clears the line count") {
+        // DEW's trailing edge starts the field on its first character row.
+        for (int i = 0; i < 3; ++i) {
+            chip.end_of_line();
+        }
         chip.vsync();
-        CHECK(chip.raster() == 0);
+        CHECK(chip.line() == 3);  // the leading edge leaves the count alone
+        chip.end_of_vsync();
+        CHECK(chip.line() == 0);
     }
 }
 
@@ -146,9 +170,9 @@ TEST_CASE("SAA5050 renders space character", "[saa5050][render]") {
 TEST_CASE("SAA5050 renders alpha character A", "[saa5050][render]") {
     Saa5050 chip;
 
-    // Test at font row 2 where 'A' has pixels (row 0 is blank for most characters)
-    // With m_raster_shift=0, glyph_raster = raster directly
-    chip.set_raster(2);  // raster = 2 (font row 2)
+    // Draw glyph line 2 -- font row 1, where 'A' has pixels (row 0 is blank
+    // for most characters): one displayed line down the character, CRS low.
+    chip.end_of_line();
     chip.start_of_line();
 
     // Each byte() writes 2 entries (left half, right half)
@@ -199,8 +223,6 @@ TEST_CASE("SAA5050 emit_pixels basic output", "[saa5050][render]") {
     // Each byte() writes 2 entries (left and right halves)
     // So 2 byte() calls fill 4 entries, and 4 byte() calls fill all 8
 
-    // Test set_raster to verify it updates raster value
-    CHECK(chip.raster() == 0);
-    chip.set_raster(5);
-    CHECK(chip.raster() == 5);
+    // A fresh chip draws the first glyph line of the character.
+    CHECK(chip.glyph_line() == 0);
 }

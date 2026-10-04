@@ -190,14 +190,35 @@ inline uint16_t TeletextFontInit::get_aa_row(TeletextCharset charset, uint8_t ch
 }
 
 // SAA5050 Teletext character generator chip
+//
+// The chip keeps its own count of which of a character's ten lines it is
+// drawing; it never sees the 6845's row address apart from RA0. On the BBC
+// Micro three 6845 outputs drive that count:
+//
+//   DEW  <- VSYNC    the trailing edge clears the line count and starts the
+//                    first character row (and the top half of double height)
+//   LOSE <- DISPTMG  the trailing edge, at the end of each displayed line,
+//                    advances the line count; the tenth ends the character row
+//   CRS  <- RA0      selects a glyph line's rounded partner, which is how the
+//                    two interlaced fields draw the in-between lines
+//
+// So a character row is ten displayed lines whatever R9 says, and the glyph
+// line drawn is 2 x line + CRS of the twenty in the expanded font. With the
+// standard interlace sync and video (R9=18, RA 0,2,..18 or 1,3,..19) that is
+// exactly the row address; with the interlace off (R9=9, RA 0..9) it still
+// walks all ten font lines rather than the top half of them.
 class Saa5050 {
 public:
+    // Lines in a character row, counted by the chip.
+    static constexpr uint8_t ROW_LINES = 10;
+
     Saa5050() {
         reset();
     }
 
     void reset() {
-        m_raster = 0;
+        m_line = 0;
+        m_crs = false;
         m_frame = 0;
         m_fg = 7;
         m_bg = 0;
@@ -220,31 +241,8 @@ public:
         std::memset(m_output, 0, sizeof(m_output));
     }
 
-    // Set the current raster (scanline within character row) from CRTC
-    // This should be called each tick with the CRTC's raster output
-    void set_raster(uint8_t raster) {
-        // Detect character row completion: when raster wraps from high to low
-        // In interlace mode, raster goes 0,2,4...18 then wraps to 0 (or 1 for even field)
-        // Threshold of 10 detects the wrap reliably
-        if (m_raster >= 10 && raster < 10) {
-            // We've completed a character row - handle double-height transition
-            // A character row has completed, so subsequent cells belong to the
-            // next row of the grid.
-            ++m_capture_row;
-
-            if (m_any_double_height) {
-                if (m_raster_offset == 0) {
-                    // Transition from top half to bottom half
-                    m_raster_offset = 20;
-                } else {
-                    // Transition from bottom half back to top
-                    m_raster_offset = 0;
-                    m_any_double_height = false;
-                }
-            }
-        }
-        m_raster = raster;
-    }
+    // CRS (character rounding select), from the 6845's RA0. Call each tick.
+    void set_crs(bool level) { m_crs = level; }
 
     // Feed a byte from screen memory (character code or control code)
     // dispen: 1 if display is enabled, 0 for blanking
@@ -271,7 +269,7 @@ public:
             }
         } else {
             // Display character using pre-computed expanded AA font
-            uint8_t glyph_raster = (m_raster + m_raster_offset) >> m_raster_shift;
+            uint8_t glyph_raster = (glyph_line() + m_raster_offset) >> m_raster_shift;
 
             if (glyph_raster < 20 && m_text_visible && !m_conceal) {
                 // Use pre-computed expanded AA font
@@ -362,7 +360,7 @@ public:
         m_read_index = (m_read_index + 1) & 7;
     }
 
-    // Called at start of each scanline
+    // LOSE leading edge: the start of a displayed line.
     void start_of_line() {
         m_capture_column = 0;
         m_conceal = false;
@@ -381,25 +379,52 @@ public:
         std::memset(m_output, 0, sizeof(m_output));
     }
 
-    // Called at end of each scanline
+    // LOSE trailing edge: the end of a displayed line. Advances the line
+    // count; the tenth line ends the character row, so the cells that follow
+    // belong to the next row of the grid, and a row that asked for double
+    // height is followed by its bottom half.
     void end_of_line() {
         m_bg = 0;
-        // Double-height transition is handled in set_raster() when raster wraps
+
+        if (++m_line < ROW_LINES) {
+            return;
+        }
+        m_line = 0;
+        ++m_capture_row;
+
+        if (m_any_double_height) {
+            if (m_raster_offset == 0) {
+                // Transition from top half to bottom half
+                m_raster_offset = 20;
+            } else {
+                // Transition from bottom half back to top
+                m_raster_offset = 0;
+                m_any_double_height = false;
+            }
+        }
     }
 
-    // Called at vertical sync
+    // DEW leading edge: a field has ended. Publishes the captured page and
+    // steps the flash cycle.
     void vsync() {
         if (m_teletext_grid) {
             m_teletext_grid->swap();
         }
         m_capture_row = 0;
         m_display_started = false;
-        m_raster = 0;
         ++m_frame;
         if (m_frame >= 64) {
             m_frame = 0;
         }
         m_frame_flash_visible = m_frame >= 16;
+    }
+
+    // DEW trailing edge: the next field begins on the first line of its first
+    // character row, in the top half of any double height. Clearing here
+    // rather than on the leading edge keeps the count in step even when lines
+    // are displayed during VSYNC.
+    void end_of_vsync() {
+        m_line = 0;
         m_any_double_height = false;
         m_raster_offset = 0;
     }
@@ -416,7 +441,14 @@ public:
     // State accessors
     [[nodiscard]] uint8_t foreground() const { return m_fg; }
     [[nodiscard]] uint8_t background() const { return m_bg; }
-    [[nodiscard]] uint8_t raster() const { return m_raster; }
+    // The chip's own line within the character row, 0-9.
+    [[nodiscard]] uint8_t line() const { return m_line; }
+    [[nodiscard]] bool crs() const { return m_crs; }
+    // The line of the twenty-line expanded glyph being drawn: each font line
+    // and its rounded partner, the partner chosen by CRS.
+    [[nodiscard]] uint8_t glyph_line() const {
+        return static_cast<uint8_t>(2 * m_line + (m_crs ? 1 : 0));
+    }
     [[nodiscard]] TeletextCharset charset() const { return m_charset; }
     [[nodiscard]] bool is_flash_enabled() const { return !m_text_visible; }
 
@@ -448,15 +480,13 @@ private:
             return;
         }
 
-        // set_raster() advances m_capture_row on every character-row wrap,
-        // whether or not display is enabled, so the vertical-border rows between
-        // vsync and the first displayed row leave it counting from the top of
-        // the frame rather than the top of the picture. The renderer, by
-        // contrast, resets its write position when display enable rises, so the
-        // pixels of the first displayed row land at grid row 0. Snap the capture
-        // row back to zero at the first displayed cell of the frame so the
-        // captured grid and the rendered pixels agree on which row is which --
-        // otherwise every cell is recorded a few rows below where it was drawn.
+        // end_of_line() advances m_capture_row on every tenth displayed line,
+        // so the count need not be zero when the first teletext cell of the
+        // frame is drawn. The renderer resets its write
+        // position when display enable rises, so the pixels of the first
+        // displayed row land at grid row 0. Snap the capture row back to zero at
+        // the first displayed cell of the frame so the captured grid and the
+        // rendered pixels agree on which row is which.
         if (!m_display_started) {
             m_capture_row = 0;
             m_display_started = true;
@@ -645,8 +675,10 @@ private:
     uint8_t m_write_index = 0;  // No pipeline delay
     uint8_t m_read_index = 0;
 
-    // Raster state
-    uint8_t m_raster = 0;
+    // Line timing: the chip's own line within the character row (0-9),
+    // cleared by DEW and advanced by LOSE, and CRS from the 6845's RA0.
+    uint8_t m_line = 0;
+    bool m_crs = false;
     uint8_t m_frame = 0;
 
     // Current colors

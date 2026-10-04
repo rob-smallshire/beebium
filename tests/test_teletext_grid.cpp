@@ -275,8 +275,9 @@ TEST_CASE("Double height marks the top half on the row that carries it",
 TEST_CASE("Double height marks the bottom half on the next row",
           "[teletext-grid][attributes]") {
     // The bottom half is drawn on the following display row with the raster
-    // offset engaged. Drive the row wrap directly -- set_raster advances the
-    // capture row and toggles the offset -- since there is no CRTC here.
+    // offset engaged. Drive the row wrap directly -- the tenth end_of_line()
+    // advances the capture row and toggles the offset -- since there is no
+    // CRTC here.
     Saa5050 saa;
     TeletextGrid grid;
     saa.set_teletext_grid(&grid);
@@ -284,10 +285,11 @@ TEST_CASE("Double height marks the bottom half on the next row",
     saa.byte(0x0D, /*dispen=*/1);  // double height, at (0,0)
     saa.byte('D', /*dispen=*/1);   // top half, at (0,1)
 
-    // A character row completes: raster climbs past the wrap threshold and
-    // drops back, which advances the capture row and engages the offset.
-    saa.set_raster(15);
-    saa.set_raster(0);
+    // A character row completes after ten displayed lines, which advances
+    // the capture row and engages the offset.
+    for (int i = 0; i < Saa5050::ROW_LINES; ++i) {
+        saa.end_of_line();
+    }
 
     saa.byte('D', /*dispen=*/1);   // bottom half, on the new row
     saa.vsync();

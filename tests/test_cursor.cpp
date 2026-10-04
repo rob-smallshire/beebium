@@ -1169,8 +1169,10 @@ TEST_CASE("SAA5050 cursor XOR output", "[video][cursor][saa5050]") {
     // characters to see cursor output after the delay
     for (int cursor_col = 0; cursor_col < 8; ++cursor_col) {
         saa.reset();
+        for (int i = 0; i < 5; ++i) {
+            saa.end_of_line();  // Middle of character row
+        }
         saa.start_of_line();
-        saa.set_raster(10);  // Middle of character row
 
         // Process characters up to and including cursor position + pipeline delay
         // Pipeline delay is 4 characters
