@@ -430,6 +430,23 @@ TEST_CASE("V15: flashing text is hidden for 16 fields of every 64",
     }
 }
 
+// --- Glyphs (R21; study defect 6.5) ----------------------------------------
+
+TEST_CASE("V16: the 3/4 glyph matches the chip", "[saa5050][attributes][font]") {
+    // As captured from a real BBC: the strokes of the 3 sit in dots 1-3.
+    const char* const want[10] = {
+        "......", ".XX...", "...X..", ".XX...", "...X..",
+        ".XX..X", "....XX", "...X.X", "...XXX", ".....X",
+    };
+    for (int line = 0; line < 10; ++line) {
+        std::string got;
+        const uint8_t bits = TELETEXT_FONT_REVERSED[0x7D - 32][line];
+        for (int dot = 0; dot < 6; ++dot) got += (bits >> dot) & 1 ? 'X' : '.';
+        INFO("font line " << line);
+        CHECK(got == want[line]);
+    }
+}
+
 // --- Codes the chip ignores (R20) ------------------------------------------
 
 TEST_CASE("V17: box, shift, DLE, ESC and NUL change nothing and show the held mosaic",

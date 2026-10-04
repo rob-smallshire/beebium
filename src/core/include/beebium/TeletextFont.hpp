@@ -1,4 +1,4 @@
-// Copyright 2025 Robert Smallshire <robert@smallshire.org.uk>
+// Copyright 2026 Robert Smallshire <robert@smallshire.org.uk>
 //
 // This file is part of Beebium.
 //
@@ -1241,11 +1241,11 @@ inline constexpr uint8_t TELETEXT_FONT_RAW[96][10] = {
     // 0x7D '3/4'
     {
         0b000000,
-        0b001100,
-        0b000010,
-        0b001100,
-        0b000010,
-        0b001101,
+        0b011000,
+        0b000100,
+        0b011000,
+        0b000100,
+        0b011001,
         0b000011,
         0b000101,
         0b000111,
