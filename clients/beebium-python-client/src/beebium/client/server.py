@@ -191,7 +191,8 @@ class ServerProcess:
             timeout: Maximum time to wait for the server to start (seconds).
 
         Raises:
-            ServerStartupError: If the server fails to start within timeout.
+            ServerStartupError: If the server exits before reporting ready, or
+                is not ready within timeout. The message says which.
         """
         if self._process is not None:
             raise ServerStartupError("Server is already running")
@@ -205,6 +206,7 @@ class ServerProcess:
         cmd = self._build_command()
 
         # Start the server process
+        started = time.monotonic()
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -215,14 +217,22 @@ class ServerProcess:
         # Wait for the server to be ready
         if not self._wait_for_ready(timeout):
             exit_code = self._process.poll() if self._process is not None else None
-            self.stop(timeout=1.0)  # joins the reader threads and reaps output
+            elapsed = time.monotonic() - started
+            # Joins the reader threads and reaps output. A death during startup
+            # is reported by the error below, not as a mid-session crash.
+            self._stop(timeout=1.0, report_unexpected_exit=False)
             stdout_output, stderr_output = self._captured_output()
 
-            # Build detailed error message
-            error_msg = f"Server failed to start within {timeout} seconds"
-            error_msg += f"\nCommand: {' '.join(cmd)}"
+            # Say first whether the server died or merely never became ready:
+            # an instant death must not read as a timeout.
             if exit_code is not None:
-                error_msg += f"\nServer exited with {self._describe_exit(exit_code)}"
+                error_msg = (
+                    f"Server exited during startup after {elapsed:.2f} s with "
+                    f"{self._describe_exit(exit_code)}, before reporting ready"
+                )
+            else:
+                error_msg = f"Server failed to start within {timeout} seconds"
+            error_msg += f"\nCommand: {' '.join(cmd)}"
             if stderr_output:
                 error_msg += f"\nServer stderr:\n{stderr_output}"
             if stdout_output:
@@ -240,6 +250,9 @@ class ServerProcess:
         Args:
             timeout: Maximum time to wait for graceful shutdown (seconds).
         """
+        self._stop(timeout, report_unexpected_exit=True)
+
+    def _stop(self, timeout: float, *, report_unexpected_exit: bool) -> None:
         proc = self._process
         if proc is None:
             return
@@ -271,7 +284,7 @@ class ServerProcess:
         self.last_exit_code = proc.returncode
         self._process = None
 
-        if died_unexpectedly:
+        if died_unexpectedly and report_unexpected_exit:
             self._report_unexpected_exit(proc.returncode)
 
     def _start_readers(self) -> None:

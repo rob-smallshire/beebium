@@ -29,7 +29,7 @@ import time
 
 import pytest
 
-from beebium.client.exceptions import ServerNotFoundError
+from beebium.client.exceptions import ServerNotFoundError, ServerStartupError
 from beebium.client.server import ServerProcess
 
 # The crash path is exercised with POSIX signal semantics.
@@ -89,3 +89,42 @@ def test_clean_shutdown_is_not_reported_as_a_crash(capsys, mos_filepath, basic_f
     server.start()
     server.stop()
     assert "exited unexpectedly" not in capsys.readouterr().err
+
+
+def _fake_server(tmp_path, body: str) -> ServerProcess:
+    """A stand-in server executable that behaves as the shell `body` says."""
+    script = tmp_path / "beebium-model-b"
+    script.write_text(f"#!/bin/sh\n{body}\n")
+    script.chmod(0o755)
+    return ServerProcess(server=script)
+
+
+def test_a_server_that_dies_during_startup_is_reported_as_dying(tmp_path, capsys):
+    """An instant death is an exit, not a timeout: the message says so first."""
+    server = _fake_server(tmp_path, "echo dying >&2; kill -PIPE $$")
+    started = time.monotonic()
+    with pytest.raises(ServerStartupError) as excinfo:
+        server.start(timeout=10.0)
+    assert time.monotonic() - started < 5.0
+
+    message = str(excinfo.value)
+    assert message.startswith("Server exited during startup after ")
+    assert "with signal 13 (SIGPIPE), before reporting ready" in message.splitlines()[0]
+    assert "within" not in message
+    assert "dying" in message  # the server's own stderr is still attached
+    # The startup error is the report; no second, mid-session one.
+    assert "mid-session" not in capsys.readouterr().err
+
+
+def test_a_server_that_exits_during_startup_gives_its_exit_code(tmp_path):
+    server = _fake_server(tmp_path, "exit 3")
+    with pytest.raises(ServerStartupError) as excinfo:
+        server.start(timeout=10.0)
+    assert "with code 3, before reporting ready" in str(excinfo.value).splitlines()[0]
+
+
+def test_a_server_that_never_becomes_ready_is_reported_as_a_timeout(tmp_path):
+    server = _fake_server(tmp_path, "exec sleep 30")
+    with pytest.raises(ServerStartupError) as excinfo:
+        server.start(timeout=0.5)
+    assert str(excinfo.value).startswith("Server failed to start within 0.5 seconds")
