@@ -151,7 +151,10 @@ server or ROMs with `--beebium-server` / `--beebium-rom-dir` (or the
 Importing `beebium.client` sets `GRPC_ENABLE_FORK_SUPPORT=false` unless it is
 already set. The client forks only to start processes, and grpcio's fork
 handlers, run in a child forked while a channel is busy, can kill that child
-before it starts. The setting must be made before grpc is first imported, so a
+before it starts. That happens only where a child really is forked -- on macOS,
+or on Linux with a `preexec_fn` or `os.fork()`, since Linux `subprocess`
+otherwise uses `vfork()`, which runs no fork handlers -- but the setting is made
+everywhere. The setting must be made before grpc is first imported, so a
 program that imports grpc itself, or another gRPC-based library, before
 `beebium.client` should set the variable in its environment.
 

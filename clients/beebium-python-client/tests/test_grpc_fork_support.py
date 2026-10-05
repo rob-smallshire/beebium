@@ -13,9 +13,10 @@
 """gRPC fork support is off unless a program asks for it.
 
 The client forks only to exec at once, and never uses gRPC in a child. With
-grpcio's fork support on, every fork made while a channel is busy runs gRPC's
-fork handlers in the still-Python child, which on the macOS x86_64 CI lane
-killed children with SIGPIPE before they could exec. The package turns the
+grpcio's fork support on, every real fork() made while a channel is busy runs
+gRPC's fork handlers in the still-Python child, which on the macOS x86_64 CI
+lane killed children with SIGPIPE before they could exec. (Linux subprocess
+uses vfork(), which runs no fork handlers, unless a preexec_fn forces a fork.) The package turns the
 support off before anything imports grpc, by whichever path it is entered.
 
 Each check runs in a fresh interpreter: once grpc is imported the setting is
@@ -119,9 +120,15 @@ def test_the_pytest_plugin_entry_point_turns_fork_support_off(tmp_path: Path) ->
 
 # Fork and exec repeatedly while a server stream is open, with gRPC's fork
 # tracing on, and count the lines its fork handlers log.
+#
+# The children must come from a real fork(). On Linux, subprocess starts a
+# child with vfork() where it safely can, and vfork runs no pthread_atfork
+# handlers, so gRPC's would stay silent whatever the setting and the tests
+# would prove nothing. A preexec_fn forces a real fork on every POSIX
+# platform; macOS forks anyway.
 FORK_WHILE_STREAMING = """
     import os, subprocess, threading, time
-    import beebium.client  # first, as any client program does
+    IMPORT_CLIENT
     import grpc
     from concurrent import futures
 
@@ -154,7 +161,10 @@ FORK_WHILE_STREAMING = """
     threading.Thread(target=drain, daemon=True).start()
     assert received.wait(10), "the stream never delivered"
 
-    codes = {subprocess.run(["/usr/bin/true"]).returncode for _ in range(50)}
+    def real_fork():
+        pass
+
+    codes = {subprocess.run(["/usr/bin/true"], preexec_fn=real_fork).returncode for _ in range(50)}
     assert codes == {0}, codes
 
     stream.cancel()
@@ -163,20 +173,26 @@ FORK_WHILE_STREAMING = """
 """
 
 
-def _fork_handler_lines(environment: dict[str, str]) -> list[str]:
-    environment.update(GRPC_TRACE="fork", GRPC_VERBOSITY="DEBUG")
-    result = _python(FORK_WHILE_STREAMING, environment)
+def _fork_handler_lines(*, import_client: bool) -> list[str]:
+    # The client is imported first, as any client program does; without it
+    # the probe runs with grpcio's own default.
+    code = FORK_WHILE_STREAMING.replace("IMPORT_CLIENT", "import beebium.client" if import_client else "pass")
+    environment = _environment(GRPC_TRACE="fork", GRPC_VERBOSITY="DEBUG")
+    result = _python(code, environment)
     assert result.returncode == 0, result.stderr
-    return [line for line in result.stderr.splitlines() if "fork" in line and "Tracers" not in line]
+    # Only gRPC core log lines ("file.cc:NNN] ..."), so a Python warning that
+    # mentions fork cannot pass for handler activity.
+    return [line for line in result.stderr.splitlines() if ".cc:" in line and "fork" in line and "Tracers" not in line]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows does not fork")
 def test_forking_while_streaming_runs_no_grpc_fork_handlers() -> None:
-    assert _fork_handler_lines(_environment()) == []
+    assert _fork_handler_lines(import_client=True) == []
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows does not fork")
-def test_with_fork_support_asked_for_the_fork_handlers_run() -> None:
-    # The control: the probe above can see fork-handler activity when there
-    # is some, so its silence means the handlers did not run.
-    assert _fork_handler_lines(_environment(**{VARIABLE: "true"})) != []
+def test_without_the_client_grpcs_default_runs_the_fork_handlers() -> None:
+    # The control, in the configuration that failed in CI: grpcio's default,
+    # with nothing to turn its fork support off. The probe sees the handlers
+    # then, so its silence above means they did not run.
+    assert _fork_handler_lines(import_client=False) != []

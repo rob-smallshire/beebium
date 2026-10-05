@@ -30,10 +30,13 @@ Usage:
 # gRPC's fork support must be settled before anything imports grpc, so this
 # comes first. The client forks only to exec at once (launching a server,
 # running a subcommand) and never uses gRPC in a child, so the support buys
-# nothing; but with it on, every fork made while a channel is busy runs gRPC's
-# fork handlers in the child, which on the macOS x86_64 CI lane killed
-# children with SIGPIPE before they could exec. setdefault, so a program
-# that wants fork support can still ask for it. Every other entry point --
+# nothing; but with it on, every real fork() made while a channel is busy
+# runs gRPC's fork handlers in the child, which on the macOS x86_64 CI lane
+# killed children with SIGPIPE before they could exec. That arises only where
+# a child really is forked: on macOS, or on Linux with a preexec_fn or
+# os.fork() -- Linux subprocess otherwise uses vfork(), which runs no fork
+# handlers. The setting is made on every platform all the same. setdefault,
+# so a program that wants fork support can still ask for it. Every other entry point --
 # the pytest plugin, the generated stubs, the beebium.ext adapters -- imports
 # this package first.
 import os as _os
