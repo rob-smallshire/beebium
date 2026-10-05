@@ -146,6 +146,15 @@ and the session-scoped `mos_filepath` / `basic_filepath`. Point the plugin at a
 server or ROMs with `--beebium-server` / `--beebium-rom-dir` (or the
 `BEEBIUM_SERVER` / `BEEBIUM_ROM_DIR` environment variables).
 
+### gRPC fork support
+
+Importing `beebium.client` sets `GRPC_ENABLE_FORK_SUPPORT=false` unless it is
+already set. The client forks only to start processes, and grpcio's fork
+handlers, run in a child forked while a channel is busy, can kill that child
+before it starts. The setting must be made before grpc is first imported, so a
+program that imports grpc itself, or another gRPC-based library, before
+`beebium.client` should set the variable in its environment.
+
 ### Further reading
 
 Fuller documentation and runnable programs live in the repository: see
