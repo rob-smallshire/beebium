@@ -13,14 +13,17 @@
 # rewrites UDP source endpoints, which the bridge's static AUN MAP HOST entry
 # cannot match). The server is not rebuilt: the job reuses the
 # beebium-server-linux artifact of a ci.yml run, as python-integration-reuse.yml
-# does.
+# does -- by default the newest ci.yml run of the checked-out commit that has
+# an unexpired one, whatever that run's overall result, so the server and the
+# tests share a protocol fingerprint. It fails rather than fall back to another
+# commit's server.
 name: PiEconetBridge recipe
 
 on:
   workflow_dispatch:
     inputs:
       server_run_id:
-        description: "ci.yml run id whose beebium-server-linux artifact to use (default: the latest successful master run)"
+        description: "ci.yml run id whose beebium-server-linux artifact to use (default: the newest ci.yml run of this commit that has one)"
         required: false
         type: string
         default: ""
@@ -48,23 +51,56 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The server must come from a ci.yml build of the commit under test, not
+      # from the latest successful master run: another commit may carry a
+      # different protocol fingerprint, and the run list filtered by workflow
+      # has returned long-expired runs. A run's overall conclusion does not
+      # matter -- its server artifact is uploaded before the test lanes run.
       - name: Choose the server build
         id: server
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED: ${{ inputs.server_run_id }}
+          ARTIFACT_NAME: beebium-server-linux
         run: |
+          set -euo pipefail
           run_id="$REQUESTED"
-          if [ -z "$run_id" ]; then
-            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
-              --branch master --status success --limit 1 \
-              --json databaseId --jq '.[0].databaseId')"
+          if [ -n "$run_id" ]; then
+            run_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq .head_sha)"
+            if [ "$run_sha" != "$GITHUB_SHA" ]; then
+              echo "::warning::server_run_id $run_id built $run_sha, not the checked-out $GITHUB_SHA; the protocol fingerprints may differ"
+            fi
+          else
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&per_page=20" \
+              --jq '.workflow_runs | sort_by(.created_at) | reverse | .[] | "\(.id) \(.status) \(.created_at)"')"
+            if [ -z "$runs" ]; then
+              echo "::error::no ci.yml run for $GITHUB_SHA; run CI on it first, or pass server_run_id"
+              exit 1
+            fi
+            echo "ci.yml runs for $GITHUB_SHA (newest first):"
+            echo "$runs"
+            pending=""
+            while read -r id status created; do
+              if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?name=$ARTIFACT_NAME" \
+                   --jq '.artifacts[] | select(.expired == false) | .id' | grep -q .; then
+                run_id="$id"
+                break
+              fi
+              if [ "$status" != "completed" ]; then
+                pending="$pending $id($status)"
+              fi
+            done <<< "$runs"
+            if [ -z "$run_id" ]; then
+              if [ -n "$pending" ]; then
+                echo "::error::CI for $GITHUB_SHA has not produced a $ARTIFACT_NAME artifact yet (still running:$pending); rerun once its server build finishes"
+              else
+                echo "::error::no ci.yml run for $GITHUB_SHA has an unexpired $ARTIFACT_NAME artifact (its server build failed or the artifact expired)"
+              fi
+              exit 1
+            fi
           fi
-          if [ -z "$run_id" ]; then
-            echo "::error::no successful ci.yml run on master to take the server from"
-            exit 1
-          fi
-          echo "Using the server built by ci.yml run $run_id"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" \
+            --jq '"Using the server built by ci.yml run \(.id): commit \(.head_sha), created \(.created_at), conclusion \(.conclusion // .status)"'
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Install gRPC runtime libraries
