@@ -56,7 +56,7 @@ Drive Beebium from the **Python** or **TypeScript** client, from **CI**, or from
 
 - **Any platform (Python)** — `pip install beebium beebium-server` (`beebium` is the client library; `beebium-server` ships the servers)
 - **Linux** — self-contained `.deb` (Debian / Ubuntu / Raspberry Pi OS) and `.rpm` (Fedora / RHEL / openSUSE) for `amd64` and `arm64`, or a `.tar.gz` for any distro
-- **macOS** — `brew install rob-smallshire/beebium/beebium-server`, or a self-contained tarball
+- **macOS** — `brew install rob-smallshire/beebium/beebium-server` on Apple Silicon, or a self-contained tarball (Apple Silicon or Intel)
 - **Windows** — `scoop bucket add beebium https://github.com/rob-smallshire/scoop-beebium` then `scoop install beebium-server`, or a self-contained zip
 
 Direct download links for every package are on the [releases page](https://github.com/rob-smallshire/beebium/releases/latest).

@@ -119,7 +119,6 @@ beebium/
 └── .github/workflows/
     ├── linux-packages.yml         # build + smoke the Linux packages
     ├── macos-package.yml          # build/test/audit the Homebrew formula (arm64)
-    ├── macos-intel.yml            # best-effort Intel formula check (non-gating)
     ├── windows-package.yml        # build + smoke the Windows .zip
     ├── release.yml                # tag -> all packages + verified draft Release
     ├── sync-channels.yml          # publish -> pin the tap + bucket to the release
@@ -737,19 +736,17 @@ release job's artifact merge would collide same-named assets and publish the
 wrong ones.
 
 `.github/workflows/macos-package.yml` builds, installs, tests and audits the
-Homebrew formula on `macos-14` (arm64) by running
+Homebrew formula on `macos-15` (arm64) by running
 `packaging/homebrew/test-formula.sh`. The source build is cheap (~1 min), so it
-runs on PRs that touch the formula or the build system, plus on demand. It is
-**arm64 only**: GitHub's Intel `macos-13` runners are scarce and deprecated, and
-a release-gating Intel leg stuck in the runner queue would block the draft
-indefinitely.
+runs on PRs that touch the formula or the build system, plus on demand.
 
-`.github/workflows/macos-intel.yml` covers Intel (`x86_64`) **best-effort** — the
-same `test-formula.sh`, on `macos-13`, triggered weekly / on demand / on
-formula-or-build PRs. It is standalone and **never gates a release**, so a stuck
-or absent Intel runner only affects that run. The formula is a source build, so
-Intel Macs work for users regardless of CI. For reliable Intel coverage, register
-an Intel Mac as a self-hosted runner and point `runs-on` at its label.
+The Homebrew formula is **arm64 only**. Homebrew ships no Intel macOS bottles
+for the formula's grpc, protobuf and openssl@3 dependencies (only Apple Silicon
+and Linux), so on an Intel Mac `brew install` would have to build the whole gRPC
+stack from source. Intel Mac users take the self-contained
+`beebium-server-<version>-macos-x86_64.tar.gz`, the `beebium-server` wheel, or
+the `macos-x86_64` DMG instead; `release.yml` builds all three on the
+`macos-15-intel` runner, where `ci.yml` also builds and tests the server.
 
 `.github/workflows/windows-package.yml` builds the static-md `.zip` on
 `windows-2022`, runs the `dumpbin` self-containment gate, and — on a separate
@@ -780,8 +777,8 @@ tag).
   `.tar.gz`, all validated by install-in-clean-distro on Debian, Fedora and Arch
   (x86_64 + Arch Linux ARM).
 - **macOS:** Homebrew formula (`beebium-server`), source build against Homebrew's
-  grpc/protobuf, validated in CI on arm64 (Intel best-effort via
-  `macos-intel.yml`). The tap `rob-smallshire/homebrew-beebium` is live and synced
+  grpc/protobuf, validated in CI on arm64 (the formula is arm64-only; Intel Macs
+  use the tarball, wheel or DMG). The tap `rob-smallshire/homebrew-beebium` is live and synced
   to `v0.1.0`; the stable `brew install beebium-server` works and is validated
   end-to-end by the `release-smoke.yml` macOS leg.
 - **Windows:** self-contained `x64-windows-static-md` `.zip`, built + smoke-tested

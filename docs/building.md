@@ -226,7 +226,7 @@ xcodebuild test \
 | Platform | Architecture | Runner/Machine | Notes |
 |----------|--------------|----------------|-------|
 | macOS | arm64 | Apple Silicon Mac, `macos-14` runner | Native on M1/M2/M3 |
-| macOS | x86_64 | Intel Mac, `macos-13` runner | Native on Intel, Rosetta on AS |
+| macOS | x86_64 | Intel Mac, `macos-15-intel` runner | Native on Intel, Rosetta on AS |
 | Linux | x86_64 | `ubuntu-latest` runner | Standard Linux build |
 | Windows | x64 | `windows-latest` runner | MSVC build |
 

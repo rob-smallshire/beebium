@@ -28,11 +28,10 @@ permissions:
   contents: read
 
 jobs:
-  # arm64 only. The Intel macos-13 runner is being deprecated and is so
-  # runner-constrained that the job often never gets picked up, which would block
-  # releases indefinitely (a reusable-workflow leg that never completes blocks the
-  # dependent release job). The formula is a source build, so it still works on
-  # Intel Macs for users; we just validate the formula logic on arm64.
+  # arm64 only, because the formula is: Homebrew ships no Intel macOS bottles for
+  # its grpc, protobuf and openssl@3 dependencies, so Intel Macs use the
+  # self-contained tarball, wheel or DMG, which release.yml builds on
+  # macos-15-intel (where ci.yml also builds and tests the server).
   formula:
     name: formula (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
