@@ -1969,6 +1969,18 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_image_resample)
 
+    # The preset machinery without the server: PresetResolution.hpp alone.
+    add_executable(test_preset_resolution test_preset_resolution.cpp)
+    target_include_directories(test_preset_resolution PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/server/include
+    )
+    target_link_libraries(test_preset_resolution PRIVATE
+        beebium_core
+        nlohmann_json::nlohmann_json
+        Catch2::Catch2WithMain
+    )
+    catch_discover_tests(test_preset_resolution)
+
     add_executable(test_server_main test_server_main.cpp)
     target_include_directories(test_server_main PRIVATE
         ${CMAKE_SOURCE_DIR}/src/server/include
