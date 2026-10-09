@@ -46,139 +46,25 @@ struct PeripheralsSectionView: View {
 
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
 
-    /// Every extension name currently in the draft, to preload manifests for.
-    private var instanceNames: [String] {
-        (draft.extensions ?? []).map(\.name)
+    /// The model points to show here. A caller (Processor) owns some points
+    /// (e.g. the tube), which it passes to exclude.
+    var excludedPointIds: Set<String> = []
+
+    private var shownPoints: [AttachmentPoint] {
+        model.modelPoints.filter { !excludedPointIds.contains($0.id) }
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(model.modelPoints) { point in
-                    pointGroup(point)
+                ForEach(shownPoints) { point in
+                    AttachmentPointGroup(
+                        draft: $draft, schema: schema, point: point,
+                        diagnostics: diagnostics, manifests: manifests, serialPorts: serialPorts)
                 }
             }
             .padding(12)
         }
         .onAppear { manifests.resolver = manifestResolver }
-        .task(id: instanceNames.joined(separator: "|")) {
-            for name in instanceNames { await manifests.load(name) }
-        }
-    }
-
-    // MARK: - Point group
-
-    // pointGroup and instanceView are mutually recursive (a provided point's
-    // group nests under its provider instance). A recursive @ViewBuilder with an
-    // opaque return type crashes the Release whole-module optimiser with no
-    // diagnostic (the bug ExtensionViewRenderer documents), so both return
-    // AnyView to break the recursion at a type boundary.
-    private func pointGroup(_ point: AttachmentPoint) -> AnyView {
-        let instances = model.instances(onPoint: point.id, in: draft)
-        return AnyView(VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(point.displayName ?? point.id)
-                    .font(.headline)
-                Text(occupancyLabel(point))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                addMenu(point)
-            }
-
-            if instances.isEmpty {
-                Text("Nothing attached.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(instances) { instance in
-                    instanceView(instance)
-                }
-            }
-        })
-    }
-
-    private func occupancyLabel(_ point: AttachmentPoint) -> String {
-        let occ = model.occupancy(onPoint: point.id, in: draft)
-        if let max = occ.max { return "\(occ.count) of \(max)" }
-        return "\(occ.count)"
-    }
-
-    @ViewBuilder
-    private func addMenu(_ point: AttachmentPoint) -> some View {
-        let addable = model.addableExtensions(onPoint: point.id, in: draft)
-        if !addable.isEmpty {
-            Menu {
-                ForEach(addable, id: \.self) { name in
-                    Button(name) { draft = model.draft(adding: name, to: draft) }
-                }
-            } label: {
-                Label("Add", systemImage: "plus")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
-    }
-
-    // MARK: - Instance
-
-    private func instanceView(_ instance: ExtensionInstanceModel.Instance) -> AnyView {
-        AnyView(VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(instance.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Spacer()
-                Button {
-                    draft = model.draft(removingInstanceAt: instance.index, from: draft)
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help("Remove \(instance.name)")
-            }
-
-            if let manifest = manifests.byName[instance.name] {
-                ExtensionParameterForm(
-                    manifest: manifest,
-                    config: draft.extensions?[safe: instance.index]?.config ?? [:],
-                    diagnostics: diagnostics.filter {
-                        PresetDiagnosticLocation.extensionIndex(path: $0.path) == instance.index
-                    },
-                    bundledImages: schema.bundledImages ?? [:],
-                    serialPortSuggestions: serialPorts,
-                    setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
-                    .padding(.leading, 8)
-            }
-
-            // Points this instance provides (e.g. the SCSI bus) nest beneath it.
-            ForEach(model.pointsProvided(by: instance)) { provided in
-                pointGroup(provided)
-                    .padding(.leading, 16)
-            }
-        }
-        .padding(8)
-        .background(Color(NSColor.textBackgroundColor).opacity(0.5))
-        .cornerRadius(6))
-    }
-
-    // MARK: - Write-through
-
-    private func setConfig(_ key: String, _ value: JSONValue?, forInstanceAt index: Int) {
-        guard var extensions = draft.extensions, extensions.indices.contains(index) else { return }
-        var config = extensions[index].config ?? [:]
-        if let value = value {
-            config[key] = value
-        } else {
-            config.removeValue(forKey: key)
-        }
-        extensions[index].config = config.isEmpty ? nil : config
-        draft.extensions = extensions
-    }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
     }
 }

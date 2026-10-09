@@ -119,6 +119,21 @@ struct ExtensionInstanceModel {
         return "\(name)-\(k)"
     }
 
+    /// Set the single instance on a point (a max-occupancy-1 point presented as
+    /// a picker): remove any instance currently on it, then add `name` unless it
+    /// is nil ("None"). A fresh config is left for resolve-preset to default.
+    func draft(settingSoleInstance name: String?, onPoint pointId: String, in draft: MachineDraft) -> MachineDraft {
+        guard let point = schema.attachmentPoints.first(where: { $0.id == pointId }) else { return draft }
+        let hosted = Set(point.extensions)
+        var result = draft
+        var extensions = (result.extensions ?? []).filter { !hosted.contains($0.name) }
+        if let name = name, !name.isEmpty {
+            extensions.append(MachineDraft.Extension(name: name))
+        }
+        result.extensions = extensions
+        return result
+    }
+
     /// Remove the instance at `index`. Deliberately does NOT cascade: a provider
     /// left with nothing attached, or a dependent left with no provider, is the
     /// user's to resolve -- resolve-preset reports the orphan as a diagnostic
