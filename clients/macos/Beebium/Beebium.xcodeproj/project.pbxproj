@@ -53,6 +53,7 @@
 		2E9C2894C04791EF7CCDE424 /* BeebiumTouchBarLEDs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */; };
 		2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */; };
 		30ACE9109C0CD0CFC4CAFC47 /* EconetStationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22FC5E47C7A9D0A75ABD0E0C /* EconetStationPresentation.swift */; };
+		316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */; };
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
 		345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */; };
 		361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */; };
@@ -432,6 +433,7 @@
 		D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParserTests.swift; sourceTree = "<group>"; };
 		DA0CF5589888F672F43B52FD /* aun.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.pb.swift; sourceTree = "<group>"; };
 		DBE3C453D296DD3F81E0B829 /* ReconnectCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinator.swift; sourceTree = "<group>"; };
+		DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetManagerDraftLaunchTests.swift; sourceTree = "<group>"; };
 		DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusDiagnostics.swift; sourceTree = "<group>"; };
 		DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleClickMonitor.swift; sourceTree = "<group>"; };
 		DFB1414298AE8F8261138293 /* keyboard.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = keyboard.proto; sourceTree = "<group>"; };
@@ -778,6 +780,7 @@
 				4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */,
 				2D1D75896DF179CEC420018F /* PixelShapeTests.swift */,
 				02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */,
+				DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
 				27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */,
 				58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */,
@@ -957,6 +960,7 @@
 				934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */,
 				A994E213FE38477C0CF26811 /* PixelShapeTests.swift in Sources */,
 				1D4EF3D9B6F79DD6EBC15905 /* PopoverFocusHostingTests.swift in Sources */,
+				316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
 				4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */,
 				AC8547463BFF17B483A076FA /* ScreenSelectionGeometryTests.swift in Sources */,

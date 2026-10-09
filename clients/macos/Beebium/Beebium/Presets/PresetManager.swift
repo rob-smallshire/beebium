@@ -806,8 +806,124 @@ class PresetManager: ObservableObject {
 
         NSLog("[PresetManager] Launched \(preset.coreExecutablePath) with args: \(arguments.joined(separator: " "))")
 
-        // Read stdout to find the port
-        return await withCheckedContinuation { continuation in
+        return await Self.awaitListeningPort(process: process,
+                                             stdoutPipe: stdoutPipe,
+                                             stderrPipe: stderrPipe,
+                                             provenanceUUID: provenanceUUID)
+    }
+
+    // MARK: - Draft-based launching
+
+    /// Launch a core from a fully-specified `MachineDraft`.
+    ///
+    /// The draft is the whole machine configuration: it is serialised to a
+    /// temporary preset file and the core is started with `start --preset
+    /// <temp>` plus server plumbing only (port, advertise, wait, machine
+    /// name/ordinal, provenance, rom-dir). No per-setting CLI overrides -- the
+    /// preset document carries everything -- so there is a single
+    /// representation of a machine's configuration.
+    ///
+    /// The temporary file is removed when the launched process terminates, which
+    /// is unambiguously after the server has read it; relative file paths in a
+    /// draft resolve against this temp directory for now, which is why shipped
+    /// presets use bare (search-path) ROM names and the user's floppy paths are
+    /// absolute. Once `resolve-preset` becomes the oracle, every path the draft
+    /// carries is absolute and this caveat is moot.
+    func launchCore(draft: MachineDraft, executablePath: String) async -> Result<LaunchedCore, CoreLaunchError> {
+        let provenanceUUID = UUID().uuidString
+        let displayName = draft.name ?? ""
+        let ordinal = nameSequence.nextOrdinal(forPreset: displayName)
+        let machineName = MachineLaunchName.template(
+            presetMachineName: draft.machineName, presetDisplayName: displayName)
+
+        let presetURL: URL
+        do {
+            presetURL = try Self.writeTemporaryPreset(draft)
+        } catch {
+            return .failure(.launchFailed("Failed to write temporary preset: \(error.localizedDescription)"))
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = Self.draftLaunchArguments(
+            presetFilepath: presetURL.path,
+            machineName: machineName,
+            ordinal: ordinal,
+            provenanceUUID: provenanceUUID,
+            romDirpath: bundledRomDirpath())
+
+        // Remove the temporary preset once the process ends -- after every read
+        // of it, whether the launch succeeded, failed or timed out.
+        process.terminationHandler = { _ in
+            try? FileManager.default.removeItem(at: presetURL)
+        }
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        do {
+            try process.run()
+        } catch {
+            try? FileManager.default.removeItem(at: presetURL)
+            return .failure(.launchFailed("Failed to launch: \(error.localizedDescription)"))
+        }
+
+        NSLog("[PresetManager] Launched \(executablePath) with args: \(process.arguments?.joined(separator: " ") ?? "")")
+
+        return await Self.awaitListeningPort(process: process,
+                                             stdoutPipe: stdoutPipe,
+                                             stderrPipe: stderrPipe,
+                                             provenanceUUID: provenanceUUID)
+    }
+
+    /// The `start` arguments for launching a draft preset file: server plumbing
+    /// only, no per-setting overrides. Pure, so the argument shape is testable
+    /// without a launch.
+    nonisolated static func draftLaunchArguments(presetFilepath: String,
+                                                 machineName: String,
+                                                 ordinal: Int,
+                                                 provenanceUUID: String,
+                                                 romDirpath: String?) -> [String] {
+        var arguments = [
+            "start",
+            "--preset", presetFilepath,
+            "--port", "0",
+            "--advertise",
+            "--wait=api",
+            "--machine-name", machineName,
+            "--machine-ordinal", "\(ordinal)",
+            "--provenance-type", "macos-gui",
+            "--provenance-uuid", provenanceUUID,
+        ]
+        if let romDirpath = romDirpath {
+            arguments.append(contentsOf: ["--rom-dir", romDirpath])
+        }
+        return arguments
+    }
+
+    /// Serialise a draft to a fresh temporary `*.preset.beebium` file and return
+    /// its URL. Each call returns a distinct path.
+    nonisolated static func writeTemporaryPreset(_ draft: MachineDraft) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Beebium", isDirectory: true)
+            .appendingPathComponent("drafts", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("\(UUID().uuidString).preset.beebium")
+        try draft.encoded().write(to: url, options: .atomic)
+        return url
+    }
+
+    /// Wait for a freshly-launched core to print its listening port, or fail.
+    ///
+    /// The core is launched with `--port 0` and prints "Listening on port N";
+    /// this reads stdout until that line, the process exits, or a timeout.
+    private static func awaitListeningPort(process: Process,
+                                           stdoutPipe: Pipe,
+                                           stderrPipe: Pipe,
+                                           provenanceUUID: String) async -> Result<LaunchedCore, CoreLaunchError> {
+        await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let handle = stdoutPipe.fileHandleForReading
                 var buffer = Data()
@@ -855,6 +971,41 @@ class PresetManager: ObservableObject {
                 continuation.resume(returning: .failure(.timeout))
             }
         }
+    }
+
+    /// Save a draft as a new user preset by writing it to a temporary file and
+    /// importing it through the server's `import-preset` subcommand, so the
+    /// server owns writing the user-presets directory (the client never writes
+    /// it). The whole draft is persisted -- FDC, floppies and sideways alike --
+    /// not just a subset.
+    ///
+    /// Returns `(presetId, errorMessage)` with exactly one non-nil.
+    func saveDraftAsPreset(_ draft: MachineDraft,
+                           name: String,
+                           executablePath: String) async -> (String?, String?) {
+        var named = draft
+        named.name = name
+        let url: URL
+        do {
+            url = try Self.writeTemporaryPreset(named)
+        } catch {
+            return (nil, "Failed to write preset: \(error.localizedDescription)")
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let (output, error) = await runCli(executable: executablePath,
+                                           arguments: ["import-preset", url.path])
+        if let error = error {
+            NSLog("[PresetManager] Failed to import preset: \(error)")
+            return (nil, error.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        let newPresetId = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        NSLog("[PresetManager] Saved draft as preset: \(newPresetId)")
+
+        // Reload presets so the new one appears in the picker next time.
+        await discoverPresets()
+        return (newPresetId, nil)
     }
 
     // MARK: - CLI Execution
