@@ -102,6 +102,13 @@ packages = ["src/beebium"]
 url = "https://pypi.org/simple"
 default = true
 
+[tool.pytest.ini_options]
+# Bare `pytest` runs the client suite and the README snippets. tests_packaging/
+# must run against the installed wheel from outside src/, so
+# scripts/test-wheel.sh names it explicitly (an explicit path overrides
+# testpaths).
+testpaths = ["tests", "readme/snippets"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 120
