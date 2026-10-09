@@ -388,20 +388,19 @@ TEST_CASE("create-preset: --station + --aun round-trips to an econet transport",
     CHECK(loaded.config->econet->station == 80);
     REQUIRE(loaded.config->econet->transport.has_value());
     CHECK(loaded.config->econet->transport->name == "aun");
-    // AUN defaults are baked in as typed parameters.
-    CHECK(loaded.config->econet->transport->parameters.at("port") == "32768");
-    CHECK(loaded.config->econet->transport->parameters.at("net") == "0");
+    // Only what was given is recorded: AUN's defaults stay defaults.
+    CHECK(loaded.config->econet->transport->parameters.empty());
     // The transport must NOT also leak into the generic extensions array.
     CHECK(loaded.config->extensions.empty());
 }
 
-TEST_CASE("create-preset: --station + --piconet records device discovery",
+TEST_CASE("create-preset: --station + --piconet omits a discovered device_path",
           "[integration][preset][create-preset]") {
     TempDirectory temp_dir;
     auto output_filepath = temp_dir.path() / "piconet.preset.beebium";
 
-    // No device_path given: the transport records the default, "auto", so
-    // the extension discovers the device at boot.
+    // No device_path given: the transport records name only, so the extension
+    // discovers the device at boot (device_path's default, "auto").
     auto result = run_command(
         EXECUTABLE + " create-preset --name \"Piconet Box\" --output \"" +
         output_filepath.string() + "\" --station 81 --piconet");
@@ -413,9 +412,7 @@ TEST_CASE("create-preset: --station + --piconet records device discovery",
     CHECK(loaded.config->econet->station == 81);
     REQUIRE(loaded.config->econet->transport.has_value());
     CHECK(loaded.config->econet->transport->name == "piconet");
-    const auto& parameters = loaded.config->econet->transport->parameters;
-    CHECK(parameters.size() == 1);
-    CHECK(parameters.at("device_path") == "auto");
+    CHECK(loaded.config->econet->transport->parameters.empty());
 }
 
 TEST_CASE("create-preset: --machine-name round-trips through the loader",
@@ -910,9 +907,15 @@ TEST_CASE("create-preset --from: --sideways replaces only the slots it names",
     CHECK(loaded.warnings.empty());  // the source's top-level auto_boot moved into startup
     CHECK(loaded.config->startup->auto_boot == true);
     REQUIRE(loaded.config->sideways.size() == 2);
-    CHECK(loaded.config->sideways[0].slot == 14);  // kept from the source
-    CHECK(loaded.config->sideways[1].slot == 13);
-    CHECK(loaded.config->sideways[1].type == beebium::server::SidewaysSlotType::Ram);  // replaced
+    auto slot = [&](int n) {
+        for (const auto& c : loaded.config->sideways) {
+            if (c.slot == n) return c;
+        }
+        FAIL("no slot " << n);
+        return beebium::server::SidewaysConfig{};
+    };
+    CHECK(slot(14).type == beebium::server::SidewaysSlotType::Rom);  // kept from the source
+    CHECK(slot(13).type == beebium::server::SidewaysSlotType::Ram);  // replaced
 }
 
 // ============================================================================
@@ -1967,4 +1970,77 @@ TEST_CASE("start: a preset whose content is invalid is a configuration error",
     auto result = run_command(EXECUTABLE + " start --preset \"" + preset_filepath.string() +
                               "\" --port 0");
     CHECK(result.exit_code == 78);
+}
+
+// ============================================================================
+// create-preset records what was given, parsed as start parses it
+// ============================================================================
+
+namespace {
+
+nlohmann::json read_json(const std::filesystem::path& filepath) {
+    std::ifstream f(filepath);
+    return nlohmann::json::parse(f);
+}
+
+}  // namespace
+
+TEST_CASE("create-preset: an extension records only the parameters given",
+          "[integration][preset][create-preset][given]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "given.preset.beebium";
+    auto result = run_command(EXECUTABLE + " create-preset --name \"Given\" --station 80 "
+                              "--aun port=0 --host-serial baud=9600 --output \"" +
+                              output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+
+    auto preset = read_json(output_filepath);
+    CHECK(preset.at("econet").at("transport").at("parameters") ==
+          nlohmann::json{{"port", "0"}});
+    REQUIRE(preset.at("extensions").size() == 1);
+    CHECK(preset.at("extensions")[0].at("config") == nlohmann::json{{"baud", 9600}});
+}
+
+TEST_CASE("create-preset: a launch-only option cannot be recorded",
+          "[integration][preset][create-preset][given]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "port.preset.beebium";
+    auto result = run_command(EXECUTABLE + " create-preset --name \"Port\" --port 4000 "
+                              "--output \"" + output_filepath.string() + "\"");
+    CHECK(result.exit_code == 64);
+    CHECK(result.stderr_output.find("--port") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(output_filepath));
+}
+
+TEST_CASE("create-preset --from: a flag overrides the source preset as start would",
+          "[integration][preset][create-preset][given]") {
+    TempDirectory user_dir;
+    std::filesystem::create_directory(user_dir.path() / "discs");
+    {
+        std::ofstream f(user_dir.path() / "source.preset.beebium");
+        f << R"({"model": "model-b", "name": "Source", "description": "From here",
+                 "storage": {"floppy_drives": [{"drive": 0, "image_uri": "discs/game.ssd"}]},
+                 "extensions": [{"name": "host-serial",
+                                 "config": {"id": "modem", "mode": "device",
+                                            "path": "/dev/ttyUSB0", "baud": 9600}}]})";
+    }
+    auto output_filepath = user_dir.path() / "copy.preset.beebium";
+    auto result = run_command(
+        EXECUTABLE + " create-preset --from source --name \"Copy\" "
+        "--host-serial id=modem:baud=2400 --output \"" + output_filepath.string() + "\"",
+        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}});
+    INFO(result.stderr_output);
+    REQUIRE(result.exit_code == 0);
+
+    auto preset = read_json(output_filepath);
+    CHECK(preset.at("name") == "Copy");
+    CHECK(preset.at("description") == "From here");
+    REQUIRE(preset.at("extensions").size() == 1);
+    CHECK(preset.at("extensions")[0].at("config") ==
+          nlohmann::json{{"baud", 2400}, {"id", "modem"}, {"mode", "device"},
+                         {"path", "/dev/ttyUSB0"}});
+    // The source's relative floppy meant its own directory; the copy says so.
+    CHECK(preset.at("storage").at("floppy_drives")[0].at("image_uri") ==
+          "file://" + (std::filesystem::absolute(user_dir.path()) / "discs" / "game.ssd")
+                          .lexically_normal().generic_string());
 }
