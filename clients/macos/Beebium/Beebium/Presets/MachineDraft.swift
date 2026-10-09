@@ -41,8 +41,13 @@ struct MachineDraft: Equatable {
     var description: String?
     /// Release date for sorting: YYYY, YYYY-MM or YYYY-MM-DD.
     var releaseDate: String?
-    /// Whether the machine auto-boots (SHIFT+BREAK) at startup.
+    /// Whether the machine auto-boots (SHIFT+BREAK) at startup. Deprecated in
+    /// favour of `startup.auto_boot`; read but no longer written by the server.
     var autoBoot: Bool?
+    /// Emulation speed: a positive number (multiple of real time) or "unlimited".
+    var speed: JSONValue?
+    /// Startup keyboard links: screen_mode + auto_boot, or the whole links byte.
+    var startup: Startup?
     var storage: Storage?
     var sidewaysBank: SidewaysBank?
     var econet: Econet?
@@ -56,6 +61,8 @@ struct MachineDraft: Equatable {
          description: String? = nil,
          releaseDate: String? = nil,
          autoBoot: Bool? = nil,
+         speed: JSONValue? = nil,
+         startup: Startup? = nil,
          storage: Storage? = nil,
          sidewaysBank: SidewaysBank? = nil,
          econet: Econet? = nil,
@@ -67,6 +74,8 @@ struct MachineDraft: Equatable {
         self.description = description
         self.releaseDate = releaseDate
         self.autoBoot = autoBoot
+        self.speed = speed
+        self.startup = startup
         self.storage = storage
         self.sidewaysBank = sidewaysBank
         self.econet = econet
@@ -178,6 +187,24 @@ struct MachineDraft: Equatable {
         }
     }
 
+    /// The `startup` section: either a screen mode + auto-boot pair, or the raw
+    /// keyboard-links byte (the two forms are mutually exclusive; the server
+    /// enforces it and the editor presents it that way).
+    struct Startup: Equatable {
+        var screenMode: Int?
+        var autoBoot: Bool?
+        var links: Int?
+        var extra: [String: JSONValue]
+
+        init(screenMode: Int? = nil, autoBoot: Bool? = nil, links: Int? = nil,
+             extra: [String: JSONValue] = [:]) {
+            self.screenMode = screenMode
+            self.autoBoot = autoBoot
+            self.links = links
+            self.extra = extra
+        }
+    }
+
     /// One entry in the `extensions` array: a named plugin and its config.
     struct Extension: Equatable {
         var name: String
@@ -199,7 +226,7 @@ struct MachineDraft: Equatable {
 extension MachineDraft: Codable {
     private static let knownKeys: Set<String> = [
         "model", "name", "machine_name", "description", "release_date",
-        "auto_boot", "storage", "sideways_bank", "econet", "extensions",
+        "auto_boot", "speed", "startup", "storage", "sideways_bank", "econet", "extensions",
     ]
 
     init(from decoder: Decoder) throws {
@@ -210,6 +237,8 @@ extension MachineDraft: Codable {
         description = try c.decodeIfPresent(String.self, forKey: "description")
         releaseDate = try c.decodeIfPresent(String.self, forKey: "release_date")
         autoBoot = try c.decodeIfPresent(Bool.self, forKey: "auto_boot")
+        speed = try c.decodeIfPresent(JSONValue.self, forKey: "speed")
+        startup = try c.decodeIfPresent(Startup.self, forKey: "startup")
         storage = try c.decodeIfPresent(Storage.self, forKey: "storage")
         sidewaysBank = try c.decodeIfPresent(SidewaysBank.self, forKey: "sideways_bank")
         econet = try c.decodeIfPresent(Econet.self, forKey: "econet")
@@ -225,10 +254,32 @@ extension MachineDraft: Codable {
         try c.encodeIfPresent(description, forKey: "description")
         try c.encodeIfPresent(releaseDate, forKey: "release_date")
         try c.encodeIfPresent(autoBoot, forKey: "auto_boot")
+        try c.encodeIfPresent(speed, forKey: "speed")
+        try c.encodeIfPresent(startup, forKey: "startup")
         try c.encodeIfPresent(storage, forKey: "storage")
         try c.encodeIfPresent(sidewaysBank, forKey: "sideways_bank")
         try c.encodeIfPresent(econet, forKey: "econet")
         try c.encodeIfPresent(extensions, forKey: "extensions")
+        try c.encodeExtra(extra)
+    }
+}
+
+extension MachineDraft.Startup: Codable {
+    private static let knownKeys: Set<String> = ["screen_mode", "auto_boot", "links"]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: JSONCodingKey.self)
+        screenMode = try c.decodeIfPresent(Int.self, forKey: "screen_mode")
+        autoBoot = try c.decodeIfPresent(Bool.self, forKey: "auto_boot")
+        links = try c.decodeIfPresent(Int.self, forKey: "links")
+        extra = try c.decodeExtra(excluding: Self.knownKeys)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: JSONCodingKey.self)
+        try c.encodeIfPresent(screenMode, forKey: "screen_mode")
+        try c.encodeIfPresent(autoBoot, forKey: "auto_boot")
+        try c.encodeIfPresent(links, forKey: "links")
         try c.encodeExtra(extra)
     }
 }

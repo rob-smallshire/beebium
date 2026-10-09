@@ -168,6 +168,24 @@ final class MachineDraftTests: XCTestCase {
         XCTAssertEqual(draft.econet?.station, .string("auto"))
     }
 
+    func testRoundTripsSpeedAndStartup() throws {
+        let modeBoot = try assertRoundTrips("""
+        { "model": "model-b", "speed": 1.5,
+          "startup": { "screen_mode": 7, "auto_boot": true } }
+        """, "speed+startup(mode)")
+        XCTAssertEqual(modeBoot.speed, .double(1.5))
+        XCTAssertEqual(modeBoot.startup?.screenMode, 7)
+        XCTAssertEqual(modeBoot.startup?.autoBoot, true)
+        XCTAssertNil(modeBoot.startup?.links)
+
+        let unlimited = try assertRoundTrips("""
+        { "model": "model-b", "speed": "unlimited", "startup": { "links": 128 } }
+        """, "speed+startup(links)")
+        XCTAssertEqual(unlimited.speed, .string("unlimited"))
+        XCTAssertEqual(unlimited.startup?.links, 128)
+        XCTAssertNil(unlimited.startup?.screenMode)
+    }
+
     // MARK: - Unknown-key preservation
 
     func testPreservesUnknownKeys() throws {
@@ -178,7 +196,7 @@ final class MachineDraftTests: XCTestCase {
           "name": "Unknown Keys Preset",
           "model": "model-b",
           "future_feature": { "some": "data", "count": 3 },
-          "speed": "unlimited",
+          "colour": "green",
           "storage": {
             "fdc_socket": { "id": "acorn-1770" },
             "unknown_storage_key": true
@@ -187,7 +205,7 @@ final class MachineDraftTests: XCTestCase {
         """
         let draft = try assertRoundTrips(json, "unknown")
 
-        XCTAssertEqual(draft.extra["speed"], .string("unlimited"))
+        XCTAssertEqual(draft.extra["colour"], .string("green"))
         XCTAssertEqual(draft.extra["future_feature"],
                        .object(["some": .string("data"), "count": .int(3)]))
         XCTAssertEqual(draft.storage?.extra["unknown_storage_key"], .bool(true))
@@ -197,7 +215,7 @@ final class MachineDraftTests: XCTestCase {
         let object = try XCTUnwrap(
             try JSONSerialization.jsonObject(with: reencoded) as? [String: Any])
         XCTAssertNotNil(object["future_feature"])
-        XCTAssertEqual(object["speed"] as? String, "unlimited")
+        XCTAssertEqual(object["colour"] as? String, "green")
         let storage = try XCTUnwrap(object["storage"] as? [String: Any])
         XCTAssertEqual(storage["unknown_storage_key"] as? Bool, true)
     }

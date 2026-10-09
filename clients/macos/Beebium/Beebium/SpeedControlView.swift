@@ -147,7 +147,7 @@ private struct SpeedScale: View {
     }
 
     private static func label(forExponent e: Int) -> String {
-        e >= 0 ? "\(Int(pow(2.0, Double(e))))×" : "1/\(Int(pow(2.0, Double(-e))))"
+        SpeedPresentation.label(forMultiplier: pow(2.0, Double(e)))
     }
 }
 

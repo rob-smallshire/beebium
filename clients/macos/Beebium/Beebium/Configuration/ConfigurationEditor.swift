@@ -82,6 +82,7 @@ struct ConfigurationEditor: View {
         case memory = "Memory"
         case peripherals = "Peripherals"
         case network = "Network"
+        case processor = "Processor"
 
         var id: String { rawValue }
 
@@ -91,6 +92,7 @@ struct ConfigurationEditor: View {
             case .memory: return "memorychip"
             case .peripherals: return "puzzlepiece.extension"
             case .network: return "network"
+            case .processor: return "cpu"
             }
         }
     }
@@ -109,6 +111,9 @@ struct ConfigurationEditor: View {
             sections.append(.peripherals)
         }
         if econetSchema != nil { sections.append(.network) }
+        // Processor is shown for every model: emulation speed is universal, and
+        // the coprocessor sub-group appears only when the model has a tube point.
+        if extensionsSchema != nil { sections.append(.processor) }
         return sections
     }
 
@@ -203,7 +208,8 @@ struct ConfigurationEditor: View {
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
                     manifestResolver: manifestResolver,
-                    serialPorts: serialPorts))
+                    serialPorts: serialPorts,
+                    excludedPointIds: [ProcessorSectionView.tubePointId]))
             }
             return AnyView(EmptyView())
         case .network:
@@ -211,6 +217,16 @@ struct ConfigurationEditor: View {
                 return AnyView(NetworkSectionView(
                     draft: $draft,
                     schema: econetSchema,
+                    diagnostics: diagnostics,
+                    manifestResolver: manifestResolver,
+                    serialPorts: serialPorts))
+            }
+            return AnyView(EmptyView())
+        case .processor:
+            if let extensionsSchema = extensionsSchema {
+                return AnyView(ProcessorSectionView(
+                    draft: $draft,
+                    extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
                     manifestResolver: manifestResolver,
                     serialPorts: serialPorts))

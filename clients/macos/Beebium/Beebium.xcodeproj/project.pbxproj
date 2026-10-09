@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		010DBCB8FE2D1DAA06D514CC /* BeebiumSvgGlyphRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */; };
+		01523CB60DD7D1A75D412AD1 /* SpeedPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */; };
 		01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */; };
 		02202BCE716C487C5A3D36FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3FE1A20DF4E1D3707C33DE /* SettingsView.swift */; };
 		02956037B5EAA66AA17BCBEB /* SidewaysSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */; };
@@ -169,6 +170,7 @@
 		B778FD3CAB76C7B9AE5B7EF9 /* AudioMixerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AC8AB6C51EB3EDA7D26CE6F /* AudioMixerState.swift */; };
 		B8A7FA6C0FA7DE88CE0A6255 /* SelectionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15311FE0E08476CA352DD0FB /* SelectionCoordinator.swift */; };
 		BA7685640D333A974EF6D1F6 /* ResettableControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EE5C7867F0B72F92C0F032 /* ResettableControls.swift */; };
+		BAF0C8765FE555AA7FE0528A /* ProcessorSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D07C4A60DC07CF2E59160C /* ProcessorSectionView.swift */; };
 		BB411BA73F2726E174FF3054 /* AudioRingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FAFDF7474D253DDBE042E3 /* AudioRingBuffer.swift */; };
 		BB826699AAD95D5477C0D88F /* peripheral_extension.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */; };
 		BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CA435023B19D31740E399C /* ColorExtensionsTests.swift */; };
@@ -265,6 +267,7 @@
 		08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClient.swift; sourceTree = "<group>"; };
 		0A03414ECE92D9AA04944FBB /* TextInputField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputField.swift; sourceTree = "<group>"; };
 		0A9849250F602C15283E458A /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
+		0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedPresentation.swift; sourceTree = "<group>"; };
 		0C19550BD759DAA9DFA9A015 /* extension_ui.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.pb.swift; sourceTree = "<group>"; };
 		0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarLEDs.swift; sourceTree = "<group>"; };
 		1031975F4050BF5875549DFA /* FileCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCommands.swift; sourceTree = "<group>"; };
@@ -448,6 +451,7 @@
 		D0D01B8A395DCAD93419F4DD /* AudioMixerStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerStateTests.swift; sourceTree = "<group>"; };
 		D0E57F03286476B3C039BC2F /* EditableListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableListViewModel.swift; sourceTree = "<group>"; };
 		D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelShape.swift; sourceTree = "<group>"; };
+		D1D07C4A60DC07CF2E59160C /* ProcessorSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessorSectionView.swift; sourceTree = "<group>"; };
 		D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryClient.swift; sourceTree = "<group>"; };
 		D33DB174D4636C866C169ACC /* ServerAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailability.swift; sourceTree = "<group>"; };
 		D3922D45B57369B7E5AB9B44 /* MachineNameTemplateSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNameTemplateSupport.swift; sourceTree = "<group>"; };
@@ -636,6 +640,7 @@
 				A40E77C5074CCD7F93B8183F /* NetworkSectionView.swift */,
 				D40BD06303AD2BB105BAEEC0 /* PeripheralsSectionView.swift */,
 				7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */,
+				D1D07C4A60DC07CF2E59160C /* ProcessorSectionView.swift */,
 				89D4F5285CFD741418E4365C /* RomTitleCache.swift */,
 				9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */,
 				AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */,
@@ -749,6 +754,7 @@
 				C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */,
 				4E49E6333D48600C4C8E1BD9 /* SpeedControlModel.swift */,
 				6AA9C1D32F71A0E3DD2F7D8E /* SpeedControlView.swift */,
+				0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */,
 				0A9849250F602C15283E458A /* StatusBarView.swift */,
 				F6A0228B7AD63C2E38A63080 /* StorageModeView.swift */,
 				FEB0459103AA8B2261579315 /* SystemClient.swift */,
@@ -1132,6 +1138,7 @@
 				C7CFB3597A51313102A58455 /* PopoverTextField.swift in Sources */,
 				42C67AA0AD4A7A00460ADB81 /* PresetDiagnosticsView.swift in Sources */,
 				D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */,
+				BAF0C8765FE555AA7FE0528A /* ProcessorSectionView.swift in Sources */,
 				EE33BF0A4DE7E404A3288E43 /* ProtocolFingerprint.swift in Sources */,
 				F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */,
 				FBA4B50F2A55D17E9C34AEF9 /* ReconnectCoordinator.swift in Sources */,
@@ -1155,6 +1162,7 @@
 				1B4902343B55BDA1E75617D1 /* SidewaysSocketEditor.swift in Sources */,
 				6286ABC565FAA33F26C0BB1F /* SpeedControlModel.swift in Sources */,
 				F1C97066D79A492FB7FD76D1 /* SpeedControlView.swift in Sources */,
+				01523CB60DD7D1A75D412AD1 /* SpeedPresentation.swift in Sources */,
 				C3ED514E6ED1E2D44FD407BF /* StandardDisplayStyle.swift in Sources */,
 				75BBA7064C85D6CDB3797111 /* StatusBarView.swift in Sources */,
 				8E648F53A0DD1B04A0E1F08E /* StorageModeView.swift in Sources */,
