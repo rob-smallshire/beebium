@@ -53,6 +53,11 @@ function(beebium_finalize_plugin)
         # All three server variants (model-b, model-b-plus, model-b-romram)
         # share the same output directory, so any of them is a valid anchor.
         set(_deploy_dir "$<TARGET_FILE_DIR:beebium-model-b>/extensions/${ARG_NAME}")
+        # The copy below runs only when the plugin relinks, so make an edit to
+        # the manifest alone relink it; otherwise the deployed manifest goes
+        # stale. (Honoured by the Makefile and Ninja generators.)
+        set_property(TARGET ${ARG_TARGET} APPEND PROPERTY
+            LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/manifest.json")
         add_custom_command(TARGET ${ARG_TARGET} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_deploy_dir}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
