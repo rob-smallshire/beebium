@@ -27,9 +27,11 @@ struct HardDiscsSectionView: View {
     private var editor: ScsiDiscEditor { ScsiDiscEditor(capability: capability) }
     private var discs: [ScsiDiscEditor.Disc] { editor.discs(in: draft) }
 
-    /// SCSI IDs already taken, so the per-row picker can mark clashes.
-    private var usedIds: [Int: Int] {
-        discs.reduce(into: [:]) { counts, disc in counts[disc.scsiId, default: 0] += 1 }
+    /// SCSI IDs used by more than one disc, so rows can flag a clash.
+    private var duplicateIds: Set<Int> {
+        var counts: [Int: Int] = [:]
+        for disc in discs { counts[disc.scsiId, default: 0] += 1 }
+        return Set(counts.filter { $0.value > 1 }.keys)
     }
 
     var body: some View {
@@ -54,7 +56,12 @@ struct HardDiscsSectionView: View {
                     .foregroundColor(.secondary)
             } else {
                 ForEach(discs) { disc in
-                    discRow(disc)
+                    HardDiscRowView(
+                        disc: disc,
+                        duplicateId: duplicateIds.contains(disc.scsiId),
+                        setScsiId: { draft = editor.draft(settingScsiId: $0, forDiscAt: disc.instanceIndex, in: draft) },
+                        setImage: { draft = editor.draft(settingImage: $0, forDiscAt: disc.instanceIndex, in: draft) },
+                        remove: { draft = editor.draft(removingDiscAt: disc.instanceIndex, from: draft) })
                     if disc.id != discs.last?.id {
                         Divider()
                     }
@@ -62,25 +69,35 @@ struct HardDiscsSectionView: View {
             }
         }
     }
+}
 
-    private func discRow(_ disc: ScsiDiscEditor.Disc) -> some View {
+/// One hard-disc row, with its own transient drop state. Accepts a dropped image
+/// file through the shared DiscImageDropDelegate (the same handler the floppy
+/// rows use); what the file is gets judged downstream by the server.
+private struct HardDiscRowView: View {
+    let disc: ScsiDiscEditor.Disc
+    let duplicateId: Bool
+    let setScsiId: (Int) -> Void
+    let setImage: (String?) -> Void
+    let remove: () -> Void
+
+    @State private var isDropTargeted = false
+    @State private var dropRefusal: DiscDropRefusal?
+    @StateObject private var dropError = TransientMessage()
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text("SCSI ID")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                Picker("", selection: Binding(
-                    get: { disc.scsiId },
-                    set: { draft = editor.draft(settingScsiId: $0, forDiscAt: disc.instanceIndex, in: draft) }
-                )) {
-                    ForEach(0..<8, id: \.self) { id in
-                        Text("\(id)").tag(id)
-                    }
+                Picker("", selection: Binding(get: { disc.scsiId }, set: setScsiId)) {
+                    ForEach(0..<8, id: \.self) { Text("\($0)").tag($0) }
                 }
                 .labelsHidden()
                 .frame(width: 60)
 
-                if (usedIds[disc.scsiId] ?? 0) > 1 {
+                if duplicateId {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                         .help("Another disc uses SCSI ID \(disc.scsiId)")
@@ -88,9 +105,7 @@ struct HardDiscsSectionView: View {
 
                 Spacer()
 
-                Button {
-                    draft = editor.draft(removingDiscAt: disc.instanceIndex, from: draft)
-                } label: {
+                Button(action: remove) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
@@ -98,23 +113,37 @@ struct HardDiscsSectionView: View {
             }
 
             HStack(spacing: 8) {
-                imageLabel(disc)
+                imageLabel
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Browse…") { browseForImage(disc) }
+                Button("Browse…") { browseForImage() }
                     .controlSize(.small)
                 if disc.image != nil {
-                    Button("Clear") {
-                        draft = editor.draft(settingImage: nil, forDiscAt: disc.instanceIndex, in: draft)
-                    }
-                    .controlSize(.small)
+                    Button("Clear") { setImage(nil) }
+                        .controlSize(.small)
                 }
+            }
+
+            if dropRefusal != nil || dropError.kind != nil {
+                DriveStatusLine(refusalMessage: dropRefusal?.message, message: dropError)
             }
         }
         .padding(.vertical, 4)
+        .background(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
+        .contentShape(Rectangle())
+        .onDrop(of: [.fileURL], delegate: DiscImageDropDelegate(
+            isSlotEmpty: disc.image == nil,
+            occupiedReason: "Clear disc first",
+            isTargeted: $isDropTargeted,
+            refusal: $dropRefusal,
+            accept: { url in setImage(url.path) },
+            report: { message in dropError.show(message) }))
+        .onChange(of: isDropTargeted) { targeted in
+            if targeted { dropError.clear() }
+        }
     }
 
     @ViewBuilder
-    private func imageLabel(_ disc: ScsiDiscEditor.Disc) -> some View {
+    private var imageLabel: some View {
         if let name = disc.displayName {
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
@@ -129,7 +158,7 @@ struct HardDiscsSectionView: View {
                 }
             }
         } else {
-            Text("No image")
+            Text("Empty - Drop a disc image here")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
@@ -138,13 +167,13 @@ struct HardDiscsSectionView: View {
     /// Browse for a hard-disc image file. Stored as an absolute path (the preset
     /// takes an absolute image path as-is); a bare bundled-master name is set by
     /// the catalogue chooser (to come) instead.
-    private func browseForImage(_ disc: ScsiDiscEditor.Disc) {
+    private func browseForImage() {
         let panel = NSOpenPanel()
         panel.title = "Select Hard Disc Image"
         panel.allowedContentTypes = [UTType(filenameExtension: "dat") ?? .data]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        draft = editor.draft(settingImage: url.path, forDiscAt: disc.instanceIndex, in: draft)
+        setImage(url.path)
     }
 }
