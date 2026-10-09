@@ -249,8 +249,9 @@ names its instances the same way, and `resolve-preset` writes the ids out.
 A preset's extension config is checked exactly as the equivalent command-line
 flag is (`normalise_extension_config`): an unknown extension, an unknown
 parameter, a missing required parameter, a value of the wrong type, outside
-the parameter's `min`/`max` or not among its `choices` stops the launch with
-`CONFIG` (78), and the manifest's defaults are filled in for the
+the parameter's `min`/`max` or not among its `choices`, or two parameters the
+manifest says exclude each other (`excludes`, e.g. the RTC's `time` and
+`offset`) stops the launch with `CONFIG` (78), and the manifest's defaults are filled in for the
 parameters left out. An empty value (`""`, or `[]` for a list) is the same as
 leaving the parameter out, so the default applies. A single value for a list
 parameter is a one-element list. A `filepath` parameter is resolved as in
@@ -282,13 +283,20 @@ These properties are general manifest parameter properties, shown by
 `provider_of` `scsi` and its `scsi-id` is `unique`, so two discs may share a
 SCSI ID only on different adapters.
 
-A manifest may also declare a `filepath` parameter `bundled` with a kind, as
-`scsi-hard-disc`'s `image` is `bundled` `hard-disc`: a bare name there refers
-to one of the server's bundled images of that kind, and the machine uses a
-per-user copy-on-write working copy of it, never the master
-([deployment.md](deployment.md#bundled-discs-and-copy-on-write)).
-`describe-preset-schema` lists the bundled images. No floppy images are
-bundled.
+A manifest may also declare a `filepath` parameter `bundled` with a kind: a
+bare name there refers to one of the images of that kind that ship with
+Beebium. There are two kinds. `hard-disc` (`scsi-hard-disc`'s `image`): a disc
+master in the server's disc directory, used through a per-user copy-on-write
+working copy, never the master
+([deployment.md](deployment.md#bundled-discs-and-copy-on-write)). `rom` (a
+coprocessor's `rom`): one of the ROMs that extension itself ships in its
+`roms/` directory; a bare name it does not ship is an error (write `./name`
+for a file of that name in the working directory). `describe-preset-schema`
+lists the bundled images of both kinds. No floppy images are bundled.
+
+A parameter may declare `choices_from` `"serial-ports"` (`host-serial`'s
+`path`, Piconet's `device_path`): a UI may offer the host's serial ports,
+which `list-serial-ports` lists, and the value stays free text.
 
 A SCSI hard disc, then, is two entries: the adapter and the disc.
 
@@ -417,7 +425,7 @@ There is one section per preset key, its `type` being the key:
 | `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives` with their geometry and image types |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
-| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "size_bytes": 10002432}]}` |
+| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}` |
 
 The split is deliberate: `describe-preset-schema` says where things go on this
 model, `describe-extension` what each extension takes. Extensions and

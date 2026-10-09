@@ -164,14 +164,21 @@ Parameter schema fields:
 - `choices` -- the only values allowed, each a bare string or
   `{"value": ..., "label": ...}`; matched without regard to case and stored as
   declared
-- `bundled` -- for a `filepath`, a kind of image the server ships (today
-  `hard-disc`): a bare name refers to one, used through a copy-on-write
-  working copy
+- `choices_from` -- the values a UI may offer come from a host enumeration
+  (today `serial-ports`, as `list-serial-ports` lists them); the value stays
+  free text
+- `excludes` -- keys that may not be given together with this one (declaring
+  it on either side is enough; a default or an empty value does not count)
+- `bundled` -- for a `filepath`, a kind of image that ships with Beebium: a
+  bare name refers to one. `hard-disc`: a disc master in the server's disc
+  directory, used through a copy-on-write working copy. `rom`: one of this
+  extension's own `roms`, loaded from its `roms/` directory
 - `provider_of` -- the value is the `id` of the instance providing the named
   attachment point to attach to (empty: the last one)
 - `unique` -- the value must differ among the instances on the same attachment
 
-`min`/`max` and `choices` are enforced for the command line and presets alike;
+`min`/`max`, `choices`, `excludes` and `required` are enforced for the command
+line and presets alike;
 `provider_of`, `unique` and the attachment points are checked before the
 machine is built ([preset-schema.md](preset-schema.md#attachment)). Only add a
 bound or a choice list the code really enforces, so that the form, the

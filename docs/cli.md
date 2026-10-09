@@ -523,6 +523,19 @@ beebium-model-b describe-extension --format jsonl scsi-hdd
 
 Like `list-extensions`, `--extension-dir` is repeatable and can be used to look up extensions in user-supplied directories.
 
+### list-serial-ports
+
+List the host's serial ports, with the USB identity the OS reports for each
+(best-effort). These are the values a configuration UI offers for an extension
+parameter declared `choices_from` `"serial-ports"` (host-serial's `path`,
+Piconet's `device_path`). Honours `--format pretty|tsv|jsonl`; `jsonl` gives
+`path`, `usb_vendor_id`, `usb_product_id` (numbers or `null`), `manufacturer`,
+`product` and `serial_number`.
+
+```bash
+beebium-model-b --format jsonl list-serial-ports
+```
+
 ### list-attachment-points
 
 List the attachment points an extension can plug into (the ids used by `attaches_to`), each with a display name and its occupancy. Pair it with `list-extensions --attaches-to <point>` to drive a configuration UI: enumerate the points, then for each point offer the extensions that attach to it.
