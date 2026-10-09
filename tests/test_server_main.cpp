@@ -396,6 +396,36 @@ TEST_CASE("merge_preset_extensions: real AUN manifest, only typed keys beat the 
 }
 
 // ============================================================================
+// apply_rom_defaults(): the ROMs a machine gets when the config names none,
+// decided without a machine
+// ============================================================================
+
+TEST_CASE("apply_rom_defaults: fills the default MOS and language ROM",
+          "[server_main][apply_rom_defaults]") {
+    using Memory = MachineType::Memory;
+    ServerConfig<MachineType> config;
+
+    apply_rom_defaults(config);
+
+    CHECK(config.mos_filepath == Memory::DEFAULT_MOS_ROM);
+    REQUIRE(config.rom_slots.count(Memory::DEFAULT_LANGUAGE_SLOT) == 1);
+    CHECK(config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == Memory::DEFAULT_LANGUAGE_ROM);
+}
+
+TEST_CASE("apply_rom_defaults: leaves a configured MOS and language slot alone",
+          "[server_main][apply_rom_defaults]") {
+    using Memory = MachineType::Memory;
+    ServerConfig<MachineType> config;
+    config.mos_filepath = "my-mos.rom";
+    config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] = EMPTY_SLOT_MARKER;
+
+    apply_rom_defaults(config);
+
+    CHECK(config.mos_filepath == "my-mos.rom");
+    CHECK(config.rom_slots[Memory::DEFAULT_LANGUAGE_SLOT] == EMPTY_SLOT_MARKER);
+}
+
+// ============================================================================
 // load_roms() tests
 // ============================================================================
 

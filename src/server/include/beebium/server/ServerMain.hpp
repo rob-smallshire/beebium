@@ -1510,27 +1510,17 @@ std::optional<std::string> validate_config(const ServerConfig<MachineType>& conf
     return std::nullopt;  // Valid
 }
 
-// Load MOS ROM and sideways ROMs into machine memory.
-// Applies defaults to config where not specified.
-// Throws on file I/O errors.
+// Fill in the ROMs the machine gets when the config names none: the model's
+// MOS, and its language, DFS and expansion-board ROMs in their slots unless a
+// sideways slot already claims that socket. Needs no machine, so the resolved
+// configuration can be reported before launch (resolve-preset).
 template<typename MachineType>
-void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
+void apply_rom_defaults(ServerConfig<MachineType>& config) {
     using Memory = typename MachineType::Memory;
 
     // Apply default MOS ROM if not specified
     if (config.mos_filepath.empty()) {
         config.mos_filepath = std::string(Memory::DEFAULT_MOS_ROM);
-    }
-
-    // Apply motherboard link state to memory wiring before any ROM is
-    // loaded. On Model B+ this drops the IC71 binding from the slot pair
-    // S13 has routed away from, so loaded BASIC only appears at the
-    // currently-active pair. Other variants don't supply this hook.
-    if constexpr (requires (typename MachineType::Memory& m,
-                            const typename MachineType::Memory::MotherboardLinks& l) {
-                      m.apply_motherboard_links(l);
-                  }) {
-        machine.state().memory.apply_motherboard_links(config.motherboard_links);
     }
 
     // Apply default ROM fallbacks (BASIC into the language slot, DFS into
@@ -1601,6 +1591,25 @@ void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
                 std::string(Memory::DEFAULT_BOARD_ROM);
         }
     }
+}
+
+// Load MOS ROM and sideways ROMs into machine memory.
+// Applies defaults to config where not specified.
+// Throws on file I/O errors.
+template<typename MachineType>
+void load_roms(MachineType& machine, ServerConfig<MachineType>& config) {
+    // Apply motherboard link state to memory wiring before any ROM is
+    // loaded. On Model B+ this drops the IC71 binding from the slot pair
+    // S13 has routed away from, so loaded BASIC only appears at the
+    // currently-active pair. Other variants don't supply this hook.
+    if constexpr (requires (typename MachineType::Memory& m,
+                            const typename MachineType::Memory::MotherboardLinks& l) {
+                      m.apply_motherboard_links(l);
+                  }) {
+        machine.state().memory.apply_motherboard_links(config.motherboard_links);
+    }
+
+    apply_rom_defaults(config);
 
     // Load MOS ROM
     auto mos_path = RomPaths::find_rom(config.mos_filepath);
