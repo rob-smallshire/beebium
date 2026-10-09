@@ -21,6 +21,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace beebium {
@@ -33,6 +34,16 @@ struct ParameterChoice {
 
 // Schema for one extension parameter.
 struct ParameterSchema {
+    ParameterSchema() = default;
+    // The core fields, in the order a manifest's parameters are usually
+    // written; the rest are set by name.
+    ParameterSchema(std::string key_, std::string type_, std::string description_,
+                    int position_ = -1, bool required_ = false, bool is_list_ = false,
+                    std::string default_value_ = {})
+        : key(std::move(key_)), type(std::move(type_)), description(std::move(description_)),
+          position(position_), required(required_), is_list(is_list_),
+          default_value(std::move(default_value_)) {}
+
     std::string key;
     std::string type;           // "string", "integer", "boolean", "filepath"
     std::string description;

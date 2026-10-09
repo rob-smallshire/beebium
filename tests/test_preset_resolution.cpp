@@ -227,7 +227,8 @@ TEST_CASE("preset_document with Given leaves defaults out; with Every fills them
     Config config = config_with_manifests();
     apply_rom_defaults(config);
     config.mos_filepath.clear();  // as if no --mos was given
-    PresetDocumentHeader header{"Bare"};
+    PresetDocumentHeader header;
+    header.name = "Bare";
     std::string error;
 
     auto given = preset_document(config, header, DocumentKeys::Given, error);
@@ -247,8 +248,9 @@ TEST_CASE("preset_document refuses a transport with no station", "[preset-resolu
     auto config = config_with_manifests();
     config.extension_instances.push_back({"net", {}, {}, false, {}});
     std::string error;
-    CHECK_FALSE(preset_document(config, PresetDocumentHeader{"X"}, DocumentKeys::Given, error)
-                    .has_value());
+    PresetDocumentHeader header;
+    header.name = "X";
+    CHECK_FALSE(preset_document(config, header, DocumentKeys::Given, error).has_value());
     CHECK_THAT(error, ContainsSubstring("requires --station"));
 }
 

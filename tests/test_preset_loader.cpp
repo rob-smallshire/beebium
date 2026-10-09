@@ -188,7 +188,9 @@ TEST_CASE("load_preset: non-object JSON returns error", "[preset][load_preset]")
 // ============================================================================
 
 TEST_CASE("PresetLoadResult: success() matches config presence", "[preset][PresetLoadResult]") {
-    PresetLoadResult success_result{PresetConfig{"Test"}, {}};
+    PresetConfig loaded;
+    loaded.name = "Test";
+    PresetLoadResult success_result{loaded, {}};
     REQUIRE(success_result.success());
     REQUIRE(static_cast<bool>(success_result));
     CHECK(success_result.error() == nullptr);
