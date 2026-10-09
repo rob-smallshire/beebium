@@ -45,6 +45,10 @@ struct ConfigurationEditor: View {
     /// Sideways bank schema describing the machine's sockets
     let memorySchema: SidewaysSchemaSection?
 
+    /// The model's hard-disc capability, if it has one (shows the Storage tab's
+    /// Hard discs group).
+    let hardDiscCapability: HardDiscCapability?
+
     /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
@@ -151,7 +155,8 @@ struct ConfigurationEditor: View {
         case .storage:
             StorageSectionView(
                 draft: $draft,
-                schema: storageSchema
+                schema: storageSchema,
+                hardDiscCapability: hardDiscCapability
             )
         case .memory:
             MemorySectionView(

@@ -498,6 +498,42 @@ class PresetManager: ObservableObject {
         }
     }
 
+    /// Fetch the `extensions` schema section for a preset's model: the model's
+    /// attachment points and which extensions can attach where. Used to decide
+    /// which configuration sections the model offers (e.g. hard discs).
+    func fetchExtensionsSchema(for preset: MachinePreset) async -> ExtensionsSchemaSection? {
+        await fetchSection(type: "extensions", executablePath: preset.coreExecutablePath)
+    }
+
+    /// Run describe-preset-schema and decode the section of the given `type`.
+    private func fetchSection<T: Decodable>(type: String, executablePath: String) async -> T? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = ["describe-preset-schema"]
+
+        let stdoutPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+
+            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let sections = json["sections"] as? [[String: Any]],
+                  let section = sections.first(where: { ($0["type"] as? String) == type }) else {
+                return nil
+            }
+            let sectionData = try JSONSerialization.data(withJSONObject: section)
+            return try JSONDecoder().decode(T.self, from: sectionData)
+        } catch {
+            NSLog("[PresetManager] Failed to decode '\(type)' schema section: \(error)")
+            return nil
+        }
+    }
+
     /// Sort presets by release date (chronological), then by name (natural alphanumeric).
     private func sortPresets(_ presets: [MachinePreset]) -> [MachinePreset] {
         presets.sorted { lhs, rhs in

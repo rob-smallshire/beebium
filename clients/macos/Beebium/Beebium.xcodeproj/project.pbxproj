@@ -15,6 +15,7 @@
 		03B945147D637860AEC9B652 /* aun.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32A705682AF714B2B54471F /* aun.grpc.swift */; };
 		03F8C1AF54A149B3750029EE /* audio.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */; };
 		03FCAEA23F2FF31EC7E07D29 /* KeyboardMappings in Resources */ = {isa = PBXBuildFile; fileRef = C9A1A70DB6662E96A6210970 /* KeyboardMappings */; };
+		054AD7E408934C75069853A5 /* ScsiDiscEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B03CB6D61C32284DED1F50E /* ScsiDiscEditorTests.swift */; };
 		05D71668C0E59AA851697A16 /* DriveStatusLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750FA727EAFD38FAE34EA7C7 /* DriveStatusLine.swift */; };
 		06B9C1E897D9DB39E8392078 /* SidebarModeContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7386122C0E5009AE250FECD /* SidebarModeContent.swift */; };
 		07C91006D788A614860664BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4635C74CA6E1654868006CA6 /* Assets.xcassets */; };
@@ -78,6 +79,7 @@
 		47FD133746DA2EEA77B73EDC /* econet.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D969BBA00E4077B69BBCACAF /* econet.pb.swift */; };
 		49FEE51472DA8FB96B3587EA /* econet_transport.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6020BCD62F9F79F3019AB3D /* econet_transport.pb.swift */; };
 		4AD0CF022E27D94F9FB1FEDC /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FAB928B6093490D60EECA734 /* MetalKit.framework */; };
+		4B4653D36FCF045518EC78EC /* HardDiscsSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B08ED433C4601841BD14D7 /* HardDiscsSectionView.swift */; };
 		4CF04CE9A5BFD96B5E1E4590 /* BiquadFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C511516BDB7D578CF5D63867 /* BiquadFilter.swift */; };
 		4CFAD53FAAACED77B5672A4F /* AudioClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EE9DCF3D01CE98B029C0C3 /* AudioClient.swift */; };
 		4D9536D54F0C9291F5ECD326 /* DiscClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6562062957B62B8C099A42 /* DiscClient.swift */; };
@@ -182,6 +184,7 @@
 		CC184BBA4B126032E36F04DB /* FocusDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9D42AD7DD904E1B5B80617 /* FocusDiagnostics.swift */; };
 		CC3CDA8C1FB5B978B592EADE /* EconetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115851A5C42EB33AAB063B35 /* EconetClientTests.swift */; };
 		CCF53B2BFF28A41B641DEA7A /* FileReferenceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74BC34119DE428F9D633CD8 /* FileReferenceView.swift */; };
+		CFE3E67E8128083CCC839C89 /* ScsiDiscEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */; };
 		D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */; };
 		D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */; };
 		D5072BCBDC5F2D2DBAFFAF87 /* PixelShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */; };
@@ -204,6 +207,7 @@
 		E487A1E602822CCC33215258 /* VideoClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38117A6A03CE78C8AC64C4C5 /* VideoClientTests.swift */; };
 		E529443D463B439E147AEDD0 /* MemorySectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */; };
 		E5C73027F3EBE4D4754E5E0D /* VideoClientEventLoopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB7B6DCB7E4F65741BE1EDA /* VideoClientEventLoopTests.swift */; };
+		E5F649776BF1A6D963F3A89E /* ExtensionsSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */; };
 		E89BC098B23BC7953F1F7317 /* WelcomeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */; };
 		EB57600D1B017B3105D1F79D /* system.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C4007152A43F9E94FB30A5 /* system.pb.swift */; };
 		EB7386AD783AEBB8DCABC15A /* keyboard.proto in Resources */ = {isa = PBXBuildFile; fileRef = DFB1414298AE8F8261138293 /* keyboard.proto */; };
@@ -301,6 +305,7 @@
 		4F12FAA03C7C95012C4CD79D /* MachineNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNames.swift; sourceTree = "<group>"; };
 		4FB76E7D20ACD4AEA9B9274B /* ServerErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerErrorView.swift; sourceTree = "<group>"; };
 		5123F0FA32B3711748D351D7 /* DebugDisplayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDisplayStyle.swift; sourceTree = "<group>"; };
+		55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsSchemaSection.swift; sourceTree = "<group>"; };
 		5635C71D7BCFDC74AE40070B /* econet_transport.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet_transport.grpc.swift; sourceTree = "<group>"; };
 		57967139EC7DEA91FCF67161 /* debugger.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = debugger.pb.swift; sourceTree = "<group>"; };
 		58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSelectionGeometryTests.swift; sourceTree = "<group>"; };
@@ -334,6 +339,7 @@
 		757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralsClient.swift; sourceTree = "<group>"; };
 		76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockStateReconcilerTests.swift; sourceTree = "<group>"; };
+		7B03CB6D61C32284DED1F50E /* ScsiDiscEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScsiDiscEditorTests.swift; sourceTree = "<group>"; };
 		7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetTransportsClient.swift; sourceTree = "<group>"; };
 		7C5792BABD709C954B706793 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDiagnosticsView.swift; sourceTree = "<group>"; };
@@ -374,6 +380,7 @@
 		965A81E6609BBCFAA7FA3997 /* ExtensionEditorForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionEditorForm.swift; sourceTree = "<group>"; };
 		98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RomHeaderInfo.swift; sourceTree = "<group>"; };
 		992C39260909EB85C84D2C20 /* SidebarMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarMode.swift; sourceTree = "<group>"; };
+		9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScsiDiscEditor.swift; sourceTree = "<group>"; };
 		9C2BCB8ED24D409A21A27A8C /* PopoverTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverTextField.swift; sourceTree = "<group>"; };
 		9CD03C0FA5A6E6032A953101 /* SelectionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionCoordinatorTests.swift; sourceTree = "<group>"; };
 		9D59B36AC9E2A59CA68F4FD3 /* ExtensionViewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionViewRenderer.swift; sourceTree = "<group>"; };
@@ -432,6 +439,7 @@
 		D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscErrorKindLabelTests.swift; sourceTree = "<group>"; };
 		D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteCoordinatorTests.swift; sourceTree = "<group>"; };
 		D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorySectionView.swift; sourceTree = "<group>"; };
+		D8B08ED433C4601841BD14D7 /* HardDiscsSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardDiscsSectionView.swift; sourceTree = "<group>"; };
 		D969BBA00E4077B69BBCACAF /* econet.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = econet.pb.swift; sourceTree = "<group>"; };
 		D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SvgPathParserTests.swift; sourceTree = "<group>"; };
 		DA0CF5589888F672F43B52FD /* aun.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aun.pb.swift; sourceTree = "<group>"; };
@@ -581,6 +589,7 @@
 			children = (
 				5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */,
 				80EC3C1B36F0B3BFDEEDD1A1 /* DiscImageInfo.swift */,
+				55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */,
 				C1E96BF7B20865AFD600D53F /* JSONValue.swift */,
 				2A4A8D3907E53A1168B8542D /* MachineDraft.swift */,
 				28ED949DB593C8353954F7B1 /* MachinePreset.swift */,
@@ -597,9 +606,11 @@
 			children = (
 				FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */,
 				664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */,
+				D8B08ED433C4601841BD14D7 /* HardDiscsSectionView.swift */,
 				D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */,
 				7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */,
 				89D4F5285CFD741418E4365C /* RomTitleCache.swift */,
+				9A0C6F5673F086F459EA3FDC /* ScsiDiscEditor.swift */,
 				AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */,
 				E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */,
 			);
@@ -789,6 +800,7 @@
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
 				27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */,
 				58D505651495B05B9E0A01F5 /* ScreenSelectionGeometryTests.swift */,
+				7B03CB6D61C32284DED1F50E /* ScsiDiscEditorTests.swift */,
 				9CD03C0FA5A6E6032A953101 /* SelectionCoordinatorTests.swift */,
 				AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */,
 				B79C08E01A7BA46EE2246BF7 /* SidewaysSchemaTests.swift */,
@@ -970,6 +982,7 @@
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
 				4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */,
 				AC8547463BFF17B483A076FA /* ScreenSelectionGeometryTests.swift in Sources */,
+				054AD7E408934C75069853A5 /* ScsiDiscEditorTests.swift in Sources */,
 				54C94C4200C162B935D5C4AB /* SelectionCoordinatorTests.swift in Sources */,
 				10FB81233FBCF7FBD0EE36D5 /* ServerAvailabilityTests.swift in Sources */,
 				0E39819B2C23C51F72129F27 /* SidewaysSchemaTests.swift in Sources */,
@@ -1035,6 +1048,7 @@
 				8C6EF54139165E4D6F07941C /* ExtensionPanelView.swift in Sources */,
 				EE2E16B800D75FA4C460895A /* ExtensionUiClient.swift in Sources */,
 				F8DB66D575799986E3C664C3 /* ExtensionViewRenderer.swift in Sources */,
+				E5F649776BF1A6D963F3A89E /* ExtensionsSchemaSection.swift in Sources */,
 				4DD0F4094D0E603CFF35DF6C /* FileCommands.swift in Sources */,
 				A401339BE3EA315D59F1DC40 /* FileReferenceMenu.swift in Sources */,
 				CCF53B2BFF28A41B641DEA7A /* FileReferenceView.swift in Sources */,
@@ -1043,6 +1057,7 @@
 				C0FE51C252E4FBB01738A7B3 /* FocusSelfTest.swift in Sources */,
 				B41DE38A258D6C2E68314C5D /* FocusedDialogKeys.swift in Sources */,
 				6115EAB5B469DD1B9242F92E /* GeneralSettingsPane.swift in Sources */,
+				4B4653D36FCF045518EC78EC /* HardDiscsSectionView.swift in Sources */,
 				089EF7471FE413A083088115 /* HostFingerprint.swift in Sources */,
 				4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */,
 				40F2A089FF91784C67231853 /* IndicatorClient.swift in Sources */,
@@ -1084,6 +1099,7 @@
 				1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */,
 				44CFFA37FCA909B67E296E53 /* RomTitleCache.swift in Sources */,
 				986C994B355DAC32982C71E7 /* ScreenSelectionGeometry.swift in Sources */,
+				CFE3E67E8128083CCC839C89 /* ScsiDiscEditor.swift in Sources */,
 				B8A7FA6C0FA7DE88CE0A6255 /* SelectionCoordinator.swift in Sources */,
 				14E16012DD8EC1046039A0FF /* SelectionOverlayView.swift in Sources */,
 				9A8754B2F1CB725F4A296CDF /* SerialClient.swift in Sources */,

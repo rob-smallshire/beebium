@@ -24,6 +24,9 @@ struct StorageSectionView: View {
     /// Schema describing available options (nil if not yet loaded)
     let schema: StorageSchemaSection?
 
+    /// The model's hard-disc capability, if any (shows the Hard discs group).
+    let hardDiscCapability: HardDiscCapability?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -31,6 +34,10 @@ struct StorageSectionView: View {
                     fdcSocketSection(schema: fdcSchema)
                 }
                 floppyDrivesSection
+                if let capability = hardDiscCapability {
+                    Divider()
+                    HardDiscsSectionView(draft: $draft, capability: capability)
+                }
             }
             .padding(12)
         }

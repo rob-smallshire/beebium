@@ -33,6 +33,8 @@ struct NewMachineDialog: View {
     @State private var originalDraft = MachineDraft()
     @State private var storageSchema: StorageSchemaSection?
     @State private var memorySchema: SidewaysSchemaSection?
+    /// The model's hard-disc capability (adapter + disc chain), if it has one.
+    @State private var hardDiscCapability: HardDiscCapability?
     @State private var isLoadingSchema = false
 
     /// resolve-preset diagnostics for the current draft. Errors block launching;
@@ -269,6 +271,7 @@ struct NewMachineDialog: View {
                         originalDraft: originalDraft,
                         storageSchema: storageSchema,
                         memorySchema: memorySchema,
+                        hardDiscCapability: hardDiscCapability,
                         romResolver: romResolver(for: selectedPreset),
                         modelId: selectedPreset?.modelName ?? "model-b"
                     )
@@ -419,6 +422,7 @@ struct NewMachineDialog: View {
             let manager = presetManager
             let storage = await manager.fetchStorageSchema(for: preset)
             let sideways = await manager.fetchSidewaysSchema(for: preset)
+            let extensions = await manager.fetchExtensionsSchema(for: preset)
             // The resolved document is the editing source: defaults filled,
             // paths absolute, default ROMs expanded into explicit slots. The
             // raw-file decode is a defensive fallback for the rare case the
@@ -429,6 +433,7 @@ struct NewMachineDialog: View {
             await MainActor.run {
                 storageSchema = storage
                 memorySchema = sideways
+                hardDiscCapability = extensions.flatMap { HardDiscCapability(schema: $0) }
 
                 // Fill the metadata the launch needs if it was omitted.
                 if loaded.name == nil { loaded.name = preset.name }
