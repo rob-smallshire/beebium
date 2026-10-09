@@ -20,6 +20,7 @@
             "key": "rom",
             "label": "Client ROM",
             "type": "filepath",
+            "bundled": "rom",
             "description": "Path to the full 4KB Tube client ROM image (the 2732 device contents, F000-FFFF)",
             "required": false
         }

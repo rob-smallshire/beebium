@@ -1005,6 +1005,56 @@ void assign_extension_ids(ServerConfig<MachineType>& config) {
     }
 }
 
+// An image a parameter declared `bundled` may name by its bare name: a hard
+// disc master the server ships (kind "hard-disc", any extension), or a ROM a
+// plugin ships in its roms/ directory (kind "rom", that extension only).
+struct BundledImage {
+    std::string kind;
+    std::string image;            // the bare name, e.g. "l3fs-v1_26b.dat"
+    std::uintmax_t size_bytes = 0;
+    std::string extension;        // the extension it belongs to; "" = any
+    std::filesystem::path filepath;  // the shipped file
+};
+
+// Every bundled image, of every kind: the one catalogue describe-preset-schema
+// lists and the launch and resolve-preset check names against.
+inline std::vector<BundledImage> bundled_images(const beebium::ExtensionResolver& resolver) {
+    std::vector<BundledImage> images;
+    for (const auto& disc : beebium::server::DiscPaths::bundled_hard_disc_images()) {
+        images.push_back({"hard-disc", disc.image, disc.size_bytes, "", {}});
+    }
+    for (const auto& e : resolver.entries()) {
+        for (const auto& rom : e.manifest->roms) {
+            images.push_back({"rom", rom.filename, rom.size, e.manifest->name,
+                              e.manifest->manifest_dirpath / "roms" / rom.filename});
+        }
+    }
+    return images;
+}
+
+// True when `value` is a bare name (no directory component, not absolute):
+// the form a bundled parameter uses to name a bundled image.
+inline bool is_bare_name(const std::string& value) {
+    const std::filesystem::path path(value);
+    return !value.empty() && !path.is_absolute() && !path.has_parent_path() &&
+           value.find("://") == std::string::npos;
+}
+
+// The bundled image a bare value of `param` (of extension `manifest`) names,
+// or nullptr.
+inline const BundledImage* find_bundled_image(const std::vector<BundledImage>& images,
+                                              const beebium::ExtensionManifest& manifest,
+                                              const beebium::ParameterSchema& param,
+                                              const std::string& value) {
+    for (const auto& image : images) {
+        if (image.kind == param.bundled && image.image == value &&
+            (image.extension.empty() || image.extension == manifest.name)) {
+            return &image;
+        }
+    }
+    return nullptr;
+}
+
 // The attachment points this model's own hardware offers extensions.
 template<typename Memory>
 std::vector<std::string> machine_attachment_points() {
@@ -2706,23 +2756,35 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             return {nullptr, ExitCode::CONFIG};
         }
 
-        // Resolve a bundled hard-disc reference (a bare, version-named
-        // filename, in a parameter the manifest declares bundled "hard-disc")
-        // to a per-user working copy via copy-on-first-use, so the shipped
-        // read-only master is never opened writable. Explicit user paths
-        // (absolute or with a directory component) pass through unchanged.
-        // See DiscPaths.
+        // A bare name in a parameter the manifest declares bundled names a
+        // shipped image. A hard disc resolves to a per-user working copy via
+        // copy-on-first-use, so the shipped read-only master is never opened
+        // writable (see DiscPaths); a ROM to the file in its plugin's roms/.
+        // Explicit paths (absolute or with a directory component) pass through.
         for (const auto& p : manifest->parameters) {
-            if (p.bundled != "hard-disc") continue;
-            auto image_it = inst.config.find(p.key);
-            if (image_it == inst.config.end() || image_it->second.empty()) continue;
-            try {
-                image_it->second =
-                    beebium::server::DiscPaths::resolve_disc_image(image_it->second).string();
-            } catch (const std::exception& e) {
-                std::cerr << "Error: cannot resolve disc image for '"
-                          << inst.name << "': " << e.what() << "\n";
-                return {nullptr, ExitCode::CONFIG};
+            if (p.bundled.empty()) continue;
+            auto it = inst.config.find(p.key);
+            if (it == inst.config.end() || !is_bare_name(it->second)) continue;
+            if (p.bundled == "hard-disc") {
+                try {
+                    it->second =
+                        beebium::server::DiscPaths::resolve_disc_image(it->second).string();
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: cannot resolve disc image for '"
+                              << inst.name << "': " << e.what() << "\n";
+                    return {nullptr, ExitCode::CONFIG};
+                }
+            } else {
+                const auto images = bundled_images(config.extension_resolver);
+                const auto* image = find_bundled_image(images, *manifest, p, it->second);
+                if (!image) {
+                    std::cerr << "Error: " << inst.name << " " << p.key << " '" << it->second
+                              << "' is not a " << p.bundled << " this extension ships"
+                              << " (for a file in the working directory, write ./"
+                              << it->second << ")\n";
+                    return {nullptr, ExitCode::CONFIG};
+                }
+                it->second = image->filepath.string();
             }
         }
 
@@ -4252,16 +4314,19 @@ public:
                     {"extensions", attaching}});
             }
             // The images a parameter declared bundled may name by bare name,
-            // by kind. The masters are the server's (DiscPaths); floppy discs
-            // have none.
-            ojson hard_discs = ojson::array();
-            for (const auto& image : beebium::server::DiscPaths::bundled_hard_disc_images()) {
-                hard_discs.push_back(
-                    ojson{{"image", image.image}, {"size_bytes", image.size_bytes}});
+            // by kind (bundled_images): the hard-disc masters the server ships,
+            // and each plugin's own ROMs. Floppy discs have none.
+            ojson by_kind{{"hard-disc", ojson::array()}, {"rom", ojson::array()}};
+            for (const auto& image : bundled_images(resolver_cfg.extension_resolver)) {
+                by_kind[image.kind].push_back(ojson{
+                    {"image", image.image},
+                    {"size_bytes", image.size_bytes},
+                    {"extension", image.extension.empty() ? ojson(nullptr)
+                                                          : ojson(image.extension)}});
             }
             sections.push_back(ojson{{"type", "extensions"},
                                      {"attachment_points", attachment_points},
-                                     {"bundled_images", ojson{{"hard-disc", hard_discs}}}});
+                                     {"bundled_images", by_kind}});
         }
 
         output["sections"] = sections;
@@ -5618,7 +5683,7 @@ private:
                     "ignored: this model has a built-in disc controller");
         }
         apply_rom_defaults(config);
-        check_bundled_images_exist(config, warning);
+        if (check_bundled_images_exist(config, error, warning)) failed = true;
         check_roms_exist(config, preset, warning);
         check_floppies_exist(config, warning);
 
@@ -5659,30 +5724,37 @@ private:
         }
     }
 
-    // A bare name in a parameter declared bundled must be one of the bundled
-    // images; resolving it at launch fails otherwise.
-    template<typename Warning>
-    static void check_bundled_images_exist(const ServerConfig<MachineType>& config,
-                                           Warning warning) {
-        const auto images = beebium::server::DiscPaths::bundled_hard_disc_images();
+    // A bare name in a parameter declared bundled must name a bundled image;
+    // the launch fails otherwise. A plugin's ROMs are certain, so an unknown
+    // one is an error; the hard-disc masters are the server's disc directory,
+    // which the launch may see differently, so an unknown one is a warning.
+    template<typename Error, typename Warning>
+    static bool check_bundled_images_exist(const ServerConfig<MachineType>& config,
+                                           Error error, Warning warning) {
+        bool failed = false;
+        const auto images = bundled_images(config.extension_resolver);
         for (const auto& inst : config.extension_instances) {
             const auto* m = config.extension_resolver.find_by_name(inst.name);
             if (!m) continue;
             for (const auto& p : m->parameters) {
-                if (p.bundled != "hard-disc") continue;
+                if (p.bundled.empty()) continue;
                 auto it = inst.config.find(p.key);
-                if (it == inst.config.end() || std::filesystem::path(it->second).has_parent_path() ||
-                    std::filesystem::path(it->second).is_absolute()) {
+                if (it == inst.config.end() || !is_bare_name(it->second) ||
+                    find_bundled_image(images, *m, p, it->second)) {
                     continue;
                 }
-                const bool found = std::any_of(images.begin(), images.end(),
-                                               [&](const auto& i) { return i.image == it->second; });
-                if (!found) {
-                    warning(inst.from_preset ? inst.preset_pointer + "/config/" + p.key : "",
-                            "'" + it->second + "' is not a bundled hard-disc image");
+                const auto path = inst.from_preset ? inst.preset_pointer + "/config/" + p.key
+                                                   : std::string();
+                if (p.bundled == "rom") {
+                    error(path, "'" + it->second + "' is not a ROM " + inst.name + " ships");
+                    failed = true;
+                } else {
+                    warning(path, "'" + it->second + "' is not a bundled " + p.bundled +
+                                      " image");
                 }
             }
         }
+        return failed;
     }
 
     template<typename Warning>

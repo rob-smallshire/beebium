@@ -1854,3 +1854,48 @@ TEST_CASE("resolve-preset: every extension instance is written with an id",
     CHECK(extensions[1].at("config").at("id") == "acorn-scsi-1");
     CHECK(extensions[2].at("config").at("id") == "scsi-hard-disc");
 }
+
+// ============================================================================
+// A plugin's own ROMs, named by bare name
+// ============================================================================
+
+TEST_CASE("describe-preset-schema: the ROMs extensions ship, with their extension",
+          "[integration][preset][describe-preset-schema][bundled]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    bool found = false;
+    for (const auto& rom : extensions.at("bundled_images").at("rom")) {
+        if (rom.at("image") == "acorn-tube-6502_1_10.rom") {
+            found = true;
+            CHECK(rom.at("extension") == "acorn-65c02-coprocessor");
+            CHECK(rom.at("size_bytes") == 4096);
+        }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("resolve-preset: a bare ROM name the extension does not ship is an error",
+          "[integration][preset][resolve-preset][bundled]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "rom.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "acorn-65c02-coprocessor", "config": {"rom": "acorn-tube-65c102_1_20.rom"}}]})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+
+    REQUIRE(out.at("diagnostics").size() == 1);
+    CHECK(out.at("diagnostics")[0].at("path") == "/extensions/0/config/rom");
+}
+
+TEST_CASE("a coprocessor's ROM named by bare name loads the one the plugin ships",
+          "[integration][preset][bundled]") {
+    TempDirectory temp_dir;
+    auto png_filepath = temp_dir.path() / "rom.png";
+    auto ok = run_command(EXECUTABLE + " capture-screenshot --duration 0 --output \"" +
+                          png_filepath.string() +
+                          "\" --tube-65c102 rom=acorn-tube-65c102_1_20.rom");
+    INFO(ok.stdout_output << ok.stderr_output);
+    CHECK(ok.exit_code == 0);
+    auto bad = run_command(EXECUTABLE + " capture-screenshot --duration 0 --output \"" +
+                           png_filepath.string() + "\" --tube-65c102 rom=no-such.rom");
+    CHECK(bad.exit_code == 78);
+}
