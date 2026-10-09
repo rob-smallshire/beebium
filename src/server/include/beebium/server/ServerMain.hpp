@@ -717,6 +717,34 @@ void print_usage(const char* program_name) {
     }
 }
 
+// A sideways slot as a preset writes it (sideways_bank.slots[]). With
+// every_key, a RAM slot always carries image_uri (null when there is none)
+// and write_protected; without it, they appear only when set.
+inline nlohmann::ordered_json sideways_slot_json(const SidewaysConfig& slot, bool every_key) {
+    nlohmann::ordered_json entry{{"slot", slot.slot}};
+    switch (slot.type) {
+        case SidewaysSlotType::Rom:
+            entry["type"] = "rom";
+            entry["image_uri"] = slot.image_filepath;
+            break;
+        case SidewaysSlotType::Ram:
+            entry["type"] = "ram";
+            if (!slot.image_filepath.empty()) {
+                entry["image_uri"] = slot.image_filepath;
+            } else if (every_key) {
+                entry["image_uri"] = nullptr;
+            }
+            if (slot.write_protected || every_key) {
+                entry["write_protected"] = slot.write_protected;
+            }
+            break;
+        case SidewaysSlotType::Empty:
+            entry["type"] = "empty";
+            break;
+    }
+    return entry;
+}
+
 // An extension instance's config as a preset writes it: each value typed by
 // its manifest parameter (an integer parameter as a JSON number, a boolean as
 // true/false, anything else a string) and each list parameter as an array.
@@ -1229,6 +1257,41 @@ void merge_preset_extensions(ServerConfig<MachineType>& config) {
     insts = std::move(kept);
 }
 
+// The preset a --preset argument names: a file path or, failing that, a
+// preset id resolved like show-preset (system presets, then user presets).
+inline std::optional<std::filesystem::path> locate_preset(const std::string& preset_arg) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(preset_arg, ec)) {
+        return std::filesystem::path(preset_arg);
+    }
+    return PresetPaths::find_preset_filepath(preset_arg);
+}
+
+inline std::string preset_not_found_message(const std::string& preset_arg) {
+    return "Preset not found: '" + preset_arg +
+           "' (no such file, and no system or user preset with that id)";
+}
+
+// Fold the preset staged by apply_preset in under the command line, once both
+// are known and the extension resolver is populated: the sideways slots and
+// startup links as baselines the CLI overrides, then the extensions --
+// normalised as the CLI's were, merged with the CLI's (#150), named
+// (assign_extension_ids) and checked for somewhere to attach. Returns the
+// problems found, each located in the preset where it can be; the extension
+// steps after normalisation run only if it succeeds. start and resolve-preset
+// both build their configuration through this.
+template<typename MachineType>
+std::vector<PresetDiagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
+    merge_preset_sideways_configs(config);
+    merge_preset_startup(config);
+    if (auto errors = normalise_preset_extensions(config); !errors.empty()) {
+        return errors;
+    }
+    merge_preset_extensions(config);
+    assign_extension_ids(config);
+    return check_extension_attachments(config);
+}
+
 // Parse command-line arguments for the 'start' subcommand into a ServerConfig struct.
 // Returns:
 //   - std::nullopt on success (continue execution)
@@ -1342,14 +1405,9 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             // The argument is a preset file path or, failing that, a preset id
             // resolved like show-preset: system presets, then user presets.
             std::string preset_arg = argv[++i];
-            std::error_code ec;
-            if (std::filesystem::is_regular_file(preset_arg, ec)) {
-                config.preset_filepath = preset_arg;
-            } else if (auto found = PresetPaths::find_preset_filepath(preset_arg)) {
-                config.preset_filepath = *found;
-            } else {
-                std::cerr << "Error: Preset not found: '" << preset_arg
-                          << "' (no such file, and no system or user preset with that id)\n";
+            config.preset_filepath = locate_preset(preset_arg);
+            if (!config.preset_filepath) {
+                std::cerr << "Error: " << preset_not_found_message(preset_arg) << "\n";
                 return ExitCode::NOINPUT;
             }
             auto result = load_preset(*config.preset_filepath);
@@ -1619,22 +1677,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
 
     // Fold preset-supplied sideways slots in as a baseline now that all CLI
     // --sideways flags have been parsed (CLI wins per slot).
-    merge_preset_sideways_configs(config);
-    merge_preset_startup(config);
-
-    // Normalise the preset's extensions as the CLI's were, then let a CLI
-    // instance override the preset instance it names rather than count as a
-    // second one (#150). Runs after the resolver is populated and all CLI args
-    // are parsed.
-    if (auto errors = normalise_preset_extensions(config); !errors.empty()) {
-        for (const auto& error : errors) {
-            std::cerr << "Error: " << error.message << "\n";
-        }
-        return ExitCode::CONFIG;
-    }
-    merge_preset_extensions(config);
-    assign_extension_ids(config);
-    if (auto errors = check_extension_attachments(config); !errors.empty()) {
+    if (auto errors = fold_in_preset(config); !errors.empty()) {
         for (const auto& error : errors) {
             std::cerr << "Error: " << error.message << "\n";
         }
@@ -5404,20 +5447,7 @@ public:
                 }
             }
             for (const auto& cfg : sideways_slots) {
-                nlohmann::ordered_json slot;
-                slot["slot"] = cfg.slot;
-                switch (cfg.type) {
-                    case SidewaysSlotType::Rom:   slot["type"] = "rom"; break;
-                    case SidewaysSlotType::Ram:   slot["type"] = "ram"; break;
-                    case SidewaysSlotType::Empty: slot["type"] = "empty"; break;
-                }
-                if (!cfg.image_filepath.empty()) {
-                    slot["image_uri"] = cfg.image_filepath;
-                }
-                if (cfg.write_protected) {
-                    slot["write_protected"] = true;
-                }
-                slots.push_back(slot);
+                slots.push_back(sideways_slot_json(cfg, /*every_key=*/false));
             }
             preset["sideways_bank"]["slots"] = slots;
         }
@@ -5617,17 +5647,12 @@ private:
         using Memory = typename MachineType::Memory;
 
         // Find and load the preset as `start --preset` does.
-        std::filesystem::path preset_filepath;
-        std::error_code ec;
-        if (std::filesystem::is_regular_file(preset_arg, ec)) {
-            preset_filepath = preset_arg;
-        } else if (auto found = PresetPaths::find_preset_filepath(preset_arg)) {
-            preset_filepath = *found;
-        } else {
-            error("", "Preset not found: '" + preset_arg +
-                          "' (no such file, and no system or user preset with that id)");
+        const auto located = locate_preset(preset_arg);
+        if (!located) {
+            error("", preset_not_found_message(preset_arg));
             return ExitCode::NOINPUT;
         }
+        const std::filesystem::path preset_filepath = *located;
         auto loaded = load_preset(preset_filepath);
         for (const auto& w : loaded.warnings) {
             warning(w.path, w.message);
@@ -5652,16 +5677,8 @@ private:
             error("", "cannot scan the extension directories");
             return *err;
         }
-        merge_preset_sideways_configs(config);
-        merge_preset_startup(config);
         bool failed = false;
-        for (const auto& e : normalise_preset_extensions(config)) {
-            error(e.path, e.message);
-            failed = true;
-        }
-        merge_preset_extensions(config);
-        assign_extension_ids(config);
-        for (const auto& e : check_extension_attachments(config)) {
+        for (const auto& e : fold_in_preset(config)) {
             error(e.path, e.message);
             failed = true;
         }
@@ -5822,23 +5839,20 @@ private:
 
         nlohmann::ordered_json slots = nlohmann::ordered_json::array();
         for (const auto& [slot, image] : config.rom_slots) {
-            nlohmann::ordered_json entry{{"slot", slot}};
+            SidewaysConfig entry{};
+            entry.slot = slot;
             if (image == EMPTY_SLOT_MARKER) {
-                entry["type"] = "empty";
+                entry.type = SidewaysSlotType::Empty;
             } else if (image == RAM_SLOT_MARKER) {
-                entry["type"] = "ram";
-                entry["image_uri"] = nullptr;
-                entry["write_protected"] = false;
+                entry.type = SidewaysSlotType::Ram;
                 for (const auto& c : config.sideways_configs) {
-                    if (c.slot != slot) continue;
-                    if (!c.image_filepath.empty()) entry["image_uri"] = c.image_filepath;
-                    entry["write_protected"] = c.write_protected;
+                    if (c.slot == slot) entry = c;
                 }
             } else {
-                entry["type"] = "rom";
-                entry["image_uri"] = image;
+                entry.type = SidewaysSlotType::Rom;
+                entry.image_filepath = image;
             }
-            slots.push_back(std::move(entry));
+            slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
         }
         doc["sideways_bank"] = {{"slots", std::move(slots)}};
 
