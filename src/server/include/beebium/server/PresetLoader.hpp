@@ -27,12 +27,10 @@
 
 namespace beebium::server {
 
-// Preset storage configuration (matches docs/plans/preset-schema/storage.md)
+// Preset storage configuration
 struct PresetStorageConfig {
     std::optional<std::string> fdc_socket_id;     // e.g., "acorn-1770", "none"
-    std::optional<std::string> fdc_socket_mode;   // e.g., "1770" for Solidisk DFDC
     std::map<uint8_t, std::optional<std::string>> floppy_drives;  // drive -> image_uri (nullopt = empty)
-    std::optional<std::string> cassette_image_uri;
 };
 
 // Generic Econet transport sub-configuration: names a transport
@@ -139,6 +137,26 @@ inline std::string normalize_image_uri(const std::string& uri_or_path,
     return "file://" + path_str;
 }
 
+// Resolve a file path parameter of a preset's extension config against the
+// directory holding the preset. A relative path with a directory component
+// (e.g. "discs/l3fs.dat", "../maps/aun.json") is joined to the preset's
+// directory. A bare name (no directory component) is left as given: it names
+// a resource the extension finds on its own search path (a bundled hard-disc
+// image, a plugin ROM) or a keyword such as "none". Absolute paths, Unix-style
+// absolute paths on Windows, URIs and the empty string are unchanged.
+inline std::string resolve_preset_relative_filepath(const std::string& value,
+                                                    const std::filesystem::path& preset_dirpath) {
+    if (value.empty() || value.find("://") != std::string::npos ||
+        is_unix_absolute_path(value)) {
+        return value;
+    }
+    std::filesystem::path path(value);
+    if (path.is_absolute() || !path.has_parent_path()) {
+        return value;
+    }
+    return (preset_dirpath / path).lexically_normal().string();
+}
+
 // Parse the storage section from JSON
 inline std::optional<PresetStorageConfig> parse_storage_section(
     const nlohmann::json& storage_json,
@@ -152,9 +170,6 @@ inline std::optional<PresetStorageConfig> parse_storage_section(
         if (fdc.is_object()) {
             if (fdc.contains("id") && fdc["id"].is_string()) {
                 storage.fdc_socket_id = fdc["id"].get<std::string>();
-            }
-            if (fdc.contains("mode") && fdc["mode"].is_string()) {
-                storage.fdc_socket_mode = fdc["mode"].get<std::string>();
             }
         }
     }
@@ -175,17 +190,6 @@ inline std::optional<PresetStorageConfig> parse_storage_section(
                     std::string uri = drive_json["image_uri"].get<std::string>();
                     storage.floppy_drives[drive_num] = normalize_image_uri(uri, preset_dirpath);
                 }
-            }
-        }
-    }
-
-    // Parse cassette
-    if (storage_json.contains("cassette") && storage_json["cassette"].is_object()) {
-        const auto& cassette = storage_json["cassette"];
-        if (cassette.contains("image_uri")) {
-            if (cassette["image_uri"].is_string()) {
-                storage.cassette_image_uri =
-                    normalize_image_uri(cassette["image_uri"].get<std::string>(), preset_dirpath);
             }
         }
     }
@@ -434,8 +438,12 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     }
 
     // Storage section
+    // Relative paths in the preset resolve from the directory holding it,
+    // wherever the preset was named from.
+    const auto preset_dirpath = std::filesystem::absolute(filepath).parent_path();
+
     if (json.contains("storage") && json["storage"].is_object()) {
-        config.storage = parse_storage_section(json["storage"], filepath.parent_path());
+        config.storage = parse_storage_section(json["storage"], preset_dirpath);
     }
 
     // Econet section
@@ -456,7 +464,6 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
 
     // Extensions section
     if (json.contains("extensions") && json["extensions"].is_array()) {
-        auto base_dirpath = filepath.parent_path();
         for (const auto& ext_json : json["extensions"]) {
             if (!ext_json.is_object() || !ext_json.contains("name")) continue;
 
@@ -466,10 +473,10 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
             if (ext_json.contains("config") && ext_json["config"].is_object()) {
                 for (auto& [key, value] : ext_json["config"].items()) {
                     if (value.is_string()) {
-                        std::string val = value.get<std::string>();
-                        // Resolve relative filepaths against preset directory
-                        // (heuristic: if the key ends with a path-like suffix)
-                        ext_config.config[key] = val;
+                        // A relative file path is resolved against the
+                        // preset's directory once the manifest says which
+                        // parameters are file paths (normalise_preset_extensions).
+                        ext_config.config[key] = value.get<std::string>();
                     } else if (value.is_number_integer()) {
                         ext_config.config[key] = std::to_string(value.get<int64_t>());
                     } else if (value.is_boolean()) {

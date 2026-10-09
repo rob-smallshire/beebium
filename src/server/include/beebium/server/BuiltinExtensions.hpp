@@ -79,7 +79,7 @@ inline std::vector<Entry> make_entries() {
              "(repeatable)",
              -1, false, /*is_list=*/true, ""});
         m.parameters.push_back(
-            {"map-file", "string",
+            {"map-file", "filepath",
              "Path to the AUN map file (default: BEEBIUM_AUN_MAP_FILEPATH, else the "
              "per-user aun-map.json), or 'none' to disable it",
              -1, false, false, ""});

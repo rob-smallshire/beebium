@@ -764,7 +764,6 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
         if (storage.fdc_socket_id && config.fdc_type.empty()) {
             config.fdc_type = *storage.fdc_socket_id;
         }
-        // Note: fdc_socket_mode stored for future use
 
         // Floppy drives
         for (const auto& [drive, uri_opt] : storage.floppy_drives) {
@@ -775,8 +774,6 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                 // nullopt means empty drive - leave as empty string (default)
             }
         }
-
-        // Cassette - future enhancement
     }
 
     // Sideways slots: kept as a baseline so a later CLI --sideways for the
@@ -875,6 +872,9 @@ void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
 // required parameters and types checked, and a single value for a list
 // parameter made a one-element list. The keys the preset gave become the
 // instance's explicit_keys. An extension name no manifest has is an error.
+// A relative path the preset gives for a "filepath" parameter is resolved
+// against the preset's directory (resolve_preset_relative_filepath), as its
+// floppy images are; a bare name is left for the extension's own search.
 //
 // Runs after CLI parsing, when the resolver is populated.
 // Returns an error message, or nullopt.
@@ -900,6 +900,17 @@ std::optional<std::string> normalise_preset_extensions(ServerConfig<MachineType>
         inst.config = std::move(normalised.config);
         inst.list_config = std::move(normalised.list_config);
         inst.explicit_keys = std::move(normalised.explicit_keys);
+        if (config.preset_filepath) {
+            const auto preset_dirpath =
+                std::filesystem::absolute(*config.preset_filepath).parent_path();
+            for (const auto& p : manifest->parameters) {
+                auto it = inst.config.find(p.key);
+                if (p.type == "filepath" && it != inst.config.end() &&
+                    inst.explicit_keys.count(p.key) != 0) {
+                    it->second = resolve_preset_relative_filepath(it->second, preset_dirpath);
+                }
+            }
+        }
     }
     return std::nullopt;
 }

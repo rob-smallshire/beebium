@@ -99,16 +99,12 @@ TEST_CASE("load_preset: valid storage section", "[preset][load_preset]") {
 
     // FDC socket
     REQUIRE(storage.fdc_socket_id == "acorn-1770");
-    REQUIRE(storage.fdc_socket_mode == "1770");
 
     // Floppy drives
     REQUIRE(storage.floppy_drives.size() == 2);
     REQUIRE(storage.floppy_drives.at(0).has_value());
     REQUIRE(*storage.floppy_drives.at(0) == "file:///tmp/test.ssd");
     REQUIRE_FALSE(storage.floppy_drives.at(1).has_value());  // Explicit null
-
-    // Cassette
-    REQUIRE(storage.cassette_image_uri == "file:///tmp/test.uef");
 }
 
 TEST_CASE("load_preset: relative paths are resolved", "[preset][load_preset]") {
@@ -201,6 +197,53 @@ TEST_CASE("PresetLoadResult: success() matches config presence", "[preset][Prese
     REQUIRE_FALSE(static_cast<bool>(error_result));
 }
 
+TEST_CASE("load_preset: a preset named by a relative path resolves floppies from its directory",
+          "[preset][load_preset]") {
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::create_directory(temp_dir / "presets");
+    {
+        std::ofstream file(temp_dir / "presets" / "relative.preset.beebium");
+        file << R"({"storage": {"floppy_drives": [{"drive": 0, "image_uri": "game.ssd"}]}})";
+    }
+    const auto saved_cwd = std::filesystem::current_path();
+    std::filesystem::current_path(temp_dir.path());
+
+    auto result = load_preset(std::filesystem::path("presets") / "relative.preset.beebium");
+    std::filesystem::current_path(saved_cwd);
+
+    REQUIRE(result.success());
+    const auto expected = "file://" + (std::filesystem::canonical(temp_dir.path()) / "presets" /
+                                       "game.ssd").generic_string();
+    CHECK(*result.config->storage->floppy_drives.at(0) == expected);
+}
+
+// ============================================================================
+// resolve_preset_relative_filepath() tests
+// ============================================================================
+
+TEST_CASE("resolve_preset_relative_filepath: a path with a directory resolves from the preset",
+          "[preset][resolve_preset_relative_filepath]") {
+    CHECK(resolve_preset_relative_filepath("discs/l3fs.dat", "/home/u/presets") ==
+          std::filesystem::path("/home/u/presets/discs/l3fs.dat").lexically_normal().string());
+    CHECK(resolve_preset_relative_filepath("../discs/l3fs.dat", "/home/u/presets") ==
+          std::filesystem::path("/home/u/discs/l3fs.dat").lexically_normal().string());
+}
+
+TEST_CASE("resolve_preset_relative_filepath: a bare name is left for the extension's search",
+          "[preset][resolve_preset_relative_filepath]") {
+    CHECK(resolve_preset_relative_filepath("l3fs-v1_26b.dat", "/home/u/presets") ==
+          "l3fs-v1_26b.dat");
+    CHECK(resolve_preset_relative_filepath("none", "/home/u/presets") == "none");
+}
+
+TEST_CASE("resolve_preset_relative_filepath: absolute paths and URIs are unchanged",
+          "[preset][resolve_preset_relative_filepath]") {
+    CHECK(resolve_preset_relative_filepath("/dev/ttyUSB0", "/home/u/presets") == "/dev/ttyUSB0");
+    CHECK(resolve_preset_relative_filepath("file:///x/y.dat", "/home/u/presets") ==
+          "file:///x/y.dat");
+    CHECK(resolve_preset_relative_filepath("", "/home/u/presets").empty());
+}
+
 // ============================================================================
 // PresetStorageConfig tests
 // ============================================================================
@@ -209,9 +252,7 @@ TEST_CASE("PresetStorageConfig: default state", "[preset][PresetStorageConfig]")
     PresetStorageConfig storage;
 
     REQUIRE_FALSE(storage.fdc_socket_id.has_value());
-    REQUIRE_FALSE(storage.fdc_socket_mode.has_value());
     REQUIRE(storage.floppy_drives.empty());
-    REQUIRE_FALSE(storage.cassette_image_uri.has_value());
 }
 
 // ============================================================================
@@ -248,7 +289,7 @@ TEST_CASE("load_preset: empty storage section", "[preset][load_preset]") {
     std::filesystem::remove(temp_filepath);
 }
 
-TEST_CASE("load_preset: fdc_socket without mode", "[preset][load_preset]") {
+TEST_CASE("load_preset: fdc_socket with only an id", "[preset][load_preset]") {
     beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
     std::filesystem::path temp_filepath = temp_dir / "fdc_no_mode.preset.beebium";
     {
@@ -260,7 +301,6 @@ TEST_CASE("load_preset: fdc_socket without mode", "[preset][load_preset]") {
 
     REQUIRE(result.success());
     REQUIRE(result.config->storage->fdc_socket_id == "acorn-1770");
-    REQUIRE_FALSE(result.config->storage->fdc_socket_mode.has_value());
 
     std::filesystem::remove(temp_filepath);
 }

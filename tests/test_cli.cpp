@@ -2531,3 +2531,41 @@ TEST_CASE("parse_start_arguments: --preset given twice is an error",
     REQUIRE(result.has_value());
     CHECK(*result == ExitCode::USAGE);
 }
+
+TEST_CASE("parse_start_arguments: a preset's relative file path parameter resolves from the preset",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "econet": { "station": 80,
+                    "transport": { "name": "aun",
+                                   "parameters": { "map-file": "maps/aun-map.json" } } }
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    const auto* inst = find_instance(config, "aun");
+    REQUIRE(inst != nullptr);
+    CHECK(inst->config.at("map-file") ==
+          (dir.path() / "maps" / "aun-map.json").lexically_normal().string());
+}
+
+TEST_CASE("parse_start_arguments: a preset's bare file name parameter is left as given",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "econet": { "station": 80,
+                    "transport": { "name": "aun", "parameters": { "map-file": "none" } } }
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    const auto* inst = find_instance(config, "aun");
+    REQUIRE(inst != nullptr);
+    CHECK(inst->config.at("map-file") == "none");
+}
