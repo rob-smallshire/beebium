@@ -121,6 +121,19 @@ though the transport fills them with manifest defaults internally (#166). So
 leaves the preset's `port`, `net` and `discovery` intact, while
 `--aun port=0:discovery=off` overrides exactly those two.
 
+Other extensions can have several instances (two SCSI hard discs, say), so an
+extension's name does not say which preset instance a flag means. A command-line
+instance overrides the preset instance of the same extension whose `id` it
+gives, again per typed key: with a preset hard disc `{"id": "boot", ...}`,
+`--scsi-hdd id=boot:image=other.dat` swaps only its image. A command-line
+instance with no `id`, or one no preset instance has, is added alongside the
+preset's.
+
+A preset's extension configs are checked exactly as a command-line flag's are:
+an unknown parameter, a missing required one, a value of the wrong type or an
+unknown extension name stops the launch with `CONFIG` (78), and the manifest's
+defaults are filled in for the parameters the preset leaves out.
+
 #### ROM Configuration
 
 | Option | Description |

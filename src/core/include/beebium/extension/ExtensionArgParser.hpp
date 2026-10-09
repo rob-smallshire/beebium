@@ -97,17 +97,6 @@ BEEBIUM_EXT_API ParseResult normalise_extension_config(
 // (beebium/CliArgSplit.hpp) - it is not extension-specific. Included here so
 // existing users of this header keep compiling.
 
-// Move any key in `config` that names an is_list schema param into
-// `list_config` as a single-element vector (unless list_config already
-// has an entry for that key, in which case the scalar is dropped on the
-// floor -- list form wins). Used when is_list values may arrive via a
-// schema-unaware code path (e.g. preset loader reading a JSON string
-// value) that populated the scalar map.
-BEEBIUM_EXT_API void normalise_list_params(
-    std::map<std::string, std::string>& config,
-    std::map<std::string, std::vector<std::string>>& list_config,
-    const std::vector<ParameterSchema>& schema);
-
 }  // namespace beebium
 
 #endif  // BEEBIUM_EXTENSION_ARG_PARSER_HPP

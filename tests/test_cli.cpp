@@ -18,6 +18,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
+#include <fstream>
+#include <set>
 #include <sstream>
 #include "test_temp_paths.hpp"
 
@@ -2349,4 +2351,183 @@ TEST_CASE("parse_start_arguments: --fdc sets fdc_type", "[cli][parse_start_argum
 
     REQUIRE_FALSE(result.has_value());
     REQUIRE(config.fdc_type == "acorn-1770");
+}
+
+// ============================================================================
+// Preset extensions are normalised exactly as CLI extensions are, and a CLI
+// instance overrides the preset instance it names
+// ============================================================================
+
+namespace {
+
+// Write `body` as a preset in `dir` and return its path.
+std::filesystem::path write_preset(const beebium::test::ScopedTempDir& dir, const std::string& body) {
+    auto preset_filepath = dir / "test.preset.beebium";
+    std::ofstream(preset_filepath) << body;
+    return preset_filepath;
+}
+
+const ServerConfig<MachineType>::ExtensionInstance* find_instance(
+        const ServerConfig<MachineType>& config, const std::string& name) {
+    for (const auto& inst : config.extension_instances) {
+        if (inst.name == name) return &inst;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("parse_start_arguments: a preset extension gets the manifest defaults",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "model": "model-b",
+        "extensions": [ { "name": "host-serial", "config": { "mode": "pty" } } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    const auto* inst = find_instance(config, "host-serial");
+    REQUIRE(inst != nullptr);
+    CHECK(inst->config.at("mode") == "pty");
+    CHECK(inst->config.at("baud") == "19200");     // manifest default
+    CHECK(inst->config.at("tx_buffer") == "4096"); // manifest default
+    CHECK(inst->explicit_keys == std::set<std::string>{"mode"});
+}
+
+TEST_CASE("parse_start_arguments: a preset extension with an unknown parameter is an error",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "extensions": [ { "name": "host-serial", "config": { "colour": "red" } } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE(result.has_value());
+    CHECK(*result == ExitCode::CONFIG);
+}
+
+TEST_CASE("parse_start_arguments: a preset extension value of the wrong type is an error",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "extensions": [ { "name": "host-serial", "config": { "baud": "fast" } } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE(result.has_value());
+    CHECK(*result == ExitCode::CONFIG);
+}
+
+TEST_CASE("parse_start_arguments: a preset naming an unknown extension is an error",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "extensions": [ { "name": "no-such-extension" } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE(result.has_value());
+    CHECK(*result == ExitCode::CONFIG);
+}
+
+TEST_CASE("parse_start_arguments: a preset Econet transport gets the manifest defaults",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "econet": { "station": 80,
+                    "transport": { "name": "aun", "parameters": { "port": 0 } } }
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    const auto* inst = find_instance(config, "aun");
+    REQUIRE(inst != nullptr);
+    CHECK(inst->config.at("port") == "0");
+    CHECK(inst->config.at("net") == "0");          // manifest default
+    CHECK(inst->config.at("discovery") == "on");   // manifest default
+}
+
+TEST_CASE("parse_start_arguments: a CLI extension with a preset instance's id overrides it per key",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "extensions": [ { "name": "host-serial",
+                          "config": { "id": "modem", "mode": "device",
+                                      "path": "/dev/ttyUSB0", "baud": 9600 } } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str(),
+                    "--host-serial", "id=modem:baud=2400"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(config.extension_instances.size() == 1);
+    const auto& inst = config.extension_instances[0];
+    CHECK(inst.config.at("id") == "modem");
+    CHECK(inst.config.at("mode") == "device");        // from the preset
+    CHECK(inst.config.at("path") == "/dev/ttyUSB0");  // from the preset
+    CHECK(inst.config.at("baud") == "2400");          // typed on the CLI
+}
+
+TEST_CASE("parse_start_arguments: a CLI extension naming no preset instance is added",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({
+        "extensions": [ { "name": "host-serial", "config": { "id": "modem" } } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str(),
+                    "--host-serial", "baud=2400"};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    CHECK(config.extension_instances.size() == 2);
+}
+
+TEST_CASE("parse_start_arguments: --extension-dir after --preset is honoured",
+          "[cli][parse_start_arguments][preset][extensions]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({ "model": "model-b" })");
+    beebium::test::ScopedTempDir extension_dir("beebium-extension-dir-");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str(),
+                    "--extension-dir", extension_dir.path().string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(config.extension_dirpaths.size() == 1);
+    CHECK(config.extension_dirpaths[0] == extension_dir.path().string());
+}
+
+TEST_CASE("parse_start_arguments: --preset given twice is an error",
+          "[cli][parse_start_arguments][preset]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ext-");
+    auto preset_filepath = write_preset(dir, R"({ "model": "model-b" })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str(),
+                    "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
+
+    REQUIRE(result.has_value());
+    CHECK(*result == ExitCode::USAGE);
 }

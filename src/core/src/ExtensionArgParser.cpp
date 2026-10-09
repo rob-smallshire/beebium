@@ -79,21 +79,6 @@ std::string type_description(std::string_view type) {
 
 }  // namespace
 
-void normalise_list_params(
-        std::map<std::string, std::string>& config,
-        std::map<std::string, std::vector<std::string>>& list_config,
-        const std::vector<ParameterSchema>& schema) {
-    for (const auto& p : schema) {
-        if (!p.is_list) continue;
-        auto cit = config.find(p.key);
-        if (cit == config.end()) continue;
-        if (list_config.find(p.key) == list_config.end()) {
-            list_config[p.key].push_back(std::move(cit->second));
-        }
-        config.erase(cit);
-    }
-}
-
 // split_colon_args now lives in beebium/CliArgSplit.hpp (a neutral home; it is
 // not extension-specific). It is used below via the header.
 

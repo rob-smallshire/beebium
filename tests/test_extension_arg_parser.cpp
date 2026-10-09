@@ -438,32 +438,16 @@ TEST_CASE("non-list parameter still rejects duplicates",
     REQUIRE(result.error.find("specified twice") != std::string::npos);
 }
 
-TEST_CASE("normalise_list_params moves scalar into list_config as 1-element vector",
-          "[extension][arg-parser]") {
-    std::vector<ParameterSchema> schema = {
-        {"port", "string", "Bind port", -1, false, false, "32768"},
-        {"map",  "string", "Peer entry", -1, false, /*is_list=*/true, ""},
-    };
-    std::map<std::string, std::string> config = {
-        {"port", "9000"}, {"map", "0.254@127.0.0.1@32768"}};
-    std::map<std::string, std::vector<std::string>> list_config;
-    normalise_list_params(config, list_config, schema);
-    REQUIRE(config.count("map") == 0);
-    REQUIRE(config.at("port") == "9000");
-    REQUIRE(list_config.at("map") == std::vector<std::string>{"0.254@127.0.0.1@32768"});
-}
-
-TEST_CASE("normalise_list_params: list_config form wins when both present",
-          "[extension][arg-parser]") {
+TEST_CASE("normalise_extension_config: the list form wins when both are given",
+          "[extension][arg-parser][normalise]") {
     std::vector<ParameterSchema> schema = {
         {"map",  "string", "Peer entry", -1, false, /*is_list=*/true, ""},
     };
-    std::map<std::string, std::string> config = {{"map", "from-scalar"}};
-    std::map<std::string, std::vector<std::string>> list_config = {
-        {"map", {"from-list"}}};
-    normalise_list_params(config, list_config, schema);
-    REQUIRE(config.count("map") == 0);
-    REQUIRE(list_config.at("map") == std::vector<std::string>{"from-list"});
+    auto result = normalise_extension_config(
+        "preset", {{"map", "from-scalar"}}, {{"map", {"from-list"}}}, schema);
+    REQUIRE(result.ok);
+    REQUIRE(result.config.count("map") == 0);
+    REQUIRE(result.list_config.at("map") == std::vector<std::string>{"from-list"});
 }
 
 // ---------------------------------------------------------------------------

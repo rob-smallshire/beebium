@@ -420,7 +420,7 @@ For an econet-transport extension the order is:
 
 1. `ServerMain` parses CLI flags, building a list of `ExtensionInstance{name, config}` records.
 2. Plugin manifests are scanned from the extension directory.
-3. A preset's `econet.transport` and a command-line transport of the same kind are reconciled (`merge_preset_econet_transport`, #150).
+3. A preset's `econet.transport` and a command-line transport of the same kind are reconciled (`merge_preset_extensions`, #150).
 4. The `EconetTransportRegistry` is populated by walking the instance list — entries whose manifest `extension_kind == "econet-transport"` are constructed (via `BuiltinExtensions::find()` for built-ins or `PluginLoader::load_extension()` for plugins), checked with `config_error()`, and added to the registry. This happens **before `machine.reset()`**.
 5. `install_econet` queries the registry: if it holds a transport, it calls `transport->create_backend(station)` and hands the result to `EconetSocket::enable()` (a null backend — `port=none`, a failed bind — is replaced by a disconnected `TestBackend`). With no transport an internally-disconnected `TestBackend` is installed (NFS sees "No Clock"). For a fixed station this runs before `machine.reset()`, so the BBC's reset routine sees a configured ADLC; for `--station auto` it runs after the gRPC server has printed its port and `select_auto_station` has chosen the number, still before the machine runs.
 6. The `ExtensionRpc` and `ExtensionUiService` services are given the transport registry and serve its transports directly — their `rpc_dispatchers()` and `ui()` — alongside the peripheral extensions.
@@ -496,7 +496,7 @@ A preset configures Econet with one `econet` object: a `station`, and a single `
 - A `--aun` (or `--piconet`) on the command line overrides the preset's transport. With the same transport name the parameters merge, the command line winning key by key, and only the keys typed on the command line override the preset. With a different name the command line's transport replaces the preset's. See [cli.md](cli.md).
 - The legacy preset keys `econet.aun_port` and `econet.piconet` are rejected with a message pointing at this shape. Other unknown keys in the `econet` section, including the old `econet.aun_map`, are ignored.
 
-The parsing is in `src/server/include/beebium/server/PresetLoader.hpp` (`parse_econet_section()`); `merge_preset_econet_transport` in `ServerMain.hpp` combines the preset's transport with the command line's, and the result goes through the same dispatch as a command-line transport.
+The parsing is in `src/server/include/beebium/server/PresetLoader.hpp` (`parse_econet_section()`); `merge_preset_extensions` in `ServerMain.hpp` combines the preset's transport with the command line's, and the result goes through the same dispatch as a command-line transport.
 
 ### gRPC services
 

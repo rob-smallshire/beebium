@@ -178,7 +178,7 @@ TEST_CASE("merge_preset_sideways_configs: CLI --sideways overrides preset for sa
 }
 
 // ============================================================================
-// merge_preset_econet_transport() - CLI --aun/--piconet overrides preset (#150)
+// merge_preset_extensions() - CLI --aun/--piconet overrides preset (#150)
 // ============================================================================
 
 namespace {
@@ -205,7 +205,7 @@ using Inst = ServerConfig<MachineType>::ExtensionInstance;
 
 }  // namespace
 
-TEST_CASE("merge_preset_econet_transport: a CLI --aun merges over the preset's aun",
+TEST_CASE("merge_preset_extensions: a CLI --aun merges over the preset's aun",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
@@ -216,7 +216,7 @@ TEST_CASE("merge_preset_econet_transport: a CLI --aun merges over the preset's a
         Inst{"aun", {{"port", "0"}, {"map-file", "none"}}, {}, false,
              /*explicit_keys=*/{"port", "map-file"}});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     // One transport survives: the CLI instance, with the preset's net kept and
     // the CLI's port and map-file winning.
@@ -229,7 +229,7 @@ TEST_CASE("merge_preset_econet_transport: a CLI --aun merges over the preset's a
     CHECK(inst.config.at("map-file") == "none"); // CLI adds
 }
 
-TEST_CASE("merge_preset_econet_transport: a different CLI transport replaces the preset's",
+TEST_CASE("merge_preset_extensions: a different CLI transport replaces the preset's",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
@@ -239,27 +239,27 @@ TEST_CASE("merge_preset_econet_transport: a different CLI transport replaces the
         Inst{"piconet", {{"device_path", "/dev/ttyUSB0"}}, {}, false,
              /*explicit_keys=*/{"device_path"}});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     REQUIRE(config.extension_instances.size() == 1);
     CHECK(config.extension_instances[0].name == "piconet");  // preset aun dropped
 }
 
-TEST_CASE("merge_preset_econet_transport: a preset transport alone is left in place",
+TEST_CASE("merge_preset_extensions: a preset transport alone is left in place",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
     config.extension_instances.push_back(
         Inst{"aun", {{"net", "0"}}, {}, /*from_preset=*/true});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     REQUIRE(config.extension_instances.size() == 1);
     CHECK(config.extension_instances[0].name == "aun");
     CHECK(config.extension_instances[0].from_preset);
 }
 
-TEST_CASE("merge_preset_econet_transport: list parameters follow the CLI per key",
+TEST_CASE("merge_preset_extensions: list parameters follow the CLI per key",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
@@ -272,7 +272,7 @@ TEST_CASE("merge_preset_econet_transport: list parameters follow the CLI per key
     config.extension_instances.push_back(std::move(preset));
     config.extension_instances.push_back(std::move(cli));
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     REQUIRE(config.extension_instances.size() == 1);
     const auto& inst = config.extension_instances[0];
@@ -283,14 +283,14 @@ TEST_CASE("merge_preset_econet_transport: list parameters follow the CLI per key
     CHECK(inst.list_config.at("subnet")[0] == "128@192.168.5.0/24");
 }
 
-TEST_CASE("merge_preset_econet_transport: two CLI transports are left for the one-transport check",
+TEST_CASE("merge_preset_extensions: two CLI transports are left for the one-transport check",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
     config.extension_instances.push_back(Inst{"aun", {}, {}, false});
     config.extension_instances.push_back(Inst{"piconet", {}, {}, false});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     // No preset transport to reconcile: both stay, so install_econet still
     // reports "got 2".
@@ -300,7 +300,7 @@ TEST_CASE("merge_preset_econet_transport: two CLI transports are left for the on
 // #166: parse_extension_args fills every optional key with its default before
 // the merge runs, so the CLI instance carries a value for keys the user never
 // typed. Those DEFAULTED keys must not beat the preset -- only typed keys do.
-TEST_CASE("merge_preset_econet_transport: a CLI's defaulted keys do not mask the preset",
+TEST_CASE("merge_preset_extensions: a CLI's defaulted keys do not mask the preset",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
@@ -318,7 +318,7 @@ TEST_CASE("merge_preset_econet_transport: a CLI's defaulted keys do not mask the
         false,
         /*explicit_keys=*/{"discovery", "map-file"}});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     REQUIRE(config.extension_instances.size() == 1);
     const auto& inst = config.extension_instances[0];
@@ -330,7 +330,7 @@ TEST_CASE("merge_preset_econet_transport: a CLI's defaulted keys do not mask the
 
 // #166: the headline symptom -- a preset with discovery=off plus any --aun used
 // to turn discovery back on, because discovery arrived defaulted as "on".
-TEST_CASE("merge_preset_econet_transport: a preset discovery=off survives an unrelated --aun",
+TEST_CASE("merge_preset_extensions: a preset discovery=off survives an unrelated --aun",
           "[server_main][preset][transport]") {
     ServerConfig<MachineType> config;
     install_transport_manifests(config);
@@ -341,7 +341,7 @@ TEST_CASE("merge_preset_econet_transport: a preset discovery=off survives an unr
         "aun", {{"port", "0"}, {"discovery", "on"}}, {}, false,
         /*explicit_keys=*/{"port"}});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     REQUIRE(config.extension_instances.size() == 1);
     const auto& inst = config.extension_instances[0];
@@ -362,7 +362,7 @@ TEST_CASE("The AUN transport is displayed as 'AUN'", "[server_main][transport][n
 // server_main does (defaults and all), then merge. This is the seam the #150
 // tests missed by using manifests without defaults. Reproduces the reported
 // `--preset model-b-disc-aun-auto --aun discovery=off:map-file=none` case.
-TEST_CASE("merge_preset_econet_transport: real AUN manifest, only typed keys beat the preset",
+TEST_CASE("merge_preset_extensions: real AUN manifest, only typed keys beat the preset",
           "[server_main][preset][transport]") {
     const auto* aun = beebium::builtin_extensions::find("aun");
     REQUIRE(aun != nullptr);
@@ -385,7 +385,7 @@ TEST_CASE("merge_preset_econet_transport: real AUN manifest, only typed keys bea
                                               std::move(parsed.list_config), false,
                                               std::move(parsed.explicit_keys)});
 
-    merge_preset_econet_transport(config);
+    merge_preset_extensions(config);
 
     REQUIRE(config.extension_instances.size() == 1);
     const auto& inst = config.extension_instances[0];
