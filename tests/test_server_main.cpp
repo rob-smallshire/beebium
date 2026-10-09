@@ -349,6 +349,20 @@ TEST_CASE("merge_preset_extensions: a preset discovery=off survives an unrelated
     CHECK(inst.config.at("port") == "0");          // user typed it
 }
 
+TEST_CASE("merge_preset_extensions: a peripheral without a matching id is added alongside",
+          "[server_main][preset][extensions]") {
+    ServerConfig<MachineType> config;
+    install_transport_manifests(config);
+    config.extension_instances.push_back(
+        Inst{"scsi-hard-disc", {{"id", "boot"}, {"scsi-id", "0"}}, {}, /*from_preset=*/true});
+    config.extension_instances.push_back(Inst{"scsi-hard-disc", {{"scsi-id", "1"}}, {}, false,
+                                              /*explicit_keys=*/{"scsi-id"}});
+
+    merge_preset_extensions(config);
+
+    CHECK(config.extension_instances.size() == 2);
+}
+
 // The AUN transport's display name is what a machine-name template's
 // {econet-transport} shows and the default label its sidebar panel carries
 // (#153): the protocol's own short name, as Piconet's is.

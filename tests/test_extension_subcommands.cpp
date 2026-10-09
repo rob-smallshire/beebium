@@ -245,13 +245,13 @@ TEST_CASE("describe-extension shows the rom parameter for tube-65c102",
 TEST_CASE("starting with both coprocessor flags fails with the single-socket message",
           "[integration][extension][start]") {
     // The Tube has one socket, so two coprocessors cannot both attach. The
-    // server refuses to start with a clear message.
+    // server refuses to start, before building anything, with a clear message.
     auto r = run_command(EXECUTABLE + " start --tube-65c02 --tube-65c102 --port 0 --wait");
     INFO("stdout: " << r.stdout_output);
     INFO("stderr: " << r.stderr_output);
-    REQUIRE(r.exit_code != 0);
-    auto combined = r.stdout_output + r.stderr_output;
-    REQUIRE(combined.find("more than one coprocessor attached to the Tube") != std::string::npos);
+    REQUIRE(r.exit_code == 78);
+    REQUIRE(r.stderr_output.find("--tube-65c102: Tube holds at most 1 extension") !=
+            std::string::npos);
 }
 
 TEST_CASE("describe-extension errors for unknown extension",

@@ -11,6 +11,7 @@
             "type": "integer",
             "position": 0,
             "default": "0",
+            "unique": true,
             "description": "SCSI target ID (0-7)"
         },
         {
@@ -22,6 +23,7 @@
         {
             "key": "adapter-id",
             "type": "string",
+            "provider_of": "scsi",
             "description": "ID of SCSI adapter to attach to"
         }
     ]

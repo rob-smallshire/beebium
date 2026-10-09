@@ -17,6 +17,7 @@
 #include "CliArgParsers.hpp"
 #include "SidewaysValidation.hpp"
 #include "beebium/extension/AttachmentPointCatalogue.hpp"
+#include "beebium/extension/AttachmentPlan.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
 #include "beebium/service/EconetTransportService.hpp"
 #include "beebium/service/ExtensionRpcService.hpp"
@@ -981,6 +982,55 @@ std::vector<PresetDiagnostic> normalise_preset_extensions(ServerConfig<MachineTy
     return errors;
 }
 
+// The attachment points this model's own hardware offers extensions.
+template<typename Memory>
+std::vector<std::string> machine_attachment_points() {
+    std::vector<std::string> points;
+    if constexpr (beebium::HasOneMHzBus<Memory>) points.push_back("1mhz-bus");
+    if constexpr (beebium::HasUserPort<Memory>) points.push_back("user-port");
+    if constexpr (beebium::HasTubeSocket<Memory>) points.push_back("tube");
+    if constexpr (beebium::HasSerialPort<Memory>) points.push_back("serial-port");
+    return points;
+}
+
+// Check, before anything is loaded, that every peripheral extension instance
+// has somewhere to attach (check_attachments): its points exist, are within
+// their occupancy, a provider-naming parameter names a provider, and a unique
+// parameter is unique on its attachment. An instance from the preset is
+// located by its entry (and parameter); one from the command line by its flag.
+template<typename MachineType>
+std::vector<PresetDiagnostic> check_extension_attachments(
+        const ServerConfig<MachineType>& config) {
+    std::vector<const beebium::ExtensionManifest*> known;
+    for (const auto& e : config.extension_resolver.entries()) {
+        known.push_back(e.manifest);
+    }
+    std::vector<const typename ServerConfig<MachineType>::ExtensionInstance*> instances;
+    std::vector<beebium::AttachmentRequest> requests;
+    for (const auto& inst : config.extension_instances) {
+        const auto* m = config.extension_resolver.find_by_name(inst.name);
+        if (m && m->extension_kind == "econet-transport") continue;
+        instances.push_back(&inst);
+        requests.push_back({inst.name, inst.config});
+    }
+    std::vector<PresetDiagnostic> errors;
+    for (const auto& problem : beebium::check_attachments(
+             requests, known, machine_attachment_points<typename MachineType::Memory>())) {
+        const auto& inst = *instances[problem.instance];
+        if (inst.from_preset) {
+            errors.push_back({inst.preset_pointer +
+                                  (problem.key.empty() ? "" : "/config/" + problem.key),
+                              "preset extension '" + inst.name + "': " + problem.message});
+        } else {
+            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            errors.push_back({"", "--" + std::string(m ? m->effective_cli_name()
+                                                       : std::string_view(inst.name)) +
+                                      ": " + problem.message});
+        }
+    }
+    return errors;
+}
+
 // Reconcile the preset's extension instances with the command line's, so the
 // rule everywhere is CLI-overrides-preset (sideways, station, disc) rather than
 // a CLI flag counting as a second instance. Which preset instance a CLI
@@ -1470,6 +1520,12 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
         return ExitCode::CONFIG;
     }
     merge_preset_extensions(config);
+    if (auto errors = check_extension_attachments(config); !errors.empty()) {
+        for (const auto& error : errors) {
+            std::cerr << "Error: " << error.message << "\n";
+        }
+        return ExitCode::CONFIG;
+    }
 
     return std::nullopt;  // Success, continue execution
 }
@@ -2599,17 +2655,8 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
 
     // Set up peripheral extension registry.
     beebium::ExtensionRegistry& extension_registry = am->extension_registry;
-    if constexpr (beebium::HasOneMHzBus<Memory>) {
-        extension_registry.register_extension_point("1mhz-bus");
-    }
-    if constexpr (beebium::HasUserPort<Memory>) {
-        extension_registry.register_extension_point("user-port");
-    }
-    if constexpr (beebium::HasTubeSocket<Memory>) {
-        extension_registry.register_extension_point("tube");
-    }
-    if constexpr (beebium::HasSerialPort<Memory>) {
-        extension_registry.register_extension_point("serial-port");
+    for (const auto& point : machine_attachment_points<Memory>()) {
+        extension_registry.register_extension_point(point);
     }
 
     // Load peripheral extensions (from --<cli-name> flags). Sort so providers
@@ -3596,6 +3643,10 @@ public:
                         if (!p.default_value.empty()) {
                             std::cout << " [default: " << p.default_value << "]";
                         }
+                        if (p.unique) std::cout << " (unique on its attachment)";
+                        if (!p.provider_of.empty()) {
+                            std::cout << " (names the " << p.provider_of << " provider)";
+                        }
                         std::cout << "\n";
                         if (!p.description.empty()) {
                             std::cout << "        " << p.description << "\n";
@@ -3634,6 +3685,9 @@ public:
                               << ",\"required\":" << (p.required ? "true" : "false")
                               << ",\"default\":\""
                               << extension_listing::json_escape(p.default_value)
+                              << "\",\"unique\":" << (p.unique ? "true" : "false")
+                              << ",\"provider_of\":\""
+                              << extension_listing::json_escape(p.provider_of)
                               << "\",\"description\":\""
                               << extension_listing::json_escape(p.description)
                               << "\"}\n";
@@ -4067,11 +4121,7 @@ public:
         // (a SCSI bus from a host adapter), each with the extensions that
         // attach to it.
         {
-            std::vector<std::string> machine_points;
-            if constexpr (beebium::HasOneMHzBus<Memory>) machine_points.push_back("1mhz-bus");
-            if constexpr (beebium::HasUserPort<Memory>) machine_points.push_back("user-port");
-            if constexpr (beebium::HasTubeSocket<Memory>) machine_points.push_back("tube");
-            if constexpr (beebium::HasSerialPort<Memory>) machine_points.push_back("serial-port");
+            const auto machine_points = machine_attachment_points<Memory>();
 
             std::vector<std::pair<std::string, std::vector<std::string>>> points;
             for (const auto& id : machine_points) points.push_back({id, {}});
@@ -5438,6 +5488,10 @@ private:
             failed = true;
         }
         merge_preset_extensions(config);
+        for (const auto& e : check_extension_attachments(config)) {
+            error(e.path, e.message);
+            failed = true;
+        }
         if (auto err = validate_config(config)) {
             error("", *err);
             failed = true;

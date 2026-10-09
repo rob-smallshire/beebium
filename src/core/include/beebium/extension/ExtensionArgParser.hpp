@@ -38,6 +38,13 @@ struct ParameterSchema {
                                 // separator).
                                 // false: a repeated key is a parse error.
     std::string default_value;  // empty = no default
+    std::string provider_of;    // non-empty: the value is the `id` of the
+                                // instance providing this attachment point
+                                // (e.g. "scsi") that the extension attaches
+                                // to; empty value = the default provider
+    bool unique = false;        // the value must differ among the instances
+                                // attached to the same provider (e.g. a SCSI
+                                // target ID on one bus)
 };
 
 // Result of parsing extension arguments.

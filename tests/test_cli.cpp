@@ -2488,6 +2488,8 @@ TEST_CASE("parse_start_arguments: a CLI extension with a preset instance's id ov
 
 TEST_CASE("parse_start_arguments: a CLI extension naming no preset instance is added",
           "[cli][parse_start_arguments][preset][extensions]") {
+    // Added alongside the preset's: two host-serial instances, which the one
+    // serial port then refuses (the occupancy check runs after the merge).
     beebium::test::ScopedTempDir dir("beebium-preset-ext-");
     auto preset_filepath = write_preset(dir, R"({
         "extensions": [ { "name": "host-serial", "config": { "id": "modem" } } ]
@@ -2498,7 +2500,8 @@ TEST_CASE("parse_start_arguments: a CLI extension naming no preset instance is a
 
     auto result = parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config);
 
-    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.has_value());
+    CHECK(*result == ExitCode::CONFIG);
     CHECK(config.extension_instances.size() == 2);
 }
 

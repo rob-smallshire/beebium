@@ -1716,3 +1716,67 @@ TEST_CASE("describe-preset-schema: an expansion board's own ROM is a default ROM
     }
     CHECK(board);
 }
+
+// ============================================================================
+// Attachment checks before launch: SCSI discs and their adapters
+// ============================================================================
+
+namespace {
+
+// The error diagnostics of resolving `body` as a Model B preset.
+std::vector<std::pair<std::string, std::string>> attachment_errors(const std::string& body) {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "scsi.preset.beebium";
+    std::ofstream(preset_filepath) << body;
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+    std::vector<std::pair<std::string, std::string>> errors;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("severity") == "error") {
+            errors.emplace_back(d.at("path").get<std::string>(),
+                                d.at("message").get<std::string>());
+        }
+    }
+    return errors;
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: a SCSI disc with no adapter is an error at its entry",
+          "[integration][preset][resolve-preset][attachment]") {
+    auto errors = attachment_errors(R"({"model": "model-b", "extensions": [
+        {"name": "scsi-hard-disc", "config": {"image": "/tmp/x.dat"}}]})");
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].first == "/extensions/0");
+    CHECK(errors[0].second.find("acorn-scsi") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: two SCSI discs with one scsi-id is an error at the second",
+          "[integration][preset][resolve-preset][attachment]") {
+    auto errors = attachment_errors(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"image": "/tmp/a.dat", "scsi-id": 1}},
+        {"name": "scsi-hard-disc", "config": {"image": "/tmp/b.dat", "scsi-id": 1}}]})");
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].first == "/extensions/2/config/scsi-id");
+}
+
+TEST_CASE("resolve-preset: an adapter-id naming no adapter is an error at that parameter",
+          "[integration][preset][resolve-preset][attachment]") {
+    auto errors = attachment_errors(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-scsi", "config": {"id": "bus0"}},
+        {"name": "scsi-hard-disc", "config": {"image": "/tmp/a.dat", "adapter-id": "bus9"}}]})");
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].first == "/extensions/1/config/adapter-id");
+}
+
+TEST_CASE("start: a SCSI disc with no adapter stops the launch with CONFIG",
+          "[integration][preset][attachment]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "scsi.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "scsi-hard-disc", "config": {"image": "/tmp/x.dat"}}]})";
+    auto result = run_command(EXECUTABLE + " start --preset \"" + preset_filepath.string() +
+                              "\" --port 0");
+    CHECK(result.exit_code == 78);
+    CHECK(result.stderr_output.find("acorn-scsi") != std::string::npos);
+}
