@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "beebium/server/DiscPaths.hpp"
+#include "test_temp_paths.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -281,4 +282,33 @@ TEST_CASE("resolve_disc_image passes explicit paths through untouched",
 
     fs::path rel = fs::path("subdir") / "user.dat";
     CHECK(DiscPaths::resolve_disc_image(rel.string()) == rel);
+}
+
+// ---------------------------------------------------------------------------
+// bundled_hard_disc_images: the masters a bare hard-disc name can refer to
+// ---------------------------------------------------------------------------
+
+TEST_CASE("bundled_hard_disc_images lists each .dat with its .dsc sidecar, by name",
+          "[disc_paths][bundled]") {
+    beebium::test::ScopedTempDir master_dir("beebium_bundled_");
+    write_file(master_dir / "zeta.dat", "0123456789");
+    write_file(master_dir / "zeta.dsc", "g");
+    write_file(master_dir / "alpha.dat", "01234");
+    write_file(master_dir / "alpha.dsc", "g");
+    write_file(master_dir / "orphan.dat", "x");     // no sidecar: not a master
+    write_file(master_dir / "notes.txt", "x");
+
+    auto images = DiscPaths::bundled_hard_disc_images(master_dir.path());
+
+    REQUIRE(images.size() == 2);
+    CHECK(images[0].image == "alpha.dat");
+    CHECK(images[0].size_bytes == 5);
+    CHECK(images[1].image == "zeta.dat");
+    CHECK(images[1].size_bytes == 10);
+}
+
+TEST_CASE("bundled_hard_disc_images of a missing directory is empty",
+          "[disc_paths][bundled]") {
+    beebium::test::ScopedTempDir dir("beebium_bundled_");
+    CHECK(DiscPaths::bundled_hard_disc_images(dir / "absent").empty());
 }

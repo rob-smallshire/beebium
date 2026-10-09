@@ -197,6 +197,7 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.default_value = p.value("default", "");
             param.provider_of = p.value("provider_of", "");
             param.unique = p.value("unique", false);
+            param.bundled = p.value("bundled", "");
             if (!param.key.empty()) {
                 manifest.parameters.push_back(std::move(param));
             }

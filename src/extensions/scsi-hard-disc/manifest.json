@@ -18,6 +18,7 @@
             "key": "image",
             "type": "filepath",
             "position": 1,
+            "bundled": "hard-disc",
             "description": "Path to DAT disc image file"
         },
         {

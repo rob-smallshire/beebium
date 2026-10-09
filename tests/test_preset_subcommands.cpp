@@ -1786,3 +1786,55 @@ TEST_CASE("start: a SCSI disc with no adapter stops the launch with CONFIG",
     CHECK(result.exit_code == 78);
     CHECK(result.stderr_output.find("acorn-scsi") != std::string::npos);
 }
+
+// ============================================================================
+// The bundled hard-disc masters, offered before launch
+// ============================================================================
+
+TEST_CASE("describe-preset-schema: the bundled hard-disc masters",
+          "[integration][preset][describe-preset-schema][bundled]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    const auto& hard_discs = extensions.at("bundled_images").at("hard-disc");
+    bool l3fs = false;
+    for (const auto& image : hard_discs) {
+        if (image.at("image") == "l3fs-v1_26b.dat") {
+            l3fs = true;
+            CHECK(image.at("size_bytes").get<std::uint64_t>() > 0);
+        }
+    }
+    CHECK(l3fs);
+}
+
+TEST_CASE("describe-extension: a parameter that takes a bundled image says which kind",
+          "[integration][extension][describe-extension][bundled]") {
+    auto result = run_command(EXECUTABLE + " --format jsonl describe-extension scsi-hard-disc");
+    REQUIRE(result.exit_code == 0);
+    std::istringstream lines(result.stdout_output);
+    std::string line;
+    bool image_seen = false;
+    while (std::getline(lines, line)) {
+        auto p = nlohmann::json::parse(line);
+        if (p.at("key") == "image") {
+            image_seen = true;
+            CHECK(p.at("bundled") == "hard-disc");
+        } else {
+            CHECK(p.at("bundled") == "");
+        }
+    }
+    CHECK(image_seen);
+}
+
+TEST_CASE("resolve-preset: a bare hard-disc name that is not bundled is a warning",
+          "[integration][preset][resolve-preset][bundled]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "nope.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"image": "no-such-master.dat"}}]})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    REQUIRE(out.at("diagnostics").size() == 1);
+    CHECK(out.at("diagnostics")[0].at("severity") == "warning");
+    CHECK(out.at("diagnostics")[0].at("path") == "/extensions/1/config/image");
+}

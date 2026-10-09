@@ -15,6 +15,7 @@
 
 #include <beebium/PlatformUtils.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -23,6 +24,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #if !defined(__APPLE__) && !defined(_WIN32)
 #include <unistd.h>
@@ -115,6 +117,46 @@ public:
         throw std::runtime_error(
             "Cannot find disc directory. Set BEEBIUM_DISC_DIR environment "
             "variable to the directory containing the bundled disc images.");
+    }
+
+    // A bundled hard-disc master: the bare name a preset or --scsi-hdd uses
+    // to refer to it, and its size.
+    struct BundledImage {
+        std::string image;            // e.g. "l3fs-v1_26b.dat"
+        std::uintmax_t size_bytes = 0;
+    };
+
+    // The hard-disc masters in a master directory: every <name>.dat that has
+    // its <name>.dsc sidecar, sorted by name. These are the bare names
+    // resolve_disc_image accepts. An absent directory has none.
+    static std::vector<BundledImage> bundled_hard_disc_images(
+        const std::filesystem::path& master_dir) {
+        std::vector<BundledImage> images;
+        std::error_code ec;
+        if (!std::filesystem::is_directory(master_dir, ec)) {
+            return images;
+        }
+        for (const auto& entry : std::filesystem::directory_iterator(master_dir, ec)) {
+            const auto& path = entry.path();
+            if (path.extension() != ".dat" || !entry.is_regular_file(ec)) continue;
+            auto dsc = path;
+            dsc.replace_extension(".dsc");
+            if (!std::filesystem::exists(dsc, ec)) continue;
+            images.push_back({path.filename().string(), entry.file_size(ec)});
+        }
+        std::sort(images.begin(), images.end(),
+                  [](const BundledImage& a, const BundledImage& b) { return a.image < b.image; });
+        return images;
+    }
+
+    // The hard-disc masters this server ships (find_disc_directory), or none
+    // when it has no disc directory.
+    static std::vector<BundledImage> bundled_hard_disc_images() {
+        try {
+            return bundled_hard_disc_images(find_disc_directory());
+        } catch (const std::runtime_error&) {
+            return {};
+        }
     }
 
     // Per-user working-copy directory: a sibling of the user presets

@@ -2689,24 +2689,23 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             return {nullptr, ExitCode::CONFIG};
         }
 
-        // Resolve a bundled disc-image reference (a bare, version-named
-        // filename) to a per-user working copy via copy-on-first-use, so the
-        // shipped read-only master is never opened writable. Explicit user
-        // paths (absolute or with a directory component) pass through
-        // unchanged. Only the scsi-hard-disc extension bears a disc image.
+        // Resolve a bundled hard-disc reference (a bare, version-named
+        // filename, in a parameter the manifest declares bundled "hard-disc")
+        // to a per-user working copy via copy-on-first-use, so the shipped
+        // read-only master is never opened writable. Explicit user paths
+        // (absolute or with a directory component) pass through unchanged.
         // See DiscPaths.
-        if (manifest->name == "scsi-hard-disc") {
-            auto image_it = inst.config.find("image");
-            if (image_it != inst.config.end() && !image_it->second.empty()) {
-                try {
-                    image_it->second =
-                        beebium::server::DiscPaths::resolve_disc_image(
-                            image_it->second).string();
-                } catch (const std::exception& e) {
-                    std::cerr << "Error: cannot resolve disc image for '"
-                              << inst.name << "': " << e.what() << "\n";
-                    return {nullptr, ExitCode::CONFIG};
-                }
+        for (const auto& p : manifest->parameters) {
+            if (p.bundled != "hard-disc") continue;
+            auto image_it = inst.config.find(p.key);
+            if (image_it == inst.config.end() || image_it->second.empty()) continue;
+            try {
+                image_it->second =
+                    beebium::server::DiscPaths::resolve_disc_image(image_it->second).string();
+            } catch (const std::exception& e) {
+                std::cerr << "Error: cannot resolve disc image for '"
+                          << inst.name << "': " << e.what() << "\n";
+                return {nullptr, ExitCode::CONFIG};
             }
         }
 
@@ -3643,6 +3642,9 @@ public:
                         if (!p.default_value.empty()) {
                             std::cout << " [default: " << p.default_value << "]";
                         }
+                        if (!p.bundled.empty()) {
+                            std::cout << " (or a bundled " << p.bundled << " image)";
+                        }
                         if (p.unique) std::cout << " (unique on its attachment)";
                         if (!p.provider_of.empty()) {
                             std::cout << " (names the " << p.provider_of << " provider)";
@@ -3685,6 +3687,7 @@ public:
                               << ",\"required\":" << (p.required ? "true" : "false")
                               << ",\"default\":\""
                               << extension_listing::json_escape(p.default_value)
+                              << "\",\"bundled\":\"" << extension_listing::json_escape(p.bundled)
                               << "\",\"unique\":" << (p.unique ? "true" : "false")
                               << ",\"provider_of\":\""
                               << extension_listing::json_escape(p.provider_of)
@@ -4159,8 +4162,17 @@ public:
                     {"provided_by", providers.empty() ? ojson(nullptr) : ojson(providers)},
                     {"extensions", attaching}});
             }
+            // The images a parameter declared bundled may name by bare name,
+            // by kind. The masters are the server's (DiscPaths); floppy discs
+            // have none.
+            ojson hard_discs = ojson::array();
+            for (const auto& image : beebium::server::DiscPaths::bundled_hard_disc_images()) {
+                hard_discs.push_back(
+                    ojson{{"image", image.image}, {"size_bytes", image.size_bytes}});
+            }
             sections.push_back(ojson{{"type", "extensions"},
-                                     {"attachment_points", attachment_points}});
+                                     {"attachment_points", attachment_points},
+                                     {"bundled_images", ojson{{"hard-disc", hard_discs}}}});
         }
 
         output["sections"] = sections;
@@ -5516,6 +5528,7 @@ private:
                     "ignored: this model has a built-in disc controller");
         }
         apply_rom_defaults(config);
+        check_bundled_images_exist(config, warning);
         check_roms_exist(config, preset, warning);
         check_floppies_exist(config, warning);
 
@@ -5553,6 +5566,32 @@ private:
                 continue;
             }
             check(path, image);
+        }
+    }
+
+    // A bare name in a parameter declared bundled must be one of the bundled
+    // images; resolving it at launch fails otherwise.
+    template<typename Warning>
+    static void check_bundled_images_exist(const ServerConfig<MachineType>& config,
+                                           Warning warning) {
+        const auto images = beebium::server::DiscPaths::bundled_hard_disc_images();
+        for (const auto& inst : config.extension_instances) {
+            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            if (!m) continue;
+            for (const auto& p : m->parameters) {
+                if (p.bundled != "hard-disc") continue;
+                auto it = inst.config.find(p.key);
+                if (it == inst.config.end() || std::filesystem::path(it->second).has_parent_path() ||
+                    std::filesystem::path(it->second).is_absolute()) {
+                    continue;
+                }
+                const bool found = std::any_of(images.begin(), images.end(),
+                                               [&](const auto& i) { return i.image == it->second; });
+                if (!found) {
+                    warning(inst.from_preset ? inst.preset_pointer + "/config/" + p.key : "",
+                            "'" + it->second + "' is not a bundled hard-disc image");
+                }
+            }
         }
     }
 
