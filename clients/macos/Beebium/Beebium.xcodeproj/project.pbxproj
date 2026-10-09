@@ -34,6 +34,7 @@
 		15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */; };
 		162D791FD0BE2D5F6E75CB72 /* FloppyDriveConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */; };
 		18076BDCC5AC917FB887DC99 /* EconetStationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */; };
+		19617EDAAB58E72A082451BB /* MachineDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16E213786D5D1828745EFE6 /* MachineDraftTests.swift */; };
 		1AE92C3076119A47291BD4D7 /* NewMachineDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */; };
 		1AEDEA9B5B2CA4CC55909B84 /* BBCKeyCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152853E7E4735D1E7994275 /* BBCKeyCache.swift */; };
 		1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */; };
@@ -55,6 +56,7 @@
 		317D8650FFD239EF03206DA7 /* EconetTransportsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */; };
 		345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */; };
 		361BFD07D5C734F4857DAEFF /* AudioLimiterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3162BA8FF05AE79259EC5AA /* AudioLimiterTests.swift */; };
+		3922D2EE613A705A5EC066D7 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E96BF7B20865AFD600D53F /* JSONValue.swift */; };
 		394059FE9C2A8CC58886CC50 /* PeripheralsModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F91689B09CACC55C956BA2 /* PeripheralsModeView.swift */; };
 		3A5F2C41B8468DD7E63EC414 /* audio.proto in Resources */ = {isa = PBXBuildFile; fileRef = A16BD17340EC98E2C5EF1127 /* audio.proto */; };
 		3B3122E1626E09ABEAC4315B /* ConfigurationSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */; };
@@ -187,6 +189,7 @@
 		D9718E6F6B0170B2E3BDDD45 /* extension_ui.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E1A6F06137647B3CB8F6C8 /* extension_ui.grpc.swift */; };
 		DA2A617393E4BA1C28E528F7 /* ModalEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91EE41147FA34459F83B3130 /* ModalEditorView.swift */; };
 		DA8B66BA897FDC6A944A0603 /* DiscImageReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6378C40652987D58945A27B7 /* DiscImageReferenceTests.swift */; };
+		DB6216175E8F0BBD24DC76CC /* MachineDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4A8D3907E53A1168B8542D /* MachineDraft.swift */; };
 		DD38D6EB9C3CC2182169F801 /* Disconnectable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639EC2DB9EC3CBA7F0E7A8CB /* Disconnectable.swift */; };
 		DD7F6150B025820774A44746 /* KeyboardMTKView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B98CF59648104556C3677412 /* KeyboardMTKView.swift */; };
 		DE83DD7DC63111D2D1AC48CF /* ColorExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C346B94C85DFDC5E4D867DA /* ColorExtensions.swift */; };
@@ -269,6 +272,7 @@
 		25D1F9F6D43714BB3F5B5CEB /* AudioMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerView.swift; sourceTree = "<group>"; };
 		27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectCoordinatorTests.swift; sourceTree = "<group>"; };
 		28ED949DB593C8353954F7B1 /* MachinePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinePreset.swift; sourceTree = "<group>"; };
+		2A4A8D3907E53A1168B8542D /* MachineDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDraft.swift; sourceTree = "<group>"; };
 		2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageInfoTests.swift; sourceTree = "<group>"; };
 		2BE9E7191CAFDC8E2EAE7ADA /* WelcomeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeWindow.swift; sourceTree = "<group>"; };
 		2C346B94C85DFDC5E4D867DA /* ColorExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtensions.swift; sourceTree = "<group>"; };
@@ -402,6 +406,7 @@
 		BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilterTests.swift; sourceTree = "<group>"; };
 		BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMapping.swift; sourceTree = "<group>"; };
 		C152853E7E4735D1E7994275 /* BBCKeyCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCKeyCache.swift; sourceTree = "<group>"; };
+		C1E96BF7B20865AFD600D53F /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
 		C432ADD4B509CA5A4D3462C0 /* FocusedDialogKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusedDialogKeys.swift; sourceTree = "<group>"; };
 		C511516BDB7D578CF5D63867 /* BiquadFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilter.swift; sourceTree = "<group>"; };
 		C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysClient.swift; sourceTree = "<group>"; };
@@ -431,6 +436,7 @@
 		DEA7D0A129BC077F76BE2180 /* TitleClickMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleClickMonitor.swift; sourceTree = "<group>"; };
 		DFB1414298AE8F8261138293 /* keyboard.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = keyboard.proto; sourceTree = "<group>"; };
 		E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSchemaSection.swift; sourceTree = "<group>"; };
+		E16E213786D5D1828745EFE6 /* MachineDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineDraftTests.swift; sourceTree = "<group>"; };
 		E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSectionView.swift; sourceTree = "<group>"; };
 		E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscFormatListTests.swift; sourceTree = "<group>"; };
 		E2FF930B029ECBBAE243C4D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -569,6 +575,8 @@
 			children = (
 				5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */,
 				80EC3C1B36F0B3BFDEEDD1A1 /* DiscImageInfo.swift */,
+				C1E96BF7B20865AFD600D53F /* JSONValue.swift */,
+				2A4A8D3907E53A1168B8542D /* MachineDraft.swift */,
 				28ED949DB593C8353954F7B1 /* MachinePreset.swift */,
 				8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */,
 				98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */,
@@ -760,6 +768,7 @@
 				62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */,
 				77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */,
 				A452738F56C6C80444FBD7B3 /* LockSyncPolicyTests.swift */,
+				E16E213786D5D1828745EFE6 /* MachineDraftTests.swift */,
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
 				B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */,
 				ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */,
@@ -938,6 +947,7 @@
 				15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */,
 				9FD319C4AF922A8D60CB43CA /* LockStateReconcilerTests.swift in Sources */,
 				582166736131C819C1974BDE /* LockSyncPolicyTests.swift in Sources */,
+				19617EDAAB58E72A082451BB /* MachineDraftTests.swift in Sources */,
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
 				C19767F534EBBAEAB5F75148 /* MachineNameTemplateSupportTests.swift in Sources */,
 				C39DF4B1A3101F1124458288 /* MachineNamesTests.swift in Sources */,
@@ -1026,6 +1036,7 @@
 				4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */,
 				40F2A089FF91784C67231853 /* IndicatorClient.swift in Sources */,
 				7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */,
+				3922D2EE613A705A5EC066D7 /* JSONValue.swift in Sources */,
 				94C93812FC0975970E7C7230 /* KeyInput.swift in Sources */,
 				987BD71FBAD1D69713DD3995 /* KeyboardClient.swift in Sources */,
 				DD7F6150B025820774A44746 /* KeyboardMTKView.swift in Sources */,
@@ -1035,6 +1046,7 @@
 				674B2003EFDBCA5697E614C0 /* LockStateReconciler.swift in Sources */,
 				F9DCB28FBA6728EEC04A0D6D /* LockSyncPolicy.swift in Sources */,
 				F8E43B3F7BBA3554BE190043 /* MacKeyCode.swift in Sources */,
+				DB6216175E8F0BBD24DC76CC /* MachineDraft.swift in Sources */,
 				0DA8A667A8A7A3861F00B88F /* MachineManager.swift in Sources */,
 				C4C6DB5BB267DF75EE940A1D /* MachineNameTemplateSupport.swift in Sources */,
 				A16526EF2B425C9CE263353C /* MachineNames.swift in Sources */,
