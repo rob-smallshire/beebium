@@ -119,12 +119,13 @@ Each extension has a `manifest.json` file alongside its shared library. The mani
     "cli": "scsi-hdd",
     "attaches_to": ["scsi"],
     "parameters": [
-        {"key": "scsi-id", "type": "integer", "position": 0, "default": "0",
+        {"key": "scsi-id", "label": "SCSI ID", "type": "integer", "position": 0,
+         "default": "0", "min": 0, "max": 7, "unique": true,
          "description": "SCSI target ID (0-7)"},
-        {"key": "image", "type": "filepath", "position": 1,
-         "description": "Path to DAT disc image file"},
-        {"key": "adapter-id", "type": "string", "keyword_only": true,
-         "description": "ID of SCSI adapter to attach to"}
+        {"key": "image", "label": "Disc image", "type": "filepath", "position": 1,
+         "bundled": "hard-disc", "description": "Path to DAT disc image file"},
+        {"key": "adapter-id", "label": "SCSI adapter", "type": "string",
+         "provider_of": "scsi", "description": "ID of SCSI adapter to attach to"}
     ]
 }
 ```
@@ -147,19 +148,43 @@ attachment-point discovery below.
 
 Parameter schema fields:
 - `key` -- parameter name
-- `type` -- `string`, `integer`, `boolean`, or `filepath`
+- `label` -- a short human-readable name, for a configuration UI's form
+  (required of every shipped extension: a test checks each parameter has a
+  `label` and a `description`)
+- `description` -- one line of human-readable description (used in help, error
+  messages and forms)
+- `type` -- `string`, `integer`, `boolean`, or `filepath` (a file path, which a
+  preset resolves against its own directory; see
+  [preset-schema.md](preset-schema.md#paths))
 - `position` -- positional index (0, 1, ...); omit or -1 for keyword-only
 - `required` -- whether the parameter must be provided (default: false)
 - `default` -- default value if not provided
-- `description` -- human-readable description (used in error messages and gRPC)
+- `is_list` -- the parameter may be given several times; its values form a list
+- `min`, `max` -- for an `integer`, the least and greatest values allowed
+- `choices` -- the only values allowed, each a bare string or
+  `{"value": ..., "label": ...}`; matched without regard to case and stored as
+  declared
+- `bundled` -- for a `filepath`, a kind of image the server ships (today
+  `hard-disc`): a bare name refers to one, used through a copy-on-write
+  working copy
+- `provider_of` -- the value is the `id` of the instance providing the named
+  attachment point to attach to (empty: the last one)
+- `unique` -- the value must differ among the instances on the same attachment
 
-Two framework-managed parameters are injected automatically and do not appear in the manifest:
-- `id` -- instance identity (auto-generated UUID, overridable via `id=<value>`)
+`min`/`max` and `choices` are enforced for the command line and presets alike;
+`provider_of`, `unique` and the attachment points are checked before the
+machine is built ([preset-schema.md](preset-schema.md#attachment)). Only add a
+bound or a choice list the code really enforces, so that the form, the
+validation and the extension agree. `describe-extension <name> --json` shows
+every property.
+
+Two framework-managed parameters are accepted by every extension and do not appear in the manifest:
+- `id` -- instance identity (see below; overridable via `id=<value>`)
 - `label` -- display name for GUIs (falls back to `id` if not set)
 
 ### Instance Identity
 
-Every extension instance has an `id` (stable identity for referencing, logging, gRPC) and an optional `label` (display name for GUIs). If not provided by the user, `id` is auto-generated as a UUID and `label` falls back to `id`.
+Every extension instance has an `id` (stable identity for referencing, logging, gRPC) and an optional `label` (display name for GUIs). An instance not given an `id` takes its extension's name, or `name-1`, `name-2`, ... when that is taken, never an `id` another instance was given explicitly; ids are assigned in one place, once the preset and the command line are merged, so the same configuration always names its instances the same way and `resolve-preset` writes them into the document.
 
 Extension-specific identifiers use qualified names to avoid collision with `id`: e.g. `scsi-id` for the SCSI target number, `adapter-id` to reference a parent adapter.
 

@@ -237,14 +237,20 @@ from an older format, are rejected with a message giving the new form.
 Each entry is one extension instance: `name` is the extension's canonical
 name (`list-extensions`), and `config` its parameters. The parameters, their
 types and defaults are the extension's manifest's, given by
-`describe-extension <name>`. Values may be JSON strings, integers, booleans,
+`describe-extension <name>` (`--json` for every property: label, bounds,
+choices and the attachment properties below; the manifest format is in
+[peripheral-extension-framework.md](peripheral-extension-framework.md#extension-manifest)). Values may be JSON strings, integers, booleans,
 or for a repeatable (`is_list`) parameter an array; `id` and `label` are
-framework keys every extension accepts (`id` names the instance).
+framework keys every extension accepts. `id` names the instance; one not
+given an `id` takes its extension's name, or `name-1`, `name-2`, ... when
+that is taken (never an `id` given explicitly), so the same preset always
+names its instances the same way, and `resolve-preset` writes the ids out.
 
 A preset's extension config is checked exactly as the equivalent command-line
 flag is (`normalise_extension_config`): an unknown extension, an unknown
-parameter, a missing required parameter or a value of the wrong type stops the
-launch with `CONFIG` (78), and the manifest's defaults are filled in for the
+parameter, a missing required parameter, a value of the wrong type, outside
+the parameter's `min`/`max` or not among its `choices` stops the launch with
+`CONFIG` (78), and the manifest's defaults are filled in for the
 parameters left out. An empty value (`""`, or `[]` for a list) is the same as
 leaving the parameter out, so the default applies. A single value for a list
 parameter is a one-element list. A `filepath` parameter is resolved as in
@@ -413,7 +419,9 @@ There is one section per preset key, its `type` being the key:
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
 | `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "size_bytes": 10002432}]}` |
 
-Extensions and transports are named, not described: their parameters come from
+The split is deliberate: `describe-preset-schema` says where things go on this
+model, `describe-extension` what each extension takes. Extensions and
+transports are named, not described: their parameters come from
 `describe-extension`, an attachment point's occupancy from
 `list-attachment-points`, and the controller and image-format catalogues from
 `list-fdcs` and `list-floppy-formats`.
