@@ -22,7 +22,7 @@ import SwiftUI
 /// machine variant with cartridge slots lands.
 ///
 /// Read-only by design: changing what's in a slot at runtime is intentionally
-/// out of scope (see docs/plans/preset-schema/sideways-bank.md).
+/// out of scope (see docs/preset-schema.md#sideways-romram-bank).
 struct MemoryModeView: View {
     @ObservedObject var sidewaysClient: SidewaysClient
 
