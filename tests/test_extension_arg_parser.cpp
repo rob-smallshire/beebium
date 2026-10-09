@@ -632,3 +632,47 @@ TEST_CASE("parse_extension_args: an empty value is a parameter left out",
     CHECK(result.config.count("adapter-id") == 0);
     CHECK(result.explicit_keys.count("adapter-id") == 0);
 }
+
+// ---------------------------------------------------------------------------
+// Bounds and choices, checked the same way for every source
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::vector<ParameterSchema> bounded_schema() {
+    ParameterSchema id{"scsi-id", "integer", "SCSI target ID", -1, false, false, "0"};
+    id.min = 0;
+    id.max = 7;
+    ParameterSchema mode{"mode", "string", "Mode", -1, false, false, "pty"};
+    mode.choices = {{"pty", "Pseudo-terminal"}, {"device", "Serial device"}};
+    return {id, mode};
+}
+
+}  // namespace
+
+TEST_CASE("an integer parameter outside its bounds is rejected",
+          "[extension][arg-parser][bounds]") {
+    auto cli = parse_extension_args("x", "scsi-id=8", bounded_schema());
+    REQUIRE_FALSE(cli.ok);
+    CHECK_THAT(cli.error, ContainsSubstring("parameter 'scsi-id' must be 0-7, got '8'"));
+
+    auto preset = normalise_extension_config("preset", {{"scsi-id", "-1"}}, {}, bounded_schema());
+    REQUIRE_FALSE(preset.ok);
+    CHECK_THAT(preset.error, ContainsSubstring("must be 0-7"));
+
+    CHECK(parse_extension_args("x", "scsi-id=7", bounded_schema()).ok);
+}
+
+TEST_CASE("a parameter with choices takes only one of them",
+          "[extension][arg-parser][choices]") {
+    auto result = parse_extension_args("x", "mode=serial", bounded_schema());
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("parameter 'mode' must be one of: pty, device"));
+}
+
+TEST_CASE("a choice is matched without regard to case and written as declared",
+          "[extension][arg-parser][choices]") {
+    auto result = normalise_extension_config("preset", {{"mode", "DEVICE"}}, {}, bounded_schema());
+    REQUIRE(result.ok);
+    CHECK(result.config.at("mode") == "device");
+}

@@ -3,50 +3,77 @@
     "display_name": "RFC 2217 Serial (client)",
     "description": "Connect the BBC serial port (RS423) to a remote RFC 2217 access server over TCP",
     "library": "rfc2217-client-serial",
-    "attaches_to": ["serial-port"],
+    "attaches_to": [
+        "serial-port"
+    ],
     "cli": "rfc2217-client-serial",
     "parameters": [
         {
             "key": "url",
+            "label": "Server URL",
             "type": "string",
             "description": "Access-server endpoint as [scheme://]host:port (e.g. url=\"rfc2217://ser2net.local:4001\"); alternative to host/port, cannot be combined with them"
         },
         {
             "key": "host",
+            "label": "Server host",
             "type": "string",
             "description": "RFC 2217 access-server hostname or address (alternative to url)"
         },
         {
             "key": "port",
+            "label": "Server port",
             "type": "integer",
-            "description": "RFC 2217 access-server TCP port (alternative to url)"
+            "description": "RFC 2217 access-server TCP port (alternative to url)",
+            "min": 1,
+            "max": 65535
         },
         {
             "key": "baud",
+            "label": "Baud rate",
             "type": "integer",
             "default": "19200",
-            "description": "baud rate to set on the remote UART (real hardware)"
+            "description": "baud rate to set on the remote UART (real hardware)",
+            "min": 1
         },
         {
             "key": "framing",
+            "label": "Framing",
             "type": "string",
             "default": "8N1",
             "description": "remote UART framing as <data><parity><stop> (data 5-8; parity N/O/E/M/S; stop 1/2), e.g. 8N1 or 7E1"
         },
         {
             "key": "flow",
+            "label": "Flow control",
             "type": "string",
             "default": "none",
-            "description": "remote UART flow control: none, rtscts (hardware) or xonxoff"
+            "description": "remote UART flow control: none, rtscts (hardware) or xonxoff",
+            "choices": [
+                {
+                    "value": "none",
+                    "label": "None"
+                },
+                {
+                    "value": "rtscts",
+                    "label": "Hardware (RTS/CTS)"
+                },
+                {
+                    "value": "xonxoff",
+                    "label": "Software (XON/XOFF)"
+                }
+            ]
         },
         {
             "key": "dtr",
+            "label": "Assert DTR",
             "type": "boolean",
             "default": "true",
             "description": "assert DTR on the remote UART (many devices/modems need it; the BBC connector has no DTR pin)"
         },
         {
             "key": "tx_buffer",
+            "label": "Transmit buffer (bytes)",
             "type": "integer",
             "default": "4096",
             "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it"

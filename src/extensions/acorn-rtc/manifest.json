@@ -3,24 +3,43 @@
     "display_name": "Acorn Real-Time Clock",
     "description": "Acorn User Port Real Time Clock Module (SAF3019P)",
     "library": "acorn-rtc",
-    "attaches_to": ["user-port"],
+    "attaches_to": [
+        "user-port"
+    ],
     "cli": "acorn-rtc",
     "parameters": [
         {
             "key": "time",
+            "label": "Start time",
             "type": "string",
             "description": "Set emulated clock to absolute datetime (e.g. 1985-03-15T10:30)"
         },
         {
             "key": "offset",
+            "label": "Offset from host time",
             "type": "string",
             "description": "Offset from host local time (e.g. -10y, +5h, -365d)"
         },
         {
             "key": "layout",
+            "label": "Register layout",
             "type": "string",
             "description": "Register layout: '4bit-year-in-r1' (Acorn original), '7bit-year-in-r7' (L3 v1.26), '7bit-year-in-r1r5' (BeebMaster Y2KFIX)",
-            "default": "4bit-year-in-r1"
+            "default": "4bit-year-in-r1",
+            "choices": [
+                {
+                    "value": "4bit-year-in-r1",
+                    "label": "Acorn original (4-bit year in R1)"
+                },
+                {
+                    "value": "7bit-year-in-r7",
+                    "label": "Level 3 File Server 1.26 (7-bit year in R7)"
+                },
+                {
+                    "value": "7bit-year-in-r1r5",
+                    "label": "BeebMaster Y2KFIX (7-bit year in R1/R5)"
+                }
+            ]
         }
     ]
 }

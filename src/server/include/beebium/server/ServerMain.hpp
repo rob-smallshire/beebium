@@ -3528,6 +3528,56 @@ public:
 };
 
 // DescribeExtension subcommand - parameter detail for a single extension
+// One manifest parameter as describe-extension's JSON forms give it: every
+// property a configuration UI needs to build a field for it.
+inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSchema& p) {
+    nlohmann::ordered_json choices = nlohmann::ordered_json::array();
+    for (const auto& c : p.choices) {
+        choices.push_back({{"value", c.value}, {"label", c.label}});
+    }
+    return {
+        {"key", p.key},
+        {"label", p.label},
+        {"description", p.description},
+        {"type", p.type},
+        {"required", p.required},
+        {"is_list", p.is_list},
+        {"position", p.position >= 0 ? nlohmann::ordered_json(p.position)
+                                     : nlohmann::ordered_json(nullptr)},
+        {"default", p.default_value},
+        {"min", p.min ? nlohmann::ordered_json(*p.min) : nlohmann::ordered_json(nullptr)},
+        {"max", p.max ? nlohmann::ordered_json(*p.max) : nlohmann::ordered_json(nullptr)},
+        {"choices", choices},
+        {"bundled", p.bundled},
+        {"unique", p.unique},
+        {"provider_of", p.provider_of},
+    };
+}
+
+// An extension as describe-extension --json gives it.
+inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionManifest& m,
+                                                      const std::string& source) {
+    nlohmann::ordered_json parameters = nlohmann::ordered_json::array();
+    for (const auto& p : m.parameters) parameters.push_back(parameter_schema_json(p));
+    nlohmann::ordered_json roms = nlohmann::ordered_json::array();
+    for (const auto& r : m.roms) {
+        roms.push_back({{"key", r.key}, {"filename", r.filename}, {"size", r.size},
+                        {"description", r.description}});
+    }
+    return {
+        {"name", m.name},
+        {"display_name", m.display_name},
+        {"description", m.description},
+        {"cli_name", std::string(m.effective_cli_name())},
+        {"kind", m.extension_kind},
+        {"source", source},
+        {"attaches_to", m.attaches_to},
+        {"provides", m.provides},
+        {"parameters", parameters},
+        {"roms", roms},
+    };
+}
+
 template<typename MachineType>
 class DescribeExtensionSubcommand : public Subcommand<MachineType> {
 public:
@@ -3543,7 +3593,12 @@ public:
                   << "Shows the parameter schema for an extension. <name> may be\n"
                   << "either the CLI flag stem (e.g. tube-65c02) or the canonical\n"
                   << "extension name (e.g. acorn-65c02-coprocessor).\n"
-                  << "Honours --format pretty|tsv|jsonl.\n";
+                  << "Honours --format pretty|tsv|jsonl (jsonl: one object per\n"
+                  << "parameter). --json prints the whole extension as one object:\n"
+                  << "name, display_name, description, cli_name, kind, source,\n"
+                  << "attaches_to, provides, parameters (key, label, description,\n"
+                  << "type, required, is_list, position, default, min, max, choices,\n"
+                  << "bundled, unique, provider_of) and roms.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -3556,10 +3611,15 @@ public:
             argc, argv, global.subcommand_argv_start);
 
         std::string target_name;
+        bool json_output = false;
         for (const auto& tok : parsed.remaining) {
             if (tok == "--help" || tok == "-h") {
                 help(argv[0]);
                 return ExitCode::OK;
+            }
+            if (tok == "--json") {
+                json_output = true;
+                continue;
             }
             if (!tok.empty() && tok.front() == '-') {
                 std::cerr << "Unknown argument: " << tok << "\n";
@@ -3600,6 +3660,11 @@ public:
         if (!manifest) {
             std::cerr << "Error: no extension named '" << target_name << "'\n";
             return ExitCode::CONFIG;
+        }
+
+        if (json_output) {
+            std::cout << extension_manifest_json(*manifest, source_label).dump(2) << "\n";
+            return ExitCode::OK;
         }
 
         OutputFormat format = resolve_output_format(global.output_format);
@@ -3656,6 +3721,17 @@ public:
                                   << " : " << p.type;
                         if (p.is_list) std::cout << " (list)";
                         if (p.required) std::cout << " (required)";
+                        if (p.min || p.max) {
+                            std::cout << " (" << (p.min ? std::to_string(*p.min) : "")
+                                      << ".." << (p.max ? std::to_string(*p.max) : "") << ")";
+                        }
+                        if (!p.choices.empty()) {
+                            std::cout << " {";
+                            for (std::size_t c = 0; c < p.choices.size(); ++c) {
+                                std::cout << (c ? "|" : "") << p.choices[c].value;
+                            }
+                            std::cout << "}";
+                        }
                         if (!p.default_value.empty()) {
                             std::cout << " [default: " << p.default_value << "]";
                         }
@@ -3667,8 +3743,10 @@ public:
                             std::cout << " (names the " << p.provider_of << " provider)";
                         }
                         std::cout << "\n";
-                        if (!p.description.empty()) {
-                            std::cout << "        " << p.description << "\n";
+                        if (!p.label.empty() || !p.description.empty()) {
+                            std::cout << "        " << p.label
+                                      << (p.label.empty() || p.description.empty() ? "" : ": ")
+                                      << p.description << "\n";
                         }
                     }
                 }
@@ -3698,19 +3776,7 @@ public:
 
             case OutputFormat::Jsonl:
                 for (const auto& p : manifest->parameters) {
-                    std::cout << "{\"key\":\"" << extension_listing::json_escape(p.key)
-                              << "\",\"type\":\"" << extension_listing::json_escape(p.type)
-                              << "\",\"is_list\":" << (p.is_list ? "true" : "false")
-                              << ",\"required\":" << (p.required ? "true" : "false")
-                              << ",\"default\":\""
-                              << extension_listing::json_escape(p.default_value)
-                              << "\",\"bundled\":\"" << extension_listing::json_escape(p.bundled)
-                              << "\",\"unique\":" << (p.unique ? "true" : "false")
-                              << ",\"provider_of\":\""
-                              << extension_listing::json_escape(p.provider_of)
-                              << "\",\"description\":\""
-                              << extension_listing::json_escape(p.description)
-                              << "\"}\n";
+                    std::cout << parameter_schema_json(p).dump() << "\n";
                 }
                 break;
 

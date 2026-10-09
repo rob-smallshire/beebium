@@ -71,6 +71,16 @@ bool validate_type(std::string_view type, std::string_view value) {
     return true;
 }
 
+bool equal_ignoring_case(std::string_view a, std::string_view b) {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+               auto lower = [](char c) {
+                   return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+               };
+               return lower(x) == lower(y);
+           });
+}
+
 std::string type_description(std::string_view type) {
     if (type == "integer") return "an integer";
     if (type == "boolean") return "a boolean (true/false)";
@@ -185,15 +195,40 @@ ParseResult complete_config(ParseResult result,
         }
     }
 
-    // Validate types
+    // Validate types, then bounds and choices
     for (const auto& p : schema) {
         auto it = result.config.find(p.key);
-        if (it != result.config.end() && !it->second.empty()) {
-            if (!validate_type(p.type, it->second)) {
-                return err("parameter '" + p.key + "' must be "
-                           + type_description(p.type)
+        if (it == result.config.end() || it->second.empty()) {
+            continue;
+        }
+        if (!validate_type(p.type, it->second)) {
+            return err("parameter '" + p.key + "' must be "
+                       + type_description(p.type)
+                       + ", got '" + it->second + "'");
+        }
+        if (p.type == "integer" && (p.min || p.max)) {
+            const long long v = std::stoll(it->second);
+            if ((p.min && v < *p.min) || (p.max && v > *p.max)) {
+                std::string range = p.min && p.max
+                    ? std::to_string(*p.min) + "-" + std::to_string(*p.max)
+                    : p.min ? "at least " + std::to_string(*p.min)
+                            : "at most " + std::to_string(*p.max);
+                return err("parameter '" + p.key + "' must be " + range
                            + ", got '" + it->second + "'");
             }
+        }
+        if (!p.choices.empty()) {
+            auto match = std::find_if(p.choices.begin(), p.choices.end(),
+                [&](const ParameterChoice& c) { return equal_ignoring_case(c.value, it->second); });
+            if (match == p.choices.end()) {
+                std::string values;
+                for (const auto& c : p.choices) {
+                    values += (values.empty() ? "" : ", ") + c.value;
+                }
+                return err("parameter '" + p.key + "' must be one of: " + values
+                           + ", got '" + it->second + "'");
+            }
+            it->second = match->value;
         }
     }
 

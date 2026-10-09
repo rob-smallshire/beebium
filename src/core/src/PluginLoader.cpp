@@ -198,6 +198,24 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.provider_of = p.value("provider_of", "");
             param.unique = p.value("unique", false);
             param.bundled = p.value("bundled", "");
+            param.label = p.value("label", "");
+            if (p.contains("min") && p["min"].is_number_integer()) {
+                param.min = p["min"].get<long long>();
+            }
+            if (p.contains("max") && p["max"].is_number_integer()) {
+                param.max = p["max"].get<long long>();
+            }
+            // A choice is a bare value, or {"value": ..., "label": ...}.
+            if (p.contains("choices") && p["choices"].is_array()) {
+                for (const auto& c : p["choices"]) {
+                    if (c.is_string()) {
+                        param.choices.push_back({c.get<std::string>(), c.get<std::string>()});
+                    } else if (c.is_object() && c.contains("value")) {
+                        auto value = c.value("value", "");
+                        param.choices.push_back({value, c.value("label", value)});
+                    }
+                }
+            }
             if (!param.key.empty()) {
                 manifest.parameters.push_back(std::move(param));
             }

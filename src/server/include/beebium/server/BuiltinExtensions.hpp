@@ -92,6 +92,25 @@ inline std::vector<Entry> make_entries() {
             {"discovery", "string",
              "mDNS discovery: on (announce+browse), announce, browse, or off",
              -1, false, false, "on"});
+        auto label = [&](std::string_view key, std::string text) {
+            for (auto& p : m.parameters) {
+                if (p.key == key) p.label = std::move(text);
+            }
+        };
+        label("port", "UDP port");
+        label("net", "Net number");
+        label("map", "Peers");
+        label("map-file", "Map file");
+        label("subnet", "Subnet rules");
+        label("discovery", "Discovery");
+        for (auto& p : m.parameters) {
+            if (p.key == "discovery") {
+                p.choices = {{"on", "Announce and browse"},
+                             {"announce", "Announce only"},
+                             {"browse", "Browse only"},
+                             {"off", "Off"}};
+            }
+        }
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new AunEconetTransportExtension()); }});
@@ -129,6 +148,18 @@ inline std::vector<Entry> make_entries() {
             {"tx_buffer", "integer",
              "transmit buffer size in bytes; the BBC's /CTS asserts at/above it",
              -1, false, false, "4096"});
+        for (auto& p : m.parameters) {
+            if (p.key == "mode") {
+                p.label = "Mode";
+                p.choices = {{"pty", "Pseudo-terminal"}, {"device", "Serial device"}};
+            } else if (p.key == "path") {
+                p.label = "Path";
+            } else if (p.key == "baud") {
+                p.label = "Baud rate";
+            } else if (p.key == "tx_buffer") {
+                p.label = "Transmit buffer (bytes)";
+            }
+        }
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new HostSerialExtension()); }});

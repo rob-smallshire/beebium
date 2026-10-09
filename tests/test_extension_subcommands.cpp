@@ -19,6 +19,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <beebium/PlatformUtils.hpp>
+#include <nlohmann/json.hpp>
 #include "test_temp_paths.hpp"
 
 #include <atomic>
@@ -297,4 +298,91 @@ TEST_CASE("start --help mentions --extension-dir is repeatable",
     // Description should call out the repeatability/override semantics.
     REQUIRE((combined.find("Repeatable") != std::string::npos
              || combined.find("repeatable") != std::string::npos));
+}
+
+// ============================================================================
+// describe-extension --json: everything a generic form needs
+// ============================================================================
+
+namespace {
+
+nlohmann::json describe_extension_json(const std::string& name) {
+    auto r = run_command(EXECUTABLE + " describe-extension " + name + " --json");
+    INFO(r.stderr_output);
+    REQUIRE(r.exit_code == 0);
+    return nlohmann::json::parse(r.stdout_output);
+}
+
+const nlohmann::json& parameter(const nlohmann::json& ext, const std::string& key) {
+    for (const auto& p : ext.at("parameters")) {
+        if (p.at("key") == key) return p;
+    }
+    FAIL("no parameter " << key);
+    static nlohmann::json none;
+    return none;
+}
+
+}  // namespace
+
+TEST_CASE("describe-extension --json describes the extension and each parameter",
+          "[integration][extension][describe-extension][json]") {
+    auto ext = describe_extension_json("scsi-hdd");
+    CHECK(ext.at("name") == "scsi-hard-disc");
+    CHECK(ext.at("cli_name") == "scsi-hdd");
+    CHECK(ext.at("display_name") == "SCSI Hard Disc");
+    CHECK(ext.at("kind") == "peripheral");
+    CHECK(ext.at("attaches_to") == nlohmann::json::array({"scsi"}));
+    CHECK(ext.at("provides") == nlohmann::json::array());
+    const auto& scsi_id = parameter(ext, "scsi-id");
+    CHECK(scsi_id.at("type") == "integer");
+    CHECK(scsi_id.at("min") == 0);
+    CHECK(scsi_id.at("max") == 7);
+    CHECK(scsi_id.at("default") == "0");
+    CHECK(scsi_id.at("unique") == true);
+    CHECK_FALSE(scsi_id.at("label").get<std::string>().empty());
+    CHECK(parameter(ext, "image").at("bundled") == "hard-disc");
+    CHECK(parameter(ext, "image").at("min").is_null());
+}
+
+TEST_CASE("describe-extension --json lists a parameter's choices",
+          "[integration][extension][describe-extension][json]") {
+    const auto aun = describe_extension_json("aun");
+    const auto& discovery = parameter(aun, "discovery");
+    std::vector<std::string> values;
+    for (const auto& c : discovery.at("choices")) {
+        values.push_back(c.at("value").get<std::string>());
+        CHECK_FALSE(c.at("label").get<std::string>().empty());
+    }
+    CHECK(values == std::vector<std::string>{"on", "announce", "browse", "off"});
+}
+
+TEST_CASE("every parameter of every shipped extension has a label and a description",
+          "[integration][extension][describe-extension][json]") {
+    auto list = run_command(EXECUTABLE + " --format jsonl list-extensions");
+    REQUIRE(list.exit_code == 0);
+    std::istringstream lines(list.stdout_output);
+    std::string line;
+    int extensions = 0;
+    while (std::getline(lines, line)) {
+        if (line.empty()) continue;
+        auto name = nlohmann::json::parse(line).at("name").get<std::string>();
+        auto ext = describe_extension_json(name);
+        ++extensions;
+        INFO(name);
+        CHECK_FALSE(ext.at("display_name").get<std::string>().empty());
+        CHECK_FALSE(ext.at("description").get<std::string>().empty());
+        for (const auto& p : ext.at("parameters")) {
+            INFO(p.at("key"));
+            CHECK_FALSE(p.at("label").get<std::string>().empty());
+            CHECK_FALSE(p.at("description").get<std::string>().empty());
+        }
+    }
+    CHECK(extensions >= 10);
+}
+
+TEST_CASE("start refuses an out-of-range SCSI ID as a usage error",
+          "[integration][extension][start][bounds]") {
+    auto r = run_command(EXECUTABLE + " start --acorn-scsi --scsi-hdd 8:/tmp/x.dat --port 0");
+    CHECK(r.exit_code == 64);
+    CHECK(r.stderr_output.find("must be 0-7") != std::string::npos);
 }

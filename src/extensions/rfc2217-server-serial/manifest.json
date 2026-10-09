@@ -3,23 +3,30 @@
     "display_name": "RFC 2217 Serial (server)",
     "description": "Expose the emulated BBC serial port (RS423) to RFC 2217 clients over TCP",
     "library": "rfc2217-server-serial",
-    "attaches_to": ["serial-port"],
+    "attaches_to": [
+        "serial-port"
+    ],
     "cli": "rfc2217-server-serial",
     "parameters": [
         {
             "key": "bind",
+            "label": "Listen address",
             "type": "string",
             "default": "127.0.0.1",
             "description": "listen address; the service is UNAUTHENTICATED plain Telnet, so bind to a wider address only behind SSH/WireGuard"
         },
         {
             "key": "port",
+            "label": "Listen port",
             "type": "integer",
             "required": true,
-            "description": "TCP port to listen on"
+            "description": "TCP port to listen on",
+            "min": 0,
+            "max": 65535
         },
         {
             "key": "tx_buffer",
+            "label": "Transmit buffer (bytes)",
             "type": "integer",
             "default": "4096",
             "description": "transmit buffer size in bytes; the BBC's /CTS asserts at/above it"

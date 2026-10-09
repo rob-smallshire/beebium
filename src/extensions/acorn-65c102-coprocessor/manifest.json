@@ -3,7 +3,9 @@
     "display_name": "Acorn 65C102 Co-processor",
     "description": "Acorn 65C102 4 MHz second processor",
     "library": "acorn-65c102-coprocessor",
-    "attaches_to": ["tube"],
+    "attaches_to": [
+        "tube"
+    ],
     "cli": "tube-65c102",
     "roms": [
         {
@@ -16,6 +18,7 @@
     "parameters": [
         {
             "key": "rom",
+            "label": "Client ROM",
             "type": "filepath",
             "description": "Path to the full 4KB Tube client ROM image (the 2732 device contents, F000-FFFF)",
             "required": false

@@ -2045,6 +2045,7 @@ if(BEEBIUM_BUILD_SERVICE)
     add_executable(test_extension_subcommands test_extension_subcommands.cpp)
     target_link_libraries(test_extension_subcommands PRIVATE
         beebium_core
+        nlohmann_json::nlohmann_json
         Catch2::Catch2WithMain
     )
     add_dependencies(test_extension_subcommands beebium-servers)

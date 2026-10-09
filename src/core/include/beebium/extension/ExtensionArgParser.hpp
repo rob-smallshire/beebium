@@ -17,12 +17,19 @@
 #include "beebium/CliArgSplit.hpp"  // split_colon_args (shared tokenizer)
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace beebium {
+
+// One allowed value of a parameter that takes one of a fixed set.
+struct ParameterChoice {
+    std::string value;          // as written in a preset or on the command line
+    std::string label;          // human-readable, for a configuration UI
+};
 
 // Schema for one extension parameter.
 struct ParameterSchema {
@@ -49,6 +56,12 @@ struct ParameterSchema {
     bool unique = false;        // the value must differ among the instances
                                 // attached to the same provider (e.g. a SCSI
                                 // target ID on one bus)
+    std::string label;          // short human-readable name, for a form
+    std::optional<long long> min;  // "integer" only: the least value allowed
+    std::optional<long long> max;  // "integer" only: the greatest value allowed
+    std::vector<ParameterChoice> choices;  // non-empty: the only values allowed
+                                           // (matched ignoring ASCII case and
+                                           // written as declared)
 };
 
 // Result of parsing extension arguments.
