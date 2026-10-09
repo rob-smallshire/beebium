@@ -19,6 +19,8 @@
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/PresetLoader.hpp>
 #include "stb_image.h"
+#include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -1442,4 +1444,172 @@ TEST_CASE("add-aun-subnet then remove-aun-subnet",
     REQUIRE(removed.exit_code == 0);
     REQUIRE(removed.stdout_output.find("Removed") != std::string::npos);
     remove_quietly(path);
+}
+
+// ============================================================================
+// resolve-preset: the preset as `start` would load it, every key filled
+// ============================================================================
+
+namespace {
+
+nlohmann::json resolve_json(const std::string& executable, const std::string& preset,
+                            int expected_exit_code = 0,
+                            const std::vector<std::pair<std::string, std::string>>& env = {}) {
+    auto result = run_command(executable + " resolve-preset \"" + preset + "\" --json", env);
+    INFO(preset << "\n" << result.stdout_output << result.stderr_output);
+    REQUIRE(result.exit_code == expected_exit_code);
+    return nlohmann::json::parse(result.stdout_output);
+}
+
+std::vector<std::filesystem::path> shipped_preset_filepaths() {
+    auto presets_dirpath =
+        std::filesystem::absolute(std::filesystem::path(EXECUTABLE)).parent_path() / "presets";
+    std::vector<std::filesystem::path> filepaths;
+    for (const auto& entry : std::filesystem::directory_iterator(presets_dirpath)) {
+        const auto name = entry.path().filename().string();
+        if (name.size() > 15 && name.substr(name.size() - 15) == ".preset.beebium") {
+            filepaths.push_back(entry.path());
+        }
+    }
+    std::sort(filepaths.begin(), filepaths.end());
+    return filepaths;
+}
+
+std::string model_of(const std::filesystem::path& preset_filepath) {
+    std::ifstream f(preset_filepath);
+    return nlohmann::json::parse(f).at("model").get<std::string>();
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: every key of a minimal preset is filled",
+          "[integration][preset][resolve-preset]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "minimal.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "name": "Minimal"})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    CHECK(out.at("diagnostics").empty());
+    const auto& p = out.at("preset");
+    CHECK(p.at("model") == "model-b");
+    CHECK(p.at("name") == "Minimal");
+    CHECK(p.at("description").is_null());
+    CHECK(p.at("release_date").is_null());
+    CHECK(p.at("machine_name").is_null());
+    CHECK(p.at("speed") == 1.0);
+    CHECK(p.at("startup") == nlohmann::json{{"screen_mode", 7}, {"auto_boot", false}});
+    CHECK(p.at("mos_image_uri") == "acorn-mos_1_20.rom");
+    CHECK(p.at("storage").at("fdc_socket").at("id") == "none");
+    REQUIRE(p.at("storage").at("floppy_drives").size() == 2);
+    CHECK(p.at("storage").at("floppy_drives")[1] ==
+          nlohmann::json{{"drive", 1}, {"image_uri", nullptr}});
+    // The model's language ROM, as an explicit slot.
+    CHECK(p.at("sideways_bank").at("slots") ==
+          nlohmann::json::array({{{"slot", 15}, {"type", "rom"},
+                                  {"image_uri", "bbc-basic_2.rom"}}}));
+    CHECK(p.at("econet").is_null());
+    CHECK(p.at("extensions").empty());
+}
+
+TEST_CASE("resolve-preset: extensions carry every parameter, typed, and their attachment",
+          "[integration][preset][resolve-preset]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "ext.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b",
+        "econet": {"station": "auto", "transport": {"name": "aun", "parameters": {"port": 0}}},
+        "extensions": [{"name": "host-serial", "config": {"id": "modem", "baud": 9600}}]})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    const auto& p = out.at("preset");
+    CHECK(p.at("econet").at("station") == "auto");
+    const auto& aun = p.at("econet").at("transport");
+    CHECK(aun.at("name") == "aun");
+    CHECK(aun.at("parameters").at("port") == "0");
+    CHECK(aun.at("parameters").at("discovery") == "on");
+    CHECK(aun.at("parameters").at("map") == nlohmann::json::array());
+    REQUIRE(p.at("extensions").size() == 1);
+    const auto& serial = p.at("extensions")[0];
+    CHECK(serial.at("name") == "host-serial");
+    CHECK(serial.at("config").at("id") == "modem");
+    CHECK(serial.at("config").at("baud") == 9600);     // integer parameter: a number
+    CHECK(serial.at("config").at("mode") == "pty");    // default
+    CHECK(serial.at("attaches_to") == nlohmann::json::array({"serial-port"}));
+}
+
+TEST_CASE("resolve-preset: errors are reported with a JSON pointer and a non-zero exit",
+          "[integration][preset][resolve-preset]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "bad.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "colour": "beige",
+        "extensions": [{"name": "host-serial", "config": {"baud": "fast"}},
+                       {"name": "host-serial", "config": {"wibble": 1}}]})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+
+    std::vector<std::pair<std::string, std::string>> seen;
+    for (const auto& d : out.at("diagnostics")) {
+        seen.emplace_back(d.at("severity").get<std::string>(), d.at("path").get<std::string>());
+    }
+    using P = std::pair<std::string, std::string>;
+    CHECK(std::find(seen.begin(), seen.end(), P{"warning", "/colour"}) != seen.end());
+    CHECK(std::find(seen.begin(), seen.end(), P{"error", "/extensions/0"}) != seen.end());
+    CHECK(std::find(seen.begin(), seen.end(), P{"error", "/extensions/1"}) != seen.end());
+}
+
+TEST_CASE("resolve-preset: an unreadable preset reports a null preset",
+          "[integration][preset][resolve-preset]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "broken.preset.beebium";
+    std::ofstream(preset_filepath) << "{ not json";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 66);
+
+    CHECK(out.at("preset").is_null());
+    REQUIRE(out.at("diagnostics").size() == 1);
+    CHECK(out.at("diagnostics")[0].at("severity") == "error");
+}
+
+TEST_CASE("resolve-preset: a preset for another model is an error",
+          "[integration][preset][resolve-preset]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "other.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b-plus"})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+
+    CHECK(out.at("diagnostics")[0].at("path") == "/model");
+}
+
+// The save-as round trip: a resolved preset, saved through create-preset,
+// resolves to itself. Run over every shipped preset.
+TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through create-preset",
+          "[integration][preset][resolve-preset][create-preset]") {
+    const auto filepaths = shipped_preset_filepaths();
+    REQUIRE_FALSE(filepaths.empty());
+    for (const auto& preset_filepath : filepaths) {
+        INFO(preset_filepath.string());
+        const auto executable = find_executable("beebium-" + model_of(preset_filepath)).string();
+
+        auto first = resolve_json(executable, preset_filepath.string());
+        for (const auto& d : first.at("diagnostics")) {
+            CHECK(d.at("severity") != "error");
+        }
+
+        TempDirectory user_dir;
+        std::ofstream(user_dir.path() / "resolved.preset.beebium") << first.at("preset").dump(2);
+        auto saved_filepath = user_dir.path() / "saved.preset.beebium";
+        const std::vector<std::pair<std::string, std::string>> env{
+            {"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}};
+        auto created = run_command(
+            executable + " create-preset --from resolved --name \"" +
+                first.at("preset").at("name").get<std::string>() + "\" --output \"" +
+                saved_filepath.string() + "\"",
+            env);
+        REQUIRE(created.exit_code == 0);
+
+        auto second = resolve_json(executable, saved_filepath.string());
+        CHECK(second.at("preset") == first.at("preset"));
+    }
 }

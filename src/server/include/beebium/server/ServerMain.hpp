@@ -554,6 +554,7 @@ struct ServerConfig {
         std::map<std::string, std::vector<std::string>> list_config;    // list params (is_list=true)
         bool from_preset = false;                                       // supplied by a preset, overridable by the CLI
         std::set<std::string> explicit_keys{};                          // keys the source gave (not defaulted) (#166)
+        std::string preset_pointer{};                                   // JSON pointer of the preset entry it came from
     };
     std::vector<ExtensionInstance> extension_instances;
 };
@@ -742,6 +743,57 @@ void print_info(const char* program_name) {
     std::cout << "\n}\n";
 }
 
+// An extension instance's config as a preset writes it: each value typed by
+// its manifest parameter (an integer parameter as a JSON number, a boolean as
+// true/false, anything else a string) and each list parameter as an array.
+// With every_parameter, a parameter with no value is written too ("" or []),
+// so the object names every parameter the manifest declares; without it,
+// empty values are left out. A null manifest types everything as a string.
+inline nlohmann::ordered_json extension_config_json(
+        const beebium::ExtensionManifest* manifest,
+        const std::map<std::string, std::string>& config,
+        const std::map<std::string, std::vector<std::string>>& list_config,
+        bool every_parameter) {
+    auto param_type = [&](const std::string& key) -> std::string {
+        if (manifest) {
+            for (const auto& p : manifest->parameters) {
+                if (p.key == key) return p.type;
+            }
+        }
+        return "string";
+    };
+    auto to_value = [](const std::string& type, const std::string& v) -> nlohmann::ordered_json {
+        if (type == "integer") {
+            try {
+                std::size_t consumed = 0;
+                long long n = std::stoll(v, &consumed);
+                if (consumed == v.size()) return nlohmann::ordered_json(n);
+            } catch (...) {}
+        } else if (type == "boolean") {
+            if (v == "true" || v == "1") return nlohmann::ordered_json(true);
+            if (v == "false" || v == "0") return nlohmann::ordered_json(false);
+        }
+        return nlohmann::ordered_json(v);
+    };
+    nlohmann::ordered_json out = nlohmann::ordered_json::object();
+    for (const auto& [key, value] : config) {
+        if (value.empty() && !every_parameter) continue;
+        out[key] = to_value(param_type(key), value);
+    }
+    for (const auto& [key, values] : list_config) {
+        out[key] = values;
+    }
+    if (every_parameter && manifest) {
+        for (const auto& p : manifest->parameters) {
+            if (!out.contains(p.key)) {
+                out[p.key] = p.is_list ? nlohmann::ordered_json::array()
+                                       : nlohmann::ordered_json("");
+            }
+        }
+    }
+    return out;
+}
+
 // Apply preset configuration to ServerConfig.
 // Preset values provide defaults that can be overridden by CLI arguments.
 template<typename MachineType>
@@ -813,17 +865,20 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
             inst.config = econet.transport->parameters;
             inst.list_config = econet.transport->list_parameters;
             inst.from_preset = true;
+            inst.preset_pointer = "/econet/transport";
             config.extension_instances.push_back(std::move(inst));
         }
     }
 
     // Extensions (from preset, applied as baseline; CLI can add more)
-    for (const auto& ext : preset.extensions) {
+    for (std::size_t i = 0; i < preset.extensions.size(); ++i) {
+        const auto& ext = preset.extensions[i];
         typename ServerConfig<MachineType>::ExtensionInstance inst;
         inst.name = ext.name;
         inst.config = ext.config;
         inst.list_config = ext.list_config;
         inst.from_preset = true;
+        inst.preset_pointer = "/extensions/" + std::to_string(i);
         config.extension_instances.push_back(std::move(inst));
     }
 }
@@ -912,15 +967,18 @@ void merge_preset_startup(ServerConfig<MachineType>& config) {
 // floppy images are; a bare name is left for the extension's own search.
 //
 // Runs after CLI parsing, when the resolver is populated.
-// Returns an error message, or nullopt.
+// Returns one error per instance that fails, located by its preset entry.
 template<typename MachineType>
-std::optional<std::string> normalise_preset_extensions(ServerConfig<MachineType>& config) {
+std::vector<PresetDiagnostic> normalise_preset_extensions(ServerConfig<MachineType>& config) {
+    std::vector<PresetDiagnostic> errors;
     for (auto& inst : config.extension_instances) {
         if (!inst.from_preset) continue;
         const auto* manifest = config.extension_resolver.find_by_name(inst.name);
         if (!manifest) {
-            return "preset extension '" + inst.name
-                   + "' is not a known extension (see list-extensions)";
+            errors.push_back({inst.preset_pointer,
+                              "preset extension '" + inst.name
+                                  + "' is not a known extension (see list-extensions)"});
+            continue;
         }
         const std::string source =
             (manifest->extension_kind == "econet-transport" ? "preset Econet transport '"
@@ -930,7 +988,8 @@ std::optional<std::string> normalise_preset_extensions(ServerConfig<MachineType>
             source, std::move(inst.config), std::move(inst.list_config),
             manifest->parameters);
         if (!normalised.ok) {
-            return normalised.error;
+            errors.push_back({inst.preset_pointer, normalised.error});
+            continue;
         }
         inst.config = std::move(normalised.config);
         inst.list_config = std::move(normalised.list_config);
@@ -947,7 +1006,7 @@ std::optional<std::string> normalise_preset_extensions(ServerConfig<MachineType>
             }
         }
     }
-    return std::nullopt;
+    return errors;
 }
 
 // Reconcile the preset's extension instances with the command line's, so the
@@ -1432,8 +1491,10 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
     // instance override the preset instance it names rather than count as a
     // second one (#150). Runs after the resolver is populated and all CLI args
     // are parsed.
-    if (auto error = normalise_preset_extensions(config)) {
-        std::cerr << "Error: " << *error << "\n";
+    if (auto errors = normalise_preset_extensions(config); !errors.empty()) {
+        for (const auto& error : errors) {
+            std::cerr << "Error: " << error.message << "\n";
+        }
         return ExitCode::CONFIG;
     }
     merge_preset_extensions(config);
@@ -5195,35 +5256,13 @@ public:
                 preset["econet"]["station"] = station_number;
             }
             if (econet_transport) {
-                auto to_value = [](const std::string& type,
-                                   const std::string& v) -> nlohmann::ordered_json {
-                    if (type == "integer") {
-                        try { return nlohmann::ordered_json(std::stoll(v)); } catch (...) {}
-                    } else if (type == "boolean") {
-                        return nlohmann::ordered_json(v == "true");
-                    }
-                    return nlohmann::ordered_json(v);
-                };
-                auto param_type = [&](const std::string& ext_name,
-                                      const std::string& key) {
-                    if (const auto* m =
-                            resolver_cfg.extension_resolver.find_by_name(ext_name)) {
-                        for (const auto& p : m->parameters) {
-                            if (p.key == key) return p.type;
-                        }
-                    }
-                    return std::string("string");
-                };
                 nlohmann::ordered_json transport;
                 transport["name"] = econet_transport->name;
-                nlohmann::ordered_json params = nlohmann::ordered_json::object();
-                for (const auto& [key, value] : econet_transport->config) {
-                    if (value.empty()) continue;  // skip unset optionals (e.g. discovered device_path)
-                    params[key] = to_value(param_type(econet_transport->name, key), value);
-                }
-                for (const auto& [key, values] : econet_transport->list_config) {
-                    params[key] = values;
-                }
+                // Skip unset optionals (e.g. a discovered device_path).
+                auto params = extension_config_json(
+                    resolver_cfg.extension_resolver.find_by_name(econet_transport->name),
+                    econet_transport->config, econet_transport->list_config,
+                    /*every_parameter=*/false);
                 if (!params.empty()) transport["parameters"] = params;
                 preset["econet"]["transport"] = std::move(transport);
             }
@@ -5233,23 +5272,6 @@ public:
         // "extensions" array PresetLoader reads back. Appended to any inherited
         // via --from. Values are typed per the manifest schema for clean JSON.
         if (!preset_extensions.empty()) {
-            auto param_type = [&](const std::string& ext_name, const std::string& key) {
-                if (const auto* m = resolver_cfg.extension_resolver.find_by_name(ext_name)) {
-                    for (const auto& p : m->parameters) {
-                        if (p.key == key) return p.type;
-                    }
-                }
-                return std::string("string");
-            };
-            auto to_value = [](const std::string& type,
-                               const std::string& v) -> nlohmann::ordered_json {
-                if (type == "integer") {
-                    try { return nlohmann::ordered_json(std::stoll(v)); } catch (...) {}
-                } else if (type == "boolean") {
-                    return nlohmann::ordered_json(v == "true");
-                }
-                return nlohmann::ordered_json(v);
-            };
             nlohmann::ordered_json exts = nlohmann::ordered_json::array();
             if (preset.contains("extensions") && preset["extensions"].is_array()) {
                 exts = preset["extensions"];
@@ -5257,14 +5279,10 @@ public:
             for (const auto& inst : preset_extensions) {
                 nlohmann::ordered_json ext_json;
                 ext_json["name"] = inst.name;
-                nlohmann::ordered_json cfg = nlohmann::ordered_json::object();
-                for (const auto& [key, value] : inst.config) {
-                    if (value.empty()) continue;  // skip unset optionals (e.g. empty path)
-                    cfg[key] = to_value(param_type(inst.name, key), value);
-                }
-                for (const auto& [key, values] : inst.list_config) {
-                    cfg[key] = values;
-                }
+                // Skip unset optionals (e.g. an empty path).
+                auto cfg = extension_config_json(
+                    resolver_cfg.extension_resolver.find_by_name(inst.name), inst.config,
+                    inst.list_config, /*every_parameter=*/false);
                 if (!cfg.empty()) ext_json["config"] = cfg;
                 exts.push_back(std::move(ext_json));
             }
@@ -5310,6 +5328,345 @@ public:
         // Output the created preset ID (or path)
         std::cout << preset_id << "\n";
         return ExitCode::OK;
+    }
+};
+
+// ResolvePreset subcommand - load a preset exactly as `start` would and print
+// the machine it describes, with every key filled in
+template<typename MachineType>
+class ResolvePresetSubcommand : public Subcommand<MachineType> {
+public:
+    std::string_view name() const override { return "resolve-preset"; }
+    std::string_view description() const override {
+        return "Print a preset as start would load it, with every key filled in";
+    }
+
+    void help(const char* program_name) const override {
+        std::cerr << "Usage: " << program_name << " resolve-preset <id|filepath> [--json]\n"
+                  << "\n"
+                  << "Loads a preset the way 'start --preset' does -- the same loader, the same\n"
+                  << "extension normalisation and validation -- without building a machine, and\n"
+                  << "prints the machine it describes as a preset document in which every key\n"
+                  << "is present: defaults filled in, relative paths resolved, the model's\n"
+                  << "default ROMs as explicit sideways slots, and every extension parameter\n"
+                  << "given (each extension also lists its attaches_to points).\n"
+                  << "\n"
+                  << "Without --json, the document goes to stdout and any diagnostics to stderr.\n"
+                  << "With --json, stdout is one object:\n"
+                  << "  {\"preset\": <document, or null if none could be loaded>,\n"
+                  << "   \"diagnostics\": [{\"severity\": \"error\"|\"warning\",\n"
+                  << "                    \"path\": <JSON pointer into the preset>,\n"
+                  << "                    \"message\": <text>}, ...]}\n"
+                  << "\n"
+                  << "Exits 0 when there are no errors, 66 when the preset cannot be found or\n"
+                  << "read, and 78 when it does not describe a valid machine for this model.\n";
+    }
+
+    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
+        if (global.help_requested) {
+            help(argv[0]);
+            return ExitCode::OK;
+        }
+
+        std::string preset_arg;
+        bool json_output = false;
+        for (int i = global.subcommand_argv_start; i < argc; ++i) {
+            std::string_view arg = argv[i];
+            if (arg == "--help" || arg == "-h") {
+                help(argv[0]);
+                return ExitCode::OK;
+            } else if (arg == "--json") {
+                json_output = true;
+            } else if (!arg.empty() && arg[0] != '-' && preset_arg.empty()) {
+                preset_arg = std::string(arg);
+            } else {
+                std::cerr << "Unknown argument: " << arg << "\n";
+                help(argv[0]);
+                return ExitCode::USAGE;
+            }
+        }
+        if (preset_arg.empty()) {
+            std::cerr << "Error: a preset id or file path is required\n";
+            help(argv[0]);
+            return ExitCode::USAGE;
+        }
+
+        std::vector<std::pair<std::string, PresetDiagnostic>> diagnostics;
+        auto error = [&](std::string path, std::string message) {
+            diagnostics.push_back({"error", {std::move(path), std::move(message)}});
+        };
+        auto warning = [&](std::string path, std::string message) {
+            diagnostics.push_back({"warning", {std::move(path), std::move(message)}});
+        };
+
+        std::optional<nlohmann::ordered_json> document;
+        int exit_code = resolve(argv[0], preset_arg, document, error, warning);
+
+        if (json_output) {
+            nlohmann::ordered_json out;
+            out["preset"] = document ? *document : nlohmann::ordered_json(nullptr);
+            out["diagnostics"] = nlohmann::ordered_json::array();
+            for (const auto& [severity, d] : diagnostics) {
+                out["diagnostics"].push_back(
+                    {{"severity", severity}, {"path", d.path}, {"message", d.message}});
+            }
+            std::cout << out.dump(2) << "\n";
+        } else {
+            if (document) {
+                std::cout << document->dump(2) << "\n";
+            }
+            for (const auto& [severity, d] : diagnostics) {
+                std::cerr << (severity == "error" ? "Error: " : "Warning: ");
+                if (!d.path.empty()) std::cerr << d.path << ": ";
+                std::cerr << d.message << "\n";
+            }
+        }
+        return exit_code;
+    }
+
+private:
+    template<typename Error, typename Warning>
+    static int resolve(const char* argv0, const std::string& preset_arg,
+                       std::optional<nlohmann::ordered_json>& document,
+                       Error error, Warning warning) {
+        using Memory = typename MachineType::Memory;
+
+        // Find and load the preset as `start --preset` does.
+        std::filesystem::path preset_filepath;
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(preset_arg, ec)) {
+            preset_filepath = preset_arg;
+        } else if (auto found = PresetPaths::find_preset_filepath(preset_arg)) {
+            preset_filepath = *found;
+        } else {
+            error("", "Preset not found: '" + preset_arg +
+                          "' (no such file, and no system or user preset with that id)");
+            return ExitCode::NOINPUT;
+        }
+        auto loaded = load_preset(preset_filepath);
+        for (const auto& w : loaded.warnings) {
+            warning(w.path, w.message);
+        }
+        if (!loaded) {
+            error("", loaded.error);
+            return ExitCode::NOINPUT;
+        }
+        const PresetConfig& preset = *loaded.config;
+        if (preset.model && *preset.model != Memory::MACHINE_TYPE) {
+            error("/model", "Preset is for model '" + *preset.model + "' but this executable is '" +
+                                std::string(Memory::MACHINE_TYPE) + "'");
+            return ExitCode::CONFIG;
+        }
+
+        // Build the configuration exactly as parse_start_arguments does with
+        // no other arguments.
+        ServerConfig<MachineType> config;
+        config.preset_filepath = preset_filepath;
+        apply_preset(config, preset);
+        if (auto err = populate_extension_resolver(argv0, {}, config)) {
+            error("", "cannot scan the extension directories");
+            return *err;
+        }
+        merge_preset_sideways_configs(config);
+        merge_preset_startup(config);
+        bool failed = false;
+        for (const auto& e : normalise_preset_extensions(config)) {
+            error(e.path, e.message);
+            failed = true;
+        }
+        merge_preset_extensions(config);
+        if (auto err = validate_config(config)) {
+            error("", *err);
+            failed = true;
+        }
+        if constexpr (HasDiscControllerSocket<Memory>) {
+            if (!config.fdc_type.empty() && config.fdc_type != "none" &&
+                !DiscControllerRegistry::find(config.fdc_type)) {
+                error("/storage/fdc_socket/id",
+                      "unknown disc controller '" + config.fdc_type + "' (see list-fdcs)");
+                failed = true;
+            }
+        } else if (!config.fdc_type.empty()) {
+            warning("/storage/fdc_socket/id",
+                    "ignored: this model has a built-in disc controller");
+        }
+        apply_rom_defaults(config);
+        check_roms_exist(config, preset, warning);
+        check_floppies_exist(config, warning);
+
+        document = resolved_document(config, preset);
+        return failed ? ExitCode::CONFIG : ExitCode::OK;
+    }
+
+    // A ROM the machine would load but that cannot be found is reported, not
+    // fatal: the ROM directory may differ where the preset is launched.
+    template<typename Warning>
+    static void check_roms_exist(const ServerConfig<MachineType>& config,
+                                 const PresetConfig& preset, Warning warning) {
+        auto check = [&](const std::string& path, const std::string& rom) {
+            try {
+                (void)RomPaths::find_rom(rom);
+            } catch (const std::exception& e) {
+                warning(path, e.what());
+            }
+        };
+        check(preset.mos_image_uri ? "/mos_image_uri" : "", config.mos_filepath);
+        for (const auto& [slot, image] : config.rom_slots) {
+            if (image == EMPTY_SLOT_MARKER) continue;
+            std::string path;
+            for (std::size_t i = 0; i < preset.sideways.size(); ++i) {
+                if (preset.sideways[i].slot == slot) {
+                    path = "/sideways_bank/slots/" + std::to_string(i) + "/image_uri";
+                }
+            }
+            if (image == RAM_SLOT_MARKER) {
+                for (const auto& c : config.sideways_configs) {
+                    if (c.slot == slot && !c.image_filepath.empty()) {
+                        check(path, c.image_filepath);
+                    }
+                }
+                continue;
+            }
+            check(path, image);
+        }
+    }
+
+    template<typename Warning>
+    static void check_floppies_exist(const ServerConfig<MachineType>& config, Warning warning) {
+        for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
+            const auto& uri = config.floppy_filepaths[drive];
+            if (uri.empty()) continue;
+            auto url = beebium::DiscUrl::parse(uri);
+            std::error_code ec;
+            if (url && url->is_local() && !std::filesystem::exists(url->to_filepath(), ec)) {
+                warning("/storage/floppy_drives/" + std::to_string(drive) + "/image_uri",
+                        "disc image not found: " + url->to_filepath().string());
+            }
+        }
+    }
+
+    // The preset document for a resolved configuration: every key present.
+    static nlohmann::ordered_json resolved_document(const ServerConfig<MachineType>& config,
+                                                    const PresetConfig& preset) {
+        using Memory = typename MachineType::Memory;
+        auto or_null = [](const std::optional<std::string>& v) {
+            return v ? nlohmann::ordered_json(*v) : nlohmann::ordered_json(nullptr);
+        };
+
+        nlohmann::ordered_json doc;
+        doc["model"] = Memory::MACHINE_TYPE;
+        doc["name"] = preset.name;
+        doc["description"] = or_null(preset.description);
+        doc["release_date"] = or_null(preset.release_date);
+        doc["machine_name"] = config.machine_name.empty()
+                                  ? nlohmann::ordered_json(nullptr)
+                                  : nlohmann::ordered_json(config.machine_name);
+
+        const double speed = config.speed_multiplier_override.value_or(1.0);
+        doc["speed"] = speed == 0.0 ? nlohmann::ordered_json("unlimited")
+                                    : nlohmann::ordered_json(speed);
+
+        if (config.raw_links >= 0) {
+            doc["startup"] = {{"links", config.raw_links}};
+        } else {
+            // The machine's own links, where the config sets none: mode 7, and
+            // SHIFT-BREAK (not BREAK) boots.
+            doc["startup"] = {{"screen_mode", config.screen_mode_set ? config.screen_mode : 7},
+                              {"auto_boot", config.auto_boot_set && config.auto_boot}};
+        }
+        doc["mos_image_uri"] = config.mos_filepath;
+
+        nlohmann::ordered_json storage;
+        if constexpr (HasDiscControllerSocket<Memory>) {
+            storage["fdc_socket"] = {{"id", config.fdc_type.empty() ? "none" : config.fdc_type}};
+        } else {
+            storage["fdc_socket"] = nullptr;
+        }
+        storage["floppy_drives"] = nlohmann::ordered_json::array();
+        for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
+            const auto& uri = config.floppy_filepaths[drive];
+            storage["floppy_drives"].push_back(
+                {{"drive", drive},
+                 {"image_uri", uri.empty() ? nlohmann::ordered_json(nullptr)
+                                           : nlohmann::ordered_json(uri)}});
+        }
+        doc["storage"] = std::move(storage);
+
+        nlohmann::ordered_json slots = nlohmann::ordered_json::array();
+        for (const auto& [slot, image] : config.rom_slots) {
+            nlohmann::ordered_json entry{{"slot", slot}};
+            if (image == EMPTY_SLOT_MARKER) {
+                entry["type"] = "empty";
+            } else if (image == RAM_SLOT_MARKER) {
+                entry["type"] = "ram";
+                entry["image_uri"] = nullptr;
+                entry["write_protected"] = false;
+                for (const auto& c : config.sideways_configs) {
+                    if (c.slot != slot) continue;
+                    if (!c.image_filepath.empty()) entry["image_uri"] = c.image_filepath;
+                    entry["write_protected"] = c.write_protected;
+                }
+            } else {
+                entry["type"] = "rom";
+                entry["image_uri"] = image;
+            }
+            slots.push_back(std::move(entry));
+        }
+        doc["sideways_bank"] = {{"slots", std::move(slots)}};
+
+        const auto* transport_inst = static_cast<const typename ServerConfig<MachineType>::
+                                                     ExtensionInstance*>(nullptr);
+        auto manifest_of = [&](const std::string& name) {
+            return config.extension_resolver.find_by_name(name);
+        };
+        const bool has_econet = config.station_number >= 1 || config.station_auto_range;
+        nlohmann::ordered_json extensions = nlohmann::ordered_json::array();
+        for (const auto& inst : config.extension_instances) {
+            const auto* manifest = manifest_of(inst.name);
+            if (has_econet && manifest && manifest->extension_kind == "econet-transport" &&
+                !transport_inst) {
+                transport_inst = &inst;
+                continue;
+            }
+            nlohmann::ordered_json ext{{"name", inst.name}};
+            ext["config"] = extension_config_json(manifest, inst.config, inst.list_config,
+                                                  /*every_parameter=*/true);
+            ext["attaches_to"] = manifest ? manifest->attaches_to : std::vector<std::string>{};
+            extensions.push_back(std::move(ext));
+        }
+
+        if (has_econet) {
+            nlohmann::ordered_json econet;
+            if (config.station_auto_range) {
+                const auto& r = *config.station_auto_range;
+                const beebium::econet::StationRange defaults{};
+                econet["station"] =
+                    (r.lo == defaults.lo && r.hi == defaults.hi)
+                        ? std::string("auto")
+                        : "auto:" + std::to_string(r.lo) + "-" + std::to_string(r.hi);
+            } else {
+                econet["station"] = config.station_number;
+            }
+            if (transport_inst) {
+                econet["transport"] = {
+                    {"name", transport_inst->name},
+                    {"parameters",
+                     extension_config_json(manifest_of(transport_inst->name),
+                                           transport_inst->config, transport_inst->list_config,
+                                           /*every_parameter=*/true)}};
+            } else {
+                econet["transport"] = nullptr;
+            }
+            doc["econet"] = std::move(econet);
+        } else {
+            doc["econet"] = nullptr;
+        }
+        doc["extensions"] = std::move(extensions);
+        doc["thumbnail_capture_delay_seconds"] =
+            preset.thumbnail_capture_delay_seconds
+                ? nlohmann::ordered_json(*preset.thumbnail_capture_delay_seconds)
+                : nlohmann::ordered_json(nullptr);
+        return doc;
     }
 };
 
@@ -6140,6 +6497,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<DescribeDiscImageSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListPresetsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ShowPresetSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ResolvePresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<ReportPresetsDirpathSubcommand<MachineType>>());
         v.push_back(std::make_unique<CreatePresetSubcommand<MachineType>>());
         v.push_back(std::make_unique<DeletePresetSubcommand<MachineType>>());

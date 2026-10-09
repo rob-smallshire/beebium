@@ -300,8 +300,9 @@ inline std::pair<std::optional<PresetEconetConfig>, std::string> parse_econet_se
         return {std::nullopt, "Econet 'station' must be an integer or \"auto\""};
     }
 
-    // Transport (optional): { name: "<extension-name>", parameters: {...} }
-    if (econet_json.contains("transport")) {
+    // Transport (optional): { name: "<extension-name>", parameters: {...} }.
+    // null means no transport, as an absent key does.
+    if (econet_json.contains("transport") && !econet_json["transport"].is_null()) {
         const auto& transport_json = econet_json["transport"];
         if (!transport_json.is_object()) {
             return {std::nullopt, "Econet 'transport' must be an object"};
