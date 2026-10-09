@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -1612,4 +1613,95 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
         auto second = resolve_json(executable, saved_filepath.string());
         CHECK(second.at("preset") == first.at("preset"));
     }
+}
+
+// ============================================================================
+// describe-preset-schema: one section per preset key this model accepts
+// ============================================================================
+
+namespace {
+
+nlohmann::json schema_section(const nlohmann::json& schema, const std::string& type) {
+    for (const auto& section : schema.at("sections")) {
+        if (section.at("type") == type) return section;
+    }
+    FAIL("no section of type " << type);
+    return {};
+}
+
+nlohmann::json describe_schema(const std::string& executable) {
+    auto result = run_command(executable + " describe-preset-schema");
+    REQUIRE(result.exit_code == 0);
+    return nlohmann::json::parse(result.stdout_output);
+}
+
+}  // namespace
+
+TEST_CASE("describe-preset-schema: a section for every configurable preset key",
+          "[integration][preset][describe-preset-schema]") {
+    auto schema = describe_schema(EXECUTABLE);
+
+    std::vector<std::string> types;
+    for (const auto& section : schema.at("sections")) {
+        types.push_back(section.at("type").get<std::string>());
+    }
+    for (const char* key : {"speed", "startup", "mos_image_uri", "storage", "sideways_bank",
+                            "econet", "extensions"}) {
+        CHECK(std::find(types.begin(), types.end(), key) != types.end());
+    }
+    CHECK(schema.at("model").at("id") == "model-b");
+}
+
+TEST_CASE("describe-preset-schema: startup gives both forms and their exclusion",
+          "[integration][preset][describe-preset-schema]") {
+    auto startup = schema_section(describe_schema(EXECUTABLE), "startup");
+    CHECK(startup.at("screen_mode") == nlohmann::json{{"min", 0}, {"max", 7}, {"default", 7}});
+    CHECK(startup.at("auto_boot").at("default") == false);
+    CHECK(startup.at("links").at("max") == 255);
+    CHECK(startup.at("links").at("excludes") ==
+          nlohmann::json::array({"screen_mode", "auto_boot"}));
+}
+
+TEST_CASE("describe-preset-schema: the MOS default",
+          "[integration][preset][describe-preset-schema]") {
+    auto mos = schema_section(describe_schema(EXECUTABLE), "mos_image_uri");
+    CHECK(mos.at("default") == "acorn-mos_1_20.rom");
+}
+
+TEST_CASE("describe-preset-schema: Econet stations and the transports to choose from",
+          "[integration][preset][describe-preset-schema]") {
+    auto econet = schema_section(describe_schema(EXECUTABLE), "econet");
+    CHECK(econet.at("station").at("min") == 1);
+    CHECK(econet.at("station").at("max") == 254);
+    CHECK(econet.at("station").at("auto_default_range") == nlohmann::json::array({1, 253}));
+    const auto& transports = econet.at("transports");
+    CHECK(std::find(transports.begin(), transports.end(), "aun") != transports.end());
+}
+
+TEST_CASE("describe-preset-schema: the attachment points and what plugs into each",
+          "[integration][preset][describe-preset-schema]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    std::map<std::string, nlohmann::json> points;
+    for (const auto& p : extensions.at("attachment_points")) {
+        points[p.at("id").get<std::string>()] = p;
+    }
+    REQUIRE(points.count("serial-port") == 1);
+    CHECK(points["serial-port"].at("provided_by").is_null());
+    const auto& serial = points["serial-port"].at("extensions");
+    CHECK(std::find(serial.begin(), serial.end(), "host-serial") != serial.end());
+    // A point an extension provides is listed with its provider.
+    REQUIRE(points.count("scsi") == 1);
+    CHECK(points["scsi"].at("provided_by") == nlohmann::json::array({"acorn-scsi"}));
+}
+
+TEST_CASE("describe-preset-schema: an expansion board's own ROM is a default ROM",
+          "[integration][preset][describe-preset-schema][sideways]") {
+    auto sideways =
+        schema_section(describe_schema(find_executable("beebium-model-b-integra-b").string()),
+                       "sideways_bank");
+    bool board = false;
+    for (const auto& rom : sideways.at("default_roms")) {
+        if (rom.at("role") == "board") board = true;
+    }
+    CHECK(board);
 }

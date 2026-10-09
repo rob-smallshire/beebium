@@ -445,8 +445,8 @@ struct ServerConfig {
     // merge step at the end of parse_start_arguments().
     std::vector<SidewaysConfig> preset_sideways_configs;
     // Protection groups to engage at launch, from --write-protect <group> /
-    // --hide <group>: a group id (see GetSlotStatus.protection_groups /
-    // describe-machine) and the control to engage. Applied after slot config via
+    // --hide <group>: a group id (see GetSlotStatus.protection_groups) and
+    // the control to engage. Applied after slot config via
     // Memory::set_protection. Expresses the board-wide / hide switches that the
     // per-slot --sideways ...:write-protect flag cannot (e.g. Watford S1/S2).
     std::vector<std::pair<std::string, ProtectionKind>> launch_protections;
@@ -583,7 +583,8 @@ void print_usage(const char* program_name) {
               << "                           SidewaysService.SetSlotProtection.\n"
               << "  --write-protect <group>  Engage a protection group's write-protect switch at\n"
               << "                           startup (repeatable). <group> is a protection-group\n"
-              << "                           id from describe-machine (e.g. slot-15, board).\n"
+              << "                           id (e.g. slot-15, board; a running machine\n"
+              << "                           lists them in SidewaysService.GetSlotStatus).\n"
               << "  --hide <group>           Engage a protection group's hide switch at startup:\n"
               << "                           its slots read as a constant (repeatable; e.g. the\n"
               << "                           Watford slot-14 / S1 switch).\n"
@@ -712,35 +713,6 @@ void print_usage(const char* program_name) {
     if constexpr (HasDiscControllerSocket<Memory>) {
         std::cerr << "  " << program_name << " --fdc acorn-1770               # Install disc controller\n";
     }
-}
-
-template<typename MachineType>
-void print_info(const char* program_name) {
-    using Memory = typename MachineType::Memory;
-
-    // JSON output for machine discovery
-    std::cout << "{\n"
-              << "  \"executable\": \"" << program_name << "\",\n"
-              << "  \"machine_type\": \"" << Memory::MACHINE_TYPE << "\",\n"
-              << "  \"display_name\": \"" << Memory::MACHINE_DISPLAY_NAME << "\",\n"
-              << "  \"version\": \"" << BEEBIUM_VERSION << "\",\n"
-              << "  \"default_mos_rom\": \"" << Memory::DEFAULT_MOS_ROM << "\",\n"
-              << "  \"default_language_rom\": \"" << Memory::DEFAULT_LANGUAGE_ROM << "\",\n"
-              << "  \"default_language_slot\": " << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT);
-
-    if constexpr (requires { Memory::DEFAULT_DFS_ROM; }) {
-        std::cout << ",\n"
-                  << "  \"default_dfs_rom\": \"" << Memory::DEFAULT_DFS_ROM << "\",\n"
-                  << "  \"default_dfs_slot\": " << static_cast<int>(Memory::DEFAULT_DFS_SLOT);
-    }
-
-    if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
-        std::cout << ",\n"
-                  << "  \"default_board_rom\": \"" << Memory::DEFAULT_BOARD_ROM << "\",\n"
-                  << "  \"default_board_rom_slot\": " << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT);
-    }
-
-    std::cout << "\n}\n";
 }
 
 // An extension instance's config as a preset writes it: each value typed by
@@ -3866,109 +3838,6 @@ public:
     }
 };
 
-// DescribeMachine subcommand - output machine info
-template<typename MachineType>
-class DescribeMachineSubcommand : public Subcommand<MachineType> {
-public:
-    std::string_view name() const override { return "describe-machine"; }
-    std::string_view description() const override { return "Output machine information"; }
-
-    void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " describe-machine\n"
-                  << "\n"
-                  << "Outputs machine information for programmatic use.\n"
-                  << "Includes machine type, default ROMs, and version information.\n";
-    }
-
-    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
-        using Memory = typename MachineType::Memory;
-
-        // Handle --help for this subcommand
-        if (global.help_requested) {
-            help(argv[0]);
-            return ExitCode::OK;
-        }
-
-        // Check for subcommand-specific --help
-        for (int i = global.subcommand_argv_start; i < argc; ++i) {
-            std::string_view arg = argv[i];
-            if (arg == "--help" || arg == "-h") {
-                help(argv[0]);
-                return ExitCode::OK;
-            }
-            // Unknown argument
-            std::cerr << "Unknown argument: " << arg << "\n";
-            help(argv[0]);
-            return ExitCode::USAGE;
-        }
-
-        // Resolve format based on TTY detection
-        OutputFormat format = resolve_output_format(global.output_format);
-
-        switch (format) {
-            case OutputFormat::Pretty:
-                std::cout << "Machine:        " << Memory::MACHINE_DISPLAY_NAME << "\n"
-                          << "Executable:     " << argv[0] << "\n"
-                          << "Version:        " << BEEBIUM_VERSION << "\n"
-                          << "MOS ROM:        " << Memory::DEFAULT_MOS_ROM << "\n"
-                          << "Language ROM:   " << Memory::DEFAULT_LANGUAGE_ROM
-                          << " (slot " << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT) << ")\n";
-                if constexpr (requires { Memory::DEFAULT_DFS_ROM; }) {
-                    std::cout << "DFS ROM:        " << Memory::DEFAULT_DFS_ROM
-                              << " (slot " << static_cast<int>(Memory::DEFAULT_DFS_SLOT) << ")\n";
-                }
-                if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
-                    std::cout << "Board ROM:      " << Memory::DEFAULT_BOARD_ROM
-                              << " (slot " << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT) << ")\n";
-                }
-                break;
-
-            case OutputFormat::Tsv:
-                std::cout << "key\tvalue\n"
-                          << "machine_type\t" << Memory::MACHINE_TYPE << "\n"
-                          << "display_name\t" << Memory::MACHINE_DISPLAY_NAME << "\n"
-                          << "executable\t" << argv[0] << "\n"
-                          << "version\t" << BEEBIUM_VERSION << "\n"
-                          << "default_mos_rom\t" << Memory::DEFAULT_MOS_ROM << "\n"
-                          << "default_language_rom\t" << Memory::DEFAULT_LANGUAGE_ROM << "\n"
-                          << "default_language_slot\t" << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT) << "\n";
-                if constexpr (requires { Memory::DEFAULT_DFS_ROM; }) {
-                    std::cout << "default_dfs_rom\t" << Memory::DEFAULT_DFS_ROM << "\n"
-                              << "default_dfs_slot\t" << static_cast<int>(Memory::DEFAULT_DFS_SLOT) << "\n";
-                }
-                if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
-                    std::cout << "default_board_rom\t" << Memory::DEFAULT_BOARD_ROM << "\n"
-                              << "default_board_rom_slot\t" << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT) << "\n";
-                }
-                break;
-
-            case OutputFormat::Jsonl:
-                std::cout << "{\"executable\":\"" << argv[0]
-                          << "\",\"machine_type\":\"" << Memory::MACHINE_TYPE
-                          << "\",\"display_name\":\"" << Memory::MACHINE_DISPLAY_NAME
-                          << "\",\"version\":\"" << BEEBIUM_VERSION
-                          << "\",\"default_mos_rom\":\"" << Memory::DEFAULT_MOS_ROM
-                          << "\",\"default_language_rom\":\"" << Memory::DEFAULT_LANGUAGE_ROM
-                          << "\",\"default_language_slot\":" << static_cast<int>(Memory::DEFAULT_LANGUAGE_SLOT);
-                if constexpr (requires { Memory::DEFAULT_DFS_ROM; }) {
-                    std::cout << ",\"default_dfs_rom\":\"" << Memory::DEFAULT_DFS_ROM
-                              << "\",\"default_dfs_slot\":" << static_cast<int>(Memory::DEFAULT_DFS_SLOT);
-                }
-                if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
-                    std::cout << ",\"default_board_rom\":\"" << Memory::DEFAULT_BOARD_ROM
-                              << "\",\"default_board_rom_slot\":" << static_cast<int>(Memory::DEFAULT_BOARD_ROM_SLOT);
-                }
-                std::cout << "}\n";
-                break;
-
-            case OutputFormat::Auto:
-                // Should not reach here after resolve_output_format
-                break;
-        }
-        return ExitCode::OK;
-    }
-};
-
 // DescribePresetSchema subcommand - output preset configuration schema as JSON
 template<typename MachineType>
 class DescribePresetSchemaSubcommand : public Subcommand<MachineType> {
@@ -3979,13 +3848,20 @@ public:
     void help(const char* program_name) const override {
         std::cerr << "Usage: " << program_name << " describe-preset-schema\n"
                   << "\n"
-                  << "Outputs JSON describing the machine's configurable options for presets.\n"
-                  << "This is used by frontends to dynamically build configuration UI.\n"
+                  << "Outputs JSON describing what a preset for this model may contain, so a\n"
+                  << "front-end can build a configuration UI before any machine is launched.\n"
                   << "\n"
                   << "Output includes:\n"
                   << "  - schema_version: Schema format version\n"
                   << "  - model: Machine identification (id, name, description)\n"
-                  << "  - sections: Array of configuration sections (storage, etc.)\n"
+                  << "  - sections: one per preset key this model accepts, its 'type' being\n"
+                  << "    that key: speed, startup, mos_image_uri, storage, sideways_bank,\n"
+                  << "    econet, extensions\n"
+                  << "\n"
+                  << "Extensions and transports are named, not described: describe-extension\n"
+                  << "gives each one's parameters, list-attachment-points each point's\n"
+                  << "occupancy, list-fdcs and list-floppy-formats the controller and image\n"
+                  << "catalogues. resolve-preset shows what a given preset resolves to.\n"
                   << "\n"
                   << "Output is always JSON regardless of --format option.\n";
     }
@@ -4017,7 +3893,7 @@ public:
         using ojson = nlohmann::ordered_json;
 
         ojson output;
-        output["schema_version"] = 1;
+        output["schema_version"] = 2;
         output["model"] = ojson{
             {"id", Memory::MACHINE_TYPE},
             {"name", Memory::MACHINE_DISPLAY_NAME},
@@ -4078,16 +3954,53 @@ public:
             });
         }
 
+        ServerConfig<MachineType> resolver_cfg;
+        if (auto err = populate_extension_resolver(argv[0], {}, resolver_cfg)) {
+            return *err;
+        }
+        const auto& extension_entries = resolver_cfg.extension_resolver.entries();
+
         ojson sections = ojson::array();
+
+        sections.push_back(ojson{
+            {"type", "speed"},
+            {"default", 1.0},
+            {"unlimited", "unlimited"},
+            {"description", "Emulation speed as a positive multiple of real time, or "
+                            "\"unlimited\" to run flat out"}});
+
+        sections.push_back(ojson{
+            {"type", "startup"},
+            {"screen_mode", ojson{{"min", 0}, {"max", 7}, {"default", 7}}},
+            {"auto_boot", ojson{{"default", false}}},
+            {"links", ojson{{"min", 0}, {"max", 255},
+                            {"excludes", ojson::array({"screen_mode", "auto_boot"})}}},
+            {"description", "The startup keyboard links: screen_mode and auto_boot, or the "
+                            "whole links byte"}});
+
+        sections.push_back(ojson{
+            {"type", "mos_image_uri"},
+            {"default", Memory::DEFAULT_MOS_ROM},
+            {"description", "The MOS ROM: a ROM name (found on the ROM search path) or a path"}});
+
         sections.push_back(storage);
 
         if constexpr (HasEconetSocket<Memory>) {
-            ojson networking;
-            networking["type"] = "networking";
-            networking["econet"]["station_range"] = ojson::array({1, 254});
-            networking["econet"]["default_enabled"] = false;
-            networking["aun"]["default_port"] = beebium::AUN_DEFAULT_PORT;
-            sections.push_back(networking);
+            const beebium::econet::StationRange auto_range{};
+            ojson transports = ojson::array();
+            for (const auto& e : extension_entries) {
+                if (e.manifest->extension_kind == "econet-transport") {
+                    transports.push_back(e.manifest->name);
+                }
+            }
+            sections.push_back(ojson{
+                {"type", "econet"},
+                {"station", ojson{{"min", 1},
+                                  {"max", 254},
+                                  {"auto", true},
+                                  {"auto_default_range",
+                                   ojson::array({auto_range.lo, auto_range.hi})}}},
+                {"transports", transports}});
         }
 
         // Sideways ROM/RAM bank section, derived from the machine's slot
@@ -4137,9 +4050,59 @@ public:
                     {"role", "filing"}
                 });
             }
+            if constexpr (requires { Memory::DEFAULT_BOARD_ROM; }) {
+                default_roms.push_back(ojson{
+                    {"slot", Memory::DEFAULT_BOARD_ROM_SLOT},
+                    {"image", Memory::DEFAULT_BOARD_ROM},
+                    {"role", "board"}
+                });
+            }
             sideways["default_roms"] = default_roms;
 
             sections.push_back(sideways);
+        }
+
+        // The attachment points a preset's extensions may use on this model:
+        // the machine's own connectors, then any point an extension provides
+        // (a SCSI bus from a host adapter), each with the extensions that
+        // attach to it.
+        {
+            std::vector<std::string> machine_points;
+            if constexpr (beebium::HasOneMHzBus<Memory>) machine_points.push_back("1mhz-bus");
+            if constexpr (beebium::HasUserPort<Memory>) machine_points.push_back("user-port");
+            if constexpr (beebium::HasTubeSocket<Memory>) machine_points.push_back("tube");
+            if constexpr (beebium::HasSerialPort<Memory>) machine_points.push_back("serial-port");
+
+            std::vector<std::pair<std::string, std::vector<std::string>>> points;
+            for (const auto& id : machine_points) points.push_back({id, {}});
+            for (const auto& e : extension_entries) {
+                for (const auto& provided : e.manifest->provides) {
+                    auto it = std::find_if(points.begin(), points.end(),
+                                           [&](const auto& p) { return p.first == provided; });
+                    if (it == points.end()) {
+                        points.push_back({provided, {e.manifest->name}});
+                    } else if (std::find(machine_points.begin(), machine_points.end(),
+                                         provided) == machine_points.end()) {
+                        it->second.push_back(e.manifest->name);
+                    }
+                }
+            }
+            ojson attachment_points = ojson::array();
+            for (const auto& [id, providers] : points) {
+                ojson attaching = ojson::array();
+                for (const auto& e : extension_entries) {
+                    const auto& at = e.manifest->attaches_to;
+                    if (std::find(at.begin(), at.end(), id) != at.end()) {
+                        attaching.push_back(e.manifest->name);
+                    }
+                }
+                attachment_points.push_back(ojson{
+                    {"id", id},
+                    {"provided_by", providers.empty() ? ojson(nullptr) : ojson(providers)},
+                    {"extensions", attaching}});
+            }
+            sections.push_back(ojson{{"type", "extensions"},
+                                     {"attachment_points", attachment_points}});
         }
 
         output["sections"] = sections;
@@ -6491,7 +6454,6 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<DescribeExtensionSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListAttachmentPointsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListNamePlaceholdersSubcommand<MachineType>>());
-        v.push_back(std::make_unique<DescribeMachineSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribePresetSchemaSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeDiscImageSubcommand<MachineType>>());

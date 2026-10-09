@@ -124,14 +124,14 @@ TEST_CASE("parse_global_arguments: list-fdcs subcommand", "[cli][parse_global_ar
     REQUIRE(global.subcommand_name == "list-fdcs");
 }
 
-TEST_CASE("parse_global_arguments: describe-machine subcommand", "[cli][parse_global_arguments]") {
-    ArgvHelper args{"beebium", "describe-machine"};
+TEST_CASE("parse_global_arguments: resolve-preset subcommand", "[cli][parse_global_arguments]") {
+    ArgvHelper args{"beebium", "resolve-preset"};
     GlobalConfig global;
 
     auto result = parse_global_arguments(args.argc(), args.data(), global);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(global.subcommand_name == "describe-machine");
+    REQUIRE(global.subcommand_name == "resolve-preset");
 }
 
 TEST_CASE("parse_global_arguments: help subcommand", "[cli][parse_global_arguments]") {
@@ -404,15 +404,15 @@ TEST_CASE("parse_global_arguments: list-floppy-formats subcommand", "[cli][parse
     REQUIRE(global.subcommand_name == "list-floppy-formats");
 }
 
-TEST_CASE("dispatch_subcommand: describe-machine returns OK", "[cli][dispatch_subcommand]") {
-    ArgvHelper args{"beebium", "describe-machine"};
+TEST_CASE("dispatch_subcommand: resolve-preset without a preset returns USAGE", "[cli][dispatch_subcommand]") {
+    ArgvHelper args{"beebium", "resolve-preset"};
     GlobalConfig global;
-    global.subcommand_name = "describe-machine";
+    global.subcommand_name = "resolve-preset";
     global.subcommand_argv_start = 2;
 
     auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
 
-    REQUIRE(result == ExitCode::OK);
+    REQUIRE(result == ExitCode::USAGE);
 }
 
 TEST_CASE("dispatch_subcommand: help returns OK", "[cli][dispatch_subcommand]") {
@@ -521,7 +521,7 @@ TEST_CASE("get_subcommands: contains expected subcommands", "[cli][get_subcomman
 
     REQUIRE(std::find(names.begin(), names.end(), "start") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "list-fdcs") != names.end());
-    REQUIRE(std::find(names.begin(), names.end(), "describe-machine") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "resolve-preset") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "describe-preset-schema") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "list-presets") != names.end());
     REQUIRE(std::find(names.begin(), names.end(), "show-preset") != names.end());
@@ -685,18 +685,18 @@ TEST_CASE("parse_global_arguments: --format jsonl sets output_format", "[cli][pa
 }
 
 TEST_CASE("parse_global_arguments: --format=pretty works", "[cli][parse_global_arguments][format]") {
-    ArgvHelper args{"beebium", "--format=pretty", "describe-machine"};
+    ArgvHelper args{"beebium", "--format=pretty", "describe-preset-schema"};
     GlobalConfig global;
 
     auto result = parse_global_arguments(args.argc(), args.data(), global);
 
     REQUIRE_FALSE(result.has_value());
     REQUIRE(global.output_format == OutputFormat::Pretty);
-    REQUIRE(global.subcommand_name == "describe-machine");
+    REQUIRE(global.subcommand_name == "describe-preset-schema");
 }
 
 TEST_CASE("parse_global_arguments: --format=tsv works", "[cli][parse_global_arguments][format]") {
-    ArgvHelper args{"beebium", "--format=tsv", "describe-machine"};
+    ArgvHelper args{"beebium", "--format=tsv", "describe-preset-schema"};
     GlobalConfig global;
 
     auto result = parse_global_arguments(args.argc(), args.data(), global);
@@ -706,7 +706,7 @@ TEST_CASE("parse_global_arguments: --format=tsv works", "[cli][parse_global_argu
 }
 
 TEST_CASE("parse_global_arguments: --format=jsonl works", "[cli][parse_global_arguments][format]") {
-    ArgvHelper args{"beebium", "--format=jsonl", "describe-machine"};
+    ArgvHelper args{"beebium", "--format=jsonl", "describe-preset-schema"};
     GlobalConfig global;
 
     auto result = parse_global_arguments(args.argc(), args.data(), global);
@@ -1373,7 +1373,7 @@ TEST_CASE("describe-preset-schema: has schema_version", "[cli][describe-preset-s
 
     REQUIRE(json.contains("schema_version"));
     REQUIRE(json["schema_version"].is_number_integer());
-    REQUIRE(json["schema_version"].get<int>() == 1);
+    REQUIRE(json["schema_version"].get<int>() == 2);
 }
 
 TEST_CASE("describe-preset-schema: has model info", "[cli][describe-preset-schema][json]") {

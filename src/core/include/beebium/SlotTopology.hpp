@@ -40,7 +40,7 @@ struct SocketSpec {
     bool supports_empty = true;      // Socket may be left empty
     bool runtime_configurable = false; // Type may change at runtime via the API
     // Static hint that this socket has a per-slot write-protect switch. Used only
-    // for config-time (pre-launch) capability description (describe-machine) and
+    // for config-time (pre-launch) capability description (describe-preset-schema) and
     // to validate the --sideways ...:write-protect launch flag - there is no
     // running instance to enumerate protection groups from at that point. The
     // RUNTIME protection state is modelled by SlotProtectionGroup (see
