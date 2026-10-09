@@ -1955,11 +1955,18 @@ TEST_CASE("resolve-preset: sideways errors are located at the slot",
           std::make_pair(78, std::string("/sideways_bank/slots/1/slot")));
     CHECK(located_error(R"({"sideways_bank": {"slots": [{"slot": 14, "type": "rom"}]}})") ==
           std::make_pair(78, std::string("/sideways_bank/slots/0/image_uri")));
-    // A slot the model lacks is found against its topology, after loading.
+    // Slots found to conflict on the model's sockets, after loading, are
+    // located at the later request.
     CHECK(located_error(R"({"sideways_bank": {"slots": [
               {"slot": 14, "type": "rom", "image_uri": "a.rom"},
-              {"slot": 2, "type": "rom", "image_uri": "b.rom"}]}})").second.rfind(
-              "/sideways_bank", 0) == 0);
+              {"slot": 2, "type": "rom", "image_uri": "b.rom"}]}})") ==
+          std::make_pair(78, std::string("/sideways_bank/slots/1")));
+    // A write-protect request on a model with no write-protect control at
+    // all is about the bank, not one slot.
+    CHECK(located_error(R"({"sideways_bank": {"slots": [
+              {"slot": 15, "type": "rom", "image_uri": "a.rom"},
+              {"slot": 13, "type": "ram", "write_protected": true}]}})") ==
+          std::make_pair(78, std::string("/sideways_bank")));
 }
 
 TEST_CASE("start: a preset whose content is invalid is a configuration error",

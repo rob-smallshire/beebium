@@ -632,29 +632,38 @@ std::optional<std::string> validate_startup_links(const ServerConfig<MachineType
     return std::nullopt;
 }
 
+// A problem with the sideways slots: its message and, where it is about one
+// slot request, that request's index in ServerConfig::sideways_configs.
+struct SidewaysSlotsError {
+    std::optional<std::size_t> index;
+    std::string message;
+};
+
 template<typename MachineType>
-std::optional<std::string> validate_sideways_slots(const ServerConfig<MachineType>& config);
+std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<MachineType>& config);
 
 template<typename MachineType>
 std::optional<std::string> validate_config(const ServerConfig<MachineType>& config) {
     if (auto err = validate_startup_links(config)) return err;
-    return validate_sideways_slots(config);
+    if (auto err = validate_sideways_slots(config)) return err->message;
+    return std::nullopt;
 }
 
 // The sideways slots against the model's topology, and their write-protect
 // requests against its switches.
 template<typename MachineType>
-std::optional<std::string> validate_sideways_slots(const ServerConfig<MachineType>& config) {
+std::optional<SidewaysSlotsError> validate_sideways_slots(const ServerConfig<MachineType>& config) {
     // Validate --sideways arguments against the machine variant's slot
     // topology, taking into account any motherboard link state that affects
     // slot mapping (e.g. Model B+ S13). Reports nonexistent slots,
     // unsupported types, aliased-socket conflicts, duplicate slot specs.
     using Memory = typename MachineType::Memory;
     if constexpr (requires { Memory::slot_topology(config.motherboard_links); }) {
-        if (auto err = validate_sideways_configs(
-                Memory::slot_topology(config.motherboard_links),
-                config.sideways_configs)) {
-            return err;
+        const auto topology = Memory::slot_topology(config.motherboard_links);
+        if (auto err = validate_sideways_configs(topology, config.sideways_configs)) {
+            return SidewaysSlotsError{
+                sideways_config_problems(topology, config.sideways_configs).front().index,
+                *err};
         }
     }
 
@@ -669,19 +678,22 @@ std::optional<std::string> validate_sideways_slots(const ServerConfig<MachineTyp
         if constexpr (!requires(Memory m) {
                           m.set_slot_write_protected(uint8_t{0}, bool{});
                       }) {
-            return "write-protect is not supported on this machine variant "
-                   "(no sideways write-protect control)";
+            return SidewaysSlotsError{std::nullopt,
+                                      "write-protect is not supported on this machine variant "
+                                      "(no sideways write-protect control)"};
         } else if constexpr (requires {
                                  Memory::slot_topology(config.motherboard_links);
                              }) {
             auto topo = Memory::slot_topology(config.motherboard_links);
-            for (const auto& c : config.sideways_configs) {
+            for (std::size_t i = 0; i < config.sideways_configs.size(); ++i) {
+                const auto& c = config.sideways_configs[i];
                 if (!c.write_protected) continue;
                 const auto* spec =
                     topo.find_socket_for_slot(static_cast<int>(c.slot));
                 if (spec == nullptr) {
-                    return "--sideways write-protect: slot " + std::to_string(c.slot)
-                           + " does not exist on this machine variant";
+                    return SidewaysSlotsError{
+                        i, "--sideways write-protect: slot " + std::to_string(c.slot)
+                               + " does not exist on this machine variant"};
                 }
                 // Per-slot launch write-protect targets a per-slot switch (a
                 // one-slot write-protect group, applied below via
@@ -689,9 +701,10 @@ std::optional<std::string> validate_sideways_slots(const ServerConfig<MachineTyp
                 // S2) are runtime controls via SidewaysService.SetSlotProtection,
                 // not this flag - their sockets set supports_write_protect false.
                 if (!spec->supports_write_protect) {
-                    return "--sideways write-protect: slot " + std::to_string(c.slot)
-                           + " has no per-slot write-protect switch on this "
-                             "machine variant";
+                    return SidewaysSlotsError{
+                        i, "--sideways write-protect: slot " + std::to_string(c.slot)
+                               + " has no per-slot write-protect switch on this "
+                                 "machine variant"};
                 }
             }
         }

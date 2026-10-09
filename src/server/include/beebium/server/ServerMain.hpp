@@ -4570,7 +4570,17 @@ private:
             failed = true;
         }
         if (auto err = validate_sideways_slots(config)) {
-            error("/sideways_bank", *err);
+            // Locate it at the preset's slot entry for the request at fault.
+            std::string path = "/sideways_bank";
+            if (err->index) {
+                const auto slot = config.sideways_configs[*err->index].slot;
+                for (std::size_t i = 0; i < preset.sideways.size(); ++i) {
+                    if (preset.sideways[i].slot == slot) {
+                        path = "/sideways_bank/slots/" + std::to_string(i);
+                    }
+                }
+            }
+            error(path, err->message);
             failed = true;
         }
         if constexpr (HasDiscControllerSocket<Memory>) {

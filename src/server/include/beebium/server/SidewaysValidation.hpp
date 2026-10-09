@@ -107,14 +107,21 @@ inline std::string format_request(const SidewaysConfig& cfg) {
 
 }  // namespace detail
 
-// Validate a parsed list of --sideways configurations against a machine
-// variant's slot topology. Returns nullopt on success, or a multi-line error
-// message describing every detected problem on failure.
-inline std::optional<std::string> validate_sideways_configs(
+// One problem with a list of --sideways configurations: the index of the
+// configuration it is reported against (for a conflict, the later one) and
+// the message.
+struct SidewaysProblem {
+    size_t index = 0;
+    std::string message;
+};
+
+// Every problem with a parsed list of --sideways configurations against a
+// machine variant's slot topology, in the order found.
+inline std::vector<SidewaysProblem> sideways_config_problems(
     const SlotTopology& topo,
     const std::vector<SidewaysConfig>& configs)
 {
-    std::vector<std::string> errors;
+    std::vector<SidewaysProblem> problems;
 
     // Bucket each config by the physical socket it targets.
     // Each entry is (socket pointer, original index in configs).
@@ -129,7 +136,7 @@ inline std::optional<std::string> validate_sideways_configs(
                 << " does not exist on this machine variant. "
                 << "Valid slots are: "
                 << detail::format_slot_list(topo.all_slots()) << '.';
-            errors.push_back(msg.str());
+            problems.push_back({i, msg.str()});
             continue;
         }
 
@@ -149,7 +156,7 @@ inline std::optional<std::string> validate_sideways_configs(
                 << "). This socket supports only "
                 << detail::format_supported_types(*socket)
                 << " on this machine variant.";
-            errors.push_back(msg.str());
+            problems.push_back({i, msg.str()});
             continue;
         }
 
@@ -181,7 +188,7 @@ inline std::optional<std::string> validate_sideways_configs(
                 msg << "\n  - " << detail::format_request(configs[idx]);
             }
             msg << "\nA single physical socket cannot hold more than one type.";
-            errors.push_back(msg.str());
+            problems.push_back({indices.back(), msg.str()});
             continue;
         }
 
@@ -210,7 +217,7 @@ inline std::optional<std::string> validate_sideways_configs(
                     msg << "\n  - " << detail::format_request(configs[idx]);
                 }
                 msg << "\nA single physical socket can only hold one ROM image.";
-                errors.push_back(msg.str());
+                problems.push_back({indices.back(), msg.str()});
                 continue;
             }
         }
@@ -238,7 +245,7 @@ inline std::optional<std::string> validate_sideways_configs(
                     msg << "\n  - " << detail::format_request(configs[idx]);
                 }
                 msg << "\nA single physical socket can only be preloaded with one image.";
-                errors.push_back(msg.str());
+                problems.push_back({indices.back(), msg.str()});
                 continue;
             }
         }
@@ -249,12 +256,19 @@ inline std::optional<std::string> validate_sideways_configs(
         for (size_t idx : indices) {
             slot_counts[configs[idx].slot]++;
         }
+        auto last_index_of = [&](std::uint8_t slot) {
+            size_t last = indices.front();
+            for (size_t idx : indices) {
+                if (configs[idx].slot == slot) last = idx;
+            }
+            return last;
+        };
         for (const auto& [slot, count] : slot_counts) {
             if (count > 1) {
                 std::ostringstream msg;
                 msg << "Sideways slot " << static_cast<int>(slot)
                     << " specified " << count << " times.";
-                errors.push_back(msg.str());
+                problems.push_back({last_index_of(slot), msg.str()});
             }
         }
     }
@@ -285,15 +299,26 @@ inline std::optional<std::string> validate_sideways_configs(
         for (size_t i : ram_requests) msg << ' ' << detail::format_request(configs[i]);
         msg << "). Also specify:";
         for (int slot : missing) msg << " --sideways slot=" << slot << ":type=RAM";
-        errors.push_back(msg.str());
+        problems.push_back({ram_requests.front(), msg.str()});
     }
 
-    if (errors.empty()) return std::nullopt;
+    return problems;
+}
+
+// Validate a parsed list of --sideways configurations against a machine
+// variant's slot topology. Returns nullopt on success, or a multi-line error
+// message describing every detected problem on failure.
+inline std::optional<std::string> validate_sideways_configs(
+    const SlotTopology& topo,
+    const std::vector<SidewaysConfig>& configs)
+{
+    const auto problems = sideways_config_problems(topo, configs);
+    if (problems.empty()) return std::nullopt;
 
     std::ostringstream combined;
     combined << "Invalid --sideways configuration:";
-    for (const auto& e : errors) {
-        combined << "\n  * " << e;
+    for (const auto& p : problems) {
+        combined << "\n  * " << p.message;
     }
     return combined.str();
 }

@@ -391,7 +391,8 @@ Without `--json` the document goes to stdout and diagnostics to stderr. With
 
 `path` is a JSON pointer to the key at fault: `/econet/station`,
 `/startup/links`, `/speed`, `/sideways_bank/slots/1/slot` (a slot's own
-shape), `/sideways_bank` (slots that conflict on the model's sockets),
+shape), `/sideways_bank/slots/1` (a slot the model's sockets refuse, or the
+later of two that conflict), `/sideways_bank` (the bank as a whole),
 `/storage/fdc_socket/id`, `/model`, an extension's entry or parameter. It is
 `""` only when the file itself cannot be found or read. The exit status is 0
 with no errors, 78 when the preset does not describe a valid machine for this
