@@ -56,6 +56,9 @@ struct ConfigurationEditor: View {
     /// nil on a model with no Econet socket.
     let econetSchema: EconetSchemaSection?
 
+    /// The model's startup schema (screen-mode / auto-boot / links), for Keyboard.
+    let startupSchema: StartupSchemaSection?
+
     /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
@@ -83,6 +86,7 @@ struct ConfigurationEditor: View {
         case peripherals = "Peripherals"
         case network = "Network"
         case processor = "Processor"
+        case keyboard = "Keyboard"
 
         var id: String { rawValue }
 
@@ -93,6 +97,7 @@ struct ConfigurationEditor: View {
             case .peripherals: return "puzzlepiece.extension"
             case .network: return "network"
             case .processor: return "cpu"
+            case .keyboard: return "keyboard"
             }
         }
     }
@@ -114,6 +119,7 @@ struct ConfigurationEditor: View {
         // Processor is shown for every model: emulation speed is universal, and
         // the coprocessor sub-group appears only when the model has a tube point.
         if extensionsSchema != nil { sections.append(.processor) }
+        if startupSchema != nil { sections.append(.keyboard) }
         return sections
     }
 
@@ -230,6 +236,14 @@ struct ConfigurationEditor: View {
                     diagnostics: diagnostics,
                     manifestResolver: manifestResolver,
                     serialPorts: serialPorts))
+            }
+            return AnyView(EmptyView())
+        case .keyboard:
+            if let startupSchema = startupSchema {
+                return AnyView(KeyboardSectionView(
+                    draft: $draft,
+                    schema: startupSchema,
+                    diagnostics: diagnostics))
             }
             return AnyView(EmptyView())
         case nil:

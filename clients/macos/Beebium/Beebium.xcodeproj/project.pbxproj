@@ -160,8 +160,10 @@
 		AE3969E0CE7F7D5F7C57513A /* StorageSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */; };
 		AEFDACA93EC7747DF05C2447 /* DiscoveryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */; };
 		AFE73F855C924CA7EC10D01C /* URL+DiscImageReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */; };
+		B0A2354141FA9EC4227A8007 /* KeyboardSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1667C72B283ACDA76849586 /* KeyboardSectionView.swift */; };
 		B0E52098A904B8D9EB8C8870 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 3C410D45C0D56B52B7405B54 /* Shaders.metal */; };
 		B18E97257A891E2AC24129ED /* EditableChoiceField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899F340E434ACDCAA75F913F /* EditableChoiceField.swift */; };
+		B26994AC2B8974201B5C23D7 /* StartupSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E245F485CE5D4FA57FA06E /* StartupSchemaSection.swift */; };
 		B26B3EEFA493E960103D6527 /* system.proto in Resources */ = {isa = PBXBuildFile; fileRef = 3D27B82F5650277464200982 /* system.proto */; };
 		B41DE38A258D6C2E68314C5D /* FocusedDialogKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = C432ADD4B509CA5A4D3462C0 /* FocusedDialogKeys.swift */; };
 		B49078C0DB0782133FA05F34 /* serial.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0120B84124735271034BFC9 /* serial.pb.swift */; };
@@ -258,6 +260,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01E245F485CE5D4FA57FA06E /* StartupSchemaSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupSchemaSection.swift; sourceTree = "<group>"; };
 		028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewMachineDialog.swift; sourceTree = "<group>"; };
 		02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverFocusHostingTests.swift; sourceTree = "<group>"; };
 		0380D979784116B4110F8904 /* ConnectionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionRegistry.swift; sourceTree = "<group>"; };
@@ -451,6 +454,7 @@
 		D0D01B8A395DCAD93419F4DD /* AudioMixerStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerStateTests.swift; sourceTree = "<group>"; };
 		D0E57F03286476B3C039BC2F /* EditableListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableListViewModel.swift; sourceTree = "<group>"; };
 		D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelShape.swift; sourceTree = "<group>"; };
+		D1667C72B283ACDA76849586 /* KeyboardSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSectionView.swift; sourceTree = "<group>"; };
 		D1D07C4A60DC07CF2E59160C /* ProcessorSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessorSectionView.swift; sourceTree = "<group>"; };
 		D1E33FE42096EF584FC8D538 /* DiscoveryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryClient.swift; sourceTree = "<group>"; };
 		D33DB174D4636C866C169ACC /* ServerAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailability.swift; sourceTree = "<group>"; };
@@ -622,6 +626,7 @@
 				8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */,
 				98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */,
 				9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */,
+				01E245F485CE5D4FA57FA06E /* StartupSchemaSection.swift */,
 				E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */,
 			);
 			path = Presets;
@@ -636,6 +641,7 @@
 				3DC9C04EC6C010373F7AF591 /* ExtensionParameterForm.swift */,
 				664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */,
 				D8B08ED433C4601841BD14D7 /* HardDiscsSectionView.swift */,
+				D1667C72B283ACDA76849586 /* KeyboardSectionView.swift */,
 				D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */,
 				A40E77C5074CCD7F93B8183F /* NetworkSectionView.swift */,
 				D40BD06303AD2BB105BAEEC0 /* PeripheralsSectionView.swift */,
@@ -1112,6 +1118,7 @@
 				DD7F6150B025820774A44746 /* KeyboardMTKView.swift in Sources */,
 				BE8551008B3836CA24806130 /* KeyboardMapping.swift in Sources */,
 				9F0D659309F36B7DD20F0070 /* KeyboardMappingManager.swift in Sources */,
+				B0A2354141FA9EC4227A8007 /* KeyboardSectionView.swift in Sources */,
 				1F9774ADF4454EEA179ED3EA /* KeyboardSettingsPane.swift in Sources */,
 				674B2003EFDBCA5697E614C0 /* LockStateReconciler.swift in Sources */,
 				F9DCB28FBA6728EEC04A0D6D /* LockSyncPolicy.swift in Sources */,
@@ -1164,6 +1171,7 @@
 				F1C97066D79A492FB7FD76D1 /* SpeedControlView.swift in Sources */,
 				01523CB60DD7D1A75D412AD1 /* SpeedPresentation.swift in Sources */,
 				C3ED514E6ED1E2D44FD407BF /* StandardDisplayStyle.swift in Sources */,
+				B26994AC2B8974201B5C23D7 /* StartupSchemaSection.swift in Sources */,
 				75BBA7064C85D6CDB3797111 /* StatusBarView.swift in Sources */,
 				8E648F53A0DD1B04A0E1F08E /* StorageModeView.swift in Sources */,
 				A4E82812655C69808291E22A /* StorageSchemaSection.swift in Sources */,

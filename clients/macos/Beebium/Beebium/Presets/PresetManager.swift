@@ -511,6 +511,12 @@ class PresetManager: ObservableObject {
         await fetchSection(type: "econet", executablePath: preset.coreExecutablePath)
     }
 
+    /// Fetch the `startup` schema section (screen-mode / auto-boot / links rules)
+    /// for a preset's model.
+    func fetchStartupSchema(for preset: MachinePreset) async -> StartupSchemaSection? {
+        await fetchSection(type: "startup", executablePath: preset.coreExecutablePath)
+    }
+
     /// Cache of extension manifests per (executable, extension name), stable for
     /// the session (a manifest does not change while the app runs).
     private var cachedManifests: [String: ExtensionManifest] = [:]
