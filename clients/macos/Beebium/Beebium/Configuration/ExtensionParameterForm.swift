@@ -29,6 +29,9 @@ struct ExtensionParameterForm: View {
     let config: [String: JSONValue]
     /// Diagnostics for this instance (paths under /extensions/<n>/config/...).
     var diagnostics: [PresetManager.PresetDiagnostic] = []
+    /// Bundled disc-image masters by kind, for a filepath parameter that draws
+    /// from a catalogue (its `bundled` kind).
+    var bundledImages: [String: [BundledImage]] = [:]
     /// Set (or, with nil, clear) one config key, written through to the draft.
     let setValue: (String, JSONValue?) -> Void
 
@@ -74,8 +77,8 @@ struct ExtensionParameterForm: View {
 
     @ViewBuilder
     private func control(_ parameter: ExtensionParameter) -> some View {
-        if let choices = parameter.choices, !choices.isEmpty {
-            choicePicker(parameter, choices: choices)
+        if !parameter.choices.isEmpty {
+            choicePicker(parameter)
         } else if parameter.isList {
             StringListEditor(values: listValue(parameter.key),
                              placeholder: parameter.defaultValue,
@@ -88,10 +91,7 @@ struct ExtensionParameterForm: View {
                     set: { setValue(parameter.key, .bool($0)) }))
                     .labelsHidden()
             case "integer":
-                TextField(parameter.defaultValue, text: Binding(
-                    get: { stringValue(parameter.key) },
-                    set: { setValue(parameter.key, intJSON(from: $0)) }))
-                    .frame(maxWidth: 160)
+                integerField(parameter)
             case "filepath":
                 filepathControl(parameter)
             default: // "string"
@@ -103,32 +103,65 @@ struct ExtensionParameterForm: View {
         }
     }
 
-    private func choicePicker(_ parameter: ExtensionParameter, choices: [String]) -> some View {
-        Picker("", selection: Binding(
-            get: { stringValue(parameter.key).isEmpty ? parameter.defaultValue : stringValue(parameter.key) },
+    private func choicePicker(_ parameter: ExtensionParameter) -> some View {
+        let current = stringValue(parameter.key).isEmpty ? parameter.defaultValue : stringValue(parameter.key)
+        return Picker("", selection: Binding(
+            get: { current },
             set: { setValue(parameter.key, .string($0)) }
         )) {
-            ForEach(choices, id: \.self) { Text($0).tag($0) }
+            ForEach(parameter.choices) { choice in
+                Text(choice.label).tag(choice.value)
+            }
         }
         .labelsHidden()
         .frame(maxWidth: 260)
     }
 
-    private func filepathControl(_ parameter: ExtensionParameter) -> some View {
-        let path = stringValue(parameter.key)
-        return HStack(spacing: 8) {
-            Text(path.isEmpty ? "No file" : URL(fileURLWithPath: path).lastPathComponent)
-                .font(.subheadline)
-                .foregroundColor(path.isEmpty ? .secondary : .primary)
-                .lineLimit(1).truncationMode(.middle)
-                .help(path)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Choose…") { browse(parameter.key) }
-                .controlSize(.small)
-            if !path.isEmpty {
-                Button("Clear") { setValue(parameter.key, .string("")) }
-                    .controlSize(.small)
+    private func integerField(_ parameter: ExtensionParameter) -> some View {
+        HStack(spacing: 6) {
+            TextField(parameter.defaultValue, text: Binding(
+                get: { stringValue(parameter.key) },
+                set: { setValue(parameter.key, intJSON(from: $0, parameter: parameter)) }))
+                .frame(maxWidth: 120)
+            if let min = parameter.minimum, let max = parameter.maximum {
+                Text("(\(min)-\(max))")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
+        }
+    }
+
+    private func filepathControl(_ parameter: ExtensionParameter) -> some View {
+        let value = stringValue(parameter.key)
+        let masters = parameter.bundled.isEmpty ? [] : (bundledImages[parameter.bundled] ?? [])
+        // A bare name is a bundled master (per-machine working copy); a path is a file.
+        let isBare = !value.isEmpty && !value.contains("/")
+        let display = value.isEmpty ? "No file"
+            : (isBare ? value : URL(fileURLWithPath: value).lastPathComponent)
+        return HStack(spacing: 8) {
+            Text(display)
+                .font(.subheadline)
+                .foregroundColor(value.isEmpty ? .secondary : .primary)
+                .lineLimit(1).truncationMode(.middle)
+                .help(value)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Menu {
+                if !masters.isEmpty {
+                    Section("Bundled discs") {
+                        ForEach(masters, id: \.image) { master in
+                            Button(master.displayName) { setValue(parameter.key, .string(master.image)) }
+                        }
+                    }
+                }
+                Button("Choose File…") { browse(parameter.key) }
+                if !value.isEmpty {
+                    Button("Clear") { setValue(parameter.key, .string("")) }
+                }
+            } label: {
+                Text(value.isEmpty ? "Choose…" : "Change…")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             loadDroppedFile(providers) { url in setValue(parameter.key, .string(url.path)) }
@@ -153,12 +186,16 @@ struct ExtensionParameterForm: View {
         return items.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
     }
 
-    /// An integer JSONValue from a field string; a non-number clears the key so
-    /// the default applies rather than writing an invalid value.
-    private func intJSON(from text: String) -> JSONValue? {
+    /// An integer JSONValue from a field string, clamped to the parameter's
+    /// bounds; a non-number clears the key so the default applies rather than
+    /// writing an invalid value.
+    private func intJSON(from text: String, parameter: ExtensionParameter) -> JSONValue? {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return nil }
-        return Int(trimmed).map(JSONValue.int)
+        guard var value = Int(trimmed) else { return nil }
+        if let lower = parameter.minimum { value = Swift.max(value, lower) }
+        if let upper = parameter.maximum { value = Swift.min(value, upper) }
+        return .int(value)
     }
 
     private func parameterDiagnostics(_ key: String) -> [PresetManager.PresetDiagnostic] {

@@ -18,6 +18,14 @@ import Foundation
 /// they take. The generic parameter form (ExtensionParameterForm) is driven by
 /// these, so it adapts to any extension without the client hard-coding its keys.
 struct ExtensionParameter: Codable, Identifiable, Equatable {
+    /// A permitted value for a choice parameter: the value written back and the
+    /// label shown.
+    struct Choice: Codable, Equatable, Identifiable {
+        let value: String
+        let label: String
+        var id: String { value }
+    }
+
     let key: String
     /// "string", "integer", "boolean" or "filepath".
     let type: String
@@ -26,7 +34,7 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     /// The default, always as a string (e.g. "19200", "" for none).
     let defaultValue: String
     /// Non-empty when this parameter names a bundled-image kind (e.g. the SCSI
-    /// disc image's "hard-disc"); the Storage hard-disc UI owns those.
+    /// disc image's "hard-disc").
     let bundled: String
     /// Whether the value must be unique across instances on a bus (e.g. scsi-id).
     let unique: Bool
@@ -34,30 +42,28 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     /// point (e.g. adapter-id references a "scsi" provider).
     let providerOf: String
     let description: String
-
-    // The following arrive with describe-extension --json (Stage 2 server work)
-    // and default to "unconstrained" until then, so the form works against the
-    // current schema and gains richer controls when they land.
-    var label: String?
-    var minimum: Double?
-    var maximum: Double?
-    var choices: [String]?
-    /// A renderer hint, e.g. "path"/"device"; maps to a control flavour.
-    var displayKind: String?
+    /// Human label; may be empty on older servers (then the key is used).
+    var label: String = ""
+    /// Display/declaration order; nil when unspecified.
+    var position: Int?
+    /// Bounds, integer parameters only.
+    var minimum: Int?
+    var maximum: Int?
+    /// Permitted values, or empty when the value is free.
+    var choices: [Choice] = []
 
     var id: String { key }
 
     /// The human label for the control: the explicit label, else the key.
-    var displayLabel: String { (label?.isEmpty == false ? label! : nil) ?? key }
+    var displayLabel: String { label.isEmpty ? key : label }
 
     enum CodingKeys: String, CodingKey {
-        case key, type, required, bundled, unique, description, label, choices
+        case key, type, required, bundled, unique, description, label, choices, position
         case isList = "is_list"
         case defaultValue = "default"
         case providerOf = "provider_of"
         case minimum = "min"
         case maximum = "max"
-        case displayKind = "display_kind"
     }
 }
 
@@ -78,6 +84,13 @@ struct ExtensionManifest: Equatable {
             }
             parameters.append(parameter)
         }
-        return ExtensionManifest(name: name, parameters: parameters)
+        // Order by `position` where given, keeping declaration order among those
+        // without one (and as a stable tie-break).
+        let ordered = parameters.enumerated().sorted { lhs, rhs in
+            let lp = lhs.element.position ?? Int.max
+            let rp = rhs.element.position ?? Int.max
+            return lp != rp ? lp < rp : lhs.offset < rhs.offset
+        }.map(\.element)
+        return ExtensionManifest(name: name, parameters: ordered)
     }
 }

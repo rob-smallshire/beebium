@@ -141,6 +141,7 @@ struct PeripheralsSectionView: View {
                     diagnostics: diagnostics.filter {
                         PresetDiagnosticLocation.extensionIndex(path: $0.path) == instance.index
                     },
+                    bundledImages: schema.bundledImages ?? [:],
                     setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
                     .padding(.leading, 8)
             }
