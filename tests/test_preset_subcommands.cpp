@@ -1838,3 +1838,19 @@ TEST_CASE("resolve-preset: a bare hard-disc name that is not bundled is a warnin
     CHECK(out.at("diagnostics")[0].at("severity") == "warning");
     CHECK(out.at("diagnostics")[0].at("path") == "/extensions/1/config/image");
 }
+
+TEST_CASE("resolve-preset: every extension instance is written with an id",
+          "[integration][preset][resolve-preset][ids]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "two-adapters.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "extensions": [
+        {"name": "acorn-scsi"}, {"name": "acorn-scsi"},
+        {"name": "scsi-hard-disc", "config": {"image": "/tmp/a.dat", "adapter-id": "acorn-scsi"}}]})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    const auto& extensions = out.at("preset").at("extensions");
+    CHECK(extensions[0].at("config").at("id") == "acorn-scsi");
+    CHECK(extensions[1].at("config").at("id") == "acorn-scsi-1");
+    CHECK(extensions[2].at("config").at("id") == "scsi-hard-disc");
+}

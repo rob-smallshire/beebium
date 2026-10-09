@@ -982,6 +982,29 @@ std::vector<PresetDiagnostic> normalise_preset_extensions(ServerConfig<MachineTy
     return errors;
 }
 
+// Give every extension instance without a framework `id` one: its extension's
+// name, or name-1, name-2, ... when that is taken (make_extension_id, the
+// registries' scheme), never an id another instance was given explicitly.
+// This is the one place an instance is named, so the same configuration
+// always names its instances the same way: a provider_of parameter can name
+// an instance whose author gave it no id, and resolve-preset writes the ids
+// into the document so a saved preset stays addressable.
+template<typename MachineType>
+void assign_extension_ids(ServerConfig<MachineType>& config) {
+    std::vector<std::string> taken;
+    for (const auto& inst : config.extension_instances) {
+        if (auto it = inst.config.find("id"); it != inst.config.end()) {
+            taken.push_back(it->second);
+        }
+    }
+    for (auto& inst : config.extension_instances) {
+        if (inst.config.count("id") != 0) continue;
+        auto id = beebium::make_extension_id(inst.name, taken);
+        taken.push_back(id);
+        inst.config["id"] = std::move(id);
+    }
+}
+
 // The attachment points this model's own hardware offers extensions.
 template<typename Memory>
 std::vector<std::string> machine_attachment_points() {
@@ -1520,6 +1543,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
         return ExitCode::CONFIG;
     }
     merge_preset_extensions(config);
+    assign_extension_ids(config);
     if (auto errors = check_extension_attachments(config); !errors.empty()) {
         for (const auto& error : errors) {
             std::cerr << "Error: " << error.message << "\n";
@@ -2554,9 +2578,6 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
                 continue;
             }
 
-            if (inst.config.find("id") == inst.config.end()) {
-                inst.config["id"] = generate_uuid_v4();
-            }
             inst.config["machine_uuid"] = config.machine_uuid;
             std::cout << "Loading transport: " << manifest->name
                       << " (id=" << inst.config["id"] << ")\n";
@@ -2671,10 +2692,6 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
         });
 
     for (auto& inst : config.extension_instances) {
-        if (inst.config.find("id") == inst.config.end()) {
-            inst.config["id"] = generate_uuid_v4();
-        }
-
         const beebium::ExtensionManifest* manifest =
             config.extension_resolver.find_by_name(inst.name);
         if (!manifest) {
@@ -5508,6 +5525,7 @@ private:
             failed = true;
         }
         merge_preset_extensions(config);
+        assign_extension_ids(config);
         for (const auto& e : check_extension_attachments(config)) {
             error(e.path, e.message);
             failed = true;

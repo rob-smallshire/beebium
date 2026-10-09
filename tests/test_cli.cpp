@@ -2682,3 +2682,39 @@ TEST_CASE("parse_start_arguments: a preset's links apply",
     CHECK(config.raw_links == 135);
     CHECK_FALSE(validate_config(config).has_value());
 }
+
+// ============================================================================
+// Every extension instance has a stable id by the end of argument parsing
+// ============================================================================
+
+TEST_CASE("parse_start_arguments: an instance without an id is named after its extension",
+          "[cli][parse_start_arguments][extensions][ids]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-ids-");
+    auto preset_filepath = write_preset(dir, R"({
+        "econet": { "station": 80, "transport": { "name": "aun" } },
+        "extensions": [ { "name": "host-serial" } ]
+    })");
+    ArgvHelper args{"beebium", "start", "--preset", preset_filepath.string().c_str()};
+    ServerConfig<MachineType> config;
+
+    REQUIRE_FALSE(parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config)
+                      .has_value());
+
+    CHECK(find_instance(config, "host-serial")->config.at("id") == "host-serial");
+    CHECK(find_instance(config, "aun")->config.at("id") == "aun");
+}
+
+TEST_CASE("parse_start_arguments: generated ids never take an id given explicitly",
+          "[cli][parse_start_arguments][extensions][ids]") {
+    // Two AUN instances (left for the one-transport check, which is later),
+    // the second explicitly named "aun": the first, unnamed, becomes aun-1.
+    ArgvHelper args{"beebium", "start", "--aun", "port=0", "--aun", "id=aun:port=0"};
+    ServerConfig<MachineType> config;
+
+    REQUIRE_FALSE(parse_start_arguments<MachineType>(args.argc(), args.data(), 2, config)
+                      .has_value());
+
+    REQUIRE(config.extension_instances.size() == 2);
+    CHECK(config.extension_instances[0].config.at("id") == "aun-1");
+    CHECK(config.extension_instances[1].config.at("id") == "aun");
+}
