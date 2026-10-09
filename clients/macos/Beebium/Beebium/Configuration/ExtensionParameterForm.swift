@@ -32,6 +32,9 @@ struct ExtensionParameterForm: View {
     /// Bundled disc-image masters by kind, for a filepath parameter that draws
     /// from a catalogue (its `bundled` kind).
     var bundledImages: [String: [BundledImage]] = [:]
+    /// Host serial-port paths, offered as suggestions for a choices_from
+    /// "serial-ports" parameter.
+    var serialPortSuggestions: [String] = []
     /// Set (or, with nil, clear) one config key, written through to the draft.
     let setValue: (String, JSONValue?) -> Void
 
@@ -60,6 +63,11 @@ struct ExtensionParameterForm: View {
                 }
             }
             control(parameter)
+                .disabled(isExcluded(parameter))
+            if isExcluded(parameter) {
+                Text("Not used with \(excludedBy(parameter) ?? "another setting").")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
             if !parameter.description.isEmpty {
                 Text(parameter.description)
                     .font(.caption2)
@@ -95,11 +103,59 @@ struct ExtensionParameterForm: View {
             case "filepath":
                 filepathControl(parameter)
             default: // "string"
-                TextField(parameter.defaultValue, text: Binding(
-                    get: { stringValue(parameter.key) },
-                    set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
-                    .frame(maxWidth: 260)
+                if parameter.choicesFrom == "serial-ports" {
+                    serialPortCombo(parameter)
+                } else {
+                    TextField(parameter.defaultValue, text: Binding(
+                        get: { stringValue(parameter.key) },
+                        set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
+                        .frame(maxWidth: 260)
+                }
             }
+        }
+    }
+
+    /// A free-text field with a menu of host serial ports to fill it in.
+    private func serialPortCombo(_ parameter: ExtensionParameter) -> some View {
+        HStack(spacing: 6) {
+            TextField(parameter.defaultValue, text: Binding(
+                get: { stringValue(parameter.key) },
+                set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
+                .frame(maxWidth: 220)
+            if !serialPortSuggestions.isEmpty {
+                Menu {
+                    ForEach(serialPortSuggestions, id: \.self) { path in
+                        Button(path) { setValue(parameter.key, .string(path)) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Choose a detected serial port")
+            }
+        }
+    }
+
+    /// Whether `parameter` is disabled because a parameter it excludes has a
+    /// value (the mutually-exclusive pairs, e.g. time vs offset).
+    private func isExcluded(_ parameter: ExtensionParameter) -> Bool {
+        excludedBy(parameter) != nil
+    }
+
+    private func excludedBy(_ parameter: ExtensionParameter) -> String? {
+        parameter.excludes.first { hasValue($0) }
+    }
+
+    /// Whether a config key carries an explicitly-given, non-empty value.
+    private func hasValue(_ key: String) -> Bool {
+        switch config[key] {
+        case .string(let s): return !s.isEmpty
+        case .array(let a):  return !a.isEmpty
+        case .bool(let b):   return b
+        case .int, .double:  return true
+        case .object(let o): return !o.isEmpty
+        case .null, .none:   return false
         }
     }
 
@@ -134,6 +190,7 @@ struct ExtensionParameterForm: View {
     private func filepathControl(_ parameter: ExtensionParameter) -> some View {
         let value = stringValue(parameter.key)
         let masters = parameter.bundled.isEmpty ? [] : (bundledImages[parameter.bundled] ?? [])
+            .filter { $0.availableTo(extensionName: manifest.name) }
         // A bare name is a bundled master (per-machine working copy); a path is a file.
         let isBare = !value.isEmpty && !value.contains("/")
         let display = value.isEmpty ? "No file"

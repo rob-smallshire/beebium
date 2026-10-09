@@ -39,6 +39,8 @@ struct NewMachineDialog: View {
     @State private var extensionsSchema: ExtensionsSchemaSection?
     /// The model's econet schema (station rules + transports), for Network.
     @State private var econetSchema: EconetSchemaSection?
+    /// Host serial-port paths, for choices_from "serial-ports" fields.
+    @State private var serialPorts: [String] = []
     @State private var isLoadingSchema = false
 
     /// resolve-preset diagnostics for the current draft. Errors block launching;
@@ -280,6 +282,7 @@ struct NewMachineDialog: View {
                         econetSchema: econetSchema,
                         romResolver: romResolver(for: selectedPreset),
                         manifestResolver: manifestResolver(for: selectedPreset),
+                        serialPorts: serialPorts,
                         diagnostics: diagnostics,
                         modelId: selectedPreset?.modelName ?? "model-b"
                     )
@@ -432,6 +435,7 @@ struct NewMachineDialog: View {
             let sideways = await manager.fetchSidewaysSchema(for: preset)
             let extensions = await manager.fetchExtensionsSchema(for: preset)
             let econet = await manager.fetchEconetSchema(for: preset)
+            let ports = await manager.serialPortSuggestions()
             // The resolved document is the editing source: defaults filled,
             // paths absolute, default ROMs expanded into explicit slots. The
             // raw-file decode is a defensive fallback for the rare case the
@@ -444,6 +448,7 @@ struct NewMachineDialog: View {
                 memorySchema = sideways
                 extensionsSchema = extensions
                 econetSchema = econet
+                serialPorts = ports
                 hardDiscCapability = extensions.flatMap { HardDiscCapability(schema: $0) }
 
                 // Fill the metadata the launch needs if it was omitted.

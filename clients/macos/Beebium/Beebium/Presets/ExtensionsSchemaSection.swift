@@ -35,15 +35,25 @@ struct ExtensionsSchemaSection: Codable {
 struct BundledImage: Codable, Equatable {
     let image: String
     let sizeBytes: Int?
+    /// The extension this image belongs to, or nil when shared across extensions
+    /// (e.g. hard-disc masters). An extension's parameter offers images with a
+    /// matching name or nil.
+    var extensionName: String?
 
     /// A display name: the image's filename stem (there is no nicer name).
     var displayName: String {
         (image as NSString).deletingPathExtension
     }
 
+    /// Whether this image may be offered for `extension`.
+    func availableTo(extensionName name: String) -> Bool {
+        self.extensionName == nil || self.extensionName == name
+    }
+
     enum CodingKeys: String, CodingKey {
         case image
         case sizeBytes = "size_bytes"
+        case extensionName = "extension"
     }
 }
 
@@ -117,8 +127,11 @@ struct HardDiscCapability: Equatable {
             self.adapterPoint = host.id
             self.maxDiscsPerAdapter = point.maxOccupancy
             // "hard-disc" is the storage kind SCSI discs draw masters from; it
-            // matches the disc image parameter's declared `bundled` kind.
-            self.bundledMasters = schema.bundledImages?["hard-disc"] ?? []
+            // matches the disc image parameter's declared `bundled` kind. Filter
+            // to images available to the disc extension (hard-disc masters are
+            // shared, so this keeps them all).
+            self.bundledMasters = (schema.bundledImages?["hard-disc"] ?? [])
+                .filter { $0.availableTo(extensionName: disc) }
             return
         }
         return nil

@@ -26,12 +26,15 @@ final class ExtensionManifestTests: XCTestCase {
         let manifest = ExtensionManifest.parse(name: "host-serial", jsonl: jsonl)
         XCTAssertEqual(manifest.name, "host-serial")
         XCTAssertEqual(manifest.parameters.map(\.key), ["mode", "path", "baud"])
-        XCTAssertEqual(manifest.parameters[0].displayLabel, "Mode")
-        XCTAssertEqual(manifest.parameters[0].choices.map(\.value), ["pty", "device"])
-        XCTAssertEqual(manifest.parameters[0].choices.first?.label, "Pseudo-terminal")
-        XCTAssertEqual(manifest.parameters[2].type, "integer")
-        XCTAssertEqual(manifest.parameters[2].minimum, 50)
-        XCTAssertEqual(manifest.parameters[2].maximum, 115200)
+        // Index by key, never by position: a short list must fail an assertion,
+        // not crash the test host with an out-of-range subscript.
+        let byKey = Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
+        XCTAssertEqual(byKey["mode"]?.displayLabel, "Mode")
+        XCTAssertEqual(byKey["mode"]?.choices.map(\.value), ["pty", "device"])
+        XCTAssertEqual(byKey["mode"]?.choices.first?.label, "Pseudo-terminal")
+        XCTAssertEqual(byKey["baud"]?.type, "integer")
+        XCTAssertEqual(byKey["baud"]?.minimum, 50)
+        XCTAssertEqual(byKey["baud"]?.maximum, 115200)
     }
 
     func testOrdersByPosition() {
@@ -56,6 +59,35 @@ final class ExtensionManifestTests: XCTestCase {
         XCTAssertEqual(byKey["image"]?.bundled, "hard-disc")
         XCTAssertEqual(byKey["image"]?.type, "filepath")
         XCTAssertEqual(byKey["adapter-id"]?.providerOf, "scsi")
+    }
+
+    func testParsesExcludesAndChoicesFrom() {
+        let jsonl = """
+        {"key":"time","label":"Time","description":"","type":"string","required":false,"is_list":false,"position":0,"default":"","min":null,"max":null,"choices":[],"excludes":["offset"],"choices_from":"","bundled":"","unique":false,"provider_of":""}
+        {"key":"path","label":"Path","description":"","type":"string","required":false,"is_list":false,"position":1,"default":"","min":null,"max":null,"choices":[],"excludes":[],"choices_from":"serial-ports","bundled":"","unique":false,"provider_of":""}
+        """
+        let manifest = ExtensionManifest.parse(name: "x", jsonl: jsonl)
+        let byKey = Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
+        XCTAssertEqual(byKey["time"]?.excludes, ["offset"])
+        XCTAssertEqual(byKey["path"]?.choicesFrom, "serial-ports")
+        XCTAssertEqual(byKey["path"]?.excludes, [])
+    }
+
+    func testBundledImageAvailabilityByExtension() {
+        let shared = BundledImage(image: "hd.dat", sizeBytes: 1, extensionName: nil)
+        let owned = BundledImage(image: "rom.rom", sizeBytes: 1, extensionName: "acorn-65c102-coprocessor")
+        XCTAssertTrue(shared.availableTo(extensionName: "anything"))
+        XCTAssertTrue(owned.availableTo(extensionName: "acorn-65c102-coprocessor"))
+        XCTAssertFalse(owned.availableTo(extensionName: "acorn-65c02-coprocessor"))
+    }
+
+    func testParsesSerialPortPaths() {
+        let jsonl = """
+        {"path":"/dev/cu.usbserial-1","usb_vendor_id":1027,"usb_product_id":24577,"manufacturer":"FTDI","product":"","serial_number":""}
+        {"path":"/dev/cu.Bluetooth-Incoming-Port","usb_vendor_id":null,"usb_product_id":null,"manufacturer":"","product":"","serial_number":""}
+        """
+        XCTAssertEqual(PresetManager.parseSerialPortPaths(fromJSONL: jsonl),
+                       ["/dev/cu.usbserial-1", "/dev/cu.Bluetooth-Incoming-Port"])
     }
 
     func testSkipsMalformedLines() {

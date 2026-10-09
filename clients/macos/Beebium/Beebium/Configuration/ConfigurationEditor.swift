@@ -62,6 +62,9 @@ struct ConfigurationEditor: View {
     /// Resolves an extension's manifest (describe-extension), for Peripherals.
     let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
 
+    /// Host serial-port paths, for choices_from "serial-ports" fields.
+    var serialPorts: [String] = []
+
     /// Current resolve-preset diagnostics, so a section can show its own rows'
     /// problems.
     var diagnostics: [PresetManager.PresetDiagnostic] = []
@@ -197,7 +200,8 @@ struct ConfigurationEditor: View {
                     draft: $draft,
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
-                    manifestResolver: manifestResolver
+                    manifestResolver: manifestResolver,
+                    serialPorts: serialPorts
                 )
             }
         case .network:
@@ -206,7 +210,8 @@ struct ConfigurationEditor: View {
                     draft: $draft,
                     schema: econetSchema,
                     diagnostics: diagnostics,
-                    manifestResolver: manifestResolver
+                    manifestResolver: manifestResolver,
+                    serialPorts: serialPorts
                 )
             }
         case nil:

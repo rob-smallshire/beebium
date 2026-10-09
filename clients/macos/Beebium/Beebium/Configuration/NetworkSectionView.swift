@@ -25,6 +25,7 @@ struct NetworkSectionView: View {
     let schema: EconetSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
+    var serialPorts: [String] = []
 
     @StateObject private var manifests = ManifestCache()
 
@@ -100,34 +101,15 @@ struct NetworkSectionView: View {
                 }
             }
 
-            // Immediate, field-level validation from the schema rules (the
-            // server also rejects an out-of-range or missing station, but
-            // reports it against the whole document, so the inline flag here is
-            // what ties the problem to the field).
-            if let message = stationValidationError {
-                Label(message, systemImage: "exclamationmark.octagon.fill")
-                    .font(.caption2).foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            // The server validates the station and reports it at /econet/station,
+            // the single source of truth; the clamped number field above is only
+            // a UI nicety, not a second copy of the rules.
             ForEach(Array(stationDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
                 Label(diagnostic.message, systemImage: "exclamationmark.octagon.fill")
                     .font(.caption2).foregroundColor(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-
-    /// A station problem knowable from the schema rules: a fixed number out of
-    /// range (e.g. a loaded preset's 300), or a required station left unset.
-    private var stationValidationError: String? {
-        guard draft.econet != nil, case .number(let n) = station else { return nil }
-        if draft.econet?.station == nil {
-            return "A station number is required."
-        }
-        if n < schema.station.min || n > schema.station.max {
-            return "Station must be \(schema.station.min)-\(schema.station.max)."
-        }
-        return nil
     }
 
     // MARK: - Transport
@@ -151,6 +133,7 @@ struct NetworkSectionView: View {
                     manifest: manifest,
                     config: draft.econet?.transport?.parameters ?? [:],
                     diagnostics: [],   // econet param diagnostics show below, section-level
+                    serialPortSuggestions: serialPorts,
                     setValue: setTransportParameter)
                     .padding(.leading, 8)
             }

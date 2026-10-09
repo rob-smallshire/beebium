@@ -40,6 +40,7 @@ struct PeripheralsSectionView: View {
     let schema: ExtensionsSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
+    var serialPorts: [String] = []
 
     @StateObject private var manifests = ManifestCache()
 
@@ -142,6 +143,7 @@ struct PeripheralsSectionView: View {
                         PresetDiagnosticLocation.extensionIndex(path: $0.path) == instance.index
                     },
                     bundledImages: schema.bundledImages ?? [:],
+                    serialPortSuggestions: serialPorts,
                     setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
                     .padding(.leading, 8)
             }

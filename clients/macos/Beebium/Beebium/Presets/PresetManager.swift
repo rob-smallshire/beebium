@@ -531,6 +531,36 @@ class PresetManager: ObservableObject {
         return manifest
     }
 
+    /// Cached host serial-port paths for the session (for the choices_from
+    /// "serial-ports" combo).
+    private var cachedSerialPorts: [String]?
+
+    /// The host's serial-port device paths, via `list-serial-ports`, as
+    /// suggestions for a free-text device-path parameter. Cached for the session.
+    func serialPortSuggestions() async -> [String] {
+        if let cached = cachedSerialPorts { return cached }
+        guard let executablePath = anyCoreExecutablePath else { return [] }
+        let (output, error) = await runCli(
+            executable: executablePath, arguments: ["--format", "jsonl", "list-serial-ports"])
+        if error != nil { return [] }
+        let paths = Self.parseSerialPortPaths(fromJSONL: output)
+        cachedSerialPorts = paths
+        return paths
+    }
+
+    /// The device paths from list-serial-ports JSONL. A pure seam for testing.
+    nonisolated static func parseSerialPortPaths(fromJSONL jsonl: String) -> [String] {
+        struct Line: Decodable { let path: String }
+        var out: [String] = []
+        for raw in jsonl.split(whereSeparator: \.isNewline) {
+            guard let data = raw.data(using: .utf8),
+                  let line = try? JSONDecoder().decode(Line.self, from: data),
+                  !line.path.isEmpty else { continue }
+            out.append(line.path)
+        }
+        return out
+    }
+
     /// Run describe-preset-schema and decode the section of the given `type`.
     private func fetchSection<T: Decodable>(type: String, executablePath: String) async -> T? {
         let process = Process()

@@ -51,6 +51,12 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     var maximum: Int?
     /// Permitted values, or empty when the value is free.
     var choices: [Choice] = []
+    /// Other parameter keys that cannot be set together with this one; when one
+    /// of a pair has a value, the other is disabled.
+    var excludes: [String] = []
+    /// A source of suggestions for a free-text value, e.g. "serial-ports"; empty
+    /// when none.
+    var choicesFrom: String = ""
 
     var id: String { key }
 
@@ -58,12 +64,38 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     var displayLabel: String { label.isEmpty ? key : label }
 
     enum CodingKeys: String, CodingKey {
-        case key, type, required, bundled, unique, description, label, choices, position
+        case key, type, required, bundled, unique, description, label, choices, position, excludes
         case isList = "is_list"
         case defaultValue = "default"
         case providerOf = "provider_of"
         case minimum = "min"
         case maximum = "max"
+        case choicesFrom = "choices_from"
+    }
+
+    // Decoded explicitly (not synthesised) so a parameter object missing any
+    // field but key/type still decodes -- the synthesised Decodable requires
+    // every non-optional key even when it has a default. Only key and type are
+    // mandatory; the rest tolerate absence, so older servers (or trimmed
+    // fixtures) still parse.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        type = try c.decode(String.self, forKey: .type)
+        isList = try c.decodeIfPresent(Bool.self, forKey: .isList) ?? false
+        required = try c.decodeIfPresent(Bool.self, forKey: .required) ?? false
+        defaultValue = try c.decodeIfPresent(String.self, forKey: .defaultValue) ?? ""
+        bundled = try c.decodeIfPresent(String.self, forKey: .bundled) ?? ""
+        unique = try c.decodeIfPresent(Bool.self, forKey: .unique) ?? false
+        providerOf = try c.decodeIfPresent(String.self, forKey: .providerOf) ?? ""
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        position = try c.decodeIfPresent(Int.self, forKey: .position)
+        minimum = try c.decodeIfPresent(Int.self, forKey: .minimum)
+        maximum = try c.decodeIfPresent(Int.self, forKey: .maximum)
+        choices = try c.decodeIfPresent([Choice].self, forKey: .choices) ?? []
+        excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? []
+        choicesFrom = try c.decodeIfPresent(String.self, forKey: .choicesFrom) ?? ""
     }
 }
 
