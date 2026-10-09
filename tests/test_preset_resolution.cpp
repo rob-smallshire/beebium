@@ -251,3 +251,14 @@ TEST_CASE("preset_document refuses a transport with no station", "[preset-resolu
                     .has_value());
     CHECK_THAT(error, ContainsSubstring("requires --station"));
 }
+
+TEST_CASE("an extension that fails normalisation keeps the config the preset gave",
+          "[preset-resolution]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-resolution-");
+    auto config = config_with_manifests();
+    apply_preset(config, load(dir, R"({"extensions": [
+        {"name": "serial", "config": {"baud": "fast"}}]})"));
+
+    REQUIRE(fold_in_preset(config).size() == 1);
+    CHECK(config.extension_instances[0].config.at("baud") == "fast");
+}

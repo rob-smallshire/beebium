@@ -343,9 +343,10 @@ std::vector<PresetDiagnostic> normalise_preset_extensions(ServerConfig<MachineTy
             (manifest->extension_kind == "econet-transport" ? "preset Econet transport '"
                                                             : "preset extension '")
             + inst.name + "'";
+        // Copies: on failure the instance keeps what the preset said, so
+        // resolve-preset can still show it.
         auto normalised = beebium::normalise_extension_config(
-            source, std::move(inst.config), std::move(inst.list_config),
-            manifest->parameters);
+            source, inst.config, inst.list_config, manifest->parameters);
         if (!normalised.ok) {
             errors.push_back({inst.preset_pointer, normalised.error});
             continue;
