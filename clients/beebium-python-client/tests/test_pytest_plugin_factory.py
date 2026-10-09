@@ -244,7 +244,10 @@ def test_resolve_preset_names_where_it_looked_for_an_unknown_id(tmp_path: Path) 
         resolve_preset("no-such-preset", search_dirpaths=[tmp_path / "system"])
 
 
-def test_resolve_preset_says_when_there_is_no_server_to_search(tmp_path: Path) -> None:
+def test_resolve_preset_says_when_there_is_no_server_to_search(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # BEEBIUM_SERVERS_DIRPATH names system presets without a server, so it
+    # must not leak in from a run pointed at a separate build.
+    monkeypatch.delenv("BEEBIUM_SERVERS_DIRPATH", raising=False)
     with pytest.raises(FileNotFoundError, match="no server was found"):
         resolve_preset("model-b-disc", server=tmp_path / "no-such-server")
 
