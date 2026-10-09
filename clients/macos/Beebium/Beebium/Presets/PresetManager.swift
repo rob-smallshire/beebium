@@ -505,6 +505,26 @@ class PresetManager: ObservableObject {
         await fetchSection(type: "extensions", executablePath: preset.coreExecutablePath)
     }
 
+    /// Cache of extension manifests per (executable, extension name), stable for
+    /// the session (a manifest does not change while the app runs).
+    private var cachedManifests: [String: ExtensionManifest] = [:]
+
+    /// Fetch an extension's manifest (the parameters it takes) via
+    /// `describe-extension`, for the generic parameter form.
+    func fetchExtensionManifest(name: String, executablePath: String) async -> ExtensionManifest {
+        let cacheKey = "\(executablePath)\u{0}\(name)"
+        if let cached = cachedManifests[cacheKey] { return cached }
+        let (output, error) = await runCli(
+            executable: executablePath,
+            arguments: ["--format", "jsonl", "describe-extension", name])
+        if error != nil {
+            return ExtensionManifest(name: name, parameters: [])
+        }
+        let manifest = ExtensionManifest.parse(name: name, jsonl: output)
+        cachedManifests[cacheKey] = manifest
+        return manifest
+    }
+
     /// Run describe-preset-schema and decode the section of the given `type`.
     private func fetchSection<T: Decodable>(type: String, executablePath: String) async -> T? {
         let process = Process()

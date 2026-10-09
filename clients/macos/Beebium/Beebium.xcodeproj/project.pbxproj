@@ -188,6 +188,7 @@
 		D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */; };
 		D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */; };
 		D5072BCBDC5F2D2DBAFFAF87 /* PixelShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */; };
+		D673C730A5FBC4A96AAE3D68 /* ExtensionManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED1E4790F731F56410D335E /* ExtensionManifest.swift */; };
 		D68AE50897EB5CBD1070CC1E /* WindowKeyActivator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */; };
 		D74BF8677E5A5731DC06D3FD /* keyboard.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */; };
 		D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */; };
@@ -223,6 +224,7 @@
 		F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B19F4DD5A21B41C2CF9630 /* RecentConnections.swift */; };
 		F44ED1692215ABF5CE928E87 /* indicator.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831E41582E1F4F7358C624E8 /* indicator.pb.swift */; };
 		F4E79C3B365AB2D13A5B5984 /* VideoClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08EE196EF5A83B8C77CEA3FA /* VideoClient.swift */; };
+		F5336AD96DB468018D7B5AE9 /* ExtensionManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */; };
 		F61126ACA1A3E0AD40E6FB14 /* sideways.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94057CD054785189D20ACE11 /* sideways.pb.swift */; };
 		F619A0248AEA6D3F17D0EBA9 /* GRPC in Frameworks */ = {isa = PBXBuildFile; productRef = 4C97A19D18727CB09CD95712 /* GRPC */; };
 		F8DB66D575799986E3C664C3 /* ExtensionViewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D59B36AC9E2A59CA68F4FD3 /* ExtensionViewRenderer.swift */; };
@@ -269,6 +271,7 @@
 		1D125639FA049009F5018DA3 /* ExtensionFieldHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionFieldHelp.swift; sourceTree = "<group>"; };
 		1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCModifierStateTests.swift; sourceTree = "<group>"; };
 		1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPowerMonitor.swift; sourceTree = "<group>"; };
+		1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifestTests.swift; sourceTree = "<group>"; };
 		1F66DA1B5AF0659B892650E5 /* TransientMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientMessageTests.swift; sourceTree = "<group>"; };
 		2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = keyboard.grpc.swift; sourceTree = "<group>"; };
 		208639B544792E5992A279DF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -415,6 +418,7 @@
 		B9D68557079BA374D2FAD131 /* BeebiumTouchBarKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarKeys.swift; sourceTree = "<group>"; };
 		BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComboBoxRepresentableTests.swift; sourceTree = "<group>"; };
 		BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilterTests.swift; sourceTree = "<group>"; };
+		BED1E4790F731F56410D335E /* ExtensionManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionManifest.swift; sourceTree = "<group>"; };
 		BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMapping.swift; sourceTree = "<group>"; };
 		C152853E7E4735D1E7994275 /* BBCKeyCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCKeyCache.swift; sourceTree = "<group>"; };
 		C1E96BF7B20865AFD600D53F /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
@@ -589,6 +593,7 @@
 			children = (
 				5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */,
 				80EC3C1B36F0B3BFDEEDD1A1 /* DiscImageInfo.swift */,
+				BED1E4790F731F56410D335E /* ExtensionManifest.swift */,
 				55B1EDE37C44C9225386BC79 /* ExtensionsSchemaSection.swift */,
 				C1E96BF7B20865AFD600D53F /* JSONValue.swift */,
 				2A4A8D3907E53A1168B8542D /* MachineDraft.swift */,
@@ -780,6 +785,7 @@
 				CDB10CCDB68756C040A009F0 /* EconetStationPresentationTests.swift */,
 				3199BC9BC5BDBE72ADCAF7B1 /* EditableListViewModelTests.swift */,
 				B570706C1BCFCAE564221FBC /* EventLoopScalingMeasurement.swift */,
+				1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */,
 				F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */,
 				AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */,
 				89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */,
@@ -962,6 +968,7 @@
 				18076BDCC5AC917FB887DC99 /* EconetStationPresentationTests.swift in Sources */,
 				630B9079508DE55EB905DC5D /* EditableListViewModelTests.swift in Sources */,
 				FBCF1BC08E2089AED97EC3F1 /* EventLoopScalingMeasurement.swift in Sources */,
+				F5336AD96DB468018D7B5AE9 /* ExtensionManifestTests.swift in Sources */,
 				95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */,
 				1FE8AE12703189FD243A6977 /* FileReferenceMenuTests.swift in Sources */,
 				A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */,
@@ -1045,6 +1052,7 @@
 				D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */,
 				25614C8EFD2EC82348C86EEA /* ExtensionEditorForm.swift in Sources */,
 				0932E8A4F1F05ED374AA18ED /* ExtensionFieldHelp.swift in Sources */,
+				D673C730A5FBC4A96AAE3D68 /* ExtensionManifest.swift in Sources */,
 				8C6EF54139165E4D6F07941C /* ExtensionPanelView.swift in Sources */,
 				EE2E16B800D75FA4C460895A /* ExtensionUiClient.swift in Sources */,
 				F8DB66D575799986E3C664C3 /* ExtensionViewRenderer.swift in Sources */,
