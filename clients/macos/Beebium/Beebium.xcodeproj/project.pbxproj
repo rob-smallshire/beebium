@@ -71,6 +71,7 @@
 		418D98871B7DBD60523323D9 /* AudioPreRollTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1576454956E7BA5E1797A53F /* AudioPreRollTests.swift */; };
 		42072CC836ABE4A92B2EF2AC /* BeebiumApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E7A0E6AF52A2C316C7C419 /* BeebiumApp.swift */; };
 		4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */; };
+		42C67AA0AD4A7A00460ADB81 /* PresetDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */; };
 		4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */; };
 		44CFFA37FCA909B67E296E53 /* RomTitleCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D4F5285CFD741418E4365C /* RomTitleCache.swift */; };
 		44FF38917718C8C09556A62A /* indicator.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C4898953F0003B85113EC0 /* indicator.grpc.swift */; };
@@ -211,6 +212,7 @@
 		EEC1DCADCCF584AB8BC8DD01 /* ConnectionRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0380D979784116B4110F8904 /* ConnectionRegistry.swift */; };
 		EED3FE1B2C84F875665FC6FE /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C5792BABD709C954B706793 /* Metal.framework */; };
 		EF8362333B41FBAA43E048B0 /* disc.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92BF9F9BD423BAC0EBD291A4 /* disc.pb.swift */; };
+		F1007C97B24AA67ECDE8C619 /* PresetDiagnosticLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */; };
 		F1C97066D79A492FB7FD76D1 /* SpeedControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AA9C1D32F71A0E3DD2F7D8E /* SpeedControlView.swift */; };
 		F27E0697D14CBC60E7BB945E /* TextInputField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A03414ECE92D9AA04944FBB /* TextInputField.swift */; };
 		F285735344904A7D3775E42B /* DiscImageDropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */; };
@@ -334,6 +336,7 @@
 		77B50A78CE4E5CCC31E34AE2 /* LockStateReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockStateReconcilerTests.swift; sourceTree = "<group>"; };
 		7C0D454E8A8AE8B2ACA6340F /* EconetTransportsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EconetTransportsClient.swift; sourceTree = "<group>"; };
 		7C5792BABD709C954B706793 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDiagnosticsView.swift; sourceTree = "<group>"; };
 		7D2677DED8933B5E1A7D11D4 /* ModifierKeyStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModifierKeyStateTests.swift; sourceTree = "<group>"; };
 		7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = peripheral_extension.grpc.swift; sourceTree = "<group>"; };
 		7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinesSettingsPane.swift; sourceTree = "<group>"; };
@@ -388,6 +391,7 @@
 		A7386122C0E5009AE250FECD /* SidebarModeContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarModeContent.swift; sourceTree = "<group>"; };
 		A9DC98B37B62CE999A94A076 /* LockStateReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockStateReconciler.swift; sourceTree = "<group>"; };
 		AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailabilityTests.swift; sourceTree = "<group>"; };
+		AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDiagnosticLocationTests.swift; sourceTree = "<group>"; };
 		ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNameTemplateSupportTests.swift; sourceTree = "<group>"; };
 		AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileReferenceMenuTests.swift; sourceTree = "<group>"; };
 		AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSocketEditor.swift; sourceTree = "<group>"; };
@@ -594,6 +598,7 @@
 				FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */,
 				664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */,
 				D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */,
+				7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */,
 				89D4F5285CFD741418E4365C /* RomTitleCache.swift */,
 				AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */,
 				E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */,
@@ -779,6 +784,7 @@
 				4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */,
 				2D1D75896DF179CEC420018F /* PixelShapeTests.swift */,
 				02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */,
+				AA381491DEE3F058B098A69B /* PresetDiagnosticLocationTests.swift */,
 				DC12DDC0E12925FCC40FF334 /* PresetManagerDraftLaunchTests.swift */,
 				8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */,
 				27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */,
@@ -959,6 +965,7 @@
 				934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */,
 				A994E213FE38477C0CF26811 /* PixelShapeTests.swift in Sources */,
 				1D4EF3D9B6F79DD6EBC15905 /* PopoverFocusHostingTests.swift in Sources */,
+				F1007C97B24AA67ECDE8C619 /* PresetDiagnosticLocationTests.swift in Sources */,
 				316C036A4CF391595A4DD8CC /* PresetManagerDraftLaunchTests.swift in Sources */,
 				62024A31F9AD52CA2676CCB2 /* PresetTests.swift in Sources */,
 				4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */,
@@ -1068,6 +1075,7 @@
 				394059FE9C2A8CC58886CC50 /* PeripheralsModeView.swift in Sources */,
 				D5072BCBDC5F2D2DBAFFAF87 /* PixelShape.swift in Sources */,
 				C7CFB3597A51313102A58455 /* PopoverTextField.swift in Sources */,
+				42C67AA0AD4A7A00460ADB81 /* PresetDiagnosticsView.swift in Sources */,
 				D7BE097905B0FE46BD611CB5 /* PresetManager.swift in Sources */,
 				EE33BF0A4DE7E404A3288E43 /* ProtocolFingerprint.swift in Sources */,
 				F369818B03931A54C795F6D6 /* RecentConnections.swift in Sources */,

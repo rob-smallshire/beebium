@@ -761,16 +761,30 @@ class PresetManager: ObservableObject {
     /// diagnostics; `resolve-preset` prints its JSON even on a non-zero exit, so
     /// the diagnostics are parsed regardless.
     func resolvePreset(_ preset: MachinePreset) async -> (MachineDraft?, [PresetDiagnostic]) {
+        await resolve(presetPath: preset.presetFilepath, executablePath: preset.coreExecutablePath)
+    }
+
+    /// Validate/normalise an in-memory draft: write it to a temporary preset file
+    /// and resolve that. Used to re-validate the dialog's draft as the user edits
+    /// it, so diagnostics (and whether launching is allowed) reflect the current
+    /// configuration, not just the preset as loaded.
+    func resolveDraft(_ draft: MachineDraft, executablePath: String) async -> (MachineDraft?, [PresetDiagnostic]) {
+        guard let url = try? Self.writeTemporaryPreset(draft) else { return (nil, []) }
+        defer { try? FileManager.default.removeItem(at: url) }
+        return await resolve(presetPath: url.path, executablePath: executablePath)
+    }
+
+    private func resolve(presetPath: String, executablePath: String) async -> (MachineDraft?, [PresetDiagnostic]) {
         struct Output: Decodable {
             let preset: MachineDraft?
             let diagnostics: [PresetDiagnostic]
         }
         let (output, _) = await runCli(
-            executable: preset.coreExecutablePath,
-            arguments: ["resolve-preset", preset.presetFilepath, "--json"])
+            executable: executablePath,
+            arguments: ["resolve-preset", presetPath, "--json"])
         guard let data = output.data(using: .utf8),
               let parsed = try? JSONDecoder().decode(Output.self, from: data) else {
-            NSLog("[PresetManager] Could not parse resolve-preset output for \(preset.presetId)")
+            NSLog("[PresetManager] Could not parse resolve-preset output for \(presetPath)")
             return (nil, [])
         }
         return (parsed.preset, parsed.diagnostics)

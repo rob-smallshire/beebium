@@ -35,6 +35,11 @@ struct NewMachineDialog: View {
     @State private var memorySchema: SidewaysSchemaSection?
     @State private var isLoadingSchema = false
 
+    /// resolve-preset diagnostics for the current draft. Errors block launching;
+    /// re-evaluated (debounced) as the draft changes.
+    @State private var diagnostics: [PresetManager.PresetDiagnostic] = []
+    @State private var validationTask: Task<Void, Never>?
+
     // Save as preset
     @State private var saveAsNewPreset = false
     @State private var newPresetName = ""
@@ -70,6 +75,7 @@ struct NewMachineDialog: View {
                 if showConfiguration {
                     saveAsPresetSection
                 }
+                PresetDiagnosticsView(diagnostics: visibleDiagnostics)
                 errorSection
             }
             .padding(20)
@@ -113,6 +119,41 @@ struct NewMachineDialog: View {
             if let preset = newPreset {
                 loadDraftForPreset(preset)
             }
+        }
+        .onChange(of: draft) { _ in
+            scheduleValidation()
+        }
+    }
+
+    /// Diagnostics to show: all while the configuration is open; only errors
+    /// when it is collapsed (so a blocked Create is still explained without
+    /// surfacing warnings about options the user cannot see).
+    private var visibleDiagnostics: [PresetManager.PresetDiagnostic] {
+        showConfiguration ? diagnostics : diagnostics.filter(\.isError)
+    }
+
+    /// Whether an error diagnostic blocks launching/saving.
+    private var hasBlockingError: Bool {
+        diagnostics.contains(where: \.isError)
+    }
+
+    /// Re-validate the draft after a short debounce, so each keystroke does not
+    /// spawn a resolver. Validation runs the server's resolve-preset over the
+    /// current draft and keeps its diagnostics.
+    private func scheduleValidation() {
+        validationTask?.cancel()
+        guard let preset = selectedPreset else {
+            diagnostics = []
+            return
+        }
+        let executablePath = preset.coreExecutablePath
+        let current = draft
+        validationTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if Task.isCancelled { return }
+            let (_, diags) = await presetManager.resolveDraft(current, executablePath: executablePath)
+            if Task.isCancelled { return }
+            diagnostics = diags
         }
     }
 
@@ -281,6 +322,7 @@ struct NewMachineDialog: View {
             }
             .keyboardShortcut(.defaultAction)
             .disabled(selectedPreset == nil || isLaunching || presetManager.isDiscovering ||
+                     hasBlockingError ||
                      (saveAsNewPreset && newPresetName.trimmingCharacters(in: .whitespaces).isEmpty))
         }
         .padding(16)
@@ -303,6 +345,8 @@ struct NewMachineDialog: View {
         newPresetName = ""
         isLaunching = false
         launchError = nil
+        validationTask?.cancel()
+        diagnostics = []
         // Re-resolve selectedPreset against the current preset list.
         // createPreset() calls discoverPresets() which rebuilds the
         // systemPresets/userPresets arrays with fresh MachinePreset
