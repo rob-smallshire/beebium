@@ -14,6 +14,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <beebium/extension/ExtensionArgParser.hpp>
 
+#include <set>
+
 using namespace beebium;
 using Catch::Matchers::ContainsSubstring;
 
@@ -599,4 +601,34 @@ TEST_CASE("normalise_extension_config rejects a list for a scalar parameter",
         "preset", {}, {{"port", {"1", "2"}}}, kListSchema);
     REQUIRE_FALSE(result.ok);
     CHECK_THAT(result.error, ContainsSubstring("parameter 'port' takes one value"));
+}
+
+TEST_CASE("normalise_extension_config: an empty value is a parameter left out",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset", {{"image", "d.dat"}, {"adapter-id", ""}, {"scsi-id", ""}},
+        {{"map", {}}}, {{"map", "string", "Peer entry", -1, false, true, ""},
+                        {"scsi-id", "integer", "SCSI target ID", 0, false, false, "0"},
+                        {"image", "filepath", "Image", 1, false, false, ""},
+                        {"adapter-id", "string", "Adapter", -1, false, false, ""}});
+    REQUIRE(result.ok);
+    CHECK(result.config.count("adapter-id") == 0);  // no default: absent
+    CHECK(result.config.at("scsi-id") == "0");      // the default, as if left out
+    CHECK(result.list_config.count("map") == 0);    // an empty list is no list
+    CHECK(result.explicit_keys == std::set<std::string>{"image"});
+}
+
+TEST_CASE("normalise_extension_config: an empty required parameter is missing",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config("preset", {{"name", ""}}, {}, kRequiredSchema);
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("missing required parameter 'name'"));
+}
+
+TEST_CASE("parse_extension_args: an empty value is a parameter left out",
+          "[extension][arg-parser]") {
+    auto result = parse_extension_args("scsi-hdd", "0:d.dat:adapter-id=", kScsiHddSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config.count("adapter-id") == 0);
+    CHECK(result.explicit_keys.count("adapter-id") == 0);
 }

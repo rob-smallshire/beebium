@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <iterator>
 #include <sstream>
 
 namespace beebium {
@@ -140,6 +141,17 @@ template <typename Err>
 ParseResult complete_config(ParseResult result,
                             const std::vector<ParameterSchema>& schema,
                             Err err) {
+    // An empty value is a parameter left out: `key=` on the command line, ""
+    // or [] in a preset. So a document that spells out every parameter, with
+    // "" where there is no value (resolve-preset's output), means what the
+    // same document without them means, and the default still applies.
+    for (auto it = result.config.begin(); it != result.config.end();) {
+        it = it->second.empty() ? result.config.erase(it) : std::next(it);
+    }
+    for (auto it = result.list_config.begin(); it != result.list_config.end();) {
+        it = it->second.empty() ? result.list_config.erase(it) : std::next(it);
+    }
+
     // Record which keys the caller actually supplied, before any defaults are
     // filled in -- a preset merge uses this to override only typed keys (#166).
     for (const auto& [key, value] : result.config) {

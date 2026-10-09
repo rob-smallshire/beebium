@@ -1612,6 +1612,17 @@ TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through
 
         auto second = resolve_json(executable, saved_filepath.string());
         CHECK(second.at("preset") == first.at("preset"));
+
+        // And the saved document builds the machine: every value it spells
+        // out (an unset parameter as "", a default ROM as an explicit slot)
+        // must mean what leaving it out means.
+        auto png_filepath = user_dir.path() / "saved.png";
+        auto built = run_command(
+            executable + " capture-screenshot --preset \"" + saved_filepath.string() +
+                "\" --duration 0 --output \"" + png_filepath.string() + "\"",
+            {{"BEEBIUM_DISC_WORK_DIR", (user_dir.path() / "discs").string()}});
+        INFO(built.stdout_output << built.stderr_output);
+        CHECK(built.exit_code == 0);
     }
 }
 
