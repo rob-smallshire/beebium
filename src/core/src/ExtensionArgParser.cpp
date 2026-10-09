@@ -171,6 +171,16 @@ ParseResult complete_config(ParseResult result,
         result.explicit_keys.insert(key);
     }
 
+    // Parameters that exclude each other: given ones only, before defaults.
+    for (const auto& p : schema) {
+        if (result.explicit_keys.count(p.key) == 0) continue;
+        for (const auto& other : p.excludes) {
+            if (result.explicit_keys.count(other) != 0) {
+                return err("parameter '" + p.key + "' cannot be combined with '" + other + "'");
+            }
+        }
+    }
+
     // Apply defaults for missing optional parameters
     for (const auto& p : schema) {
         if (p.default_value.empty()) {

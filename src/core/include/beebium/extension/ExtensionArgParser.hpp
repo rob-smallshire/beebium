@@ -59,6 +59,9 @@ struct ParameterSchema {
     std::string label;          // short human-readable name, for a form
     std::optional<long long> min;  // "integer" only: the least value allowed
     std::optional<long long> max;  // "integer" only: the greatest value allowed
+    std::vector<std::string> excludes;     // keys that may not be given with
+                                           // this one (either side declaring
+                                           // it is enough)
     std::vector<ParameterChoice> choices;  // non-empty: the only values allowed
                                            // (matched ignoring ASCII case and
                                            // written as declared)

@@ -12,18 +12,28 @@
             "key": "url",
             "label": "Server URL",
             "type": "string",
+            "excludes": [
+                "host",
+                "port"
+            ],
             "description": "IP232 server endpoint as [scheme://]host:port (e.g. url=\"ip232://bbs.example.com:25232\"); alternative to host/port, cannot be combined with them"
         },
         {
             "key": "host",
             "label": "Server host",
             "type": "string",
+            "excludes": [
+                "url"
+            ],
             "description": "IP232 server hostname or address (default localhost; alternative to url)"
         },
         {
             "key": "port",
             "label": "Server port",
             "type": "integer",
+            "excludes": [
+                "url"
+            ],
             "description": "IP232 server TCP port (default 25232; alternative to url)",
             "min": 1,
             "max": 65535

@@ -12,12 +12,18 @@
             "key": "time",
             "label": "Start time",
             "type": "string",
+            "excludes": [
+                "offset"
+            ],
             "description": "Set emulated clock to absolute datetime (e.g. 1985-03-15T10:30)"
         },
         {
             "key": "offset",
             "label": "Offset from host time",
             "type": "string",
+            "excludes": [
+                "time"
+            ],
             "description": "Offset from host local time (e.g. -10y, +5h, -365d)"
         },
         {

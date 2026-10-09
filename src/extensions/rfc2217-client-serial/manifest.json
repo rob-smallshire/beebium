@@ -12,18 +12,28 @@
             "key": "url",
             "label": "Server URL",
             "type": "string",
+            "excludes": [
+                "host",
+                "port"
+            ],
             "description": "Access-server endpoint as [scheme://]host:port (e.g. url=\"rfc2217://ser2net.local:4001\"); alternative to host/port, cannot be combined with them"
         },
         {
             "key": "host",
             "label": "Server host",
             "type": "string",
+            "excludes": [
+                "url"
+            ],
             "description": "RFC 2217 access-server hostname or address (alternative to url)"
         },
         {
             "key": "port",
             "label": "Server port",
             "type": "integer",
+            "excludes": [
+                "url"
+            ],
             "description": "RFC 2217 access-server TCP port (alternative to url)",
             "min": 1,
             "max": 65535

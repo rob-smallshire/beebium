@@ -205,6 +205,11 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             if (p.contains("max") && p["max"].is_number_integer()) {
                 param.max = p["max"].get<long long>();
             }
+            if (p.contains("excludes") && p["excludes"].is_array()) {
+                for (const auto& key : p["excludes"]) {
+                    if (key.is_string()) param.excludes.push_back(key.get<std::string>());
+                }
+            }
             // A choice is a bare value, or {"value": ..., "label": ...}.
             if (p.contains("choices") && p["choices"].is_array()) {
                 for (const auto& c : p["choices"]) {

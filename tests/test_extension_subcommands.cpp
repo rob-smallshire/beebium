@@ -406,3 +406,13 @@ TEST_CASE("the AUN net number is an integer 0-255",
     CHECK(r.exit_code == 64);
     CHECK(r.stderr_output.find("must be 0-255") != std::string::npos);
 }
+
+TEST_CASE("describe-extension --json lists the parameters each one excludes",
+          "[integration][extension][describe-extension][excludes]") {
+    const auto rtc = describe_extension_json("acorn-rtc");
+    CHECK(parameter(rtc, "time").at("excludes") == nlohmann::json::array({"offset"}));
+    CHECK(parameter(rtc, "layout").at("excludes") == nlohmann::json::array());
+    auto r = run_command(EXECUTABLE + " start --acorn-rtc time=1985-03-15:offset=-10y --port 0");
+    CHECK(r.exit_code == 64);
+    CHECK(r.stderr_output.find("cannot be combined") != std::string::npos);
+}

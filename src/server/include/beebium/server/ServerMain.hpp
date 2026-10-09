@@ -3548,6 +3548,7 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"min", p.min ? nlohmann::ordered_json(*p.min) : nlohmann::ordered_json(nullptr)},
         {"max", p.max ? nlohmann::ordered_json(*p.max) : nlohmann::ordered_json(nullptr)},
         {"choices", choices},
+        {"excludes", p.excludes},
         {"bundled", p.bundled},
         {"unique", p.unique},
         {"provider_of", p.provider_of},
@@ -3724,6 +3725,11 @@ public:
                         if (p.min || p.max) {
                             std::cout << " (" << (p.min ? std::to_string(*p.min) : "")
                                       << ".." << (p.max ? std::to_string(*p.max) : "") << ")";
+                        }
+                        if (!p.excludes.empty()) {
+                            std::cout << " (not with";
+                            for (const auto& k : p.excludes) std::cout << " " << k;
+                            std::cout << ")";
                         }
                         if (!p.choices.empty()) {
                             std::cout << " {";

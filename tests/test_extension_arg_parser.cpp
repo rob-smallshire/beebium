@@ -676,3 +676,40 @@ TEST_CASE("a choice is matched without regard to case and written as declared",
     REQUIRE(result.ok);
     CHECK(result.config.at("mode") == "device");
 }
+
+// ---------------------------------------------------------------------------
+// Parameters that exclude each other
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::vector<ParameterSchema> exclusive_schema() {
+    ParameterSchema url{"url", "string", "Server URL", -1, false, false, ""};
+    url.excludes = {"host", "port"};
+    ParameterSchema host{"host", "string", "Host", -1, false, false, ""};
+    ParameterSchema port{"port", "integer", "Port", -1, false, false, ""};
+    ParameterSchema mode{"mode", "string", "Mode", -1, false, false, "ip232"};
+    return {url, host, port, mode};
+}
+
+}  // namespace
+
+TEST_CASE("parameters that exclude each other cannot both be given",
+          "[extension][arg-parser][excludes]") {
+    auto cli = parse_extension_args("ip232-serial", "url=\"ip232://h:1\":port=2", exclusive_schema());
+    REQUIRE_FALSE(cli.ok);
+    CHECK_THAT(cli.error, ContainsSubstring("'url' cannot be combined with 'port'"));
+
+    // Declared on one side, it holds both ways round.
+    auto preset = normalise_extension_config("preset", {{"host", "h"}, {"url", "x"}}, {},
+                                             exclusive_schema());
+    REQUIRE_FALSE(preset.ok);
+    CHECK_THAT(preset.error, ContainsSubstring("cannot be combined"));
+}
+
+TEST_CASE("an excluded parameter left out, or empty, does not count",
+          "[extension][arg-parser][excludes]") {
+    CHECK(parse_extension_args("x", "host=h:port=2", exclusive_schema()).ok);
+    CHECK(normalise_extension_config("preset", {{"url", "x"}, {"host", ""}}, {},
+                                     exclusive_schema()).ok);
+}
