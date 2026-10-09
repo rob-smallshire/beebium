@@ -75,31 +75,7 @@ struct NetworkSectionView: View {
             .pickerStyle(.segmented)
             .fixedSize()
 
-            switch mode {
-            case .number:
-                HStack(spacing: 6) {
-                    TextField("\(schema.station.min)", text: Binding(
-                        get: { numberText },
-                        set: { setStation(.number(clampStation($0))) }))
-                        .frame(maxWidth: 100)
-                    Text("(\(schema.station.min)-\(schema.station.max))")
-                        .font(.caption2).foregroundColor(.secondary)
-                }
-            case .auto:
-                Text("A free station number is chosen on the network at launch.")
-                    .font(.caption2).foregroundColor(.secondary)
-            case .range:
-                HStack(spacing: 6) {
-                    Text("from")
-                    TextField("\(schema.station.autoDefaultLow)", text: Binding(
-                        get: { String(rangeLow) }, set: { setRange(low: clampStation($0), high: rangeHigh) }))
-                        .frame(maxWidth: 70)
-                    Text("to")
-                    TextField("\(schema.station.autoDefaultHigh)", text: Binding(
-                        get: { String(rangeHigh) }, set: { setRange(low: rangeLow, high: clampStation($0)) }))
-                        .frame(maxWidth: 70)
-                }
-            }
+            stationInput(mode)
 
             // The server validates the station and reports it at /econet/station,
             // the single source of truth; the clamped number field above is only
@@ -109,6 +85,37 @@ struct NetworkSectionView: View {
                     .font(.caption2).foregroundColor(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    // The per-mode input, type-erased: a @ViewBuilder switch returning several
+    // concrete View types crashes the Release whole-module optimiser with no
+    // diagnostic (see ExtensionViewRenderer).
+    private func stationInput(_ mode: StationMode) -> AnyView {
+        switch mode {
+        case .number:
+            return AnyView(HStack(spacing: 6) {
+                TextField("\(schema.station.min)", text: Binding(
+                    get: { numberText },
+                    set: { setStation(.number(clampStation($0))) }))
+                    .frame(maxWidth: 100)
+                Text("(\(schema.station.min)-\(schema.station.max))")
+                    .font(.caption2).foregroundColor(.secondary)
+            })
+        case .auto:
+            return AnyView(Text("A free station number is chosen on the network at launch.")
+                .font(.caption2).foregroundColor(.secondary))
+        case .range:
+            return AnyView(HStack(spacing: 6) {
+                Text("from")
+                TextField("\(schema.station.autoDefaultLow)", text: Binding(
+                    get: { String(rangeLow) }, set: { setRange(low: clampStation($0), high: rangeHigh) }))
+                    .frame(maxWidth: 70)
+                Text("to")
+                TextField("\(schema.station.autoDefaultHigh)", text: Binding(
+                    get: { String(rangeHigh) }, set: { setRange(low: rangeLow, high: clampStation($0)) }))
+                    .frame(maxWidth: 70)
+            })
         }
     }
 

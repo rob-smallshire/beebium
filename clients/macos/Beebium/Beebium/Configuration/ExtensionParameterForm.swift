@@ -83,35 +83,37 @@ struct ExtensionParameterForm: View {
         }
     }
 
-    @ViewBuilder
-    private func control(_ parameter: ExtensionParameter) -> some View {
+    // Returns AnyView (type-erased): a @ViewBuilder returning this many distinct
+    // concrete View types crashes the Release whole-module optimiser with no
+    // diagnostic (see ExtensionViewRenderer). Type-erasure avoids it.
+    private func control(_ parameter: ExtensionParameter) -> AnyView {
         if !parameter.choices.isEmpty {
-            choicePicker(parameter)
-        } else if parameter.isList {
-            StringListEditor(values: listValue(parameter.key),
-                             placeholder: parameter.defaultValue,
-                             setValues: { setValue(parameter.key, $0.isEmpty ? nil : .array($0.map(JSONValue.string))) })
-        } else {
-            switch parameter.type {
-            case "boolean":
-                Toggle("", isOn: Binding(
-                    get: { boolValue(parameter.key) },
-                    set: { setValue(parameter.key, .bool($0)) }))
-                    .labelsHidden()
-            case "integer":
-                integerField(parameter)
-            case "filepath":
-                filepathControl(parameter)
-            default: // "string"
-                if parameter.choicesFrom == "serial-ports" {
-                    serialPortCombo(parameter)
-                } else {
-                    TextField(parameter.defaultValue, text: Binding(
-                        get: { stringValue(parameter.key) },
-                        set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
-                        .frame(maxWidth: 260)
-                }
+            return AnyView(choicePicker(parameter))
+        }
+        if parameter.isList {
+            return AnyView(StringListEditor(
+                values: listValue(parameter.key),
+                placeholder: parameter.defaultValue,
+                setValues: { setValue(parameter.key, $0.isEmpty ? nil : .array($0.map(JSONValue.string))) }))
+        }
+        switch parameter.type {
+        case "boolean":
+            return AnyView(Toggle("", isOn: Binding(
+                get: { boolValue(parameter.key) },
+                set: { setValue(parameter.key, .bool($0)) }))
+                .labelsHidden())
+        case "integer":
+            return AnyView(integerField(parameter))
+        case "filepath":
+            return AnyView(filepathControl(parameter))
+        default: // "string"
+            if parameter.choicesFrom == "serial-ports" {
+                return AnyView(serialPortCombo(parameter))
             }
+            return AnyView(TextField(parameter.defaultValue, text: Binding(
+                get: { stringValue(parameter.key) },
+                set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
+                .frame(maxWidth: 260))
         }
     }
 

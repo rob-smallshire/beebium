@@ -177,48 +177,50 @@ struct ConfigurationEditor: View {
 
     // MARK: - Content
 
-    @ViewBuilder
-    private var contentView: some View {
+    // Returns AnyView (type-erased) rather than `some View`: a @ViewBuilder
+    // switch returning several different concrete View types makes the Release
+    // whole-module optimiser crash swift-frontend with no diagnostic (the same
+    // bug ExtensionViewRenderer documents). Type-erasure sidesteps it; the cost
+    // is negligible for a handful of sections.
+    private var contentView: AnyView {
         switch effectiveSection {
         case .storage:
-            StorageSectionView(
+            return AnyView(StorageSectionView(
                 draft: $draft,
                 schema: storageSchema,
                 hardDiscCapability: hardDiscCapability,
-                diagnostics: diagnostics
-            )
+                diagnostics: diagnostics))
         case .memory:
-            MemorySectionView(
+            return AnyView(MemorySectionView(
                 draft: $draft,
                 originalDraft: originalDraft,
                 schema: memorySchema,
-                romResolver: romResolver
-            )
+                romResolver: romResolver))
         case .peripherals:
             if let extensionsSchema = extensionsSchema {
-                PeripheralsSectionView(
+                return AnyView(PeripheralsSectionView(
                     draft: $draft,
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
                     manifestResolver: manifestResolver,
-                    serialPorts: serialPorts
-                )
+                    serialPorts: serialPorts))
             }
+            return AnyView(EmptyView())
         case .network:
             if let econetSchema = econetSchema {
-                NetworkSectionView(
+                return AnyView(NetworkSectionView(
                     draft: $draft,
                     schema: econetSchema,
                     diagnostics: diagnostics,
                     manifestResolver: manifestResolver,
-                    serialPorts: serialPorts
-                )
+                    serialPorts: serialPorts))
             }
+            return AnyView(EmptyView())
         case nil:
-            Text("This machine has no configurable options yet.")
+            return AnyView(Text("This machine has no configurable options yet.")
                 .font(.caption)
                 .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity))
         }
     }
 }

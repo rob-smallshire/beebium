@@ -68,10 +68,14 @@ struct PeripheralsSectionView: View {
 
     // MARK: - Point group
 
-    @ViewBuilder
-    private func pointGroup(_ point: AttachmentPoint) -> some View {
+    // pointGroup and instanceView are mutually recursive (a provided point's
+    // group nests under its provider instance). A recursive @ViewBuilder with an
+    // opaque return type crashes the Release whole-module optimiser with no
+    // diagnostic (the bug ExtensionViewRenderer documents), so both return
+    // AnyView to break the recursion at a type boundary.
+    private func pointGroup(_ point: AttachmentPoint) -> AnyView {
         let instances = model.instances(onPoint: point.id, in: draft)
-        VStack(alignment: .leading, spacing: 6) {
+        return AnyView(VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(point.displayName ?? point.id)
                     .font(.headline)
@@ -91,7 +95,7 @@ struct PeripheralsSectionView: View {
                     instanceView(instance)
                 }
             }
-        }
+        })
     }
 
     private func occupancyLabel(_ point: AttachmentPoint) -> String {
@@ -118,9 +122,8 @@ struct PeripheralsSectionView: View {
 
     // MARK: - Instance
 
-    @ViewBuilder
-    private func instanceView(_ instance: ExtensionInstanceModel.Instance) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func instanceView(_ instance: ExtensionInstanceModel.Instance) -> AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(instance.name)
                     .font(.subheadline)
@@ -156,7 +159,7 @@ struct PeripheralsSectionView: View {
         }
         .padding(8)
         .background(Color(NSColor.textBackgroundColor).opacity(0.5))
-        .cornerRadius(6)
+        .cornerRadius(6))
     }
 
     // MARK: - Write-through
