@@ -4377,17 +4377,16 @@ public:
             release_date = *source->release_date;
         }
 
-        nlohmann::ordered_json preset;
-        preset["model"] = Memory::MACHINE_TYPE;
-        preset["name"] = preset_name;
-        if (!release_date.empty()) preset["release_date"] = release_date;
-        if (!preset_description.empty()) preset["description"] = preset_description;
-        if (auto exit_code = write_given_configuration(config, preset)) {
-            return *exit_code;
+        PresetDocumentHeader header{preset_name, preset_description, release_date,
+                                    source ? source->thumbnail_capture_delay_seconds
+                                           : std::nullopt};
+        std::string write_error;
+        auto document = preset_document(config, header, DocumentKeys::Given, write_error);
+        if (!document) {
+            std::cerr << "Error: " << write_error << "\n";
+            return ExitCode::USAGE;
         }
-        if (source && source->thumbnail_capture_delay_seconds) {
-            preset["thumbnail_capture_delay_seconds"] = *source->thumbnail_capture_delay_seconds;
-        }
+        const auto& preset = *document;
 
         // Determine output path
         std::filesystem::path target_filepath;
@@ -4428,140 +4427,6 @@ public:
         // Output the created preset ID (or path)
         std::cout << preset_id << "\n";
         return ExitCode::OK;
-    }
-private:
-    // Write the machine configuration `config` holds -- what parse_start_
-    // arguments built from the options and any --from preset -- into the
-    // preset document, recording only what was given: a setting left at its
-    // default, an extension parameter not given, a generated instance id are
-    // all left out. Returns an exit code if the configuration cannot be
-    // recorded.
-    static std::optional<int> write_given_configuration(const ServerConfig<MachineType>& config,
-                                                        nlohmann::ordered_json& preset) {
-        using Memory = typename MachineType::Memory;
-
-        if (!config.machine_name.empty()) {
-            preset["machine_name"] = config.machine_name;
-        }
-
-        if (config.raw_links >= 0) {
-            preset["startup"] = {{"links", config.raw_links}};
-        } else if (config.screen_mode_set || config.auto_boot_set) {
-            nlohmann::ordered_json startup = nlohmann::ordered_json::object();
-            if (config.screen_mode_set) startup["screen_mode"] = config.screen_mode;
-            if (config.auto_boot_set) startup["auto_boot"] = config.auto_boot;
-            preset["startup"] = std::move(startup);
-        }
-
-        if (config.speed_multiplier_override) {
-            const double speed = *config.speed_multiplier_override;
-            preset["speed"] = speed == 0.0 ? nlohmann::ordered_json("unlimited")
-                                           : nlohmann::ordered_json(speed);
-        }
-
-        if (!config.mos_filepath.empty()) {
-            preset["mos_image_uri"] = path_for_preset(config.mos_filepath);
-        }
-
-        if (!config.fdc_type.empty()) {
-            preset["storage"]["fdc_socket"]["id"] = config.fdc_type;
-        }
-        nlohmann::ordered_json drives = nlohmann::ordered_json::array();
-        for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
-            const auto& image = config.floppy_filepaths[drive];
-            if (image.empty()) continue;
-            drives.push_back({{"drive", drive},
-                              {"image_uri", normalize_image_uri(
-                                                image, std::filesystem::current_path())}});
-        }
-        if (!drives.empty()) {
-            preset["storage"]["floppy_drives"] = std::move(drives);
-        }
-
-        // Sideways slots, then --language-rom as the model's language slot.
-        nlohmann::ordered_json slots = nlohmann::ordered_json::array();
-        for (auto slot : config.sideways_configs) {
-            if (!config.language_rom_filepath.empty() &&
-                slot.slot == Memory::DEFAULT_LANGUAGE_SLOT) {
-                continue;
-            }
-            slot.image_filepath = path_for_preset(slot.image_filepath);
-            slots.push_back(sideways_slot_json(slot, /*every_key=*/false));
-        }
-        if (!config.language_rom_filepath.empty()) {
-            SidewaysConfig language{};
-            language.slot = Memory::DEFAULT_LANGUAGE_SLOT;
-            language.type = SidewaysSlotType::Rom;
-            language.image_filepath = path_for_preset(config.language_rom_filepath);
-            slots.push_back(sideways_slot_json(language, /*every_key=*/false));
-        }
-        if (!slots.empty()) {
-            preset["sideways_bank"]["slots"] = std::move(slots);
-        }
-
-        // Extensions: the given parameters only. An Econet transport goes in
-        // the econet section, which needs a station.
-        const typename ServerConfig<MachineType>::ExtensionInstance* transport = nullptr;
-        nlohmann::ordered_json extensions = nlohmann::ordered_json::array();
-        for (const auto& inst : config.extension_instances) {
-            const auto* manifest = config.extension_resolver.find_by_name(inst.name);
-            if (manifest && manifest->extension_kind == "econet-transport") {
-                if (transport) {
-                    std::cerr << "Error: at most one Econet transport may be given (already "
-                                 "have '" << transport->name << "')\n";
-                    return ExitCode::USAGE;
-                }
-                transport = &inst;
-                continue;
-            }
-            nlohmann::ordered_json entry{{"name", inst.name}};
-            auto given = given_config_json(manifest, inst);
-            if (!given.empty()) entry["config"] = std::move(given);
-            extensions.push_back(std::move(entry));
-        }
-        const bool has_station = config.station_number >= 1 || config.station_auto_range;
-        if (transport && !has_station) {
-            std::cerr << "Error: Econet transport '" << transport->name
-                      << "' requires --station <1-254> or --station auto\n";
-            return ExitCode::USAGE;
-        }
-        if (has_station) {
-            preset["econet"]["station"] = station_json(config);
-            if (transport) {
-                nlohmann::ordered_json t{{"name", transport->name}};
-                auto given = given_config_json(
-                    config.extension_resolver.find_by_name(transport->name), *transport);
-                if (!given.empty()) t["parameters"] = std::move(given);
-                preset["econet"]["transport"] = std::move(t);
-            }
-        }
-        if (!extensions.empty()) {
-            preset["extensions"] = std::move(extensions);
-        }
-        return std::nullopt;
-    }
-
-    // An instance's given parameters (explicit_keys), typed by its manifest,
-    // with a given relative file path made absolute (path_for_preset).
-    template<typename Instance>
-    static nlohmann::ordered_json given_config_json(const beebium::ExtensionManifest* manifest,
-                                                    const Instance& inst) {
-        std::map<std::string, std::string> config;
-        std::map<std::string, std::vector<std::string>> list_config;
-        for (const auto& [key, value] : inst.config) {
-            if (inst.explicit_keys.count(key) == 0) continue;
-            bool filepath = false;
-            if (manifest) {
-                for (const auto& p : manifest->parameters) {
-                    if (p.key == key && p.type == "filepath") filepath = true;
-                }
-            }
-            config[key] = filepath ? path_for_preset(value) : value;
-        }
-        for (const auto& [key, values] : inst.list_config) {
-            if (inst.explicit_keys.count(key) != 0) list_config[key] = values;
-        }
-        return extension_config_json(manifest, config, list_config, /*every_parameter=*/false);
     }
 };
 
@@ -4724,7 +4589,16 @@ private:
         check_roms_exist(config, preset, warning);
         check_floppies_exist(config, warning);
 
-        document = resolved_document(config, preset);
+        std::string write_error;
+        document = preset_document(
+            config,
+            PresetDocumentHeader{preset.name, preset.description, preset.release_date,
+                                 preset.thumbnail_capture_delay_seconds},
+            DocumentKeys::Every, write_error);
+        if (!document) {
+            error("/econet", write_error);
+            return ExitCode::CONFIG;
+        }
         return failed ? ExitCode::CONFIG : ExitCode::OK;
     }
 
@@ -4808,117 +4682,6 @@ private:
         }
     }
 
-    // The preset document for a resolved configuration: every key present.
-    static nlohmann::ordered_json resolved_document(const ServerConfig<MachineType>& config,
-                                                    const PresetConfig& preset) {
-        using Memory = typename MachineType::Memory;
-        auto or_null = [](const std::optional<std::string>& v) {
-            return v ? nlohmann::ordered_json(*v) : nlohmann::ordered_json(nullptr);
-        };
-
-        nlohmann::ordered_json doc;
-        doc["model"] = Memory::MACHINE_TYPE;
-        doc["name"] = preset.name;
-        doc["description"] = or_null(preset.description);
-        doc["release_date"] = or_null(preset.release_date);
-        doc["machine_name"] = config.machine_name.empty()
-                                  ? nlohmann::ordered_json(nullptr)
-                                  : nlohmann::ordered_json(config.machine_name);
-
-        const double speed = config.speed_multiplier_override.value_or(1.0);
-        doc["speed"] = speed == 0.0 ? nlohmann::ordered_json("unlimited")
-                                    : nlohmann::ordered_json(speed);
-
-        if (config.raw_links >= 0) {
-            doc["startup"] = {{"links", config.raw_links}};
-        } else {
-            // The machine's own links, where the config sets none: mode 7, and
-            // SHIFT-BREAK (not BREAK) boots.
-            doc["startup"] = {{"screen_mode", config.screen_mode_set ? config.screen_mode : 7},
-                              {"auto_boot", config.auto_boot_set && config.auto_boot}};
-        }
-        doc["mos_image_uri"] = config.mos_filepath;
-
-        nlohmann::ordered_json storage;
-        if constexpr (HasDiscControllerSocket<Memory>) {
-            storage["fdc_socket"] = {{"id", config.fdc_type.empty() ? "none" : config.fdc_type}};
-        } else {
-            storage["fdc_socket"] = nullptr;
-        }
-        storage["floppy_drives"] = nlohmann::ordered_json::array();
-        for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
-            const auto& uri = config.floppy_filepaths[drive];
-            storage["floppy_drives"].push_back(
-                {{"drive", drive},
-                 {"image_uri", uri.empty() ? nlohmann::ordered_json(nullptr)
-                                           : nlohmann::ordered_json(uri)}});
-        }
-        doc["storage"] = std::move(storage);
-
-        nlohmann::ordered_json slots = nlohmann::ordered_json::array();
-        for (const auto& [slot, image] : config.rom_slots) {
-            SidewaysConfig entry{};
-            entry.slot = slot;
-            if (image == EMPTY_SLOT_MARKER) {
-                entry.type = SidewaysSlotType::Empty;
-            } else if (image == RAM_SLOT_MARKER) {
-                entry.type = SidewaysSlotType::Ram;
-                for (const auto& c : config.sideways_configs) {
-                    if (c.slot == slot) entry = c;
-                }
-            } else {
-                entry.type = SidewaysSlotType::Rom;
-                entry.image_filepath = image;
-            }
-            slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
-        }
-        doc["sideways_bank"] = {{"slots", std::move(slots)}};
-
-        const auto* transport_inst = static_cast<const typename ServerConfig<MachineType>::
-                                                     ExtensionInstance*>(nullptr);
-        auto manifest_of = [&](const std::string& name) {
-            return config.extension_resolver.find_by_name(name);
-        };
-        const bool has_econet = config.station_number >= 1 || config.station_auto_range;
-        nlohmann::ordered_json extensions = nlohmann::ordered_json::array();
-        for (const auto& inst : config.extension_instances) {
-            const auto* manifest = manifest_of(inst.name);
-            if (has_econet && manifest && manifest->extension_kind == "econet-transport" &&
-                !transport_inst) {
-                transport_inst = &inst;
-                continue;
-            }
-            nlohmann::ordered_json ext{{"name", inst.name}};
-            ext["config"] = extension_config_json(manifest, inst.config, inst.list_config,
-                                                  /*every_parameter=*/true);
-            ext["attaches_to"] = manifest ? manifest->attaches_to : std::vector<std::string>{};
-            extensions.push_back(std::move(ext));
-        }
-
-        if (has_econet) {
-            nlohmann::ordered_json econet;
-            econet["station"] = station_json(config);
-            if (transport_inst) {
-                econet["transport"] = {
-                    {"name", transport_inst->name},
-                    {"parameters",
-                     extension_config_json(manifest_of(transport_inst->name),
-                                           transport_inst->config, transport_inst->list_config,
-                                           /*every_parameter=*/true)}};
-            } else {
-                econet["transport"] = nullptr;
-            }
-            doc["econet"] = std::move(econet);
-        } else {
-            doc["econet"] = nullptr;
-        }
-        doc["extensions"] = std::move(extensions);
-        doc["thumbnail_capture_delay_seconds"] =
-            preset.thumbnail_capture_delay_seconds
-                ? nlohmann::ordered_json(*preset.thumbnail_capture_delay_seconds)
-                : nlohmann::ordered_json(nullptr);
-        return doc;
-    }
 };
 
 // ListSerialPorts subcommand - the host's serial ports, for a configuration

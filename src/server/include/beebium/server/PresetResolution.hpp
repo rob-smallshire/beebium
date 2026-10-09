@@ -783,4 +783,229 @@ void apply_rom_defaults(ServerConfig<MachineType>& config) {
     }
 }
 
+// Which keys preset_document writes.
+enum class DocumentKeys {
+    // Only what was given: a setting left at its default, an extension
+    // parameter not given, a generated instance id are left out, so the
+    // preset keeps following the defaults (create-preset).
+    Given,
+    // Every key, defaults filled in, null where there is no value (the
+    // resolved document resolve-preset prints).
+    Every,
+};
+
+// What a preset says about itself rather than the machine.
+struct PresetDocumentHeader {
+    std::string name;
+    std::optional<std::string> description;
+    std::optional<std::string> release_date;
+    std::optional<double> thumbnail_capture_delay_seconds;
+};
+
+// An extension instance's config for preset_document: with Given, only the
+// parameters in its explicit_keys, a given relative file path made absolute
+// (path_for_preset); with Every, every manifest parameter.
+template<typename Instance>
+nlohmann::ordered_json document_config_json(const beebium::ExtensionManifest* manifest,
+                                            const Instance& inst, DocumentKeys keys) {
+    if (keys == DocumentKeys::Every) {
+        return extension_config_json(manifest, inst.config, inst.list_config,
+                                     /*every_parameter=*/true);
+    }
+    std::map<std::string, std::string> config;
+    std::map<std::string, std::vector<std::string>> list_config;
+    for (const auto& [key, value] : inst.config) {
+        if (inst.explicit_keys.count(key) == 0) continue;
+        bool filepath = false;
+        if (manifest) {
+            for (const auto& p : manifest->parameters) {
+                if (p.key == key && p.type == "filepath") filepath = true;
+            }
+        }
+        config[key] = filepath ? path_for_preset(value) : value;
+    }
+    for (const auto& [key, values] : inst.list_config) {
+        if (inst.explicit_keys.count(key) != 0) list_config[key] = values;
+    }
+    return extension_config_json(manifest, config, list_config, /*every_parameter=*/false);
+}
+
+// The preset document describing the machine `config` holds, in the one key
+// order every preset is written in. The only writer of preset documents:
+// create-preset writes with Given, resolve-preset with Every, so a key added
+// here is added to both. For Every, `config` must have had apply_rom_defaults,
+// whose default ROMs become explicit slots. Returns nullopt, with `error` set,
+// when the configuration cannot be written as a preset (an Econet transport
+// with no station, or two transports).
+template<typename MachineType>
+std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<MachineType>& config,
+                                                      const PresetDocumentHeader& header,
+                                                      DocumentKeys keys, std::string& error) {
+    using Memory = typename MachineType::Memory;
+    using ojson = nlohmann::ordered_json;
+    const bool every = keys == DocumentKeys::Every;
+
+    ojson doc;
+    doc["model"] = Memory::MACHINE_TYPE;
+    doc["name"] = header.name;
+    auto optional_string = [&](const char* key, const std::optional<std::string>& value) {
+        if (value && !value->empty()) {
+            doc[key] = *value;
+        } else if (every) {
+            doc[key] = nullptr;
+        }
+    };
+    optional_string("release_date", header.release_date);
+    optional_string("description", header.description);
+    optional_string("machine_name", config.machine_name.empty()
+                                        ? std::nullopt
+                                        : std::optional<std::string>(config.machine_name));
+
+    // The startup links: one form or the other. Every fills in the machine's
+    // own (mode 7, SHIFT-BREAK boots) where the config sets none.
+    if (config.raw_links >= 0) {
+        doc["startup"] = {{"links", config.raw_links}};
+    } else if (every) {
+        doc["startup"] = {{"screen_mode", config.screen_mode_set ? config.screen_mode : 7},
+                          {"auto_boot", config.auto_boot_set && config.auto_boot}};
+    } else if (config.screen_mode_set || config.auto_boot_set) {
+        ojson startup = ojson::object();
+        if (config.screen_mode_set) startup["screen_mode"] = config.screen_mode;
+        if (config.auto_boot_set) startup["auto_boot"] = config.auto_boot;
+        doc["startup"] = std::move(startup);
+    }
+
+    if (config.speed_multiplier_override || every) {
+        const double speed = config.speed_multiplier_override.value_or(1.0);
+        doc["speed"] = speed == 0.0 ? ojson("unlimited") : ojson(speed);
+    }
+
+    if (!config.mos_filepath.empty()) {
+        doc["mos_image_uri"] = path_for_preset(config.mos_filepath);
+    }
+
+    // Storage: the socket's controller and the floppy drives.
+    ojson storage = ojson::object();
+    if constexpr (HasDiscControllerSocket<Memory>) {
+        if (!config.fdc_type.empty()) {
+            storage["fdc_socket"] = {{"id", config.fdc_type}};
+        } else if (every) {
+            storage["fdc_socket"] = {{"id", "none"}};
+        }
+    } else {
+        if (!config.fdc_type.empty() && !every) {
+            storage["fdc_socket"] = {{"id", config.fdc_type}};
+        } else if (every) {
+            storage["fdc_socket"] = nullptr;
+        }
+    }
+    ojson drives = ojson::array();
+    for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
+        const auto& image = config.floppy_filepaths[drive];
+        if (image.empty() && !every) continue;
+        drives.push_back(
+            {{"drive", drive},
+             {"image_uri", image.empty() ? ojson(nullptr)
+                                         : ojson(normalize_image_uri(
+                                               image, std::filesystem::current_path()))}});
+    }
+    if (!drives.empty()) storage["floppy_drives"] = std::move(drives);
+    if (!storage.empty()) doc["storage"] = std::move(storage);
+
+    // Sideways slots. Given: the slots given, then --language-rom as the
+    // model's language slot. Every: every loaded slot, defaults included, in
+    // slot order.
+    ojson slots = ojson::array();
+    if (every) {
+        for (const auto& [slot, image] : config.rom_slots) {
+            SidewaysConfig entry{};
+            entry.slot = slot;
+            if (image == EMPTY_SLOT_MARKER) {
+                entry.type = SidewaysSlotType::Empty;
+            } else if (image == RAM_SLOT_MARKER) {
+                entry.type = SidewaysSlotType::Ram;
+                for (const auto& c : config.sideways_configs) {
+                    if (c.slot == slot) entry = c;
+                }
+            } else {
+                entry.type = SidewaysSlotType::Rom;
+                entry.image_filepath = image;
+            }
+            slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
+        }
+    } else {
+        for (auto slot : config.sideways_configs) {
+            if (!config.language_rom_filepath.empty() &&
+                slot.slot == Memory::DEFAULT_LANGUAGE_SLOT) {
+                continue;
+            }
+            slot.image_filepath = path_for_preset(slot.image_filepath);
+            slots.push_back(sideways_slot_json(slot, /*every_key=*/false));
+        }
+        if (!config.language_rom_filepath.empty()) {
+            SidewaysConfig language{};
+            language.slot = Memory::DEFAULT_LANGUAGE_SLOT;
+            language.type = SidewaysSlotType::Rom;
+            language.image_filepath = path_for_preset(config.language_rom_filepath);
+            slots.push_back(sideways_slot_json(language, /*every_key=*/false));
+        }
+    }
+    if (!slots.empty() || every) doc["sideways_bank"] = {{"slots", std::move(slots)}};
+
+    // Econet and extensions. An Econet transport goes in the econet section,
+    // which needs a station; with none (only possible through extensions[] in
+    // a preset), Every writes it among the extensions.
+    const bool has_station = config.station_number >= 1 || config.station_auto_range;
+    const typename ServerConfig<MachineType>::ExtensionInstance* transport = nullptr;
+    ojson extensions = ojson::array();
+    for (const auto& inst : config.extension_instances) {
+        const auto* manifest = config.extension_resolver.find_by_name(inst.name);
+        const bool is_transport = manifest && manifest->extension_kind == "econet-transport";
+        if (is_transport && (has_station || !every)) {
+            if (transport) {
+                error = "at most one Econet transport may be given (already have '" +
+                        transport->name + "')";
+                return std::nullopt;
+            }
+            transport = &inst;
+            continue;
+        }
+        ojson entry{{"name", inst.name}};
+        auto ext_config = document_config_json(manifest, inst, keys);
+        if (!ext_config.empty() || every) entry["config"] = std::move(ext_config);
+        if (every) {
+            entry["attaches_to"] = manifest ? manifest->attaches_to : std::vector<std::string>{};
+        }
+        extensions.push_back(std::move(entry));
+    }
+    if (transport && !has_station) {
+        error = "Econet transport '" + transport->name +
+                "' requires --station <1-254> or --station auto";
+        return std::nullopt;
+    }
+    if (has_station) {
+        ojson econet{{"station", station_json(config)}};
+        if (transport) {
+            ojson t{{"name", transport->name}};
+            auto parameters = document_config_json(
+                config.extension_resolver.find_by_name(transport->name), *transport, keys);
+            if (!parameters.empty() || every) t["parameters"] = std::move(parameters);
+            econet["transport"] = std::move(t);
+        } else if (every) {
+            econet["transport"] = nullptr;
+        }
+        doc["econet"] = std::move(econet);
+    } else if (every) {
+        doc["econet"] = nullptr;
+    }
+    if (!extensions.empty() || every) doc["extensions"] = std::move(extensions);
+
+    if (header.thumbnail_capture_delay_seconds) {
+        doc["thumbnail_capture_delay_seconds"] = *header.thumbnail_capture_delay_seconds;
+    } else if (every) {
+        doc["thumbnail_capture_delay_seconds"] = nullptr;
+    }
+    return doc;
+}
+
 } // namespace beebium::server

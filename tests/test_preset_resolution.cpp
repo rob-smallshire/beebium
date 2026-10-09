@@ -168,3 +168,86 @@ TEST_CASE("the preset JSON helpers", "[preset-resolution]") {
     CHECK(extension_config_json(&serial, {{"baud", "9600"}}, {}, false) ==
           nlohmann::ordered_json{{"baud", 9600}});
 }
+
+// ---------------------------------------------------------------------------
+// preset_document: the one writer, in either mode
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::vector<std::string> keys_of(const nlohmann::ordered_json& doc) {
+    std::vector<std::string> keys;
+    for (const auto& item : doc.items()) keys.push_back(item.key());
+    return keys;
+}
+
+// A configuration that sets something in every section.
+Config populated_config() {
+    auto config = config_with_manifests();
+    config.machine_name = "Station {econet-station}";
+    config.screen_mode = 3;
+    config.screen_mode_set = true;
+    config.speed_multiplier_override = 2.0;
+    config.mos_filepath = "my-mos.rom";
+    config.fdc_type = "acorn-1770";
+    config.floppy_filepaths[0] = "file:///discs/game.ssd";
+    config.sideways_configs.push_back({14, SidewaysSlotType::Rom, "dfs.rom", false});
+    config.rom_slots[14] = "dfs.rom";
+    config.station_number = 80;
+    Config::ExtensionInstance net{"net", {{"port", "0"}}, {}, false, {"port"}};
+    Config::ExtensionInstance serial{"serial", {{"baud", "9600"}}, {}, false, {"baud"}};
+    config.extension_instances = {net, serial};
+    return config;
+}
+
+}  // namespace
+
+TEST_CASE("preset_document writes every key in the one order, Given a subsequence of Every",
+          "[preset-resolution][document]") {
+    auto config = populated_config();
+    PresetDocumentHeader header{"Test", "A test", "1985", 1.5};
+    std::string error;
+
+    auto every = preset_document(config, header, DocumentKeys::Every, error);
+    auto given = preset_document(config, header, DocumentKeys::Given, error);
+    REQUIRE(every.has_value());
+    REQUIRE(given.has_value());
+
+    const std::vector<std::string> all_keys{
+        "model", "name", "release_date", "description", "machine_name", "startup", "speed",
+        "mos_image_uri", "storage", "sideways_bank", "econet", "extensions",
+        "thumbnail_capture_delay_seconds"};
+    CHECK(keys_of(*every) == all_keys);
+    // A fully populated configuration gives every key in both modes.
+    CHECK(keys_of(*given) == all_keys);
+}
+
+TEST_CASE("preset_document with Given leaves defaults out; with Every fills them in",
+          "[preset-resolution][document]") {
+    Config config = config_with_manifests();
+    apply_rom_defaults(config);
+    config.mos_filepath.clear();  // as if no --mos was given
+    PresetDocumentHeader header{"Bare"};
+    std::string error;
+
+    auto given = preset_document(config, header, DocumentKeys::Given, error);
+    REQUIRE(given.has_value());
+    CHECK(keys_of(*given) == std::vector<std::string>{"model", "name"});
+
+    auto every = preset_document(config, header, DocumentKeys::Every, error);
+    REQUIRE(every.has_value());
+    CHECK(every->at("speed") == 1.0);
+    CHECK(every->at("startup") ==
+          nlohmann::ordered_json{{"screen_mode", 7}, {"auto_boot", false}});
+    CHECK(every->at("econet").is_null());
+    CHECK(every->at("storage").at("floppy_drives").size() == 2);
+}
+
+TEST_CASE("preset_document refuses a transport with no station", "[preset-resolution][document]") {
+    auto config = config_with_manifests();
+    config.extension_instances.push_back({"net", {}, {}, false, {}});
+    std::string error;
+    CHECK_FALSE(preset_document(config, PresetDocumentHeader{"X"}, DocumentKeys::Given, error)
+                    .has_value());
+    CHECK_THAT(error, ContainsSubstring("requires --station"));
+}
