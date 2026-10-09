@@ -97,29 +97,27 @@ final class MachineDraftTests: XCTestCase {
     }
 
     func testRoundTripsStoragePreset() throws {
-        // FDC mode, floppy drives (one mounted, one explicitly null), cassette.
+        // FDC socket, floppy drives (one mounted, one explicitly null).
         let json = """
         {
           "name": "Storage Test Preset",
           "model": "model-b",
           "storage": {
-            "fdc_socket": { "id": "acorn-1770", "mode": "1770" },
+            "fdc_socket": { "id": "acorn-1770" },
             "floppy_drives": [
               { "drive": 0, "image_uri": "file:///tmp/test.ssd" },
               { "drive": 1, "image_uri": null }
-            ],
-            "cassette": { "image_uri": "file:///tmp/test.uef" }
+            ]
           }
         }
         """
         let draft = try assertRoundTrips(json, "storage")
 
-        XCTAssertEqual(draft.storage?.fdcSocket?.mode, "1770")
+        XCTAssertEqual(draft.storage?.fdcSocket?.id, "acorn-1770")
         XCTAssertEqual(draft.storage?.floppyDrives?.count, 2)
         XCTAssertEqual(draft.storage?.floppyDrives?[0].imageUri, "file:///tmp/test.ssd")
         // An explicit null and an absent image_uri both mean "no disc".
         XCTAssertNil(draft.storage?.floppyDrives?[1].imageUri)
-        XCTAssertEqual(draft.storage?.cassette?.imageUri, "file:///tmp/test.uef")
     }
 
     func testRoundTripsSidewaysKinds() throws {
