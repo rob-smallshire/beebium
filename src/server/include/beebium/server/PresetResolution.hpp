@@ -328,8 +328,8 @@ void merge_preset_startup(ServerConfig<MachineType>& config) {
 // Runs after CLI parsing, when the resolver is populated.
 // Returns one error per instance that fails, located by its preset entry.
 template<typename MachineType>
-std::vector<PresetDiagnostic> normalise_preset_extensions(ServerConfig<MachineType>& config) {
-    std::vector<PresetDiagnostic> errors;
+std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& config) {
+    std::vector<Diagnostic> errors;
     for (auto& inst : config.extension_instances) {
         if (!inst.from_preset) continue;
         const auto* manifest = config.extension_resolver.find_by_name(inst.name);
@@ -459,7 +459,7 @@ std::vector<std::string> machine_attachment_points() {
 // parameter is unique on its attachment. An instance from the preset is
 // located by its entry (and parameter); one from the command line by its flag.
 template<typename MachineType>
-std::vector<PresetDiagnostic> check_extension_attachments(
+std::vector<Diagnostic> check_extension_attachments(
         const ServerConfig<MachineType>& config) {
     std::vector<const beebium::ExtensionManifest*> known;
     for (const auto& e : config.extension_resolver.entries()) {
@@ -473,7 +473,7 @@ std::vector<PresetDiagnostic> check_extension_attachments(
         instances.push_back(&inst);
         requests.push_back({inst.name, inst.config});
     }
-    std::vector<PresetDiagnostic> errors;
+    std::vector<Diagnostic> errors;
     for (const auto& problem : beebium::check_attachments(
              requests, known, machine_attachment_points<typename MachineType::Memory>())) {
         const auto& inst = *instances[problem.instance];
@@ -613,7 +613,7 @@ inline std::string preset_not_found_message(const std::string& preset_arg) {
 // steps after normalisation run only if it succeeds. start and resolve-preset
 // both build their configuration through this.
 template<typename MachineType>
-std::vector<PresetDiagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
+std::vector<Diagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
     merge_preset_sideways_configs(config);
     merge_preset_startup(config);
     if (auto errors = normalise_preset_extensions(config); !errors.empty()) {

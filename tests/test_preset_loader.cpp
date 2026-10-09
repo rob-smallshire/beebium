@@ -165,22 +165,22 @@ TEST_CASE("load_preset: missing file returns error", "[preset][load_preset]") {
     auto result = load_preset(presets_dirpath() / "nonexistent.preset.beebium");
 
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("Cannot open") != std::string::npos);
+    REQUIRE(result.error()->message.find("Cannot open") != std::string::npos);
 }
 
 TEST_CASE("load_preset: invalid JSON returns error", "[preset][load_preset]") {
     auto result = load_preset(presets_dirpath() / "invalid.json");
 
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("Invalid JSON") != std::string::npos);
-    REQUIRE(result.error.find("parse error") != std::string::npos);
+    REQUIRE(result.error()->message.find("Invalid JSON") != std::string::npos);
+    REQUIRE(result.error()->message.find("parse error") != std::string::npos);
 }
 
 TEST_CASE("load_preset: non-object JSON returns error", "[preset][load_preset]") {
     auto result = load_preset(presets_dirpath() / "not_object.json");
 
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("must contain a JSON object") != std::string::npos);
+    REQUIRE(result.error()->message.find("must contain a JSON object") != std::string::npos);
 }
 
 // ============================================================================
@@ -188,13 +188,17 @@ TEST_CASE("load_preset: non-object JSON returns error", "[preset][load_preset]")
 // ============================================================================
 
 TEST_CASE("PresetLoadResult: success() matches config presence", "[preset][PresetLoadResult]") {
-    PresetLoadResult success_result{PresetConfig{"Test", std::nullopt, std::nullopt, std::nullopt, std::nullopt}, ""};
+    PresetLoadResult success_result{PresetConfig{"Test"}, {}};
     REQUIRE(success_result.success());
     REQUIRE(static_cast<bool>(success_result));
+    CHECK(success_result.error() == nullptr);
 
-    PresetLoadResult error_result{std::nullopt, "Error message"};
+    PresetLoadResult error_result{std::nullopt, {Diagnostic{"/speed", "Error message"}}};
     REQUIRE_FALSE(error_result.success());
     REQUIRE_FALSE(static_cast<bool>(error_result));
+    REQUIRE(error_result.error() != nullptr);
+    CHECK(error_result.error()->path == "/speed");
+    CHECK(error_result.warnings().empty());
 }
 
 TEST_CASE("load_preset: a preset named by a relative path resolves floppies from its directory",
@@ -491,8 +495,8 @@ TEST_CASE("load_preset: legacy piconet object is rejected with migration hint",
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    CHECK(result.error.find("piconet") != std::string::npos);
-    CHECK(result.error.find("transport") != std::string::npos);
+    CHECK(result.error()->message.find("piconet") != std::string::npos);
+    CHECK(result.error()->message.find("transport") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -511,8 +515,8 @@ TEST_CASE("load_preset: legacy aun_port is rejected with migration hint",
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    CHECK(result.error.find("aun_port") != std::string::npos);
-    CHECK(result.error.find("transport") != std::string::npos);
+    CHECK(result.error()->message.find("aun_port") != std::string::npos);
+    CHECK(result.error()->message.find("transport") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -567,7 +571,7 @@ TEST_CASE("load_preset: econet station 0 is invalid", "[preset][load_preset][eco
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("between 1 and 254") != std::string::npos);
+    REQUIRE(result.error()->message.find("between 1 and 254") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -582,7 +586,7 @@ TEST_CASE("load_preset: econet station 255 is invalid", "[preset][load_preset][e
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("between 1 and 254") != std::string::npos);
+    REQUIRE(result.error()->message.find("between 1 and 254") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -597,7 +601,7 @@ TEST_CASE("load_preset: econet station 300 is invalid", "[preset][load_preset][e
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("between 1 and 254") != std::string::npos);
+    REQUIRE(result.error()->message.find("between 1 and 254") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -612,7 +616,7 @@ TEST_CASE("load_preset: econet missing station", "[preset][load_preset][econet]"
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("requires a 'station' field") != std::string::npos);
+    REQUIRE(result.error()->message.find("requires a 'station' field") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -710,7 +714,7 @@ TEST_CASE("load_preset: sideways rom without image_uri is invalid", "[preset][lo
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("requires an 'image_uri'") != std::string::npos);
+    REQUIRE(result.error()->message.find("requires an 'image_uri'") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -725,7 +729,7 @@ TEST_CASE("load_preset: sideways empty with image_uri is invalid", "[preset][loa
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("cannot have an 'image_uri'") != std::string::npos);
+    REQUIRE(result.error()->message.find("cannot have an 'image_uri'") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -740,7 +744,7 @@ TEST_CASE("load_preset: sideways invalid type is rejected", "[preset][load_prese
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("expected one of: rom, ram, empty") != std::string::npos);
+    REQUIRE(result.error()->message.find("expected one of: rom, ram, empty") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -755,7 +759,7 @@ TEST_CASE("load_preset: sideways slot out of range is rejected", "[preset][load_
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("between 0 and 15") != std::string::npos);
+    REQUIRE(result.error()->message.find("between 0 and 15") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -770,7 +774,7 @@ TEST_CASE("load_preset: sideways slot entry missing slot is rejected", "[preset]
 
     auto result = load_preset(temp_filepath);
     REQUIRE_FALSE(result.success());
-    REQUIRE(result.error.find("requires an integer 'slot'") != std::string::npos);
+    REQUIRE(result.error()->message.find("requires an integer 'slot'") != std::string::npos);
 
     std::filesystem::remove(temp_filepath);
 }
@@ -831,7 +835,7 @@ TEST_CASE("load_preset: startup links cannot be combined with screen_mode or aut
     beebium::test::ScopedTempDir dir("beebium_preset_loader_");
     auto result = load_preset_text(dir, R"({"startup": {"links": 135, "auto_boot": false}})");
     REQUIRE_FALSE(result.success());
-    CHECK(result.error.find("links") != std::string::npos);
+    CHECK(result.error()->message.find("links") != std::string::npos);
 }
 
 TEST_CASE("load_preset: startup values out of range are rejected",
@@ -848,8 +852,8 @@ TEST_CASE("load_preset: a top-level auto_boot is read as startup.auto_boot, with
     auto result = load_preset_text(dir, R"({"auto_boot": true})");
     REQUIRE(result.success());
     CHECK(result.config->startup->auto_boot == true);
-    REQUIRE(result.warnings.size() == 1);
-    CHECK(result.warnings[0].path == "/auto_boot");
+    REQUIRE(result.warnings().size() == 1);
+    CHECK(result.warnings()[0].path == "/auto_boot");
 }
 
 TEST_CASE("load_preset: mos_image_uri is kept verbatim", "[preset][load_preset][settings]") {
@@ -863,8 +867,8 @@ TEST_CASE("load_preset: unknown top-level keys are warned about", "[preset][load
     beebium::test::ScopedTempDir dir("beebium_preset_loader_");
     auto result = load_preset_text(dir, R"({"name": "x", "colour": "beige"})");
     REQUIRE(result.success());
-    REQUIRE(result.warnings.size() == 1);
-    CHECK(result.warnings[0].path == "/colour");
+    REQUIRE(result.warnings().size() == 1);
+    CHECK(result.warnings()[0].path == "/colour");
 }
 
 TEST_CASE("load_preset: a ROM path with a directory resolves from the preset",

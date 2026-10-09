@@ -747,7 +747,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             }
             auto result = load_preset(*config.preset_filepath);
             if (!result) {
-                std::cerr << "Error: " << result.error << "\n";
+                std::cerr << "Error: " << result.error()->message << "\n";
                 return result.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
             }
 
@@ -4490,12 +4490,13 @@ public:
             return ExitCode::USAGE;
         }
 
-        std::vector<std::pair<std::string, PresetDiagnostic>> diagnostics;
+        std::vector<Diagnostic> diagnostics;
         auto error = [&](std::string path, std::string message) {
-            diagnostics.push_back({"error", {std::move(path), std::move(message)}});
+            diagnostics.push_back({std::move(path), std::move(message)});
         };
         auto warning = [&](std::string path, std::string message) {
-            diagnostics.push_back({"warning", {std::move(path), std::move(message)}});
+            diagnostics.push_back(
+                {std::move(path), std::move(message), Diagnostic::Severity::Warning});
         };
 
         std::optional<nlohmann::ordered_json> document;
@@ -4505,17 +4506,18 @@ public:
             nlohmann::ordered_json out;
             out["preset"] = document ? *document : nlohmann::ordered_json(nullptr);
             out["diagnostics"] = nlohmann::ordered_json::array();
-            for (const auto& [severity, d] : diagnostics) {
-                out["diagnostics"].push_back(
-                    {{"severity", severity}, {"path", d.path}, {"message", d.message}});
+            for (const auto& d : diagnostics) {
+                out["diagnostics"].push_back({{"severity", std::string(d.severity_name())},
+                                              {"path", d.path},
+                                              {"message", d.message}});
             }
             std::cout << out.dump(2) << "\n";
         } else {
             if (document) {
                 std::cout << document->dump(2) << "\n";
             }
-            for (const auto& [severity, d] : diagnostics) {
-                std::cerr << (severity == "error" ? "Error: " : "Warning: ");
+            for (const auto& d : diagnostics) {
+                std::cerr << (d.is_error() ? "Error: " : "Warning: ");
                 if (!d.path.empty()) std::cerr << d.path << ": ";
                 std::cerr << d.message << "\n";
             }
@@ -4538,11 +4540,11 @@ private:
         }
         const std::filesystem::path preset_filepath = *located;
         auto loaded = load_preset(preset_filepath);
-        for (const auto& w : loaded.warnings) {
+        for (const auto& w : loaded.warnings()) {
             warning(w.path, w.message);
         }
         if (!loaded) {
-            error(loaded.error_path, loaded.error);
+            error(loaded.error()->path, loaded.error()->message);
             return loaded.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
         }
         const PresetConfig& preset = *loaded.config;

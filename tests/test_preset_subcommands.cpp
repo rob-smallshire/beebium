@@ -460,7 +460,7 @@ TEST_CASE("create-preset: --auto-boot round-trips through the loader",
 
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    CHECK(loaded.warnings.empty());  // written as startup.auto_boot
+    CHECK(loaded.warnings().empty());  // written as startup.auto_boot
     REQUIRE(loaded.config->startup.has_value());
     CHECK(loaded.config->startup->auto_boot == true);
 }
@@ -491,7 +491,7 @@ TEST_CASE("create-preset: machine settings round-trip through the loader",
 
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    CHECK(loaded.warnings.empty());
+    CHECK(loaded.warnings().empty());
     CHECK(loaded.config->speed == 2.0);
     REQUIRE(loaded.config->startup.has_value());
     CHECK(loaded.config->startup->screen_mode == 3);
@@ -904,7 +904,7 @@ TEST_CASE("create-preset --from: --sideways replaces only the slots it names",
 
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    CHECK(loaded.warnings.empty());  // the source's top-level auto_boot moved into startup
+    CHECK(loaded.warnings().empty());  // the source's top-level auto_boot moved into startup
     CHECK(loaded.config->startup->auto_boot == true);
     REQUIRE(loaded.config->sideways.size() == 2);
     auto slot = [&](int n) {
@@ -2050,4 +2050,116 @@ TEST_CASE("create-preset --from: a flag overrides the source preset as start wou
     CHECK(preset.at("storage").at("floppy_drives")[0].at("image_uri") ==
           "file://" + (std::filesystem::absolute(user_dir.path()) / "discs" / "game.ssd")
                           .lexically_normal().generic_string());
+}
+
+// ============================================================================
+// resolve-preset's JSON output, pinned byte for byte: front-ends parse it
+// ============================================================================
+
+TEST_CASE("resolve-preset --json output is stable, diagnostics included",
+          "[integration][preset][resolve-preset][pinned]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "pinned.preset.beebium";
+    std::ofstream(preset_filepath)
+        << R"({"model": "model-b", "name": "Pinned", "colour": "beige", "auto_boot": true,
+ "extensions": [{"name": "host-serial", "config": {"baud": "fast"}}]})";
+
+    auto result = run_command(EXECUTABLE + " resolve-preset \"" + preset_filepath.string() +
+                              "\" --json");
+
+    CHECK(result.exit_code == 78);
+    CHECK(result.stdout_output == R"PINNED({
+  "preset": {
+    "model": "model-b",
+    "name": "Pinned",
+    "release_date": null,
+    "description": null,
+    "machine_name": null,
+    "startup": {
+      "screen_mode": 7,
+      "auto_boot": true
+    },
+    "speed": 1.0,
+    "mos_image_uri": "acorn-mos_1_20.rom",
+    "storage": {
+      "fdc_socket": {
+        "id": "none"
+      },
+      "floppy_drives": [
+        {
+          "drive": 0,
+          "image_uri": null
+        },
+        {
+          "drive": 1,
+          "image_uri": null
+        }
+      ]
+    },
+    "sideways_bank": {
+      "slots": [
+        {
+          "slot": 15,
+          "type": "rom",
+          "image_uri": "bbc-basic_2.rom"
+        }
+      ]
+    },
+    "econet": null,
+    "extensions": [
+      {
+        "name": "host-serial",
+        "config": {
+          "baud": "fast",
+          "mode": "",
+          "path": "",
+          "tx_buffer": ""
+        },
+        "attaches_to": [
+          "serial-port"
+        ]
+      }
+    ],
+    "thumbnail_capture_delay_seconds": null
+  },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "path": "/colour",
+      "message": "unknown key 'colour' is ignored"
+    },
+    {
+      "severity": "warning",
+      "path": "/auto_boot",
+      "message": "a top-level 'auto_boot' is read as 'startup.auto_boot'; write it there instead"
+    },
+    {
+      "severity": "error",
+      "path": "/extensions/0",
+      "message": "preset extension 'host-serial': parameter 'baud' must be an integer, got 'fast'"
+    }
+  ]
+}
+)PINNED");
+}
+
+TEST_CASE("resolve-preset --json output for an unloadable preset is stable",
+          "[integration][preset][resolve-preset][pinned]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "bad.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"econet": {"station": 300}})";
+
+    auto result = run_command(EXECUTABLE + " resolve-preset \"" + preset_filepath.string() +
+                              "\" --json");
+
+    CHECK(result.exit_code == 78);
+    nlohmann::ordered_json expected{
+        {"preset", nullptr},
+        {"diagnostics",
+         nlohmann::ordered_json::array(
+             {{{"severity", "error"},
+               {"path", "/econet/station"},
+               {"message", "Econet station number must be between 1 and 254, got 300: " +
+                               preset_filepath.string()}}})}};
+    CHECK(result.stdout_output == expected.dump(2) + "\n");
 }

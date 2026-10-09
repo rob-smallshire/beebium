@@ -91,27 +91,48 @@ struct PresetConfig {
 };
 
 // A remark about one place in a preset file, located by a JSON pointer
-// (e.g. "/startup/links").
-struct PresetDiagnostic {
+// (e.g. "/startup/links"; "" for the file as a whole): an error, which stops
+// the preset being used, or a warning, which does not. The one shape every
+// stage of loading and resolving a preset reports in, and the one
+// resolve-preset prints.
+struct Diagnostic {
+    enum class Severity { Error, Warning };
+
     std::string path;
     std::string message;
+    Severity severity = Severity::Error;
+
+    bool is_error() const { return severity == Severity::Error; }
+    std::string_view severity_name() const { return is_error() ? "error" : "warning"; }
 };
 
-// Result of loading a preset file
+// Result of loading a preset file: the configuration, or the error that
+// stopped it, and any warnings (unknown keys, keys in a form that is read but
+// no longer written).
 struct PresetLoadResult {
     std::optional<PresetConfig> config;
-    std::string error;
-    // Things that do not stop the preset loading: unknown keys, keys in a
-    // form that is read but no longer written.
-    std::vector<PresetDiagnostic> warnings{};
-    // Where the error is: a JSON pointer into the preset ("" for the file as
-    // a whole), and whether the file could not be read as a JSON object at
-    // all (as against holding something invalid).
-    std::string error_path{};
+    std::vector<Diagnostic> diagnostics{};
+    // The file could not be read as a JSON object at all (as against holding
+    // something invalid).
     bool unreadable = false;
 
     bool success() const { return config.has_value(); }
     explicit operator bool() const { return success(); }
+
+    // The error that stopped the load, or nullptr.
+    const Diagnostic* error() const {
+        for (const auto& d : diagnostics) {
+            if (d.is_error()) return &d;
+        }
+        return nullptr;
+    }
+    std::vector<Diagnostic> warnings() const {
+        std::vector<Diagnostic> result;
+        for (const auto& d : diagnostics) {
+            if (!d.is_error()) result.push_back(d);
+        }
+        return result;
+    }
 };
 
 // The top-level keys a preset file may carry. Any other key is ignored with
@@ -127,7 +148,7 @@ inline const std::vector<std::string>& preset_top_level_keys() {
 }
 
 // Parse the startup section. Returns the config, or nullopt with an error.
-inline std::pair<std::optional<PresetStartupConfig>, PresetDiagnostic> parse_startup_section(
+inline std::pair<std::optional<PresetStartupConfig>, Diagnostic> parse_startup_section(
     const nlohmann::json& startup_json) {
     PresetStartupConfig startup;
     auto int_in_range = [&](const char* key, int lo, int hi,
@@ -275,7 +296,7 @@ inline std::optional<PresetStorageConfig> parse_storage_section(
 
 // Parse the econet section from JSON.
 // Returns the parsed config on success, or nullopt with error message on failure.
-inline std::pair<std::optional<PresetEconetConfig>, PresetDiagnostic> parse_econet_section(
+inline std::pair<std::optional<PresetEconetConfig>, Diagnostic> parse_econet_section(
     const nlohmann::json& econet_json) {
 
     PresetEconetConfig econet;
@@ -385,7 +406,7 @@ inline std::pair<std::optional<PresetEconetConfig>, PresetDiagnostic> parse_econ
 // the 0-15 slot range, mirroring parse_sideways_arg.
 //
 // Returns the parsed slots on success, or nullopt with an error message.
-inline std::pair<std::optional<std::vector<SidewaysConfig>>, PresetDiagnostic>
+inline std::pair<std::optional<std::vector<SidewaysConfig>>, Diagnostic>
 parse_sideways_section(const nlohmann::json& sideways_json) {
     std::vector<SidewaysConfig> slots;
 
@@ -474,10 +495,15 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
 //       std::cerr << "Error: " << result.error << "\n";
 //   }
 inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
+    auto failed = [](std::string path, std::string message, bool unreadable = false) {
+        return PresetLoadResult{std::nullopt, {Diagnostic{std::move(path), std::move(message)}},
+                                unreadable};
+    };
+
     // Open the file
     std::ifstream file(filepath);
     if (!file.is_open()) {
-        return {std::nullopt, "Cannot open preset file: " + filepath.string(), {}, "", true};
+        return failed("", "Cannot open preset file: " + filepath.string(), true);
     }
 
     // Parse JSON
@@ -485,15 +511,14 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     try {
         json = nlohmann::json::parse(file);
     } catch (const nlohmann::json::parse_error& e) {
-        return {std::nullopt,
-                "Invalid JSON in preset file: " + filepath.string() +
-                    ": parse error at byte " + std::to_string(e.byte),
-                {}, "", true};
+        return failed("",
+                      "Invalid JSON in preset file: " + filepath.string() +
+                          ": parse error at byte " + std::to_string(e.byte),
+                      true);
     }
 
     if (!json.is_object()) {
-        return {std::nullopt, "Preset file must contain a JSON object: " + filepath.string(),
-                {}, "", true};
+        return failed("", "Preset file must contain a JSON object: " + filepath.string(), true);
     }
 
     // Relative paths in the preset resolve from the directory holding it,
@@ -502,12 +527,13 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
 
     // Parse into PresetConfig
     PresetConfig config;
-    std::vector<PresetDiagnostic> result_warnings;
+    std::vector<Diagnostic> result_warnings;
 
     const auto& known_keys = preset_top_level_keys();
     for (const auto& [key, value] : json.items()) {
         if (std::find(known_keys.begin(), known_keys.end(), key) == known_keys.end()) {
-            result_warnings.push_back({"/" + key, "unknown key '" + key + "' is ignored"});
+            result_warnings.push_back({"/" + key, "unknown key '" + key + "' is ignored",
+                                       Diagnostic::Severity::Warning});
         }
     }
 
@@ -544,23 +570,19 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
                 throw std::runtime_error("");
             }
         } catch (const std::runtime_error&) {
-            return {std::nullopt,
-                    "Preset 'speed' must be a positive number or \"unlimited\": " +
-                        filepath.string(),
-                    {}, "/speed"};
+            return failed("/speed", "Preset 'speed' must be a positive number or \"unlimited\": " +
+                                        filepath.string());
         }
     }
 
     // Startup keyboard links (optional), as --screen-mode/--auto-boot or --links.
     if (json.contains("startup")) {
         if (!json["startup"].is_object()) {
-            return {std::nullopt, "Preset 'startup' must be an object: " + filepath.string(), {},
-                    "/startup"};
+            return failed("/startup", "Preset 'startup' must be an object: " + filepath.string());
         }
         auto [startup, error] = parse_startup_section(json["startup"]);
         if (!startup) {
-            return {std::nullopt, "Preset " + error.message + ": " + filepath.string(), {},
-                    error.path};
+            return failed(error.path, "Preset " + error.message + ": " + filepath.string());
         }
         config.startup = startup;
     }
@@ -568,16 +590,16 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     // startup section; it is read as startup.auto_boot.
     if (json.contains("auto_boot") && json["auto_boot"].is_boolean()) {
         if (config.startup && (config.startup->auto_boot || config.startup->links)) {
-            return {std::nullopt,
-                    "Preset gives both a top-level 'auto_boot' and a 'startup' section "
-                    "that sets the links; move it into 'startup': " + filepath.string(),
-                    {}, "/auto_boot"};
+            return failed("/auto_boot",
+                          "Preset gives both a top-level 'auto_boot' and a 'startup' section "
+                          "that sets the links; move it into 'startup': " + filepath.string());
         }
         if (!config.startup) config.startup.emplace();
         config.startup->auto_boot = json["auto_boot"].get<bool>();
         result_warnings.push_back(
-            {"/auto_boot", "a top-level 'auto_boot' is read as 'startup.auto_boot'; "
-                           "write it there instead"});
+            {"/auto_boot",
+             "a top-level 'auto_boot' is read as 'startup.auto_boot'; write it there instead",
+             Diagnostic::Severity::Warning});
     }
 
     // MOS ROM (optional): a ROM name or path, resolved like --mos.
@@ -600,7 +622,7 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     if (json.contains("econet") && json["econet"].is_object()) {
         auto [econet, error] = parse_econet_section(json["econet"]);
         if (!econet) {
-            return {std::nullopt, error.message + ": " + filepath.string(), {}, error.path};
+            return failed(error.path, error.message + ": " + filepath.string());
         }
         config.econet = std::move(*econet);
     }
@@ -655,7 +677,7 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     if (json.contains("sideways_bank") && json["sideways_bank"].is_object()) {
         auto [slots, error] = parse_sideways_section(json["sideways_bank"]);
         if (!slots) {
-            return {std::nullopt, error.message + ": " + filepath.string(), {}, error.path};
+            return failed(error.path, error.message + ": " + filepath.string());
         }
         for (auto& slot : *slots) {
             slot.image_filepath =
@@ -664,7 +686,7 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         config.sideways = std::move(*slots);
     }
 
-    return {std::move(config), "", std::move(result_warnings)};
+    return {std::move(config), std::move(result_warnings), false};
 }
 
 } // namespace beebium::server
