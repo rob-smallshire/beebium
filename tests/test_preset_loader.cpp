@@ -780,3 +780,89 @@ TEST_CASE("PresetConfig: sideways default state", "[preset][PresetConfig][sidewa
 
     REQUIRE(config.sideways.empty());
 }
+
+// ============================================================================
+// Machine settings: speed, startup, mos_image_uri
+// ============================================================================
+
+namespace {
+
+PresetLoadResult load_preset_text(const beebium::test::ScopedTempDir& dir, const std::string& text) {
+    auto preset_filepath = dir / "settings.preset.beebium";
+    std::ofstream(preset_filepath) << text;
+    return load_preset(preset_filepath);
+}
+
+}  // namespace
+
+TEST_CASE("load_preset: speed as a multiplier or unlimited", "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto doubled = load_preset_text(dir, R"({"speed": 2.5})");
+    REQUIRE(doubled.success());
+    CHECK(doubled.config->speed == 2.5);
+
+    auto unlimited = load_preset_text(dir, R"({"speed": "unlimited"})");
+    REQUIRE(unlimited.success());
+    CHECK(unlimited.config->speed == 0.0);
+
+    CHECK_FALSE(load_preset_text(dir, R"({"speed": 0})").success());
+    CHECK_FALSE(load_preset_text(dir, R"({"speed": "fast"})").success());
+}
+
+TEST_CASE("load_preset: startup screen_mode and auto_boot", "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"startup": {"screen_mode": 3, "auto_boot": true}})");
+    REQUIRE(result.success());
+    REQUIRE(result.config->startup.has_value());
+    CHECK(result.config->startup->screen_mode == 3);
+    CHECK(result.config->startup->auto_boot == true);
+    CHECK_FALSE(result.config->startup->links.has_value());
+}
+
+TEST_CASE("load_preset: startup links", "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"startup": {"links": 135}})");
+    REQUIRE(result.success());
+    CHECK(result.config->startup->links == 135);
+}
+
+TEST_CASE("load_preset: startup links cannot be combined with screen_mode or auto_boot",
+          "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"startup": {"links": 135, "auto_boot": false}})");
+    REQUIRE_FALSE(result.success());
+    CHECK(result.error.find("links") != std::string::npos);
+}
+
+TEST_CASE("load_preset: startup values out of range are rejected",
+          "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    CHECK_FALSE(load_preset_text(dir, R"({"startup": {"screen_mode": 8}})").success());
+    CHECK_FALSE(load_preset_text(dir, R"({"startup": {"links": 256}})").success());
+    CHECK_FALSE(load_preset_text(dir, R"({"startup": {"auto_boot": "yes"}})").success());
+}
+
+TEST_CASE("load_preset: a top-level auto_boot is read as startup.auto_boot, with a warning",
+          "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"auto_boot": true})");
+    REQUIRE(result.success());
+    CHECK(result.config->startup->auto_boot == true);
+    REQUIRE(result.warnings.size() == 1);
+    CHECK(result.warnings[0].path == "/auto_boot");
+}
+
+TEST_CASE("load_preset: mos_image_uri is kept verbatim", "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"mos_image_uri": "acorn-mos_1_20.rom"})");
+    REQUIRE(result.success());
+    CHECK(result.config->mos_image_uri == "acorn-mos_1_20.rom");
+}
+
+TEST_CASE("load_preset: unknown top-level keys are warned about", "[preset][load_preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"name": "x", "colour": "beige"})");
+    REQUIRE(result.success());
+    REQUIRE(result.warnings.size() == 1);
+    CHECK(result.warnings[0].path == "/colour");
+}

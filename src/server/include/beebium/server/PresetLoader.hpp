@@ -18,6 +18,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -64,27 +65,95 @@ struct PresetExtensionConfig {
     std::map<std::string, std::vector<std::string>> list_config;   // is_list params (JSON arrays)
 };
 
+// The startup keyboard links (the options byte read at power-up), in one of
+// two forms: screen_mode and auto_boot, or the raw links byte. A preset gives
+// one form, never both.
+struct PresetStartupConfig {
+    std::optional<int> screen_mode;               // 0-7
+    std::optional<bool> auto_boot;                // boot on power-up (reversed SHIFT-BREAK)
+    std::optional<int> links;                     // 0-255, the whole byte
+};
+
 struct PresetConfig {
     std::string name;
+    std::optional<std::string> description;       // One-line description shown in the picker
+    std::optional<std::string> release_date;      // YYYY, YYYY-MM or YYYY-MM-DD
     std::optional<std::string> machine_name;      // Machine label the preset launches with
-    std::optional<bool> auto_boot;                // Startup keyboard link: boot on power-up (runs !BOOT)
     std::optional<std::string> model;             // For validation against executable
     std::optional<PresetStorageConfig> storage;
     std::optional<PresetEconetConfig> econet;
     std::optional<double> thumbnail_capture_delay_seconds;  // For capture-screenshot subcommand
     std::vector<PresetExtensionConfig> extensions{};
     std::vector<SidewaysConfig> sideways{};       // sideways_bank.slots (slot/type/image)
-    // Future: startup_options, coprocessor, os_rom
+    std::optional<double> speed;                  // multiplier; 0.0 = unlimited (as --speed)
+    std::optional<PresetStartupConfig> startup;
+    std::optional<std::string> mos_image_uri;     // MOS ROM name or path, as --mos
+};
+
+// A remark about one place in a preset file, located by a JSON pointer
+// (e.g. "/startup/links").
+struct PresetDiagnostic {
+    std::string path;
+    std::string message;
 };
 
 // Result of loading a preset file
 struct PresetLoadResult {
     std::optional<PresetConfig> config;
     std::string error;
+    // Things that do not stop the preset loading: unknown keys, keys in a
+    // form that is read but no longer written.
+    std::vector<PresetDiagnostic> warnings{};
 
     bool success() const { return config.has_value(); }
     explicit operator bool() const { return success(); }
 };
+
+// The top-level keys a preset file may carry. Any other key is ignored with
+// a warning.
+inline const std::vector<std::string>& preset_top_level_keys() {
+    static const std::vector<std::string> keys{
+        "name", "description", "release_date", "model", "machine_name",
+        "speed", "startup", "mos_image_uri", "storage", "sideways_bank",
+        "econet", "extensions", "thumbnail_capture_delay_seconds",
+        "auto_boot",  // read as startup.auto_boot
+    };
+    return keys;
+}
+
+// Parse the startup section. Returns the config, or nullopt with an error.
+inline std::pair<std::optional<PresetStartupConfig>, std::string> parse_startup_section(
+    const nlohmann::json& startup_json) {
+    PresetStartupConfig startup;
+    auto int_in_range = [&](const char* key, int lo, int hi,
+                            std::optional<int>& out) -> std::string {
+        if (!startup_json.contains(key)) return {};
+        const auto& v = startup_json[key];
+        if (!v.is_number_integer() || v.get<int64_t>() < lo || v.get<int64_t>() > hi) {
+            return std::string("startup '") + key + "' must be an integer " +
+                   std::to_string(lo) + "-" + std::to_string(hi);
+        }
+        out = v.get<int>();
+        return {};
+    };
+    if (auto e = int_in_range("screen_mode", 0, 7, startup.screen_mode); !e.empty()) {
+        return {std::nullopt, e};
+    }
+    if (auto e = int_in_range("links", 0, 255, startup.links); !e.empty()) {
+        return {std::nullopt, e};
+    }
+    if (startup_json.contains("auto_boot")) {
+        if (!startup_json["auto_boot"].is_boolean()) {
+            return {std::nullopt, "startup 'auto_boot' must be true or false"};
+        }
+        startup.auto_boot = startup_json["auto_boot"].get<bool>();
+    }
+    if (startup.links && (startup.screen_mode || startup.auto_boot)) {
+        return {std::nullopt,
+                "startup 'links' cannot be combined with 'screen_mode' or 'auto_boot'"};
+    }
+    return {startup, ""};
+}
 
 // Check if a path string represents a Unix-style absolute path.
 // On Unix, paths starting with '/' are absolute.
@@ -380,7 +449,7 @@ parse_sideways_section(const nlohmann::json& sideways_json) {
 // Load and parse a preset file.
 //
 // Returns a PresetLoadResult containing either the parsed configuration or an error message.
-// Unknown keys are ignored for forward compatibility.
+// Unknown top-level keys are ignored with a warning (PresetLoadResult::warnings).
 //
 // Usage:
 //   auto result = load_preset("/path/to/game.preset.beebium");
@@ -411,6 +480,14 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
 
     // Parse into PresetConfig
     PresetConfig config;
+    std::vector<PresetDiagnostic> result_warnings;
+
+    const auto& known_keys = preset_top_level_keys();
+    for (const auto& [key, value] : json.items()) {
+        if (std::find(known_keys.begin(), known_keys.end(), key) == known_keys.end()) {
+            result_warnings.push_back({"/" + key, "unknown key '" + key + "' is ignored"});
+        }
+    }
 
     // Name (required)
     if (json.contains("name") && json["name"].is_string()) {
@@ -419,17 +496,67 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         config.name = filepath.stem().string();  // Use filename as fallback
     }
 
+    // Descriptive fields, shown by front-ends' preset pickers.
+    if (json.contains("description") && json["description"].is_string()) {
+        config.description = json["description"].get<std::string>();
+    }
+    if (json.contains("release_date") && json["release_date"].is_string()) {
+        config.release_date = json["release_date"].get<std::string>();
+    }
+
     // Machine name (optional): the label the launched machine carries. A CLI
     // --machine-name overrides it (applied in apply_preset).
     if (json.contains("machine_name") && json["machine_name"].is_string()) {
         config.machine_name = json["machine_name"].get<std::string>();
     }
 
-    // Auto-boot (optional): whether the machine boots on power-up (reversed
-    // SHIFT-BREAK link) so the disc's !BOOT runs unattended. A CLI --auto-boot
-    // overrides it (applied in apply_preset).
+    // Speed (optional): a positive multiplier or "unlimited", as --speed.
+    if (json.contains("speed")) {
+        const auto& speed = json["speed"];
+        try {
+            if (speed.is_number()) {
+                config.speed = parse_speed_arg(speed.dump());
+            } else if (speed.is_string()) {
+                config.speed = parse_speed_arg(speed.get<std::string>());
+            } else {
+                throw std::runtime_error("");
+            }
+        } catch (const std::runtime_error&) {
+            return {std::nullopt,
+                    "Preset 'speed' must be a positive number or \"unlimited\": " +
+                        filepath.string()};
+        }
+    }
+
+    // Startup keyboard links (optional), as --screen-mode/--auto-boot or --links.
+    if (json.contains("startup")) {
+        if (!json["startup"].is_object()) {
+            return {std::nullopt, "Preset 'startup' must be an object: " + filepath.string()};
+        }
+        auto [startup, error] = parse_startup_section(json["startup"]);
+        if (!startup) {
+            return {std::nullopt, "Preset " + error + ": " + filepath.string()};
+        }
+        config.startup = startup;
+    }
+    // A top-level auto_boot is the form presets were written in before the
+    // startup section; it is read as startup.auto_boot.
     if (json.contains("auto_boot") && json["auto_boot"].is_boolean()) {
-        config.auto_boot = json["auto_boot"].get<bool>();
+        if (config.startup && (config.startup->auto_boot || config.startup->links)) {
+            return {std::nullopt,
+                    "Preset gives both a top-level 'auto_boot' and a 'startup' section "
+                    "that sets the links; move it into 'startup': " + filepath.string()};
+        }
+        if (!config.startup) config.startup.emplace();
+        config.startup->auto_boot = json["auto_boot"].get<bool>();
+        result_warnings.push_back(
+            {"/auto_boot", "a top-level 'auto_boot' is read as 'startup.auto_boot'; "
+                           "write it there instead"});
+    }
+
+    // MOS ROM (optional): a ROM name or path, resolved like --mos.
+    if (json.contains("mos_image_uri") && json["mos_image_uri"].is_string()) {
+        config.mos_image_uri = json["mos_image_uri"].get<std::string>();
     }
 
     // Model (optional, for validation)
@@ -510,9 +637,7 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         config.sideways = std::move(*slots);
     }
 
-    // Note: Unknown keys are silently ignored for forward compatibility
-
-    return {std::move(config), ""};
+    return {std::move(config), "", std::move(result_warnings)};
 }
 
 } // namespace beebium::server

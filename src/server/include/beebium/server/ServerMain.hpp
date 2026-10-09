@@ -490,6 +490,9 @@ struct ServerConfig {
     int raw_links = -1;
     bool screen_mode_set = false;
     bool auto_boot_set = false;
+    // The preset's startup links, folded in after the CLI's by
+    // merge_preset_startup (the CLI wins).
+    std::optional<PresetStartupConfig> preset_startup;
 
     // Wait mode for controlled startup
     WaitMode wait_mode = WaitMode::None;
@@ -750,12 +753,16 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
     }
     config.preset_name = preset.name;
 
-    // Auto-boot: preset supplies a default keyboard-link state; a CLI
-    // --auto-boot (which sets auto_boot_set) takes precedence.
-    if (preset.auto_boot && !config.auto_boot_set) {
-        config.auto_boot = *preset.auto_boot;
-        config.auto_boot_set = true;
+    // Machine settings. CLI parsing runs after this and overwrites them; the
+    // startup links are merged afterwards (merge_preset_startup) because the
+    // two forms exclude each other.
+    if (preset.speed) {
+        config.speed_multiplier_override = *preset.speed;
     }
+    if (preset.mos_image_uri) {
+        config.mos_filepath = *preset.mos_image_uri;
+    }
+    config.preset_startup = preset.startup;
 
     if (preset.storage) {
         const auto& storage = *preset.storage;
@@ -863,6 +870,34 @@ void merge_preset_sideways_configs(ServerConfig<MachineType>& config) {
         } else if (preset_slot.type == SidewaysSlotType::Ram) {
             config.rom_slots[preset_slot.slot] = RAM_SLOT_MARKER;
         }
+    }
+}
+
+// Fold the preset's startup links in under the CLI's. Within one form the CLI
+// overrides per key (--screen-mode keeps the preset's auto_boot); a CLI option
+// of the other form replaces the preset's outright (--links drops the preset's
+// screen_mode and auto_boot, and --screen-mode or --auto-boot drops its links),
+// so the two forms never meet unless the command line itself mixes them.
+template<typename MachineType>
+void merge_preset_startup(ServerConfig<MachineType>& config) {
+    if (!config.preset_startup) return;
+    const auto& preset = *config.preset_startup;
+    const bool cli_links = config.raw_links >= 0;
+    const bool cli_semantic = config.screen_mode_set || config.auto_boot_set;
+    if (preset.links) {
+        if (!cli_links && !cli_semantic) {
+            config.raw_links = *preset.links;
+        }
+        return;
+    }
+    if (cli_links) return;
+    if (preset.screen_mode && !config.screen_mode_set) {
+        config.screen_mode = *preset.screen_mode;
+        config.screen_mode_set = true;
+    }
+    if (preset.auto_boot && !config.auto_boot_set) {
+        config.auto_boot = *preset.auto_boot;
+        config.auto_boot_set = true;
     }
 }
 
@@ -1391,6 +1426,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
     // Fold preset-supplied sideways slots in as a baseline now that all CLI
     // --sideways flags have been parsed (CLI wins per slot).
     merge_preset_sideways_configs(config);
+    merge_preset_startup(config);
 
     // Normalise the preset's extensions as the CLI's were, then let a CLI
     // instance override the preset instance it names rather than count as a
@@ -4773,6 +4809,16 @@ public:
                   << "                        (e.g. a server's role); CLI --machine-name overrides\n"
                   << "  --auto-boot           Boot on power-up (reversed SHIFT-BREAK link), so the\n"
                   << "                        disc's !BOOT runs unattended; CLI --auto-boot overrides\n"
+                  << "  --screen-mode <0-7>   Startup screen mode\n"
+                  << "  --links <0-255>       Raw startup options byte (not with --screen-mode or\n"
+                  << "                        --auto-boot)\n"
+                  << "  --speed <multiplier>  Emulation speed (a positive multiple of real time, or\n"
+                  << "                        'unlimited')\n"
+                  << "  --mos <filepath>      MOS ROM name or path\n"
+                  << "  --language-rom <filepath>  Language ROM for this model's language slot\n"
+                  << "                        (recorded as that sideways slot)\n"
+                  << "  --floppy <drive>:<filepath|url>  Disc image in floppy drive 0 or 1; a\n"
+                  << "                        relative path is taken from the working directory\n"
                   << "  --from <id>       Source preset to copy configuration from\n"
                   << "  --output <path>   Write to specified path instead of user directory\n"
                   << "  --release-date <date>     Release date (YYYY, YYYY-MM, or YYYY-MM-DD)\n"
@@ -4810,6 +4856,12 @@ public:
         std::string release_date;
         std::string fdc_id;
         std::vector<std::string> sideways_args;
+        std::optional<int> screen_mode;
+        std::optional<int> links;
+        std::optional<double> speed;
+        std::string mos_image_uri;
+        std::string language_rom;
+        std::map<std::size_t, std::string> floppy_uris;
         std::vector<typename ServerConfig<MachineType>::ExtensionInstance> preset_extensions;
         // Econet: station number and (at most one) transport. A captured
         // extension whose manifest kind is "econet-transport" is routed here,
@@ -4859,6 +4911,52 @@ public:
                 fdc_id = argv[++i];
             } else if (arg == "--sideways" && i + 1 < argc) {
                 sideways_args.push_back(argv[++i]);
+            } else if (arg == "--screen-mode" && i + 1 < argc) {
+                try {
+                    screen_mode = parse_int(argv[++i], "--screen-mode");
+                } catch (const std::runtime_error& e) {
+                    std::cerr << "Error: " << e.what() << "\n";
+                    return ExitCode::USAGE;
+                }
+                if (*screen_mode < 0 || *screen_mode > 7) {
+                    std::cerr << "Error: --screen-mode must be 0-7\n";
+                    return ExitCode::USAGE;
+                }
+            } else if (arg == "--links" && i + 1 < argc) {
+                try {
+                    links = parse_int(argv[++i], "--links");
+                } catch (const std::runtime_error& e) {
+                    std::cerr << "Error: " << e.what() << "\n";
+                    return ExitCode::USAGE;
+                }
+                if (*links < 0 || *links > 255) {
+                    std::cerr << "Error: --links must be 0-255\n";
+                    return ExitCode::USAGE;
+                }
+            } else if (arg == "--speed" && i + 1 < argc) {
+                try {
+                    speed = parse_speed_arg(argv[++i]);
+                } catch (const std::runtime_error& e) {
+                    std::cerr << "Error: " << e.what() << "\n";
+                    return ExitCode::USAGE;
+                }
+            } else if (arg == "--mos" && i + 1 < argc) {
+                mos_image_uri = argv[++i];
+            } else if (arg == "--language-rom" && i + 1 < argc) {
+                language_rom = argv[++i];
+            } else if (arg == "--floppy" && i + 1 < argc) {
+                std::string value = argv[++i];
+                complete_colon_arg(value, i, argc, argv);
+                try {
+                    auto [drive, filepath] = parse_floppy_arg(value);
+                    // As for `start`, a relative path is relative to the working
+                    // directory, so record it absolutely.
+                    floppy_uris[drive] =
+                        normalize_image_uri(filepath, std::filesystem::current_path());
+                } catch (const std::runtime_error& e) {
+                    std::cerr << "Error: " << e.what() << "\n";
+                    return ExitCode::USAGE;
+                }
             } else if (arg == "--station" && i + 1 < argc) {
                 std::string value = argv[++i];
                 std::string error;
@@ -4919,6 +5017,10 @@ public:
             help(argv[0]);
             return ExitCode::USAGE;
         }
+        if (links && (screen_mode || preset_auto_boot)) {
+            std::cerr << "Error: --links cannot be combined with --screen-mode or --auto-boot\n";
+            return ExitCode::USAGE;
+        }
 
         // Build preset JSON
         nlohmann::ordered_json preset;
@@ -4963,24 +5065,90 @@ public:
         if (!preset_machine_name.empty()) {
             preset["machine_name"] = preset_machine_name;
         }
-        if (preset_auto_boot) {
-            preset["auto_boot"] = true;
+        // A --from source in the older form keeps auto_boot at the top level;
+        // it belongs in startup.
+        if (preset.contains("auto_boot")) {
+            if (!preset.contains("startup") || !preset["startup"].contains("links")) {
+                preset["startup"]["auto_boot"] = preset["auto_boot"];
+            }
+            preset.erase("auto_boot");
+        }
+        // Startup links: within one form a flag overrides the baseline per key;
+        // a flag of the other form replaces the baseline's.
+        if (links) {
+            preset["startup"] = nlohmann::ordered_json{{"links", *links}};
+        } else if (screen_mode || preset_auto_boot) {
+            if (preset.contains("startup")) preset["startup"].erase("links");
+            if (screen_mode) preset["startup"]["screen_mode"] = *screen_mode;
+            if (preset_auto_boot) preset["startup"]["auto_boot"] = true;
+        }
+        if (speed) {
+            if (*speed == 0.0) {
+                preset["speed"] = "unlimited";
+            } else {
+                preset["speed"] = *speed;
+            }
+        }
+        if (!mos_image_uri.empty()) {
+            preset["mos_image_uri"] = mos_image_uri;
         }
         if (!fdc_id.empty()) {
             preset["storage"]["fdc_socket"]["id"] = fdc_id;
         }
-        if (!sideways_args.empty()) {
-            // Reuse the --sideways grammar so create-preset and start agree,
-            // and emit the sideways_bank shape that PresetLoader parses back.
-            nlohmann::ordered_json slots = nlohmann::ordered_json::array();
-            for (const auto& sw : sideways_args) {
-                SidewaysConfig cfg;
-                try {
-                    cfg = parse_sideways_arg(sw);
-                } catch (const std::runtime_error& e) {
-                    std::cerr << "Error: " << e.what() << "\n";
-                    return ExitCode::USAGE;
+        if (!floppy_uris.empty()) {
+            // Replace the baseline's entry for each drive given.
+            nlohmann::ordered_json drives = nlohmann::ordered_json::array();
+            if (preset.contains("storage") && preset["storage"].contains("floppy_drives")) {
+                for (const auto& d : preset["storage"]["floppy_drives"]) {
+                    if (d.contains("drive") && d["drive"].is_number_integer() &&
+                        floppy_uris.count(d["drive"].get<std::size_t>()) != 0) {
+                        continue;
+                    }
+                    drives.push_back(d);
                 }
+            }
+            for (const auto& [drive, uri] : floppy_uris) {
+                drives.push_back({{"drive", drive}, {"image_uri", uri}});
+            }
+            preset["storage"]["floppy_drives"] = std::move(drives);
+        }
+        // Sideways slots. Reuse the --sideways grammar so create-preset and
+        // start agree, and emit the sideways_bank shape that PresetLoader parses
+        // back. As for `start`, a slot given here replaces the baseline's entry
+        // for that slot and leaves the others.
+        std::vector<SidewaysConfig> sideways_slots;
+        for (const auto& sw : sideways_args) {
+            try {
+                sideways_slots.push_back(parse_sideways_arg(sw));
+            } catch (const std::runtime_error& e) {
+                std::cerr << "Error: " << e.what() << "\n";
+                return ExitCode::USAGE;
+            }
+        }
+        if (!language_rom.empty()) {
+            // --language-rom names the model's language slot, which a preset
+            // records as that sideways slot.
+            SidewaysConfig cfg{};
+            cfg.slot = Memory::DEFAULT_LANGUAGE_SLOT;
+            cfg.type = SidewaysSlotType::Rom;
+            cfg.image_filepath = language_rom;
+            sideways_slots.push_back(cfg);
+        }
+        if (!sideways_slots.empty()) {
+            nlohmann::ordered_json slots = nlohmann::ordered_json::array();
+            if (preset.contains("sideways_bank") && preset["sideways_bank"].contains("slots")) {
+                for (const auto& baseline : preset["sideways_bank"]["slots"]) {
+                    const bool replaced = std::any_of(
+                        sideways_slots.begin(), sideways_slots.end(),
+                        [&](const SidewaysConfig& c) {
+                            return baseline.contains("slot") &&
+                                   baseline["slot"].is_number_integer() &&
+                                   baseline["slot"].get<int>() == c.slot;
+                        });
+                    if (!replaced) slots.push_back(baseline);
+                }
+            }
+            for (const auto& cfg : sideways_slots) {
                 nlohmann::ordered_json slot;
                 slot["slot"] = cfg.slot;
                 switch (cfg.type) {

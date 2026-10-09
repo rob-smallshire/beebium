@@ -2569,3 +2569,113 @@ TEST_CASE("parse_start_arguments: a preset's bare file name parameter is left as
     REQUIRE(inst != nullptr);
     CHECK(inst->config.at("map-file") == "none");
 }
+
+// ============================================================================
+// Machine settings a preset carries: speed, mos_image_uri, startup
+// ============================================================================
+
+namespace {
+
+std::optional<int> parse_with_preset(const beebium::test::ScopedTempDir& dir,
+                                     const std::string& body,
+                                     std::initializer_list<const char*> extra,
+                                     ServerConfig<MachineType>& config) {
+    auto preset_filepath = write_preset(dir, body);
+    std::vector<std::string> args{"beebium", "start", "--preset", preset_filepath.string()};
+    for (const char* a : extra) args.emplace_back(a);
+    std::vector<char*> argv;
+    for (auto& a : args) argv.push_back(a.data());
+    argv.push_back(nullptr);
+    return parse_start_arguments<MachineType>(static_cast<int>(args.size()), argv.data(), 2,
+                                              config);
+}
+
+}  // namespace
+
+TEST_CASE("parse_start_arguments: a preset's speed applies and --speed overrides it",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> from_preset;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"speed": 2})", {}, from_preset).has_value());
+    CHECK(from_preset.speed_multiplier_override == 2.0);
+
+    ServerConfig<MachineType> overridden;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"speed": 2})", {"--speed", "unlimited"}, overridden)
+                      .has_value());
+    CHECK(overridden.speed_multiplier_override == 0.0);
+}
+
+TEST_CASE("parse_start_arguments: a preset's mos_image_uri applies and --mos overrides it",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> from_preset;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"mos_image_uri": "my-mos.rom"})", {}, from_preset)
+                      .has_value());
+    CHECK(from_preset.mos_filepath == "my-mos.rom");
+
+    ServerConfig<MachineType> overridden;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"mos_image_uri": "my-mos.rom"})",
+                                    {"--mos", "other.rom"}, overridden)
+                      .has_value());
+    CHECK(overridden.mos_filepath == "other.rom");
+}
+
+TEST_CASE("parse_start_arguments: a preset's startup screen_mode and auto_boot apply",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> config;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"screen_mode": 3, "auto_boot": true}})",
+                                    {}, config)
+                      .has_value());
+    CHECK(config.screen_mode == 3);
+    CHECK(config.screen_mode_set);
+    CHECK(config.auto_boot);
+    CHECK(config.auto_boot_set);
+    CHECK(config.raw_links == -1);
+}
+
+TEST_CASE("parse_start_arguments: --screen-mode overrides the preset's per key",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> config;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"screen_mode": 3, "auto_boot": true}})",
+                                    {"--screen-mode", "1"}, config)
+                      .has_value());
+    CHECK(config.screen_mode == 1);
+    CHECK(config.auto_boot);  // kept from the preset
+}
+
+TEST_CASE("parse_start_arguments: --links replaces the preset's screen_mode and auto_boot",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> config;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"screen_mode": 3, "auto_boot": false}})",
+                                    {"--links", "7"}, config)
+                      .has_value());
+    CHECK(config.raw_links == 7);
+    CHECK_FALSE(config.screen_mode_set);
+    CHECK_FALSE(config.auto_boot_set);
+    CHECK_FALSE(validate_config(config).has_value());
+}
+
+TEST_CASE("parse_start_arguments: --auto-boot replaces the preset's links",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> config;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"links": 135}})", {"--auto-boot"},
+                                    config)
+                      .has_value());
+    CHECK(config.raw_links == -1);
+    CHECK(config.auto_boot);
+    CHECK_FALSE(validate_config(config).has_value());
+}
+
+TEST_CASE("parse_start_arguments: a preset's links apply",
+          "[cli][parse_start_arguments][preset][settings]") {
+    beebium::test::ScopedTempDir dir("beebium-preset-settings-");
+    ServerConfig<MachineType> config;
+    REQUIRE_FALSE(parse_with_preset(dir, R"({"startup": {"links": 135}})", {}, config)
+                      .has_value());
+    CHECK(config.raw_links == 135);
+    CHECK_FALSE(validate_config(config).has_value());
+}

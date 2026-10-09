@@ -458,8 +458,9 @@ TEST_CASE("create-preset: --auto-boot round-trips through the loader",
 
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    REQUIRE(loaded.config->auto_boot.has_value());
-    CHECK(*loaded.config->auto_boot == true);
+    CHECK(loaded.warnings.empty());  // written as startup.auto_boot
+    REQUIRE(loaded.config->startup.has_value());
+    CHECK(loaded.config->startup->auto_boot == true);
 }
 
 TEST_CASE("create-preset: without --auto-boot the preset omits it",
@@ -472,7 +473,65 @@ TEST_CASE("create-preset: without --auto-boot the preset omits it",
     REQUIRE(result.exit_code == 0);
     auto loaded = beebium::server::load_preset(output_filepath);
     REQUIRE(loaded.success());
-    CHECK_FALSE(loaded.config->auto_boot.has_value());
+    CHECK_FALSE(loaded.config->startup.has_value());
+}
+
+TEST_CASE("create-preset: machine settings round-trip through the loader",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "settings.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Settings\" --speed 2 --screen-mode 3 "
+        "--mos my-mos.rom --fdc acorn-1770 --floppy 0:discs/game.ssd "
+        "--output \"" + output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    CHECK(loaded.warnings.empty());
+    CHECK(loaded.config->speed == 2.0);
+    REQUIRE(loaded.config->startup.has_value());
+    CHECK(loaded.config->startup->screen_mode == 3);
+    CHECK(loaded.config->mos_image_uri == "my-mos.rom");
+    REQUIRE(loaded.config->storage.has_value());
+    REQUIRE(loaded.config->storage->floppy_drives.at(0).has_value());
+    // A relative --floppy path means what it means to `start`: relative to the
+    // working directory, so the preset records it absolutely.
+    CHECK(*loaded.config->storage->floppy_drives.at(0) ==
+          "file://" + (std::filesystem::current_path() / "discs" / "game.ssd")
+                          .lexically_normal().generic_string());
+}
+
+TEST_CASE("create-preset: --links and --language-rom round-trip through the loader",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "links.preset.beebium";
+
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Links\" --links 135 --speed unlimited "
+        "--language-rom forth.rom --output \"" + output_filepath.string() + "\"");
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    CHECK(loaded.config->startup->links == 135);
+    CHECK(loaded.config->speed == 0.0);
+    // The language ROM is the model's language slot (15 on a Model B).
+    REQUIRE(loaded.config->sideways.size() == 1);
+    CHECK(loaded.config->sideways[0].slot == 15);
+    CHECK(loaded.config->sideways[0].image_filepath == "forth.rom");
+}
+
+TEST_CASE("create-preset: --links with --screen-mode is a usage error",
+          "[integration][preset][create-preset]") {
+    TempDirectory temp_dir;
+    auto output_filepath = temp_dir.path() / "bad.preset.beebium";
+    auto result = run_command(
+        EXECUTABLE + " create-preset --name \"Bad\" --links 7 --screen-mode 3 "
+        "--output \"" + output_filepath.string() + "\"");
+    CHECK(result.exit_code == 64);
+    CHECK_FALSE(std::filesystem::exists(output_filepath));
 }
 
 TEST_CASE("create-preset: --station without a transport fits Econet with no "
@@ -822,6 +881,33 @@ TEST_CASE("create-preset --from and export-preset preserve sideways_bank",
     std::string export_contents = read_file(export_filepath);
     REQUIRE(export_contents.find("sideways_bank") != std::string::npos);
     REQUIRE(export_contents.find("acorn-dfs_2_26.rom") != std::string::npos);
+}
+
+TEST_CASE("create-preset --from: --sideways replaces only the slots it names",
+          "[integration][preset][create-preset][sideways]") {
+    TempDirectory user_dir;
+    {
+        std::ofstream f(user_dir.path() / "slots-src.preset.beebium");
+        f << R"({"name": "Slots Source", "model": "model-b", "auto_boot": true, )"
+             R"("sideways_bank": { "slots": [ )"
+             R"({ "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" }, )"
+             R"({ "slot": 13, "type": "empty" } ] }})";
+    }
+    auto output_filepath = user_dir.path() / "slots-copy.preset.beebium";
+    auto result = run_command(
+        EXECUTABLE + " create-preset --from slots-src --name \"Slots Copy\" "
+        "--sideways slot=13:type=ram --output \"" + output_filepath.string() + "\"",
+        {{"BEEBIUM_USER_PRESETS_DIRPATH", user_dir.path().string()}});
+    REQUIRE(result.exit_code == 0);
+
+    auto loaded = beebium::server::load_preset(output_filepath);
+    REQUIRE(loaded.success());
+    CHECK(loaded.warnings.empty());  // the source's top-level auto_boot moved into startup
+    CHECK(loaded.config->startup->auto_boot == true);
+    REQUIRE(loaded.config->sideways.size() == 2);
+    CHECK(loaded.config->sideways[0].slot == 14);  // kept from the source
+    CHECK(loaded.config->sideways[1].slot == 13);
+    CHECK(loaded.config->sideways[1].type == beebium::server::SidewaysSlotType::Ram);  // replaced
 }
 
 // ============================================================================
