@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "beebium/extension/PluginLoader.hpp"
+#include "beebium/extension/ExtensionAbi.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -321,6 +322,28 @@ std::unique_ptr<Extension> PluginLoader::load_extension(
         throw std::runtime_error(
             "Failed to load extension library '" + library_filepath.string()
             + "': " + platform_dlerror());
+    }
+
+    // Refuse a plugin built against another extension ABI before touching
+    // anything else in it: its view of the shared types would be wrong.
+    using AbiVersionFn = std::uint32_t (*)();
+    auto* abi_fn = reinterpret_cast<AbiVersionFn>(
+        platform_dlsym(handle, kPluginAbiVersionSymbol));
+    if (!abi_fn) {
+        platform_dlclose(handle);
+        throw std::runtime_error(
+            "Extension '" + manifest.name + "' (" + library_filepath.string()
+            + ") carries no extension ABI version; it was built before this server, "
+              "which has ABI version " + std::to_string(kExtensionAbiVersion)
+            + ". Rebuild the plugin.");
+    }
+    if (const auto plugin_abi = abi_fn(); plugin_abi != kExtensionAbiVersion) {
+        platform_dlclose(handle);
+        throw std::runtime_error(
+            "Extension '" + manifest.name + "' (" + library_filepath.string()
+            + ") was built for extension ABI version " + std::to_string(plugin_abi)
+            + ", but this server has version " + std::to_string(kExtensionAbiVersion)
+            + "; rebuild the plugin against this server.");
     }
 
     // Find the entry point

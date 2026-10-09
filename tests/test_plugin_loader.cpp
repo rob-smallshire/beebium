@@ -16,6 +16,7 @@
 
 #include <beebium/extension/PeripheralExtension.hpp>
 #include <beebium/extension/PluginLoader.hpp>
+#include <beebium/extension/ExtensionAbi.hpp>
 #include <beebium/extension/ExtensionContext.hpp>
 #include <beebium/extension/ExtensionRegistry.hpp>
 #include <beebium/extension/OneMHzBusPort.hpp>
@@ -344,3 +345,53 @@ TEST_CASE("PluginLoader load_extension fails when a declared ROM is the wrong si
     }
     std::filesystem::remove_all(dir);
 }
+
+// ============================================================================
+// Extension ABI version (#176): a plugin built for another ABI is refused
+// ============================================================================
+
+#ifdef BEEBIUM_ABI_STUB_DIR
+namespace {
+
+beebium::ExtensionManifest stub_manifest(const std::string& stem) {
+    beebium::ExtensionManifest m;
+    m.name = stem;
+    m.library_stem = stem;
+    m.manifest_dirpath = BEEBIUM_ABI_STUB_DIR;
+    return m;
+}
+
+}  // namespace
+
+TEST_CASE("PluginLoader refuses a plugin built for another extension ABI",
+          "[plugin][abi]") {
+    beebium::PluginLoader loader;
+    try {
+        (void)loader.load_extension(stub_manifest("abi_mismatch_plugin"), {}, {});
+        FAIL("the mismatched plugin was loaded");
+    } catch (const std::runtime_error& e) {
+        const std::string message = e.what();
+        INFO(message);
+        CHECK(message.find("abi_mismatch_plugin") != std::string::npos);
+        CHECK(message.find("ABI version " + std::to_string(beebium::kExtensionAbiVersion + 1)) !=
+              std::string::npos);
+        CHECK(message.find("version " + std::to_string(beebium::kExtensionAbiVersion)) !=
+              std::string::npos);
+        CHECK(message.find("rebuild") != std::string::npos);
+    }
+}
+
+TEST_CASE("PluginLoader refuses a plugin that carries no extension ABI version",
+          "[plugin][abi]") {
+    beebium::PluginLoader loader;
+    try {
+        (void)loader.load_extension(stub_manifest("abi_unstamped_plugin"), {}, {});
+        FAIL("the unstamped plugin was loaded");
+    } catch (const std::runtime_error& e) {
+        const std::string message = e.what();
+        INFO(message);
+        CHECK(message.find("abi_unstamped_plugin") != std::string::npos);
+        CHECK(message.find("no extension ABI version") != std::string::npos);
+    }
+}
+#endif

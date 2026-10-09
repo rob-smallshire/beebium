@@ -294,7 +294,9 @@ Follow `src/extensions/acorn-65c102-coprocessor/CMakeLists.txt`:
   private copies of core classes never interpose on the server's;
 - `beebium_finalize_plugin(TARGET ... NAME <name>)`, which deploys the
   library, `manifest.json` and `roms/` to `<exe-dir>/extensions/<name>/`
-  and installs them under `bin/extensions/<name>/`;
+  and installs them under `bin/extensions/<name>/`, and compiles in the
+  extension ABI version the server checks before loading the plugin (see
+  `beebium/extension/ExtensionAbi.hpp`, #176);
 - if tests link your extension directly, a `STATIC` library of the same
   sources, as the 65C02 has;
 - `add_subdirectory` in `src/extensions/CMakeLists.txt`, and the plugin

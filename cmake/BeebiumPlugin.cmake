@@ -27,6 +27,9 @@
 # NAME     - the short directory name (e.g. "piconet"); also the expected
 #            output name of the plugin DLL / .so / .dylib.
 
+set(_BEEBIUM_PLUGIN_ABI_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/../src/core/extension-api/PluginAbiVersion.cpp")
+
 function(beebium_finalize_plugin)
     cmake_parse_arguments(ARG "" "TARGET;NAME" "" ${ARGN})
 
@@ -36,6 +39,10 @@ function(beebium_finalize_plugin)
     if(NOT ARG_NAME)
         message(FATAL_ERROR "beebium_finalize_plugin: NAME is required")
     endif()
+
+    # Every plugin exports the extension ABI version it was built against,
+    # which PluginLoader checks before loading it (#176).
+    target_sources(${ARG_TARGET} PRIVATE "${_BEEBIUM_PLUGIN_ABI_SOURCE}")
 
     # Plugins resolve the extension ABI (and the framework types they use) from
     # the linked beebium_extension_api dylib, and protobuf from the shared

@@ -302,6 +302,15 @@ set_target_properties(beebium_ext_my_plugin PROPERTIES PREFIX "" OUTPUT_NAME "my
 beebium_finalize_plugin(TARGET beebium_ext_my_plugin NAME my-extension)
 ```
 
+`beebium_finalize_plugin` also compiles in `beebium_plugin_abi_version()`, which
+reports the extension ABI version (`kExtensionAbiVersion`,
+`beebium/extension/ExtensionAbi.hpp`) the plugin was built against. The server
+refuses a plugin whose version differs from its own, naming both, so after any
+change to the shared extension types rebuild the plugins with the server (the
+`beebium-servers` target does). If you change the layout of a type that crosses
+the plugin boundary (`ExtensionManifest`, `ParameterSchema`, the `Extension`
+classes), increment `kExtensionAbiVersion` (#176).
+
 > **ODR caveat (this one bites).** If your extension's *public header* gates a
 > member on `#ifdef BEEBIUM_BUILD_SERVICE` (e.g. `unique_ptr<MyDispatcher>
 > dispatcher_;`), the flag **must** be `PUBLIC`, so every consumer that

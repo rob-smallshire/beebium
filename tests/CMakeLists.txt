@@ -1667,6 +1667,23 @@ if(BEEBIUM_BUILD_SERVICE)
         # manifest/code attaches_to drift guard).
         BEEBIUM_EXTENSIONS_DIR="$<TARGET_FILE_DIR:beebium-model-b>/extensions"
     )
+    # Stub plugins for the extension ABI check (#176): one claiming another ABI
+    # version, one carrying none. Built beside the test, never deployed, so no
+    # server ever discovers them.
+    foreach(_stub abi_mismatch_plugin abi_unstamped_plugin)
+        add_library(${_stub} SHARED plugins/${_stub}.cpp)
+        target_link_libraries(${_stub} PRIVATE beebium_extension_api)
+        set_target_properties(${_stub} PROPERTIES
+            PREFIX ""
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/abi_stubs"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/abi_stubs")
+        add_dependencies(test_plugin_loader ${_stub})
+    endforeach()
+    # The directory the stubs land in, per configuration on multi-config
+    # generators (a DLL is a runtime output on Windows).
+    target_compile_definitions(test_plugin_loader PRIVATE
+        BEEBIUM_ABI_STUB_DIR="$<TARGET_FILE_DIR:abi_mismatch_plugin>")
+
     # Ensure the plugins are deployed before the test runs: test-scratch-ram for
     # the load tests, and every peripheral plugin for the attaches_to drift guard.
     add_dependencies(test_plugin_loader
