@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -2165,9 +2166,37 @@ TEST_CASE("resolve-preset --json output for an unloadable preset is stable",
 }
 
 // ============================================================================
-// describe-preset-schema's output, pinned byte for byte per model: front-ends
-// build their configuration UI from it
+// describe-preset-schema's output, pinned per model: front-ends build their
+// configuration UI from it. What depends on the build -- which plugins it
+// built (the extensions at each point, the points they provide, the Econet
+// transports) and the bundled images it decompressed -- is normalised out of
+// both sides; everything else is compared byte for byte.
 // ============================================================================
+
+namespace {
+
+nlohmann::ordered_json without_build_dependent_parts(nlohmann::ordered_json schema) {
+    static const std::set<std::string> machine_points{"1mhz-bus", "user-port", "tube",
+                                                      "serial-port"};
+    for (auto& section : schema.at("sections")) {
+        const auto type = section.at("type").get<std::string>();
+        if (type == "econet") {
+            section["transports"] = nlohmann::ordered_json::array();
+        } else if (type == "extensions") {
+            auto points = nlohmann::ordered_json::array();
+            for (auto point : section.at("attachment_points")) {
+                if (machine_points.count(point.at("id").get<std::string>()) == 0) continue;
+                point["extensions"] = nlohmann::ordered_json::array();
+                points.push_back(std::move(point));
+            }
+            section["attachment_points"] = std::move(points);
+            section.erase("bundled_images");
+        }
+    }
+    return schema;
+}
+
+}  // namespace
 
 TEST_CASE("describe-preset-schema output is stable",
           "[integration][preset][describe-preset-schema][pinned]") {
@@ -2179,8 +2208,10 @@ TEST_CASE("describe-preset-schema output is stable",
         REQUIRE(result.exit_code == 0);
         std::ifstream expected_file(std::filesystem::path(BEEBIUM_TEST_ASSETS_DIR) /
                                     "describe_preset_schema" / (std::string(model) + ".json"));
-        std::ostringstream expected;
-        expected << expected_file.rdbuf();
-        CHECK(result.stdout_output == expected.str());
+        const auto expected = without_build_dependent_parts(
+            nlohmann::ordered_json::parse(expected_file));
+        const auto actual =
+            without_build_dependent_parts(nlohmann::ordered_json::parse(result.stdout_output));
+        CHECK(actual.dump(2) == expected.dump(2));
     }
 }
