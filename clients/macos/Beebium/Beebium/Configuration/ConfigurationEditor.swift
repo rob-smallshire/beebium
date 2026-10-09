@@ -72,9 +72,6 @@ struct ConfigurationEditor: View {
     /// problems.
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
-    /// Machine model ID (e.g., "model-b")
-    let modelId: String
-
     /// Currently selected section (may not be available for the current model;
     /// `effectiveSection` resolves that).
     @State private var selectedSection: ConfigSection = .storage

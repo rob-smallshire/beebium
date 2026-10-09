@@ -92,16 +92,8 @@ struct ProcessorSectionView: View {
             .labelsHidden()
             .frame(maxWidth: 220)
 
-            ForEach(Array(speedDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                Label(diagnostic.message, systemImage: "exclamationmark.octagon.fill")
-                    .font(.caption2).foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            DiagnosticLabels(diagnostics: diagnostics.atPath("/speed"))
         }
-    }
-
-    private var speedDiagnostics: [PresetManager.PresetDiagnostic] {
-        diagnostics.filter { $0.path == "/speed" }
     }
 
     private func setChoice(_ choice: SpeedChoice) {

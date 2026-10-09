@@ -92,9 +92,7 @@ struct HardDiscsSectionView: View {
                         duplicateId: duplicateIds.contains(disc.scsiId),
                         bundledMasters: capability.bundledMasters,
                         adapters: adapters.count > 1 ? adapters : [],
-                        diagnostics: diagnostics.filter {
-                            PresetDiagnosticLocation.extensionIndex(path: $0.path) == disc.instanceIndex
-                        },
+                        diagnostics: diagnostics.forExtension(index: disc.instanceIndex),
                         setScsiId: { draft = editor.draft(settingScsiId: $0, forDiscAt: disc.instanceIndex, in: draft) },
                         setImage: { draft = editor.draft(settingImage: $0, forDiscAt: disc.instanceIndex, in: draft) },
                         setAdapterId: { draft = editor.draft(settingAdapterId: $0, forDiscAt: disc.instanceIndex, in: draft) },
@@ -181,13 +179,7 @@ private struct HardDiscRowView: View {
                 }
             }
 
-            ForEach(Array(diagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                Label(diagnostic.message, systemImage: diagnostic.isError
-                      ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundColor(diagnostic.isError ? .red : .orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            DiagnosticLabels(diagnostics: diagnostics, font: .caption)
 
             if dropRefusal != nil || dropError.kind != nil {
                 DriveStatusLine(refusalMessage: dropRefusal?.message, message: dropError)

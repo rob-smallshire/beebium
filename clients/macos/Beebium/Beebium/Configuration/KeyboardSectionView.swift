@@ -45,11 +45,7 @@ struct KeyboardSectionView: View {
                     modeBootEditor
                 }
 
-                ForEach(Array(startupDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                    Label(diagnostic.message, systemImage: "exclamationmark.octagon.fill")
-                        .font(.caption2).foregroundColor(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                DiagnosticLabels(diagnostics: diagnostics.withPrefix("/startup"))
             }
             .padding(12)
         }
@@ -98,10 +94,6 @@ struct KeyboardSectionView: View {
     }
     private var links: Int {
         draft.startup?.links ?? schema.links.min
-    }
-
-    private var startupDiagnostics: [PresetManager.PresetDiagnostic] {
-        diagnostics.filter { $0.path.hasPrefix("/startup") }
     }
 
     // MARK: - Writes (mutually exclusive forms)

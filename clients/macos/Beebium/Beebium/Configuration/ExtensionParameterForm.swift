@@ -74,12 +74,7 @@ struct ExtensionParameterForm: View {
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(Array(parameterDiagnostics(parameter.key).enumerated()), id: \.offset) { _, diagnostic in
-                Label(diagnostic.message, systemImage: "exclamationmark.octagon.fill")
-                    .font(.caption2)
-                    .foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            DiagnosticLabels(diagnostics: diagnostics.forConfigKey(parameter.key))
         }
     }
 
@@ -255,10 +250,6 @@ struct ExtensionParameterForm: View {
         if let lower = parameter.minimum { value = Swift.max(value, lower) }
         if let upper = parameter.maximum { value = Swift.min(value, upper) }
         return .int(value)
-    }
-
-    private func parameterDiagnostics(_ key: String) -> [PresetManager.PresetDiagnostic] {
-        diagnostics.filter { PresetDiagnosticLocation.configKey(path: $0.path) == key }
     }
 
     private func browse(_ key: String) {

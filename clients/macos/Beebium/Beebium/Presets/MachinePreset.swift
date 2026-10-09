@@ -41,7 +41,6 @@ struct MachinePreset: Identifiable, Hashable {
     let modelDescription: String?
     /// Release date for sorting, format: YYYY, YYYY-MM, or YYYY-MM-DD
     let releaseDate: String?
-    var configuration: [String: String]
 
     /// Whether this is a system-provided preset (not user-created).
     var isSystemProvided: Bool { source == .systemPreset }

@@ -150,8 +150,7 @@ class PresetManager: ObservableObject {
             machineName: presetData.machineName,
             modelName: schema.model.name,
             modelDescription: presetData.description ?? schema.model.description,
-            releaseDate: presetData.releaseDate,
-            configuration: [:]
+            releaseDate: presetData.releaseDate
         )
         NSLog("[PresetManager] Discovered: \(preset.name)")
         return preset

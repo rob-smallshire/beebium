@@ -57,6 +57,38 @@ struct PresetDiagnosticsView: View {
     }
 }
 
+/// Renders a list of diagnostics as labelled rows (errors red, warnings orange).
+/// The shared presentation every section uses for its own diagnostics.
+struct DiagnosticLabels: View {
+    let diagnostics: [PresetManager.PresetDiagnostic]
+    var font: Font = .caption2
+
+    var body: some View {
+        ForEach(Array(diagnostics.enumerated()), id: \.offset) { _, diagnostic in
+            Label(diagnostic.message, systemImage: diagnostic.isError
+                  ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
+                .font(font)
+                .foregroundColor(diagnostic.isError ? .red : .orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+extension Array where Element == PresetManager.PresetDiagnostic {
+    /// Diagnostics whose path is exactly `path`.
+    func atPath(_ path: String) -> [Element] { filter { $0.path == path } }
+    /// Diagnostics whose path begins with `prefix`.
+    func withPrefix(_ prefix: String) -> [Element] { filter { $0.path.hasPrefix(prefix) } }
+    /// Diagnostics on the extensions-array instance at `index`.
+    func forExtension(index: Int) -> [Element] {
+        filter { PresetDiagnosticLocation.extensionIndex(path: $0.path) == index }
+    }
+    /// Diagnostics on an extension parameter named `key`.
+    func forConfigKey(_ key: String) -> [Element] {
+        filter { PresetDiagnosticLocation.configKey(path: $0.path) == key }
+    }
+}
+
 /// Maps a diagnostic's JSON-pointer path to a human location, and classifies it
 /// to the configuration section it belongs to, so a section can show (or
 /// highlight) only its own problems. One place, since every section needs it.

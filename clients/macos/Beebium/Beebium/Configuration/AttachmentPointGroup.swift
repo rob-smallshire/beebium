@@ -149,9 +149,7 @@ struct AttachmentPointGroup: View {
                 ExtensionParameterForm(
                     manifest: manifest,
                     config: config(forInstanceAt: instance.index),
-                    diagnostics: diagnostics.filter {
-                        PresetDiagnosticLocation.extensionIndex(path: $0.path) == instance.index
-                    },
+                    diagnostics: diagnostics.forExtension(index: instance.index),
                     bundledImages: schema.bundledImages ?? [:],
                     serialPortSuggestions: serialPorts,
                     setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })

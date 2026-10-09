@@ -286,8 +286,7 @@ struct NewMachineDialog: View {
                         romResolver: romResolver(for: selectedPreset),
                         manifestResolver: manifestResolver(for: selectedPreset),
                         serialPorts: serialPorts,
-                        diagnostics: diagnostics,
-                        modelId: selectedPreset?.modelName ?? "model-b"
+                        diagnostics: diagnostics
                     )
                     // Grow with the window (resizable) so the sideways list can
                     // show more rows; 220 is the floor.

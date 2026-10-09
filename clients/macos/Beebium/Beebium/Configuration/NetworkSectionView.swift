@@ -80,11 +80,7 @@ struct NetworkSectionView: View {
             // The server validates the station and reports it at /econet/station,
             // the single source of truth; the clamped number field above is only
             // a UI nicety, not a second copy of the rules.
-            ForEach(Array(stationDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                Label(diagnostic.message, systemImage: "exclamationmark.octagon.fill")
-                    .font(.caption2).foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            DiagnosticLabels(diagnostics: stationDiagnostics)
         }
     }
 
@@ -145,11 +141,7 @@ struct NetworkSectionView: View {
                     .padding(.leading, 8)
             }
 
-            ForEach(Array(transportDiagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                Label(diagnostic.message, systemImage: "exclamationmark.octagon.fill")
-                    .font(.caption2).foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            DiagnosticLabels(diagnostics: transportDiagnostics)
         }
     }
 
@@ -179,11 +171,11 @@ struct NetworkSectionView: View {
     }
 
     private var stationDiagnostics: [PresetManager.PresetDiagnostic] {
-        diagnostics.filter { $0.path == "/econet/station" }
+        diagnostics.atPath("/econet/station")
     }
 
     private var transportDiagnostics: [PresetManager.PresetDiagnostic] {
-        diagnostics.filter { $0.path.hasPrefix("/econet/transport") }
+        diagnostics.withPrefix("/econet/transport")
     }
 
     // MARK: - Edits (write through to draft.econet)
