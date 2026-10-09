@@ -1056,6 +1056,45 @@ inline const BundledImage* find_bundled_image(const std::vector<BundledImage>& i
     return nullptr;
 }
 
+// Log an extension instance's configuration and create it: from its plugin
+// library, or from the built-in factory for one with no library. The instance's
+// config is moved into the extension. Returns nullptr, having said why on
+// stderr, when there is nothing to create it from. `what` names the kind for
+// the log ("extension", "transport").
+template<typename Instance>
+std::unique_ptr<beebium::Extension> instantiate_extension(
+        const beebium::ExtensionManifest& manifest, Instance& inst,
+        beebium::PluginLoader& plugin_loader, std::string_view what) {
+    std::cout << "Loading " << what << ": " << manifest.name << " (id=" << inst.config["id"]
+              << ")\n";
+    for (const auto& [key, value] : inst.config) {
+        if (key != "id" && key != "machine_uuid") {
+            std::cout << "  " << key << "=" << value << "\n";
+        }
+    }
+    for (const auto& [key, values] : inst.list_config) {
+        for (const auto& v : values) {
+            std::cout << "  " << key << "=" << v << "\n";
+        }
+    }
+
+    if (!manifest.library_stem.empty()) {
+        return plugin_loader.load_extension(manifest, std::move(inst.config),
+                                            std::move(inst.list_config));
+    }
+    const auto* builtin_entry = beebium::builtin_extensions::find(inst.name);
+    if (!builtin_entry) {
+        std::cerr << "Error: Extension '" << inst.name
+                  << "' has no library and no built-in factory.\n";
+        return nullptr;
+    }
+    auto loaded = builtin_entry->factory();
+    loaded->set_manifest(manifest);
+    loaded->set_config(std::move(inst.config));
+    loaded->set_list_config(std::move(inst.list_config));
+    return loaded;
+}
+
 // The attachment points this model's own hardware offers extensions.
 template<typename Memory>
 std::vector<std::string> machine_attachment_points() {
@@ -2640,34 +2679,9 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             }
 
             inst.config["machine_uuid"] = config.machine_uuid;
-            std::cout << "Loading transport: " << manifest->name
-                      << " (id=" << inst.config["id"] << ")\n";
-            for (const auto& [k, v] : inst.config) {
-                if (k != "id" && k != "machine_uuid") {
-                    std::cout << "  " << k << "=" << v << "\n";
-                }
-            }
-            for (const auto& [k, vs] : inst.list_config) {
-                for (const auto& v : vs) {
-                    std::cout << "  " << k << "=" << v << "\n";
-                }
-            }
-
-            std::unique_ptr<beebium::Extension> loaded;
-            if (!manifest->library_stem.empty()) {
-                loaded = plugin_loader.load_extension(
-                    *manifest, std::move(inst.config), std::move(inst.list_config));
-            } else {
-                const auto* builtin_entry = beebium::builtin_extensions::find(inst.name);
-                if (!builtin_entry) {
-                    std::cerr << "Error: Transport extension '" << inst.name
-                              << "' has no library and no built-in factory.\n";
-                    return {nullptr, 1};
-                }
-                loaded = builtin_entry->factory();
-                loaded->set_manifest(*manifest);
-                loaded->set_config(std::move(inst.config));
-                loaded->set_list_config(std::move(inst.list_config));
+            auto loaded = instantiate_extension(*manifest, inst, plugin_loader, "transport");
+            if (!loaded) {
+                return {nullptr, ExitCode::CONFIG};
             }
 
             auto* transport = dynamic_cast<beebium::EconetTransportExtension*>(loaded.get());
@@ -2799,37 +2813,9 @@ AssemblyOutcome<MachineType> assemble_machine(ServerConfig<MachineType>& config,
             }
         }
 
-        std::cout << "Loading extension: " << inst.name;
-        if (inst.config.count("id")) {
-            std::cout << " (id=" << inst.config["id"] << ")";
-        }
-        std::cout << "\n";
-        for (const auto& [key, value] : inst.config) {
-            if (key != "id") {
-                std::cout << "  " << key << "=" << value << "\n";
-            }
-        }
-        for (const auto& [key, values] : inst.list_config) {
-            for (const auto& v : values) {
-                std::cout << "  " << key << "=" << v << "\n";
-            }
-        }
-
-        std::unique_ptr<beebium::Extension> loaded;
-        if (!manifest->library_stem.empty()) {
-            loaded = plugin_loader.load_extension(
-                *manifest, std::move(inst.config), std::move(inst.list_config));
-        } else {
-            const auto* builtin_entry = beebium::builtin_extensions::find(inst.name);
-            if (!builtin_entry) {
-                std::cerr << "Error: Extension '" << inst.name
-                          << "' has no library and no built-in factory.\n";
-                return {nullptr, ExitCode::CONFIG};
-            }
-            loaded = builtin_entry->factory();
-            loaded->set_manifest(*manifest);
-            loaded->set_config(std::move(inst.config));
-            loaded->set_list_config(std::move(inst.list_config));
+        auto loaded = instantiate_extension(*manifest, inst, plugin_loader, "extension");
+        if (!loaded) {
+            return {nullptr, ExitCode::CONFIG};
         }
 
         if (manifest->extension_kind == "peripheral") {
