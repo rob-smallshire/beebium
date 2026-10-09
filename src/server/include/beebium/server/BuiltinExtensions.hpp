@@ -160,6 +160,7 @@ inline std::vector<Entry> make_entries() {
                 p.choices = {{"pty", "Pseudo-terminal"}, {"device", "Serial device"}};
             } else if (p.key == "path") {
                 p.label = "Path";
+                p.choices_from = "serial-ports";
             } else if (p.key == "baud") {
                 p.label = "Baud rate";
             } else if (p.key == "tx_buffer") {

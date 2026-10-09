@@ -18,6 +18,7 @@
 #include "SidewaysValidation.hpp"
 #include "beebium/extension/AttachmentPointCatalogue.hpp"
 #include "beebium/extension/AttachmentPlan.hpp"
+#include "beebium/serial/EnumeratePorts.hpp"
 #include "beebium/extension/EconetTransportRegistry.hpp"
 #include "beebium/service/EconetTransportService.hpp"
 #include "beebium/service/ExtensionRpcService.hpp"
@@ -3610,6 +3611,7 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"min", p.min ? nlohmann::ordered_json(*p.min) : nlohmann::ordered_json(nullptr)},
         {"max", p.max ? nlohmann::ordered_json(*p.max) : nlohmann::ordered_json(nullptr)},
         {"choices", choices},
+        {"choices_from", p.choices_from},
         {"excludes", p.excludes},
         {"bundled", p.bundled},
         {"unique", p.unique},
@@ -5896,6 +5898,100 @@ private:
     }
 };
 
+// ListSerialPorts subcommand - the host's serial ports, for a configuration
+// UI offering values to a parameter declared choices_from "serial-ports"
+template<typename MachineType>
+class ListSerialPortsSubcommand : public Subcommand<MachineType> {
+public:
+    std::string_view name() const override { return "list-serial-ports"; }
+    std::string_view description() const override {
+        return "List the host's serial ports";
+    }
+
+    void help(const char* program_name) const override {
+        std::cerr << "Usage: " << program_name << " list-serial-ports\n"
+                  << "\n"
+                  << "Lists the host's serial ports, with the USB identity the OS reports\n"
+                  << "for each (best-effort; a port may be missing or unopenable). These are\n"
+                  << "the values a configuration UI offers for an extension parameter whose\n"
+                  << "manifest declares choices_from \"serial-ports\" (see describe-extension).\n"
+                  << "Honours --format pretty|tsv|jsonl.\n";
+    }
+
+    int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
+        if (global.help_requested) {
+            help(argv[0]);
+            return ExitCode::OK;
+        }
+        for (int i = global.subcommand_argv_start; i < argc; ++i) {
+            std::string_view arg = argv[i];
+            if (arg == "--help" || arg == "-h") {
+                help(argv[0]);
+                return ExitCode::OK;
+            }
+            std::cerr << "Unknown argument: " << arg << "\n";
+            help(argv[0]);
+            return ExitCode::USAGE;
+        }
+
+        const auto ports = beebium::serial::enumerate_serial_ports();
+        auto hex = [](const std::optional<std::uint16_t>& id) -> std::string {
+            if (!id) return {};
+            char text[8];
+            std::snprintf(text, sizeof text, "%04x", static_cast<unsigned>(*id));
+            return text;
+        };
+        switch (resolve_output_format(global.output_format)) {
+            case OutputFormat::Pretty:
+                if (ports.empty()) {
+                    std::cout << "No serial ports found.\n";
+                }
+                for (const auto& p : ports) {
+                    std::cout << p.path;
+                    if (p.usb_vendor_id) {
+                        std::cout << "  [" << hex(p.usb_vendor_id) << ":"
+                                  << hex(p.usb_product_id) << "]";
+                    }
+                    if (!p.manufacturer.empty() || !p.product.empty()) {
+                        std::cout << "  " << p.manufacturer
+                                  << (p.manufacturer.empty() || p.product.empty() ? "" : " ")
+                                  << p.product;
+                    }
+                    std::cout << "\n";
+                }
+                break;
+            case OutputFormat::Tsv:
+                std::cout << "path\tusb_vendor_id\tusb_product_id\tmanufacturer\tproduct\t"
+                             "serial_number\n";
+                for (const auto& p : ports) {
+                    std::cout << p.path << "\t" << hex(p.usb_vendor_id) << "\t"
+                              << hex(p.usb_product_id) << "\t" << p.manufacturer << "\t"
+                              << p.product << "\t" << p.serial_number << "\n";
+                }
+                break;
+            case OutputFormat::Jsonl:
+                for (const auto& p : ports) {
+                    auto id = [](const std::optional<std::uint16_t>& v) {
+                        return v ? nlohmann::ordered_json(*v) : nlohmann::ordered_json(nullptr);
+                    };
+                    std::cout << nlohmann::ordered_json{
+                                     {"path", p.path},
+                                     {"usb_vendor_id", id(p.usb_vendor_id)},
+                                     {"usb_product_id", id(p.usb_product_id)},
+                                     {"manufacturer", p.manufacturer},
+                                     {"product", p.product},
+                                     {"serial_number", p.serial_number}}
+                                     .dump()
+                              << "\n";
+                }
+                break;
+            case OutputFormat::Auto:
+                break;
+        }
+        return ExitCode::OK;
+    }
+};
+
 // DeletePreset subcommand - delete a user preset
 template<typename MachineType>
 class DeletePresetSubcommand : public Subcommand<MachineType> {
@@ -6716,6 +6812,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         v.push_back(std::make_unique<ListExtensionsSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeExtensionSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListAttachmentPointsSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ListSerialPortsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListNamePlaceholdersSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribePresetSchemaSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeRomSubcommand<MachineType>>());

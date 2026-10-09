@@ -416,3 +416,34 @@ TEST_CASE("describe-extension --json lists the parameters each one excludes",
     CHECK(r.exit_code == 64);
     CHECK(r.stderr_output.find("cannot be combined") != std::string::npos);
 }
+
+// ============================================================================
+// Host serial ports, enumerated before launch
+// ============================================================================
+
+TEST_CASE("list-serial-ports lists the host's serial ports as JSON lines",
+          "[integration][serial][list-serial-ports]") {
+    auto r = run_command(EXECUTABLE + " --format jsonl list-serial-ports");
+    INFO(r.stderr_output);
+    REQUIRE(r.exit_code == 0);
+    std::istringstream lines(r.stdout_output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (line.empty()) continue;
+        auto port = nlohmann::json::parse(line);
+        CHECK(port.at("path").is_string());
+        CHECK(port.contains("usb_vendor_id"));
+        CHECK(port.contains("product"));
+    }
+}
+
+TEST_CASE("a serial device parameter offers the enumerated ports",
+          "[integration][serial][describe-extension][json]") {
+    const auto piconet = describe_extension_json("piconet");
+    const auto& device_path = parameter(piconet, "device_path");
+    CHECK(device_path.at("choices_from") == "serial-ports");
+    CHECK(device_path.at("default") == "auto");
+    const auto host_serial = describe_extension_json("host-serial");
+    CHECK(parameter(host_serial, "path").at("choices_from") == "serial-ports");
+    CHECK(parameter(host_serial, "mode").at("choices_from") == "");
+}

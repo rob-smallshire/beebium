@@ -395,13 +395,13 @@ TEST_CASE("create-preset: --station + --aun round-trips to an econet transport",
     CHECK(loaded.config->extensions.empty());
 }
 
-TEST_CASE("create-preset: --station + --piconet omits a discovered device_path",
+TEST_CASE("create-preset: --station + --piconet records device discovery",
           "[integration][preset][create-preset]") {
     TempDirectory temp_dir;
     auto output_filepath = temp_dir.path() / "piconet.preset.beebium";
 
-    // No device_path: the transport records name only, so the extension
-    // discovers the device at boot.
+    // No device_path given: the transport records the default, "auto", so
+    // the extension discovers the device at boot.
     auto result = run_command(
         EXECUTABLE + " create-preset --name \"Piconet Box\" --output \"" +
         output_filepath.string() + "\" --station 81 --piconet");
@@ -413,7 +413,9 @@ TEST_CASE("create-preset: --station + --piconet omits a discovered device_path",
     CHECK(loaded.config->econet->station == 81);
     REQUIRE(loaded.config->econet->transport.has_value());
     CHECK(loaded.config->econet->transport->name == "piconet");
-    CHECK(loaded.config->econet->transport->parameters.empty());
+    const auto& parameters = loaded.config->econet->transport->parameters;
+    CHECK(parameters.size() == 1);
+    CHECK(parameters.at("device_path") == "auto");
 }
 
 TEST_CASE("create-preset: --machine-name round-trips through the loader",

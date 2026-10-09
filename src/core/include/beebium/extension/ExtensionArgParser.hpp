@@ -59,6 +59,12 @@ struct ParameterSchema {
     std::string label;          // short human-readable name, for a form
     std::optional<long long> min;  // "integer" only: the least value allowed
     std::optional<long long> max;  // "integer" only: the greatest value allowed
+    std::string choices_from;              // non-empty: a configuration UI
+                                           // may offer values from this
+                                           // host enumeration (today
+                                           // "serial-ports", as
+                                           // list-serial-ports lists them);
+                                           // the value stays free text
     std::vector<std::string> excludes;     // keys that may not be given with
                                            // this one (either side declaring
                                            // it is enough)

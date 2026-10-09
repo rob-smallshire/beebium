@@ -199,6 +199,7 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.unique = p.value("unique", false);
             param.bundled = p.value("bundled", "");
             param.label = p.value("label", "");
+            param.choices_from = p.value("choices_from", "");
             if (p.contains("min") && p["min"].is_number_integer()) {
                 param.min = p["min"].get<long long>();
             }
