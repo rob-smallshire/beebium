@@ -365,9 +365,10 @@ inline std::pair<std::optional<PresetEconetConfig>, std::string> parse_econet_se
 // Shape: { "slots": [ { "slot": <0-15>, "type": "rom"|"ram"|"empty",
 //                       "image_uri": "<rom-name-or-path>" }, ... ] }
 //
-// ROM/RAM image references are stored verbatim and resolved downstream via
-// the ROM search path (like --sideways and the machine's default ROMs), so
-// they are NOT rewritten to file:// URIs the way disc images are. Slot
+// ROM/RAM image references are not rewritten to file:// URIs the way disc
+// images are: a bare name is resolved downstream via the ROM search path (like
+// --sideways and the machine's default ROMs), and load_preset resolves a
+// relative path with a directory against the preset's directory. Slot
 // existence and per-machine topology are validated later against the
 // configured machine variant; here we only check structural validity and
 // the 0-15 slot range, mirroring parse_sideways_arg.
@@ -478,6 +479,10 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         return {std::nullopt, "Preset file must contain a JSON object: " + filepath.string()};
     }
 
+    // Relative paths in the preset resolve from the directory holding it,
+    // wherever the preset was named from.
+    const auto preset_dirpath = std::filesystem::absolute(filepath).parent_path();
+
     // Parse into PresetConfig
     PresetConfig config;
     std::vector<PresetDiagnostic> result_warnings;
@@ -556,7 +561,8 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
 
     // MOS ROM (optional): a ROM name or path, resolved like --mos.
     if (json.contains("mos_image_uri") && json["mos_image_uri"].is_string()) {
-        config.mos_image_uri = json["mos_image_uri"].get<std::string>();
+        config.mos_image_uri = resolve_preset_relative_filepath(
+            json["mos_image_uri"].get<std::string>(), preset_dirpath);
     }
 
     // Model (optional, for validation)
@@ -565,10 +571,6 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     }
 
     // Storage section
-    // Relative paths in the preset resolve from the directory holding it,
-    // wherever the preset was named from.
-    const auto preset_dirpath = std::filesystem::absolute(filepath).parent_path();
-
     if (json.contains("storage") && json["storage"].is_object()) {
         config.storage = parse_storage_section(json["storage"], preset_dirpath);
     }
@@ -633,6 +635,10 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
         auto [slots, error] = parse_sideways_section(json["sideways_bank"]);
         if (!slots) {
             return {std::nullopt, error + ": " + filepath.string()};
+        }
+        for (auto& slot : *slots) {
+            slot.image_filepath =
+                resolve_preset_relative_filepath(slot.image_filepath, preset_dirpath);
         }
         config.sideways = std::move(*slots);
     }

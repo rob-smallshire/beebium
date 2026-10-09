@@ -866,3 +866,21 @@ TEST_CASE("load_preset: unknown top-level keys are warned about", "[preset][load
     REQUIRE(result.warnings.size() == 1);
     CHECK(result.warnings[0].path == "/colour");
 }
+
+TEST_CASE("load_preset: a ROM path with a directory resolves from the preset",
+          "[preset][load_preset][sideways][settings]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({
+        "mos_image_uri": "roms/my-mos.rom",
+        "sideways_bank": { "slots": [
+            { "slot": 14, "type": "rom", "image_uri": "roms/forth.rom" },
+            { "slot": 13, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" } ] }
+    })");
+    REQUIRE(result.success());
+    const auto roms_dirpath = std::filesystem::absolute(dir.path()) / "roms";
+    CHECK(result.config->mos_image_uri ==
+          (roms_dirpath / "my-mos.rom").lexically_normal().string());
+    CHECK(result.config->sideways[0].image_filepath ==
+          (roms_dirpath / "forth.rom").lexically_normal().string());
+    CHECK(result.config->sideways[1].image_filepath == "acorn-dfs_2_26.rom");  // bare: ROM search
+}
