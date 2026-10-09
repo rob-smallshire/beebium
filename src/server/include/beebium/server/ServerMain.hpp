@@ -1316,7 +1316,7 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             auto result = load_preset(*config.preset_filepath);
             if (!result) {
                 std::cerr << "Error: " << result.error << "\n";
-                return ExitCode::NOINPUT;
+                return result.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
             }
 
             // Validate model compatibility if preset specifies a model
@@ -1607,18 +1607,28 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
 
 // Validate configuration for consistency.
 // Returns error message if invalid, nullopt if valid.
+// The startup links: --links excludes the semantic options.
 template<typename MachineType>
-std::optional<std::string> validate_config(const ServerConfig<MachineType>& config) {
-    // --links is mutually exclusive with semantic options
+std::optional<std::string> validate_startup_links(const ServerConfig<MachineType>& config) {
     if (config.raw_links >= 0 && (config.screen_mode_set || config.auto_boot_set)) {
         return "--links cannot be combined with --screen-mode or --auto-boot";
     }
+    return std::nullopt;
+}
 
-    // Econet transports are mutually exclusive. Both AUN and Piconet
-    // are extension instances; the one-transport check lives in
-    // resolve_auto_station and install_econet (which see the
-    // EconetTransportRegistry).
+template<typename MachineType>
+std::optional<std::string> validate_sideways_slots(const ServerConfig<MachineType>& config);
 
+template<typename MachineType>
+std::optional<std::string> validate_config(const ServerConfig<MachineType>& config) {
+    if (auto err = validate_startup_links(config)) return err;
+    return validate_sideways_slots(config);
+}
+
+// The sideways slots against the model's topology, and their write-protect
+// requests against its switches.
+template<typename MachineType>
+std::optional<std::string> validate_sideways_slots(const ServerConfig<MachineType>& config) {
     // Validate --sideways arguments against the machine variant's slot
     // topology, taking into account any motherboard link state that affects
     // slot mapping (e.g. Model B+ S13). Reports nonexistent slots,
@@ -5637,8 +5647,8 @@ private:
             warning(w.path, w.message);
         }
         if (!loaded) {
-            error("", loaded.error);
-            return ExitCode::NOINPUT;
+            error(loaded.error_path, loaded.error);
+            return loaded.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
         }
         const PresetConfig& preset = *loaded.config;
         if (preset.model && *preset.model != Memory::MACHINE_TYPE) {
@@ -5669,8 +5679,12 @@ private:
             error(e.path, e.message);
             failed = true;
         }
-        if (auto err = validate_config(config)) {
-            error("", *err);
+        if (auto err = validate_startup_links(config)) {
+            error("/startup", *err);
+            failed = true;
+        }
+        if (auto err = validate_sideways_slots(config)) {
+            error("/sideways_bank", *err);
             failed = true;
         }
         if constexpr (HasDiscControllerSocket<Memory>) {

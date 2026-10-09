@@ -389,10 +389,15 @@ Without `--json` the document goes to stdout and diagnostics to stderr. With
 }
 ```
 
-`path` is a JSON pointer into the preset, or `""` for a problem with the
-configuration as a whole. The exit status is 0 with no errors, 78 when the
-preset does not describe a valid machine for this model, and 66 when it cannot
-be found or read; `preset` is then `null`.
+`path` is a JSON pointer to the key at fault: `/econet/station`,
+`/startup/links`, `/speed`, `/sideways_bank/slots/1/slot` (a slot's own
+shape), `/sideways_bank` (slots that conflict on the model's sockets),
+`/storage/fdc_socket/id`, `/model`, an extension's entry or parameter. It is
+`""` only when the file itself cannot be found or read. The exit status is 0
+with no errors, 78 when the preset does not describe a valid machine for this
+model, and 66 when it cannot be found or read as a JSON object. When the
+preset cannot be loaded at all (66, or a 78 from its shape, such as a station
+out of range) `preset` is `null`; the error's path still says where.
 
 The document is itself a preset: saving it (with `create-preset --from`, or by
 writing it to a file) and resolving it again gives the same document. A test

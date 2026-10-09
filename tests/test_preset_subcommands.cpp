@@ -1901,3 +1901,70 @@ TEST_CASE("a coprocessor's ROM named by bare name loads the one the plugin ships
                            png_filepath.string() + "\" --tube-65c102 rom=no-such.rom");
     CHECK(bad.exit_code == 78);
 }
+
+// ============================================================================
+// resolve-preset: every error the preset's content causes is located
+// ============================================================================
+
+namespace {
+
+// The single error resolving `body` gives, as (exit code, path).
+std::pair<int, std::string> located_error(const std::string& body) {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "located.preset.beebium";
+    std::ofstream(preset_filepath) << body;
+    auto result = run_command(EXECUTABLE + " resolve-preset \"" + preset_filepath.string() +
+                              "\" --json");
+    auto out = nlohmann::json::parse(result.stdout_output);
+    std::string path = "<none>";
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("severity") == "error") path = d.at("path").get<std::string>();
+    }
+    return {result.exit_code, path};
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: Econet station errors are located at the station",
+          "[integration][preset][resolve-preset][pointers]") {
+    CHECK(located_error(R"({"econet": {"station": 255}})") ==
+          std::make_pair(78, std::string("/econet/station")));
+    CHECK(located_error(R"({"econet": {"transport": {"name": "aun"}}})") ==
+          std::make_pair(78, std::string("/econet/station")));
+    CHECK(located_error(R"({"econet": {"station": 80, "transport": {"parameters": {}}}})") ==
+          std::make_pair(78, std::string("/econet/transport/name")));
+}
+
+TEST_CASE("resolve-preset: machine-setting errors are located at their key",
+          "[integration][preset][resolve-preset][pointers]") {
+    CHECK(located_error(R"({"speed": 0})") == std::make_pair(78, std::string("/speed")));
+    CHECK(located_error(R"({"startup": {"screen_mode": 9}})") ==
+          std::make_pair(78, std::string("/startup/screen_mode")));
+    CHECK(located_error(R"({"startup": {"links": 3, "auto_boot": true}})") ==
+          std::make_pair(78, std::string("/startup/links")));
+}
+
+TEST_CASE("resolve-preset: sideways errors are located at the slot",
+          "[integration][preset][resolve-preset][pointers]") {
+    CHECK(located_error(R"({"sideways_bank": {"slots": [
+              {"slot": 15, "type": "rom", "image_uri": "x.rom"},
+              {"slot": 16, "type": "empty"}]}})") ==
+          std::make_pair(78, std::string("/sideways_bank/slots/1/slot")));
+    CHECK(located_error(R"({"sideways_bank": {"slots": [{"slot": 14, "type": "rom"}]}})") ==
+          std::make_pair(78, std::string("/sideways_bank/slots/0/image_uri")));
+    // A slot the model lacks is found against its topology, after loading.
+    CHECK(located_error(R"({"sideways_bank": {"slots": [
+              {"slot": 14, "type": "rom", "image_uri": "a.rom"},
+              {"slot": 2, "type": "rom", "image_uri": "b.rom"}]}})").second.rfind(
+              "/sideways_bank", 0) == 0);
+}
+
+TEST_CASE("start: a preset whose content is invalid is a configuration error",
+          "[integration][preset][pointers]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "bad-station.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"econet": {"station": 255}})";
+    auto result = run_command(EXECUTABLE + " start --preset \"" + preset_filepath.string() +
+                              "\" --port 0");
+    CHECK(result.exit_code == 78);
+}
