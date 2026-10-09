@@ -78,6 +78,21 @@ BEEBIUM_EXT_API ParseResult parse_extension_args(
     std::string_view arg_string,
     const std::vector<ParameterSchema>& schema);
 
+// Normalise an extension config that arrives already split into key/value
+// pairs -- a preset's extensions[].config or econet.transport.parameters --
+// exactly as parse_extension_args normalises a command-line string: unknown
+// keys are rejected, a single value for an is_list parameter becomes a
+// one-element list (and a list for a scalar parameter is an error), the
+// supplied keys are recorded in explicit_keys, defaults are filled in, and
+// required parameters and types are checked. `source` prefixes any error
+// (e.g. "preset extension 'scsi-hard-disc'"). The framework keys id and label
+// pass through unvalidated, as they do on the command line.
+BEEBIUM_EXT_API ParseResult normalise_extension_config(
+    std::string_view source,
+    std::map<std::string, std::string> config,
+    std::map<std::string, std::vector<std::string>> list_config,
+    const std::vector<ParameterSchema>& schema);
+
 // The colon-separated CLI tokenizer split_colon_args() moved to a neutral home
 // (beebium/CliArgSplit.hpp) - it is not extension-specific. Included here so
 // existing users of this header keep compiling.

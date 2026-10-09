@@ -527,3 +527,92 @@ TEST_CASE("parse leaves a single-letter-scheme URL for the split-URL guidance",
     CHECK_FALSE(result.ok);
     REQUIRE_THAT(result.error, ContainsSubstring("URL"));
 }
+
+// ---------------------------------------------------------------------------
+// normalise_extension_config: the same normalisation for a config that
+// arrives already split into key/value pairs (a preset's extensions[].config,
+// an econet.transport's parameters) as parse_extension_args gives a CLI string.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+const std::vector<ParameterSchema> kListSchema = {
+    {"port", "integer", "UDP port", -1, false, false, "32768"},
+    {"map", "string", "Peer entry", -1, false, /*is_list=*/true, ""},
+};
+
+}  // namespace
+
+TEST_CASE("normalise_extension_config fills defaults and records supplied keys",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset extension 'scsi-hard-disc'", {{"image", "disc.dat"}}, {}, kScsiHddSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config.at("image") == "disc.dat");
+    CHECK(result.config.at("scsi-id") == "0");  // manifest default
+    CHECK(result.explicit_keys == std::set<std::string>{"image"});
+}
+
+TEST_CASE("normalise_extension_config agrees with parse_extension_args",
+          "[extension][arg-parser][normalise]") {
+    auto parsed = parse_extension_args("scsi-hdd", "3:disc.dat", kScsiHddSchema);
+    auto normalised = normalise_extension_config(
+        "preset", {{"scsi-id", "3"}, {"image", "disc.dat"}}, {}, kScsiHddSchema);
+    REQUIRE(parsed.ok);
+    REQUIRE(normalised.ok);
+    CHECK(parsed.config == normalised.config);
+    CHECK(parsed.list_config == normalised.list_config);
+    CHECK(parsed.explicit_keys == normalised.explicit_keys);
+}
+
+TEST_CASE("normalise_extension_config enforces required parameters",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config("preset extension 'x'", {}, {}, kRequiredSchema);
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("preset extension 'x'"));
+    CHECK_THAT(result.error, ContainsSubstring("missing required parameter 'name'"));
+}
+
+TEST_CASE("normalise_extension_config checks types",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset", {{"scsi-id", "seven"}}, {}, kScsiHddSchema);
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("parameter 'scsi-id' must be an integer"));
+}
+
+TEST_CASE("normalise_extension_config rejects an unknown parameter",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset", {{"colour", "red"}}, {}, kScsiHddSchema);
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("unknown parameter 'colour'"));
+}
+
+TEST_CASE("normalise_extension_config passes the framework keys through",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset", {{"id", "hdd0"}, {"label", "Boot disc"}, {"image", "d.dat"}}, {},
+        kScsiHddSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config.at("id") == "hdd0");
+    CHECK(result.config.at("label") == "Boot disc");
+}
+
+TEST_CASE("normalise_extension_config moves a scalar list parameter into the list",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset", {{"map", "0.80@127.0.0.1@40001"}}, {}, kListSchema);
+    REQUIRE(result.ok);
+    CHECK(result.config.count("map") == 0);
+    REQUIRE(result.list_config.at("map") == std::vector<std::string>{"0.80@127.0.0.1@40001"});
+    CHECK(result.explicit_keys.count("map") == 1);
+}
+
+TEST_CASE("normalise_extension_config rejects a list for a scalar parameter",
+          "[extension][arg-parser][normalise]") {
+    auto result = normalise_extension_config(
+        "preset", {}, {{"port", {"1", "2"}}}, kListSchema);
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("parameter 'port' takes one value"));
+}

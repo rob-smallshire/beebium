@@ -147,6 +147,62 @@ bool is_drive_letter_split(const std::string& cur, const std::string& next) {
             (value[0] >= 'a' && value[0] <= 'z'));
 }
 
+// The steps every extension config takes once its keys and values are known,
+// however they arrived: record the keys the caller supplied, fill the defaults
+// of the optional parameters it left out, then check the required parameters
+// are present and the values have their types. `err` builds the failed result.
+template <typename Err>
+ParseResult complete_config(ParseResult result,
+                            const std::vector<ParameterSchema>& schema,
+                            Err err) {
+    // Record which keys the caller actually supplied, before any defaults are
+    // filled in -- a preset merge uses this to override only typed keys (#166).
+    for (const auto& [key, value] : result.config) {
+        result.explicit_keys.insert(key);
+    }
+    for (const auto& [key, values] : result.list_config) {
+        result.explicit_keys.insert(key);
+    }
+
+    // Apply defaults for missing optional parameters
+    for (const auto& p : schema) {
+        if (p.default_value.empty()) {
+            continue;
+        }
+        if (p.is_list) {
+            if (result.list_config.count(p.key) == 0) {
+                result.list_config[p.key].push_back(p.default_value);
+            }
+        } else if (result.config.count(p.key) == 0) {
+            result.config[p.key] = p.default_value;
+        }
+    }
+
+    // Validate required parameters
+    for (const auto& p : schema) {
+        const bool present = p.is_list ? result.list_config.count(p.key) != 0
+                                       : result.config.count(p.key) != 0;
+        if (p.required && !present) {
+            return err("missing required parameter '" + p.key
+                       + "' (" + p.description + ")");
+        }
+    }
+
+    // Validate types
+    for (const auto& p : schema) {
+        auto it = result.config.find(p.key);
+        if (it != result.config.end() && !it->second.empty()) {
+            if (!validate_type(p.type, it->second)) {
+                return err("parameter '" + p.key + "' must be "
+                           + type_description(p.type)
+                           + ", got '" + it->second + "'");
+            }
+        }
+    }
+
+    return result;
+}
+
 }  // namespace
 
 ParseResult parse_extension_args(
@@ -303,45 +359,60 @@ ParseResult parse_extension_args(
         }
     }
 
-    // Record which keys the caller actually supplied, before any defaults are
-    // filled in -- a preset merge uses this to override only typed keys (#166).
-    for (const auto& [key, value] : result.config) {
-        result.explicit_keys.insert(key);
-    }
-    for (const auto& [key, values] : result.list_config) {
-        result.explicit_keys.insert(key);
+    return complete_config(std::move(result), schema, err);
+}
+
+ParseResult normalise_extension_config(
+        std::string_view source,
+        std::map<std::string, std::string> config,
+        std::map<std::string, std::vector<std::string>> list_config,
+        const std::vector<ParameterSchema>& schema) {
+
+    auto err = [&](const std::string& msg) -> ParseResult {
+        ParseResult r;
+        r.ok = false;
+        r.error = std::string(source) + ": " + msg;
+        return r;
+    };
+
+    std::map<std::string, const ParameterSchema*> by_key;
+    for (const auto& p : schema) {
+        by_key[p.key] = &p;
     }
 
-    // Apply defaults for missing optional parameters
-    for (const auto& p : schema) {
-        if (result.config.count(p.key) == 0) {
-            if (!p.default_value.empty()) {
-                result.config[p.key] = p.default_value;
+    ParseResult result;
+    result.ok = true;
+
+    for (auto& [key, value] : config) {
+        if (!is_framework_key(key)) {
+            auto it = by_key.find(key);
+            if (it == by_key.end()) {
+                return err("unknown parameter '" + key
+                           + "' (valid parameters: " + format_valid_keys(schema) + ")");
+            }
+            // A single value for a list parameter is a one-element list.
+            if (it->second->is_list) {
+                if (list_config.count(key) == 0) {
+                    result.list_config[key].push_back(std::move(value));
+                }
+                continue;
             }
         }
+        result.config[key] = std::move(value);
     }
-
-    // Validate required parameters
-    for (const auto& p : schema) {
-        if (p.required && result.config.count(p.key) == 0) {
-            return err("missing required parameter '" + p.key
-                       + "' (" + p.description + ")");
+    for (auto& [key, values] : list_config) {
+        auto it = by_key.find(key);
+        if (it == by_key.end()) {
+            return err("unknown parameter '" + key
+                       + "' (valid parameters: " + format_valid_keys(schema) + ")");
         }
-    }
-
-    // Validate types
-    for (const auto& p : schema) {
-        auto it = result.config.find(p.key);
-        if (it != result.config.end() && !it->second.empty()) {
-            if (!validate_type(p.type, it->second)) {
-                return err("parameter '" + p.key + "' must be "
-                           + type_description(p.type)
-                           + ", got '" + it->second + "'");
-            }
+        if (!it->second->is_list) {
+            return err("parameter '" + key + "' takes one value, not a list");
         }
+        result.list_config[key] = std::move(values);
     }
 
-    return result;
+    return complete_config(std::move(result), schema, err);
 }
 
 }  // namespace beebium
