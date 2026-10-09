@@ -2163,3 +2163,24 @@ TEST_CASE("resolve-preset --json output for an unloadable preset is stable",
                                preset_filepath.string()}}})}};
     CHECK(result.stdout_output == expected.dump(2) + "\n");
 }
+
+// ============================================================================
+// describe-preset-schema's output, pinned byte for byte per model: front-ends
+// build their configuration UI from it
+// ============================================================================
+
+TEST_CASE("describe-preset-schema output is stable",
+          "[integration][preset][describe-preset-schema][pinned]") {
+    for (const char* model : {"model-b", "model-b-plus", "model-b-integra-b"}) {
+        INFO(model);
+        auto result =
+            run_command(find_executable(std::string("beebium-") + model).string() +
+                        " describe-preset-schema");
+        REQUIRE(result.exit_code == 0);
+        std::ifstream expected_file(std::filesystem::path(BEEBIUM_TEST_ASSETS_DIR) /
+                                    "describe_preset_schema" / (std::string(model) + ".json"));
+        std::ostringstream expected;
+        expected << expected_file.rdbuf();
+        CHECK(result.stdout_output == expected.str());
+    }
+}

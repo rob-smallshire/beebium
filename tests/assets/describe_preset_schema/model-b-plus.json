@@ -1,0 +1,337 @@
+{
+  "schema_version": 2,
+  "model": {
+    "id": "model-b-plus",
+    "name": "BBC Model B+ 64K",
+    "description": "Enhanced Model B with 64KB RAM and built-in FDC"
+  },
+  "sections": [
+    {
+      "type": "speed",
+      "default": 1.0,
+      "unlimited": "unlimited",
+      "description": "Emulation speed as a positive multiple of real time, or \"unlimited\" to run flat out"
+    },
+    {
+      "type": "startup",
+      "screen_mode": {
+        "min": 0,
+        "max": 7,
+        "default": 7
+      },
+      "auto_boot": {
+        "default": false
+      },
+      "links": {
+        "min": 0,
+        "max": 255,
+        "excludes": [
+          "screen_mode",
+          "auto_boot"
+        ]
+      },
+      "description": "The startup keyboard links: screen_mode and auto_boot, or the whole links byte"
+    },
+    {
+      "type": "mos_image_uri",
+      "default": "acorn-mos_2_0.rom",
+      "description": "The MOS ROM: a ROM name (found on the ROM search path) or a path"
+    },
+    {
+      "type": "storage",
+      "builtin": {
+        "cassette": true,
+        "fdc": {
+          "device": "WD1770",
+          "label": "Built-in WD1770"
+        }
+      },
+      "floppy_drives": [
+        {
+          "drive": 0,
+          "tracks": [
+            40,
+            80
+          ],
+          "sides": 2,
+          "image_types": [
+            "ssd",
+            "dsd",
+            "adf",
+            "adl",
+            "adm",
+            "ads",
+            "hfe"
+          ]
+        },
+        {
+          "drive": 1,
+          "tracks": [
+            40,
+            80
+          ],
+          "sides": 2,
+          "image_types": [
+            "ssd",
+            "dsd",
+            "adf",
+            "adl",
+            "adm",
+            "ads",
+            "hfe"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "econet",
+      "station": {
+        "min": 1,
+        "max": 254,
+        "auto": true,
+        "auto_default_range": [
+          1,
+          253
+        ]
+      },
+      "transports": [
+        "aun",
+        "piconet"
+      ]
+    },
+    {
+      "type": "sideways_bank",
+      "has_aliasing": true,
+      "sockets": [
+        {
+          "label": "IC71",
+          "slots": [
+            14,
+            15
+          ],
+          "capabilities": [
+            "rom"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC35 (slot 2)",
+          "slots": [
+            2
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC35 (slot 3)",
+          "slots": [
+            3
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC44 (slot 4)",
+          "slots": [
+            4
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC44 (slot 5)",
+          "slots": [
+            5
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC57 (slot 6)",
+          "slots": [
+            6
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC57 (slot 7)",
+          "slots": [
+            7
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC62 (slot 8)",
+          "slots": [
+            8
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC62 (slot 9)",
+          "slots": [
+            9
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC68 (slot 10)",
+          "slots": [
+            10
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        },
+        {
+          "label": "IC68 (slot 11)",
+          "slots": [
+            11
+          ],
+          "capabilities": [
+            "rom",
+            "ram",
+            "empty"
+          ],
+          "runtime_configurable": false
+        }
+      ],
+      "default_roms": [
+        {
+          "slot": 15,
+          "image": "bbc-basic_2.rom",
+          "role": "language"
+        },
+        {
+          "slot": 11,
+          "image": "acorn-dfs_2_26.rom",
+          "role": "filing"
+        }
+      ]
+    },
+    {
+      "type": "extensions",
+      "attachment_points": [
+        {
+          "id": "1mhz-bus",
+          "display_name": "1 MHz Bus",
+          "min_occupancy": 0,
+          "max_occupancy": null,
+          "provided_by": null,
+          "extensions": [
+            "test-scratch-ram",
+            "acorn-scsi"
+          ]
+        },
+        {
+          "id": "user-port",
+          "display_name": "User Port",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "acorn-rtc"
+          ]
+        },
+        {
+          "id": "tube",
+          "display_name": "Tube",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "acorn-65c102-coprocessor",
+            "acorn-65c02-coprocessor"
+          ]
+        },
+        {
+          "id": "serial-port",
+          "display_name": "Serial Port",
+          "min_occupancy": 0,
+          "max_occupancy": 1,
+          "provided_by": null,
+          "extensions": [
+            "host-serial",
+            "rpc-serial",
+            "rfc2217-client-serial",
+            "ip232-serial",
+            "loopback-serial",
+            "rfc2217-server-serial"
+          ]
+        },
+        {
+          "id": "scsi",
+          "display_name": "SCSI Bus",
+          "min_occupancy": 0,
+          "max_occupancy": 7,
+          "provided_by": [
+            "acorn-scsi"
+          ],
+          "extensions": [
+            "scsi-hard-disc"
+          ]
+        }
+      ],
+      "bundled_images": {
+        "hard-disc": [
+          {
+            "image": "l3fs-v1_26b.dat",
+            "size_bytes": 10002432,
+            "extension": null
+          }
+        ],
+        "rom": [
+          {
+            "image": "acorn-tube-65c102_1_20.rom",
+            "size_bytes": 4096,
+            "extension": "acorn-65c102-coprocessor"
+          },
+          {
+            "image": "acorn-tube-6502_1_10.rom",
+            "size_bytes": 4096,
+            "extension": "acorn-65c02-coprocessor"
+          }
+        ]
+      }
+    }
+  ]
+}
