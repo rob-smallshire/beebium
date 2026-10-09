@@ -505,6 +505,12 @@ class PresetManager: ObservableObject {
         await fetchSection(type: "extensions", executablePath: preset.coreExecutablePath)
     }
 
+    /// Fetch the `econet` schema section (station rules + transports) for a
+    /// preset's model, or nil if the model has no Econet socket.
+    func fetchEconetSchema(for preset: MachinePreset) async -> EconetSchemaSection? {
+        await fetchSection(type: "econet", executablePath: preset.coreExecutablePath)
+    }
+
     /// Cache of extension manifests per (executable, extension name), stable for
     /// the session (a manifest does not change while the app runs).
     private var cachedManifests: [String: ExtensionManifest] = [:]

@@ -37,6 +37,8 @@ struct NewMachineDialog: View {
     @State private var hardDiscCapability: HardDiscCapability?
     /// The model's extensions schema (attachment points), for Peripherals.
     @State private var extensionsSchema: ExtensionsSchemaSection?
+    /// The model's econet schema (station rules + transports), for Network.
+    @State private var econetSchema: EconetSchemaSection?
     @State private var isLoadingSchema = false
 
     /// resolve-preset diagnostics for the current draft. Errors block launching;
@@ -275,6 +277,7 @@ struct NewMachineDialog: View {
                         memorySchema: memorySchema,
                         hardDiscCapability: hardDiscCapability,
                         extensionsSchema: extensionsSchema,
+                        econetSchema: econetSchema,
                         romResolver: romResolver(for: selectedPreset),
                         manifestResolver: manifestResolver(for: selectedPreset),
                         diagnostics: diagnostics,
@@ -428,6 +431,7 @@ struct NewMachineDialog: View {
             let storage = await manager.fetchStorageSchema(for: preset)
             let sideways = await manager.fetchSidewaysSchema(for: preset)
             let extensions = await manager.fetchExtensionsSchema(for: preset)
+            let econet = await manager.fetchEconetSchema(for: preset)
             // The resolved document is the editing source: defaults filled,
             // paths absolute, default ROMs expanded into explicit slots. The
             // raw-file decode is a defensive fallback for the rare case the
@@ -439,6 +443,7 @@ struct NewMachineDialog: View {
                 storageSchema = storage
                 memorySchema = sideways
                 extensionsSchema = extensions
+                econetSchema = econet
                 hardDiscCapability = extensions.flatMap { HardDiscCapability(schema: $0) }
 
                 // Fill the metadata the launch needs if it was omitted.

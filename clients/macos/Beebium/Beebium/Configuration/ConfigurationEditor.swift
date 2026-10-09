@@ -52,6 +52,10 @@ struct ConfigurationEditor: View {
     /// The model's extensions schema (attachment points), for Peripherals.
     let extensionsSchema: ExtensionsSchemaSection?
 
+    /// The model's econet schema (station rules + transports), for Network;
+    /// nil on a model with no Econet socket.
+    let econetSchema: EconetSchemaSection?
+
     /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
@@ -74,6 +78,7 @@ struct ConfigurationEditor: View {
         case storage = "Storage"
         case memory = "Memory"
         case peripherals = "Peripherals"
+        case network = "Network"
 
         var id: String { rawValue }
 
@@ -82,6 +87,7 @@ struct ConfigurationEditor: View {
             case .storage: return "internaldrive"
             case .memory: return "memorychip"
             case .peripherals: return "puzzlepiece.extension"
+            case .network: return "network"
             }
         }
     }
@@ -99,6 +105,7 @@ struct ConfigurationEditor: View {
            }) {
             sections.append(.peripherals)
         }
+        if econetSchema != nil { sections.append(.network) }
         return sections
     }
 
@@ -189,6 +196,15 @@ struct ConfigurationEditor: View {
                 PeripheralsSectionView(
                     draft: $draft,
                     schema: extensionsSchema,
+                    diagnostics: diagnostics,
+                    manifestResolver: manifestResolver
+                )
+            }
+        case .network:
+            if let econetSchema = econetSchema {
+                NetworkSectionView(
+                    draft: $draft,
+                    schema: econetSchema,
                     diagnostics: diagnostics,
                     manifestResolver: manifestResolver
                 )
