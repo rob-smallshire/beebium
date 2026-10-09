@@ -386,3 +386,23 @@ TEST_CASE("start refuses an out-of-range SCSI ID as a usage error",
     CHECK(r.exit_code == 64);
     CHECK(r.stderr_output.find("must be 0-7") != std::string::npos);
 }
+
+TEST_CASE("a SCSI hard disc needs an image",
+          "[integration][extension][start][required]") {
+    CHECK(parameter(describe_extension_json("scsi-hdd"), "image").at("required") == true);
+    auto r = run_command(EXECUTABLE + " start --acorn-scsi --scsi-hdd 0 --port 0");
+    CHECK(r.exit_code == 64);
+    CHECK(r.stderr_output.find("missing required parameter 'image'") != std::string::npos);
+}
+
+TEST_CASE("the AUN net number is an integer 0-255",
+          "[integration][extension][start][bounds]") {
+    const auto aun = describe_extension_json("aun");
+    const auto& net = parameter(aun, "net");
+    CHECK(net.at("type") == "integer");
+    CHECK(net.at("min") == 0);
+    CHECK(net.at("max") == 255);
+    auto r = run_command(EXECUTABLE + " start --station 80 --aun net=256:port=0:discovery=off --port 0");
+    CHECK(r.exit_code == 64);
+    CHECK(r.stderr_output.find("must be 0-255") != std::string::npos);
+}

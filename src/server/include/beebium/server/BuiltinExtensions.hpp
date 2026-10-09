@@ -70,7 +70,7 @@ inline std::vector<Entry> make_entries() {
              "disable the network)",
              -1, false, false, "32768"});
         m.parameters.push_back(
-            {"net", "string",
+            {"net", "integer",
              "Local Econet net number this station belongs to (0..255)",
              -1, false, false, "0"});
         m.parameters.push_back(
@@ -99,6 +99,12 @@ inline std::vector<Entry> make_entries() {
         };
         label("port", "UDP port");
         label("net", "Net number");
+        for (auto& p : m.parameters) {
+            if (p.key == "net") {
+                p.min = 0;
+                p.max = 255;
+            }
+        }
         label("map", "Peers");
         label("map-file", "Map file");
         label("subnet", "Subnet rules");
