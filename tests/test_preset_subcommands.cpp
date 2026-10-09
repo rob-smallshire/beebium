@@ -1703,6 +1703,12 @@ TEST_CASE("describe-preset-schema: the attachment points and what plugs into eac
     // A point an extension provides is listed with its provider.
     REQUIRE(points.count("scsi") == 1);
     CHECK(points["scsi"].at("provided_by") == nlohmann::json::array({"acorn-scsi"}));
+    // Occupancy, from the same catalogue list-attachment-points prints.
+    CHECK(points["serial-port"].at("display_name") == "Serial Port");
+    CHECK(points["serial-port"].at("min_occupancy") == 0);
+    CHECK(points["serial-port"].at("max_occupancy") == 1);
+    CHECK(points["1mhz-bus"].at("max_occupancy").is_null());  // no fixed bound
+    CHECK(points["scsi"].at("max_occupancy") == 7);            // per adapter
 }
 
 TEST_CASE("describe-preset-schema: an expansion board's own ROM is a default ROM",

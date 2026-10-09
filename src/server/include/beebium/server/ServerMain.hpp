@@ -4146,8 +4146,16 @@ public:
                         attaching.push_back(e.manifest->name);
                     }
                 }
+                const auto* catalogued = find_attachment_point(id);
+                ojson max_occupancy = nullptr;
+                if (catalogued && catalogued->max_occupancy) {
+                    max_occupancy = *catalogued->max_occupancy;
+                }
                 attachment_points.push_back(ojson{
                     {"id", id},
+                    {"display_name", std::string(attachment_point_display_name(id))},
+                    {"min_occupancy", catalogued ? catalogued->min_occupancy : 0},
+                    {"max_occupancy", max_occupancy},
                     {"provided_by", providers.empty() ? ojson(nullptr) : ojson(providers)},
                     {"extensions", attaching}});
             }
