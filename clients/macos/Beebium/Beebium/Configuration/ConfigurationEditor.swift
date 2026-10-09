@@ -49,8 +49,14 @@ struct ConfigurationEditor: View {
     /// Hard discs group).
     let hardDiscCapability: HardDiscCapability?
 
+    /// The model's extensions schema (attachment points), for Peripherals.
+    let extensionsSchema: ExtensionsSchemaSection?
+
     /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
+
+    /// Resolves an extension's manifest (describe-extension), for Peripherals.
+    let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
 
     /// Current resolve-preset diagnostics, so a section can show its own rows'
     /// problems.
@@ -67,6 +73,7 @@ struct ConfigurationEditor: View {
     enum ConfigSection: String, Identifiable {
         case storage = "Storage"
         case memory = "Memory"
+        case peripherals = "Peripherals"
 
         var id: String { rawValue }
 
@@ -74,6 +81,7 @@ struct ConfigurationEditor: View {
             switch self {
             case .storage: return "internaldrive"
             case .memory: return "memorychip"
+            case .peripherals: return "puzzlepiece.extension"
             }
         }
     }
@@ -84,6 +92,12 @@ struct ConfigurationEditor: View {
         if storageSchema != nil { sections.append(.storage) }
         if let memorySchema = memorySchema, !memorySchema.sockets.isEmpty {
             sections.append(.memory)
+        }
+        if let extensionsSchema = extensionsSchema,
+           extensionsSchema.attachmentPoints.contains(where: {
+               $0.providedBy == nil && !$0.extensions.isEmpty
+           }) {
+            sections.append(.peripherals)
         }
         return sections
     }
@@ -170,6 +184,15 @@ struct ConfigurationEditor: View {
                 schema: memorySchema,
                 romResolver: romResolver
             )
+        case .peripherals:
+            if let extensionsSchema = extensionsSchema {
+                PeripheralsSectionView(
+                    draft: $draft,
+                    schema: extensionsSchema,
+                    diagnostics: diagnostics,
+                    manifestResolver: manifestResolver
+                )
+            }
         case nil:
             Text("This machine has no configurable options yet.")
                 .font(.caption)

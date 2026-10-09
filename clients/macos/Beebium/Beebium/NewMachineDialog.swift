@@ -35,6 +35,8 @@ struct NewMachineDialog: View {
     @State private var memorySchema: SidewaysSchemaSection?
     /// The model's hard-disc capability (adapter + disc chain), if it has one.
     @State private var hardDiscCapability: HardDiscCapability?
+    /// The model's extensions schema (attachment points), for Peripherals.
+    @State private var extensionsSchema: ExtensionsSchemaSection?
     @State private var isLoadingSchema = false
 
     /// resolve-preset diagnostics for the current draft. Errors block launching;
@@ -272,7 +274,9 @@ struct NewMachineDialog: View {
                         storageSchema: storageSchema,
                         memorySchema: memorySchema,
                         hardDiscCapability: hardDiscCapability,
+                        extensionsSchema: extensionsSchema,
                         romResolver: romResolver(for: selectedPreset),
+                        manifestResolver: manifestResolver(for: selectedPreset),
                         diagnostics: diagnostics,
                         modelId: selectedPreset?.modelName ?? "model-b"
                     )
@@ -434,6 +438,7 @@ struct NewMachineDialog: View {
             await MainActor.run {
                 storageSchema = storage
                 memorySchema = sideways
+                extensionsSchema = extensions
                 hardDiscCapability = extensions.flatMap { HardDiscCapability(schema: $0) }
 
                 // Fill the metadata the launch needs if it was omitted.
@@ -480,6 +485,17 @@ struct NewMachineDialog: View {
         let executablePath = preset.coreExecutablePath
         return { image in
             await manager.fetchRomHeader(image: image, executablePath: executablePath)
+        }
+    }
+
+    /// A manifest resolver bound to the preset's core executable, for the
+    /// Peripherals forms; nil before a preset is selected.
+    private func manifestResolver(for preset: MachinePreset?) -> (@MainActor (String) async -> ExtensionManifest)? {
+        guard let preset else { return nil }
+        let manager = presetManager
+        let executablePath = preset.coreExecutablePath
+        return { name in
+            await manager.fetchExtensionManifest(name: name, executablePath: executablePath)
         }
     }
 

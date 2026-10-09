@@ -104,4 +104,13 @@ enum PresetDiagnosticLocation {
         guard components.count >= 2, components[0] == "extensions" else { return nil }
         return Int(components[1])
     }
+
+    /// The config key a diagnostic points at, from a path like
+    /// "/extensions/2/config/baud"; nil if it is not a per-parameter diagnostic.
+    static func configKey(path: String) -> String? {
+        let components = path.split(separator: "/").map(String.init)
+        guard components.count >= 4, components[0] == "extensions", components[2] == "config"
+        else { return nil }
+        return components[3]
+    }
 }
