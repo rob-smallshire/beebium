@@ -66,11 +66,33 @@ struct ScsiDiscEditor {
         .sorted { $0.scsiId < $1.scsiId }
     }
 
+    /// An adapter instance the discs can attach to.
+    struct Adapter: Identifiable, Equatable {
+        let index: Int
+        /// The framework id discs reference via adapter-id.
+        let id: String
+    }
+
     /// The indices of adapter instances in the draft.
     func adapterIndices(in draft: MachineDraft) -> [Int] {
         (draft.extensions ?? []).enumerated()
             .filter { $0.element.name == capability.adapterExtension }
             .map(\.offset)
+    }
+
+    /// The adapters in the draft, each with its framework id (explicit config
+    /// "id", else the extension name the server would assign a sole instance).
+    func adapters(in draft: MachineDraft) -> [Adapter] {
+        (draft.extensions ?? []).enumerated().compactMap { index, ext in
+            guard ext.name == capability.adapterExtension else { return nil }
+            let id: String
+            if case .string(let explicit)? = ext.config?["id"], !explicit.isEmpty {
+                id = explicit
+            } else {
+                id = ext.name
+            }
+            return Adapter(index: index, id: id)
+        }
     }
 
     /// The lowest SCSI ID 0-7 not already used by a disc.
@@ -82,34 +104,53 @@ struct ScsiDiscEditor {
     // MARK: - Write-through
 
     /// Add a hard disc (with the next free SCSI ID and no image yet), adding an
-    /// adapter first if the draft has none.
-    func draft(addingDiscTo draft: MachineDraft) -> MachineDraft {
+    /// adapter first if the draft has none. When `adapterId` is given (the user
+    /// chose among several adapters), the disc's adapter-id targets it; left nil
+    /// the disc goes on the last adapter.
+    func draft(addingDiscTo draft: MachineDraft, adapterId: String? = nil) -> MachineDraft {
         var result = draft
         var extensions = result.extensions ?? []
         if adapterIndices(in: result).isEmpty {
             extensions.append(MachineDraft.Extension(name: capability.adapterExtension))
         }
         let scsiId = nextFreeScsiId(in: result)
-        extensions.append(MachineDraft.Extension(
-            name: capability.discExtension,
-            config: ["scsi-id": .int(scsiId)]))
+        var config: [String: JSONValue] = ["scsi-id": .int(scsiId)]
+        if let adapterId = adapterId, !adapterId.isEmpty {
+            config["adapter-id"] = .string(adapterId)
+        }
+        extensions.append(MachineDraft.Extension(name: capability.discExtension, config: config))
         result.extensions = extensions
         return result
     }
 
-    /// Remove the disc at `instanceIndex`. If no discs remain afterwards, the
-    /// adapters have nothing attached, so remove them too.
+    /// Remove the disc at `instanceIndex`. If that was the only disc and there is
+    /// exactly one adapter, the adapter was the user's means of attaching it (it
+    /// was auto-added), so remove it too. With several adapters, nothing is
+    /// cascaded -- an empty adapter is legal and the user manages adapters in
+    /// Peripherals.
     func draft(removingDiscAt instanceIndex: Int, from draft: MachineDraft) -> MachineDraft {
         var result = draft
         guard var extensions = result.extensions, extensions.indices.contains(instanceIndex),
               extensions[instanceIndex].name == capability.discExtension else { return draft }
+        let adapterCount = adapterIndices(in: result).count
         extensions.remove(at: instanceIndex)
         let discsRemain = extensions.contains { $0.name == capability.discExtension }
-        if !discsRemain {
+        if !discsRemain && adapterCount == 1 {
             extensions.removeAll { $0.name == capability.adapterExtension }
         }
         result.extensions = extensions
         return result
+    }
+
+    /// Set (or, with nil/empty, clear) a disc's adapter-id.
+    func draft(settingAdapterId adapterId: String?, forDiscAt instanceIndex: Int, in draft: MachineDraft) -> MachineDraft {
+        mutatingDisc(at: instanceIndex, in: draft) { ext in
+            if let adapterId = adapterId, !adapterId.isEmpty {
+                ext.setConfig("adapter-id", .string(adapterId))
+            } else {
+                ext.removeConfig("adapter-id")
+            }
+        }
     }
 
     /// Set a disc's SCSI ID.

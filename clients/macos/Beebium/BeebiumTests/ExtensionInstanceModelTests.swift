@@ -70,6 +70,17 @@ final class ExtensionInstanceModelTests: XCTestCase {
         let m = model()
         let draft = m.draft(adding: "acorn-rtc", to: MachineDraft(model: "model-b"))
         XCTAssertEqual((draft.extensions ?? []).map(\.name), ["acorn-rtc"])
+        // A sole instance keeps the implicit id (its name).
+        XCTAssertEqual(m.effectiveId(ofInstanceAt: 0, in: draft), "acorn-rtc")
+    }
+
+    func testAddingDuplicateAssignsDistinctId() {
+        let m = model()
+        var draft = m.draft(adding: "acorn-scsi", to: MachineDraft(model: "model-b"))
+        draft = m.draft(adding: "acorn-scsi", to: draft)
+        // First keeps the implicit id; the second gets a distinct one.
+        XCTAssertEqual(m.effectiveId(ofInstanceAt: 0, in: draft), "acorn-scsi")
+        XCTAssertEqual(m.effectiveId(ofInstanceAt: 1, in: draft), "acorn-scsi-1")
     }
 
     func testRemoveDoesNotCascade() {

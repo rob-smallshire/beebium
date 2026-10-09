@@ -79,14 +79,44 @@ struct ExtensionInstanceModel {
 
     // MARK: - Edits (write through)
 
+    /// The framework id of the instance at `index`: its explicit config "id",
+    /// else its extension name (the implicit id the server would assign a sole
+    /// instance). Used to reference a specific provider (e.g. a SCSI adapter).
+    func effectiveId(ofInstanceAt index: Int, in draft: MachineDraft) -> String {
+        guard let extensions = draft.extensions, extensions.indices.contains(index) else { return "" }
+        let ext = extensions[index]
+        if case .string(let id)? = ext.config?["id"], !id.isEmpty { return id }
+        return ext.name
+    }
+
     /// Add an extension instance (with no config) to the draft. The caller has
     /// already decided the extension attaches somewhere with room.
+    ///
+    /// When another instance of the same extension already exists, the new one
+    /// is given a distinct framework id (name-1, name-2, ...) so it can be
+    /// referenced immediately -- the first instance keeps the implicit id (its
+    /// name), matching the server's own id assignment.
     func draft(adding name: String, to draft: MachineDraft) -> MachineDraft {
         var result = draft
         var extensions = result.extensions ?? []
-        extensions.append(MachineDraft.Extension(name: name))
+        var instance = MachineDraft.Extension(name: name)
+        if extensions.contains(where: { $0.name == name }) {
+            instance.config = ["id": .string(uniqueId(forName: name, in: extensions))]
+        }
+        extensions.append(instance)
         result.extensions = extensions
         return result
+    }
+
+    /// The first "name-K" (K from 1) not already taken as a framework id.
+    private func uniqueId(forName name: String, in extensions: [MachineDraft.Extension]) -> String {
+        let taken = Set(extensions.map { ext -> String in
+            if case .string(let id)? = ext.config?["id"], !id.isEmpty { return id }
+            return ext.name
+        })
+        var k = 1
+        while taken.contains("\(name)-\(k)") { k += 1 }
+        return "\(name)-\(k)"
     }
 
     /// Remove the instance at `index`. Deliberately does NOT cascade: a provider

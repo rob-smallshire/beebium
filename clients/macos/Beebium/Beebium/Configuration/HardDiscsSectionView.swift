@@ -27,6 +27,7 @@ struct HardDiscsSectionView: View {
 
     private var editor: ScsiDiscEditor { ScsiDiscEditor(capability: capability) }
     private var discs: [ScsiDiscEditor.Disc] { editor.discs(in: draft) }
+    private var adapters: [ScsiDiscEditor.Adapter] { editor.adapters(in: draft) }
 
     /// SCSI IDs used by more than one disc, so rows can flag a clash instantly
     /// (ahead of the debounced server validation).
@@ -40,22 +41,44 @@ struct HardDiscsSectionView: View {
     /// unbounded points cap at the 8 SCSI IDs).
     private var maxDiscs: Int { capability.maxDiscsPerAdapter ?? 8 }
 
+    /// Add disc: a plain button with one (or no) adapter, a menu asking which
+    /// adapter when there are several.
+    @ViewBuilder
+    private var addControl: some View {
+        let full = discs.count >= maxDiscs
+        if adapters.count > 1 {
+            Menu {
+                ForEach(adapters) { adapter in
+                    Button("On \(adapter.id)") {
+                        draft = editor.draft(addingDiscTo: draft, adapterId: adapter.id)
+                    }
+                }
+            } label: {
+                Label("Add disc", systemImage: "plus")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(full)
+        } else {
+            Button {
+                draft = editor.draft(addingDiscTo: draft)
+            } label: {
+                Label("Add disc", systemImage: "plus")
+            }
+            .buttonStyle(.borderless)
+            .disabled(full)
+            .help(full ? "This machine holds at most \(maxDiscs) hard discs"
+                       : "Attach a SCSI hard disc")
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Hard discs")
                     .font(.headline)
                 Spacer()
-                Button {
-                    draft = editor.draft(addingDiscTo: draft)
-                } label: {
-                    Label("Add disc", systemImage: "plus")
-                }
-                .buttonStyle(.borderless)
-                .disabled(discs.count >= maxDiscs)
-                .help(discs.count >= maxDiscs
-                      ? "This machine holds at most \(maxDiscs) hard discs"
-                      : "Attach a SCSI hard disc")
+                addControl
             }
 
             if discs.isEmpty {
@@ -68,11 +91,13 @@ struct HardDiscsSectionView: View {
                         disc: disc,
                         duplicateId: duplicateIds.contains(disc.scsiId),
                         bundledMasters: capability.bundledMasters,
+                        adapters: adapters.count > 1 ? adapters : [],
                         diagnostics: diagnostics.filter {
                             PresetDiagnosticLocation.extensionIndex(path: $0.path) == disc.instanceIndex
                         },
                         setScsiId: { draft = editor.draft(settingScsiId: $0, forDiscAt: disc.instanceIndex, in: draft) },
                         setImage: { draft = editor.draft(settingImage: $0, forDiscAt: disc.instanceIndex, in: draft) },
+                        setAdapterId: { draft = editor.draft(settingAdapterId: $0, forDiscAt: disc.instanceIndex, in: draft) },
                         remove: { draft = editor.draft(removingDiscAt: disc.instanceIndex, from: draft) })
                     if disc.id != discs.last?.id {
                         Divider()
@@ -90,9 +115,12 @@ private struct HardDiscRowView: View {
     let disc: ScsiDiscEditor.Disc
     let duplicateId: Bool
     let bundledMasters: [BundledImage]
+    /// The adapters to choose from; empty when there is only one (no picker).
+    let adapters: [ScsiDiscEditor.Adapter]
     let diagnostics: [PresetManager.PresetDiagnostic]
     let setScsiId: (Int) -> Void
     let setImage: (String?) -> Void
+    let setAdapterId: (String?) -> Void
     let remove: () -> Void
 
     @State private var isDropTargeted = false
@@ -115,6 +143,23 @@ private struct HardDiscRowView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                         .help("Another disc uses SCSI ID \(disc.scsiId)")
+                }
+
+                if !adapters.isEmpty {
+                    Text("on")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Picker("", selection: Binding(
+                        get: { disc.adapterId ?? "" },
+                        set: { setAdapterId($0.isEmpty ? nil : $0) }
+                    )) {
+                        Text("Last adapter").tag("")
+                        ForEach(adapters) { adapter in
+                            Text(adapter.id).tag(adapter.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 160)
                 }
 
                 Spacer()

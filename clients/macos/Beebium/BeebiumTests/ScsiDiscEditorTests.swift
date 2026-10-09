@@ -144,6 +144,53 @@ final class ScsiDiscEditorTests: XCTestCase {
         XCTAssertEqual(disc.displayName, "l3fs-v1_26b.dat")
     }
 
+    // MARK: - Adapters (multi-adapter)
+
+    func testAdaptersReadFrameworkIds() {
+        let e = editor()
+        let draft = MachineDraft(model: "model-b", extensions: [
+            Ext(name: "acorn-scsi"),                                   // implicit id = name
+            Ext(name: "acorn-scsi", config: ["id": .string("acorn-scsi-1")]),
+        ])
+        XCTAssertEqual(e.adapters(in: draft).map(\.id), ["acorn-scsi", "acorn-scsi-1"])
+    }
+
+    func testAddingDiscOnChosenAdapterSetsAdapterId() {
+        let e = editor()
+        var draft = MachineDraft(model: "model-b", extensions: [
+            Ext(name: "acorn-scsi"),
+            Ext(name: "acorn-scsi", config: ["id": .string("acorn-scsi-1")]),
+        ])
+        draft = e.draft(addingDiscTo: draft, adapterId: "acorn-scsi-1")
+        XCTAssertEqual(e.discs(in: draft).first?.adapterId, "acorn-scsi-1")
+    }
+
+    func testRemovingLastDiscKeepsAdapterWhenSeveral() {
+        let e = editor()
+        var draft = MachineDraft(model: "model-b", extensions: [
+            Ext(name: "acorn-scsi"),
+            Ext(name: "acorn-scsi", config: ["id": .string("acorn-scsi-1")]),
+            Ext(name: "scsi-hard-disc", config: ["scsi-id": .int(0)]),
+        ])
+        let disc = e.discs(in: draft)[0]
+        draft = e.draft(removingDiscAt: disc.instanceIndex, from: draft)
+        // Both adapters stay; an empty adapter is legal and user-managed.
+        XCTAssertEqual(e.adapters(in: draft).count, 2)
+    }
+
+    func testSettingAndClearingAdapterId() {
+        let e = editor()
+        var draft = MachineDraft(model: "model-b", extensions: [
+            Ext(name: "acorn-scsi"),
+            Ext(name: "scsi-hard-disc", config: ["scsi-id": .int(0)]),
+        ])
+        let disc = e.discs(in: draft)[0]
+        draft = e.draft(settingAdapterId: "acorn-scsi-1", forDiscAt: disc.instanceIndex, in: draft)
+        XCTAssertEqual(e.discs(in: draft)[0].adapterId, "acorn-scsi-1")
+        draft = e.draft(settingAdapterId: nil, forDiscAt: disc.instanceIndex, in: draft)
+        XCTAssertNil(e.discs(in: draft)[0].adapterId)
+    }
+
     func testClearingImageRemovesConfigKey() {
         let e = editor()
         var draft = MachineDraft(model: "model-b", extensions: [
