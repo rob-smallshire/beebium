@@ -23,7 +23,7 @@ commands that list, show, create, import, export and delete presets are in
 - [Storage](#storage)
 - [Sideways ROM/RAM bank](#sideways-romram-bank)
 - [Econet](#econet)
-- [Extensions](#extensions)
+- [Extensions](#extensions), [attachment](#attachment)
 - [Which models accept what](#which-models-accept-what)
 - [Command line over preset](#command-line-over-preset)
 - [Diagnostics](#diagnostics)
@@ -245,15 +245,53 @@ A preset's extension config is checked exactly as the equivalent command-line
 flag is (`normalise_extension_config`): an unknown extension, an unknown
 parameter, a missing required parameter or a value of the wrong type stops the
 launch with `CONFIG` (78), and the manifest's defaults are filled in for the
-parameters left out. A single value for a list parameter is a one-element
-list. A `filepath` parameter is resolved as in [Paths](#paths).
+parameters left out. An empty value (`""`, or `[]` for a list) is the same as
+leaving the parameter out, so the default applies. A single value for a list
+parameter is a one-element list. A `filepath` parameter is resolved as in
+[Paths](#paths).
 
-An extension attaches to one of the points named in its manifest's
-`attaches_to`: a connector of the machine (`1mhz-bus`, `user-port`, `tube`,
-`serial-port`), or a point another extension provides (a SCSI host adapter
-provides `scsi`). `describe-preset-schema` lists the points a model has and
-what attaches to each; `list-attachment-points` says which hold one extension
-and which several.
+### Attachment
+
+An extension attaches to the points named in its manifest's `attaches_to`: a
+connector of the machine (`1mhz-bus`, `user-port`, `tube`, `serial-port`), or
+a point another extension provides (a SCSI host adapter provides `scsi`).
+Before anything is loaded, the launch works out where each instance would
+attach (`check_attachments`, the same rules the extension registry applies
+when it builds the machine) and stops with `CONFIG` (78) if:
+
+- a point it attaches to is neither on the machine nor provided by another
+  instance (the message names the extensions that would provide it);
+- a point would hold more than its maximum occupancy: one on the serial port,
+  user port and Tube, seven on each SCSI bus, no limit on the 1 MHz bus
+  (`list-attachment-points`; `describe-preset-schema` gives the same bounds);
+- a parameter the manifest declares `provider_of` a point names no instance
+  providing it. The value is the provider's framework `id`, so a preset that
+  chooses between two adapters gives each one an `id`. With no value, the
+  extension attaches to the last instance providing the point;
+- a parameter the manifest declares `unique` has the same value as another
+  instance of the extension on the same attachment.
+
+These properties are general manifest parameter properties, shown by
+`describe-extension`. SCSI discs use them: `scsi-hard-disc`'s `adapter-id` is
+`provider_of` `scsi` and its `scsi-id` is `unique`, so two discs may share a
+SCSI ID only on different adapters.
+
+A manifest may also declare a `filepath` parameter `bundled` with a kind, as
+`scsi-hard-disc`'s `image` is `bundled` `hard-disc`: a bare name there refers
+to one of the server's bundled images of that kind, and the machine uses a
+per-user copy-on-write working copy of it, never the master
+([deployment.md](deployment.md#bundled-discs-and-copy-on-write)).
+`describe-preset-schema` lists the bundled images. No floppy images are
+bundled.
+
+A SCSI hard disc, then, is two entries: the adapter and the disc.
+
+```json
+"extensions": [
+  { "name": "acorn-scsi" },
+  { "name": "scsi-hard-disc", "config": { "image": "l3fs-v1_26b.dat", "scsi-id": 0 } }
+]
+```
 
 ## Which models accept what
 
@@ -293,9 +331,17 @@ override; parameters the command line fills from manifest defaults do not
 
 A preset that cannot be read, or whose JSON is invalid, stops a launch with
 `NOINPUT` (66). One whose content is invalid stops it with `CONFIG` (78) and a
-message naming the problem. Problems that do not stop a launch are warnings:
-an unknown top-level key, the older top-level `auto_boot`, and (from
-`resolve-preset`) a ROM or disc image that cannot be found.
+message naming the problem: among them every [attachment](#attachment)
+problem. Problems that do not stop a launch are warnings: an unknown top-level
+key, the older top-level `auto_boot`, and (from `resolve-preset`) a ROM or
+floppy image that cannot be found, or a bare name in a `bundled` parameter
+that is not a bundled image.
+
+`resolve-preset` locates each problem by a JSON pointer: an extension's
+attachment problems at its entry (`/extensions/2`), or at the parameter at
+fault (`/extensions/2/config/scsi-id`, `/extensions/1/config/adapter-id`); a
+problem with the Econet transport under `/econet/transport`. When two
+instances clash, the later one is reported.
 
 ## resolve-preset
 
@@ -365,7 +411,7 @@ There is one section per preset key, its `type` being the key:
 | `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives` with their geometry and image types |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
-| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it) |
+| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "size_bytes": 10002432}]}` |
 
 Extensions and transports are named, not described: their parameters come from
 `describe-extension`, an attachment point's occupancy from
