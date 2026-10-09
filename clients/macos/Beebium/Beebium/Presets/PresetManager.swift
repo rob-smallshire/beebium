@@ -739,6 +739,42 @@ class PresetManager: ObservableObject {
                                              provenanceUUID: provenanceUUID)
     }
 
+    // MARK: - Preset resolution
+
+    /// A diagnostic from `resolve-preset`: an error or warning about the preset,
+    /// with a JSON-pointer `path` into the document.
+    struct PresetDiagnostic: Decodable, Equatable {
+        let severity: String   // "error" | "warning"
+        let path: String
+        let message: String
+        var isError: Bool { severity == "error" }
+    }
+
+    /// Resolve a preset to its fully-normalised draft via the server's
+    /// `resolve-preset` subcommand -- defaults filled in, paths made absolute,
+    /// the model's default ROMs expanded into explicit slots. This is the oracle
+    /// the New Machine dialog edits, so the client never has to parse or
+    /// second-guess a preset file itself.
+    ///
+    /// Returns the resolved draft (nil when nothing could be loaded) and any
+    /// diagnostics; `resolve-preset` prints its JSON even on a non-zero exit, so
+    /// the diagnostics are parsed regardless.
+    func resolvePreset(_ preset: MachinePreset) async -> (MachineDraft?, [PresetDiagnostic]) {
+        struct Output: Decodable {
+            let preset: MachineDraft?
+            let diagnostics: [PresetDiagnostic]
+        }
+        let (output, _) = await runCli(
+            executable: preset.coreExecutablePath,
+            arguments: ["resolve-preset", preset.presetFilepath, "--json"])
+        guard let data = output.data(using: .utf8),
+              let parsed = try? JSONDecoder().decode(Output.self, from: data) else {
+            NSLog("[PresetManager] Could not parse resolve-preset output for \(preset.presetId)")
+            return (nil, [])
+        }
+        return (parsed.preset, parsed.diagnostics)
+    }
+
     // MARK: - Draft-based launching
 
     /// Launch a core from a fully-specified `MachineDraft`.

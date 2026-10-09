@@ -375,18 +375,23 @@ struct NewMachineDialog: View {
             let manager = presetManager
             let storage = await manager.fetchStorageSchema(for: preset)
             let sideways = await manager.fetchSidewaysSchema(for: preset)
-            var loaded = Self.loadDraft(fromFile: preset.presetFilepath) ?? MachineDraft()
+            // The resolved document is the editing source: defaults filled,
+            // paths absolute, default ROMs expanded into explicit slots. The
+            // raw-file decode is a defensive fallback for the rare case the
+            // resolver cannot be run.
+            let (resolved, _) = await manager.resolvePreset(preset)
+            var loaded = resolved ?? Self.loadDraft(fromFile: preset.presetFilepath) ?? MachineDraft()
 
             await MainActor.run {
                 storageSchema = storage
                 memorySchema = sideways
 
-                // Fill the metadata the launch needs if the file omitted it.
+                // Fill the metadata the launch needs if it was omitted.
                 if loaded.name == nil { loaded.name = preset.name }
                 if loaded.machineName == nil { loaded.machineName = preset.machineName }
 
-                // Ensure a drive row per drive the model offers, keeping any the
-                // preset already mounts.
+                // Ensure a drive row per drive the model offers (resolve-preset
+                // already lists both; this also covers the raw-file fallback).
                 let driveCount = storage?.floppyDrives?.count ?? 2
                 loaded.storage = Self.ensuringFloppyDrives(loaded.storage, count: driveCount)
 
@@ -398,6 +403,7 @@ struct NewMachineDialog: View {
     }
 
     /// Decode the draft from a preset file, or nil if it cannot be read/parsed.
+    /// A defensive fallback when `resolve-preset` cannot be run.
     private static func loadDraft(fromFile filepath: String) -> MachineDraft? {
         guard let data = FileManager.default.contents(atPath: filepath) else { return nil }
         return try? MachineDraft.decode(from: data)

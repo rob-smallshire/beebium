@@ -133,15 +133,15 @@ struct SidewaysSocketEditor {
     }
 
     /// The content a socket shows for a given slots array: the draft's slot for
-    /// the socket if any, else the schema's default ROM, else fixed RAM (a
-    /// RAM-only socket) or empty.
+    /// the socket if any, else fixed RAM (a RAM-only socket) or empty.
+    ///
+    /// The draft comes from `resolve-preset`, which expands the model's default
+    /// ROMs into explicit slots, so a socket with a default ROM already has a
+    /// slot here; there is no need to consult the schema's default ROMs.
     func content(for socket: SidewaysSocketSchema,
                  in slots: [MachineDraft.SidewaysSlot]) -> Content {
         if let slot = slots.first(where: { socket.slots.contains($0.slot) }) {
             return Content(slot: slot)
-        }
-        if let defaultRom = schema.defaultRoms.first(where: { socket.slots.contains($0.slot) }) {
-            return Content(kind: .rom, image: defaultRom.image)
         }
         if !socket.supportsEmpty && socket.supportsRam && !socket.supportsRom {
             // Fixed-RAM socket (e.g. B+ 128K's SRAM W/X/Y/Z): always RAM.
@@ -238,16 +238,13 @@ struct SidewaysSocketEditor {
     // MARK: - Helpers
 
     /// The slot number to write an explicit entry at for a socket: an existing
-    /// draft entry's slot, else the default ROM's slot, else the socket's
-    /// representative (highest) slot. Keeping the number the content already
-    /// occupied avoids aliased-socket surprises.
+    /// draft entry's slot, else the socket's representative (highest) slot.
+    /// Keeping the number the content already occupied avoids aliased-socket
+    /// surprises.
     private func preferredSlot(for socket: SidewaysSocketSchema,
                                in slots: [MachineDraft.SidewaysSlot]) -> Int {
         if let existing = slots.first(where: { socket.slots.contains($0.slot) }) {
             return existing.slot
-        }
-        if let defaultRom = schema.defaultRoms.first(where: { socket.slots.contains($0.slot) }) {
-            return defaultRom.slot
         }
         return socket.representativeSlot
     }

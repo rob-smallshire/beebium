@@ -56,7 +56,12 @@ final class SidewaysSocketEditorTests: XCTestCase {
 
     func testProjectsPresetDefaultAndEmptySockets() {
         let editor = modelB()
-        let slots = [Slot(slot: 14, type: "rom", imageUri: "acorn-dfs_2_26.rom")]
+        // resolve-preset expands default ROMs into explicit slots, so BASIC in
+        // slot 15 arrives as a slot entry, not a schema fallback.
+        let slots = [
+            Slot(slot: 15, type: "rom", imageUri: "bbc-basic_2.rom"),
+            Slot(slot: 14, type: "rom", imageUri: "acorn-dfs_2_26.rom"),
+        ]
         let rows = editor.rows(currentSlots: slots, originalSlots: slots)
 
         XCTAssertEqual(rows.map(\.label), ["IC101", "IC100", "IC88", "IC52"])
@@ -156,7 +161,10 @@ final class SidewaysSocketEditorTests: XCTestCase {
 
     func testMovingContentsMovesImagesBetweenSockets() {
         let editor = modelB()
-        let original = [Slot(slot: 14, type: "rom", imageUri: "acorn-dfs_2_26.rom")]
+        let original = [
+            Slot(slot: 15, type: "rom", imageUri: "bbc-basic_2.rom"),
+            Slot(slot: 14, type: "rom", imageUri: "acorn-dfs_2_26.rom"),
+        ]
         // Rows by priority: IC101(BASIC), IC100(DFS), IC88(empty), IC52(empty).
         // Drag DFS (index 1) to the bottom.
         let moved = editor.slots(movingContentsFromOffsets: IndexSet(integer: 1), toOffset: 4,
