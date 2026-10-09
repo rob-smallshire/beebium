@@ -93,7 +93,7 @@ The `net` parameter (default `0`, valid range `0..255`, the full Econet net byte
 --aun port=32768:net=3
 ```
 
-The whole 0..255 range is addressable: a guest can address any net, and the RISC OS AUNMap convention uses high net numbers (128 and above) for IP-mapped subnets. Beebium does no bit-7 offset translation (unlike BeebEm's `MASSAGENETS`); a guest addressing net 128 goes out as net 128. An out-of-range or malformed value falls back to `net=0` with a warning; passing nothing is equivalent to `net=0`.
+The whole 0..255 range is addressable: a guest can address any net, and the RISC OS AUNMap convention uses high net numbers (128 and above) for IP-mapped subnets. Beebium does no bit-7 offset translation (unlike BeebEm's `MASSAGENETS`); a guest addressing net 128 goes out as net 128. An out-of-range or malformed value is refused when the configuration is read (exit 64 on the command line, 78 from a preset); passing nothing is equivalent to `net=0`.
 
 **Net 0 semantics.** BBC software addresses local-segment peers with `dest_net=0` ("this segment, don't route") on the wire, regardless of what net number the segment actually carries. `AunBackend` translates `dest_net=0` to the configured `local_net` before consulting the peer table, and on the receive side translates `src_net == local_net` back to `0` so the BBC sees frames in the form it expects. Cross-net frames (different absolute nets) pass through both translations unchanged. This means:
 
