@@ -13,15 +13,45 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Memory (sideways ROM/RAM) configuration section.
+/// Memory (sideways ROM/RAM) configuration section, editing the draft directly.
 ///
 /// Lists the machine's physical sideways sockets, highest boot-priority first,
-/// showing the slot number(s) each answers and what it holds. Each socket can
-/// be overridden (empty / sideways RAM / a ROM file); changes apply at launch
-/// via --sideways, layering over the preset.
+/// showing the slot number(s) each answers and what it holds. The rows are a
+/// projection of the sideways schema over the draft's slot assignments
+/// (`SidewaysSocketEditor`); every edit -- kind, image, write-protect, reorder --
+/// writes straight back into `draft.sidewaysBank.slots`, so the draft is the
+/// only source of truth. The ROM-title cache is the one piece of transient UI
+/// state here; it adorns the display and is never written to the draft.
 struct MemorySectionView: View {
-    @ObservedObject var memoryConfig: MemoryConfigurationState
+    @Binding var draft: MachineDraft
+    /// The preset as loaded, used to mark sockets changed from it.
+    let originalDraft: MachineDraft
     let schema: SidewaysSchemaSection?
+    /// Resolves a ROM image to its header (describe-rom), supplied by the host.
+    let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
+
+    @StateObject private var titles = RomTitleCache()
+
+    private typealias Content = SidewaysSocketEditor.Content
+    private typealias SocketKind = SidewaysSocketEditor.SocketKind
+
+    private var editor: SidewaysSocketEditor? {
+        schema.map { SidewaysSocketEditor(schema: $0) }
+    }
+
+    private var currentSlots: [MachineDraft.SidewaysSlot] {
+        draft.sidewaysBank?.slots ?? []
+    }
+
+    private var rows: [SidewaysSocketEditor.Row] {
+        editor?.rows(currentSlots: currentSlots,
+                     originalSlots: originalDraft.sidewaysBank?.slots ?? []) ?? []
+    }
+
+    /// A key over all loaded images, so title resolution re-runs when they change.
+    private var imagesKey: String {
+        rows.compactMap { $0.content.image }.sorted().joined(separator: "|")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,7 +59,7 @@ struct MemorySectionView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
 
-            if memoryConfig.sockets.isEmpty {
+            if rows.isEmpty {
                 Text("This machine has no configurable sideways sockets.")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -40,16 +70,25 @@ struct MemorySectionView: View {
                 // contents (image + kind), not its identity, so the sockets stay
                 // in priority order while the ROMs move between them.
                 List {
-                    ForEach(memoryConfig.sockets) { socket in
-                        if let index = memoryConfig.sockets.firstIndex(where: { $0.id == socket.id }) {
-                            socketRow(index: index)
-                        }
+                    ForEach(rows) { row in
+                        socketRow(row)
                     }
                     .onMove { source, destination in
-                        memoryConfig.moveContents(fromOffsets: source, toOffset: destination)
+                        guard let editor else { return }
+                        let newSlots = editor.slots(
+                            movingContentsFromOffsets: source, toOffset: destination,
+                            currentSlots: currentSlots,
+                            originalSlots: originalDraft.sidewaysBank?.slots ?? [])
+                        setSlots(newSlots)
                     }
                 }
                 .listStyle(.plain)
+            }
+        }
+        .onAppear { titles.resolver = romResolver }
+        .task(id: imagesKey) {
+            for image in rows.compactMap({ $0.content.image }) {
+                await titles.resolve(image)
             }
         }
     }
@@ -74,169 +113,123 @@ struct MemorySectionView: View {
 
     // MARK: - Socket Row
 
-    private func socketRow(index: Int) -> some View {
-        let socket = memoryConfig.sockets[index]
-        return VStack(alignment: .leading, spacing: 3) {
+    private func socketRow(_ row: SidewaysSocketEditor.Row) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                // Drag grip: signals that rows can be reordered. The whole row
-                // is the drag target (via List .onMove); the icon is purely a
-                // discoverability cue.
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     .frame(width: 14)
                     .help("Drag to reorder this socket's contents")
 
-                // Socket label: a narrow fixed column so the contents line up.
-                Text(socket.label)
+                Text(row.label)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .frame(width: 52, alignment: .leading)
 
-                // Contents: ROM title/version when known, else filename.
-                Text(socket.displayText)
+                Text(titles.displayText(for: row.content))
                     .font(.subheadline)
-                    .foregroundColor(socket.content.kind == .empty ? .secondary : .primary)
+                    .foregroundColor(row.content.kind == .empty ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if socket.isChanged {
+                if row.isChanged {
                     Image(systemName: "pencil.circle.fill")
                         .font(.caption)
                         .foregroundColor(.accentColor)
                         .help("Changed from the preset's configuration")
                 }
 
-                // Write-protect padlock in a fixed-width column left of the kind
-                // dropdown, so the dropdowns stay aligned across rows. Config
-                // time is pure local state, so this padlock just flips
-                // content.writeProtected (no RPC, cannot fail). Offered only
-                // where the board has the switch and the socket is RAM; an
-                // equal-width spacer otherwise.
                 Group {
-                    if socket.supportsWriteProtect && socket.content.kind == .ram {
-                        writeProtectPadlock(index: index, socket: socket)
+                    if row.supportsWriteProtect && row.content.kind == .ram {
+                        writeProtectPadlock(row)
                     } else {
                         Color.clear
                     }
                 }
                 .frame(width: 16)
 
-                // Tri-state ROM / RAM / Empty control (socket writability),
-                // independent of any image loaded into it.
-                kindPicker(index: index, socket: socket)
+                kindPicker(row)
 
-                // Verbs menu: browse / clear / copy / reveal the image, revert.
-                actionsMenu(index: index, socket: socket)
+                actionsMenu(row)
             }
 
-            // Slot number(s) and priority, with the resolved kinds
-            // (language / service / ROMFS) appended when known.
-            Text(captionText(for: socket))
+            Text(captionText(for: row))
                 .font(.caption2)
                 .foregroundColor(.secondary)
-                .padding(.leading, 82)  // align under the contents (past grip + label columns)
+                .padding(.leading, 82)
         }
         .padding(.vertical, 6)
     }
 
-    private func kindPicker(index: Int, socket: MemoryConfigurationState.SocketConfig) -> some View {
-        // A socket only ever offers the kinds the hardware genuinely
-        // supports. When only one kind is available (e.g. B+ 128K's
-        // fixed sideways RAM banks), the picker is still visible -
-        // so rows stay aligned and the kind is plainly visible - but
-        // disabled because there's no decision to make.
-        let optionCount = (socket.supportsRom ? 1 : 0)
-            + (socket.supportsRam ? 1 : 0)
-            + (socket.supportsEmpty ? 1 : 0)
+    private func kindPicker(_ row: SidewaysSocketEditor.Row) -> some View {
+        let optionCount = (row.supportsRom ? 1 : 0)
+            + (row.supportsRam ? 1 : 0)
+            + (row.supportsEmpty ? 1 : 0)
         return Picker("", selection: Binding(
-            get: { memoryConfig.sockets[index].content.kind },
-            set: { newKind in
-                memoryConfig.sockets[index].content.kind = newKind
-                // Setting Empty performs an implicit Clear: an empty socket
-                // holding an image is nonsensical and would mislead.
-                if newKind == .empty {
-                    memoryConfig.sockets[index].content.image = nil
-                    memoryConfig.sockets[index].resolvedTitle = nil
-                    memoryConfig.sockets[index].resolvedVersion = nil
-                    memoryConfig.sockets[index].resolvedKinds = []
-                }
-                // Write-protect is a RAM-only switch; drop it when the socket
-                // is no longer RAM so a stale tick can't linger or be emitted.
-                if newKind != .ram {
-                    memoryConfig.sockets[index].content.writeProtected = false
-                }
-            }
+            get: { row.content.kind },
+            set: { newKind in changeKind(of: row, to: newKind) }
         )) {
-            // Only offer kinds the physical socket can actually be.
-            if socket.supportsRom { Text("ROM").tag(MemoryConfigurationState.SocketKind.rom) }
-            if socket.supportsRam { Text("RAM").tag(MemoryConfigurationState.SocketKind.ram) }
-            if socket.supportsEmpty { Text("Empty").tag(MemoryConfigurationState.SocketKind.empty) }
+            if row.supportsRom { Text("ROM").tag(SocketKind.rom) }
+            if row.supportsRam { Text("RAM").tag(SocketKind.ram) }
+            if row.supportsEmpty { Text("Empty").tag(SocketKind.empty) }
         }
         .pickerStyle(.menu)
         .labelsHidden()
         .frame(width: 88)
         .disabled(optionCount <= 1)
         .help(optionCount <= 1
-              ? "This socket only ever holds \(socket.content.kind.label)"
+              ? "This socket only ever holds \(row.content.kind.label)"
               : "ROM (read-only), RAM (writable), or empty")
     }
 
-    /// Config-time write-protect padlock for a RAM socket. Sets the power-on
-    /// switch position (`--write-protect <slot>`). Config time is pure local
-    /// state with no server to side-effect, so a plain clickable icon is right
-    /// here (the Button/Toggle distinction only matters for the runtime control).
-    private func writeProtectPadlock(index: Int, socket: MemoryConfigurationState.SocketConfig) -> some View {
+    private func writeProtectPadlock(_ row: SidewaysSocketEditor.Row) -> some View {
         Button {
-            memoryConfig.sockets[index].content.writeProtected.toggle()
+            var content = row.content
+            content.writeProtected.toggle()
+            setContent(content, for: row)
         } label: {
-            Image(systemName: socket.content.writeProtected ? "lock.fill" : "lock.open")
-                .foregroundColor(socket.content.writeProtected ? .accentColor : .secondary)
+            Image(systemName: row.content.writeProtected ? "lock.fill" : "lock.open")
+                .foregroundColor(row.content.writeProtected ? .accentColor : .secondary)
         }
         .buttonStyle(.borderless)
-        .help(socket.content.writeProtected
+        .help(row.content.writeProtected
               ? "Allow writes to this sideways RAM"
               : "Write-protect this sideways RAM")
     }
 
-    private func actionsMenu(index: Int, socket: MemoryConfigurationState.SocketConfig) -> some View {
+    private func actionsMenu(_ row: SidewaysSocketEditor.Row) -> some View {
         Menu {
-            // Checkmarked Write-Protect, mirroring the padlock, on RAM sockets
-            // that have the switch. Config time is local state, so it flips
-            // content.writeProtected directly.
-            if socket.supportsWriteProtect && socket.content.kind == .ram {
+            if row.supportsWriteProtect && row.content.kind == .ram {
                 Toggle("Write-Protect", isOn: Binding(
-                    get: { memoryConfig.sockets[index].content.writeProtected },
-                    set: { memoryConfig.sockets[index].content.writeProtected = $0 }
+                    get: { row.content.writeProtected },
+                    set: { var c = row.content; c.writeProtected = $0; setContent(c, for: row) }
                 ))
                 Divider()
             }
-            Button("Browse for ROM image…") { chooseImage(index: index) }
+            Button("Browse for ROM image…") { browseForImage(row) }
             Button("Clear") {
-                memoryConfig.sockets[index].content.image = nil
-                memoryConfig.sockets[index].resolvedTitle = nil
-                memoryConfig.sockets[index].resolvedVersion = nil
-                memoryConfig.sockets[index].resolvedKinds = []
+                var c = row.content
+                c.image = nil
+                setContent(c, for: row)
             }
-            .disabled(socket.content.image == nil)
+            .disabled(row.content.image == nil)
             Button("Copy Path") {
-                if let image = socket.content.image {
+                if let image = row.content.image {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(image, forType: .string)
                 }
             }
-            .disabled(socket.content.image == nil)
-            if let filepath = socket.content.revealableFilepath {
+            .disabled(row.content.image == nil)
+            if let filepath = row.content.revealableFilepath {
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: filepath)])
                 }
             }
-            if socket.isChanged {
+            if row.isChanged {
                 Divider()
-                Button("Revert to Default") {
-                    memoryConfig.sockets[index].content = socket.initialContent
-                }
+                Button("Revert to Default") { revert(row) }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -246,39 +239,76 @@ struct MemorySectionView: View {
         .help("Image actions for this socket")
     }
 
-    /// Caption beneath each socket row: slot numbers + priority, with the
-    /// resolved ROM kinds appended when known. "romfs" is upper-cased as
-    /// "ROMFS"; the other kinds stay lowercase to read as descriptors.
-    private func captionText(for socket: MemoryConfigurationState.SocketConfig) -> String {
-        let slotsLabel = socket.slots.count > 1 ? "Slots" : "Slot"
-        let base = "\(slotsLabel) \(socket.slotsLabel) · priority \(socket.priority)"
-        if socket.resolvedKinds.isEmpty { return base }
-        let kinds = socket.resolvedKinds.map { $0 == "romfs" ? "ROMFS" : $0 }
-        return "\(base) · \(kinds.joined(separator: " · "))"
+    private func captionText(for row: SidewaysSocketEditor.Row) -> String {
+        let slotsLabel = row.slots.count > 1 ? "Slots" : "Slot"
+        let base = "\(slotsLabel) \(row.slotsLabel) · priority \(row.priority)"
+        let kinds = titles.kinds(for: row.content)
+        if kinds.isEmpty { return base }
+        let labelled = kinds.map { $0 == "romfs" ? "ROMFS" : $0 }
+        return "\(base) · \(labelled.joined(separator: " · "))"
     }
 
-    // MARK: - Actions
+    // MARK: - Edits (write through to the draft)
 
-    /// Browse for a ROM image to load into the socket. For a ROM socket this is
-    /// the ROM; for a RAM socket it is an optional startup pre-load image.
-    private func chooseImage(index: Int) {
+    private func setSlots(_ slots: [MachineDraft.SidewaysSlot]) {
+        draft.sidewaysBank = MachineDraft.SidewaysBank(
+            slots: slots, extra: draft.sidewaysBank?.extra ?? [:])
+    }
+
+    private func setContent(_ content: Content, for row: SidewaysSocketEditor.Row) {
+        guard let editor else { return }
+        setSlots(editor.slots(settingSocket: row.socket, to: content, in: currentSlots))
+    }
+
+    /// Change a socket's kind. Selecting ROM on a socket with no image opens a
+    /// browse so the draft only ever records a ROM once an image is chosen;
+    /// cancelling leaves the socket unchanged.
+    private func changeKind(of row: SidewaysSocketEditor.Row, to newKind: SocketKind) {
+        var content = row.content
+        content.kind = newKind
+        switch newKind {
+        case .empty:
+            content.image = nil
+            content.writeProtected = false
+            setContent(content, for: row)
+        case .ram:
+            setContent(content, for: row)
+        case .rom:
+            if let image = content.image, !image.isEmpty {
+                content.writeProtected = false
+                setContent(content, for: row)
+            } else {
+                // No image yet: pick one, else leave the socket as it was.
+                browseForImage(row, forcingKind: .rom)
+            }
+        }
+    }
+
+    /// Reset a socket to the preset's original content for it.
+    private func revert(_ row: SidewaysSocketEditor.Row) {
+        guard let editor else { return }
+        let original = editor.content(for: row.socket,
+                                      in: originalDraft.sidewaysBank?.slots ?? [])
+        setContent(original, for: row)
+    }
+
+    /// Browse for a ROM image. For a ROM socket this is the ROM; for a RAM socket
+    /// it is an optional startup pre-load image.
+    private func browseForImage(_ row: SidewaysSocketEditor.Row, forcingKind: SocketKind? = nil) {
         let panel = NSOpenPanel()
         panel.title = "Select ROM Image"
         panel.allowedContentTypes = [UTType(filenameExtension: "rom") ?? .data]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
 
-        if panel.runModal() == .OK, let url = panel.url {
-            // Browsing into an empty socket loads it as a ROM (one less step);
-            // a RAM socket keeps its kind and treats the image as a preload.
-            if memoryConfig.sockets[index].content.kind == .empty {
-                memoryConfig.sockets[index].content.kind = .rom
-            }
-            memoryConfig.sockets[index].content.image = url.path
-            memoryConfig.sockets[index].resolvedTitle = nil
-            memoryConfig.sockets[index].resolvedVersion = nil
-            memoryConfig.sockets[index].resolvedKinds = []
-            Task { await memoryConfig.resolveTitle(at: index) }
-        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        var content = row.content
+        if let forcingKind { content.kind = forcingKind }
+        // Browsing into an empty socket loads it as a ROM (one less step); a RAM
+        // socket keeps its kind and treats the image as a preload.
+        if content.kind == .empty { content.kind = .rom }
+        content.image = url.path
+        setContent(content, for: row)
+        Task { await titles.resolve(url.path) }
     }
 }

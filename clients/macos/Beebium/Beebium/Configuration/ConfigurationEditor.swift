@@ -30,17 +30,20 @@ import SwiftUI
 /// selected section's content on the right. Currently only Storage
 /// is implemented; other sections will be added in future phases.
 struct ConfigurationEditor: View {
-    /// Storage configuration state being edited
-    @ObservedObject var storageConfig: StorageConfigurationState
+    /// The draft being edited; every section is an editor over part of it.
+    @Binding var draft: MachineDraft
+
+    /// The preset as loaded, so sections can mark what the user changed.
+    let originalDraft: MachineDraft
 
     /// Storage schema describing available options
     let storageSchema: StorageSchemaSection?
 
-    /// Memory (sideways ROM/RAM) configuration state being edited
-    @ObservedObject var memoryConfig: MemoryConfigurationState
-
     /// Sideways bank schema describing the machine's sockets
     let memorySchema: SidewaysSchemaSection?
+
+    /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
+    let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
     /// Machine model ID (e.g., "model-b")
     let modelId: String
@@ -129,13 +132,15 @@ struct ConfigurationEditor: View {
         switch selectedSection {
         case .storage:
             StorageSectionView(
-                storageConfig: storageConfig,
+                draft: $draft,
                 schema: storageSchema
             )
         case .memory:
             MemorySectionView(
-                memoryConfig: memoryConfig,
-                schema: memorySchema
+                draft: $draft,
+                originalDraft: originalDraft,
+                schema: memorySchema,
+                romResolver: romResolver
             )
         }
     }

@@ -360,16 +360,6 @@ class PresetManager: ObservableObject {
         return await fetchSidewaysSectionFromSchema(executablePath: preset.coreExecutablePath)
     }
 
-    /// Read the sideways slot assignments a preset file declares (empty if none).
-    /// Lets the Memory tab show what the preset already configures.
-    func sidewaysSlots(for preset: MachinePreset) -> [PresetSidewaysSlot] {
-        guard let data = FileManager.default.contents(atPath: preset.presetFilepath),
-              let parsed = try? JSONDecoder().decode(PresetFileData.self, from: data) else {
-            return []
-        }
-        return parsed.sidewaysBank?.slots ?? []
-    }
-
     /// Parse a ROM image's header via the `describe-rom` subcommand, so the UI
     /// can show its real title/version. `image` is a ROM library name or path;
     /// returns nil if it can't be read or parsed.
@@ -602,55 +592,6 @@ class PresetManager: ObservableObject {
         return newPresetId
     }
 
-    /// Create a new user preset by snapshotting an existing one and
-    /// layering the user's CLI overrides on top.
-    ///
-    /// The user's sideways/FDC/etc. choices are baked into the new
-    /// preset so that selecting it later launches the same machine
-    /// without having to repeat the configuration. Storage state
-    /// (mounted disc images) is intentionally NOT folded in - those
-    /// are runtime concerns, not preset configuration.
-    ///
-    /// - Parameters:
-    ///   - basedOn: The preset to use as a starting point.
-    ///   - newName: Display name for the new preset.
-    ///   - sidewaysArguments: `--sideways SLOT:TYPE[:IMAGE]` pairs from
-    ///     the configurator. Each pair is two strings: the flag and the value.
-    /// - Returns: `(presetId, errorMessage)` - exactly one is non-nil.
-    ///   On success errorMessage is nil and presetId is the new preset's
-    ///   slug. On failure presetId is nil and errorMessage carries the
-    ///   actual stderr from the create-preset subcommand (name conflict,
-    ///   validation error, etc.) so the UI can surface it instead of
-    ///   guessing.
-    func createPreset(basedOn preset: MachinePreset,
-                      newName: String,
-                      sidewaysArguments: [String]) async -> (String?, String?) {
-        var arguments: [String] = [
-            "create-preset",
-            "--name", newName,
-            "--from", preset.presetId,
-        ]
-        arguments.append(contentsOf: sidewaysArguments)
-
-        let (output, error) = await runCli(
-            executable: preset.coreExecutablePath,
-            arguments: arguments
-        )
-        if let error = error {
-            NSLog("[PresetManager] Failed to create preset: \(error)")
-            return (nil, error.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-
-        let newPresetId = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        NSLog("[PresetManager] Created preset: \(newPresetId) from \(preset.presetId)")
-
-        // Reload presets so the new one appears in the Machine Preset
-        // picker on the next New Machine open.
-        await discoverPresets()
-
-        return (newPresetId, nil)
-    }
-
     /// Delete a user preset.
     /// - Parameter preset: The preset to delete (must be a user preset)
     /// - Returns: true if deletion succeeded
@@ -727,13 +668,15 @@ class PresetManager: ObservableObject {
         let provenanceUUID: String
     }
 
-    /// Launch a core process for the given preset.
-    /// The core is launched with --wait=api, meaning it waits for a Run() RPC before starting emulation.
-    /// - Parameters:
-    ///   - preset: The preset to launch
-    ///   - storageConfig: Optional storage configuration with drive images
+    /// Launch a core process for the given preset, as written (no per-setting
+    /// overrides). The configurable New Machine flow launches an edited draft
+    /// via `launchCore(draft:executablePath:)`; this is the quick-launch of a
+    /// preset exactly as it stands, used from the welcome window.
+    ///
+    /// The core is launched with --wait=api, meaning it waits for a Run() RPC
+    /// before starting emulation.
     /// - Returns: LaunchedCore on success, or error on failure
-    func launchCore(_ preset: MachinePreset, storageConfig: StorageConfigurationState? = nil, memoryConfig: MemoryConfigurationState? = nil) async -> Result<LaunchedCore, CoreLaunchError> {
+    func launchCore(_ preset: MachinePreset) async -> Result<LaunchedCore, CoreLaunchError> {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: preset.coreExecutablePath)
 
@@ -773,22 +716,6 @@ class PresetManager: ObservableObject {
         // Pass ROM directory if running from app bundle with bundled ROMs
         if let romDir = bundledRomDirpath() {
             arguments.append(contentsOf: ["--rom-dir", romDir])
-        }
-
-        // Add floppy drive arguments from storage config
-        if let config = storageConfig {
-            for drive in config.drives {
-                if let filepath = drive.imageFilepath {
-                    arguments.append(contentsOf: ["--floppy", "\(drive.id):\(filepath)"])
-                }
-            }
-        }
-
-        // Add sideways arguments from memory config. Only sockets the user
-        // changed emit anything; they override the preset's own sideways_bank
-        // per slot on the server side.
-        if let memoryConfig = memoryConfig {
-            arguments.append(contentsOf: memoryConfig.sidewaysLaunchArguments())
         }
 
         process.arguments = arguments

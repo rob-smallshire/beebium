@@ -12,12 +12,14 @@
 
 import SwiftUI
 
-/// Storage configuration section view.
+/// Storage configuration section view, editing the draft directly.
 ///
-/// Shows FDC socket picker (for Model B only) and floppy drive configuration.
+/// Shows the FDC socket picker (for machines with a socket) and the floppy
+/// drives. Edits write straight into `draft.storage`, so the draft is the only
+/// source of truth. Drive images are kept as `file://` URIs in the draft (the
+/// preset schema's form) and presented to the drive rows as plain paths.
 struct StorageSectionView: View {
-    /// Storage configuration state being edited
-    @ObservedObject var storageConfig: StorageConfigurationState
+    @Binding var draft: MachineDraft
 
     /// Schema describing available options (nil if not yet loaded)
     let schema: StorageSchemaSection?
@@ -25,12 +27,9 @@ struct StorageSectionView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // FDC Socket picker (only if schema has fdc_socket)
                 if let fdcSchema = schema?.fdcSocket {
                     fdcSocketSection(schema: fdcSchema)
                 }
-
-                // Floppy drives
                 floppyDrivesSection
             }
             .padding(12)
@@ -39,13 +38,25 @@ struct StorageSectionView: View {
 
     // MARK: - FDC Socket Section
 
+    private var fdcSocketId: Binding<String> {
+        Binding(
+            get: { draft.storage?.fdcSocket?.id ?? "none" },
+            set: { newID in
+                var storage = draft.storage ?? MachineDraft.Storage()
+                storage.fdcSocket = MachineDraft.FdcSocket(
+                    id: newID, extra: storage.fdcSocket?.extra ?? [:])
+                draft.storage = storage
+            }
+        )
+    }
+
     @ViewBuilder
     private func fdcSocketSection(schema: FDCSocketSchema) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Disc Controller")
                 .font(.headline)
 
-            Picker("", selection: $storageConfig.fdcSocketId) {
+            Picker("", selection: fdcSocketId) {
                 ForEach(schema.options) { option in
                     Text(option.label).tag(option.id)
                 }
@@ -53,8 +64,7 @@ struct StorageSectionView: View {
             .pickerStyle(.menu)
             .labelsHidden()
 
-            // Show description for selected option
-            if let selectedOption = schema.options.first(where: { $0.id == storageConfig.fdcSocketId }),
+            if let selectedOption = schema.options.first(where: { $0.id == fdcSocketId.wrappedValue }),
                let description = selectedOption.description {
                 Text(description)
                     .font(.caption)
@@ -68,21 +78,48 @@ struct StorageSectionView: View {
     // MARK: - Floppy Drives Section
 
     private var floppyDrivesSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(storageConfig.drives.indices, id: \.self) { index in
+        let drives = draft.storage?.floppyDrives ?? []
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(drives.indices, id: \.self) { index in
                 FloppyDriveConfigView(
-                    driveNumber: storageConfig.drives[index].id,
-                    imageFilepath: Binding(
-                        get: { storageConfig.drives[index].imageFilepath },
-                        set: { storageConfig.drives[index].imageFilepath = $0 }
-                    )
-                )
+                    driveNumber: drives[index].drive,
+                    imageFilepath: driveImageBinding(index: index))
 
-                if index < storageConfig.drives.count - 1 {
+                if index < drives.count - 1 {
                     Divider()
                         .padding(.horizontal, 12)
                 }
             }
         }
+    }
+
+    /// Bind a drive's image as a plain filesystem path, bridging to the draft's
+    /// `file://` URI form.
+    private func driveImageBinding(index: Int) -> Binding<String?> {
+        Binding(
+            get: {
+                guard let uri = draft.storage?.floppyDrives?[index].imageUri else { return nil }
+                return Self.path(fromImageUri: uri)
+            },
+            set: { newPath in
+                guard var storage = draft.storage, var drives = storage.floppyDrives,
+                      drives.indices.contains(index) else { return }
+                drives[index].imageUri = newPath.map { Self.imageUri(fromPath: $0) }
+                storage.floppyDrives = drives
+                draft.storage = storage
+            }
+        )
+    }
+
+    /// A display/filesystem path from a stored image URI (a `file://` URI becomes
+    /// its path; anything else is returned unchanged).
+    static func path(fromImageUri uri: String) -> String {
+        if uri.hasPrefix("file://"), let url = URL(string: uri) { return url.path }
+        return uri
+    }
+
+    /// A `file://` URI for a filesystem path, the form a preset stores.
+    static func imageUri(fromPath path: String) -> String {
+        URL(fileURLWithPath: path).absoluteString
     }
 }

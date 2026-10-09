@@ -37,6 +37,7 @@
 		19617EDAAB58E72A082451BB /* MachineDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16E213786D5D1828745EFE6 /* MachineDraftTests.swift */; };
 		1AE92C3076119A47291BD4D7 /* NewMachineDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028EF03EDAC1D899B4771D1D /* NewMachineDialog.swift */; };
 		1AEDEA9B5B2CA4CC55909B84 /* BBCKeyCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152853E7E4735D1E7994275 /* BBCKeyCache.swift */; };
+		1B4902343B55BDA1E75617D1 /* SidewaysSocketEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */; };
 		1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C01C154181FCA2E13ECAF0 /* RomHeaderInfo.swift */; };
 		1D4EF3D9B6F79DD6EBC15905 /* PopoverFocusHostingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BC769B92164417F2195339 /* PopoverFocusHostingTests.swift */; };
 		1D93F9B8DDEB19B857927731 /* AudioPreRoll.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BC15A775463F7A0F66447C8 /* AudioPreRoll.swift */; };
@@ -71,6 +72,7 @@
 		42072CC836ABE4A92B2EF2AC /* BeebiumApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E7A0E6AF52A2C316C7C419 /* BeebiumApp.swift */; };
 		4257B00B6F393A93AD85649A /* ImmersiveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E94733F6E0E22EE3816394 /* ImmersiveCoordinator.swift */; };
 		4324F1B48C46D8B71A0D31B5 /* ReconnectCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B55904FC39C19A0F853B46 /* ReconnectCoordinatorTests.swift */; };
+		44CFFA37FCA909B67E296E53 /* RomTitleCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89D4F5285CFD741418E4365C /* RomTitleCache.swift */; };
 		44FF38917718C8C09556A62A /* indicator.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C4898953F0003B85113EC0 /* indicator.grpc.swift */; };
 		47FD133746DA2EEA77B73EDC /* econet.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D969BBA00E4077B69BBCACAF /* econet.pb.swift */; };
 		49FEE51472DA8FB96B3587EA /* econet_transport.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6020BCD62F9F79F3019AB3D /* econet_transport.pb.swift */; };
@@ -112,6 +114,7 @@
 		7F804C9C4166A9F865A6E35E /* DiscErrorKindLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66C73FB22C3D78ED1A2D7AF /* DiscErrorKindLabelTests.swift */; };
 		7FF55ACE5A1B43545971258F /* IndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE550723A13DFA9A20EB302 /* IndicatorView.swift */; };
 		8004640AFE1BB64192794280 /* DiscImageInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8492195DA7B7640A56A7C4 /* DiscImageInfoTests.swift */; };
+		8240AA12FA9CD9DD64CB6C7E /* SidewaysSocketEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB849680FE132BBA330C1EF3 /* SidewaysSocketEditorTests.swift */; };
 		8248344928EA9782B944178F /* SidebarMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992C39260909EB85C84D2C20 /* SidebarMode.swift */; };
 		82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28ED949DB593C8353954F7B1 /* MachinePreset.swift */; };
 		838B9FA71F4995836B03D3AD /* SvgPathParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D736DE1C5A930D6A43C94E0 /* SvgPathParser.swift */; };
@@ -121,7 +124,6 @@
 		8DE0B19A245E1C1C1E144E4F /* video.proto in Resources */ = {isa = PBXBuildFile; fileRef = 69144892FD8EBDC0F0D9230E /* video.proto */; };
 		8E648F53A0DD1B04A0E1F08E /* StorageModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A0228B7AD63C2E38A63080 /* StorageModeView.swift */; };
 		8F602AC748C18A556729FE2A /* serial.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC51B6CDDCA00180CC81969A /* serial.grpc.swift */; };
-		910A258FD1C89BFB7CFDFC71 /* MemoryConfigurationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D3CAA48CAAC43745F077F26 /* MemoryConfigurationState.swift */; };
 		934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */; };
 		94C93812FC0975970E7C7230 /* KeyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6041795434C164F849A27B /* KeyInput.swift */; };
 		95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */; };
@@ -137,7 +139,6 @@
 		A005244A2347799984C194E6 /* audio.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0CD29C9A89B375C692C019 /* audio.pb.swift */; };
 		A16526EF2B425C9CE263353C /* MachineNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F12FAA03C7C95012C4CD79D /* MachineNames.swift */; };
 		A218ADC630D92D0A18D300CF /* PeripheralsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 757B84FAA1D1A37B1ABEB0A0 /* PeripheralsClient.swift */; };
-		A2664558176937A26B30748C /* StorageConfigurationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AFDA16D57D7C85C963EBC4 /* StorageConfigurationState.swift */; };
 		A2A3B7DBE03739A5275EE1EC /* FocusLossKeyReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */; };
 		A401339BE3EA315D59F1DC40 /* FileReferenceMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D700C1B381AD9783B66293A /* FileReferenceMenu.swift */; };
 		A4E82812655C69808291E22A /* StorageSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E14137BA5B8968468AC84092 /* StorageSchemaSection.swift */; };
@@ -182,7 +183,6 @@
 		CCF53B2BFF28A41B641DEA7A /* FileReferenceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74BC34119DE428F9D633CD8 /* FileReferenceView.swift */; };
 		D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BA8A6733683FD5607B8A29 /* MetalRenderer.swift */; };
 		D36CEEAAE7E54882BCC36508 /* EmulatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D7FC4E0D4B86900F8E309A /* EmulatorView.swift */; };
-		D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */; };
 		D5072BCBDC5F2D2DBAFFAF87 /* PixelShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11753B4E23EE4B1DDDE7A19 /* PixelShape.swift */; };
 		D68AE50897EB5CBD1070CC1E /* WindowKeyActivator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33D43E265EBE4A74BF8AE260 /* WindowKeyActivator.swift */; };
 		D74BF8677E5A5731DC06D3FD /* keyboard.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2073A33AE028AF1DFA0983DC /* keyboard.grpc.swift */; };
@@ -348,16 +348,15 @@
 		86F2683BAFB4C72B6644F473 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
 		87E7F7F1255B32F8C85FAFDA /* indicator.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = indicator.proto; sourceTree = "<group>"; };
 		899F340E434ACDCAA75F913F /* EditableChoiceField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableChoiceField.swift; sourceTree = "<group>"; };
+		89D4F5285CFD741418E4365C /* RomTitleCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RomTitleCache.swift; sourceTree = "<group>"; };
 		89F24656F8D85F78815EFB0A /* FocusLossKeyReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLossKeyReleaseTests.swift; sourceTree = "<group>"; };
 		8AB4718470C6723E24FBA9E9 /* SidewaysWriteProtectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysWriteProtectTests.swift; sourceTree = "<group>"; };
 		8ADC7C5C44D2AAF8D8920E36 /* VideoSettingsCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsCache.swift; sourceTree = "<group>"; };
 		8B269A5937DAC1914CA8BF39 /* video.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = video.grpc.swift; sourceTree = "<group>"; };
 		8C179B6CADA71E65979BE60C /* BeebiumTouchBarEscapeKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarEscapeKey.swift; sourceTree = "<group>"; };
 		8C2AFB016D3C8A8EF789C4A9 /* PresetManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetManager.swift; sourceTree = "<group>"; };
-		8D3CAA48CAAC43745F077F26 /* MemoryConfigurationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryConfigurationState.swift; sourceTree = "<group>"; };
 		8DC4EB31EFDD95098F6DE936 /* sideways.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = sideways.grpc.swift; sourceTree = "<group>"; };
 		8FDC80983751CFBC0D9B98A3 /* DebuggerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebuggerClient.swift; sourceTree = "<group>"; };
-		90AFDA16D57D7C85C963EBC4 /* StorageConfigurationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageConfigurationState.swift; sourceTree = "<group>"; };
 		90FE057F6229AF873816D708 /* EditableListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableListView.swift; sourceTree = "<group>"; };
 		9141154B5BCF7C71635E62B2 /* disc.proto */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.protobuf; path = disc.proto; sourceTree = "<group>"; };
 		91EE41147FA34459F83B3130 /* ModalEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalEditorView.swift; sourceTree = "<group>"; };
@@ -391,6 +390,7 @@
 		AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAvailabilityTests.swift; sourceTree = "<group>"; };
 		ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineNameTemplateSupportTests.swift; sourceTree = "<group>"; };
 		AE9CB7E033AAA4DFFA09B5B4 /* FileReferenceMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileReferenceMenuTests.swift; sourceTree = "<group>"; };
+		AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSocketEditor.swift; sourceTree = "<group>"; };
 		AF6E0FC8FC2E9B1DD5775CD0 /* audio.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = audio.grpc.swift; sourceTree = "<group>"; };
 		B4F92E65FCC0DE10C9A39BF0 /* URL+DiscImageReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+DiscImageReference.swift"; sourceTree = "<group>"; };
 		B570706C1BCFCAE564221FBC /* EventLoopScalingMeasurement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLoopScalingMeasurement.swift; sourceTree = "<group>"; };
@@ -403,7 +403,6 @@
 		B98CF59648104556C3677412 /* KeyboardMTKView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMTKView.swift; sourceTree = "<group>"; };
 		B9D68557079BA374D2FAD131 /* BeebiumTouchBarKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarKeys.swift; sourceTree = "<group>"; };
 		BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComboBoxRepresentableTests.swift; sourceTree = "<group>"; };
-		BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryConfigurationStateTests.swift; sourceTree = "<group>"; };
 		BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilterTests.swift; sourceTree = "<group>"; };
 		BF12022B03E2794E9DDF6B3F /* KeyboardMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMapping.swift; sourceTree = "<group>"; };
 		C152853E7E4735D1E7994275 /* BBCKeyCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCKeyCache.swift; sourceTree = "<group>"; };
@@ -457,6 +456,7 @@
 		F8C4007152A43F9E94FB30A5 /* system.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.pb.swift; sourceTree = "<group>"; };
 		F94659E7B330C00F11FC0E65 /* IndicatorClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorClient.swift; sourceTree = "<group>"; };
 		FAB928B6093490D60EECA734 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		FB849680FE132BBA330C1EF3 /* SidewaysSocketEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysSocketEditorTests.swift; sourceTree = "<group>"; };
 		FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationEditor.swift; sourceTree = "<group>"; };
 		FEB0459103AA8B2261579315 /* SystemClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemClient.swift; sourceTree = "<group>"; };
 		FF6041795434C164F849A27B /* KeyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyInput.swift; sourceTree = "<group>"; };
@@ -593,9 +593,9 @@
 			children = (
 				FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */,
 				664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */,
-				8D3CAA48CAAC43745F077F26 /* MemoryConfigurationState.swift */,
 				D87F51F70C1CA8A3C2CB01F4 /* MemorySectionView.swift */,
-				90AFDA16D57D7C85C963EBC4 /* StorageConfigurationState.swift */,
+				89D4F5285CFD741418E4365C /* RomTitleCache.swift */,
+				AEEB6BB6DCFD584275228F28 /* SidewaysSocketEditor.swift */,
 				E1724F99FA9BFDDE24FF4F8A /* StorageSectionView.swift */,
 			);
 			path = Configuration;
@@ -774,7 +774,6 @@
 				9E2D986E738350D95B4C5BFA /* MachineManagerTests.swift */,
 				B8422ED3425ABC72999C86CC /* MachineNamesTests.swift */,
 				ACF28DF4AE69E637FF844362 /* MachineNameTemplateSupportTests.swift */,
-				BC8CE53F23EA9D0731A693B9 /* MemoryConfigurationStateTests.swift */,
 				7D2677DED8933B5E1A7D11D4 /* ModifierKeyStateTests.swift */,
 				D81F7886E25E63A714A0EE6C /* PasteCoordinatorTests.swift */,
 				4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */,
@@ -787,6 +786,7 @@
 				9CD03C0FA5A6E6032A953101 /* SelectionCoordinatorTests.swift */,
 				AA2084B8844488BD2A4B9313 /* ServerAvailabilityTests.swift */,
 				B79C08E01A7BA46EE2246BF7 /* SidewaysSchemaTests.swift */,
+				FB849680FE132BBA330C1EF3 /* SidewaysSocketEditorTests.swift */,
 				8AB4718470C6723E24FBA9E9 /* SidewaysWriteProtectTests.swift */,
 				8389EA15AADAB20C859E9702 /* StandardDisplayStyleTests.swift */,
 				D9A09D17A7B4D22F6D9D50BD /* SvgPathParserTests.swift */,
@@ -954,7 +954,6 @@
 				2296373E4C15F8C223E5CCF8 /* MachineManagerTests.swift in Sources */,
 				C19767F534EBBAEAB5F75148 /* MachineNameTemplateSupportTests.swift in Sources */,
 				C39DF4B1A3101F1124458288 /* MachineNamesTests.swift in Sources */,
-				D41DEDC251E3306F220B5825 /* MemoryConfigurationStateTests.swift in Sources */,
 				6686F47B251CF78AF9C5F329 /* ModifierKeyStateTests.swift in Sources */,
 				406264D4A51A907E3F6F06CF /* PasteCoordinatorTests.swift in Sources */,
 				934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */,
@@ -967,6 +966,7 @@
 				54C94C4200C162B935D5C4AB /* SelectionCoordinatorTests.swift in Sources */,
 				10FB81233FBCF7FBD0EE36D5 /* ServerAvailabilityTests.swift in Sources */,
 				0E39819B2C23C51F72129F27 /* SidewaysSchemaTests.swift in Sources */,
+				8240AA12FA9CD9DD64CB6C7E /* SidewaysSocketEditorTests.swift in Sources */,
 				40E2113DA076BC2B281B0F34 /* SidewaysWriteProtectTests.swift in Sources */,
 				E309480FD076251390C77416 /* StandardDisplayStyleTests.swift in Sources */,
 				40670274CFC1B6A355867C8E /* SvgPathParserTests.swift in Sources */,
@@ -1057,7 +1057,6 @@
 				82E5C63F1FAF9D28F87F09BA /* MachinePreset.swift in Sources */,
 				9F092012B533B1C03B7F4F43 /* MachineRenamePopover.swift in Sources */,
 				2F912AE618B59A262F4FDC58 /* MachinesSettingsPane.swift in Sources */,
-				910A258FD1C89BFB7CFDFC71 /* MemoryConfigurationState.swift in Sources */,
 				6B8C451CD0B6221566DBEF56 /* MemoryModeView.swift in Sources */,
 				E529443D463B439E147AEDD0 /* MemorySectionView.swift in Sources */,
 				D0360065AC6EC0990736FA5F /* MetalRenderer.swift in Sources */,
@@ -1075,6 +1074,7 @@
 				FBA4B50F2A55D17E9C34AEF9 /* ReconnectCoordinator.swift in Sources */,
 				BA7685640D333A974EF6D1F6 /* ResettableControls.swift in Sources */,
 				1C6C1476609292CEC12F9374 /* RomHeaderInfo.swift in Sources */,
+				44CFFA37FCA909B67E296E53 /* RomTitleCache.swift in Sources */,
 				986C994B355DAC32982C71E7 /* ScreenSelectionGeometry.swift in Sources */,
 				B8A7FA6C0FA7DE88CE0A6255 /* SelectionCoordinator.swift in Sources */,
 				14E16012DD8EC1046039A0FF /* SelectionOverlayView.swift in Sources */,
@@ -1088,11 +1088,11 @@
 				FFED4839C8FA82EBD68D55E8 /* SidebarModeToolbar.swift in Sources */,
 				79DB2DF04399A3F0579DA079 /* SidewaysClient.swift in Sources */,
 				02956037B5EAA66AA17BCBEB /* SidewaysSchemaSection.swift in Sources */,
+				1B4902343B55BDA1E75617D1 /* SidewaysSocketEditor.swift in Sources */,
 				6286ABC565FAA33F26C0BB1F /* SpeedControlModel.swift in Sources */,
 				F1C97066D79A492FB7FD76D1 /* SpeedControlView.swift in Sources */,
 				C3ED514E6ED1E2D44FD407BF /* StandardDisplayStyle.swift in Sources */,
 				75BBA7064C85D6CDB3797111 /* StatusBarView.swift in Sources */,
-				A2664558176937A26B30748C /* StorageConfigurationState.swift in Sources */,
 				8E648F53A0DD1B04A0E1F08E /* StorageModeView.swift in Sources */,
 				A4E82812655C69808291E22A /* StorageSchemaSection.swift in Sources */,
 				AE3969E0CE7F7D5F7C57513A /* StorageSectionView.swift in Sources */,

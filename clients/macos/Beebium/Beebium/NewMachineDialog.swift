@@ -25,9 +25,13 @@ struct NewMachineDialog: View {
 
     // Configuration state
     @State private var showConfiguration = false
-    @StateObject private var storageConfig = StorageConfigurationState()
+    /// The draft preset document being edited: the single source of truth for
+    /// every configuration section, launched and saved as-is.
+    @State private var draft = MachineDraft()
+    /// The draft as first loaded for the selected preset, so sections can show
+    /// what the user changed.
+    @State private var originalDraft = MachineDraft()
     @State private var storageSchema: StorageSchemaSection?
-    @StateObject private var memoryConfig = MemoryConfigurationState()
     @State private var memorySchema: SidewaysSchemaSection?
     @State private var isLoadingSchema = false
 
@@ -91,7 +95,7 @@ struct NewMachineDialog: View {
             }
             restoreLastSelection()
             if let preset = selectedPreset {
-                loadSchemaForPreset(preset)
+                loadDraftForPreset(preset)
             }
         }
         // Reset transient state when the dialog closes so the next
@@ -107,7 +111,7 @@ struct NewMachineDialog: View {
         }
         .onChange(of: selectedPreset) { newPreset in
             if let preset = newPreset {
-                loadSchemaForPreset(preset)
+                loadDraftForPreset(preset)
             }
         }
     }
@@ -220,10 +224,11 @@ struct NewMachineDialog: View {
                     .frame(height: 200)
                 } else {
                     ConfigurationEditor(
-                        storageConfig: storageConfig,
+                        draft: $draft,
+                        originalDraft: originalDraft,
                         storageSchema: storageSchema,
-                        memoryConfig: memoryConfig,
                         memorySchema: memorySchema,
+                        romResolver: romResolver(for: selectedPreset),
                         modelId: selectedPreset?.modelName ?? "model-b"
                     )
                     // Grow with the window (resizable) so the sideways list can
@@ -308,13 +313,13 @@ struct NewMachineDialog: View {
         // selectedPreset to a live struct in the current list.
         restoreLastSelection()
         // Configs revert to the preset's defaults the next time
-        // loadSchemaForPreset runs (triggered by .onChange of
+        // loadDraftForPreset runs (triggered by .onChange of
         // selectedPreset on next open if the value differs, or
         // explicitly in .task on the first open of the app session).
         // Force it here too, so even within a single app session a
         // close-then-open clears any edits.
         if let preset = selectedPreset {
-            loadSchemaForPreset(preset)
+            loadDraftForPreset(preset)
         }
         // AppKit remembers the window's frame across hide/show. Resize
         // to the collapsed content height so the next open isn't
@@ -357,50 +362,68 @@ struct NewMachineDialog: View {
         }
     }
 
-    private func loadSchemaForPreset(_ preset: MachinePreset) {
+    /// Load the draft for a preset and the schemas that describe what its model
+    /// can hold. The draft is the preset document as written (so the dialog
+    /// edits exactly what will be launched); the schemas drive the editors'
+    /// capabilities (FDC options, socket layout, drive count).
+    private func loadDraftForPreset(_ preset: MachinePreset) {
         isLoadingSchema = true
         storageSchema = nil
         memorySchema = nil
 
-        // Reset storage config to defaults
-        storageConfig.fdcSocketId = "none"
-        storageConfig.clearAllDrives()
-
         Task {
             let manager = presetManager
-            let executablePath = preset.coreExecutablePath
-            let schema = await manager.fetchStorageSchema(for: preset)
-            let sidewaysSchema = await manager.fetchSidewaysSchema(for: preset)
-            let presetSlots = manager.sidewaysSlots(for: preset)
+            let storage = await manager.fetchStorageSchema(for: preset)
+            let sideways = await manager.fetchSidewaysSchema(for: preset)
+            var loaded = Self.loadDraft(fromFile: preset.presetFilepath) ?? MachineDraft()
 
             await MainActor.run {
-                storageSchema = schema
+                storageSchema = storage
+                memorySchema = sideways
 
-                // Update drive count based on schema
-                let driveCount = schema?.floppyDrives?.count ?? 2
-                storageConfig.drives = (0..<driveCount).map {
-                    StorageConfigurationState.DriveConfig(id: $0, imageFilepath: nil)
-                }
+                // Fill the metadata the launch needs if the file omitted it.
+                if loaded.name == nil { loaded.name = preset.name }
+                if loaded.machineName == nil { loaded.machineName = preset.machineName }
 
-                // Build the Memory tab from the machine's sockets and the
-                // preset's own sideways assignments.
-                memorySchema = sidewaysSchema
-                if let sidewaysSchema = sidewaysSchema {
-                    memoryConfig.configure(schema: sidewaysSchema, presetSlots: presetSlots)
-                    memoryConfig.headerResolver = { @MainActor image in
-                        await manager.fetchRomHeader(image: image, executablePath: executablePath)
-                    }
-                } else {
-                    memoryConfig.sockets = []
-                    memoryConfig.headerResolver = nil
-                }
+                // Ensure a drive row per drive the model offers, keeping any the
+                // preset already mounts.
+                let driveCount = storage?.floppyDrives?.count ?? 2
+                loaded.storage = Self.ensuringFloppyDrives(loaded.storage, count: driveCount)
 
+                draft = loaded
+                originalDraft = loaded
                 isLoadingSchema = false
             }
+        }
+    }
 
-            // Resolve ROM titles (one describe-rom per loaded image) so the
-            // Memory tab shows real ROM names rather than image filenames.
-            await memoryConfig.resolveTitles()
+    /// Decode the draft from a preset file, or nil if it cannot be read/parsed.
+    private static func loadDraft(fromFile filepath: String) -> MachineDraft? {
+        guard let data = FileManager.default.contents(atPath: filepath) else { return nil }
+        return try? MachineDraft.decode(from: data)
+    }
+
+    /// A storage section with a drive row for each of `count` drives, preserving
+    /// any drives the preset already configures.
+    private static func ensuringFloppyDrives(_ storage: MachineDraft.Storage?, count: Int) -> MachineDraft.Storage {
+        var result = storage ?? MachineDraft.Storage()
+        var drives = result.floppyDrives ?? []
+        let present = Set(drives.map(\.drive))
+        for drive in 0..<count where !present.contains(drive) {
+            drives.append(MachineDraft.FloppyDrive(drive: drive))
+        }
+        result.floppyDrives = drives.sorted { $0.drive < $1.drive }
+        return result
+    }
+
+    /// A ROM-title resolver bound to the preset's core executable, for the
+    /// Memory tab; nil before a preset is selected.
+    private func romResolver(for preset: MachinePreset?) -> (@MainActor (String) async -> RomHeaderInfo?)? {
+        guard let preset else { return nil }
+        let manager = presetManager
+        let executablePath = preset.coreExecutablePath
+        return { image in
+            await manager.fetchRomHeader(image: image, executablePath: executablePath)
         }
     }
 
@@ -414,35 +437,32 @@ struct NewMachineDialog: View {
         // @StateObject wrapper issues
         let manager = presetManager
 
-        // If "Save as new preset" is on with a non-empty name, snapshot
-        // the user's sideways configuration into a new user preset
-        // before launching. The launched machine is identical either
-        // way (same CLI args yield the same machine); the new preset
-        // simply makes the chosen configuration discoverable in the
-        // Machine Preset picker next time.
+        // If "Save as new preset" is on with a non-empty name, write the whole
+        // draft - storage, floppies, sideways and all - into a new user preset
+        // before launching, so selecting it later launches the same machine. The
+        // launched machine is identical either way (the same draft document is
+        // launched); the new preset simply makes the configuration discoverable
+        // in the Machine Preset picker next time.
         let trimmedName = newPresetName.trimmingCharacters(
             in: .whitespacesAndNewlines)
         if saveAsNewPreset && !trimmedName.isEmpty {
-            let (createdId, errorMessage) = await manager.createPreset(
-                basedOn: preset,
-                newName: trimmedName,
-                sidewaysArguments: memoryConfig.sidewaysLaunchArguments()
-            )
+            let (createdId, errorMessage) = await manager.saveDraftAsPreset(
+                draft, name: trimmedName, executablePath: preset.coreExecutablePath)
             if createdId == nil {
-                // Surface the real stderr from the create-preset subcommand
+                // Surface the real stderr from the import-preset subcommand
                 // so the user can act on it. Don't guess - the actual failure
                 // mode varies (name conflict, validation error, write
                 // permissions on the user-presets directory, ...).
                 let detail = (errorMessage?.isEmpty == false)
                     ? errorMessage!
-                    : "The create-preset subcommand failed with no error output."
+                    : "The import-preset subcommand failed with no error output."
                 launchError = "Couldn't save preset \"\(trimmedName)\":\n\(detail)"
                 isLaunching = false
                 return
             }
         }
 
-        let result = await manager.launchCore(preset, storageConfig: storageConfig, memoryConfig: memoryConfig)
+        let result = await manager.launchCore(draft: draft, executablePath: preset.coreExecutablePath)
 
         switch result {
         case .success(let core):

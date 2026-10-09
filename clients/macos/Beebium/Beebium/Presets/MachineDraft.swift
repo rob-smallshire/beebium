@@ -132,12 +132,16 @@ struct MachineDraft: Equatable {
         var slot: Int
         var type: String
         var imageUri: String?
+        /// Power-on write-protect position for a sideways-RAM slot (RAM only).
+        var writeProtected: Bool?
         var extra: [String: JSONValue]
 
-        init(slot: Int, type: String, imageUri: String? = nil, extra: [String: JSONValue] = [:]) {
+        init(slot: Int, type: String, imageUri: String? = nil,
+             writeProtected: Bool? = nil, extra: [String: JSONValue] = [:]) {
             self.slot = slot
             self.type = type
             self.imageUri = imageUri
+            self.writeProtected = writeProtected
             self.extra = extra
         }
     }
@@ -298,13 +302,14 @@ extension MachineDraft.SidewaysBank: Codable {
 }
 
 extension MachineDraft.SidewaysSlot: Codable {
-    private static let knownKeys: Set<String> = ["slot", "type", "image_uri"]
+    private static let knownKeys: Set<String> = ["slot", "type", "image_uri", "write_protected"]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: JSONCodingKey.self)
         slot = try c.decode(Int.self, forKey: "slot")
         type = try c.decode(String.self, forKey: "type")
         imageUri = try c.decodeIfPresent(String.self, forKey: "image_uri")
+        writeProtected = try c.decodeIfPresent(Bool.self, forKey: "write_protected")
         extra = try c.decodeExtra(excluding: Self.knownKeys)
     }
 
@@ -313,6 +318,7 @@ extension MachineDraft.SidewaysSlot: Codable {
         try c.encode(slot, forKey: "slot")
         try c.encode(type, forKey: "type")
         try c.encodeIfPresent(imageUri, forKey: "image_uri")
+        try c.encodeIfPresent(writeProtected, forKey: "write_protected")
         try c.encodeExtra(extra)
     }
 }
