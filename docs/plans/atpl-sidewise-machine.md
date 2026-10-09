@@ -153,7 +153,7 @@ Docs:
 - `docs/sideways-slots.md` — describe the variant, write-through, per-bank
   write-protect.
 - `docs/cli.md` — add `beebium-model-b-atpl-sidewise` to the machine table.
-- Preset schema docs under `docs/plans/preset-schema/`.
+- The preset schema reference, `docs/preset-schema.md`.
 
 Clients (later phase):
 

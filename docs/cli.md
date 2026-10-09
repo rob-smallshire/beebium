@@ -30,7 +30,7 @@ If no subcommand is specified, `start` is assumed.
 
 ### Output Formats
 
-The `--format` option controls output formatting for data commands (`list-fdcs`, `describe-machine`):
+The `--format` option controls output formatting for data commands (`list-fdcs`, `list-presets`, `list-extensions` and the other listings):
 
 | Format | Description | Auto-selected when |
 |--------|-------------|-------------------|
@@ -50,7 +50,7 @@ beebium-model-b list-fdcs | cat     # tsv output
 
 # Explicit format
 beebium-model-b --format pretty list-fdcs
-beebium-model-b --format tsv describe-machine
+beebium-model-b --format tsv list-presets
 beebium-model-b --format jsonl list-fdcs
 ```
 
@@ -77,7 +77,7 @@ drive numbers in `--floppy`.
 | Good | Bad | Reason |
 |------|-----|--------|
 | `list-presets` | `presets` | Verb "list" indicates action |
-| `describe-machine` | `machine-info` | Verb "describe" indicates action |
+| `describe-preset-schema` | `preset-schema` | Verb "describe" indicates action |
 | `report-presets-dirpath` | `presets-dir` | Verb "report" indicates action |
 | `create-preset` | `new-preset` | "new" is an adjective, not a verb |
 | `delete-preset` | `preset-remove` | Verb should come first |
@@ -97,7 +97,7 @@ beebium-model-b [options]           # Equivalent (start is default)
 
 | Option | Description |
 |--------|-------------|
-| `--preset <id\|filepath>` | Load configuration from a preset. CLI options override preset values |
+| `--preset <id\|filepath>` | Load configuration from a preset. CLI options override preset values. The file format is in [preset-schema.md](preset-schema.md) |
 
 The argument is first tried as a file path. If no such file exists it is resolved as a preset id, the same way as `show-preset`: the system presets directory first, then the user presets directory. `list-presets` shows the ids available. If neither lookup succeeds the server exits with `NOINPUT` (66):
 
@@ -582,53 +582,36 @@ Coprocessor:
 same plus `insertion` (`{key}`), with `value` `null` where it is only known at
 launch. Like the other discovery commands, this needs no running emulator.
 
-### describe-machine
-
-Output machine information for programmatic use.
-
-```bash
-beebium-model-b describe-machine
-```
-
-Output varies by format (see [Output Formats](#output-formats)):
-
-**`--format pretty`** (default for TTY):
-```
-Machine:        BBC Model B
-Executable:     beebium-model-b
-Version:        0.1.0
-MOS ROM:        acorn-mos_1_20.rom
-Language ROM:   bbc-basic_2.rom (slot 15)
-```
-
-**`--format tsv`** (default for non-TTY):
-```
-key	value
-machine_type	ModelB
-display_name	BBC Model B
-executable	beebium-model-b
-version	0.1.0
-default_mos_rom	acorn-mos_1_20.rom
-default_language_rom	bbc-basic_2.rom
-default_language_slot	15
-```
-
-**`--format jsonl`**:
-```
-{"executable":"beebium-model-b","machine_type":"ModelB","display_name":"BBC Model B","version":"0.1.0","default_mos_rom":"acorn-mos_1_20.rom","default_language_rom":"bbc-basic_2.rom","default_language_slot":15}
-```
-
-Model B+ also includes DFS information (`default_dfs_rom`, `default_dfs_slot`).
-
 ### describe-preset-schema
 
-Output the configuration schema for presets. Used by GUIs to build dynamic configuration UIs.
+Output what a preset for this model may contain, as JSON: one section per
+preset key (`speed`, `startup`, `mos_image_uri`, `storage`, `sideways_bank`,
+`econet`, `extensions`) with its ranges, defaults and choices. Used by GUIs to
+build a configuration UI before any machine is launched.
 
 ```bash
 beebium-model-b describe-preset-schema
 ```
 
-Output is JSON describing the model and available configuration sections. See [preset-system.md](plans/preset-system.md) for schema details.
+The sections are described in [preset-schema.md](preset-schema.md#describe-preset-schema).
+
+### resolve-preset
+
+Load a preset exactly as `start --preset` would, without building a machine,
+and print the machine it describes as a preset document with every key
+present: defaults filled in, relative paths resolved, the model's default ROMs
+as explicit slots and every extension parameter given.
+
+```bash
+beebium-model-b resolve-preset model-b-l3fs-aun          # the document on stdout
+beebium-model-b resolve-preset ./my.preset.beebium --json
+```
+
+With `--json`, stdout is `{"preset": <document or null>, "diagnostics": [...]}`,
+each diagnostic `{"severity", "path" (a JSON pointer), "message"}`. Exits 0 with
+no errors, 78 when the preset does not describe a valid machine for this model,
+66 when it cannot be found or read. See
+[preset-schema.md](preset-schema.md#resolve-preset).
 
 ### Preset Management Subcommands
 
@@ -714,7 +697,7 @@ The preset ID is derived by slugifying the name. Outputs the created preset ID (
 my-elite-setup
 ```
 
-`create-preset` also accepts `--description`, `--machine-name` (a name template, recorded as written; see [Machine Name](#machine-name)), `--auto-boot`, `--release-date`, `--fdc`, `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. The recorded transport parameters include the manifest defaults the CLI fills in, e.g. `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "net": "0", "port": "0"}`.
+`create-preset` also accepts every machine option `start` does that a preset can record: `--description`, `--release-date`, `--machine-name` (a name template, recorded as written; see [Machine Name](#machine-name)), `--speed`, `--screen-mode`, `--auto-boot`, `--links`, `--mos`, `--language-rom` (recorded as the model's language slot), `--fdc`, `--floppy` (a relative path is taken from the working directory, as for `start`, and recorded absolutely), `--sideways` and other `--<extension>` flags; `create-preset --help` lists them. With `--from`, each flag overrides the source preset as it would on a `start` command line: a `--sideways` or `--floppy` replaces only the slot or drive it names. The file format is described in [preset-schema.md](preset-schema.md). The recorded transport parameters include the manifest defaults the CLI fills in, e.g. `--station auto:40-49 --aun port=0:discovery=off` records `"station": "auto:40-49"` and `{"discovery": "off", "net": "0", "port": "0"}`.
 
 If `--from` is omitted, creates a minimal "bare" preset for the model containing just the model ID, name, and release date.
 
@@ -914,12 +897,15 @@ beebium-model-b start --links 0xff
 # List available disc controllers
 beebium-model-b list-fdcs
 
-# Get machine info
-beebium-model-b describe-machine
+# What a preset for this model may contain
+beebium-model-b describe-preset-schema
+
+# What a preset resolves to, every key filled in
+beebium-model-b resolve-preset model-b-disc
 
 # Output formats (auto-detected by default)
 beebium-model-b --format pretty list-fdcs    # Human-friendly
-beebium-model-b --format tsv describe-machine # Tab-separated
+beebium-model-b --format tsv list-presets    # Tab-separated
 beebium-model-b --format jsonl list-fdcs     # JSON Lines
 beebium-model-b list-fdcs | cat               # Auto-selects tsv (piped)
 

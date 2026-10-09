@@ -138,7 +138,7 @@ The first existing directory wins.
 When loading a ROM file (via `--mos`, `--language-rom`, `--sideways ...:image=`, or a preset):
 
 1. **Absolute path**: Used as-is (e.g., `/path/to/custom.rom`)
-2. **Relative path with directory**: Resolved against current working directory (e.g., `./roms/custom.rom`)
+2. **Relative path with directory**: Resolved against the current working directory (e.g., `./roms/custom.rom`); in a preset, against the directory holding the preset (see [preset-schema.md](preset-schema.md#paths))
 3. **Simple filename**: Looked up in the ROM directory (e.g., `dfs.rom` becomes `<rom_dir>/dfs.rom`)
 
 ## Installation
@@ -169,6 +169,8 @@ The CMake install rules handle:
 - Bundled disc masters (`.dat`, `.dsc`), read-only, to `share/beebium/discs/`
 
 ## Preset Discovery
+
+The preset file format is described in [preset-schema.md](preset-schema.md).
 
 System presets (shipped with the software) are searched in this order:
 

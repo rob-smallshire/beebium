@@ -183,7 +183,7 @@ Output is JSON with a sectioned structure:
 }
 ```
 
-See [preset-schema/overview.md](plans/preset-schema/overview.md) for the full schema specification.
+See [preset-schema.md](../preset-schema.md) for the full schema specification.
 
 ### PresetManager
 
@@ -647,7 +647,7 @@ Cores expose their configuration schema via CLI rather than gRPC. This allows sc
 beebium-model-b describe-preset-schema
 ```
 
-Output is JSON (see [preset-schema/overview.md](plans/preset-schema/overview.md) for full specification):
+Output is JSON (see [preset-schema.md](../preset-schema.md#describe-preset-schema) for the current specification):
 
 ```json
 {

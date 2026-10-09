@@ -255,6 +255,7 @@ WD1770 controller with:
 - `indicators.md` - LED status indicators
 - `sideways-slots.md` - Sideways ROM/RAM topology, validation rules, motherboard links
 - `deployment.md` - Installed layout and runtime ROM/preset discovery
+- `preset-schema.md` - The preset file format: every key, path resolution, which models accept what, CLI-over-preset precedence, resolve-preset and describe-preset-schema
 - `packaging.md` - Server distribution: the self-contained static `.deb`/`.tar.gz` bundles, platforms, CI, status
 - `versioning-and-compatibility.md` - Monorepo versioning (bump-my-version) and the protocol fingerprint compatibility handshake
 

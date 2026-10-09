@@ -730,4 +730,4 @@ If configuration values are invalid (e.g., invalid file path):
 
 - [lifecycle-management.md](lifecycle-management.md) — overall phase roadmap
 - [preset-system.md](preset-system.md) — preset discovery and management
-- [preset-schema/storage.md](preset-schema/storage.md) — storage configuration schema
+- [preset-schema.md](../preset-schema.md) — the preset file format, resolve-preset and describe-preset-schema
