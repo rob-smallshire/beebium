@@ -27,6 +27,9 @@ struct StorageSectionView: View {
     /// The model's hard-disc capability, if any (shows the Hard discs group).
     let hardDiscCapability: HardDiscCapability?
 
+    /// Current resolve-preset diagnostics (filtered to the rows that own them).
+    var diagnostics: [PresetManager.PresetDiagnostic] = []
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -36,7 +39,7 @@ struct StorageSectionView: View {
                 floppyDrivesSection
                 if let capability = hardDiscCapability {
                     Divider()
-                    HardDiscsSectionView(draft: $draft, capability: capability)
+                    HardDiscsSectionView(draft: $draft, capability: capability, diagnostics: diagnostics)
                 }
             }
             .padding(12)

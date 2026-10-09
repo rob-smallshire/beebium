@@ -18,10 +18,32 @@ import Foundation
 struct ExtensionsSchemaSection: Codable {
     let type: String   // "extensions"
     let attachmentPoints: [AttachmentPoint]
+    /// Bundled disc-image masters by storage kind (e.g. "hard-disc"), offered in
+    /// the image chooser. Absent when the model ships none.
+    var bundledImages: [String: [BundledImage]]? = nil
 
     enum CodingKeys: String, CodingKey {
         case type
         case attachmentPoints = "attachment_points"
+        case bundledImages = "bundled_images"
+    }
+}
+
+/// A bundled disc-image master. Its bare `image` name goes into an extension's
+/// image parameter; the server resolves it to a per-user copy-on-write working
+/// copy at launch.
+struct BundledImage: Codable, Equatable {
+    let image: String
+    let sizeBytes: Int?
+
+    /// A display name: the image's filename stem (there is no nicer name).
+    var displayName: String {
+        (image as NSString).deletingPathExtension
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case image
+        case sizeBytes = "size_bytes"
     }
 }
 
@@ -35,11 +57,18 @@ struct AttachmentPoint: Codable, Identifiable {
     let providedBy: [String]?
     /// The extensions that can attach to this point.
     let extensions: [String]
+    var displayName: String? = nil
+    var minOccupancy: Int? = nil
+    /// Maximum extensions on this point; nil means unbounded (or absent).
+    var maxOccupancy: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
         case providedBy = "provided_by"
         case extensions
+        case displayName = "display_name"
+        case minOccupancy = "min_occupancy"
+        case maxOccupancy = "max_occupancy"
     }
 }
 
@@ -55,10 +84,17 @@ struct HardDiscCapability: Equatable {
     let discExtension: String
     /// The point the discs attach to (e.g. "scsi").
     let discPoint: String
+    /// Display name of the disc point (e.g. "SCSI Bus").
+    let discPointName: String
     /// The adapter extension that provides `discPoint` (e.g. "acorn-scsi").
     let adapterExtension: String
     /// The model-built point the adapter attaches to (e.g. "1mhz-bus").
     let adapterPoint: String
+    /// Maximum discs per adapter (from the disc point's occupancy), or nil if
+    /// unbounded.
+    let maxDiscsPerAdapter: Int?
+    /// Bundled disc-image masters offered in the image chooser.
+    let bundledMasters: [BundledImage]
 
     /// Derive the hard-disc capability a model offers, or nil if it has none.
     ///
@@ -76,8 +112,13 @@ struct HardDiscCapability: Equatable {
             }) else { continue }
             self.discExtension = disc
             self.discPoint = point.id
+            self.discPointName = point.displayName ?? point.id
             self.adapterExtension = adapter
             self.adapterPoint = host.id
+            self.maxDiscsPerAdapter = point.maxOccupancy
+            // "hard-disc" is the storage kind SCSI discs draw masters from; it
+            // matches the disc image parameter's declared `bundled` kind.
+            self.bundledMasters = schema.bundledImages?["hard-disc"] ?? []
             return
         }
         return nil

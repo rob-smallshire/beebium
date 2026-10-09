@@ -29,6 +29,13 @@ final class PresetDiagnosticLocationTests: XCTestCase {
         XCTAssertNil(PresetDiagnosticLocation.describe(path: ""))
     }
 
+    func testExtensionIndex() {
+        XCTAssertEqual(PresetDiagnosticLocation.extensionIndex(path: "/extensions/2"), 2)
+        XCTAssertEqual(PresetDiagnosticLocation.extensionIndex(path: "/extensions/0/config/scsi-id"), 0)
+        XCTAssertNil(PresetDiagnosticLocation.extensionIndex(path: "/storage/floppy_drives/0"))
+        XCTAssertNil(PresetDiagnosticLocation.extensionIndex(path: ""))
+    }
+
     func testTopLevelKey() {
         XCTAssertEqual(PresetDiagnosticLocation.topLevelKey(path: "/extensions/2/config/image"), "extensions")
         XCTAssertEqual(PresetDiagnosticLocation.topLevelKey(path: "/storage/floppy_drives/0"), "storage")

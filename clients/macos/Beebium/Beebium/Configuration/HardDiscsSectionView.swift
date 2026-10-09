@@ -23,16 +23,22 @@ import UniformTypeIdentifiers
 struct HardDiscsSectionView: View {
     @Binding var draft: MachineDraft
     let capability: HardDiscCapability
+    var diagnostics: [PresetManager.PresetDiagnostic] = []
 
     private var editor: ScsiDiscEditor { ScsiDiscEditor(capability: capability) }
     private var discs: [ScsiDiscEditor.Disc] { editor.discs(in: draft) }
 
-    /// SCSI IDs used by more than one disc, so rows can flag a clash.
+    /// SCSI IDs used by more than one disc, so rows can flag a clash instantly
+    /// (ahead of the debounced server validation).
     private var duplicateIds: Set<Int> {
         var counts: [Int: Int] = [:]
         for disc in discs { counts[disc.scsiId, default: 0] += 1 }
         return Set(counts.filter { $0.value > 1 }.keys)
     }
+
+    /// The most discs the user may add (the disc point's occupancy per adapter;
+    /// unbounded points cap at the 8 SCSI IDs).
+    private var maxDiscs: Int { capability.maxDiscsPerAdapter ?? 8 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -46,8 +52,10 @@ struct HardDiscsSectionView: View {
                     Label("Add disc", systemImage: "plus")
                 }
                 .buttonStyle(.borderless)
-                .disabled(discs.count >= 8)
-                .help("Attach a SCSI hard disc")
+                .disabled(discs.count >= maxDiscs)
+                .help(discs.count >= maxDiscs
+                      ? "This machine holds at most \(maxDiscs) hard discs"
+                      : "Attach a SCSI hard disc")
             }
 
             if discs.isEmpty {
@@ -59,6 +67,10 @@ struct HardDiscsSectionView: View {
                     HardDiscRowView(
                         disc: disc,
                         duplicateId: duplicateIds.contains(disc.scsiId),
+                        bundledMasters: capability.bundledMasters,
+                        diagnostics: diagnostics.filter {
+                            PresetDiagnosticLocation.extensionIndex(path: $0.path) == disc.instanceIndex
+                        },
                         setScsiId: { draft = editor.draft(settingScsiId: $0, forDiscAt: disc.instanceIndex, in: draft) },
                         setImage: { draft = editor.draft(settingImage: $0, forDiscAt: disc.instanceIndex, in: draft) },
                         remove: { draft = editor.draft(removingDiscAt: disc.instanceIndex, from: draft) })
@@ -77,6 +89,8 @@ struct HardDiscsSectionView: View {
 private struct HardDiscRowView: View {
     let disc: ScsiDiscEditor.Disc
     let duplicateId: Bool
+    let bundledMasters: [BundledImage]
+    let diagnostics: [PresetManager.PresetDiagnostic]
     let setScsiId: (Int) -> Void
     let setImage: (String?) -> Void
     let remove: () -> Void
@@ -115,12 +129,19 @@ private struct HardDiscRowView: View {
             HStack(spacing: 8) {
                 imageLabel
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Browse…") { browseForImage() }
-                    .controlSize(.small)
+                imageMenu
                 if disc.image != nil {
                     Button("Clear") { setImage(nil) }
                         .controlSize(.small)
                 }
+            }
+
+            ForEach(Array(diagnostics.enumerated()), id: \.offset) { _, diagnostic in
+                Label(diagnostic.message, systemImage: diagnostic.isError
+                      ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundColor(diagnostic.isError ? .red : .orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if dropRefusal != nil || dropError.kind != nil {
@@ -164,9 +185,34 @@ private struct HardDiscRowView: View {
         }
     }
 
+    /// The image chooser: the bundled masters (set by bare name, so the server
+    /// uses a per-machine working copy) and a file picker.
+    private var imageMenu: some View {
+        Menu {
+            if !bundledMasters.isEmpty {
+                Section("Bundled discs") {
+                    ForEach(bundledMasters, id: \.image) { master in
+                        Button(masterLabel(master)) { setImage(master.image) }
+                    }
+                }
+            }
+            Button("Choose File…") { browseForImage() }
+        } label: {
+            Text(disc.image == nil ? "Choose…" : "Change…")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func masterLabel(_ master: BundledImage) -> String {
+        guard let bytes = master.sizeBytes else { return master.displayName }
+        let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        return "\(master.displayName) (\(size))"
+    }
+
     /// Browse for a hard-disc image file. Stored as an absolute path (the preset
-    /// takes an absolute image path as-is); a bare bundled-master name is set by
-    /// the catalogue chooser (to come) instead.
+    /// takes an absolute image path as-is); a bundled master is a bare name set
+    /// from the menu above.
     private func browseForImage() {
         let panel = NSOpenPanel()
         panel.title = "Select Hard Disc Image"

@@ -52,6 +52,10 @@ struct ConfigurationEditor: View {
     /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
+    /// Current resolve-preset diagnostics, so a section can show its own rows'
+    /// problems.
+    var diagnostics: [PresetManager.PresetDiagnostic] = []
+
     /// Machine model ID (e.g., "model-b")
     let modelId: String
 
@@ -156,7 +160,8 @@ struct ConfigurationEditor: View {
             StorageSectionView(
                 draft: $draft,
                 schema: storageSchema,
-                hardDiscCapability: hardDiscCapability
+                hardDiscCapability: hardDiscCapability,
+                diagnostics: diagnostics
             )
         case .memory:
             MemorySectionView(

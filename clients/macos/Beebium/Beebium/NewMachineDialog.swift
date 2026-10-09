@@ -273,6 +273,7 @@ struct NewMachineDialog: View {
                         memorySchema: memorySchema,
                         hardDiscCapability: hardDiscCapability,
                         romResolver: romResolver(for: selectedPreset),
+                        diagnostics: diagnostics,
                         modelId: selectedPreset?.modelName ?? "model-b"
                     )
                     // Grow with the window (resizable) so the sideways list can
