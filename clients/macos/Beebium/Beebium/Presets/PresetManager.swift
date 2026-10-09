@@ -121,22 +121,22 @@ class PresetManager: ObservableObject {
         let presetId = presetIdFromFilename(filename)
         NSLog("[PresetManager] Processing preset: \(filename) (id: \(presetId))")
 
-        guard let presetData = parsePresetFile(at: presetFilepath) else {
+        guard let presetData = parsePresetFile(at: presetFilepath), let model = presetData.model else {
             configFailures.append(filename)
-            NSLog("[PresetManager] Failed to parse preset file: \(filename)")
+            NSLog("[PresetManager] Failed to parse preset file (or no model): \(filename)")
             return nil
         }
 
-        let executablePath = "\(serversDirpath)/beebium-\(presetData.model)"
+        let executablePath = "\(serversDirpath)/beebium-\(model)"
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
-            NSLog("[PresetManager] Executable not found for model '\(presetData.model)': \(executablePath)")
+            NSLog("[PresetManager] Executable not found for model '\(model)': \(executablePath)")
             return nil
         }
 
         let (schema, error) = await fetchPresetSchema(from: executablePath)
         guard let schema = schema else {
             configFailures.append(filename)
-            NSLog("[PresetManager] Failed to get schema from \(presetData.model): \(error ?? "unknown error")")
+            NSLog("[PresetManager] Failed to get schema from \(model): \(error ?? "unknown error")")
             return nil
         }
 
@@ -247,14 +247,15 @@ class PresetManager: ObservableObject {
         return (presetFilepaths, nil)
     }
 
-    /// Parse a preset file and extract its data.
-    private func parsePresetFile(at filepath: String) -> PresetFileData? {
+    /// Parse a preset file into a draft, for its discovery metadata (model,
+    /// name, machine_name, description, release_date). The same model the dialog
+    /// edits, so the client has a single preset representation.
+    private func parsePresetFile(at filepath: String) -> MachineDraft? {
         guard let data = FileManager.default.contents(atPath: filepath) else {
             return nil
         }
-
         do {
-            return try JSONDecoder().decode(PresetFileData.self, from: data)
+            return try MachineDraft.decode(from: data)
         } catch {
             NSLog("[PresetManager] JSON decode error for \(filepath): \(error)")
             return nil

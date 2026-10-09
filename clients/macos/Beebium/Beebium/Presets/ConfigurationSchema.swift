@@ -44,47 +44,6 @@ struct SchemaSection: Codable {
     // decoded on-demand when building configuration UI for that section.
 }
 
-/// Data parsed from a preset file (*.preset.beebium).
-///
-/// Preset files declare the target model and optional metadata.
-/// The `model` field is required and maps to executable names (beebium-{model}).
-struct PresetFileData: Codable {
-    /// The model ID that maps to an executable (e.g., "model-b" -> beebium-model-b)
-    let model: String
-    /// Optional display name (if absent, use name from executable's schema)
-    let name: String?
-    /// Optional name template (e.g. "Station {econet-station} (AUN, Model B)").
-    /// The server treats `--machine-name` and this as templates; the app reads
-    /// it so a launched machine inherits the preset author's placeholders.
-    let machineName: String?
-    /// Optional description (if absent, use description from executable's schema)
-    let description: String?
-    /// Release date for sorting, format: YYYY, YYYY-MM, or YYYY-MM-DD
-    let releaseDate: String?
-    /// Sideways ROM/RAM slots the preset configures (absent if none)
-    let sidewaysBank: PresetSidewaysBank?
-
-    enum CodingKeys: String, CodingKey {
-        case model, name, description
-        case machineName = "machine_name"
-        case releaseDate = "release_date"
-        case sidewaysBank = "sideways_bank"
-    }
-}
-
-/// Sideways slot assignments declared by a preset file's `sideways_bank` section.
-struct PresetSidewaysBank: Codable {
-    let slots: [PresetSidewaysSlot]
-}
-
-/// One slot assignment in a preset's `sideways_bank`.
-struct PresetSidewaysSlot: Codable {
-    let slot: Int
-    let type: String        // "rom", "ram", or "empty"
-    let imageUri: String?   // ROM/RAM image reference (absent for empty/blank RAM)
-
-    enum CodingKeys: String, CodingKey {
-        case slot, type
-        case imageUri = "image_uri"
-    }
-}
+// The preset file itself is modelled by `MachineDraft` (Presets/MachineDraft.swift),
+// which the dialog edits and discovery reads for its metadata. There is one
+// preset-document representation, not a separate read-only parse here.

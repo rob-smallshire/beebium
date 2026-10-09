@@ -107,23 +107,18 @@ final class MachinePresetTests: XCTestCase {
     }
 }
 
-final class PresetFileDataTests: XCTestCase {
+/// The discovery metadata read from a preset file comes from decoding a
+/// MachineDraft (the single preset representation); these cover the fields
+/// discovery relies on.
+final class PresetDiscoveryMetadataTests: XCTestCase {
 
     func testDecodeMinimalPreset() throws {
-        let json = """
-        {
-            "model": "model-b"
-        }
-        """
-
-        let data = json.data(using: .utf8)!
-        let preset = try JSONDecoder().decode(PresetFileData.self, from: data)
-
-        XCTAssertEqual(preset.model, "model-b")
-        XCTAssertNil(preset.name)
-        XCTAssertNil(preset.machineName)
-        XCTAssertNil(preset.description)
-        XCTAssertNil(preset.releaseDate)
+        let draft = try MachineDraft.decode(from: Data(#"{ "model": "model-b" }"#.utf8))
+        XCTAssertEqual(draft.model, "model-b")
+        XCTAssertNil(draft.name)
+        XCTAssertNil(draft.machineName)
+        XCTAssertNil(draft.description)
+        XCTAssertNil(draft.releaseDate)
     }
 
     func testDecodeMachineNameTemplate() throws {
@@ -134,11 +129,8 @@ final class PresetFileDataTests: XCTestCase {
             "machine_name": "Station {econet-station} (AUN, Model B)"
         }
         """
-
-        let data = json.data(using: .utf8)!
-        let preset = try JSONDecoder().decode(PresetFileData.self, from: data)
-
-        XCTAssertEqual(preset.machineName, "Station {econet-station} (AUN, Model B)")
+        let draft = try MachineDraft.decode(from: Data(json.utf8))
+        XCTAssertEqual(draft.machineName, "Station {econet-station} (AUN, Model B)")
     }
 
     func testDecodeFullPreset() throws {
@@ -150,28 +142,17 @@ final class PresetFileDataTests: XCTestCase {
             "release_date": "1984-06"
         }
         """
-
-        let data = json.data(using: .utf8)!
-        let preset = try JSONDecoder().decode(PresetFileData.self, from: data)
-
-        XCTAssertEqual(preset.model, "model-b")
-        XCTAssertEqual(preset.name, "BBC Model B with Acorn DFS")
-        XCTAssertEqual(preset.description, "Model B with Acorn 1770 FDC")
-        XCTAssertEqual(preset.releaseDate, "1984-06")
+        let draft = try MachineDraft.decode(from: Data(json.utf8))
+        XCTAssertEqual(draft.model, "model-b")
+        XCTAssertEqual(draft.name, "BBC Model B with Acorn DFS")
+        XCTAssertEqual(draft.description, "Model B with Acorn 1770 FDC")
+        XCTAssertEqual(draft.releaseDate, "1984-06")
     }
 
     func testDecodeYearOnlyReleaseDate() throws {
-        let json = """
-        {
-            "model": "model-b-romram",
-            "release_date": "1984"
-        }
-        """
-
-        let data = json.data(using: .utf8)!
-        let preset = try JSONDecoder().decode(PresetFileData.self, from: data)
-
-        XCTAssertEqual(preset.model, "model-b-romram")
-        XCTAssertEqual(preset.releaseDate, "1984")
+        let json = #"{ "model": "model-b-romram", "release_date": "1984" }"#
+        let draft = try MachineDraft.decode(from: Data(json.utf8))
+        XCTAssertEqual(draft.model, "model-b-romram")
+        XCTAssertEqual(draft.releaseDate, "1984")
     }
 }

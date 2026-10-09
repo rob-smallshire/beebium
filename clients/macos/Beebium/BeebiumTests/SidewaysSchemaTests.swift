@@ -53,34 +53,7 @@ final class SidewaysSchemaTests: XCTestCase {
         XCTAssertTrue(socket.supportsEmpty)
     }
 
-    func testDecodePresetWithSidewaysBank() throws {
-        let json = """
-        {
-          "model": "model-b",
-          "name": "BBC Model B (Disc)",
-          "release_date": "1982",
-          "sideways_bank": {
-            "slots": [
-              { "slot": 14, "type": "rom", "image_uri": "acorn-dfs_2_26.rom" }
-            ]
-          }
-        }
-        """
-        let preset = try JSONDecoder().decode(PresetFileData.self, from: Data(json.utf8))
-
-        XCTAssertEqual(preset.model, "model-b")
-        XCTAssertNotNil(preset.sidewaysBank)
-        XCTAssertEqual(preset.sidewaysBank?.slots.count, 1)
-        XCTAssertEqual(preset.sidewaysBank?.slots[0].slot, 14)
-        XCTAssertEqual(preset.sidewaysBank?.slots[0].type, "rom")
-        XCTAssertEqual(preset.sidewaysBank?.slots[0].imageUri, "acorn-dfs_2_26.rom")
-    }
-
-    func testDecodePresetWithoutSidewaysBankIsNil() throws {
-        let json = #"{ "model": "model-b", "name": "BBC Model B" }"#
-        let preset = try JSONDecoder().decode(PresetFileData.self, from: Data(json.utf8))
-
-        XCTAssertEqual(preset.model, "model-b")
-        XCTAssertNil(preset.sidewaysBank)
-    }
+    // Preset-file sideways_bank parsing is covered by MachineDraftTests, which
+    // round-trips the whole preset document; this file keeps the schema-section
+    // (describe-preset-schema) tests.
 }
