@@ -26,9 +26,12 @@ import SwiftUI
 /// that assumption breaks and these panels need the same treatment as the
 /// Storage and Memory sidebars. See docs/frontend-local-server-gating.md.
 ///
-/// Shows a sidebar with configuration sections on the left and the
-/// selected section's content on the right. Currently only Storage
-/// is implemented; other sections will be added in future phases.
+/// Shows a sidebar with configuration sections on the left and the selected
+/// section's content on the right. The section list is data-driven: a section
+/// appears only when the model offers it (Storage when the model has a storage
+/// schema, Memory when it has sideways sockets). Further sections -- Peripherals,
+/// Network, Processor, Keyboard -- slot into the same mechanism as they are
+/// built, keyed on their own availability, rather than being hardcoded here.
 struct ConfigurationEditor: View {
     /// The draft being edited; every section is an editor over part of it.
     @Binding var draft: MachineDraft
@@ -48,16 +51,14 @@ struct ConfigurationEditor: View {
     /// Machine model ID (e.g., "model-b")
     let modelId: String
 
-    /// Currently selected section
+    /// Currently selected section (may not be available for the current model;
+    /// `effectiveSection` resolves that).
     @State private var selectedSection: ConfigSection = .storage
 
-    /// Available configuration sections
-    enum ConfigSection: String, CaseIterable, Identifiable {
+    /// A configuration section the dialog can show.
+    enum ConfigSection: String, Identifiable {
         case storage = "Storage"
         case memory = "Memory"
-        // Future: case peripherals = "Peripherals"
-        // Future: case display = "Display"
-        // Future: case keyboard = "Keyboard"
 
         var id: String { rawValue }
 
@@ -67,6 +68,23 @@ struct ConfigurationEditor: View {
             case .memory: return "memorychip"
             }
         }
+    }
+
+    /// The sections this model actually offers, in display order.
+    private var availableSections: [ConfigSection] {
+        var sections: [ConfigSection] = []
+        if storageSchema != nil { sections.append(.storage) }
+        if let memorySchema = memorySchema, !memorySchema.sockets.isEmpty {
+            sections.append(.memory)
+        }
+        return sections
+    }
+
+    /// The section to show: the selection when it is available, else the first
+    /// available one.
+    private var effectiveSection: ConfigSection? {
+        if availableSections.contains(selectedSection) { return selectedSection }
+        return availableSections.first
     }
 
     var body: some View {
@@ -93,7 +111,7 @@ struct ConfigurationEditor: View {
 
     private var sidebarView: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(ConfigSection.allCases) { section in
+            ForEach(availableSections) { section in
                 sidebarRow(for: section)
             }
             Spacer()
@@ -116,7 +134,7 @@ struct ConfigurationEditor: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(
-                selectedSection == section
+                effectiveSection == section
                     ? Color.accentColor.opacity(0.2)
                     : Color.clear
             )
@@ -129,7 +147,7 @@ struct ConfigurationEditor: View {
 
     @ViewBuilder
     private var contentView: some View {
-        switch selectedSection {
+        switch effectiveSection {
         case .storage:
             StorageSectionView(
                 draft: $draft,
@@ -142,6 +160,11 @@ struct ConfigurationEditor: View {
                 schema: memorySchema,
                 romResolver: romResolver
             )
+        case nil:
+            Text("This machine has no configurable options yet.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
