@@ -73,8 +73,8 @@ model's default, which `resolve-preset` shows.
 |-----|------|---------|
 | `model` | string | The machine type, e.g. `model-b`, `model-b-plus`. Must match the executable's model, or the launch fails with `CONFIG` (78) |
 | `name` | string | The preset's display name. Default: the file name without its suffix |
-| `description` | string | One line for a preset picker |
 | `release_date` | string | `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, for sorting in a picker |
+| `description` | string | One line for a preset picker |
 | `machine_name` | string | The launched machine's name, a template with `{key}` placeholders (see `list-name-placeholders` and [cli.md](cli.md#machine-name)). Default: the model's name |
 | `speed` | number or `"unlimited"` | [Emulation speed](#speed) |
 | `startup` | object | [Startup keyboard links](#startup) |
@@ -86,7 +86,10 @@ model's default, which `resolve-preset` shows.
 | `thumbnail_capture_delay_seconds` | number | How long `capture-screenshot` runs the machine before capturing the preset's thumbnail |
 | `auto_boot` | bool | The older place for `startup.auto_boot`: still read, with a warning, never written |
 
-Any other top-level key is ignored with a warning. A `null` value means the
+The keys are listed once, in `kPresetKeys` (`PresetLoader.hpp`), in the order
+above: the loader reads them in that order, `create-preset` and
+`resolve-preset` write them in it, and `describe-preset-schema` gives its
+sections in it. Any other top-level key is ignored with a warning. A `null` value means the
 same as leaving the key out, so a `resolve-preset` document, which writes
 `null` for "nothing here", loads as it reads.
 

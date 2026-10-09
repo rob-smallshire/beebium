@@ -168,88 +168,91 @@ inline nlohmann::ordered_json extension_config_json(
 // Preset values provide defaults that can be overridden by CLI arguments.
 template<typename MachineType>
 void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset) {
-    // Machine name: preset supplies a default; a CLI --machine-name (already in
-    // config.machine_name) takes precedence.
-    if (preset.machine_name && config.machine_name.empty()) {
-        config.machine_name = *preset.machine_name;
-    }
-    config.preset_name = preset.name;
-
-    // Machine settings. CLI parsing runs after this and overwrites them; the
-    // startup links are merged afterwards (merge_preset_startup) because the
-    // two forms exclude each other.
-    if (preset.speed) {
-        config.speed_multiplier_override = *preset.speed;
-    }
-    if (preset.mos_image_uri) {
-        config.mos_filepath = *preset.mos_image_uri;
-    }
-    config.preset_startup = preset.startup;
-
-    if (preset.storage) {
-        const auto& storage = *preset.storage;
-
-        // FDC socket
-        if (storage.fdc_socket_id && config.fdc_type.empty()) {
-            config.fdc_type = *storage.fdc_socket_id;
-        }
-
-        // Floppy drives
-        for (const auto& [drive, uri_opt] : storage.floppy_drives) {
-            if (drive < config.floppy_filepaths.size() && config.floppy_filepaths[drive].empty()) {
-                if (uri_opt) {
-                    config.floppy_filepaths[drive] = *uri_opt;
+    using Instance = typename ServerConfig<MachineType>::ExtensionInstance;
+    // CLI parsing runs after this and overwrites what it names; the sideways
+    // slots and startup links are staged and merged afterwards
+    // (fold_in_preset), per slot and per form.
+    for (const auto& info : kPresetKeys) {
+        switch (info.key) {
+            case PresetKey::Model:  // checked against the executable when loaded
+            case PresetKey::ReleaseDate:
+            case PresetKey::Description:
+            case PresetKey::ThumbnailCaptureDelaySeconds:  // read by capture-screenshot
+            case PresetKey::AutoBoot:  // already folded into startup by the loader
+                break;
+            case PresetKey::Name:
+                config.preset_name = preset.name;
+                break;
+            case PresetKey::MachineName:
+                if (preset.machine_name && config.machine_name.empty()) {
+                    config.machine_name = *preset.machine_name;
                 }
-                // nullopt means empty drive - leave as empty string (default)
+                break;
+            case PresetKey::Speed:
+                if (preset.speed) config.speed_multiplier_override = *preset.speed;
+                break;
+            case PresetKey::Startup:
+                config.preset_startup = preset.startup;
+                break;
+            case PresetKey::MosImageUri:
+                if (preset.mos_image_uri) config.mos_filepath = *preset.mos_image_uri;
+                break;
+            case PresetKey::Storage:
+                if (!preset.storage) break;
+                if (preset.storage->fdc_socket_id && config.fdc_type.empty()) {
+                    config.fdc_type = *preset.storage->fdc_socket_id;
+                }
+                for (const auto& [drive, uri_opt] : preset.storage->floppy_drives) {
+                    // nullopt means an empty drive: left as the empty string.
+                    if (drive < config.floppy_filepaths.size() &&
+                        config.floppy_filepaths[drive].empty() && uri_opt) {
+                        config.floppy_filepaths[drive] = *uri_opt;
+                    }
+                }
+                break;
+            case PresetKey::SidewaysBank:
+                for (const auto& slot : preset.sideways) {
+                    config.preset_sideways_configs.push_back(slot);
+                }
+                break;
+            case PresetKey::Econet: {
+                if (!preset.econet) break;
+                const auto& econet = *preset.econet;
+                if (econet.auto_range.has_value()) {
+                    // The number is chosen at launch (issue #67); install_econet
+                    // resolves it. A later --station overrides this.
+                    config.station_auto_range = econet.auto_range;
+                    config.station_number = -1;
+                } else {
+                    config.station_number = econet.station;
+                    config.station_auto_range.reset();
+                }
+                // The transport becomes an ExtensionInstance, so it flows
+                // through the same dispatch as a CLI --aun or --piconet.
+                if (econet.transport) {
+                    Instance inst;
+                    inst.name = econet.transport->name;
+                    inst.config = econet.transport->parameters;
+                    inst.list_config = econet.transport->list_parameters;
+                    inst.from_preset = true;
+                    inst.preset_pointer = "/econet/transport";
+                    config.extension_instances.push_back(std::move(inst));
+                }
+                break;
             }
+            case PresetKey::Extensions:
+                for (std::size_t i = 0; i < preset.extensions.size(); ++i) {
+                    const auto& ext = preset.extensions[i];
+                    Instance inst;
+                    inst.name = ext.name;
+                    inst.config = ext.config;
+                    inst.list_config = ext.list_config;
+                    inst.from_preset = true;
+                    inst.preset_pointer = "/extensions/" + std::to_string(i);
+                    config.extension_instances.push_back(std::move(inst));
+                }
+                break;
         }
-    }
-
-    // Sideways slots: kept as a baseline so a later CLI --sideways for the
-    // same slot can override per-slot. Merged into sideways_configs at the
-    // end of parse_start_arguments, after all CLI args are known.
-    for (const auto& slot : preset.sideways) {
-        config.preset_sideways_configs.push_back(slot);
-    }
-
-    // Econet
-    if (preset.econet) {
-        const auto& econet = *preset.econet;
-        if (econet.auto_range.has_value()) {
-            // The number is chosen at launch (issue #67); install_econet
-            // resolves it. A later --station on the command line overrides this.
-            config.station_auto_range = econet.auto_range;
-            config.station_number = -1;
-        } else {
-            config.station_number = econet.station;
-            config.station_auto_range.reset();
-        }
-
-        // Transport: convert preset.econet.transport (if present) into an
-        // ExtensionInstance so it flows through the same dispatch as a
-        // CLI --aun ... or --piconet ... flag. AUN is built-in; Piconet
-        // is a plugin; the dispatcher routes by name.
-        if (econet.transport) {
-            typename ServerConfig<MachineType>::ExtensionInstance inst;
-            inst.name = econet.transport->name;
-            inst.config = econet.transport->parameters;
-            inst.list_config = econet.transport->list_parameters;
-            inst.from_preset = true;
-            inst.preset_pointer = "/econet/transport";
-            config.extension_instances.push_back(std::move(inst));
-        }
-    }
-
-    // Extensions (from preset, applied as baseline; CLI can add more)
-    for (std::size_t i = 0; i < preset.extensions.size(); ++i) {
-        const auto& ext = preset.extensions[i];
-        typename ServerConfig<MachineType>::ExtensionInstance inst;
-        inst.name = ext.name;
-        inst.config = ext.config;
-        inst.list_config = ext.list_config;
-        inst.from_preset = true;
-        inst.preset_pointer = "/extensions/" + std::to_string(i);
-        config.extension_instances.push_back(std::move(inst));
     }
 }
 
@@ -859,165 +862,204 @@ std::optional<nlohmann::ordered_json> preset_document(const ServerConfig<Machine
     using ojson = nlohmann::ordered_json;
     const bool every = keys == DocumentKeys::Every;
 
-    ojson doc;
-    doc["model"] = Memory::MACHINE_TYPE;
-    doc["name"] = header.name;
-    auto optional_string = [&](const char* key, const std::optional<std::string>& value) {
-        if (value && !value->empty()) {
-            doc[key] = *value;
-        } else if (every) {
-            doc[key] = nullptr;
-        }
-    };
-    optional_string("release_date", header.release_date);
-    optional_string("description", header.description);
-    optional_string("machine_name", config.machine_name.empty()
-                                        ? std::nullopt
-                                        : std::optional<std::string>(config.machine_name));
-
-    // The startup links: one form or the other. Every fills in the machine's
-    // own (mode 7, SHIFT-BREAK boots) where the config sets none.
-    if (config.raw_links >= 0) {
-        doc["startup"] = {{"links", config.raw_links}};
-    } else if (every) {
-        doc["startup"] = {{"screen_mode", config.screen_mode_set ? config.screen_mode : 7},
-                          {"auto_boot", config.auto_boot_set && config.auto_boot}};
-    } else if (config.screen_mode_set || config.auto_boot_set) {
-        ojson startup = ojson::object();
-        if (config.screen_mode_set) startup["screen_mode"] = config.screen_mode;
-        if (config.auto_boot_set) startup["auto_boot"] = config.auto_boot;
-        doc["startup"] = std::move(startup);
-    }
-
-    if (config.speed_multiplier_override || every) {
-        const double speed = config.speed_multiplier_override.value_or(1.0);
-        doc["speed"] = speed == 0.0 ? ojson("unlimited") : ojson(speed);
-    }
-
-    if (!config.mos_filepath.empty()) {
-        doc["mos_image_uri"] = path_for_preset(config.mos_filepath);
-    }
-
-    // Storage: the socket's controller and the floppy drives.
-    ojson storage = ojson::object();
-    if constexpr (HasDiscControllerSocket<Memory>) {
-        if (!config.fdc_type.empty()) {
-            storage["fdc_socket"] = {{"id", config.fdc_type}};
-        } else if (every) {
-            storage["fdc_socket"] = {{"id", "none"}};
-        }
-    } else {
-        if (!config.fdc_type.empty() && !every) {
-            storage["fdc_socket"] = {{"id", config.fdc_type}};
-        } else if (every) {
-            storage["fdc_socket"] = nullptr;
-        }
-    }
-    ojson drives = ojson::array();
-    for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
-        const auto& image = config.floppy_filepaths[drive];
-        if (image.empty() && !every) continue;
-        drives.push_back(
-            {{"drive", drive},
-             {"image_uri", image.empty() ? ojson(nullptr)
-                                         : ojson(normalize_image_uri(
-                                               image, std::filesystem::current_path()))}});
-    }
-    if (!drives.empty()) storage["floppy_drives"] = std::move(drives);
-    if (!storage.empty()) doc["storage"] = std::move(storage);
-
-    // Sideways slots. Given: the slots given, then --language-rom as the
-    // model's language slot. Every: every loaded slot, defaults included, in
-    // slot order.
-    ojson slots = ojson::array();
-    if (every) {
-        for (const auto& [slot, image] : config.rom_slots) {
-            SidewaysConfig entry{};
-            entry.slot = slot;
-            if (image == EMPTY_SLOT_MARKER) {
-                entry.type = SidewaysSlotType::Empty;
-            } else if (image == RAM_SLOT_MARKER) {
-                entry.type = SidewaysSlotType::Ram;
-                for (const auto& c : config.sideways_configs) {
-                    if (c.slot == slot) entry = c;
-                }
-            } else {
-                entry.type = SidewaysSlotType::Rom;
-                entry.image_filepath = image;
-            }
-            slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
-        }
-    } else {
-        for (auto slot : config.sideways_configs) {
-            if (!config.language_rom_filepath.empty() &&
-                slot.slot == Memory::DEFAULT_LANGUAGE_SLOT) {
-                continue;
-            }
-            slot.image_filepath = path_for_preset(slot.image_filepath);
-            slots.push_back(sideways_slot_json(slot, /*every_key=*/false));
-        }
-        if (!config.language_rom_filepath.empty()) {
-            SidewaysConfig language{};
-            language.slot = Memory::DEFAULT_LANGUAGE_SLOT;
-            language.type = SidewaysSlotType::Rom;
-            language.image_filepath = path_for_preset(config.language_rom_filepath);
-            slots.push_back(sideways_slot_json(language, /*every_key=*/false));
-        }
-    }
-    if (!slots.empty() || every) doc["sideways_bank"] = {{"slots", std::move(slots)}};
-
-    // Econet and extensions. An Econet transport goes in the econet section,
-    // which needs a station; with none (only possible through extensions[] in
-    // a preset), Every writes it among the extensions.
+    // The Econet transport belongs in the econet section, which needs a
+    // station; with none (only possible through extensions[] in a preset),
+    // Every writes it among the extensions.
     const bool has_station = config.station_number >= 1 || config.station_auto_range;
     const typename ServerConfig<MachineType>::ExtensionInstance* transport = nullptr;
-    ojson extensions = ojson::array();
     for (const auto& inst : config.extension_instances) {
         const auto* manifest = config.extension_resolver.find_by_name(inst.name);
-        const bool is_transport = manifest && manifest->extension_kind == "econet-transport";
-        if (is_transport && (has_station || !every)) {
-            if (transport) {
-                error = "at most one Econet transport may be given (already have '" +
-                        transport->name + "')";
-                return std::nullopt;
-            }
-            transport = &inst;
+        if (!(manifest && manifest->extension_kind == "econet-transport") ||
+            (!has_station && every)) {
             continue;
         }
-        ojson entry{{"name", inst.name}};
-        auto ext_config = document_config_json(manifest, inst, keys);
-        if (!ext_config.empty() || every) entry["config"] = std::move(ext_config);
-        if (every) {
-            entry["attaches_to"] = manifest ? manifest->attaches_to : std::vector<std::string>{};
+        if (transport) {
+            error = "at most one Econet transport may be given (already have '" +
+                    transport->name + "')";
+            return std::nullopt;
         }
-        extensions.push_back(std::move(entry));
+        transport = &inst;
     }
     if (transport && !has_station) {
         error = "Econet transport '" + transport->name +
                 "' requires --station <1-254> or --station auto";
         return std::nullopt;
     }
-    if (has_station) {
-        ojson econet{{"station", station_json(config)}};
-        if (transport) {
-            ojson t{{"name", transport->name}};
-            auto parameters = document_config_json(
-                config.extension_resolver.find_by_name(transport->name), *transport, keys);
-            if (!parameters.empty() || every) t["parameters"] = std::move(parameters);
-            econet["transport"] = std::move(t);
-        } else if (every) {
-            econet["transport"] = nullptr;
-        }
-        doc["econet"] = std::move(econet);
-    } else if (every) {
-        doc["econet"] = nullptr;
-    }
-    if (!extensions.empty() || every) doc["extensions"] = std::move(extensions);
 
-    if (header.thumbnail_capture_delay_seconds) {
-        doc["thumbnail_capture_delay_seconds"] = *header.thumbnail_capture_delay_seconds;
-    } else if (every) {
-        doc["thumbnail_capture_delay_seconds"] = nullptr;
+    ojson doc;
+    auto optional_string = [&](std::string_view key, const std::optional<std::string>& value) {
+        if (value && !value->empty()) {
+            doc[std::string(key)] = *value;
+        } else if (every) {
+            doc[std::string(key)] = nullptr;
+        }
+    };
+
+    for (const auto& info : kPresetKeys) {
+        if (!info.written) continue;
+        const std::string key(info.name);
+        switch (info.key) {
+            case PresetKey::Model:
+                doc[key] = Memory::MACHINE_TYPE;
+                break;
+            case PresetKey::Name:
+                doc[key] = header.name;
+                break;
+            case PresetKey::ReleaseDate:
+                optional_string(key, header.release_date);
+                break;
+            case PresetKey::Description:
+                optional_string(key, header.description);
+                break;
+            case PresetKey::MachineName:
+                optional_string(key, config.machine_name.empty()
+                                         ? std::nullopt
+                                         : std::optional<std::string>(config.machine_name));
+                break;
+            case PresetKey::Speed:
+                if (config.speed_multiplier_override || every) {
+                    const double speed = config.speed_multiplier_override.value_or(1.0);
+                    doc[key] = speed == 0.0 ? ojson("unlimited") : ojson(speed);
+                }
+                break;
+            case PresetKey::Startup:
+                // One form or the other. Every fills in the machine's own
+                // (mode 7, SHIFT-BREAK boots) where the config sets none.
+                if (config.raw_links >= 0) {
+                    doc[key] = {{"links", config.raw_links}};
+                } else if (every) {
+                    doc[key] = {{"screen_mode", config.screen_mode_set ? config.screen_mode : 7},
+                                {"auto_boot", config.auto_boot_set && config.auto_boot}};
+                } else if (config.screen_mode_set || config.auto_boot_set) {
+                    ojson startup = ojson::object();
+                    if (config.screen_mode_set) startup["screen_mode"] = config.screen_mode;
+                    if (config.auto_boot_set) startup["auto_boot"] = config.auto_boot;
+                    doc[key] = std::move(startup);
+                }
+                break;
+            case PresetKey::MosImageUri:
+                if (!config.mos_filepath.empty()) {
+                    doc[key] = path_for_preset(config.mos_filepath);
+                }
+                break;
+            case PresetKey::Storage: {
+                // The socket's controller and the floppy drives.
+                ojson storage = ojson::object();
+                if constexpr (HasDiscControllerSocket<Memory>) {
+                    if (!config.fdc_type.empty()) {
+                        storage["fdc_socket"] = {{"id", config.fdc_type}};
+                    } else if (every) {
+                        storage["fdc_socket"] = {{"id", "none"}};
+                    }
+                } else {
+                    if (!config.fdc_type.empty() && !every) {
+                        storage["fdc_socket"] = {{"id", config.fdc_type}};
+                    } else if (every) {
+                        storage["fdc_socket"] = nullptr;
+                    }
+                }
+                ojson drives = ojson::array();
+                for (std::size_t drive = 0; drive < config.floppy_filepaths.size(); ++drive) {
+                    const auto& image = config.floppy_filepaths[drive];
+                    if (image.empty() && !every) continue;
+                    drives.push_back(
+                        {{"drive", drive},
+                         {"image_uri", image.empty()
+                                           ? ojson(nullptr)
+                                           : ojson(normalize_image_uri(
+                                                 image, std::filesystem::current_path()))}});
+                }
+                if (!drives.empty()) storage["floppy_drives"] = std::move(drives);
+                if (!storage.empty()) doc[key] = std::move(storage);
+                break;
+            }
+            case PresetKey::SidewaysBank: {
+                // Given: the slots given, then --language-rom as the model's
+                // language slot. Every: every loaded slot, defaults included,
+                // in slot order.
+                ojson slots = ojson::array();
+                if (every) {
+                    for (const auto& [slot, image] : config.rom_slots) {
+                        SidewaysConfig entry{};
+                        entry.slot = slot;
+                        if (image == EMPTY_SLOT_MARKER) {
+                            entry.type = SidewaysSlotType::Empty;
+                        } else if (image == RAM_SLOT_MARKER) {
+                            entry.type = SidewaysSlotType::Ram;
+                            for (const auto& c : config.sideways_configs) {
+                                if (c.slot == slot) entry = c;
+                            }
+                        } else {
+                            entry.type = SidewaysSlotType::Rom;
+                            entry.image_filepath = image;
+                        }
+                        slots.push_back(sideways_slot_json(entry, /*every_key=*/true));
+                    }
+                } else {
+                    for (auto slot : config.sideways_configs) {
+                        if (!config.language_rom_filepath.empty() &&
+                            slot.slot == Memory::DEFAULT_LANGUAGE_SLOT) {
+                            continue;
+                        }
+                        slot.image_filepath = path_for_preset(slot.image_filepath);
+                        slots.push_back(sideways_slot_json(slot, /*every_key=*/false));
+                    }
+                    if (!config.language_rom_filepath.empty()) {
+                        SidewaysConfig language{};
+                        language.slot = Memory::DEFAULT_LANGUAGE_SLOT;
+                        language.type = SidewaysSlotType::Rom;
+                        language.image_filepath = path_for_preset(config.language_rom_filepath);
+                        slots.push_back(sideways_slot_json(language, /*every_key=*/false));
+                    }
+                }
+                if (!slots.empty() || every) doc[key] = {{"slots", std::move(slots)}};
+                break;
+            }
+            case PresetKey::Econet:
+                if (has_station) {
+                    ojson econet{{"station", station_json(config)}};
+                    if (transport) {
+                        ojson t{{"name", transport->name}};
+                        auto parameters = document_config_json(
+                            config.extension_resolver.find_by_name(transport->name), *transport,
+                            keys);
+                        if (!parameters.empty() || every) t["parameters"] = std::move(parameters);
+                        econet["transport"] = std::move(t);
+                    } else if (every) {
+                        econet["transport"] = nullptr;
+                    }
+                    doc[key] = std::move(econet);
+                } else if (every) {
+                    doc[key] = nullptr;
+                }
+                break;
+            case PresetKey::Extensions: {
+                ojson extensions = ojson::array();
+                for (const auto& inst : config.extension_instances) {
+                    if (&inst == transport) continue;
+                    const auto* manifest = config.extension_resolver.find_by_name(inst.name);
+                    ojson entry{{"name", inst.name}};
+                    auto ext_config = document_config_json(manifest, inst, keys);
+                    if (!ext_config.empty() || every) entry["config"] = std::move(ext_config);
+                    if (every) {
+                        entry["attaches_to"] =
+                            manifest ? manifest->attaches_to : std::vector<std::string>{};
+                    }
+                    extensions.push_back(std::move(entry));
+                }
+                if (!extensions.empty() || every) doc[key] = std::move(extensions);
+                break;
+            }
+            case PresetKey::ThumbnailCaptureDelaySeconds:
+                if (header.thumbnail_capture_delay_seconds) {
+                    doc[key] = *header.thumbnail_capture_delay_seconds;
+                } else if (every) {
+                    doc[key] = nullptr;
+                }
+                break;
+            case PresetKey::AutoBoot:  // never written (info.written is false)
+                break;
+        }
     }
     return doc;
 }

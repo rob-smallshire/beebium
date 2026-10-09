@@ -19,11 +19,13 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace beebium::server {
@@ -135,16 +137,76 @@ struct PresetLoadResult {
     }
 };
 
-// The top-level keys a preset file may carry. Any other key is ignored with
-// a warning.
-inline const std::vector<std::string>& preset_top_level_keys() {
-    static const std::vector<std::string> keys{
-        "name", "description", "release_date", "model", "machine_name",
-        "speed", "startup", "mos_image_uri", "storage", "sideways_bank",
-        "econet", "extensions", "thumbnail_capture_delay_seconds",
-        "auto_boot",  // read as startup.auto_boot
-    };
-    return keys;
+// The top-level keys of a preset file: the one list of them. The loader reads
+// the keys in this order and warns of any other, apply_preset folds each into
+// a ServerConfig, preset_document writes them in this order, and
+// describe-preset-schema describes the machine settings among them in this
+// order. Each of those handles every key in a switch over PresetKey, so a key
+// added here and not handled somewhere is a compiler warning (-Wswitch).
+enum class PresetKey {
+    Model,
+    Name,
+    ReleaseDate,
+    Description,
+    MachineName,
+    Speed,
+    Startup,
+    MosImageUri,
+    Storage,
+    SidewaysBank,
+    Econet,
+    Extensions,
+    ThumbnailCaptureDelaySeconds,
+    AutoBoot,  // the older place for startup.auto_boot: read, never written
+};
+
+struct PresetKeyInfo {
+    PresetKey key;
+    std::string_view name;    // the key in a preset file
+    std::string_view type;    // its JSON shape
+    std::string_view cli;     // the start options that set the same thing
+    std::string_view config;  // the ServerConfig fields it lands in
+    bool written;             // preset_document writes it
+};
+
+inline constexpr std::array<PresetKeyInfo, 14> kPresetKeys{{
+    {PresetKey::Model, "model", "string", "", "(checked against the executable)", true},
+    {PresetKey::Name, "name", "string", "", "preset_name", true},
+    {PresetKey::ReleaseDate, "release_date", "string", "", "", true},
+    {PresetKey::Description, "description", "string", "", "", true},
+    {PresetKey::MachineName, "machine_name", "string", "--machine-name", "machine_name", true},
+    {PresetKey::Speed, "speed", "number or \"unlimited\"", "--speed",
+     "speed_multiplier_override", true},
+    {PresetKey::Startup, "startup", "object", "--screen-mode, --auto-boot, --links",
+     "screen_mode, auto_boot, raw_links", true},
+    {PresetKey::MosImageUri, "mos_image_uri", "string", "--mos", "mos_filepath", true},
+    {PresetKey::Storage, "storage", "object", "--fdc, --floppy", "fdc_type, floppy_filepaths",
+     true},
+    {PresetKey::SidewaysBank, "sideways_bank", "object", "--sideways, --language-rom",
+     "sideways_configs, rom_slots", true},
+    {PresetKey::Econet, "econet", "object", "--station, an Econet transport (--aun, ...)",
+     "station_number, station_auto_range, extension_instances", true},
+    {PresetKey::Extensions, "extensions", "array", "--<extension>", "extension_instances",
+     true},
+    {PresetKey::ThumbnailCaptureDelaySeconds, "thumbnail_capture_delay_seconds", "number", "",
+     "", true},
+    {PresetKey::AutoBoot, "auto_boot", "bool", "", "(read as startup.auto_boot)", false},
+}};
+
+// One entry per key, in PresetKey's order.
+static_assert([] {
+    for (std::size_t i = 0; i < kPresetKeys.size(); ++i) {
+        if (static_cast<std::size_t>(kPresetKeys[i].key) != i) return false;
+    }
+    return kPresetKeys.size() == static_cast<std::size_t>(PresetKey::AutoBoot) + 1;
+}());
+
+// The registry entry for a key name, or nullptr if the key is not one.
+inline const PresetKeyInfo* find_preset_key(std::string_view name) {
+    for (const auto& info : kPresetKeys) {
+        if (info.name == name) return &info;
+    }
+    return nullptr;
 }
 
 // Parse the startup section. Returns the config, or nullopt with an error.
@@ -529,161 +591,168 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
     PresetConfig config;
     std::vector<Diagnostic> result_warnings;
 
-    const auto& known_keys = preset_top_level_keys();
     for (const auto& [key, value] : json.items()) {
-        if (std::find(known_keys.begin(), known_keys.end(), key) == known_keys.end()) {
+        if (!find_preset_key(key)) {
             result_warnings.push_back({"/" + key, "unknown key '" + key + "' is ignored",
                                        Diagnostic::Severity::Warning});
         }
     }
 
-    // Name (required)
-    if (json.contains("name") && json["name"].is_string()) {
-        config.name = json["name"].get<std::string>();
-    } else {
-        config.name = filepath.stem().string();  // Use filename as fallback
-    }
+    // The name falls back to the file's, so a preset always has one.
+    config.name = filepath.stem().string();
 
-    // Descriptive fields, shown by front-ends' preset pickers.
-    if (json.contains("description") && json["description"].is_string()) {
-        config.description = json["description"].get<std::string>();
-    }
-    if (json.contains("release_date") && json["release_date"].is_string()) {
-        config.release_date = json["release_date"].get<std::string>();
-    }
-
-    // Machine name (optional): the label the launched machine carries. A CLI
-    // --machine-name overrides it (applied in apply_preset).
-    if (json.contains("machine_name") && json["machine_name"].is_string()) {
-        config.machine_name = json["machine_name"].get<std::string>();
-    }
-
-    // Speed (optional): a positive multiplier or "unlimited", as --speed.
-    if (json.contains("speed")) {
-        const auto& speed = json["speed"];
-        try {
-            if (speed.is_number()) {
-                config.speed = parse_speed_arg(speed.dump());
-            } else if (speed.is_string()) {
-                config.speed = parse_speed_arg(speed.get<std::string>());
-            } else {
-                throw std::runtime_error("");
+    for (const auto& info : kPresetKeys) {
+        const std::string name(info.name);
+        if (!json.contains(name)) continue;
+        const auto& value = json[name];
+        switch (info.key) {
+            case PresetKey::Model:
+                // For validation against the executable.
+                if (value.is_string()) config.model = value.get<std::string>();
+                break;
+            case PresetKey::Name:
+                if (value.is_string()) config.name = value.get<std::string>();
+                break;
+            case PresetKey::ReleaseDate:
+                // Descriptive, shown by front-ends' preset pickers.
+                if (value.is_string()) config.release_date = value.get<std::string>();
+                break;
+            case PresetKey::Description:
+                if (value.is_string()) config.description = value.get<std::string>();
+                break;
+            case PresetKey::MachineName:
+                // The label the launched machine carries; a CLI --machine-name
+                // overrides it.
+                if (value.is_string()) config.machine_name = value.get<std::string>();
+                break;
+            case PresetKey::Speed:
+                // A positive multiplier or "unlimited", as --speed.
+                try {
+                    if (value.is_number()) {
+                        config.speed = parse_speed_arg(value.dump());
+                    } else if (value.is_string()) {
+                        config.speed = parse_speed_arg(value.get<std::string>());
+                    } else {
+                        throw std::runtime_error("");
+                    }
+                } catch (const std::runtime_error&) {
+                    return failed("/speed",
+                                  "Preset 'speed' must be a positive number or \"unlimited\": " +
+                                      filepath.string());
+                }
+                break;
+            case PresetKey::Startup: {
+                // The startup keyboard links, as --screen-mode/--auto-boot or --links.
+                if (!value.is_object()) {
+                    return failed("/startup",
+                                  "Preset 'startup' must be an object: " + filepath.string());
+                }
+                auto [startup, error] = parse_startup_section(value);
+                if (!startup) {
+                    return failed(error.path, "Preset " + error.message + ": " + filepath.string());
+                }
+                config.startup = startup;
+                break;
             }
-        } catch (const std::runtime_error&) {
-            return failed("/speed", "Preset 'speed' must be a positive number or \"unlimited\": " +
-                                        filepath.string());
-        }
-    }
+            case PresetKey::MosImageUri:
+                // A ROM name or path, resolved like --mos.
+                if (value.is_string()) {
+                    config.mos_image_uri =
+                        resolve_preset_relative_filepath(value.get<std::string>(), preset_dirpath);
+                }
+                break;
+            case PresetKey::Storage:
+                if (value.is_object()) {
+                    config.storage = parse_storage_section(value, preset_dirpath);
+                }
+                break;
+            case PresetKey::SidewaysBank: {
+                if (!value.is_object()) break;
+                auto [slots, error] = parse_sideways_section(value);
+                if (!slots) {
+                    return failed(error.path, error.message + ": " + filepath.string());
+                }
+                for (auto& slot : *slots) {
+                    slot.image_filepath =
+                        resolve_preset_relative_filepath(slot.image_filepath, preset_dirpath);
+                }
+                config.sideways = std::move(*slots);
+                break;
+            }
+            case PresetKey::Econet: {
+                if (!value.is_object()) break;
+                auto [econet, error] = parse_econet_section(value);
+                if (!econet) {
+                    return failed(error.path, error.message + ": " + filepath.string());
+                }
+                config.econet = std::move(*econet);
+                break;
+            }
+            case PresetKey::Extensions:
+                if (!value.is_array()) break;
+                for (const auto& ext_json : value) {
+                    if (!ext_json.is_object() || !ext_json.contains("name")) continue;
 
-    // Startup keyboard links (optional), as --screen-mode/--auto-boot or --links.
-    if (json.contains("startup")) {
-        if (!json["startup"].is_object()) {
-            return failed("/startup", "Preset 'startup' must be an object: " + filepath.string());
-        }
-        auto [startup, error] = parse_startup_section(json["startup"]);
-        if (!startup) {
-            return failed(error.path, "Preset " + error.message + ": " + filepath.string());
-        }
-        config.startup = startup;
-    }
-    // A top-level auto_boot is the form presets were written in before the
-    // startup section; it is read as startup.auto_boot.
-    if (json.contains("auto_boot") && json["auto_boot"].is_boolean()) {
-        if (config.startup && (config.startup->auto_boot || config.startup->links)) {
-            return failed("/auto_boot",
-                          "Preset gives both a top-level 'auto_boot' and a 'startup' section "
-                          "that sets the links; move it into 'startup': " + filepath.string());
-        }
-        if (!config.startup) config.startup.emplace();
-        config.startup->auto_boot = json["auto_boot"].get<bool>();
-        result_warnings.push_back(
-            {"/auto_boot",
-             "a top-level 'auto_boot' is read as 'startup.auto_boot'; write it there instead",
-             Diagnostic::Severity::Warning});
-    }
+                    PresetExtensionConfig ext_config;
+                    ext_config.name = ext_json["name"].get<std::string>();
 
-    // MOS ROM (optional): a ROM name or path, resolved like --mos.
-    if (json.contains("mos_image_uri") && json["mos_image_uri"].is_string()) {
-        config.mos_image_uri = resolve_preset_relative_filepath(
-            json["mos_image_uri"].get<std::string>(), preset_dirpath);
-    }
-
-    // Model (optional, for validation)
-    if (json.contains("model") && json["model"].is_string()) {
-        config.model = json["model"].get<std::string>();
-    }
-
-    // Storage section
-    if (json.contains("storage") && json["storage"].is_object()) {
-        config.storage = parse_storage_section(json["storage"], preset_dirpath);
-    }
-
-    // Econet section
-    if (json.contains("econet") && json["econet"].is_object()) {
-        auto [econet, error] = parse_econet_section(json["econet"]);
-        if (!econet) {
-            return failed(error.path, error.message + ": " + filepath.string());
-        }
-        config.econet = std::move(*econet);
-    }
-
-    // Thumbnail capture delay (for capture-screenshot subcommand)
-    if (json.contains("thumbnail_capture_delay_seconds") &&
-        json["thumbnail_capture_delay_seconds"].is_number()) {
-        config.thumbnail_capture_delay_seconds =
-            json["thumbnail_capture_delay_seconds"].get<double>();
-    }
-
-    // Extensions section
-    if (json.contains("extensions") && json["extensions"].is_array()) {
-        for (const auto& ext_json : json["extensions"]) {
-            if (!ext_json.is_object() || !ext_json.contains("name")) continue;
-
-            PresetExtensionConfig ext_config;
-            ext_config.name = ext_json["name"].get<std::string>();
-
-            if (ext_json.contains("config") && ext_json["config"].is_object()) {
-                for (auto& [key, value] : ext_json["config"].items()) {
-                    if (value.is_string()) {
-                        // A relative file path is resolved against the
-                        // preset's directory once the manifest says which
-                        // parameters are file paths (normalise_preset_extensions).
-                        ext_config.config[key] = value.get<std::string>();
-                    } else if (value.is_number_integer()) {
-                        ext_config.config[key] = std::to_string(value.get<int64_t>());
-                    } else if (value.is_boolean()) {
-                        ext_config.config[key] = value.get<bool>() ? "true" : "false";
-                    } else if (value.is_array()) {
-                        std::vector<std::string> items;
-                        for (const auto& elt : value) {
-                            if (elt.is_string()) {
-                                items.push_back(elt.get<std::string>());
-                            } else if (elt.is_number_integer()) {
-                                items.push_back(std::to_string(elt.get<int64_t>()));
-                            } else if (elt.is_boolean()) {
-                                items.push_back(elt.get<bool>() ? "true" : "false");
+                    if (ext_json.contains("config") && ext_json["config"].is_object()) {
+                        for (auto& [key, item] : ext_json["config"].items()) {
+                            if (item.is_string()) {
+                                // A relative file path is resolved against the
+                                // preset's directory once the manifest says which
+                                // parameters are file paths
+                                // (normalise_preset_extensions).
+                                ext_config.config[key] = item.get<std::string>();
+                            } else if (item.is_number_integer()) {
+                                ext_config.config[key] = std::to_string(item.get<int64_t>());
+                            } else if (item.is_boolean()) {
+                                ext_config.config[key] = item.get<bool>() ? "true" : "false";
+                            } else if (item.is_array()) {
+                                std::vector<std::string> items;
+                                for (const auto& elt : item) {
+                                    if (elt.is_string()) {
+                                        items.push_back(elt.get<std::string>());
+                                    } else if (elt.is_number_integer()) {
+                                        items.push_back(std::to_string(elt.get<int64_t>()));
+                                    } else if (elt.is_boolean()) {
+                                        items.push_back(elt.get<bool>() ? "true" : "false");
+                                    }
+                                }
+                                ext_config.list_config[key] = std::move(items);
                             }
                         }
-                        ext_config.list_config[key] = std::move(items);
                     }
+
+                    config.extensions.push_back(std::move(ext_config));
                 }
-            }
-
-            config.extensions.push_back(std::move(ext_config));
+                break;
+            case PresetKey::ThumbnailCaptureDelaySeconds:
+                // For the capture-screenshot subcommand.
+                if (value.is_number()) {
+                    config.thumbnail_capture_delay_seconds = value.get<double>();
+                }
+                break;
+            case PresetKey::AutoBoot:
+                // The form presets were written in before the startup section,
+                // read as startup.auto_boot (after startup, so the two can be
+                // checked against each other).
+                if (!value.is_boolean()) break;
+                if (config.startup && (config.startup->auto_boot || config.startup->links)) {
+                    return failed("/auto_boot",
+                                  "Preset gives both a top-level 'auto_boot' and a 'startup' "
+                                  "section that sets the links; move it into 'startup': " +
+                                      filepath.string());
+                }
+                if (!config.startup) config.startup.emplace();
+                config.startup->auto_boot = value.get<bool>();
+                result_warnings.push_back(
+                    {"/auto_boot",
+                     "a top-level 'auto_boot' is read as 'startup.auto_boot'; write it there "
+                     "instead",
+                     Diagnostic::Severity::Warning});
+                break;
         }
-    }
-
-    // Sideways bank section
-    if (json.contains("sideways_bank") && json["sideways_bank"].is_object()) {
-        auto [slots, error] = parse_sideways_section(json["sideways_bank"]);
-        if (!slots) {
-            return failed(error.path, error.message + ": " + filepath.string());
-        }
-        for (auto& slot : *slots) {
-            slot.image_filepath =
-                resolve_preset_relative_filepath(slot.image_filepath, preset_dirpath);
-        }
-        config.sideways = std::move(*slots);
     }
 
     return {std::move(config), std::move(result_warnings), false};

@@ -2075,11 +2075,11 @@ TEST_CASE("resolve-preset --json output is stable, diagnostics included",
     "release_date": null,
     "description": null,
     "machine_name": null,
+    "speed": 1.0,
     "startup": {
       "screen_mode": 7,
       "auto_boot": true
     },
-    "speed": 1.0,
     "mos_image_uri": "acorn-mos_1_20.rom",
     "storage": {
       "fdc_socket": {

@@ -3378,30 +3378,32 @@ public:
         }
         const auto& extension_entries = resolver_cfg.extension_resolver.entries();
 
-        ojson sections = ojson::array();
+        // Each section, by the preset key it describes; written out below in
+        // the registry's order.
+        std::map<PresetKey, ojson> section_for;
 
-        sections.push_back(ojson{
+        section_for[PresetKey::Speed] = ojson{
             {"type", "speed"},
             {"default", 1.0},
             {"unlimited", "unlimited"},
             {"description", "Emulation speed as a positive multiple of real time, or "
-                            "\"unlimited\" to run flat out"}});
+                            "\"unlimited\" to run flat out"}};
 
-        sections.push_back(ojson{
+        section_for[PresetKey::Startup] = ojson{
             {"type", "startup"},
             {"screen_mode", ojson{{"min", 0}, {"max", 7}, {"default", 7}}},
             {"auto_boot", ojson{{"default", false}}},
             {"links", ojson{{"min", 0}, {"max", 255},
                             {"excludes", ojson::array({"screen_mode", "auto_boot"})}}},
             {"description", "The startup keyboard links: screen_mode and auto_boot, or the "
-                            "whole links byte"}});
+                            "whole links byte"}};
 
-        sections.push_back(ojson{
+        section_for[PresetKey::MosImageUri] = ojson{
             {"type", "mos_image_uri"},
             {"default", Memory::DEFAULT_MOS_ROM},
-            {"description", "The MOS ROM: a ROM name (found on the ROM search path) or a path"}});
+            {"description", "The MOS ROM: a ROM name (found on the ROM search path) or a path"}};
 
-        sections.push_back(storage);
+        section_for[PresetKey::Storage] = storage;
 
         if constexpr (HasEconetSocket<Memory>) {
             const beebium::econet::StationRange auto_range{};
@@ -3411,14 +3413,14 @@ public:
                     transports.push_back(e.manifest->name);
                 }
             }
-            sections.push_back(ojson{
+            section_for[PresetKey::Econet] = ojson{
                 {"type", "econet"},
                 {"station", ojson{{"min", 1},
                                   {"max", 254},
                                   {"auto", true},
                                   {"auto_default_range",
                                    ojson::array({auto_range.lo, auto_range.hi})}}},
-                {"transports", transports}});
+                {"transports", transports}};
         }
 
         // Sideways ROM/RAM bank section, derived from the machine's slot
@@ -3477,7 +3479,7 @@ public:
             }
             sideways["default_roms"] = default_roms;
 
-            sections.push_back(sideways);
+            section_for[PresetKey::SidewaysBank] = sideways;
         }
 
         // The attachment points a preset's extensions may use on this model:
@@ -3534,15 +3536,47 @@ public:
                     {"extension", image.extension.empty() ? ojson(nullptr)
                                                           : ojson(image.extension)}});
             }
-            sections.push_back(ojson{{"type", "extensions"},
-                                     {"attachment_points", attachment_points},
-                                     {"bundled_images", by_kind}});
+            section_for[PresetKey::Extensions] = ojson{{"type", "extensions"},
+                                                       {"attachment_points", attachment_points},
+                                                       {"bundled_images", by_kind}};
         }
 
+        ojson sections = ojson::array();
+        for (const auto& info : kPresetKeys) {
+            if (!describes(info.key)) continue;
+            if (auto it = section_for.find(info.key); it != section_for.end()) {
+                sections.push_back(std::move(it->second));
+            }
+        }
         output["sections"] = sections;
 
         std::cout << output.dump(2) << "\n";
         return ExitCode::OK;
+    }
+
+private:
+    // Whether a preset key has a section here: the machine settings do, the
+    // preset's own descriptive keys do not.
+    static bool describes(PresetKey key) {
+        switch (key) {
+            case PresetKey::Speed:
+            case PresetKey::Startup:
+            case PresetKey::MosImageUri:
+            case PresetKey::Storage:
+            case PresetKey::SidewaysBank:
+            case PresetKey::Econet:
+            case PresetKey::Extensions:
+                return true;
+            case PresetKey::Model:
+            case PresetKey::Name:
+            case PresetKey::ReleaseDate:
+            case PresetKey::Description:
+            case PresetKey::MachineName:
+            case PresetKey::ThumbnailCaptureDelaySeconds:
+            case PresetKey::AutoBoot:
+                return false;
+        }
+        return false;
     }
 };
 

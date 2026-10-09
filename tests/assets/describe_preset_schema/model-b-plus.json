@@ -84,22 +84,6 @@
       ]
     },
     {
-      "type": "econet",
-      "station": {
-        "min": 1,
-        "max": 254,
-        "auto": true,
-        "auto_default_range": [
-          1,
-          253
-        ]
-      },
-      "transports": [
-        "aun",
-        "piconet"
-      ]
-    },
-    {
       "type": "sideways_bank",
       "has_aliasing": true,
       "sockets": [
@@ -246,6 +230,22 @@
           "image": "acorn-dfs_2_26.rom",
           "role": "filing"
         }
+      ]
+    },
+    {
+      "type": "econet",
+      "station": {
+        "min": 1,
+        "max": 254,
+        "auto": true,
+        "auto_default_range": [
+          1,
+          253
+        ]
+      },
+      "transports": [
+        "aun",
+        "piconet"
       ]
     },
     {

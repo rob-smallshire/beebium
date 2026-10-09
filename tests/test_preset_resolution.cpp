@@ -21,6 +21,8 @@
 #include "test_temp_paths.hpp"
 
 #include <fstream>
+#include <set>
+#include <string_view>
 
 using namespace beebium::server;
 using Catch::Matchers::ContainsSubstring;
@@ -214,7 +216,7 @@ TEST_CASE("preset_document writes every key in the one order, Given a subsequenc
     REQUIRE(given.has_value());
 
     const std::vector<std::string> all_keys{
-        "model", "name", "release_date", "description", "machine_name", "startup", "speed",
+        "model", "name", "release_date", "description", "machine_name", "speed", "startup",
         "mos_image_uri", "storage", "sideways_bank", "econet", "extensions",
         "thumbnail_capture_delay_seconds"};
     CHECK(keys_of(*every) == all_keys);
@@ -263,4 +265,18 @@ TEST_CASE("an extension that fails normalisation keeps the config the preset gav
 
     REQUIRE(fold_in_preset(config).size() == 1);
     CHECK(config.extension_instances[0].config.at("baud") == "fast");
+}
+
+TEST_CASE("the preset key registry names every key the loader accepts, once",
+          "[preset-resolution][registry]") {
+    std::set<std::string_view> names;
+    for (const auto& info : kPresetKeys) {
+        CHECK(names.insert(info.name).second);
+        CHECK(find_preset_key(info.name) == &info);
+    }
+    CHECK(find_preset_key("colour") == nullptr);
+    // Every key but the legacy auto_boot is written.
+    for (const auto& info : kPresetKeys) {
+        CHECK(info.written == (info.key != PresetKey::AutoBoot));
+    }
 }
