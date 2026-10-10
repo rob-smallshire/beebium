@@ -363,15 +363,28 @@ override; parameters the command line fills from manifest defaults do not
 A preset that cannot be read, or whose JSON is invalid, stops a launch with
 `NOINPUT` (66). One whose content is invalid stops it with `CONFIG` (78) and a
 message naming the problem: among them every [attachment](#attachment)
-problem. Problems that do not stop a launch are warnings: an unknown top-level
-key, the older top-level `auto_boot`, and (from `resolve-preset`) a ROM or
-floppy image that cannot be found, or a bare name in a `bundled` parameter
-that is not a bundled image.
+problem, and every error an extension's own configuration check finds. Problems
+that do not stop a launch are warnings: an unknown top-level key, the older
+top-level `auto_boot`, an extension check's warnings, and (from
+`resolve-preset`) a ROM or floppy image that cannot be found, or a bare name in
+a `bundled` parameter that is not a bundled image.
+
+An extension's plugin may check its own configuration once the preset's
+instances are normalised and their attachments are sound, for what its
+manifest cannot say. The Acorn real-time clock refuses a `time` whose year its
+`layout` cannot hold ("The clock cannot start in 2001: the Acorn original
+(4-bit year in R1) register layout holds 1981-1996."), at `/config/time`, and
+warns when an `offset`, or the host's clock with neither, would start it outside
+those years today. To ask, `start` and `resolve-preset` load the plugin library
+of each configured extension (built-ins have no check), so a plugin that cannot
+be loaded is an error at its entry here too, where before only the launch found
+it.
 
 `resolve-preset` locates each problem by a JSON pointer: an extension's
 attachment problems at its entry (`/extensions/2`), or at the parameter at
 fault (`/extensions/2/config/scsi-id`, `/extensions/1/config/adapter-id`); a
-problem with the Econet transport under `/econet/transport`. When two
+problem with the Econet transport under `/econet/transport`, at a parameter
+under `/econet/transport/parameters/`. When two
 instances clash, the later one is reported.
 
 ## resolve-preset
@@ -381,7 +394,8 @@ beebium-model-b resolve-preset <id|filepath> [--json]
 ```
 
 Loads a preset through the same steps as `start --preset`, without building a
-machine, and prints the machine it describes as a preset document in which
+machine (it loads the configured extensions' plugin libraries, to ask their
+configuration checks, but creates no extension), and prints the machine it describes as a preset document in which
 every key is present:
 
 - `description`, `release_date`, `machine_name`, `thumbnail_capture_delay_seconds`: the value or `null`

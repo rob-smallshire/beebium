@@ -801,6 +801,11 @@ target_compile_definitions(test_acorn_rtc_manifest PRIVATE
     BEEBIUM_ACORN_RTC_MANIFEST_DIRPATH="${CMAKE_SOURCE_DIR}/src/extensions/acorn-rtc")
 catch_discover_tests(test_acorn_rtc_manifest)
 
+# The Acorn RTC's configuration and its pre-launch check
+add_executable(test_acorn_rtc_config test_acorn_rtc_config.cpp)
+target_link_libraries(test_acorn_rtc_config PRIVATE beebium_rtc_core Catch2::Catch2WithMain)
+catch_discover_tests(test_acorn_rtc_config)
+
 # SAF3019P v1.26 protocol conformance tests
 add_executable(test_saf3019p_v126 test_saf3019p_v126.cpp)
 target_link_libraries(test_saf3019p_v126 PRIVATE beebium_rtc_core Catch2::Catch2WithMain)
@@ -1679,9 +1684,9 @@ if(BEEBIUM_BUILD_SERVICE)
         BEEBIUM_EXTENSIONS_DIR="$<TARGET_FILE_DIR:beebium-model-b>/extensions"
     )
     # Stub plugins for the extension ABI check (#176): one claiming another ABI
-    # version, one carrying none. Built beside the test, never deployed, so no
+    # version, one carrying none; and one exporting the configuration check. Built beside the test, never deployed, so no
     # server ever discovers them.
-    foreach(_stub abi_mismatch_plugin abi_unstamped_plugin)
+    foreach(_stub abi_mismatch_plugin abi_unstamped_plugin validating_plugin)
         add_library(${_stub} SHARED plugins/${_stub}.cpp)
         target_link_libraries(${_stub} PRIVATE beebium_extension_api)
         set_target_properties(${_stub} PROPERTIES

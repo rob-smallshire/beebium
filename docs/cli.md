@@ -613,7 +613,10 @@ The sections are described in [preset-schema.md](preset-schema.md#describe-prese
 Load a preset exactly as `start --preset` would, without building a machine,
 and print the machine it describes as a preset document with every key
 present: defaults filled in, relative paths resolved, the model's default ROMs
-as explicit slots and every extension parameter given.
+as explicit slots and every extension parameter given. Each configured
+extension's plugin is loaded to check its own configuration (an RTC start time
+its register layout cannot hold, for example); its findings join the
+diagnostics.
 
 ```bash
 beebium-model-b resolve-preset model-b-l3fs-aun          # the document on stdout

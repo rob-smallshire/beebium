@@ -14,6 +14,7 @@
 #define BEEBIUM_EXTENSION_PLUGIN_LOADER_HPP
 
 #include "Export.hpp"
+#include "ConfigValidation.hpp"
 #include "Extension.hpp"
 #include "ExtensionManifest.hpp"
 
@@ -67,15 +68,31 @@ public:
         std::map<std::string, std::string> config = {},
         std::map<std::string, std::vector<std::string>> list_config = {});
 
+    // Ask the extension's plugin to check an instance configuration, already
+    // normalised against the manifest, through the configuration check it
+    // exports (kValidateConfigSymbol). Loads the plugin's library, as
+    // load_extension does, but creates no extension. Returns what the plugin
+    // found; empty when it exports no check. Throws std::runtime_error when
+    // the library cannot be loaded or was built for another extension ABI.
+    std::vector<ConfigDiagnostic> validate_config(
+        const ExtensionManifest& manifest,
+        const std::map<std::string, std::string>& config,
+        const std::map<std::string, std::vector<std::string>>& list_config);
+
     // Find a manifest by name from a previously scanned list.
     static const ExtensionManifest* find_manifest(
         const std::vector<ExtensionManifest>& manifests,
         std::string_view name);
 
 private:
+    // Load the manifest's library, refusing one of another extension ABI, or
+    // return the handle of the one already loaded. Throws std::runtime_error.
+    void* open_library(const ExtensionManifest& manifest);
+
     struct LoadedPlugin {
         void* handle = nullptr;
         std::string name;
+        std::filesystem::path library_filepath;
     };
     std::vector<LoadedPlugin> loaded_plugins_;
 };

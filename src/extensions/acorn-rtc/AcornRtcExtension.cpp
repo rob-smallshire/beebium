@@ -11,6 +11,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "AcornRtcExtension.hpp"
+#include "AcornRtcConfig.hpp"
 #include "AcornRtcDispatcher.hpp"
 #include "TimeParser.hpp"
 #include <beebium/extension/ExtensionContext.hpp>
@@ -34,36 +35,17 @@ std::span<const std::string_view> AcornRtcExtension::provides() const {
 }
 
 void AcornRtcExtension::init(ExtensionContext& ctx) {
-    // Determine the target datetime for initialisation
+    // The start time and register layout, read as the pre-launch check
+    // (check_acorn_rtc_config) reads them. The framework has already refused
+    // a time given with an offset (the manifest's "start" group).
     Saf3019p::DateTime target_dt;
-
-    auto time_val = config_value("time");
-    auto offset_val = config_value("offset");
-
-    if (time_val && offset_val) {
-        throw std::runtime_error(
-            "Acorn RTC: 'time' and 'offset' are mutually exclusive");
+    try {
+        target_dt = acorn_rtc_start_time(config(), current_local_datetime());
+        chip_.set_layout(acorn_rtc_layout(config()));
+    } catch (const std::invalid_argument& e) {
+        throw std::runtime_error(std::string("Acorn RTC: ") + e.what());
     }
-
-    if (time_val) {
-        target_dt = parse_absolute_time(*time_val);
-    } else if (offset_val) {
-        target_dt = apply_relative_offset(*offset_val);
-    } else {
-        target_dt = current_local_datetime();
-    }
-
-    // Parse register layout
     auto layout_val = config_value("layout");
-    if (layout_val) {
-        const auto layout = register_layout_from_name(*layout_val);
-        if (!layout) {
-            throw std::runtime_error(
-                "Acorn RTC: unknown layout '" + std::string(*layout_val) +
-                "' (valid: '4bit-year-in-r1', '7bit-year-in-r7', '7bit-year-in-r1r5')");
-        }
-        chip_.set_layout(*layout);
-    }
 
     // Initialise the chip (validates year range for the layout)
     if (!chip_.initialise(target_dt)) {

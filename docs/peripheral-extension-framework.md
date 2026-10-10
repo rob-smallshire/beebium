@@ -599,7 +599,41 @@ beebium::PeripheralExtension* beebium_create_extension(
 - It returns a raw pointer -- the framework takes ownership via `std::unique_ptr`
 - Use `__attribute__((visibility("default")))` to ensure the symbol is exported
 
-### 2. Add Manifest
+### 2. Check a Configuration Before Launch (Optional)
+
+What the manifest cannot say -- a value valid alone but not with another
+parameter's, such as the Acorn real-time clock's start time against the years
+its register layout holds -- the plugin can check before any machine is built,
+by exporting a configuration check (`ValidateConfigFn`,
+`beebium/extension/ConfigValidation.hpp`):
+
+```cpp
+BEEBIUM_PLUGIN_EXPORT
+void beebium_validate_extension_config(
+        const beebium::ExtensionManifest& manifest,
+        const std::map<std::string, std::string>& config,
+        const std::map<std::string, std::vector<std::string>>& list_config,
+        std::vector<beebium::ConfigDiagnostic>& diagnostics) {
+    // append {parameter key, message, Error | Warning}
+}
+```
+
+It receives the instance's configuration already normalised against the
+manifest (defaults filled in, types, bounds, choices and exclusions checked)
+and appends what it finds, each a sentence about one parameter (or `""` for the
+instance as a whole); it must not throw. The framework calls it for every
+instance once the preset and command line are merged and the attachments are
+sound (`validate_extension_configs`, in `fold_in_preset`), so `start` and
+`resolve-preset` see the same diagnostics: a preset instance's are located at
+its parameter (`/extensions/<i>/config/<key>`, or
+`/econet/transport/parameters/<key>`), a command-line instance's prefixed with
+its flag; `start` refuses on an error and prints a warning. Use a warning for
+what depends on something that may differ at launch, such as the host's clock.
+A plugin without the check validates nothing beyond its manifest. Read the
+configuration in one function the check and the extension's `init` both call,
+as the RTC's `AcornRtcConfig` does, so the two cannot disagree.
+
+### 3. Add Manifest
 
 ```json
 {
@@ -611,7 +645,7 @@ beebium::PeripheralExtension* beebium_create_extension(
 
 The `library` field is the filename stem; the platform adds `.dylib`, `.so`, or `.dll`.
 
-### 3. Add Shared Library Target
+### 4. Add Shared Library Target
 
 ```cmake
 # Append to src/extensions/my-extension/CMakeLists.txt
@@ -645,7 +679,7 @@ if(BEEBIUM_BUILD_SERVICE)
 endif()
 ```
 
-### 4. Load at Runtime
+### 5. Load at Runtime
 
 ```bash
 beebium-model-b start --extension-dir /path/to/plugins --extension my-extension

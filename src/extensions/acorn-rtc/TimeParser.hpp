@@ -32,6 +32,9 @@ Saf3019p::DateTime parse_absolute_time(std::string_view iso8601);
 // Throws std::invalid_argument on parse failure.
 Saf3019p::DateTime apply_relative_offset(std::string_view offset);
 
+// Apply a relative offset, as above, to `base` rather than the current time.
+Saf3019p::DateTime apply_relative_offset(std::string_view offset, Saf3019p::DateTime base);
+
 // Get the current local time as a DateTime.
 Saf3019p::DateTime current_local_datetime();
 

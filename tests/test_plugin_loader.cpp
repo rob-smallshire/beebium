@@ -13,10 +13,12 @@
 // Test PluginLoader: manifest scanning, opt-in loading, and extension registration.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <beebium/extension/PeripheralExtension.hpp>
 #include <beebium/extension/PluginLoader.hpp>
 #include <beebium/extension/ExtensionAbi.hpp>
+#include <beebium/extension/ConfigValidation.hpp>
 #include <beebium/extension/ExtensionContext.hpp>
 #include <beebium/extension/ExtensionRegistry.hpp>
 #include <beebium/extension/OneMHzBusPort.hpp>
@@ -560,6 +562,36 @@ TEST_CASE("PluginLoader refuses a plugin built for another extension ABI",
               std::string::npos);
         CHECK(message.find("rebuild") != std::string::npos);
     }
+}
+
+TEST_CASE("PluginLoader asks a plugin to validate a configuration",
+          "[plugin][validate]") {
+    beebium::PluginLoader loader;
+    const auto manifest = stub_manifest("validating_plugin");
+    const auto found = loader.validate_config(manifest, {{"speed", "fast"}, {"mode", "x"}}, {});
+    REQUIRE(found.size() == 2);
+    CHECK(found[0].parameter == "speed");
+    CHECK(found[0].message == "validating_plugin cannot go fast.");
+    CHECK(found[0].severity == beebium::ConfigDiagnostic::Severity::Error);
+    CHECK(found[1].parameter == "mode");
+    CHECK(found[1].severity == beebium::ConfigDiagnostic::Severity::Warning);
+    CHECK(loader.validate_config(manifest, {{"speed", "slow"}}, {}).empty());
+}
+
+TEST_CASE("PluginLoader validates nothing for a plugin without a configuration check",
+          "[plugin][validate]") {
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(kPluginDirpath);
+    const auto* m = beebium::PluginLoader::find_manifest(manifests, "test-scratch-ram");
+    REQUIRE(m);
+    CHECK(loader.validate_config(*m, {{"id", "x"}}, {}).empty());
+}
+
+TEST_CASE("PluginLoader will not ask a plugin of another ABI to validate",
+          "[plugin][validate][abi]") {
+    beebium::PluginLoader loader;
+    CHECK_THROWS_WITH(loader.validate_config(stub_manifest("abi_mismatch_plugin"), {}, {}),
+                      Catch::Matchers::ContainsSubstring("rebuild the plugin"));
 }
 
 TEST_CASE("PluginLoader refuses a plugin that carries no extension ABI version",

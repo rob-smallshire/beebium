@@ -28,6 +28,11 @@ namespace beebium {
 
 // One allowed value of a parameter that takes one of a fixed set.
 struct ParameterChoice {
+    ParameterChoice() = default;
+    ParameterChoice(std::string value_, std::string label_, std::string description_ = {})
+        : value(std::move(value_)), label(std::move(label_)),
+          description(std::move(description_)) {}
+
     std::string value;          // as written in a preset or on the command line
     std::string label;          // human-readable, for a configuration UI
     std::string description;    // what choosing it means, for a configuration

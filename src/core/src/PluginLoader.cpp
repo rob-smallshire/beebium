@@ -327,6 +327,39 @@ std::unique_ptr<Extension> PluginLoader::load_extension(
         }
     }
 
+    void* handle = open_library(manifest);
+
+    // Find the entry point
+    auto* create_fn = reinterpret_cast<CreateExtensionFn>(
+        platform_dlsym(handle, "beebium_create_extension"));
+    if (!create_fn) {
+        throw std::runtime_error(
+            "Extension library for '" + manifest.name
+            + "' does not export 'beebium_create_extension'");
+    }
+
+    // Create the extension, passing the manifest
+    Extension* ext = create_fn(manifest);
+    if (!ext) {
+        throw std::runtime_error(
+            "beebium_create_extension() returned null for '" + manifest.name + "'");
+    }
+
+    // Set config before returning (config is available during init()).
+    if (!config.empty()) {
+        ext->set_config(std::move(config));
+    }
+    if (!list_config.empty()) {
+        ext->set_list_config(std::move(list_config));
+    }
+
+    // Caller takes ownership and is responsible for downcasting to the
+    // appropriate extension-point base (PeripheralExtension,
+    // EconetTransportExtension, etc.) per manifest.extension_kind.
+    return std::unique_ptr<Extension>(ext);
+}
+
+void* PluginLoader::open_library(const ExtensionManifest& manifest) {
     // Build library path
     std::string library_filename = manifest.library_stem + kSharedLibSuffix;
     auto library_filepath = manifest.manifest_dirpath / library_filename;
@@ -339,6 +372,9 @@ std::unique_ptr<Extension> PluginLoader::load_extension(
                 "Extension library not found for '" + manifest.name + "': "
                 + (manifest.manifest_dirpath / library_filename).string());
         }
+    }
+    for (const auto& loaded : loaded_plugins_) {
+        if (loaded.library_filepath == library_filepath) return loaded.handle;
     }
 
     // Load the shared library. Provider plugins (those with "provides" in
@@ -374,39 +410,22 @@ std::unique_ptr<Extension> PluginLoader::load_extension(
             + "; rebuild the plugin against this server.");
     }
 
-    // Find the entry point
-    auto* create_fn = reinterpret_cast<CreateExtensionFn>(
-        platform_dlsym(handle, "beebium_create_extension"));
-    if (!create_fn) {
-        platform_dlclose(handle);
-        throw std::runtime_error(
-            "Extension library '" + library_filepath.string()
-            + "' does not export 'beebium_create_extension'");
-    }
+    loaded_plugins_.push_back({handle, manifest.name, library_filepath});
+    return handle;
+}
 
-    // Create the extension, passing the manifest
-    Extension* ext = create_fn(manifest);
-    if (!ext) {
-        platform_dlclose(handle);
-        throw std::runtime_error(
-            "beebium_create_extension() returned null for '" + manifest.name + "'");
+std::vector<ConfigDiagnostic> PluginLoader::validate_config(
+        const ExtensionManifest& manifest,
+        const std::map<std::string, std::string>& config,
+        const std::map<std::string, std::vector<std::string>>& list_config) {
+    void* handle = open_library(manifest);
+    auto* validate_fn = reinterpret_cast<ValidateConfigFn>(
+        platform_dlsym(handle, kValidateConfigSymbol));
+    std::vector<ConfigDiagnostic> diagnostics;
+    if (validate_fn) {
+        validate_fn(manifest, config, list_config, diagnostics);
     }
-
-    // Set config before returning (config is available during init()).
-    if (!config.empty()) {
-        ext->set_config(std::move(config));
-    }
-    if (!list_config.empty()) {
-        ext->set_list_config(std::move(list_config));
-    }
-
-    // Track the loaded library for cleanup.
-    loaded_plugins_.push_back({handle, manifest.name});
-
-    // Caller takes ownership and is responsible for downcasting to the
-    // appropriate extension-point base (PeripheralExtension,
-    // EconetTransportExtension, etc.) per manifest.extension_kind.
-    return std::unique_ptr<Extension>(ext);
+    return diagnostics;
 }
 
 const ExtensionManifest* PluginLoader::find_manifest(

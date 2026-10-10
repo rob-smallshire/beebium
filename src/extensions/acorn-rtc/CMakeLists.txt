@@ -3,6 +3,7 @@
 # Core library: chip emulation + time parsing, no gRPC dependencies.
 # Used by unit tests and linked into the full extension.
 add_library(beebium_rtc_core STATIC
+    AcornRtcConfig.cpp
     Saf3019p.cpp
     TimeParser.cpp
 )
@@ -10,6 +11,9 @@ add_library(beebium_rtc_core STATIC
 target_include_directories(beebium_rtc_core
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# AcornRtcConfig reports through the extension API's ConfigDiagnostic.
+target_link_libraries(beebium_rtc_core PUBLIC beebium_extension_api)
 
 # Full extension with gRPC service (depends on service layer)
 if(BEEBIUM_BUILD_SERVICE)

@@ -1007,10 +1007,12 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
 
     // Fold preset-supplied sideways slots in as a baseline now that all CLI
     // --sideways flags have been parsed (CLI wins per slot).
-    if (auto errors = fold_in_preset(config); !errors.empty()) {
-        for (const auto& error : errors) {
-            std::cerr << "Error: " << error.message << "\n";
-        }
+    bool fold_failed = false;
+    for (const auto& d : fold_in_preset(config)) {
+        std::cerr << (d.is_error() ? "Error: " : "Warning: ") << d.message << "\n";
+        fold_failed = fold_failed || d.is_error();
+    }
+    if (fold_failed) {
         return ExitCode::CONFIG;
     }
 
@@ -4576,7 +4578,8 @@ public:
         std::cerr << "Usage: " << program_name << " resolve-preset <id|filepath> [--json]\n"
                   << "\n"
                   << "Loads a preset the way 'start --preset' does -- the same loader, the same\n"
-                  << "extension normalisation and validation -- without building a machine, and\n"
+                  << "extension normalisation and validation, including each extension plugin's\n"
+                  << "own check of its configuration -- without building a machine, and\n"
                   << "prints the machine it describes as a preset document in which every key\n"
                   << "is present: defaults filled in, relative paths resolved, the model's\n"
                   << "default ROMs as explicit sideways slots, and every extension parameter\n"
@@ -4695,9 +4698,13 @@ private:
             return *err;
         }
         bool failed = false;
-        for (const auto& e : fold_in_preset(config)) {
-            error(e.path, e.message);
-            failed = true;
+        for (const auto& d : fold_in_preset(config)) {
+            if (d.is_error()) {
+                error(d.path, d.message);
+                failed = true;
+            } else {
+                warning(d.path, d.message);
+            }
         }
         if (auto err = validate_startup_links(config)) {
             error("/startup", *err);
@@ -4798,7 +4805,7 @@ private:
                     find_bundled_image(images, *m, p, it->second)) {
                     continue;
                 }
-                const auto path = inst.from_preset ? inst.preset_pointer + "/config/" + p.key
+                const auto path = inst.from_preset ? instance_parameter_pointer(inst, p.key)
                                                    : std::string();
                 if (p.bundled == "rom") {
                     error(path, "'" + it->second + "' is not a ROM " + inst.name + " ships");

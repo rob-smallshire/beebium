@@ -76,10 +76,14 @@ Saf3019p::DateTime parse_absolute_time(std::string_view iso8601) {
 }
 
 Saf3019p::DateTime apply_relative_offset(std::string_view offset) {
-    // Parse offset string like "-10y", "+5h", "-365d", "+30m", "-1y6M"
-    // Start from current local time and adjust
+    return apply_relative_offset(offset, current_local_datetime());
+}
 
-    auto dt = current_local_datetime();
+Saf3019p::DateTime apply_relative_offset(std::string_view offset, Saf3019p::DateTime base) {
+    // Parse offset string like "-10y", "+5h", "-365d", "+30m", "-1y6M"
+    // Start from `base` and adjust
+
+    auto dt = base;
 
     if (offset.empty()) {
         throw std::invalid_argument("Empty offset string");

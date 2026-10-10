@@ -30,6 +30,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 #include "test_temp_paths.hpp"
 
@@ -1949,6 +1950,70 @@ TEST_CASE("start: a SCSI disc with no adapter stops the launch with CONFIG",
                               "\" --port 0");
     CHECK(result.exit_code == 78);
     CHECK(result.stderr_output.find("acorn-scsi") != std::string::npos);
+}
+
+// ============================================================================
+// An extension's own check of its configuration, before launch
+// ============================================================================
+
+namespace {
+
+// The diagnostics resolve-preset gives a preset, as (severity, path, message).
+std::vector<std::tuple<std::string, std::string, std::string>> diagnostics_of(
+        const std::string& body, int expected_exit_code) {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "rtc.preset.beebium";
+    std::ofstream(preset_filepath) << body;
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), expected_exit_code);
+    std::vector<std::tuple<std::string, std::string, std::string>> found;
+    for (const auto& d : out.at("diagnostics")) {
+        found.emplace_back(d.at("severity").get<std::string>(), d.at("path").get<std::string>(),
+                           d.at("message").get<std::string>());
+    }
+    return found;
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: a start time the RTC's layout cannot hold is an error at the time",
+          "[integration][preset][resolve-preset][validate]") {
+    auto found = diagnostics_of(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-rtc", "config": {"time": "2001-01-01T00:00"}}]})", 78);
+    REQUIRE(found.size() == 1);
+    const auto& [severity, path, message] = found[0];
+    CHECK(severity == "error");
+    CHECK(path == "/extensions/0/config/time");
+    INFO(message);
+    CHECK(message.find("1981-1996") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: an RTC offset that would start out of range today is a warning",
+          "[integration][preset][resolve-preset][validate]") {
+    auto found = diagnostics_of(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-rtc", "config": {"offset": "+100y"}}]})", 0);
+    REQUIRE(found.size() == 1);
+    const auto& [severity, path, message] = found[0];
+    CHECK(severity == "warning");
+    CHECK(path == "/extensions/0/config/offset");
+    CHECK(message.find("1981-1996") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: an RTC configuration its layout holds has no diagnostics",
+          "[integration][preset][resolve-preset][validate]") {
+    CHECK(diagnostics_of(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-rtc", "config": {"time": "1985-03-15T10:30"}}]})", 0).empty());
+}
+
+TEST_CASE("start: a start time the RTC's layout cannot hold stops the launch with CONFIG",
+          "[integration][preset][validate]") {
+    auto result = run_command(EXECUTABLE +
+                              " start --acorn-rtc time=2001-01-01T0000 --port 0");
+    CHECK(result.exit_code == 78);
+    INFO(result.stderr_output);
+    CHECK(result.stderr_output.find("1981-1996") != std::string::npos);
+    // Refused before the machine is built, not by the extension at start-up.
+    CHECK(result.stderr_output.find("Initialising extensions") == std::string::npos);
+    CHECK(result.stdout_output.find("Initialising extensions") == std::string::npos);
 }
 
 // ============================================================================

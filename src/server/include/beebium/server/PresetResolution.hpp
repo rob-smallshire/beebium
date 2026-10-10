@@ -36,6 +36,7 @@
 #include "beebium/extension/ExtensionManifest.hpp"
 #include "beebium/extension/ExtensionResolver.hpp"
 #include "beebium/extension/OneMHzBusPort.hpp"
+#include "beebium/extension/PluginLoader.hpp"
 #include "beebium/extension/SerialPort.hpp"
 #include "beebium/extension/UserPort.hpp"
 #include "beebium/tube/TubeConcepts.hpp"
@@ -459,6 +460,56 @@ std::vector<std::string> machine_attachment_points() {
     return points;
 }
 
+// The JSON pointer of one of a preset extension instance's parameters: under
+// config/ for an extensions[] entry, under parameters/ for the Econet
+// transport. "" names the entry itself.
+template<typename Instance>
+std::string instance_parameter_pointer(const Instance& inst, const std::string& key) {
+    if (key.empty()) return inst.preset_pointer;
+    const bool transport = inst.preset_pointer == "/econet/transport";
+    return inst.preset_pointer + (transport ? "/parameters/" : "/config/") + key;
+}
+
+// Ask each extension instance's plugin to check its configuration (the
+// plugin's optional configuration check, PluginLoader::validate_config), once
+// the instances are normalised, merged and named. What a plugin finds keeps
+// its severity: an instance from the preset is located at its parameter, one
+// from the command line named by its flag. A plugin that cannot be loaded is
+// an error at the instance, since the launch would fail to load it too.
+// Built-in extensions have no plugin and no check.
+template<typename MachineType>
+std::vector<Diagnostic> validate_extension_configs(const ServerConfig<MachineType>& config) {
+    std::vector<Diagnostic> found;
+    beebium::PluginLoader loader;
+    for (const auto& inst : config.extension_instances) {
+        const auto* m = config.extension_resolver.find_by_name(inst.name);
+        if (!m || m->library_stem.empty()) continue;
+        const std::string source =
+            inst.from_preset
+                ? (m->extension_kind == "econet-transport" ? "preset Econet transport '"
+                                                           : "preset extension '") +
+                      inst.name + "': "
+                : "--" + std::string(m->effective_cli_name()) + ": ";
+        std::vector<beebium::ConfigDiagnostic> diagnostics;
+        try {
+            diagnostics = loader.validate_config(*m, inst.config, inst.list_config);
+        } catch (const std::exception& e) {
+            found.push_back({inst.from_preset ? inst.preset_pointer : std::string(),
+                             source + e.what()});
+            continue;
+        }
+        for (const auto& d : diagnostics) {
+            found.push_back(
+                {inst.from_preset ? instance_parameter_pointer(inst, d.parameter) : std::string(),
+                 source + d.message,
+                 d.severity == beebium::ConfigDiagnostic::Severity::Error
+                     ? Diagnostic::Severity::Error
+                     : Diagnostic::Severity::Warning});
+        }
+    }
+    return found;
+}
+
 // Check, before anything is loaded, that every peripheral extension instance
 // has somewhere to attach (check_attachments): its points exist, are within
 // their occupancy, a provider-naming parameter names a provider, and a unique
@@ -484,8 +535,7 @@ std::vector<Diagnostic> check_extension_attachments(
              requests, known, machine_attachment_points<typename MachineType::Memory>())) {
         const auto& inst = *instances[problem.instance];
         if (inst.from_preset) {
-            errors.push_back({inst.preset_pointer +
-                                  (problem.key.empty() ? "" : "/config/" + problem.key),
+            errors.push_back({instance_parameter_pointer(inst, problem.key),
                               "preset extension '" + inst.name + "': " + problem.message});
         } else {
             const auto* m = config.extension_resolver.find_by_name(inst.name);
@@ -614,9 +664,11 @@ inline std::string preset_not_found_message(const std::string& preset_arg) {
 // are known and the extension resolver is populated: the sideways slots and
 // startup links as baselines the CLI overrides, then the extensions --
 // normalised as the CLI's were, merged with the CLI's (#150), named
-// (assign_extension_ids) and checked for somewhere to attach. Returns the
-// problems found, each located in the preset where it can be; the extension
-// steps after normalisation run only if it succeeds. start and resolve-preset
+// (assign_extension_ids), checked for somewhere to attach, and checked by
+// their own plugins (validate_extension_configs). Returns the problems found,
+// errors and warnings, each located in the preset where it can be; the
+// extension steps after normalisation run only if it succeeds, and the
+// plugins' checks only if the attachments are sound. start and resolve-preset
 // both build their configuration through this.
 template<typename MachineType>
 std::vector<Diagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
@@ -627,7 +679,10 @@ std::vector<Diagnostic> fold_in_preset(ServerConfig<MachineType>& config) {
     }
     merge_preset_extensions(config);
     assign_extension_ids(config);
-    return check_extension_attachments(config);
+    if (auto errors = check_extension_attachments(config); !errors.empty()) {
+        return errors;
+    }
+    return validate_extension_configs(config);
 }
 
 // The startup links: --links excludes the semantic options.
