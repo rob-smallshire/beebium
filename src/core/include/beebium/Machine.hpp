@@ -394,9 +394,13 @@ public:
     // access cannot fire the watchpoint again. Only single-cycle step() calls
     // (the debugger's StepCycle) leave the CPU mid-instruction.
     void run(uint64_t cycles) {
+        // Raising in_run_ and then testing paused_ pairs with a quiescer's
+        // raising paused_ and then testing in_run_ (wait_until_idle): both
+        // stores and both loads are seq_cst, so at least one thread sees the
+        // other's flag (see wait_until_idle).
         struct RunGuard {
             std::atomic<bool>& flag;
-            RunGuard(std::atomic<bool>& f) : flag(f) { flag.store(true, std::memory_order_release); }
+            RunGuard(std::atomic<bool>& f) : flag(f) { flag.store(true, std::memory_order_seq_cst); }
             ~RunGuard() { flag.store(false, std::memory_order_release); }
         } guard{in_run_};
 
@@ -485,7 +489,7 @@ public:
     // Execute one complete instruction (variable cycles)
     // Returns the number of cycles taken
     uint64_t step_instruction() {
-        in_run_.store(true, std::memory_order_release);
+        in_run_.store(true, std::memory_order_seq_cst);
         const uint64_t start = state_.cycle_count;
         do {
             step();
@@ -573,9 +577,20 @@ public:
     // nor doing per-iteration work outside run() under an EmulationBusyScope
     // (emulation_busy_). Call from a quiescing thread after raising the pause so
     // the body that follows runs single-threaded against machine state.
+    //
+    // The quiescer stores paused_ and then loads in_run_; run() stores in_run_
+    // and then loads paused_. That is the store-buffer pattern: with only
+    // release stores and acquire loads each thread may read the other's flag
+    // before its own store is visible, so run() starts unpaused while the
+    // quiescer sees it idle and mutates under it (#177; on arm64 an acquire
+    // load compiles to LDAPR, which may complete before an earlier STLR). All
+    // four operations are seq_cst, which forbids that outcome: one of the two
+    // loads sees the other thread's store. emulation_busy_ needs no such care
+    // -- EmulationBusyScope sets it under debug_mutex_, which orders it -- but
+    // its load is seq_cst too so the loop reads as one argument.
     void wait_until_idle() {
-        while (in_run_.load(std::memory_order_acquire) ||
-               emulation_busy_.load(std::memory_order_acquire)) {
+        while (in_run_.load(std::memory_order_seq_cst) ||
+               emulation_busy_.load(std::memory_order_seq_cst)) {
             std::this_thread::yield();
         }
     }
@@ -810,8 +825,10 @@ private:
     // Recompute the derived pause flag the emulation loop reads. Must hold
     // debug_mutex_ so the two sources are sampled atomically together.
     void recompute_paused_locked() {
+        // seq_cst: the quiescer's half of the store-buffer pair wait_until_idle
+        // describes.
         paused_.store(user_paused_.load(std::memory_order_relaxed) || quiesce_depth_ > 0,
-                      std::memory_order_release);
+                      std::memory_order_seq_cst);
     }
 
     // Raise/lower the quiesce count around a with_emulation_paused body.

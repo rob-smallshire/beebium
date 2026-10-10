@@ -90,6 +90,36 @@ of racing. `on_wake` housekeeping (which ticks drives while the machine is
 parked) stands down whenever `quiesce_depth_ > 0`, so a quiescing body mutating
 a device never races the tick of that same device.
 
+### Why the flags are sequentially consistent
+
+`run()` stores `in_run_ = true` and then loads `paused_`; a quiescer stores
+`paused_ = true` (`begin_quiesce`) and then loads `in_run_`
+(`wait_until_idle`). Each thread stores one flag and then loads the other's:
+the store-buffer pattern. With release stores and acquire loads the C++ memory
+model allows both loads to see the old values, so `run()` starts unpaused while
+the quiescer, seeing it idle, swaps state under it. This is not only
+theoretical: on arm64 an acquire load compiles to `LDAPR`, which may complete
+before the same thread's earlier `STLR` is visible, and a witness crashed this
+way once under load (#177: the emulation thread read the watchpoint vector
+mid-swap). All four operations are therefore `seq_cst` (`STLR`/`LDAR`), and
+`seq_cst` forbids that outcome: there is a single order of the two stores and
+the two loads, so whichever store comes first is seen by the other thread's
+load. Either `run()` sees `paused_` and returns without touching state, or the
+quiescer sees `in_run_` and waits.
+
+`emulation_busy_` does not depend on this. `EmulationBusyScope` tests `paused_`
+and raises the busy flag under `debug_mutex_`, and `begin_quiesce` raises
+`paused_` under the same mutex, so the mutex orders them. The server loop holds
+that scope around `run()`, which is why the server itself was ordered through
+the mutex; a caller making bare `run()` calls relies on `in_run_` alone.
+
+`seq_cst` was chosen over taking `debug_mutex_` around `run()`'s entry test:
+`run()` is entered once per emulation batch and the debugger's step paths enter
+it too, so a lock there is more to reason about (lock order with the quiescer's
+`debug_mutex_` and the recursive quiesce mutex) for no gain; the `seq_cst`
+argument is the four lines above, and on arm64 it costs only `LDAR` in place of
+`LDAPR` on the quiescer's spin.
+
 ## The rule for services
 
 A gRPC service (`DiscService`, `SidewaysService`, `EconetService`,
@@ -178,7 +208,8 @@ on) and run with `TSAN_OPTIONS="halt_on_error=0"`.
   excludes `on_wake`; the busy scope excludes a loop-body mutation; `WriteMemory`
   on a running machine is serialised.
 - `tests/test_debugger_entry_race.cpp` -- breakpoint/watchpoint entry-vector
-  swaps on host and coprocessor.
+  swaps on host and coprocessor, and a quiesce that begins as a bare `run()`
+  is entered (#177), paced so the two meet as often as possible.
 - `tests/test_tier2_quiesce.cpp` -- the extension bus quiescer and the Econet
   enable/disable lifetime, each with a hidden `[.][race]` variant that removes
   the fix so the race can be witnessed before it, and a

@@ -27,6 +27,7 @@
 #include "SecondProcessor65C02Extension.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -71,6 +72,51 @@ TEST_CASE("Host debugger entry vectors survive concurrent set from another threa
 
     stop.store(true, std::memory_order_release);
     machine.request_shutdown();  // unblock the loop if it is parked in wait_if_paused
+    emulation.join();
+
+    SUCCEED();
+}
+
+// The quiesce must hold against a run() that begins just as the quiesce does
+// (#177). run() raises in_run_ and then tests paused_; a quiescer raises
+// paused_ and then tests in_run_. Unless both pairs are sequentially
+// consistent, each thread may read the other's flag before its own store is
+// seen -- the store-buffer interleaving -- and the swap then runs under an
+// iterating emulation thread. Short runs entered back to back make run()'s
+// entry and a quiesce's start meet as often as possible, and switching
+// between no entries and one makes a torn read of the vector touch null.
+TEST_CASE("Host debugger entry vectors survive a run() entered as a quiesce begins",
+          "[debugger][race][tsan]") {
+    ModelB machine;
+    machine.reset();
+
+    std::atomic<bool> stop{false};
+    std::atomic<std::uint64_t> runs{0};
+
+    // Bare run() calls, as a caller without an EmulationBusyScope makes them:
+    // in_run_ is the only flag the quiescer sees.
+    std::thread emulation([&] {
+        while (!stop.load(std::memory_order_acquire)) {
+            machine.wait_if_paused();
+            machine.run(8);
+            runs.fetch_add(1, std::memory_order_release);
+        }
+    });
+
+    for (int i = 0; i < 200000; ++i) {
+        // Start each quiesce just after a run() returns, as the next one begins.
+        const auto seen = runs.load(std::memory_order_acquire);
+        while (runs.load(std::memory_order_acquire) == seen) {
+        }
+        std::vector<WatchpointEntry> wps;
+        if (i & 1) {
+            wps.push_back({1u, 0x0000u, 0xFFFFu, WATCH_READ, false, std::nullopt, 0});
+        }
+        machine.set_watchpoint_entries(std::move(wps));
+    }
+
+    stop.store(true, std::memory_order_release);
+    machine.request_shutdown();
     emulation.join();
 
     SUCCEED();
