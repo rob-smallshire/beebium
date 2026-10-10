@@ -205,6 +205,17 @@ final class ExtensionCatalogueTests: XCTestCase {
         XCTAssertEqual(legacy.defaultInForce, "0")
     }
 
+    func testMapFileChoiceFromRecordedValue() {
+        // Nothing recorded -> the shared per-user default.
+        XCTAssertEqual(ExtensionParameterForm.mapFileChoice(recorded: nil), .sharedDefault)
+        XCTAssertEqual(ExtensionParameterForm.mapFileChoice(recorded: ""), .sharedDefault)
+        // "none" -> no map file.
+        XCTAssertEqual(ExtensionParameterForm.mapFileChoice(recorded: "none"), .none)
+        // A path -> a file only this machine uses.
+        XCTAssertEqual(ExtensionParameterForm.mapFileChoice(recorded: "/tmp/my-map.json"),
+                       .custom("/tmp/my-map.json"))
+    }
+
     func testParsesSerialPortPaths() {
         let jsonl = """
         {"path":"/dev/cu.usbserial-1","usb_vendor_id":1027,"usb_product_id":24577,"manufacturer":"FTDI","product":"","serial_number":""}

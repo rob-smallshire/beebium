@@ -157,6 +157,9 @@ struct ExtensionParameterForm: View {
                 placeholder: parameter.defaultValue,
                 setValues: { setValue(parameter.key, $0.isEmpty ? nil : .array($0.map(JSONValue.string))) }))
         }
+        if parameter.defaultFrom == "aun-map-file" {
+            return AnyView(mapFileControl(parameter))
+        }
         switch parameter.type {
         case "boolean":
             return AnyView(Toggle("", isOn: Binding(
@@ -413,6 +416,92 @@ struct ExtensionParameterForm: View {
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             loadDroppedFile(providers) { url in setValue(parameter.key, .string(url.path)) }
+        }
+    }
+
+    // MARK: - Map file (a shared, host-resolved default)
+
+    /// Which map file the draft selects: the shared per-user default (nothing
+    /// recorded), a specific file the user chose, or none. Pure, so the state
+    /// mapping is tested apart from the view.
+    enum MapFileChoice: Equatable {
+        case sharedDefault
+        case custom(String)
+        case none
+    }
+
+    static func mapFileChoice(recorded: String?) -> MapFileChoice {
+        guard let recorded = recorded, !recorded.isEmpty else { return .sharedDefault }
+        return recorded == "none" ? .none : .custom(recorded)
+    }
+
+    /// The control for the AUN map file (a parameter whose default_from names the
+    /// per-user "aun-map-file"): it shows the shared file -- the one every
+    /// Beebium instance on this computer uses, which the Network sidebar edits --
+    /// as the default value, with "Use a different file..." and "No map file" as
+    /// the by-exception choices and a way back to the shared file. The default
+    /// state records nothing in the draft, so the preset stays exact; a chosen
+    /// file or "none" is recorded because it differs from the default.
+    private func mapFileControl(_ parameter: ExtensionParameter) -> some View {
+        let key = parameter.key
+        let recorded: String? = { if case .string(let s)? = config[key] { return s }; return nil }()
+        let choice = Self.mapFileChoice(recorded: recorded)
+        let defaultPath = parameter.defaultInForce
+
+        let display: String
+        let detail: String
+        let caption: String
+        switch choice {
+        case .sharedDefault:
+            display = defaultPath.isEmpty ? "Shared map file"
+                : URL(fileURLWithPath: defaultPath).lastPathComponent
+            detail = defaultPath
+            caption = "Shared by every Beebium instance on this computer."
+        case .custom(let path):
+            display = URL(fileURLWithPath: path).lastPathComponent
+            detail = path
+            caption = "A map file only this machine uses."
+        case .none:
+            display = "No map file"
+            detail = ""
+            caption = "This machine uses no map file."
+        }
+
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Text(display)
+                    .font(.subheadline)
+                    .foregroundColor(choice == .none ? .secondary : .primary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(detail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Menu {
+                    if choice != .sharedDefault {
+                        Button("Use the shared file") { setValue(key, nil) }
+                        Divider()
+                    }
+                    Button("Use a different file…") { browseMapFile(key) }
+                    if choice != .none {
+                        Button("No map file") { setValue(key, .string("none")) }
+                    }
+                } label: {
+                    Text("Change…")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+            Text(caption)
+                .font(.caption2).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func browseMapFile(_ key: String) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            setValue(key, .string(url.path))
         }
     }
 
