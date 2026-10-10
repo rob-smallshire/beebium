@@ -13,64 +13,112 @@
 import XCTest
 @testable import Beebium
 
-/// Tests parsing an extension manifest from describe-extension JSONL output.
-final class ExtensionManifestTests: XCTestCase {
+/// The Configurator reads an extension's parameters, friendly name, description
+/// and bundled ROMs from the model's catalogue in describe-preset-schema -- no
+/// per-extension round-trip. These cover decoding that catalogue and turning an
+/// entry into the parameter manifest the forms are driven by.
+final class ExtensionCatalogueTests: XCTestCase {
 
-    func testParsesHostSerialParameters() {
-        // Real describe-extension --format jsonl output for host-serial.
-        let jsonl = """
-        {"key":"mode","label":"Mode","description":"'pty' or 'device'","type":"string","required":false,"is_list":false,"position":null,"default":"pty","min":null,"max":null,"choices":[{"value":"pty","label":"Pseudo-terminal"},{"value":"device","label":"Serial device"}],"bundled":"","unique":false,"provider_of":""}
-        {"key":"path","label":"Path","description":"the serial device path","type":"string","required":false,"is_list":false,"position":null,"default":"","min":null,"max":null,"choices":[],"bundled":"","unique":false,"provider_of":""}
-        {"key":"baud","label":"Baud","description":"line speed","type":"integer","required":false,"is_list":false,"position":null,"default":"19200","min":50,"max":115200,"choices":[],"bundled":"","unique":false,"provider_of":""}
-        """
-        let manifest = ExtensionManifest.parse(name: "host-serial", jsonl: jsonl)
-        XCTAssertEqual(manifest.name, "host-serial")
-        XCTAssertEqual(manifest.parameters.map(\.key), ["mode", "path", "baud"])
-        // Index by key, never by position: a short list must fail an assertion,
-        // not crash the test host with an out-of-range subscript.
-        let byKey = Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
-        XCTAssertEqual(byKey["mode"]?.displayLabel, "Mode")
-        XCTAssertEqual(byKey["mode"]?.choices.map(\.value), ["pty", "device"])
-        XCTAssertEqual(byKey["mode"]?.choices.first?.label, "Pseudo-terminal")
-        XCTAssertEqual(byKey["baud"]?.type, "integer")
-        XCTAssertEqual(byKey["baud"]?.minimum, 50)
-        XCTAssertEqual(byKey["baud"]?.maximum, 115200)
+    private func schema(from json: String) throws -> ExtensionsSchemaSection {
+        try JSONDecoder().decode(ExtensionsSchemaSection.self, from: Data(json.utf8))
     }
 
-    func testOrdersByPosition() {
-        let jsonl = """
-        {"key":"b","label":"B","description":"","type":"string","required":false,"is_list":false,"position":1,"default":"","min":null,"max":null,"choices":[],"bundled":"","unique":false,"provider_of":""}
-        {"key":"a","label":"A","description":"","type":"string","required":false,"is_list":false,"position":0,"default":"","min":null,"max":null,"choices":[],"bundled":"","unique":false,"provider_of":""}
-        """
-        let manifest = ExtensionManifest.parse(name: "x", jsonl: jsonl)
-        XCTAssertEqual(manifest.parameters.map(\.key), ["a", "b"])
+    private func byKey(_ manifest: ExtensionManifest) -> [String: ExtensionParameter] {
+        Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
     }
 
-    func testParsesScsiHardDiscHints() {
-        let jsonl = """
-        {"key":"scsi-id","label":"SCSI ID","description":"SCSI target ID","type":"integer","required":false,"is_list":false,"position":0,"default":"0","min":0,"max":7,"choices":[],"bundled":"","unique":true,"provider_of":""}
-        {"key":"image","label":"Image","description":"disc image","type":"filepath","required":false,"is_list":false,"position":1,"default":"","min":null,"max":null,"choices":[],"bundled":"hard-disc","unique":false,"provider_of":""}
-        {"key":"adapter-id","label":"Adapter","description":"adapter to attach to","type":"string","required":false,"is_list":false,"position":2,"default":"","min":null,"max":null,"choices":[],"bundled":"","unique":false,"provider_of":"scsi"}
-        """
-        let manifest = ExtensionManifest.parse(name: "scsi-hard-disc", jsonl: jsonl)
-        let byKey = Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
-        XCTAssertEqual(byKey["scsi-id"]?.unique, true)
-        XCTAssertEqual(byKey["scsi-id"]?.maximum, 7)
-        XCTAssertEqual(byKey["image"]?.bundled, "hard-disc")
-        XCTAssertEqual(byKey["image"]?.type, "filepath")
-        XCTAssertEqual(byKey["adapter-id"]?.providerOf, "scsi")
+    /// A catalogue entry's parameters decode with their every hint, and the
+    /// manifest keeps them -- indexed by key, never by position.
+    func testManifestFromCatalogueCarriesParameterHints() throws {
+        let schema = try schema(from: """
+        { "type": "extensions", "attachment_points": [], "catalogue": [
+          { "name": "scsi-hard-disc", "display_name": "SCSI Hard Disc",
+            "description": "A hard disc on the SCSI bus.", "kind": "peripheral",
+            "parameters": [
+              {"key":"scsi-id","label":"SCSI ID","type":"integer","position":0,"default":"0","min":0,"max":7,"unique":true},
+              {"key":"image","label":"Image","type":"filepath","position":1,"bundled":"hard-disc"},
+              {"key":"adapter-id","label":"Adapter","type":"string","position":2,"provider_of":"scsi"}
+            ] }
+        ] }
+        """)
+        let manifest = schema.manifest(forExtension: "scsi-hard-disc")
+        XCTAssertEqual(manifest.parameters.map(\.key), ["scsi-id", "image", "adapter-id"])
+        let p = byKey(manifest)
+        XCTAssertEqual(p["scsi-id"]?.unique, true)
+        XCTAssertEqual(p["scsi-id"]?.maximum, 7)
+        XCTAssertEqual(p["image"]?.bundled, "hard-disc")
+        XCTAssertEqual(p["image"]?.type, "filepath")
+        XCTAssertEqual(p["adapter-id"]?.providerOf, "scsi")
     }
 
-    func testParsesExcludesAndChoicesFrom() {
-        let jsonl = """
-        {"key":"time","label":"Time","description":"","type":"string","required":false,"is_list":false,"position":0,"default":"","min":null,"max":null,"choices":[],"excludes":["offset"],"choices_from":"","bundled":"","unique":false,"provider_of":""}
-        {"key":"path","label":"Path","description":"","type":"string","required":false,"is_list":false,"position":1,"default":"","min":null,"max":null,"choices":[],"excludes":[],"choices_from":"serial-ports","bundled":"","unique":false,"provider_of":""}
-        """
-        let manifest = ExtensionManifest.parse(name: "x", jsonl: jsonl)
-        let byKey = Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
-        XCTAssertEqual(byKey["time"]?.excludes, ["offset"])
-        XCTAssertEqual(byKey["path"]?.choicesFrom, "serial-ports")
-        XCTAssertEqual(byKey["path"]?.excludes, [])
+    /// The manifest orders parameters by declared position.
+    func testManifestOrdersByPosition() throws {
+        let schema = try schema(from: """
+        { "type": "extensions", "attachment_points": [], "catalogue": [
+          { "name": "x", "parameters": [
+            {"key":"b","type":"string","position":1},
+            {"key":"a","type":"string","position":0} ] }
+        ] }
+        """)
+        XCTAssertEqual(schema.manifest(forExtension: "x").parameters.map(\.key), ["a", "b"])
+    }
+
+    /// Choices, excludes and choices_from survive the round trip.
+    func testManifestCarriesChoicesExcludesAndChoicesFrom() throws {
+        let schema = try schema(from: """
+        { "type": "extensions", "attachment_points": [], "catalogue": [
+          { "name": "acorn-rtc", "parameters": [
+            {"key":"mode","type":"string","position":0,"choices":[{"value":"pty","label":"Pseudo-terminal"}]},
+            {"key":"time","type":"string","position":1,"excludes":["offset"]},
+            {"key":"path","type":"string","position":2,"choices_from":"serial-ports"} ] }
+        ] }
+        """)
+        let p = byKey(schema.manifest(forExtension: "acorn-rtc"))
+        XCTAssertEqual(p["mode"]?.choices.map(\.value), ["pty"])
+        XCTAssertEqual(p["mode"]?.choices.first?.label, "Pseudo-terminal")
+        XCTAssertEqual(p["time"]?.excludes, ["offset"])
+        XCTAssertEqual(p["path"]?.choicesFrom, "serial-ports")
+    }
+
+    /// Friendly name and description come from the entry; an unknown extension
+    /// falls back to its identifier and an empty description.
+    func testDisplayNameAndDescription() throws {
+        let schema = try schema(from: """
+        { "type": "extensions", "attachment_points": [], "catalogue": [
+          { "name": "acorn-rtc", "display_name": "Acorn Real-Time Clock",
+            "description": "Keeps the date and time." }
+        ] }
+        """)
+        XCTAssertEqual(schema.displayName(forExtension: "acorn-rtc"), "Acorn Real-Time Clock")
+        XCTAssertEqual(schema.description(forExtension: "acorn-rtc"), "Keeps the date and time.")
+        XCTAssertEqual(schema.displayName(forExtension: "unknown"), "unknown")
+        XCTAssertEqual(schema.description(forExtension: "unknown"), "")
+        XCTAssertTrue(schema.manifest(forExtension: "unknown").parameters.isEmpty)
+    }
+
+    /// A coprocessor's bundled ROMs decode, and a ROM shows its friendly name
+    /// (falling back to the file stem when none is given).
+    func testCatalogueRoms() throws {
+        let schema = try schema(from: """
+        { "type": "extensions", "attachment_points": [], "catalogue": [
+          { "name": "acorn-65c102-coprocessor", "roms": [
+            {"key":"client","filename":"acorn-tube-65c102_1_20.rom","size":4096,"display_name":"Acorn 65C102 Tube ROM 1.20"},
+            {"key":"client","filename":"bare.rom","size":4096} ] }
+        ] }
+        """)
+        let roms = schema.entry(forExtension: "acorn-65c102-coprocessor")?.roms ?? []
+        XCTAssertEqual(roms.count, 2)
+        XCTAssertEqual(roms.first?.label, "Acorn 65C102 Tube ROM 1.20")
+        XCTAssertEqual(roms.last?.label, "bare")  // stem fallback
+    }
+
+    /// A bundled image shows the schema's friendly name, falling back to the stem.
+    func testBundledImageDisplayName() {
+        let named = BundledImage(image: "l3fs.dat", sizeBytes: 1, extensionName: nil,
+                                 schemaDisplayName: "Acorn Level 3 File Server 1.26")
+        let bare = BundledImage(image: "scratch.dat", sizeBytes: 1, extensionName: nil)
+        XCTAssertEqual(named.displayName, "Acorn Level 3 File Server 1.26")
+        XCTAssertEqual(bare.displayName, "scratch")
     }
 
     func testBundledImageAvailabilityByExtension() {
@@ -88,14 +136,5 @@ final class ExtensionManifestTests: XCTestCase {
         """
         XCTAssertEqual(PresetManager.parseSerialPortPaths(fromJSONL: jsonl),
                        ["/dev/cu.usbserial-1", "/dev/cu.Bluetooth-Incoming-Port"])
-    }
-
-    func testSkipsMalformedLines() {
-        let jsonl = """
-        {"key":"ok","label":"OK","type":"string","is_list":false,"required":false,"default":"","bundled":"","unique":false,"provider_of":"","description":"","choices":[]}
-        not json
-        """
-        let manifest = ExtensionManifest.parse(name: "x", jsonl: jsonl)
-        XCTAssertEqual(manifest.parameters.map(\.key), ["ok"])
     }
 }

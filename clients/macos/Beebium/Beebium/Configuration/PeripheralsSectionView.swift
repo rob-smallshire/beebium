@@ -12,20 +12,6 @@
 
 import SwiftUI
 
-/// Caches extension manifests by name for the Peripherals forms, loaded on
-/// demand from the host (describe-extension). Transient UI adornment over the
-/// draft.
-@MainActor
-final class ManifestCache: ObservableObject {
-    @Published private(set) var byName: [String: ExtensionManifest] = [:]
-    var resolver: (@MainActor (String) async -> ExtensionManifest)?
-
-    func load(_ name: String) async {
-        guard byName[name] == nil, let resolver else { return }
-        byName[name] = await resolver(name)
-    }
-}
-
 /// The Peripherals section: one group per attachment point, listing the draft's
 /// extension instances on it, with Add (the extensions that attach there, minus
 /// those excluded by occupancy) and Remove. Points an extension provides (e.g.
@@ -39,10 +25,7 @@ struct PeripheralsSectionView: View {
     @Binding var draft: MachineDraft
     let schema: ExtensionsSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
-    let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
     var serialPorts: [String] = []
-
-    @StateObject private var manifests = ManifestCache()
 
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
 
@@ -60,11 +43,10 @@ struct PeripheralsSectionView: View {
                 ForEach(shownPoints) { point in
                     AttachmentPointGroup(
                         draft: $draft, schema: schema, point: point,
-                        diagnostics: diagnostics, manifests: manifests, serialPorts: serialPorts)
+                        diagnostics: diagnostics, serialPorts: serialPorts)
                 }
             }
             .padding(12)
         }
-        .onAppear { manifests.resolver = manifestResolver }
     }
 }

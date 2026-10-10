@@ -12,11 +12,13 @@
 
 import Foundation
 
-/// One configuration parameter an extension takes, from `describe-extension`.
+/// One configuration parameter an extension takes, as the extension catalogue
+/// reports it.
 ///
-/// describe-preset-schema says where things attach; describe-extension says what
-/// they take. The generic parameter form (ExtensionParameterForm) is driven by
-/// these, so it adapts to any extension without the client hard-coding its keys.
+/// describe-preset-schema says where things attach and, in its catalogue, what
+/// each extension takes. The generic parameter form (ExtensionParameterForm) is
+/// driven by these, so it adapts to any extension without the client hard-coding
+/// its keys.
 struct ExtensionParameter: Codable, Identifiable, Equatable {
     /// A permitted value for a choice parameter: the value written back and the
     /// label shown.
@@ -100,29 +102,12 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
 }
 
 /// An extension's manifest: the parameters it takes, in declared order.
+///
+/// Built from the model's extension catalogue (see
+/// `ExtensionsSchemaSection.manifest(forExtension:)`), which carries each
+/// extension's parameters inline -- so the Configurator needs no per-extension
+/// round-trip to assemble one.
 struct ExtensionManifest: Equatable {
     let name: String
     let parameters: [ExtensionParameter]
-
-    /// Parse the JSONL output of `<exe> --format jsonl describe-extension <name>`
-    /// (one parameter object per line). A side-effect-free seam, so parsing is
-    /// testable without running a server.
-    static func parse(name: String, jsonl: String) -> ExtensionManifest {
-        var parameters: [ExtensionParameter] = []
-        for raw in jsonl.split(whereSeparator: \.isNewline) {
-            guard let data = raw.data(using: .utf8),
-                  let parameter = try? JSONDecoder().decode(ExtensionParameter.self, from: data) else {
-                continue
-            }
-            parameters.append(parameter)
-        }
-        // Order by `position` where given, keeping declaration order among those
-        // without one (and as a stable tie-break).
-        let ordered = parameters.enumerated().sorted { lhs, rhs in
-            let lp = lhs.element.position ?? Int.max
-            let rp = rhs.element.position ?? Int.max
-            return lp != rp ? lp < rp : lhs.offset < rhs.offset
-        }.map(\.element)
-        return ExtensionManifest(name: name, parameters: ordered)
-    }
 }

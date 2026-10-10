@@ -284,7 +284,6 @@ struct NewMachineDialog: View {
                         econetSchema: econetSchema,
                         startupSchema: startupSchema,
                         romResolver: romResolver(for: selectedPreset),
-                        manifestResolver: manifestResolver(for: selectedPreset),
                         serialPorts: serialPorts,
                         diagnostics: diagnostics
                     )
@@ -499,17 +498,6 @@ struct NewMachineDialog: View {
         let executablePath = preset.coreExecutablePath
         return { image in
             await manager.fetchRomHeader(image: image, executablePath: executablePath)
-        }
-    }
-
-    /// A manifest resolver bound to the preset's core executable, for the
-    /// Peripherals forms; nil before a preset is selected.
-    private func manifestResolver(for preset: MachinePreset?) -> (@MainActor (String) async -> ExtensionManifest)? {
-        guard let preset else { return nil }
-        let manager = presetManager
-        let executablePath = preset.coreExecutablePath
-        return { name in
-            await manager.fetchExtensionManifest(name: name, executablePath: executablePath)
         }
     }
 

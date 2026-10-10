@@ -23,11 +23,11 @@ import SwiftUI
 struct NetworkSectionView: View {
     @Binding var draft: MachineDraft
     let schema: EconetSchemaSection
+    /// The extensions schema, whose catalogue supplies the transport's parameter
+    /// manifest (a transport is a kind of extension). nil only on an older server.
+    let extensionsSchema: ExtensionsSchemaSection?
     var diagnostics: [PresetManager.PresetDiagnostic] = []
-    let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
     var serialPorts: [String] = []
-
-    @StateObject private var manifests = ManifestCache()
 
     private enum StationMode: Hashable { case number, auto, range }
 
@@ -51,10 +51,6 @@ struct NetworkSectionView: View {
                 }
             }
             .padding(12)
-        }
-        .onAppear { manifests.resolver = manifestResolver }
-        .task(id: transportName ?? "") {
-            if let name = transportName { await manifests.load(name) }
         }
     }
 
@@ -131,9 +127,10 @@ struct NetworkSectionView: View {
             .labelsHidden()
             .frame(maxWidth: 220)
 
-            if let name = transportName, let manifest = manifests.byName[name] {
+            if let name = transportName {
                 ExtensionParameterForm(
-                    manifest: manifest,
+                    manifest: extensionsSchema?.manifest(forExtension: name)
+                        ?? ExtensionManifest(name: name, parameters: []),
                     config: draft.econet?.transport?.parameters ?? [:],
                     diagnostics: [],   // econet param diagnostics show below, section-level
                     serialPortSuggestions: serialPorts,

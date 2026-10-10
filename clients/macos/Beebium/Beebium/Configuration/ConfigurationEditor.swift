@@ -62,9 +62,6 @@ struct ConfigurationEditor: View {
     /// Resolves a ROM image to its header (describe-rom), for the Memory tab.
     let romResolver: (@MainActor (String) async -> RomHeaderInfo?)?
 
-    /// Resolves an extension's manifest (describe-extension), for Peripherals.
-    let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
-
     /// Host serial-port paths, for choices_from "serial-ports" fields.
     var serialPorts: [String] = []
 
@@ -234,7 +231,6 @@ struct ConfigurationEditor: View {
                     draft: $draft,
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
-                    manifestResolver: manifestResolver,
                     serialPorts: serialPorts,
                     excludedPointIds: [ProcessorSectionView.tubePointId]))
             }
@@ -244,8 +240,8 @@ struct ConfigurationEditor: View {
                 return AnyView(NetworkSectionView(
                     draft: $draft,
                     schema: econetSchema,
+                    extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
-                    manifestResolver: manifestResolver,
                     serialPorts: serialPorts))
             }
             return AnyView(EmptyView())
@@ -255,7 +251,6 @@ struct ConfigurationEditor: View {
                     draft: $draft,
                     extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
-                    manifestResolver: manifestResolver,
                     serialPorts: serialPorts))
             }
             return AnyView(EmptyView())

@@ -21,11 +21,111 @@ struct ExtensionsSchemaSection: Codable {
     /// Bundled disc-image masters by storage kind (e.g. "hard-disc"), offered in
     /// the image chooser. Absent when the model ships none.
     var bundledImages: [String: [BundledImage]]? = nil
+    /// Every extension this model can host, each describing itself: its friendly
+    /// name, its description, the parameters it takes and the ROMs it ships. The
+    /// one place the Configurator reads an extension's metadata from, so it needs
+    /// no per-extension describe-extension round-trip. Absent on older servers.
+    var catalogue: [ExtensionCatalogueEntry]? = nil
 
     enum CodingKeys: String, CodingKey {
         case type
         case attachmentPoints = "attachment_points"
         case bundledImages = "bundled_images"
+        case catalogue
+    }
+
+    /// The catalogue entry for an extension, or nil if the model does not host it.
+    func entry(forExtension name: String) -> ExtensionCatalogueEntry? {
+        catalogue?.first { $0.name == name }
+    }
+
+    /// The friendly display name for an extension, falling back to its identifier
+    /// when the catalogue has no entry (an older server).
+    func displayName(forExtension name: String) -> String {
+        entry(forExtension: name)?.displayName ?? name
+    }
+
+    /// The description for an extension, or "" when none is known.
+    func description(forExtension name: String) -> String {
+        entry(forExtension: name)?.description ?? ""
+    }
+
+    /// The parameter manifest for an extension, built from the catalogue (ordered
+    /// by declared position). Empty when the catalogue has no entry.
+    func manifest(forExtension name: String) -> ExtensionManifest {
+        guard let entry = entry(forExtension: name) else {
+            return ExtensionManifest(name: name, parameters: [])
+        }
+        let ordered = entry.parameters.enumerated().sorted { lhs, rhs in
+            let lp = lhs.element.position ?? Int.max
+            let rp = rhs.element.position ?? Int.max
+            return lp != rp ? lp < rp : lhs.offset < rhs.offset
+        }.map(\.element)
+        return ExtensionManifest(name: name, parameters: ordered)
+    }
+}
+
+/// One extension in a model's catalogue: the extension describing itself, as
+/// `describe-preset-schema` reports it. The same object `describe-extension`
+/// prints, carried inline so the Configurator needs no second call.
+struct ExtensionCatalogueEntry: Codable, Identifiable {
+    let name: String
+    var displayName: String? = nil
+    var description: String = ""
+    /// "peripheral", "econet-transport", ...
+    var kind: String = ""
+    var attachesTo: [String] = []
+    var provides: [String] = []
+    var parameters: [ExtensionParameter] = []
+    /// The ROMs this extension ships, offered as the bundled choices for a
+    /// filepath ROM parameter (e.g. a coprocessor's client ROM).
+    var roms: [CatalogueRom] = []
+
+    var id: String { name }
+
+    enum CodingKeys: String, CodingKey {
+        case name, description, kind, parameters, roms
+        case displayName = "display_name"
+        case attachesTo = "attaches_to"
+        case provides
+    }
+
+    // Decoded explicitly (not synthesised) so an entry missing any field but the
+    // name still decodes -- the synthesised Decodable requires every non-optional
+    // key even when it has a default. `source` and `cli_name` are deliberately
+    // not read: `source` is a build-dependent path, and the identifier is `name`.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
+        attachesTo = try c.decodeIfPresent([String].self, forKey: .attachesTo) ?? []
+        provides = try c.decodeIfPresent([String].self, forKey: .provides) ?? []
+        parameters = try c.decodeIfPresent([ExtensionParameter].self, forKey: .parameters) ?? []
+        roms = try c.decodeIfPresent([CatalogueRom].self, forKey: .roms) ?? []
+    }
+}
+
+/// A ROM an extension ships: a bundled image offered in its ROM chooser.
+struct CatalogueRom: Codable, Equatable, Identifiable {
+    /// The parameter role this ROM fills (e.g. "client" for a coprocessor).
+    let key: String
+    let filename: String
+    var displayName: String? = nil
+    var size: Int? = nil
+
+    var id: String { filename }
+
+    /// The name to show: the friendly name, falling back to the file stem.
+    var label: String {
+        if let displayName = displayName, !displayName.isEmpty { return displayName }
+        return (filename as NSString).deletingPathExtension
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case key, filename, size
+        case displayName = "display_name"
     }
 }
 
@@ -39,10 +139,14 @@ struct BundledImage: Codable, Equatable {
     /// (e.g. hard-disc masters). An extension's parameter offers images with a
     /// matching name or nil.
     var extensionName: String?
+    /// The friendly name from the schema, if any.
+    var schemaDisplayName: String? = nil
 
-    /// A display name: the image's filename stem (there is no nicer name).
+    /// A display name: the schema's friendly name, falling back to the image's
+    /// filename stem when the schema gives none.
     var displayName: String {
-        (image as NSString).deletingPathExtension
+        if let name = schemaDisplayName, !name.isEmpty { return name }
+        return (image as NSString).deletingPathExtension
     }
 
     /// Whether this image may be offered for `extension`.
@@ -54,6 +158,7 @@ struct BundledImage: Codable, Equatable {
         case image
         case sizeBytes = "size_bytes"
         case extensionName = "extension"
+        case schemaDisplayName = "display_name"
     }
 }
 

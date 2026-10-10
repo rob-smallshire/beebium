@@ -19,15 +19,12 @@ struct ProcessorSectionView: View {
     /// The extensions schema, for the tube attachment point's coprocessors.
     let extensionsSchema: ExtensionsSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
-    let manifestResolver: (@MainActor (String) async -> ExtensionManifest)?
     var serialPorts: [String] = []
 
     /// The attachment point coprocessors plug into. "tube" is the fixed BBC
     /// second-processor bus; the Processor section owns it (Peripherals excludes
     /// it) and presents it as a single-occupancy picker via AttachmentPointGroup.
     static let tubePointId = "tube"
-
-    @StateObject private var manifests = ManifestCache()
 
     private var tubePoint: AttachmentPoint? {
         extensionsSchema.attachmentPoints.first { $0.id == Self.tubePointId }
@@ -41,7 +38,7 @@ struct ProcessorSectionView: View {
                         Text("Coprocessor").font(.headline)
                         AttachmentPointGroup(
                             draft: $draft, schema: extensionsSchema, point: tubePoint,
-                            diagnostics: diagnostics, manifests: manifests, serialPorts: serialPorts)
+                            diagnostics: diagnostics, serialPorts: serialPorts)
                     }
                     Divider()
                 }
@@ -49,7 +46,6 @@ struct ProcessorSectionView: View {
             }
             .padding(12)
         }
-        .onAppear { manifests.resolver = manifestResolver }
     }
 
     // MARK: - Speed

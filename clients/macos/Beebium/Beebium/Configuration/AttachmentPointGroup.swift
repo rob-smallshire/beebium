@@ -28,7 +28,6 @@ struct AttachmentPointGroup: View {
     let schema: ExtensionsSchemaSection
     let point: AttachmentPoint
     var diagnostics: [PresetManager.PresetDiagnostic] = []
-    @ObservedObject var manifests: ManifestCache
     var serialPorts: [String] = []
 
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
@@ -47,9 +46,6 @@ struct AttachmentPointGroup: View {
             } else {
                 multiOccupancyList
             }
-        }
-        .task(id: instances.map(\.name).joined(separator: "|")) {
-            for instance in instances { await manifests.load(instance.name) }
         }
     }
 
@@ -145,21 +141,19 @@ struct AttachmentPointGroup: View {
 
     private func instanceDetail(_ instance: ExtensionInstanceModel.Instance) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let manifest = manifests.byName[instance.name] {
-                ExtensionParameterForm(
-                    manifest: manifest,
-                    config: config(forInstanceAt: instance.index),
-                    diagnostics: diagnostics.forExtension(index: instance.index),
-                    bundledImages: schema.bundledImages ?? [:],
-                    serialPortSuggestions: serialPorts,
-                    setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
-                    .padding(.leading, 8)
-            }
+            ExtensionParameterForm(
+                manifest: schema.manifest(forExtension: instance.name),
+                config: config(forInstanceAt: instance.index),
+                diagnostics: diagnostics.forExtension(index: instance.index),
+                bundledImages: schema.bundledImages ?? [:],
+                serialPortSuggestions: serialPorts,
+                setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
+                .padding(.leading, 8)
             // Points this instance provides (e.g. the SCSI bus) nest beneath it.
             ForEach(model.pointsProvided(by: instance)) { provided in
                 AttachmentPointGroup(
                     draft: $draft, schema: schema, point: provided,
-                    diagnostics: diagnostics, manifests: manifests, serialPorts: serialPorts)
+                    diagnostics: diagnostics, serialPorts: serialPorts)
                     .padding(.leading, 16)
             }
         }
