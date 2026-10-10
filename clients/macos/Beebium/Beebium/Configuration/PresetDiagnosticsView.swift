@@ -83,9 +83,31 @@ extension Array where Element == PresetManager.PresetDiagnostic {
     func forExtension(index: Int) -> [Element] {
         filter { PresetDiagnosticLocation.extensionIndex(path: $0.path) == index }
     }
-    /// Diagnostics on an extension parameter named `key`.
+    /// Diagnostics on an extension parameter named `key` (the parameter itself,
+    /// not an item within a structured list it holds -- those route by
+    /// forListItem / forListItemField).
     func forConfigKey(_ key: String) -> [Element] {
         filter { PresetDiagnosticLocation.configKey(path: $0.path) == key }
+    }
+    /// Diagnostics on the item at `index` of a structured-list parameter named
+    /// `key`, whatever the parent prefix (extensions config or econet transport
+    /// parameters) -- including a field within that item.
+    func forListItem(key: String, index: Int) -> [Element] {
+        filter { PresetDiagnosticLocation.listItem(path: $0.path, key: key)?.index == index }
+    }
+    /// Diagnostics on a specific `field` of the item at `index` of a
+    /// structured-list parameter named `key`.
+    func forListItemField(key: String, index: Int, field: String) -> [Element] {
+        filter {
+            let location = PresetDiagnosticLocation.listItem(path: $0.path, key: key)
+            return location?.index == index && location?.field == field
+        }
+    }
+    /// Whether any diagnostic points at an item of the structured-list parameter
+    /// named `key` (used to keep a section's own summary from repeating what the
+    /// list rows already show).
+    func isListItem(key: String) -> Bool {
+        contains { PresetDiagnosticLocation.listItem(path: $0.path, key: key) != nil }
     }
 }
 
@@ -139,10 +161,31 @@ enum PresetDiagnosticLocation {
 
     /// The config key a diagnostic points at, from a path like
     /// "/extensions/2/config/baud"; nil if it is not a per-parameter diagnostic.
+    /// A deeper path into a structured-list item ("/extensions/2/config/map/0/
+    /// host") is not a parameter-level diagnostic, so this returns nil for it --
+    /// those route by `listItem` instead.
     static func configKey(path: String) -> String? {
         let components = path.split(separator: "/").map(String.init)
-        guard components.count >= 4, components[0] == "extensions", components[2] == "config"
+        guard components.count == 4, components[0] == "extensions", components[2] == "config"
         else { return nil }
         return components[3]
+    }
+
+    /// The item index, and optional field, a diagnostic points at inside a
+    /// structured-list parameter named `key`. Handles both the extensions form
+    /// (".../config/<key>/<index>[/<field>]") and the econet transport form
+    /// (".../parameters/<key>/<index>[/<field>]"): the parent prefix does not
+    /// matter, only that `key` is preceded by "config" or "parameters" and
+    /// followed by an integer index. nil when the path is not under an item of
+    /// that key.
+    static func listItem(path: String, key: String) -> (index: Int, field: String?)? {
+        let components = path.split(separator: "/").map(String.init)
+        guard let keyIndex = components.firstIndex(of: key), keyIndex > 0,
+              components[keyIndex - 1] == "config" || components[keyIndex - 1] == "parameters"
+        else { return nil }
+        guard keyIndex + 1 < components.count, let index = Int(components[keyIndex + 1])
+        else { return nil }
+        let field = keyIndex + 2 < components.count ? components[keyIndex + 2] : nil
+        return (index, field)
     }
 }

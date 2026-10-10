@@ -80,6 +80,16 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     /// A source of suggestions for a free-text value, e.g. "serial-ports"; empty
     /// when none.
     var choicesFrom: String = ""
+    /// For an `is_list` parameter of structured records (e.g. the AUN map's
+    /// peers), the fields of one item, in display order. Empty for a plain list
+    /// of strings. A field mirrors a parameter's own keys but is a flat leaf
+    /// (see ExtensionListField), so the parameter type stays non-recursive.
+    var fields: [ExtensionListField] = []
+    /// The template that renders one structured item as a single line, e.g.
+    /// "{net}.{station}@{host}@{port}"; empty when the parameter has no fields.
+    /// `{key}` placeholders with literal separators between them; a leading
+    /// non-required field may be omitted together with the separator after it.
+    var itemFormat: String = ""
 
     var id: String { key }
 
@@ -87,13 +97,14 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     var displayLabel: String { label.isEmpty ? key : label }
 
     enum CodingKeys: String, CodingKey {
-        case key, type, required, bundled, unique, description, label, choices, position, excludes
+        case key, type, required, bundled, unique, description, label, choices, position, excludes, fields
         case isList = "is_list"
         case defaultValue = "default"
         case providerOf = "provider_of"
         case minimum = "min"
         case maximum = "max"
         case choicesFrom = "choices_from"
+        case itemFormat = "item_format"
     }
 
     // Decoded explicitly (not synthesised) so a parameter object missing any
@@ -119,6 +130,76 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
         choices = try c.decodeIfPresent([Choice].self, forKey: .choices) ?? []
         excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? []
         choicesFrom = try c.decodeIfPresent(String.self, forKey: .choicesFrom) ?? ""
+        fields = try c.decodeIfPresent([ExtensionListField].self, forKey: .fields) ?? []
+        itemFormat = try c.decodeIfPresent(String.self, forKey: .itemFormat) ?? ""
+    }
+
+    /// Whether this parameter is a list of structured records (an `is_list`
+    /// parameter that declares `fields`), as opposed to a plain list of strings.
+    var isStructuredList: Bool { isList && !fields.isEmpty }
+}
+
+/// One field of a structured `is_list` item (e.g. a peer's net, station, host,
+/// port in the AUN map). Its JSON mirrors a parameter's own keys -- key, label,
+/// description, type, required, default, min, max, choices -- but a field is a
+/// leaf: it never itself carries fields, so this is a distinct, non-recursive
+/// type rather than a reused ExtensionParameter. (A struct that stored an array
+/// of its own type would be a recursive value type; keeping the field type flat
+/// avoids that hazard entirely.)
+struct ExtensionListField: Codable, Identifiable, Equatable {
+    let key: String
+    /// "string", "integer" or "boolean" (a field has no filepath type).
+    let type: String
+    var label: String = ""
+    var description: String = ""
+    var required: Bool = false
+    /// The default, always as a string ("" for none), as for a parameter.
+    var defaultValue: String = ""
+    /// Bounds for an integer field; nil when unbounded.
+    var minimum: Int?
+    var maximum: Int?
+    /// Permitted values, or empty when the value is free.
+    var choices: [ExtensionParameter.Choice] = []
+
+    var id: String { key }
+
+    /// The human label for the control: the explicit label, else the key.
+    var displayLabel: String { label.isEmpty ? key : label }
+
+    enum CodingKeys: String, CodingKey {
+        case key, type, label, description, required, choices
+        case defaultValue = "default"
+        case minimum = "min"
+        case maximum = "max"
+    }
+
+    // Only key and type are mandatory; the rest tolerate absence (and min/max
+    // tolerate an explicit null), mirroring ExtensionParameter's own decoder.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        type = try c.decode(String.self, forKey: .type)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        required = try c.decodeIfPresent(Bool.self, forKey: .required) ?? false
+        defaultValue = try c.decodeIfPresent(String.self, forKey: .defaultValue) ?? ""
+        minimum = try c.decodeIfPresent(Int.self, forKey: .minimum)
+        maximum = try c.decodeIfPresent(Int.self, forKey: .maximum)
+        choices = try c.decodeIfPresent([ExtensionParameter.Choice].self, forKey: .choices) ?? []
+    }
+
+    init(key: String, type: String, label: String = "", description: String = "",
+         required: Bool = false, defaultValue: String = "",
+         minimum: Int? = nil, maximum: Int? = nil, choices: [ExtensionParameter.Choice] = []) {
+        self.key = key
+        self.type = type
+        self.label = label
+        self.description = description
+        self.required = required
+        self.defaultValue = defaultValue
+        self.minimum = minimum
+        self.maximum = maximum
+        self.choices = choices
     }
 }
 

@@ -95,6 +95,22 @@ struct ExtensionParameterForm: View {
 
     @ViewBuilder
     private func parameterRow(_ parameter: ExtensionParameter) -> some View {
+        if parameter.isStructuredList {
+            // The structured list brings its own titled box, help affordance and
+            // per-row/field diagnostics (it reuses the sidebar's EditableList
+            // stack), so it stands alone without the scalar label wrapper. A
+            // diagnostic on the parameter itself (not an item) still shows below.
+            VStack(alignment: .leading, spacing: 4) {
+                control(parameter)
+                DiagnosticLabels(diagnostics: diagnostics.forConfigKey(parameter.key))
+            }
+        } else {
+            scalarParameterRow(parameter)
+        }
+    }
+
+    @ViewBuilder
+    private func scalarParameterRow(_ parameter: ExtensionParameter) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(parameter.displayLabel)
@@ -125,6 +141,13 @@ struct ExtensionParameterForm: View {
     private func control(_ parameter: ExtensionParameter) -> AnyView {
         if !parameter.choices.isEmpty {
             return AnyView(choicePicker(parameter))
+        }
+        if parameter.isStructuredList {
+            return AnyView(StructuredListParameterView(
+                parameter: parameter,
+                items: arrayItems(parameter.key),
+                diagnostics: diagnostics,
+                setValue: setValue))
         }
         if parameter.isList {
             return AnyView(StringListEditor(
@@ -371,6 +394,13 @@ struct ExtensionParameterForm: View {
     private func listValue(_ key: String) -> [String] {
         guard case .array(let items)? = config[key] else { return [] }
         return items.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
+    }
+
+    /// The raw items of a list parameter (objects or legacy strings), for a
+    /// structured list.
+    private func arrayItems(_ key: String) -> [JSONValue] {
+        if case .array(let items)? = config[key] { return items }
+        return []
     }
 
     /// An integer JSONValue from a field string, clamped to the parameter's
