@@ -178,6 +178,21 @@ final class ExtensionCatalogueTests: XCTestCase {
             "mystery.rom")
     }
 
+    func testFileNounComesFromParameter() throws {
+        // A serial-device filepath (Piconet's device_path) says "device", not "image".
+        let device = try parameter(
+            #"{"key":"device_path","type":"filepath","choices_from":"serial-ports"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(device), "device")
+        // A bundled image parameter says its kind.
+        let rom = try parameter(#"{"key":"rom","type":"filepath","bundled":"rom"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(rom), "ROM")
+        let disc = try parameter(#"{"key":"image","type":"filepath","bundled":"hard-disc"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(disc), "disc")
+        // A plain filepath says "file".
+        let plain = try parameter(#"{"key":"path","type":"filepath"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(plain), "file")
+    }
+
     func testDecodesHostResolvedDefaultKeys() throws {
         // A host-resolved default (the AUN map file): "default" stays empty so an
         // exact-record preset writes nothing, while effective_default carries the

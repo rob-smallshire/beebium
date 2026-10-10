@@ -394,7 +394,7 @@ struct ExtensionParameterForm: View {
         if usingDefault {
             display = "Default: \(defaultLabel ?? "")"
         } else if value.isEmpty {
-            display = "No file"
+            display = "No \(Self.fileNoun(parameter))"
         } else if isBare {
             display = masters.first(where: { $0.image == value })?.displayName ?? value
         } else {
@@ -420,14 +420,14 @@ struct ExtensionParameterForm: View {
                         }
                     }
                 }
-                Button("Choose File…") { browse(parameter.key) }
+                Button("Choose \(Self.fileNoun(parameter).localizedCapitalized)…") { browse(parameter.key) }
                 // With a default, clearing IS "use default"; offer Clear only when
                 // there is no default to fall back to.
                 if !value.isEmpty && defaultLabel == nil {
                     Button("Clear") { setValue(parameter.key, .string("")) }
                 }
             } label: {
-                Text(usingDefault ? "Use a different \(Self.bundledNoun(parameter))…"
+                Text(usingDefault ? "Use a different \(Self.fileNoun(parameter))…"
                                   : (value.isEmpty ? "Choose…" : "Change…"))
             }
             .menuStyle(.borderlessButton)
@@ -538,6 +538,16 @@ struct ExtensionParameterForm: View {
     }
 
     /// The noun for a bundled kind, for menu wording ("ROM", "disc", "image").
+    /// The noun for a filepath parameter's affordance, taken from the parameter,
+    /// not the extension: a bundled-image parameter says its kind (ROM/disc/image),
+    /// a `choices_from: serial-ports` parameter says "device", and a plain filepath
+    /// says "file". One source, so no per-extension wording.
+    static func fileNoun(_ parameter: ExtensionParameter) -> String {
+        if !parameter.bundled.isEmpty { return bundledNoun(parameter) }
+        if parameter.choicesFrom == "serial-ports" { return "device" }
+        return "file"
+    }
+
     static func bundledNoun(_ parameter: ExtensionParameter) -> String {
         switch parameter.bundled {
         case "rom": return "ROM"
