@@ -185,7 +185,10 @@ struct KeyboardSectionView: View {
         return value
     }
 
-    static func formatHexByte(_ byte: Int) -> String { String(format: "&%02X", byte) }
+    /// The hex byte as two digits, with no radix prefix: the field's "Hex" label
+    /// already says the radix, so a leading `&` would only be noise. Input still
+    /// accepts a `&` or `0x` prefix (see parseHexByte).
+    static func formatHexByte(_ byte: Int) -> String { String(format: "%02X", byte) }
 
     /// The explanatory text shown beneath the friendly auto-boot toggle. It comes
     /// from the schema's auto_boot link entry, so the toggle and that bit's own

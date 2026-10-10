@@ -166,4 +166,14 @@ final class StartupLinksLayoutTests: XCTestCase {
         XCTAssertNil(KeyboardSectionView.parseDecByte("ff"))
         XCTAssertNil(KeyboardSectionView.parseDecByte(""))
     }
+
+    func testFormatHexByteHasNoPrefix() {
+        // The "Hex" label carries the radix, so the value shows bare digits.
+        XCTAssertEqual(KeyboardSectionView.formatHexByte(0xF3), "F3")
+        XCTAssertEqual(KeyboardSectionView.formatHexByte(0x00), "00")
+        XCTAssertEqual(KeyboardSectionView.formatHexByte(0x0A), "0A")
+        // Input still tolerates the prefixes the display no longer shows.
+        XCTAssertEqual(KeyboardSectionView.parseHexByte("&0A"), 0x0A)
+        XCTAssertEqual(KeyboardSectionView.parseHexByte("0x0a"), 0x0A)
+    }
 }
