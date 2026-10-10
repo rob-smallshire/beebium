@@ -9,9 +9,9 @@
         {
             "key": "device_path",
             "label": "Device",
-            "type": "filepath",
+            "type": "string",
             "choices_from": "serial-ports",
-            "description": "Serial device path (e.g. /dev/tty.usbmodem101). Omit or set to 'auto' to discover a connected Piconet by its USB vendor id and a STATUS probe.",
+            "description": "The serial device of the Piconet bridge, for example /dev/cu.usbmodem101. 'auto' finds a connected Piconet.",
             "required": false,
             "default": "auto"
         }

@@ -490,6 +490,17 @@ TEST_CASE("the AUN map file's default is the per-user file without the environme
           (beebium::platform::user_state_base_dirpath() / "aun-map.json").string());
 }
 
+TEST_CASE("AUN declares its parameters in the Network sidebar's order",
+          "[integration][extension][describe-extension][json]") {
+    const auto aun = describe_extension_json("aun");
+    std::vector<std::string> keys;
+    for (const auto& p : aun.at("parameters")) {
+        keys.push_back(p.at("key").get<std::string>());
+    }
+    CHECK(keys == std::vector<std::string>{"port", "net", "map", "subnet", "map-file",
+                                           "discovery"});
+}
+
 TEST_CASE("AUN peers and subnet rules are described in a user's words, not their syntax",
           "[integration][extension][describe-extension][json][list-item]") {
     const auto aun = describe_extension_json("aun");
@@ -562,6 +573,11 @@ TEST_CASE("a serial device parameter offers the enumerated ports",
     const auto& device_path = parameter(piconet, "device_path");
     CHECK(device_path.at("choices_from") == "serial-ports");
     CHECK(device_path.at("default") == "auto");
+    // A device, not a file: a UI offers the ports rather than a file picker,
+    // as it does for host-serial's path.
+    CHECK(device_path.at("type") == "string");
+    CHECK(device_path.at("description").get<std::string>().find("serial device") !=
+          std::string::npos);
     const auto host_serial = describe_extension_json("host-serial");
     CHECK(parameter(host_serial, "path").at("choices_from") == "serial-ports");
     CHECK(parameter(host_serial, "mode").at("choices_from") == "");

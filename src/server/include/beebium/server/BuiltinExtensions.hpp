@@ -81,13 +81,15 @@ inline std::vector<Entry> make_entries() {
              -1, false, false, "0"});
         // map and subnet come from the extension, with the fields and item
         // formats it reads their entries by (map_parameter, subnet_parameter).
+        // In the Network sidebar's order: a configuration UI lists them as
+        // declared.
         m.parameters.push_back(AunEconetTransportExtension::map_parameter());
+        m.parameters.push_back(AunEconetTransportExtension::subnet_parameter());
         m.parameters.push_back(
             {"map-file", "filepath",
              "The file of AUN stations shared by every Beebium instance on this computer, "
              "which the Network sidebar edits. 'none' uses no map file.",
              -1, false, false, ""});
-        m.parameters.push_back(AunEconetTransportExtension::subnet_parameter());
         m.parameters.push_back(
             {"discovery", "string",
              "Whether this machine finds other Beebium machines on the local network, "
