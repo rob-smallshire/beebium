@@ -50,10 +50,6 @@ constexpr const char* ACTION_RELOAD      = "reload";
 // Newcomer-readable help, written for someone who does not already know
 // Econet/AUN. Shown as an information affordance, never inline. The words
 // the manifest's map and subnet fields share are in AunTerms.hpp.
-constexpr const char* HELP_NET_STN =
-    "The station's Econet address: net number and station number, written "
-    "net.station. Net 0 means this machine's own net. Station numbers run "
-    "from 1 to 254; 254 is the usual file server.";
 constexpr const char* HELP_HOST =
     "The IPv4 address or DNS name of the computer running the AUN station. A "
     "name is looked up on the computer running this emulator, each time the "
@@ -123,21 +119,23 @@ void add_text_field(Group* group, const std::string& id,
     }
 }
 
-// Build a peer editor tree (host/port/label, and net.stn only when adding)
-// into `editor`. Field ids are bare because they are resolved within this one
-// editor tree; the editor root takes a distinct id so it cannot shadow a field.
-// `port_note`, when set, warns inline that the port is an ephemeral one (used
-// when saving an mDNS peer).
+// Build a peer editor tree (host/port/label, and net and station only when
+// adding) into `editor`. Field ids are bare because they are resolved within
+// this one editor tree; the editor root takes a distinct id so it cannot
+// shadow a field. `port_note`, when set, warns inline that the port is an
+// ephemeral one (used when saving an mDNS peer).
 void build_peer_editor(Control* editor, const std::string& editor_id,
-                       bool is_add, const std::string& net_stn,
-                       const std::string& host, const std::string& port,
-                       const std::string& label,
+                       bool is_add, const std::string& net,
+                       const std::string& station, const std::string& host,
+                       const std::string& port, const std::string& label,
                        const std::string& port_note = "") {
     editor->set_id(editor_id);
     auto* group = editor->mutable_group();
     if (is_add) {
-        add_text_field(group, "net_stn", "Econet net and station (net.stn)",
-                       net_stn, HELP_NET_STN);
+        add_text_field(group, "net", aun_terms::kPeerNet.label, net,
+                       aun_terms::kPeerNet.description);
+        add_text_field(group, "station", aun_terms::kPeerStation.label, station,
+                       aun_terms::kPeerStation.description);
     }
     add_text_field(group, "host", "AUN host (IP address or name)", host,
                    HELP_HOST);
@@ -268,7 +266,7 @@ void AunUi::build_view(View* out) const {
     peers->set_can_add(true);
     peers->set_empty_text("No peer stations configured");
     build_peer_editor(peers->mutable_add_editor(), "peers.add_editor",
-                      /*is_add=*/true, "", "", "32768", "");
+                      /*is_add=*/true, "0", "", "", "32768", "");
 
     for (const auto& peer : live_peers) {
         const std::string id = net_stn_text(peer.net, peer.stn);
@@ -287,7 +285,7 @@ void AunUi::build_view(View* out) const {
             std::string host = file ? file->host : format_ip(peer.ip_addr);
             std::string label = file ? file->label : std::string{};
             build_peer_editor(item->mutable_editor(), id + ".editor",
-                              /*is_add=*/false, id, host,
+                              /*is_add=*/false, "", "", host,
                               std::to_string(peer.port), label);
         } else {
             // Save to map file opens the same sheet as "+", prefilled with
@@ -301,7 +299,8 @@ void AunUi::build_view(View* out) const {
                     ? EPHEMERAL_PORT_NOTE
                     : std::string{};
             build_peer_editor(action->mutable_editor(), id + ".save_editor",
-                              /*is_add=*/true, id, format_ip(peer.ip_addr),
+                              /*is_add=*/true, std::to_string(peer.net),
+                              std::to_string(peer.stn), format_ip(peer.ip_addr),
                               std::to_string(peer.port), "", port_note);
         }
     }
@@ -322,7 +321,7 @@ void AunUi::build_view(View* out) const {
         item->set_editable(true);
         item->set_removable(true);
         build_peer_editor(item->mutable_editor(), id + ".editor",
-                          /*is_add=*/false, id, peer.host,
+                          /*is_add=*/false, "", "", peer.host,
                           std::to_string(peer.port), peer.label);
     }
 
@@ -427,19 +426,25 @@ void AunUi::handle_event(const DispatchRequest& request) {
         const auto& commit = event.commit();
         switch (event.kind()) {
             case EditableListEvent::ADD:
-                apply_add_peer(commit_value(commit, "net_stn").value_or(""),
+                apply_add_peer(commit_value(commit, "net").value_or(""),
+                               commit_value(commit, "station").value_or(""),
                                commit_value(commit, "host").value_or(""),
                                commit_value(commit, "port").value_or(""),
                                commit_value(commit, "label").value_or(""));
                 return;
-            case EditableListEvent::EDIT:
+            case EditableListEvent::EDIT: {
                 // net.stn is the item id and fixed; host/port/label come from
                 // the editor. apply_add_peer replaces the entry in place.
-                apply_add_peer(event.item_id(),
+                const auto& item_id = event.item_id();
+                const auto dot = item_id.find('.');
+                apply_add_peer(item_id.substr(0, dot),
+                               dot == std::string::npos ? std::string{}
+                                                        : item_id.substr(dot + 1),
                                commit_value(commit, "host").value_or(""),
                                commit_value(commit, "port").value_or(""),
                                commit_value(commit, "label").value_or(""));
                 return;
+            }
             case EditableListEvent::REMOVE: {
                 int net = 0, stn = 0;
                 if (parse_net_stn(event.item_id(), net, stn)) {
@@ -455,7 +460,8 @@ void AunUi::handle_event(const DispatchRequest& request) {
                 // (the user may have adjusted the endpoint or added a remark),
                 // so it writes exactly what ADD does.
                 if (event.action_id() == ACTION_SAVE_TO_MAP) {
-                    apply_add_peer(commit_value(commit, "net_stn").value_or(""),
+                    apply_add_peer(commit_value(commit, "net").value_or(""),
+                                   commit_value(commit, "station").value_or(""),
                                    commit_value(commit, "host").value_or(""),
                                    commit_value(commit, "port").value_or(""),
                                    commit_value(commit, "label").value_or(""));
@@ -497,11 +503,19 @@ void AunUi::handle_event(const DispatchRequest& request) {
     }
 }
 
-void AunUi::apply_add_peer(const std::string& net_stn, const std::string& host,
-                           const std::string& port, const std::string& label) {
-    int net = 0, stn = 0;
-    if (!parse_net_stn(net_stn, net, stn)) {
-        last_edit_error_ = "net.stn must be net.station (net 0-255, station 1-254)";
+void AunUi::apply_add_peer(const std::string& net, const std::string& station,
+                           const std::string& host, const std::string& port,
+                           const std::string& label) {
+    // An empty net is net 0, as a map entry's absent net is.
+    int net_value = 0;
+    if (!net.empty() && (!parse_int(net, net_value) || net_value < 0 || net_value > 255)) {
+        last_edit_error_ = "net must be 0-255";
+        mark_dirty();
+        return;
+    }
+    int stn = 0;
+    if (!parse_int(station, stn) || stn < 1 || stn > 254) {
+        last_edit_error_ = "station must be 1-254";
         mark_dirty();
         return;
     }
@@ -511,7 +525,7 @@ void AunUi::apply_add_peer(const std::string& net_stn, const std::string& host,
         mark_dirty();
         return;
     }
-    auto result = ext_.add_map_peer(static_cast<std::uint8_t>(net),
+    auto result = ext_.add_map_peer(static_cast<std::uint8_t>(net_value),
                                     static_cast<std::uint8_t>(stn), host,
                                     static_cast<std::uint16_t>(port_value), label);
     last_edit_error_ = result.error;  // empty on success

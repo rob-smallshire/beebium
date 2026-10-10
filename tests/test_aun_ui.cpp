@@ -23,6 +23,7 @@
 #include "AunEconetTransportExtension.hpp"
 #include "test_aun_helpers.hpp"
 #include "AunPeerSet.hpp"
+#include "AunTerms.hpp"
 #include "AunUi.hpp"
 #include "beebium/econet/AunBackend.hpp"
 #include "beebium/extension/ExtensionUi.hpp"
@@ -205,11 +206,17 @@ TEST_CASE("AunUi: empty state is two lists, a file reference and no errors",
     CHECK(peers->can_add());
     CHECK(peers->items_size() == 0);
     CHECK(peers->empty_text().empty() == false);
-    // The add editor carries net.stn/host/port/label fields, each with help.
-    CHECK(editor_field(peers->add_editor(), "net_stn") == "");
+    // The add editor carries net/station/host/port/label fields, each with
+    // help, in the words the transport's map fields use (aun_terms).
+    CHECK(editor_field(peers->add_editor(), "net") == "0");
+    CHECK(editor_field(peers->add_editor(), "station") == "");
     CHECK(editor_field(peers->add_editor(), "port") == "32768");
-    CHECK(editor_field_help(peers->add_editor(), "net_stn").find("Net 0") !=
-          std::string::npos);
+    CHECK(editor_field_help(peers->add_editor(), "net") ==
+          beebium::aun_terms::kPeerNet.description);
+    CHECK(editor_field_help(peers->add_editor(), "station") ==
+          beebium::aun_terms::kPeerStation.description);
+    CHECK(editor_field_help(peers->add_editor(), "port") ==
+          beebium::aun_terms::kPeerPort.description);
 
     const auto* subnets = list_of(view, "subnets");
     REQUIRE(subnets != nullptr);
@@ -272,7 +279,8 @@ TEST_CASE("AunUi: a non-map-file peer is read-only with a Save action",
     // seeded with this row's endpoint.
     REQUIRE(item->actions(0).has_editor());
     const auto& save_editor = item->actions(0).editor();
-    CHECK(editor_field(save_editor, "net_stn") == "0.100");
+    CHECK(editor_field(save_editor, "net") == "0");
+    CHECK(editor_field(save_editor, "station") == "100");
     CHECK(editor_field(save_editor, "host") == "10.0.0.1");
     CHECK(editor_field(save_editor, "port") == "40001");
     CHECK(editor_field_note(save_editor, "port").empty());  // no note: not mDNS
@@ -334,7 +342,8 @@ TEST_CASE("AunUi: ADD peer commit writes the map file", "[aun][ui]") {
     AunUiFixture fixture;
     fixture.extension().ui()->handle_event(
         list_event("peers", EditableListEvent::ADD, "", "",
-                   {{"net_stn", "0.254"},
+                   {{"net", "0"},
+                    {"station", "254"},
                     {"host", "192.168.1.10"},
                     {"port", "32768"},
                     {"label", "fs"}}));
@@ -351,7 +360,7 @@ TEST_CASE("AunUi: an invalid ADD peer shows a field-named error Indicator",
     AunUiFixture fixture;
     fixture.extension().ui()->handle_event(
         list_event("peers", EditableListEvent::ADD, "", "",
-                   {{"net_stn", "0.999"}, {"host", "192.168.1.10"},
+                   {{"net", "0"}, {"station", "999"}, {"host", "192.168.1.10"},
                     {"port", "32768"}}));
     CHECK(fixture.extension().map_peers().empty());
     auto view = fixture.view();
@@ -359,7 +368,19 @@ TEST_CASE("AunUi: an invalid ADD peer shows a field-named error Indicator",
     REQUIRE(err != nullptr);
     REQUIRE(err->control_case() == Control::kIndicator);
     CHECK(err->indicator().state() == beebium::Indicator_State_ERROR);  // ERROR is a Windows macro
-    CHECK(err->indicator().text().find("net.stn") != std::string::npos);
+    CHECK(err->indicator().text().find("station") != std::string::npos);
+}
+
+TEST_CASE("AunUi: an ADD peer without a net is on net 0", "[aun][ui]") {
+    AunUiFixture fixture;
+    fixture.extension().ui()->handle_event(
+        list_event("peers", EditableListEvent::ADD, "", "",
+                   {{"net", ""}, {"station", "254"}, {"host", "192.168.1.10"},
+                    {"port", "32768"}}));
+    auto peers = fixture.extension().map_peers();
+    REQUIRE(peers.size() == 1);
+    CHECK(peers[0].net == 0);
+    CHECK(peers[0].stn == 254);
 }
 
 TEST_CASE("AunUi: EDIT peer replaces the endpoint", "[aun][ui]") {
@@ -395,7 +416,8 @@ TEST_CASE("AunUi: the Save action copies a live peer into the map file",
     // committed values (the user may have adjusted them before confirming).
     fixture.extension().ui()->handle_event(
         list_event("peers", EditableListEvent::ACTION, "0.100", "save_to_map",
-                   {{"net_stn", "0.100"},
+                   {{"net", "0"},
+                    {"station", "100"},
                     {"host", "10.0.0.1"},
                     {"port", "40001"},
                     {"label", "kept"}}));

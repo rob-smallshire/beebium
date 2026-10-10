@@ -39,8 +39,9 @@ public:
 private:
     // Validate and apply an Add/Edit peer or subnet submission, recording a
     // field-named error (or clearing it on success) and marking the view dirty.
-    void apply_add_peer(const std::string& net_stn, const std::string& host,
-                        const std::string& port, const std::string& label);
+    void apply_add_peer(const std::string& net, const std::string& station,
+                        const std::string& host, const std::string& port,
+                        const std::string& label);
     void apply_add_subnet(const std::string& net, const std::string& subnet,
                           const std::string& label);
 
