@@ -131,7 +131,7 @@ struct ConfigurationEditor: View {
         HStack(spacing: 0) {
             // Sidebar
             sidebarView
-                .frame(width: 120)
+                .frame(width: Self.sidebarWidth)
 
             Divider()
 
@@ -148,6 +148,10 @@ struct ConfigurationEditor: View {
     }
 
     // MARK: - Sidebar
+
+    /// Width of the section list. Sized to hold the longest label ("Peripherals")
+    /// on one line at the dialog's minimum size, so no row ever wraps.
+    static let sidebarWidth: CGFloat = 150
 
     private var sidebarView: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -169,6 +173,8 @@ struct ConfigurationEditor: View {
                     .frame(width: 16)
                 Text(section.rawValue)
                     .font(.subheadline)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Spacer()
             }
             .padding(.horizontal, 8)
