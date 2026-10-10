@@ -77,7 +77,7 @@ struct ConfigurationEditor: View {
     @State private var selectedSection: ConfigSection = .storage
 
     /// A configuration section the dialog can show.
-    enum ConfigSection: String, Identifiable {
+    enum ConfigSection: String, Identifiable, CaseIterable {
         case storage = "Storage"
         case memory = "Memory"
         case peripherals = "Peripherals"
@@ -86,6 +86,22 @@ struct ConfigurationEditor: View {
         case keyboard = "Keyboard"
 
         var id: String { rawValue }
+
+        /// The live sidebar mode this section corresponds to. The Configurator
+        /// shows its sections in the same order the emulator window's sidebar
+        /// does (SidebarMode's case order), so the two cannot drift; the
+        /// Configurator simply omits the modes it has nothing to configure for
+        /// (Video, Sound).
+        var sidebarMode: SidebarMode {
+            switch self {
+            case .storage: return .storage
+            case .memory: return .memory
+            case .peripherals: return .peripherals
+            case .network: return .network
+            case .processor: return .processor
+            case .keyboard: return .keyboard
+            }
+        }
 
         var icon: String {
             switch self {
@@ -117,7 +133,9 @@ struct ConfigurationEditor: View {
         // the coprocessor sub-group appears only when the model has a tube point.
         if extensionsSchema != nil { sections.append(.processor) }
         if startupSchema != nil { sections.append(.keyboard) }
-        return sections
+        // Show them in the live sidebar's order, so the Configurator and the
+        // emulator window can never present their sections differently.
+        return sections.sorted { $0.sidebarMode.rawValue < $1.sidebarMode.rawValue }
     }
 
     /// The section to show: the selection when it is available, else the first
