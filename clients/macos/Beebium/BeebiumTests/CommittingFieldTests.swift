@@ -154,6 +154,21 @@ final class CommittingFieldTests: XCTestCase {
         XCTAssertFalse(model.invalid)
     }
 
+    func testCommitSettlesFieldSoReturnStopsThere() {
+        // Return commits the field (the View's onSubmit calls commit); afterwards
+        // the field is no longer "edited", so a later focus loss to another control
+        // refreshes rather than committing the same value again. This is what keeps
+        // Return from doing more than committing the field it is in.
+        var model = EditableFieldModel<Int>(display: "10")
+        model.noteFocusGain()
+        model.type("42")
+        XCTAssertTrue(model.isEdited)
+        let committed = model.commit(currentDisplay: "10", parse: decParse, format: decFormat)
+        XCTAssertEqual(committed, 42)
+        XCTAssertFalse(model.isEdited)          // settled: a subsequent resign won't re-commit
+        XCTAssertEqual(model.text, "42")
+    }
+
     func testEditedFieldCommitsOnResign() {
         // When the user did edit, the resign path commits their text.
         var model = EditableFieldModel<Int>(display: "10")

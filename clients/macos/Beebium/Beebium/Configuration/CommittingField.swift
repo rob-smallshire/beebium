@@ -100,6 +100,10 @@ struct EditableFieldModel<Value: Equatable>: Equatable {
         case .accept(let value, let display):
             text = display
             invalid = false
+            // Settle the field: a commit (Return or focus loss) re-baselines the
+            // edited mark, so pressing Return and then clicking another control
+            // does not commit the same value a second time.
+            focusGainText = display
             return value
         case .revertEmpty:
             text = currentDisplay
