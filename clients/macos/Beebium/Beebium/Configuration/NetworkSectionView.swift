@@ -33,6 +33,16 @@ struct NetworkSectionView: View {
 
     private var transportName: String? { draft.econet?.transport?.name }
 
+    /// A transport's friendly name from the catalogue, falling back to its id.
+    private func transportDisplayName(_ name: String) -> String {
+        extensionsSchema?.displayName(forExtension: name) ?? name
+    }
+
+    /// A transport's description from the catalogue, or "" when none.
+    private func transportDescription(_ name: String) -> String {
+        extensionsSchema?.description(forExtension: name) ?? ""
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -122,10 +132,19 @@ struct NetworkSectionView: View {
                 set: setTransport
             )) {
                 Text("None").tag("")
-                ForEach(schema.transports, id: \.self) { Text($0).tag($0) }
+                ForEach(schema.transports, id: \.self) { name in
+                    Text(transportDisplayName(name)).tag(name)
+                }
             }
             .labelsHidden()
             .frame(maxWidth: 220)
+
+            if let name = transportName, !transportDescription(name).isEmpty {
+                Text(transportDescription(name))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let name = transportName {
                 ExtensionParameterForm(

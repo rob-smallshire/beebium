@@ -129,6 +129,22 @@ final class ExtensionCatalogueTests: XCTestCase {
         XCTAssertFalse(owned.availableTo(extensionName: "acorn-65c02-coprocessor"))
     }
 
+    /// An attachment point carries its description, and a point without one
+    /// still decodes (nil description).
+    func testAttachmentPointDescription() throws {
+        let schema = try schema(from: """
+        { "type": "extensions", "attachment_points": [
+          { "id": "user-port", "display_name": "User Port",
+            "description": "A parallel connector for add-ons.",
+            "provided_by": null, "extensions": ["acorn-rtc"] },
+          { "id": "tube", "provided_by": null, "extensions": ["acorn-65c02-coprocessor"] }
+        ] }
+        """)
+        let points = Dictionary(uniqueKeysWithValues: schema.attachmentPoints.map { ($0.id, $0) })
+        XCTAssertEqual(points["user-port"]?.description, "A parallel connector for add-ons.")
+        XCTAssertNil(points["tube"]?.description)
+    }
+
     func testParsesSerialPortPaths() {
         let jsonl = """
         {"path":"/dev/cu.usbserial-1","usb_vendor_id":1027,"usb_product_id":24577,"manufacturer":"FTDI","product":"","serial_number":""}

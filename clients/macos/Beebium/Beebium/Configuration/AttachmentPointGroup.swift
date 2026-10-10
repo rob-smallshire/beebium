@@ -47,6 +47,12 @@ struct AttachmentPointGroup: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
+            if let description = point.description, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // The point's children: each attached instance, indented beneath the
             // node so the whole point reads as a tree.
             if instances.isEmpty {
@@ -91,7 +97,9 @@ struct AttachmentPointGroup: View {
     private var addMenu: some View {
         Menu {
             ForEach(addable, id: \.self) { name in
-                Button(name) { draft = model.draft(adding: name, to: draft) }
+                Button(schema.displayName(forExtension: name)) {
+                    draft = model.draft(adding: name, to: draft)
+                }
             }
         } label: {
             Label("Add", systemImage: "plus")
@@ -103,10 +111,18 @@ struct AttachmentPointGroup: View {
     // MARK: - Instance node (a child of the point)
 
     private func instanceNode(_ instance: ExtensionInstanceModel.Instance) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(instance.name)
-                    .font(.subheadline).fontWeight(.medium)
+        let description = schema.description(forExtension: instance.name)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                // The extension names itself: its friendly name as the title, its
+                // identifier as a quieter subheading beneath.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(schema.displayName(forExtension: instance.name))
+                        .font(.subheadline).fontWeight(.medium)
+                    Text(instance.name)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
                 // On a single-occupancy point, Change swaps the one instance for
                 // another extension the point hosts (a tree replace).
@@ -119,7 +135,13 @@ struct AttachmentPointGroup: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
-                .help("Remove \(instance.name)")
+                .help("Remove \(schema.displayName(forExtension: instance.name))")
+            }
+            if !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             instanceDetail(instance)
         }
@@ -136,7 +158,7 @@ struct AttachmentPointGroup: View {
     private func changeMenu(_ instance: ExtensionInstanceModel.Instance) -> some View {
         Menu {
             ForEach(changeAlternatives(for: instance), id: \.self) { name in
-                Button(name) {
+                Button(schema.displayName(forExtension: name)) {
                     draft = model.draft(settingSoleInstance: name, onPoint: point.id, in: draft)
                 }
             }

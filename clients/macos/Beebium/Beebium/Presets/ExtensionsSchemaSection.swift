@@ -173,6 +173,11 @@ struct AttachmentPoint: Codable, Identifiable {
     /// The extensions that can attach to this point.
     let extensions: [String]
     var displayName: String? = nil
+    /// What this point is, in a user's words (e.g. "The user port, a parallel
+    /// connector ..."). nil when the schema gives none. Optional so a point
+    /// object without it still decodes (the synthesised Decodable would
+    /// otherwise require it).
+    var description: String? = nil
     var minOccupancy: Int? = nil
     /// Maximum extensions on this point; nil means unbounded (or absent).
     var maxOccupancy: Int? = nil
@@ -182,6 +187,7 @@ struct AttachmentPoint: Codable, Identifiable {
         case providedBy = "provided_by"
         case extensions
         case displayName = "display_name"
+        case description
         case minOccupancy = "min_occupancy"
         case maxOccupancy = "max_occupancy"
     }
