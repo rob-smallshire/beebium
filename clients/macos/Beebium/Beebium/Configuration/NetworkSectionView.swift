@@ -151,7 +151,10 @@ struct NetworkSectionView: View {
                     manifest: extensionsSchema?.manifest(forExtension: name)
                         ?? ExtensionManifest(name: name, parameters: []),
                     config: draft.econet?.transport?.parameters ?? [:],
-                    diagnostics: [],   // econet param diagnostics show below, section-level
+                    // A structured list (Peers, Subnet rules) routes its items'
+                    // diagnostics to their own rows and fields; scalar transport
+                    // param diagnostics still show in the section summary below.
+                    diagnostics: diagnostics.withPrefix("/econet/transport/parameters"),
                     serialPortSuggestions: serialPorts,
                     setValue: setTransportParameter)
                     .padding(.leading, 8)
@@ -191,7 +194,15 @@ struct NetworkSectionView: View {
     }
 
     private var transportDiagnostics: [PresetManager.PresetDiagnostic] {
-        diagnostics.withPrefix("/econet/transport")
+        let all = diagnostics.withPrefix("/econet/transport")
+        // A structured list's item diagnostics are shown on their own rows, so
+        // drop them here to avoid saying the same thing twice.
+        guard let name = transportName,
+              let manifest = extensionsSchema?.manifest(forExtension: name) else { return all }
+        let listKeys = manifest.parameters.filter(\.isStructuredList).map(\.key)
+        return all.filter { diagnostic in
+            !listKeys.contains { PresetDiagnosticLocation.listItem(path: diagnostic.path, key: $0) != nil }
+        }
     }
 
     // MARK: - Edits (write through to draft.econet)
