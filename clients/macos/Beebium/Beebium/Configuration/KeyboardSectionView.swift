@@ -112,12 +112,16 @@ struct KeyboardSectionView: View {
             }
 
             HStack(spacing: 16) {
-                ByteField(title: "Hex", byte: currentByte,
-                          format: Self.formatHexByte, parse: Self.parseHexByte,
-                          setByte: setByte)
-                ByteField(title: "Decimal", byte: currentByte,
-                          format: { String($0) }, parse: Self.parseDecByte,
-                          setByte: setByte)
+                HStack(spacing: 6) {
+                    Text("Hex")
+                    CommittingField(value: currentByte, format: Self.formatHexByte,
+                                    parse: Self.parseHexByte, width: 80, onCommit: setByte)
+                }
+                HStack(spacing: 6) {
+                    Text("Decimal")
+                    CommittingField(value: currentByte, format: { String($0) },
+                                    parse: Self.parseDecByte, width: 80, onCommit: setByte)
+                }
             }
             .padding(.top, 4)
         }
@@ -193,45 +197,5 @@ struct KeyboardSectionView: View {
         return behaviour.isEmpty
             ? "reset or BREAK boots; SHIFT+reset or SHIFT+BREAK does not"
             : behaviour
-    }
-}
-
-/// A text field editing the links byte in one radix. Invalid input leaves the
-/// byte unchanged and marks the field, rather than snapping back; a change to the
-/// byte from another projection refreshes the text.
-private struct ByteField: View {
-    let title: String
-    let byte: Int
-    let format: (Int) -> String
-    let parse: (String) -> Int?
-    let setByte: (Int) -> Void
-
-    @State private var text: String = ""
-    @State private var invalid = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-            TextField("", text: $text)
-                .frame(maxWidth: 80)
-                .foregroundColor(invalid ? .red : .primary)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(invalid ? Color.red : Color.clear, lineWidth: 1))
-                .onChange(of: text) { newValue in
-                    if let value = parse(newValue) {
-                        invalid = false
-                        if value != byte { setByte(value) }
-                    } else {
-                        invalid = true
-                    }
-                }
-                .onChange(of: byte) { newValue in
-                    // Follow a change made through another projection.
-                    text = format(newValue)
-                    invalid = false
-                }
-        }
-        .onAppear { text = format(byte) }
     }
 }

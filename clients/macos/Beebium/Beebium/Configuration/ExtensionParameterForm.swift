@@ -169,20 +169,26 @@ struct ExtensionParameterForm: View {
             if parameter.choicesFrom == "serial-ports" {
                 return AnyView(serialPortCombo(parameter))
             }
-            return AnyView(TextField(parameter.defaultValue, text: Binding(
-                get: { stringValue(parameter.key) },
-                set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
-                .frame(maxWidth: 260))
+            return AnyView(CommittingField(
+                value: stringValue(parameter.key),
+                format: { $0 },
+                parse: { $0 },
+                placeholder: parameter.defaultValue,
+                width: 260,
+                onCommit: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
         }
     }
 
     /// A free-text field with a menu of host serial ports to fill it in.
     private func serialPortCombo(_ parameter: ExtensionParameter) -> some View {
         HStack(spacing: 6) {
-            TextField(parameter.defaultValue, text: Binding(
-                get: { stringValue(parameter.key) },
-                set: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
-                .frame(maxWidth: 220)
+            CommittingField(
+                value: stringValue(parameter.key),
+                format: { $0 },
+                parse: { $0 },
+                placeholder: parameter.defaultValue,
+                width: 220,
+                onCommit: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) })
             if !serialPortSuggestions.isEmpty {
                 Menu {
                     ForEach(serialPortSuggestions, id: \.self) { path in
@@ -278,16 +284,31 @@ struct ExtensionParameterForm: View {
 
     private func integerField(_ parameter: ExtensionParameter) -> some View {
         HStack(spacing: 6) {
-            TextField(parameter.defaultValue, text: Binding(
-                get: { stringValue(parameter.key) },
-                set: { setValue(parameter.key, intJSON(from: $0, parameter: parameter)) }))
-                .frame(maxWidth: 120)
+            CommittingField(
+                value: stringValue(parameter.key),
+                format: { $0 },
+                parse: { Self.parseIntegerEntry($0, parameter: parameter) },
+                placeholder: parameter.defaultValue,
+                width: 120,
+                onCommit: { setValue(parameter.key, $0.isEmpty ? nil : .int(Int($0) ?? 0)) })
             if let min = parameter.minimum, let max = parameter.maximum {
                 Text("(\(min)-\(max))")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
         }
+    }
+
+    /// Parse an integer field entry to its canonical string, clamped to the
+    /// parameter's bounds: "" for a blank (which clears the key, as before), nil
+    /// for a non-numeric entry (a marked revert), else the clamped number.
+    static func parseIntegerEntry(_ text: String, parameter: ExtensionParameter) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return "" }
+        guard var value = Int(trimmed) else { return nil }
+        if let lower = parameter.minimum { value = Swift.max(value, lower) }
+        if let upper = parameter.maximum { value = Swift.min(value, upper) }
+        return String(value)
     }
 
     private func filepathControl(_ parameter: ExtensionParameter) -> some View {
@@ -401,18 +422,6 @@ struct ExtensionParameterForm: View {
     private func arrayItems(_ key: String) -> [JSONValue] {
         if case .array(let items)? = config[key] { return items }
         return []
-    }
-
-    /// An integer JSONValue from a field string, clamped to the parameter's
-    /// bounds; a non-number clears the key so the default applies rather than
-    /// writing an invalid value.
-    private func intJSON(from text: String, parameter: ExtensionParameter) -> JSONValue? {
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return nil }
-        guard var value = Int(trimmed) else { return nil }
-        if let lower = parameter.minimum { value = Swift.max(value, lower) }
-        if let upper = parameter.maximum { value = Swift.min(value, upper) }
-        return .int(value)
     }
 
     private func browse(_ key: String) {
@@ -538,10 +547,13 @@ private struct StringListEditor: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(values.enumerated()), id: \.offset) { index, value in
                 HStack(spacing: 6) {
-                    TextField(placeholder, text: Binding(
-                        get: { value },
-                        set: { var v = values; v[index] = $0; setValues(v) }))
-                        .frame(maxWidth: 260)
+                    CommittingField(
+                        value: value,
+                        format: { $0 },
+                        parse: { $0 },
+                        placeholder: placeholder,
+                        width: 260,
+                        onCommit: { var v = values; v[index] = $0; setValues(v) })
                     Button {
                         var v = values; v.remove(at: index); setValues(v)
                     } label: { Image(systemName: "minus.circle") }

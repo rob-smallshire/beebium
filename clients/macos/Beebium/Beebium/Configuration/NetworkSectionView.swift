@@ -97,10 +97,9 @@ struct NetworkSectionView: View {
         switch mode {
         case .number:
             return AnyView(HStack(spacing: 6) {
-                TextField("\(schema.station.min)", text: Binding(
-                    get: { numberText },
-                    set: { setStation(.number(clampStation($0))) }))
-                    .frame(maxWidth: 100)
+                CommittingField(value: currentNumberOrDefault, format: { String($0) },
+                                parse: parseStation, width: 100,
+                                onCommit: { setStation(.number($0)) })
                 Text("(\(schema.station.min)-\(schema.station.max))")
                     .font(.caption2).foregroundColor(.secondary)
             })
@@ -110,13 +109,11 @@ struct NetworkSectionView: View {
         case .range:
             return AnyView(HStack(spacing: 6) {
                 Text("from")
-                TextField("\(schema.station.autoDefaultLow)", text: Binding(
-                    get: { String(rangeLow) }, set: { setRange(low: clampStation($0), high: rangeHigh) }))
-                    .frame(maxWidth: 70)
+                CommittingField(value: rangeLow, format: { String($0) }, parse: parseStation,
+                                width: 70, onCommit: { setRange(low: $0, high: rangeHigh) })
                 Text("to")
-                TextField("\(schema.station.autoDefaultHigh)", text: Binding(
-                    get: { String(rangeHigh) }, set: { setRange(low: rangeLow, high: clampStation($0)) }))
-                    .frame(maxWidth: 70)
+                CommittingField(value: rangeHigh, format: { String($0) }, parse: parseStation,
+                                width: 70, onCommit: { setRange(low: rangeLow, high: $0) })
             })
         }
     }
@@ -174,11 +171,6 @@ struct NetworkSectionView: View {
         case .auto:   return .auto
         case .autoRange: return .range
         }
-    }
-
-    private var numberText: String {
-        if case .number(let n) = station { return String(n) }
-        return ""
     }
 
     private var rangeLow: Int { rangeComponents.0 }
@@ -242,8 +234,13 @@ struct NetworkSectionView: View {
         setStation(.autoRange(low, high))
     }
 
-    private func clampStation(_ text: String) -> Int {
-        let value = Int(text.trimmingCharacters(in: .whitespaces)) ?? schema.station.min
+    /// Parse a typed station number, clamping an in-range integer to the schema's
+    /// bounds. Returns nil for a blank (a quiet revert) or non-numeric entry (a
+    /// marked revert), so the field keeps its committed value rather than
+    /// snapping to a partial number on each keystroke.
+    private func parseStation(_ text: String) -> Int? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, let value = Int(t) else { return nil }
         return Swift.min(Swift.max(value, schema.station.min), schema.station.max)
     }
 

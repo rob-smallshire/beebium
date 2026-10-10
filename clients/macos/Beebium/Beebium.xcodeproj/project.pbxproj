@@ -37,6 +37,7 @@
 		14E16012DD8EC1046039A0FF /* SelectionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC000E57DF01A727A71A82C0 /* SelectionOverlayView.swift */; };
 		14F3A975FA057C10313A9E3E /* SystemPowerMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E24C908F696C80EFC7B016E /* SystemPowerMonitor.swift */; };
 		150640ADACCA6EFA9A60A624 /* VideoSettingsCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADC7C5C44D2AAF8D8920E36 /* VideoSettingsCache.swift */; };
+		1592F3698ED208D9ED1D284C /* CommittingField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D999E37E519ADA25BD948D0 /* CommittingField.swift */; };
 		15D5EAC15AF92B0E4028BC71 /* EconetSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B1DA3FC38049588E00A6C7 /* EconetSchemaSection.swift */; };
 		15F75486C8BB6F0A605ED0C3 /* KeyboardMappingResolveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D773CF34288E45A4CFCCF5 /* KeyboardMappingResolveTests.swift */; };
 		162D791FD0BE2D5F6E75CB72 /* FloppyDriveConfigView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664E24EC940C75F69FE7E1E4 /* FloppyDriveConfigView.swift */; };
@@ -217,6 +218,7 @@
 		DD7F6150B025820774A44746 /* KeyboardMTKView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B98CF59648104556C3677412 /* KeyboardMTKView.swift */; };
 		DE83DD7DC63111D2D1AC48CF /* ColorExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C346B94C85DFDC5E4D867DA /* ColorExtensions.swift */; };
 		E0AAE22F2367681330BC0EC2 /* ConnectDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42858282A95435EEDFA1413F /* ConnectDialog.swift */; };
+		E0FA0966EB7097E8B3EF885D /* CommittingFieldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */; };
 		E1FD68EC890C314200FC59EC /* TransientMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F66DA1B5AF0659B892650E5 /* TransientMessageTests.swift */; };
 		E275D2F57760944D93A67635 /* SystemClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEB0459103AA8B2261579315 /* SystemClient.swift */; };
 		E2C3C9AB563A0A8406735C73 /* BBCModifierStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DFE84A58CCC1A258C1DA04E /* BBCModifierStateTests.swift */; };
@@ -374,6 +376,7 @@
 		7D174CDFCDCA4A6503D8EC7F /* PresetDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDiagnosticsView.swift; sourceTree = "<group>"; };
 		7D2677DED8933B5E1A7D11D4 /* ModifierKeyStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModifierKeyStateTests.swift; sourceTree = "<group>"; };
 		7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = peripheral_extension.grpc.swift; sourceTree = "<group>"; };
+		7D999E37E519ADA25BD948D0 /* CommittingField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommittingField.swift; sourceTree = "<group>"; };
 		7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinesSettingsPane.swift; sourceTree = "<group>"; };
 		7E101DD75E1EF0B125CB46B1 /* VideoSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsPane.swift; sourceTree = "<group>"; };
 		7FCCA7AD0844DCC1D120D82F /* ExtensionGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionGroupTests.swift; sourceTree = "<group>"; };
@@ -455,6 +458,7 @@
 		C152853E7E4735D1E7994275 /* BBCKeyCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BBCKeyCache.swift; sourceTree = "<group>"; };
 		C1E96BF7B20865AFD600D53F /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
 		C432ADD4B509CA5A4D3462C0 /* FocusedDialogKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusedDialogKeys.swift; sourceTree = "<group>"; };
+		C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommittingFieldTests.swift; sourceTree = "<group>"; };
 		C511516BDB7D578CF5D63867 /* BiquadFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilter.swift; sourceTree = "<group>"; };
 		C793157DDB8EFB24A11C7D63 /* SidewaysClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidewaysClient.swift; sourceTree = "<group>"; };
 		C9A1A70DB6662E96A6210970 /* KeyboardMappings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KeyboardMappings; path = Beebium/Resources/KeyboardMappings; sourceTree = SOURCE_ROOT; };
@@ -652,6 +656,7 @@
 			isa = PBXGroup;
 			children = (
 				3B2CFD235F740189691B8B05 /* AttachmentPointGroup.swift */,
+				7D999E37E519ADA25BD948D0 /* CommittingField.swift */,
 				FE9EEE0A8B69EEE0DCB2C385 /* ConfigurationEditor.swift */,
 				DF361B039A144431294C9141 /* ExtensionInstanceModel.swift */,
 				3DC9C04EC6C010373F7AF591 /* ExtensionParameterForm.swift */,
@@ -826,6 +831,7 @@
 				BE6F75B43B9824C309EEA24D /* BiquadFilterTests.swift */,
 				31CA435023B19D31740E399C /* ColorExtensionsTests.swift */,
 				BC8890240329736D55E651ED /* ComboBoxRepresentableTests.swift */,
+				C46D7348FD4254C5DB38C76D /* CommittingFieldTests.swift */,
 				D0D8B92DB46302357CC513AA /* ConfigurationEditorOrderTests.swift */,
 				F0755375EDEB34B453D3E297 /* DebugDisplayStyleTests.swift */,
 				5E40B3D9C4F674F3FBB20375 /* DeepLinkTests.swift */,
@@ -1017,6 +1023,7 @@
 				9E04292AEA136B391E1E68CE /* BiquadFilterTests.swift in Sources */,
 				BCF37D406BB524784B611B47 /* ColorExtensionsTests.swift in Sources */,
 				524A3CDC4C24461BC89C6886 /* ComboBoxRepresentableTests.swift in Sources */,
+				E0FA0966EB7097E8B3EF885D /* CommittingFieldTests.swift in Sources */,
 				E403C3B64C6DF471BEEDA99A /* ConfigurationEditorOrderTests.swift in Sources */,
 				7265A179DAA4A0794D12FCE8 /* DebugDisplayStyleTests.swift in Sources */,
 				7D8F353BFABFC3D219837373 /* DeepLinkTests.swift in Sources */,
@@ -1097,6 +1104,7 @@
 				5A4F6F3B51DDC576BBD3D142 /* BeebiumTouchBarManager.swift in Sources */,
 				4CF04CE9A5BFD96B5E1E4590 /* BiquadFilter.swift in Sources */,
 				DE83DD7DC63111D2D1AC48CF /* ColorExtensions.swift in Sources */,
+				1592F3698ED208D9ED1D284C /* CommittingField.swift in Sources */,
 				C6AED867FD53B569CAD5A945 /* ConfigurationEditor.swift in Sources */,
 				3B3122E1626E09ABEAC4315B /* ConfigurationSchema.swift in Sources */,
 				E0AAE22F2367681330BC0EC2 /* ConnectDialog.swift in Sources */,
