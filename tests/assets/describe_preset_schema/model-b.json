@@ -25,9 +25,68 @@
       "links": {
         "min": 0,
         "max": 255,
+        "default": 255,
         "excludes": [
           "screen_mode",
           "auto_boot"
+        ],
+        "link_made_when": "clear",
+        "screen_mode_bits": [
+          0,
+          1,
+          2
+        ],
+        "auto_boot_bit": 3,
+        "auto_boot_true_when": "clear",
+        "bits": [
+          {
+            "bit": 7,
+            "link": "Link 1",
+            "label": "Filing system",
+            "description": "The DNFS ROM starts in the network filing system when this link is made and in the disc filing system when it is open; the MOS does not read it, and other ROMs may."
+          },
+          {
+            "bit": 6,
+            "link": "Link 2",
+            "label": "Not used",
+            "description": "The MOS does not use this link; it is reserved for applications, which may read it."
+          },
+          {
+            "bit": 5,
+            "link": "Link 3",
+            "label": "Disc timing (link 3)",
+            "description": "With link 4, sets the disc drive step and settle times; the times depend on the disc controller and the filing system ROM fitted."
+          },
+          {
+            "bit": 4,
+            "link": "Link 4",
+            "label": "Disc timing (link 4)",
+            "description": "With link 3, sets the disc drive step and settle times; the times depend on the disc controller and the filing system ROM fitted."
+          },
+          {
+            "bit": 3,
+            "link": "Link 5",
+            "label": "SHIFT+BREAK action",
+            "description": "When this link is made, BREAK alone boots the disc and SHIFT+BREAK does not; when it is open, SHIFT+BREAK boots as usual."
+          },
+          {
+            "bit": 2,
+            "link": "Link 6",
+            "label": "Screen mode bit 2",
+            "description": "Bit 2 of the screen mode the MOS selects at power-up and after BREAK."
+          },
+          {
+            "bit": 1,
+            "link": "Link 7",
+            "label": "Screen mode bit 1",
+            "description": "Bit 1 of the screen mode the MOS selects at power-up and after BREAK."
+          },
+          {
+            "bit": 0,
+            "link": "Link 8",
+            "label": "Screen mode bit 0",
+            "description": "Bit 0 of the screen mode the MOS selects at power-up and after BREAK."
+          }
         ]
       },
       "description": "The startup keyboard links: screen_mode and auto_boot, or the whole links byte"

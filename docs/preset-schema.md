@@ -147,6 +147,18 @@ These are the preset forms of `--screen-mode`, `--auto-boot` and `--links`. A
 top-level `auto_boot` is read as `startup.auto_boot` with a warning; giving both
 a top-level `auto_boot` and a `startup` that sets the links is an error.
 
+`links` is the byte the machine reads: the eight start-up option links on the
+keyboard circuit board (SW2 in the Advanced User Guide's Appendix J), Link 1
+being bit 7 and Link 8 bit 0, a set bit an open link and a clear bit a made
+one. Bits 0-2 are the screen mode; bit 3 clear reverses SHIFT-BREAK
+(`auto_boot`); bits 4 and 5 (links 4 and 3) set the disc drive timings, which
+depend on the disc controller and filing system ROM; bit 6 is unused by the
+MOS; bit 7 clear makes DNFS start in NFS rather than DFS. `screen_mode` and
+`auto_boot` write their bits into 255, so `{"screen_mode": 3, "auto_boot":
+true}` is the byte 243 (`&F3`); a byte converts back to them only when bits
+4-7 are all set. `resolve-preset` writes whichever form the preset uses and
+never converts one to the other.
+
 ### mos_image_uri
 
 The MOS ROM, a name or path as for `--mos`. Default: the model's MOS
@@ -431,7 +443,7 @@ There is one section per preset key, its `type` being the key:
 | `type` | Contents |
 |--------|----------|
 | `speed` | `default`, and the `unlimited` keyword |
-| `startup` | `screen_mode` and `links` with `min`, `max` (and `default`), `auto_boot` with `default`, and `links.excludes` |
+| `startup` | `screen_mode` and `links` with `min`, `max` and `default`, `auto_boot` with `default`, and `links.excludes`. `links` also lays out the byte: `link_made_when` (`clear`), `screen_mode_bits` (least significant first), `auto_boot_bit` with `auto_boot_true_when` (`clear`), and `bits`, one per bit from 7 down, each with `bit`, `link` (`Link 1` to `Link 8`), `label` and a one-sentence `description` |
 | `mos_image_uri` | `default`: the model's MOS |
 | `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives` with their geometry and image types |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |

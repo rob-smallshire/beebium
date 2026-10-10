@@ -3393,8 +3393,7 @@ public:
             {"type", "startup"},
             {"screen_mode", ojson{{"min", 0}, {"max", 7}, {"default", 7}}},
             {"auto_boot", ojson{{"default", false}}},
-            {"links", ojson{{"min", 0}, {"max", 255},
-                            {"excludes", ojson::array({"screen_mode", "auto_boot"})}}},
+            {"links", startup_links_schema()},
             {"description", "The startup keyboard links: screen_mode and auto_boot, or the "
                             "whole links byte"}};
 
@@ -3576,6 +3575,61 @@ public:
     }
 
 private:
+    // The keyboard links byte as a preset writes it, which is the byte the
+    // machine reads: the eight start-up option links on the keyboard circuit
+    // board (SW2, "START UP OPTIONS", in the Advanced User Guide's Appendix J),
+    // Link 1 being bit 7 and Link 8 bit 0. A set bit is an open link, a clear
+    // bit a made one. screen_mode and auto_boot write bits 0-2 and 3 of
+    // `default`; the bit meanings are OSBYTE &FF's.
+    static nlohmann::ordered_json startup_links_schema() {
+        using ojson = nlohmann::ordered_json;
+        struct LinkBit {
+            int bit;
+            const char* label;
+            const char* description;
+        };
+        static constexpr LinkBit kBits[] = {
+            {7, "Filing system",
+             "The DNFS ROM starts in the network filing system when this link is made "
+             "and in the disc filing system when it is open; the MOS does not read it, "
+             "and other ROMs may."},
+            {6, "Not used",
+             "The MOS does not use this link; it is reserved for applications, which "
+             "may read it."},
+            {5, "Disc timing (link 3)",
+             "With link 4, sets the disc drive step and settle times; the times depend "
+             "on the disc controller and the filing system ROM fitted."},
+            {4, "Disc timing (link 4)",
+             "With link 3, sets the disc drive step and settle times; the times depend "
+             "on the disc controller and the filing system ROM fitted."},
+            {3, "SHIFT+BREAK action",
+             "When this link is made, BREAK alone boots the disc and SHIFT+BREAK does "
+             "not; when it is open, SHIFT+BREAK boots as usual."},
+            {2, "Screen mode bit 2",
+             "Bit 2 of the screen mode the MOS selects at power-up and after BREAK."},
+            {1, "Screen mode bit 1",
+             "Bit 1 of the screen mode the MOS selects at power-up and after BREAK."},
+            {0, "Screen mode bit 0",
+             "Bit 0 of the screen mode the MOS selects at power-up and after BREAK."},
+        };
+        ojson bits = ojson::array();
+        for (const auto& b : kBits) {
+            bits.push_back(ojson{{"bit", b.bit},
+                                 {"link", "Link " + std::to_string(8 - b.bit)},
+                                 {"label", b.label},
+                                 {"description", b.description}});
+        }
+        return ojson{{"min", 0},
+                     {"max", 255},
+                     {"default", 0xFF},
+                     {"excludes", ojson::array({"screen_mode", "auto_boot"})},
+                     {"link_made_when", "clear"},
+                     {"screen_mode_bits", ojson::array({0, 1, 2})},
+                     {"auto_boot_bit", 3},
+                     {"auto_boot_true_when", "clear"},
+                     {"bits", bits}};
+    }
+
     // Whether a preset key has a section here: the machine settings do, the
     // preset's own descriptive keys do not.
     static bool describes(PresetKey key) {

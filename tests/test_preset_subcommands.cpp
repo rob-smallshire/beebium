@@ -16,6 +16,7 @@
 // end-to-end behavior of the preset management workflow.
 
 #include <catch2/catch_test_macros.hpp>
+#include <beebium/KeyboardMatrix.hpp>
 #include <beebium/PlatformUtils.hpp>
 #include <beebium/server/PresetLoader.hpp>
 #include "stb_image.h"
@@ -1748,6 +1749,56 @@ TEST_CASE("describe-preset-schema: each attachment point says what it is",
     for (const auto& point : extensions.at("attachment_points")) {
         INFO(point.at("id"));
         CHECK(is_a_sentence(point.at("description").get<std::string>()));
+    }
+}
+
+TEST_CASE("describe-preset-schema: the links byte's eight bits, once each",
+          "[integration][preset][describe-preset-schema][links]") {
+    auto links = schema_section(describe_schema(EXECUTABLE), "startup").at("links");
+    const auto& bits = links.at("bits");
+    REQUIRE(bits.size() == 8);
+    std::set<int> seen;
+    for (const auto& entry : bits) {
+        const int bit = entry.at("bit").get<int>();
+        INFO(bit);
+        CHECK(seen.insert(bit).second);
+        CHECK(bit >= 0);
+        CHECK(bit <= 7);
+        // The Advanced User Guide numbers the links from bit 7 down.
+        CHECK(entry.at("link") == "Link " + std::to_string(8 - bit));
+        CHECK_FALSE(entry.at("label").get<std::string>().empty());
+        CHECK(is_a_sentence(entry.at("description").get<std::string>()));
+    }
+}
+
+TEST_CASE("describe-preset-schema: the links layout converts as the machine does",
+          "[integration][preset][describe-preset-schema][links]") {
+    auto links = schema_section(describe_schema(EXECUTABLE), "startup").at("links");
+    CHECK(links.at("link_made_when") == "clear");
+    const auto mode_bits = links.at("screen_mode_bits").get<std::vector<int>>();
+    const int boot_bit = links.at("auto_boot_bit").get<int>();
+    const bool boot_when_clear = links.at("auto_boot_true_when") == "clear";
+
+    // The byte screen_mode and auto_boot give, built from the layout alone.
+    auto from_layout = [&](int mode, bool auto_boot) {
+        int byte = links.at("default").get<int>();
+        for (std::size_t i = 0; i < mode_bits.size(); ++i) {
+            const int mask = 1 << mode_bits[i];
+            byte = ((mode >> i) & 1) ? (byte | mask) : (byte & ~mask);
+        }
+        const bool set = auto_boot != boot_when_clear;
+        byte = set ? (byte | (1 << boot_bit)) : (byte & ~(1 << boot_bit));
+        return byte;
+    };
+
+    for (int mode = 0; mode <= 7; ++mode) {
+        for (bool auto_boot : {false, true}) {
+            INFO("mode " << mode << " auto_boot " << auto_boot);
+            beebium::KeyboardMatrix matrix;
+            matrix.set_screen_mode(static_cast<uint8_t>(mode));
+            matrix.set_auto_boot(auto_boot);
+            CHECK(from_layout(mode, auto_boot) == matrix.startup_options());
+        }
     }
 }
 
