@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		010DBCB8FE2D1DAA06D514CC /* BeebiumSvgGlyphRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21F63FE0D5862D2315B5AFDC /* BeebiumSvgGlyphRenderer.swift */; };
 		01523CB60DD7D1A75D412AD1 /* SpeedPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */; };
+		01AD3C89868CD6A91157EFE3 /* ExtensionGroupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FCCA7AD0844DCC1D120D82F /* ExtensionGroupTests.swift */; };
 		01DF7C088640796D6FC529C8 /* DiscFormatListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23C6BA550C62352ED7B650E /* DiscFormatListTests.swift */; };
 		02202BCE716C487C5A3D36FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3FE1A20DF4E1D3707C33DE /* SettingsView.swift */; };
 		02956037B5EAA66AA17BCBEB /* SidewaysSchemaSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9483385D371D21EC9020EC06 /* SidewaysSchemaSection.swift */; };
@@ -370,6 +371,7 @@
 		7D34EDE9DFD8D58084F986AB /* peripheral_extension.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = peripheral_extension.grpc.swift; sourceTree = "<group>"; };
 		7DFCC16649DA95B51C6E1FDB /* MachinesSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachinesSettingsPane.swift; sourceTree = "<group>"; };
 		7E101DD75E1EF0B125CB46B1 /* VideoSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSettingsPane.swift; sourceTree = "<group>"; };
+		7FCCA7AD0844DCC1D120D82F /* ExtensionGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionGroupTests.swift; sourceTree = "<group>"; };
 		8061A3DD36CCF7976C8F41E1 /* PresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetTests.swift; sourceTree = "<group>"; };
 		80EC3C1B36F0B3BFDEEDD1A1 /* DiscImageInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageInfo.swift; sourceTree = "<group>"; };
 		814DF1809BF5672D9E8FAFDB /* DiscImageDropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscImageDropTests.swift; sourceTree = "<group>"; };
@@ -827,6 +829,7 @@
 				F33A5D132AFA4CD909D300ED /* EconetStationTests.swift */,
 				3199BC9BC5BDBE72ADCAF7B1 /* EditableListViewModelTests.swift */,
 				B570706C1BCFCAE564221FBC /* EventLoopScalingMeasurement.swift */,
+				7FCCA7AD0844DCC1D120D82F /* ExtensionGroupTests.swift */,
 				F089797F79A7218E079F7DB1 /* ExtensionInstanceModelTests.swift */,
 				1E743CB023485025EA33E39A /* ExtensionManifestTests.swift */,
 				F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */,
@@ -1015,6 +1018,7 @@
 				62D80EBD433321BA40D7E26D /* EconetStationTests.swift in Sources */,
 				630B9079508DE55EB905DC5D /* EditableListViewModelTests.swift in Sources */,
 				FBCF1BC08E2089AED97EC3F1 /* EventLoopScalingMeasurement.swift in Sources */,
+				01AD3C89868CD6A91157EFE3 /* ExtensionGroupTests.swift in Sources */,
 				126DBA1313A772F81CD27E02 /* ExtensionInstanceModelTests.swift in Sources */,
 				F5336AD96DB468018D7B5AE9 /* ExtensionManifestTests.swift in Sources */,
 				95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */,

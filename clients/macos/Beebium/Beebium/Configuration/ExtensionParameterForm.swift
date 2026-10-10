@@ -45,9 +45,50 @@ struct ExtensionParameterForm: View {
                 .foregroundColor(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(manifest.parameters) { parameter in
-                    parameterRow(parameter)
+                ForEach(renderItems) { item in
+                    switch item {
+                    case .parameter(let parameter):
+                        parameterRow(parameter)
+                    case .group(let group):
+                        GroupControl(group: group, members: members(of: group),
+                                     config: config, diagnostics: diagnostics,
+                                     setValue: setValue, control: { control($0) })
+                    }
                 }
+            }
+        }
+    }
+
+    /// What to render, in declared order: each ungrouped parameter as its own
+    /// row, and each group once, at the position of its first member. A group's
+    /// other members are folded into the group control, not shown as rows.
+    private var renderItems: [RenderItem] {
+        var items: [RenderItem] = []
+        var placed: Set<String> = []
+        for parameter in manifest.parameters {
+            if let group = manifest.group(forParameter: parameter.key) {
+                if placed.insert(group.key).inserted {
+                    items.append(.group(group))
+                }
+            } else {
+                items.append(.parameter(parameter))
+            }
+        }
+        return items
+    }
+
+    /// The member parameters of a group, in the group's declared option order.
+    private func members(of group: ExtensionGroup) -> [ExtensionParameter] {
+        group.parameters.compactMap { key in manifest.parameters.first { $0.key == key } }
+    }
+
+    private enum RenderItem: Identifiable {
+        case parameter(ExtensionParameter)
+        case group(ExtensionGroup)
+        var id: String {
+            switch self {
+            case .parameter(let p): return "param:\(p.key)"
+            case .group(let g): return "group:\(g.key)"
             }
         }
     }
@@ -146,7 +187,15 @@ struct ExtensionParameterForm: View {
 
     /// Whether a config key carries an explicitly-given, non-empty value.
     private func hasValue(_ key: String) -> Bool {
-        switch config[key] {
+        Self.valueIsPresent(config[key])
+    }
+
+    // MARK: - Group selection (pure, testable)
+
+    /// Whether a JSON value counts as explicitly given (the rule the exclusion
+    /// and group-selection logic share).
+    static func valueIsPresent(_ value: JSONValue?) -> Bool {
+        switch value {
         case .string(let s): return !s.isEmpty
         case .array(let a):  return !a.isEmpty
         case .bool(let b):   return b
@@ -156,18 +205,52 @@ struct ExtensionParameterForm: View {
         }
     }
 
+    /// The member key of `group` that currently has a value in `config`, or nil
+    /// when none does (the "none" / host-time state). Members are mutually
+    /// exclusive, so at most one has a value.
+    static func selectedMemberKey(group: ExtensionGroup, config: [String: JSONValue]) -> String? {
+        group.parameters.first { valueIsPresent(config[$0]) }
+    }
+
+    /// The option selected when the group control first appears: the member with
+    /// a value, else the "none" option when the group has one, else the first
+    /// member (a group with no "none" state always shows one option chosen).
+    static func initialSelection(group: ExtensionGroup, config: [String: JSONValue]) -> String {
+        if let key = selectedMemberKey(group: group, config: config) { return key }
+        if group.none != nil { return "" }
+        return group.parameters.first ?? ""
+    }
+
+    /// The members to clear from the draft when `picked` becomes the selection:
+    /// every other member that currently has a value. Picking "none" (picked
+    /// == "") clears them all.
+    static func keysToClear(group: ExtensionGroup, picking picked: String,
+                            config: [String: JSONValue]) -> [String] {
+        group.parameters.filter { $0 != picked && valueIsPresent(config[$0]) }
+    }
+
     private func choicePicker(_ parameter: ExtensionParameter) -> some View {
         let current = stringValue(parameter.key).isEmpty ? parameter.defaultValue : stringValue(parameter.key)
-        return Picker("", selection: Binding(
-            get: { current },
-            set: { setValue(parameter.key, .string($0)) }
-        )) {
-            ForEach(parameter.choices) { choice in
-                Text(choice.label).tag(choice.value)
+        let selectedDescription = parameter.choices.first { $0.value == current }?.description ?? ""
+        return VStack(alignment: .leading, spacing: 2) {
+            Picker("", selection: Binding(
+                get: { current },
+                set: { setValue(parameter.key, .string($0)) }
+            )) {
+                ForEach(parameter.choices) { choice in
+                    Text(choice.label).tag(choice.value)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 260)
+            // The selected choice's own explanation (e.g. a register layout's year
+            // range and Y2K note), as the storage FDC picker shows its device.
+            if !selectedDescription.isEmpty {
+                Text(selectedDescription)
+                    .font(.caption2).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .labelsHidden()
-        .frame(maxWidth: 260)
     }
 
     private func integerField(_ parameter: ExtensionParameter) -> some View {
@@ -318,6 +401,99 @@ struct ExtensionParameterForm: View {
             Task { @MainActor in accept(url) }
         }
         return true
+    }
+}
+
+/// One group of mutually-exclusive parameters, shown as a single choice: the
+/// "none" option (when the group has one) then one option per member, in the
+/// group's declared order. Picking an option reveals that member's field and
+/// clears the others in the draft; picking "none" clears them all and writes
+/// nothing (the host-time "exact record" state).
+///
+/// The selection is kept locally as well as derived from the draft, so a member
+/// just picked but not yet given a value keeps its field visible instead of
+/// snapping back to "none". An external change to the draft (a preset reload
+/// that sets a member) still moves the selection to follow it.
+private struct GroupControl: View {
+    let group: ExtensionGroup
+    let members: [ExtensionParameter]
+    let config: [String: JSONValue]
+    let diagnostics: [PresetManager.PresetDiagnostic]
+    let setValue: (String, JSONValue?) -> Void
+    let control: (ExtensionParameter) -> AnyView
+
+    @State private var selection: String
+
+    init(group: ExtensionGroup, members: [ExtensionParameter], config: [String: JSONValue],
+         diagnostics: [PresetManager.PresetDiagnostic],
+         setValue: @escaping (String, JSONValue?) -> Void,
+         control: @escaping (ExtensionParameter) -> AnyView) {
+        self.group = group
+        self.members = members
+        self.config = config
+        self.diagnostics = diagnostics
+        self.setValue = setValue
+        self.control = control
+        _selection = State(initialValue: ExtensionParameterForm.initialSelection(group: group, config: config))
+    }
+
+    /// The selection the draft alone implies: the member with a value, else the
+    /// "none" option (or the first member when the group has no "none").
+    private var derivedSelection: String {
+        ExtensionParameterForm.selectedMemberKey(group: group, config: config)
+            ?? (group.none != nil ? "" : (group.parameters.first ?? ""))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if !group.label.isEmpty {
+                Text(group.label).font(.subheadline)
+            }
+            Picker("", selection: Binding(get: { selection }, set: { pick($0) })) {
+                if let none = group.none {
+                    Text(none.label.isEmpty ? "None" : none.label).tag("")
+                }
+                ForEach(members) { member in
+                    Text(member.displayLabel).tag(member.key)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 260)
+
+            if !group.description.isEmpty {
+                caption(group.description)
+            }
+
+            if selection.isEmpty {
+                if let none = group.none, !none.description.isEmpty {
+                    caption(none.description)
+                }
+            } else if let member = members.first(where: { $0.key == selection }) {
+                control(member)
+                if !member.description.isEmpty {
+                    caption(member.description)
+                }
+                DiagnosticLabels(diagnostics: diagnostics.forConfigKey(member.key))
+            }
+        }
+        .onChange(of: derivedSelection) { newValue in
+            // Follow the draft when a member is set elsewhere (e.g. a preset
+            // reload); keep a transient pick of an as-yet-empty member.
+            if !newValue.isEmpty { selection = newValue }
+        }
+    }
+
+    private func pick(_ key: String) {
+        selection = key
+        for member in ExtensionParameterForm.keysToClear(group: group, picking: key, config: config) {
+            setValue(member, nil)
+        }
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2).foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

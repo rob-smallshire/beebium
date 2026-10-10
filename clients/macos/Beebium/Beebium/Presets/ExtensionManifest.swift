@@ -20,12 +20,33 @@ import Foundation
 /// driven by these, so it adapts to any extension without the client hard-coding
 /// its keys.
 struct ExtensionParameter: Codable, Identifiable, Equatable {
-    /// A permitted value for a choice parameter: the value written back and the
-    /// label shown.
+    /// A permitted value for a choice parameter: the value written back, the
+    /// label shown, and a description explaining the choice (shown beneath the
+    /// picker for the selected choice, as the storage FDC does).
     struct Choice: Codable, Equatable, Identifiable {
         let value: String
         let label: String
+        var description: String = ""
         var id: String { value }
+
+        enum CodingKeys: String, CodingKey {
+            case value, label, description
+        }
+
+        // Only value and label are required; description tolerates absence so an
+        // older server (or a trimmed fixture) that omits it still decodes.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            value = try c.decode(String.self, forKey: .value)
+            label = try c.decode(String.self, forKey: .label)
+            description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        }
+
+        init(value: String, label: String, description: String = "") {
+            self.value = value
+            self.label = label
+            self.description = description
+        }
     }
 
     let key: String
@@ -101,7 +122,69 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     }
 }
 
-/// An extension's manifest: the parameters it takes, in declared order.
+/// A group of mutually-exclusive parameters an extension offers as one choice
+/// (e.g. acorn-rtc's "Clock start": host time, a start time, or an offset).
+///
+/// Rendered as a single control: the `none` option (when the group has a
+/// "nothing given" state) followed by one option per member parameter, in
+/// `parameters` order. Choosing an option reveals only that member's field and
+/// clears the others in the draft; choosing `none` clears them all and writes
+/// nothing. The members still list each other in their `excludes`, so the
+/// client's exclusion handling needs no special case.
+struct ExtensionGroup: Codable, Equatable, Identifiable {
+    /// The "nothing given" option of a group, when it has one.
+    struct NoneOption: Codable, Equatable {
+        var label: String = ""
+        var description: String = ""
+
+        init(label: String = "", description: String = "") {
+            self.label = label
+            self.description = description
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+            description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        }
+
+        enum CodingKeys: String, CodingKey { case label, description }
+    }
+
+    let key: String
+    var label: String = ""
+    var description: String = ""
+    /// The member parameter keys, in the order their options are shown.
+    var parameters: [String] = []
+    /// The "nothing given" option, or nil when every state sets a member.
+    var none: NoneOption? = nil
+
+    var id: String { key }
+
+    enum CodingKeys: String, CodingKey { case key, label, description, parameters, none }
+
+    // Only key is required; the rest tolerate absence.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        parameters = try c.decodeIfPresent([String].self, forKey: .parameters) ?? []
+        none = try c.decodeIfPresent(NoneOption.self, forKey: .none)
+    }
+
+    init(key: String, label: String = "", description: String = "",
+         parameters: [String] = [], none: NoneOption? = nil) {
+        self.key = key
+        self.label = label
+        self.description = description
+        self.parameters = parameters
+        self.none = none
+    }
+}
+
+/// An extension's manifest: the parameters it takes, in declared order, and the
+/// groups of mutually-exclusive parameters among them.
 ///
 /// Built from the model's extension catalogue (see
 /// `ExtensionsSchemaSection.manifest(forExtension:)`), which carries each
@@ -110,4 +193,11 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
 struct ExtensionManifest: Equatable {
     let name: String
     let parameters: [ExtensionParameter]
+    var groups: [ExtensionGroup] = []
+
+    /// The group a parameter belongs to, or nil when it stands alone. A
+    /// parameter is in at most one group.
+    func group(forParameter key: String) -> ExtensionGroup? {
+        groups.first { $0.parameters.contains(key) }
+    }
 }

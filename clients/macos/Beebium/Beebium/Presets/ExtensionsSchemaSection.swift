@@ -61,7 +61,7 @@ struct ExtensionsSchemaSection: Codable {
             let rp = rhs.element.position ?? Int.max
             return lp != rp ? lp < rp : lhs.offset < rhs.offset
         }.map(\.element)
-        return ExtensionManifest(name: name, parameters: ordered)
+        return ExtensionManifest(name: name, parameters: ordered, groups: entry.groups)
     }
 }
 
@@ -80,11 +80,13 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
     /// The ROMs this extension ships, offered as the bundled choices for a
     /// filepath ROM parameter (e.g. a coprocessor's client ROM).
     var roms: [CatalogueRom] = []
+    /// Groups of mutually-exclusive parameters, each shown as one choice control.
+    var groups: [ExtensionGroup] = []
 
     var id: String { name }
 
     enum CodingKeys: String, CodingKey {
-        case name, description, kind, parameters, roms
+        case name, description, kind, parameters, roms, groups
         case displayName = "display_name"
         case attachesTo = "attaches_to"
         case provides
@@ -104,6 +106,7 @@ struct ExtensionCatalogueEntry: Codable, Identifiable {
         provides = try c.decodeIfPresent([String].self, forKey: .provides) ?? []
         parameters = try c.decodeIfPresent([ExtensionParameter].self, forKey: .parameters) ?? []
         roms = try c.decodeIfPresent([CatalogueRom].self, forKey: .roms) ?? []
+        groups = try c.decodeIfPresent([ExtensionGroup].self, forKey: .groups) ?? []
     }
 }
 
