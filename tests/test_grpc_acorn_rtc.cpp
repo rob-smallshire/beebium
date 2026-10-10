@@ -39,7 +39,7 @@ namespace {
 class AcornRtcGrpcFixture {
 public:
     // `layout` selects the SAF3019P register-layout variant (empty = the
-    // extension default, 4-bit year in R1). `time` seeds the initial clock.
+    // extension default, 7-bit year in R7). `time` seeds the initial clock.
     explicit AcornRtcGrpcFixture(const std::string& layout = "",
                                  const std::string& time = "1985-06-15T14:30")
         : service_(transports_, registry_) {
@@ -154,8 +154,9 @@ TEST_CASE("AcornRtcService SetTime updates registers",
 
 TEST_CASE("AcornRtcService SetTime rejects out-of-range year",
           "[grpc][extension][acorn-rtc]") {
-    // Default (4-bit-year) layout spans 1981-1996, so 2026 is out of range.
-    AcornRtcGrpcFixture fixture;
+    // The Acorn original (4-bit-year) layout spans 1981-1996, so 2026 is out
+    // of range.
+    AcornRtcGrpcFixture fixture("4bit-year-in-r1");
 
     beebium::SetRtcTimeRequest request;
     beebium::SetRtcTimeResponse response;
@@ -208,7 +209,8 @@ TEST_CASE("AcornRtcService SetTime still rejects a year beyond the active "
 
 TEST_CASE("AcornRtcService GetRegisters returns 8 values",
           "[grpc][extension][acorn-rtc]") {
-    AcornRtcGrpcFixture fixture;
+    // The Acorn original layout, whose year lives in register 1.
+    AcornRtcGrpcFixture fixture("4bit-year-in-r1");
 
     beebium::GetRtcRegistersRequest request;
     beebium::GetRtcRegistersResponse response;

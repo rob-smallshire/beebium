@@ -1978,7 +1978,8 @@ std::vector<std::tuple<std::string, std::string, std::string>> diagnostics_of(
 TEST_CASE("resolve-preset: a start time the RTC's layout cannot hold is an error at the time",
           "[integration][preset][resolve-preset][validate]") {
     auto found = diagnostics_of(R"({"model": "model-b", "extensions": [
-        {"name": "acorn-rtc", "config": {"time": "2001-01-01T00:00"}}]})", 78);
+        {"name": "acorn-rtc", "config": {"time": "2001-01-01T00:00",
+                                         "layout": "4bit-year-in-r1"}}]})", 78);
     REQUIRE(found.size() == 1);
     const auto& [severity, path, message] = found[0];
     CHECK(severity == "error");
@@ -1987,15 +1988,30 @@ TEST_CASE("resolve-preset: a start time the RTC's layout cannot hold is an error
     CHECK(message.find("1981-1996") != std::string::npos);
 }
 
-TEST_CASE("resolve-preset: an RTC offset that would start out of range today is a warning",
+TEST_CASE("resolve-preset: an RTC offset that would start out of range today is an error",
           "[integration][preset][resolve-preset][validate]") {
     auto found = diagnostics_of(R"({"model": "model-b", "extensions": [
-        {"name": "acorn-rtc", "config": {"offset": "+100y"}}]})", 0);
+        {"name": "acorn-rtc", "config": {"offset": "+100y"}}]})", 78);
     REQUIRE(found.size() == 1);
     const auto& [severity, path, message] = found[0];
-    CHECK(severity == "warning");
+    CHECK(severity == "error");
     CHECK(path == "/extensions/0/config/offset");
-    CHECK(message.find("1981-1996") != std::string::npos);
+    CHECK(message.find("1981-2099") != std::string::npos);
+}
+
+TEST_CASE("resolve-preset: an RTC on host time with the default layout has no diagnostics",
+          "[integration][preset][resolve-preset][validate]") {
+    CHECK(diagnostics_of(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-rtc"}]})", 0).empty());
+}
+
+TEST_CASE("resolve-preset: an RTC on host time its layout cannot hold is an error on the entry",
+          "[integration][preset][resolve-preset][validate]") {
+    auto found = diagnostics_of(R"({"model": "model-b", "extensions": [
+        {"name": "acorn-rtc", "config": {"layout": "4bit-year-in-r1"}}]})", 78);
+    REQUIRE(found.size() == 1);
+    CHECK(std::get<0>(found[0]) == "error");
+    CHECK(std::get<1>(found[0]) == "/extensions/0");
 }
 
 TEST_CASE("resolve-preset: an RTC configuration its layout holds has no diagnostics",
@@ -2007,7 +2023,8 @@ TEST_CASE("resolve-preset: an RTC configuration its layout holds has no diagnost
 TEST_CASE("start: a start time the RTC's layout cannot hold stops the launch with CONFIG",
           "[integration][preset][validate]") {
     auto result = run_command(EXECUTABLE +
-                              " start --acorn-rtc time=2001-01-01T0000 --port 0");
+                              " start --acorn-rtc layout=4bit-year-in-r1:time=2001-01-01T0000"
+                              " --port 0");
     CHECK(result.exit_code == 78);
     INFO(result.stderr_output);
     CHECK(result.stderr_output.find("1981-1996") != std::string::npos);

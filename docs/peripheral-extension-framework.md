@@ -627,8 +627,10 @@ sound (`validate_extension_configs`, in `fold_in_preset`), so `start` and
 `resolve-preset` see the same diagnostics: a preset instance's are located at
 its parameter (`/extensions/<i>/config/<key>`, or
 `/econet/transport/parameters/<key>`), a command-line instance's prefixed with
-its flag; `start` refuses on an error and prints a warning. Use a warning for
-what depends on something that may differ at launch, such as the host's clock.
+its flag; `start` refuses on an error and prints a warning. Make anything the
+launch would certainly refuse an error, judging what depends on the host (such
+as its clock) as it is when the check runs -- the RTC refuses host time its
+layout cannot hold -- and keep warnings for what the launch may still accept.
 A plugin without the check validates nothing beyond its manifest. Read the
 configuration in one function the check and the extension's `init` both call,
 as the RTC's `AcornRtcConfig` does, so the two cannot disagree.

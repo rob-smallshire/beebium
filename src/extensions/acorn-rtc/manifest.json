@@ -25,7 +25,7 @@
             "label": "Register layout",
             "type": "string",
             "description": "How the file server software stores the year in the clock, which sets the years the clock can hold.",
-            "default": "4bit-year-in-r1",
+            "default": "7bit-year-in-r7",
             "choices": [
                 {
                     "value": "4bit-year-in-r1",

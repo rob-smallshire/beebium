@@ -27,7 +27,7 @@ beebium::Extension* beebium_create_extension(const beebium::ExtensionManifest& m
 }
 
 // The configuration check (beebium::ValidateConfigFn): a start the register
-// layout cannot hold is found before launch, against the host clock now.
+// layout cannot hold is refused before launch, judged by the host clock now.
 BEEBIUM_PLUGIN_EXPORT
 void beebium_validate_extension_config(
         const beebium::ExtensionManifest& manifest,

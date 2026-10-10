@@ -365,17 +365,20 @@ A preset that cannot be read, or whose JSON is invalid, stops a launch with
 message naming the problem: among them every [attachment](#attachment)
 problem, and every error an extension's own configuration check finds. Problems
 that do not stop a launch are warnings: an unknown top-level key, the older
-top-level `auto_boot`, an extension check's warnings, and (from
+top-level `auto_boot`, an extension check's warnings (for what the launch may
+still accept), and (from
 `resolve-preset`) a ROM or floppy image that cannot be found, or a bare name in
 a `bundled` parameter that is not a bundled image.
 
 An extension's plugin may check its own configuration once the preset's
 instances are normalised and their attachments are sound, for what its
-manifest cannot say. The Acorn real-time clock refuses a `time` whose year its
-`layout` cannot hold ("The clock cannot start in 2001: the Acorn original
-(4-bit year in R1) register layout holds 1981-1996."), at `/config/time`, and
-warns when an `offset`, or the host's clock with neither, would start it outside
-those years today. To ask, `start` and `resolve-preset` load the plugin library
+manifest cannot say. The Acorn real-time clock refuses a start its `layout`
+cannot hold: a `time` ("The clock cannot start in 2001: the Acorn original
+(4-bit year in R1) register layout holds 1981-1996."), at `/config/time`; an
+`offset` that would start it outside those years, at `/config/offset`; or, with
+neither, the host's clock, at the entry. An offset or host time is judged by the
+host clock when the check runs, so a preset that resolves cleanly today may not
+in a later year. To ask, `start` and `resolve-preset` load the plugin library
 of each configured extension (built-ins have no check), so a plugin that cannot
 be loaded is an error at its entry here too, where before only the launch found
 it.

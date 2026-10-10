@@ -19,8 +19,6 @@ namespace beebium {
 
 namespace {
 
-constexpr const char* kDefaultLayoutName = "4bit-year-in-r1";
-
 const std::string* find_value(const std::map<std::string, std::string>& config,
                               const std::string& key) {
     auto it = config.find(key);
@@ -51,7 +49,7 @@ bool holds(RegisterLayout layout, int year) {
 
 RegisterLayout acorn_rtc_layout(const std::map<std::string, std::string>& config) {
     const auto* name = find_value(config, "layout");
-    const std::string layout_name = name ? *name : kDefaultLayoutName;
+    const std::string layout_name = name ? *name : kAcornRtcDefaultLayoutName;
     const auto layout = register_layout_from_name(layout_name);
     if (!layout) {
         throw std::invalid_argument(
@@ -82,7 +80,7 @@ std::vector<ConfigDiagnostic> check_acorn_rtc_config(
         return found;
     }
     const auto* name = find_value(config, "layout");
-    const std::string layout_name = name ? *name : kDefaultLayoutName;
+    const std::string layout_name = name ? *name : kAcornRtcDefaultLayoutName;
 
     // The parameter the start comes from: "time", "offset", or "" for host time.
     const std::string from = find_value(config, "time")     ? "time"
@@ -102,15 +100,11 @@ std::vector<ConfigDiagnostic> check_acorn_rtc_config(
     if (from == "time") {
         found.push_back({"time", "The clock cannot start in " + year + ": " + range + "."});
     } else if (from == "offset") {
-        found.push_back({"offset",
-                         "With this offset the clock would start in " + year +
-                             " by this computer's clock today, but " + range + ".",
-                         ConfigDiagnostic::Severity::Warning});
+        found.push_back({"offset", "With this offset the clock would start in " + year +
+                                       " by this computer's clock today, but " + range + "."});
     } else {
-        found.push_back({"",
-                         "This computer's clock says " + year + ", but " + range +
-                             "; give a start time or an offset, or choose another layout.",
-                         ConfigDiagnostic::Severity::Warning});
+        found.push_back({"", "This computer's clock says " + year + ", but " + range +
+                                 "; give a start time or an offset, or choose another layout."});
     }
     return found;
 }

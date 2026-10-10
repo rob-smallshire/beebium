@@ -337,13 +337,16 @@ race with the FS's year increment, and deriving month/day from the host clock
 
 Three register layouts are supported via the `layout` CLI parameter:
 
-**`4bit-year-in-r1`** (default): Original Acorn convention.
+**`4bit-year-in-r1`**: Original Acorn convention. Not Y2K compliant: host
+time cannot be used, so give a `time` or an `offset` in range.
 - Register 1: year as BCD offset from 1981 (0--15). Range: 1981--1996.
 - Register 7: dongle detection.
 - Register 5: unused.
 - Used by: Acorn FS v0.90, v1.01--v1.07, v1.24.
 
-**`7bit-year-in-r7`**: Year relocated to register 7.
+**`7bit-year-in-r7`** (default): Year relocated to register 7. The default
+because Beebium ships the Level 3 File Server 1.26 and the range holds host
+time.
 - Register 7: year as binary 2-digit value (0--99). Range: 1981--2099.
 - Register 5: dongle detection.
 - Register 1: unused.
@@ -363,12 +366,16 @@ is encoded.
 ### CLI Usage
 
 ```
---acorn-rtc                              # Host local time, 4bit-year layout
+--acorn-rtc                              # Host local time, 7bit-year-in-r7 layout
 --acorn-rtc time=1985-10-26T0121         # Specific time (compact ISO 8601)
 --acorn-rtc offset=-10y                  # 10 years before host time
 --acorn-rtc layout=7bit-year-in-r7             # 7-bit year layout
 --acorn-rtc layout=7bit-year-in-r7:time=1985-10-26T0121
 ```
+
+A start the layout cannot hold is refused before launch, by `start` and
+`resolve-preset` alike (the extension's configuration check): a `time`, or an
+`offset` or host time judged by the host clock when the check runs.
 
 Note: the compact ISO 8601 format (`T0121` not `T01:21`) avoids the colon
 being interpreted as an extension argument separator.

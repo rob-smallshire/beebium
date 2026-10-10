@@ -26,8 +26,13 @@ namespace beebium {
 // The reading of an Acorn RTC instance's configuration, shared by the
 // extension's start-up and its pre-launch check so the two cannot disagree.
 
-// The register layout the config's `layout` names; the Acorn original when it
-// names none. Throws std::invalid_argument for an unknown name.
+// The layout an instance has when its config names none: Level 3 File Server
+// 1.26's, which Beebium ships and which holds the years to 2099, so host time
+// works. The manifest's `layout` default is the same (test_acorn_rtc_manifest).
+inline constexpr const char* kAcornRtcDefaultLayoutName = "7bit-year-in-r7";
+
+// The register layout the config's `layout` names; kAcornRtcDefaultLayoutName
+// when it names none. Throws std::invalid_argument for an unknown name.
 RegisterLayout acorn_rtc_layout(const std::map<std::string, std::string>& config);
 
 // The time the clock starts at: the config's `time`, or `now` moved by its
@@ -37,10 +42,10 @@ Saf3019p::DateTime acorn_rtc_start_time(const std::map<std::string, std::string>
                                         const Saf3019p::DateTime& now);
 
 // What is wrong with the config before launch, the clock reading `now`: a
-// `time` or `offset` that does not parse, or a `time` whose year the layout
-// cannot hold, is an error at that parameter. A start computed from `now` (an
-// offset, or host time) whose year the layout cannot hold is a warning, at the
-// offset or on the instance, since the host clock may differ at launch.
+// `time` or `offset` that does not parse, or a start whose year the layout
+// cannot hold, is an error -- at the time, at the offset, or on the instance
+// for host time. A start from an offset or host time is judged by the clock at
+// the time of the check, as the launch judges it by the clock at launch.
 // `manifest` names the layouts by their choice labels.
 std::vector<ConfigDiagnostic> check_acorn_rtc_config(
     const ExtensionManifest& manifest, const std::map<std::string, std::string>& config,

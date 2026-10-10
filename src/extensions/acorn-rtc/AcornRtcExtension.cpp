@@ -54,7 +54,7 @@ void AcornRtcExtension::init(ExtensionContext& ctx) {
         throw std::runtime_error(
             "Acorn RTC: year " + std::to_string(target_dt.year) +
             " cannot be represented (valid range: " + range + " for layout '" +
-            std::string(layout_val.value_or("4bit-year-in-r1")) + "').\n"
+            std::string(layout_val.value_or(kAcornRtcDefaultLayoutName)) + "').\n"
             "  Use --acorn-rtc time=YYYY-MM-DDThhmm with a date in range,\n"
             "  or use --acorn-rtc offset=-Ny to shift the clock back.");
     }

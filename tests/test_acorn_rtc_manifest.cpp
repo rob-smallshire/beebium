@@ -15,6 +15,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "AcornRtcConfig.hpp"
 #include "Saf3019p.hpp"
 
 #include <beebium/extension/PluginLoader.hpp>
@@ -75,6 +76,13 @@ TEST_CASE("each layout choice states the years the chip holds in that layout",
         CHECK(std::stoi(match[2]) == last);
     }
     CHECK(described.size() == 3);
+}
+
+TEST_CASE("the manifest's default layout is the one the extension reads by default",
+          "[acorn-rtc][manifest]") {
+    const auto manifest = acorn_rtc_manifest();
+    CHECK(layout_parameter(manifest).default_value == kAcornRtcDefaultLayoutName);
+    CHECK(layout_parameter(manifest).default_value == "7bit-year-in-r7");
 }
 
 TEST_CASE("the layout that ends before 2000 says it is not Y2K compliant",
