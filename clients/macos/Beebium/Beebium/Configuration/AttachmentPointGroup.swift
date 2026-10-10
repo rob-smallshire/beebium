@@ -12,17 +12,20 @@
 
 import SwiftUI
 
-/// One attachment point's group, shared by the Peripherals and Processor
-/// sections: the instances on the point, how to add and remove them, and each
-/// instance's parameter form. A point an instance provides (e.g. the SCSI bus)
-/// nests beneath that instance by this view recursing on itself.
+/// One attachment point rendered as a tree node, shared by the Peripherals and
+/// Processor sections: the point is the node, the extension instances on it are
+/// its children, and a child that itself provides points (e.g. a SCSI host
+/// adapter providing the SCSI bus) shows those as further child nodes -- this
+/// view recursing on itself.
 ///
-/// It adapts to the point's occupancy: a point that holds at most one extension
-/// is a picker ("None" plus the extensions that attach there) with the chosen
-/// instance's form below; a point that holds several is an add menu and a list
-/// of removable instances. Being a concrete View struct, the recursion for
-/// nested provided points needs no type erasure (unlike a recursive
-/// @ViewBuilder function, which crashes the Release optimiser).
+/// Every point is the same shape, whatever its occupancy. A single-occupancy
+/// point (the user port, the Tube) is a node with at most one child: Add fills
+/// the empty node, and the child carries Change (swap for another extension) and
+/// Remove. A multi-occupancy point (the SCSI bus) is the same node with Add
+/// available while there is room and each child removable. Being a concrete View
+/// struct, the recursion for nested provided points needs no type erasure
+/// (unlike a recursive @ViewBuilder function, which crashes the Release
+/// optimiser).
 struct AttachmentPointGroup: View {
     @Binding var draft: MachineDraft
     let schema: ExtensionsSchemaSection
@@ -37,19 +40,33 @@ struct AttachmentPointGroup: View {
     private var isSingleOccupancy: Bool {
         model.occupancy(onPoint: point.id, in: draft).max == 1
     }
+    private var addable: [String] {
+        model.addableExtensions(onPoint: point.id, in: draft)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-            if isSingleOccupancy {
-                singleOccupancyPicker
+            // The point's children: each attached instance, indented beneath the
+            // node so the whole point reads as a tree.
+            if instances.isEmpty {
+                Text("Nothing attached.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, Self.childIndent)
             } else {
-                multiOccupancyList
+                ForEach(instances) { instance in
+                    instanceNode(instance)
+                        .padding(.leading, Self.childIndent)
+                }
             }
         }
     }
 
-    // MARK: - Header
+    /// Indentation of a node's children, giving the tree its stepped shape.
+    private static let childIndent: CGFloat = 14
+
+    // MARK: - Header (the point node)
 
     private var header: some View {
         HStack {
@@ -59,7 +76,7 @@ struct AttachmentPointGroup: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             Spacer()
-            if !isSingleOccupancy, !model.addableExtensions(onPoint: point.id, in: draft).isEmpty {
+            if !addable.isEmpty {
                 addMenu
             }
         }
@@ -73,7 +90,7 @@ struct AttachmentPointGroup: View {
 
     private var addMenu: some View {
         Menu {
-            ForEach(model.addableExtensions(onPoint: point.id, in: draft), id: \.self) { name in
+            ForEach(addable, id: \.self) { name in
                 Button(name) { draft = model.draft(adding: name, to: draft) }
             }
         } label: {
@@ -83,58 +100,51 @@ struct AttachmentPointGroup: View {
         .fixedSize()
     }
 
-    // MARK: - Single-occupancy (picker)
+    // MARK: - Instance node (a child of the point)
 
-    private var singleOccupancyPicker: some View {
-        let current = instances.first
-        return VStack(alignment: .leading, spacing: 6) {
-            Picker("", selection: Binding(
-                get: { current?.name ?? "" },
-                set: { draft = model.draft(settingSoleInstance: $0.isEmpty ? nil : $0, onPoint: point.id, in: draft) }
-            )) {
-                Text("None").tag("")
-                ForEach(point.extensions, id: \.self) { Text($0).tag($0) }
+    private func instanceNode(_ instance: ExtensionInstanceModel.Instance) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(instance.name)
+                    .font(.subheadline).fontWeight(.medium)
+                Spacer()
+                // On a single-occupancy point, Change swaps the one instance for
+                // another extension the point hosts (a tree replace).
+                if isSingleOccupancy, !changeAlternatives(for: instance).isEmpty {
+                    changeMenu(instance)
+                }
+                Button {
+                    draft = model.draft(removingInstanceAt: instance.index, from: draft)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Remove \(instance.name)")
             }
-            .labelsHidden()
-            .frame(maxWidth: 260)
-
-            if let instance = current {
-                instanceDetail(instance)
-            }
+            instanceDetail(instance)
         }
+        .padding(8)
+        .background(Color(NSColor.textBackgroundColor).opacity(0.5))
+        .cornerRadius(6)
     }
 
-    // MARK: - Multi-occupancy (list)
+    /// The extensions a single-occupancy instance could be swapped for.
+    private func changeAlternatives(for instance: ExtensionInstanceModel.Instance) -> [String] {
+        point.extensions.filter { $0 != instance.name }
+    }
 
-    private var multiOccupancyList: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if instances.isEmpty {
-                Text("Nothing attached.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(instances) { instance in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(instance.name)
-                                .font(.subheadline).fontWeight(.medium)
-                            Spacer()
-                            Button {
-                                draft = model.draft(removingInstanceAt: instance.index, from: draft)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Remove \(instance.name)")
-                        }
-                        instanceDetail(instance)
-                    }
-                    .padding(8)
-                    .background(Color(NSColor.textBackgroundColor).opacity(0.5))
-                    .cornerRadius(6)
+    private func changeMenu(_ instance: ExtensionInstanceModel.Instance) -> some View {
+        Menu {
+            ForEach(changeAlternatives(for: instance), id: \.self) { name in
+                Button(name) {
+                    draft = model.draft(settingSoleInstance: name, onPoint: point.id, in: draft)
                 }
             }
+        } label: {
+            Text("Change")
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     // MARK: - Instance detail (form + nested provided points)
@@ -149,12 +159,12 @@ struct AttachmentPointGroup: View {
                 serialPortSuggestions: serialPorts,
                 setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
                 .padding(.leading, 8)
-            // Points this instance provides (e.g. the SCSI bus) nest beneath it.
+            // Points this instance provides (e.g. the SCSI bus) nest beneath it
+            // as further child nodes.
             ForEach(model.pointsProvided(by: instance)) { provided in
                 AttachmentPointGroup(
                     draft: $draft, schema: schema, point: provided,
                     diagnostics: diagnostics, serialPorts: serialPorts)
-                    .padding(.leading, 16)
             }
         }
     }
