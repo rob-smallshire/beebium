@@ -72,6 +72,11 @@ final class FocusSelfTest {
         // Single-field popover is unaffected (focus stays on its one field).
         await captureStation(name: "station_settle", appearance: .darkAqua)
 
+        // The New Machine dialog's Configurator keyboard fields: the hex field
+        // must show a caret when focused, and must resign and refresh (not stay
+        // focused and stale) when another control changes the byte.
+        await captureConfiguratorKeyboard(name: "cfg_kbd")
+
         // With a server port, also capture the rename popover's chips and preview.
         if let port = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT"],
            let portNumber = Int(port) {
@@ -147,6 +152,68 @@ final class FocusSelfTest {
         }
         hostWindow?.endSheet(sheet)
         await sleep(0.4)
+    }
+
+    // MARK: - Configurator section fields (New Machine dialog)
+
+    /// Present the real KeyboardSectionView (its hex and decimal byte fields) in a
+    /// window, as the New Machine dialog hosts the Configurator. Click the hex
+    /// field and photograph across the caret blink: the caret draws only in the
+    /// key window, so these frames prove the field is focusable and usable. The
+    /// resign-and-refresh behaviour (the field must not stay focused and stale
+    /// when another control changes the byte) is covered by the unit tests on
+    /// EditableFieldModel. Focus snapshots are logged under BEEBIUM_DEBUG_FOCUS=1.
+    private func captureConfiguratorKeyboard(name: String) async {
+        bringHostToFront()
+        let content = ConfiguratorKeyboardHarness(schema: Self.startupSchemaFixture())
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.styleMask = [.titled, .closable]
+        window.title = "Configurator Keyboard"
+        window.setContentSize(NSSize(width: 400, height: 470))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        await sleep(0.6)
+        if let root = window.contentView, let field = Self.firstTextView(in: root) {
+            postClick(on: field, at: NSPoint(x: 6, y: field.bounds.midY))
+        }
+        await sleep(0.2)
+        FocusDiagnostics.snapshot("\(name) hex-focused", window: window)
+        for frame in 0..<framesPerOpen {
+            capture(window: window, name: "\(name)_frame\(frame)")
+            await sleep(frameInterval)
+        }
+        window.orderOut(nil)
+        await sleep(0.3)
+    }
+
+    /// A minimal Model B startup schema, enough to drive KeyboardSectionView: the
+    /// screen-mode/auto-boot/links layout as describe-preset-schema reports it.
+    private static func startupSchemaFixture() -> StartupSchemaSection {
+        let json = """
+        {
+          "type": "startup",
+          "screen_mode": {"min": 0, "max": 7, "default": 7},
+          "auto_boot": {"default": false},
+          "links": {
+            "min": 0, "max": 255, "default": 255,
+            "link_made_when": "clear",
+            "screen_mode_bits": [0, 1, 2],
+            "auto_boot_bit": 3,
+            "auto_boot_true_when": "clear",
+            "bits": [
+              {"bit": 7, "link": "1", "label": "Filing system"},
+              {"bit": 6, "link": "2", "label": "Not used"},
+              {"bit": 5, "link": "3", "label": "Disc timing (link 3)"},
+              {"bit": 4, "link": "4", "label": "Disc timing (link 4)"},
+              {"bit": 3, "link": "5", "label": "SHIFT+BREAK action"},
+              {"bit": 2, "link": "6", "label": "Screen mode bit 2"},
+              {"bit": 1, "link": "7", "label": "Screen mode bit 1"},
+              {"bit": 0, "link": "8", "label": "Screen mode bit 0"}
+            ]
+          }
+        }
+        """
+        return try! JSONDecoder().decode(StartupSchemaSection.self, from: Data(json.utf8))
     }
 
     // MARK: - Host window
@@ -363,5 +430,18 @@ final class FocusSelfTest {
 
     private func sleep(_ seconds: TimeInterval) async {
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    }
+}
+
+/// Hosts the real KeyboardSectionView with its own draft, for the focus
+/// self-test. `activate` applies the activatesHostingWindow() fix so the before
+/// and after can be captured from one build.
+private struct ConfiguratorKeyboardHarness: View {
+    let schema: StartupSchemaSection
+    @State private var draft = MachineDraft()
+
+    var body: some View {
+        KeyboardSectionView(draft: $draft, schema: schema)
+            .frame(width: 400, height: 470)
     }
 }

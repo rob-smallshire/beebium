@@ -53,7 +53,16 @@ struct EditableFieldModel<Value: Equatable>: Equatable {
     /// successful commit. Drives the brief invalid marking.
     private(set) var invalid = false
 
-    init(display: String) { text = display }
+    /// The text shown when focus was last gained, so a resign can tell whether
+    /// the user actually edited the field (commit their text) or merely tabbed
+    /// through / clicked another control (refresh to the current value, never
+    /// committing a stale value over another control's change).
+    private(set) var focusGainText: String
+
+    init(display: String) {
+        text = display
+        focusGainText = display
+    }
 
     /// Record a keystroke-level change (including a deletion). Typing clears any
     /// invalid marking, so a field stops looking wrong the moment the user starts
@@ -62,6 +71,14 @@ struct EditableFieldModel<Value: Equatable>: Equatable {
         text = newText
         invalid = false
     }
+
+    /// Note the text at the moment focus is gained (the baseline for "edited").
+    mutating func noteFocusGain() {
+        focusGainText = text
+    }
+
+    /// Whether the user has changed the text since focus was gained.
+    var isEdited: Bool { text != focusGainText }
 
     /// Adopt an externally-changed display value, but only when not focused -- so
     /// a draft change made elsewhere (a preset reload, a sibling projection of
@@ -101,18 +118,20 @@ struct EditableFieldModel<Value: Equatable>: Equatable {
 /// draft, the view that owns the field is not re-rendered mid-edit, so the AppKit
 /// field editor keeps first responder and the insertion caret stays put.
 ///
-/// This is the Configurator's counterpart to the sidebar's `TextInputField`,
-/// which already edits locally and dispatches only on commit. The Configurator's
-/// earlier fields instead bound a `TextField` straight to the draft and wrote on
-/// every keystroke; each write re-rendered the owning section, and for the fields
-/// returned through `AnyView` (extension parameters, the station number) the
-/// re-render rebuilt the type-erased subtree and replaced the `NSTextField`,
-/// dropping first responder so no caret appeared, while the keyboard byte fields
-/// had their text reloaded mid-edit by an `onChange(of: byte)`. One field, used
-/// everywhere, removes both failure modes.
+/// It shares one `@FocusState` with its section (keyed by `fieldID`), so another
+/// control can release it: clicking a check box, a picker, or the background sets
+/// the shared focus to nil, which resigns the field. On resign the field commits
+/// the user's edit when they changed it, or refreshes to the current value when
+/// they did not -- so it never leaves a stale value on screen (the bug where the
+/// hex byte stayed at its old text after a check box changed the byte) and never
+/// stays focused with a caret after the user has moved on. Committing a value the
+/// user did not type is avoided, so a refresh cannot clobber another control's
+/// change.
 ///
-/// Invalid input at commit reverts to the current value and is marked briefly; a
-/// valid entry is canonicalised through `format` and handed to `onCommit`.
+/// This is the Configurator's counterpart to the sidebar's `TextInputField`,
+/// which edits locally and dispatches only on commit. Invalid input at commit
+/// reverts to the current value and is marked briefly; a valid entry is
+/// canonicalised through `format` and handed to `onCommit`.
 struct CommittingField<Value: Equatable>: View {
     /// The committed value the field reflects (the draft's, or a default in
     /// force). The field shows `format(value)` whenever it is not being edited.
@@ -123,22 +142,30 @@ struct CommittingField<Value: Equatable>: View {
     var width: CGFloat? = 120
     /// Persist a newly-committed value. Not called when a commit reverts.
     let onCommit: (Value) -> Void
+    /// The section's shared focus, so other controls can resign this field.
+    @FocusState.Binding var focusedField: String?
+    /// This field's identity within the section's shared focus.
+    let fieldID: String
 
     @State private var model: EditableFieldModel<Value>
-    @FocusState private var focused: Bool
 
     init(value: Value, format: @escaping (Value) -> String, parse: @escaping (String) -> Value?,
-         placeholder: String = "", width: CGFloat? = 120, onCommit: @escaping (Value) -> Void) {
+         placeholder: String = "", width: CGFloat? = 120,
+         focusedField: FocusState<String?>.Binding, fieldID: String,
+         onCommit: @escaping (Value) -> Void) {
         self.value = value
         self.format = format
         self.parse = parse
         self.placeholder = placeholder
         self.width = width
+        self._focusedField = focusedField
+        self.fieldID = fieldID
         self.onCommit = onCommit
         _model = State(initialValue: EditableFieldModel(display: format(value)))
     }
 
     private var currentDisplay: String { format(value) }
+    private var isFocused: Bool { focusedField == fieldID }
 
     var body: some View {
         TextField(placeholder, text: Binding(get: { model.text }, set: { model.type($0) }))
@@ -146,19 +173,34 @@ struct CommittingField<Value: Equatable>: View {
             .foregroundColor(model.invalid ? .red : .primary)
             .overlay(RoundedRectangle(cornerRadius: 4)
                 .stroke(model.invalid ? Color.red : Color.clear, lineWidth: 1))
-            .focused($focused)
-            .onSubmit(commit)
-            .onChange(of: focused) { nowFocused in
-                if !nowFocused { commit() }
+            .focused($focusedField, equals: fieldID)
+            .onSubmit { commitEdit() }
+            .onChange(of: focusedField) { newFocus in
+                if newFocus == fieldID {
+                    model.noteFocusGain()
+                } else {
+                    // Resigned (moved to another field, or released by another
+                    // control / the background): commit what the user typed, else
+                    // refresh to the current value without committing a stale one.
+                    resign()
+                }
             }
             .onChange(of: currentDisplay) { newDisplay in
-                model.syncExternal(display: newDisplay, focused: focused)
+                model.syncExternal(display: newDisplay, focused: isFocused)
             }
     }
 
-    private func commit() {
+    private func commitEdit() {
         if let committed = model.commit(currentDisplay: currentDisplay, parse: parse, format: format) {
             onCommit(committed)
+        }
+    }
+
+    private func resign() {
+        if model.isEdited {
+            commitEdit()
+        } else {
+            model.syncExternal(display: currentDisplay, focused: false)
         }
     }
 }

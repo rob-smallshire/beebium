@@ -29,6 +29,10 @@ struct NetworkSectionView: View {
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
 
+    /// Shared focus for the station number and range fields, so a picker, the
+    /// Econet switch or a background click releases whichever is focused.
+    @FocusState private var focusedField: String?
+
     private enum StationMode: Hashable { case number, auto, range }
 
     private var transportName: String? { draft.econet?.transport?.name }
@@ -61,6 +65,9 @@ struct NetworkSectionView: View {
                 }
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { focusedField = nil }
         }
     }
 
@@ -99,6 +106,7 @@ struct NetworkSectionView: View {
             return AnyView(HStack(spacing: 6) {
                 CommittingField(value: currentNumberOrDefault, format: { String($0) },
                                 parse: parseStation, width: 100,
+                                focusedField: $focusedField, fieldID: "station",
                                 onCommit: { setStation(.number($0)) })
                 Text("(\(schema.station.min)-\(schema.station.max))")
                     .font(.caption2).foregroundColor(.secondary)
@@ -110,10 +118,12 @@ struct NetworkSectionView: View {
             return AnyView(HStack(spacing: 6) {
                 Text("from")
                 CommittingField(value: rangeLow, format: { String($0) }, parse: parseStation,
-                                width: 70, onCommit: { setRange(low: $0, high: rangeHigh) })
+                                width: 70, focusedField: $focusedField, fieldID: "rangeLow",
+                                onCommit: { setRange(low: $0, high: rangeHigh) })
                 Text("to")
                 CommittingField(value: rangeHigh, format: { String($0) }, parse: parseStation,
-                                width: 70, onCommit: { setRange(low: rangeLow, high: $0) })
+                                width: 70, focusedField: $focusedField, fieldID: "rangeHigh",
+                                onCommit: { setRange(low: rangeLow, high: $0) })
             })
         }
     }
@@ -200,6 +210,7 @@ struct NetworkSectionView: View {
     // MARK: - Edits (write through to draft.econet)
 
     private func setEnabled(_ on: Bool) {
+        focusedField = nil
         if on {
             let station: JSONValue = schema.station.auto ? .string("auto") : .int(schema.station.min)
             let transport = schema.transports.first.map {
@@ -212,6 +223,7 @@ struct NetworkSectionView: View {
     }
 
     private func setMode(_ mode: StationMode) {
+        focusedField = nil
         switch mode {
         case .number: setStation(.number(currentNumberOrDefault))
         case .auto:   setStation(.auto)
@@ -245,6 +257,7 @@ struct NetworkSectionView: View {
     }
 
     private func setTransport(_ name: String) {
+        focusedField = nil
         guard var econet = draft.econet else { return }
         // Changing transport starts fresh parameters; resolve-preset fills the
         // new transport's defaults.

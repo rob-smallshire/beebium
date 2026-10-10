@@ -88,6 +88,7 @@ struct NewMachineDialog: View {
         }
         .frame(minWidth: dialogWidth, maxWidth: .infinity)
         .background(WindowAccessor(window: $hostingWindow))
+        .focusDiagnostics("new-machine")
         .task {
             // First-open initial setup. The dialog window is a singleton:
             // SwiftUI doesn't re-fire .task when the window is re-shown

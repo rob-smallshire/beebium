@@ -125,6 +125,45 @@ final class CommittingFieldTests: XCTestCase {
         XCTAssertFalse(model.invalid)
     }
 
+    // MARK: - EditableFieldModel: focus gain / edited / resign
+
+    func testNoteFocusGainTracksEdited() {
+        var model = EditableFieldModel<Int>(display: "10")
+        XCTAssertFalse(model.isEdited)
+        model.noteFocusGain()
+        XCTAssertFalse(model.isEdited)
+        model.type("12")
+        XCTAssertTrue(model.isEdited)       // user changed the text
+        model.noteFocusGain()               // re-baseline on a fresh focus
+        XCTAssertFalse(model.isEdited)
+    }
+
+    func testResignUneditedRefreshesInsteadOfCommittingStale() {
+        // The field shows 10 and the user does not type. Another control changes
+        // the value to 20 while the field is focused (so syncExternal is ignored).
+        // On resign the field must refresh to 20, never commit its stale 10 over
+        // the other control's change -- the hex-stays-FF bug.
+        var model = EditableFieldModel<Int>(display: "10")
+        model.noteFocusGain()
+        model.syncExternal(display: "20", focused: true)   // ignored mid-focus
+        XCTAssertEqual(model.text, "10")
+        XCTAssertFalse(model.isEdited)
+        // Resign path for an unedited field: adopt the current value.
+        model.syncExternal(display: "20", focused: false)
+        XCTAssertEqual(model.text, "20")
+        XCTAssertFalse(model.invalid)
+    }
+
+    func testEditedFieldCommitsOnResign() {
+        // When the user did edit, the resign path commits their text.
+        var model = EditableFieldModel<Int>(display: "10")
+        model.noteFocusGain()
+        model.type("42")
+        XCTAssertTrue(model.isEdited)
+        let committed = model.commit(currentDisplay: "10", parse: decParse, format: decFormat)
+        XCTAssertEqual(committed, 42)
+    }
+
     // MARK: - EditableFieldModel: external sync
 
     func testSyncExternalIgnoredWhileFocused() {

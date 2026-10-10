@@ -36,6 +36,12 @@ struct KeyboardSectionView: View {
     let schema: StartupSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
+    /// Shared focus for the hex and decimal fields, so a check box, the picker or
+    /// a background click releases whichever is focused (it then commits or
+    /// refreshes). Without this SwiftUI leaves a byte field focused and stale when
+    /// another control changes the byte.
+    @FocusState private var focusedField: String?
+
     private var layout: StartupSchemaSection.LinksLayout { schema.links }
 
     var body: some View {
@@ -54,6 +60,10 @@ struct KeyboardSectionView: View {
                 DiagnosticLabels(diagnostics: diagnostics.withPrefix("/startup"))
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // A click on the section background releases a focused byte field.
+            .contentShape(Rectangle())
+            .onTapGesture { focusedField = nil }
         }
     }
 
@@ -65,7 +75,7 @@ struct KeyboardSectionView: View {
                 Text("Screen mode")
                 Picker("", selection: Binding(
                     get: { screenMode },
-                    set: { setByte(layout.byte(currentByte, settingScreenMode: $0)) })) {
+                    set: { focusedField = nil; setByte(layout.byte(currentByte, settingScreenMode: $0)) })) {
                     ForEach(schema.screenMode.min...schema.screenMode.max, id: \.self) { mode in
                         Text("\(mode)").tag(mode)
                     }
@@ -75,7 +85,7 @@ struct KeyboardSectionView: View {
             }
             Toggle(isOn: Binding(
                 get: { autoBoot },
-                set: { setByte(layout.byte(currentByte, settingAutoBoot: $0)) })) {
+                set: { focusedField = nil; setByte(layout.byte(currentByte, settingAutoBoot: $0)) })) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Auto-boot")
                     Text(Self.autoBootBehaviour(layout: layout))
@@ -97,7 +107,7 @@ struct KeyboardSectionView: View {
             ForEach(layout.bits) { link in
                 Toggle(isOn: Binding(
                     get: { layout.isLinkMade(bit: link.bit, in: currentByte) },
-                    set: { setByte(layout.byte(currentByte, settingLink: link.bit, made: $0)) })) {
+                    set: { focusedField = nil; setByte(layout.byte(currentByte, settingLink: link.bit, made: $0)) })) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("\(link.link): \(link.label)")
                         if !link.description.isEmpty {
@@ -115,12 +125,14 @@ struct KeyboardSectionView: View {
                 HStack(spacing: 6) {
                     Text("Hex")
                     CommittingField(value: currentByte, format: Self.formatHexByte,
-                                    parse: Self.parseHexByte, width: 80, onCommit: setByte)
+                                    parse: Self.parseHexByte, width: 80,
+                                    focusedField: $focusedField, fieldID: "hex", onCommit: setByte)
                 }
                 HStack(spacing: 6) {
                     Text("Decimal")
                     CommittingField(value: currentByte, format: { String($0) },
-                                    parse: Self.parseDecByte, width: 80, onCommit: setByte)
+                                    parse: Self.parseDecByte, width: 80,
+                                    focusedField: $focusedField, fieldID: "decimal", onCommit: setByte)
                 }
             }
             .padding(.top, 4)

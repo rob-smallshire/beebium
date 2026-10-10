@@ -40,6 +40,11 @@ struct ExtensionParameterForm: View {
     /// Set (or, with nil, clear) one config key, written through to the draft.
     let setValue: (String, JSONValue?) -> Void
 
+    /// Shared focus across this form's text fields, so a picker, toggle, menu or
+    /// background click releases whichever field is focused (it then commits or
+    /// refreshes rather than staying focused and stale).
+    @FocusState private var focusedField: String?
+
     var body: some View {
         if manifest.parameters.isEmpty {
             Text("No settings.")
@@ -54,7 +59,8 @@ struct ExtensionParameterForm: View {
                     case .group(let group):
                         GroupControl(group: group, members: members(of: group),
                                      config: config, diagnostics: diagnostics,
-                                     setValue: setValue, control: { control($0) })
+                                     setValue: setValue, control: { control($0) },
+                                     releaseFocus: { focusedField = nil })
                     }
                 }
             }
@@ -155,6 +161,8 @@ struct ExtensionParameterForm: View {
             return AnyView(StringListEditor(
                 values: listValue(parameter.key),
                 placeholder: parameter.defaultValue,
+                focusedField: $focusedField,
+                idBase: parameter.key,
                 setValues: { setValue(parameter.key, $0.isEmpty ? nil : .array($0.map(JSONValue.string))) }))
         }
         if parameter.defaultFrom == "aun-map-file" {
@@ -164,7 +172,7 @@ struct ExtensionParameterForm: View {
         case "boolean":
             return AnyView(Toggle("", isOn: Binding(
                 get: { boolValue(parameter.key) },
-                set: { setValue(parameter.key, .bool($0)) }))
+                set: { focusedField = nil; setValue(parameter.key, .bool($0)) }))
                 .labelsHidden())
         case "integer":
             return AnyView(integerField(parameter))
@@ -180,6 +188,7 @@ struct ExtensionParameterForm: View {
                     format: { $0 },
                     parse: { $0 },
                     width: 260,
+                    focusedField: $focusedField, fieldID: parameter.key,
                     onCommit: { text in
                         setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
                     })
@@ -197,6 +206,7 @@ struct ExtensionParameterForm: View {
                     format: { $0 },
                     parse: { $0 },
                     width: 220,
+                    focusedField: $focusedField, fieldID: parameter.key,
                     onCommit: { text in
                         setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
                     })
@@ -277,7 +287,7 @@ struct ExtensionParameterForm: View {
         return VStack(alignment: .leading, spacing: 2) {
             Picker("", selection: Binding(
                 get: { current },
-                set: { setValue(parameter.key, .string($0)) }
+                set: { focusedField = nil; setValue(parameter.key, .string($0)) }
             )) {
                 ForEach(parameter.choices) { choice in
                     Text(choice.label).tag(choice.value)
@@ -303,6 +313,7 @@ struct ExtensionParameterForm: View {
                     format: { $0 },
                     parse: { Self.parseIntegerEntry($0, parameter: parameter) },
                     width: 120,
+                    focusedField: $focusedField, fieldID: parameter.key,
                     onCommit: { text in
                         // Exact record: a blank or the default clears the key; a
                         // different number is recorded.
@@ -593,19 +604,23 @@ private struct GroupControl: View {
     let diagnostics: [PresetManager.PresetDiagnostic]
     let setValue: (String, JSONValue?) -> Void
     let control: (ExtensionParameter) -> AnyView
+    /// Release a focused field in the enclosing form when the group changes.
+    let releaseFocus: () -> Void
 
     @State private var selection: String
 
     init(group: ExtensionGroup, members: [ExtensionParameter], config: [String: JSONValue],
          diagnostics: [PresetManager.PresetDiagnostic],
          setValue: @escaping (String, JSONValue?) -> Void,
-         control: @escaping (ExtensionParameter) -> AnyView) {
+         control: @escaping (ExtensionParameter) -> AnyView,
+         releaseFocus: @escaping () -> Void) {
         self.group = group
         self.members = members
         self.config = config
         self.diagnostics = diagnostics
         self.setValue = setValue
         self.control = control
+        self.releaseFocus = releaseFocus
         _selection = State(initialValue: ExtensionParameterForm.initialSelection(group: group, config: config))
     }
 
@@ -656,6 +671,7 @@ private struct GroupControl: View {
     }
 
     private func pick(_ key: String) {
+        releaseFocus()
         selection = key
         for member in ExtensionParameterForm.keysToClear(group: group, picking: key, config: config) {
             setValue(member, nil)
@@ -674,6 +690,8 @@ private struct GroupControl: View {
 private struct StringListEditor: View {
     let values: [String]
     let placeholder: String
+    @FocusState.Binding var focusedField: String?
+    let idBase: String
     let setValues: ([String]) -> Void
 
     var body: some View {
@@ -686,14 +704,17 @@ private struct StringListEditor: View {
                         parse: { $0 },
                         placeholder: placeholder,
                         width: 260,
+                        focusedField: $focusedField, fieldID: "\(idBase)[\(index)]",
                         onCommit: { var v = values; v[index] = $0; setValues(v) })
                     Button {
+                        focusedField = nil
                         var v = values; v.remove(at: index); setValues(v)
                     } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless)
                 }
             }
             Button {
+                focusedField = nil
                 setValues(values + [""])
             } label: { Label("Add", systemImage: "plus") }
                 .buttonStyle(.borderless)
