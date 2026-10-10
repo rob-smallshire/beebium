@@ -417,6 +417,26 @@ TEST_CASE("describe-extension --json lists the parameters each one excludes",
     CHECK(r.stderr_output.find("cannot be combined") != std::string::npos);
 }
 
+TEST_CASE("describe-extension --json lists the groups of alternative parameters",
+          "[integration][extension][describe-extension][groups]") {
+    const auto rtc = describe_extension_json("acorn-rtc");
+    REQUIRE(rtc.at("groups").size() == 1);
+    const auto& start = rtc.at("groups").at(0);
+    CHECK(start.at("key") == "start");
+    CHECK_FALSE(start.at("label").get<std::string>().empty());
+    CHECK_FALSE(start.at("description").get<std::string>().empty());
+    CHECK(start.at("parameters") == nlohmann::json::array({"time", "offset"}));
+    CHECK(start.at("none").at("label") == "Host time");
+    CHECK(start.at("none").at("description") == "The clock follows this computer's clock.");
+    // The group is where the alternatives are declared; each member's excludes
+    // follow from it.
+    CHECK(parameter(rtc, "offset").at("excludes") == nlohmann::json::array({"time"}));
+
+    // An extension without groups lists none, and a group without a none
+    // state omits the key.
+    CHECK(describe_extension_json("aun").at("groups") == nlohmann::json::array());
+}
+
 // ============================================================================
 // Host serial ports, enumerated before launch
 // ============================================================================

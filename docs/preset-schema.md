@@ -265,8 +265,8 @@ A preset's extension config is checked exactly as the equivalent command-line
 flag is (`normalise_extension_config`): an unknown extension, an unknown
 parameter, a missing required parameter, a value of the wrong type, outside
 the parameter's `min`/`max` or not among its `choices`, or two parameters the
-manifest says exclude each other (`excludes`, e.g. the RTC's `time` and
-`offset`) stops the launch with `CONFIG` (78), and the manifest's defaults are filled in for the
+manifest says exclude each other (`excludes`, or two members of one of its
+`groups` of alternatives, e.g. the RTC's `time` and `offset`) stops the launch with `CONFIG` (78), and the manifest's defaults are filled in for the
 parameters left out. An empty value (`""`, or `[]` for a list) is the same as
 leaving the parameter out, so the default applies. A single value for a list
 parameter is a one-element list. A `filepath` parameter is resolved as in

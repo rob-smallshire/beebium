@@ -291,6 +291,165 @@ TEST_CASE("Manifest roms: malformed entries are skipped, not fatal", "[extension
     std::filesystem::remove_all(bad_entry);
 }
 
+// Manifest `groups`: parameters that are alternatives to one another
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr const char* kClockManifest = R"({
+    "name": "clock", "library": "clock",
+    "parameters": [
+        {"key": "time", "type": "string"},
+        {"key": "offset", "type": "string"},
+        {"key": "layout", "type": "string", "default": "a"}
+    ],
+    "groups": [
+        {"key": "start", "label": "Start", "description": "Where the clock starts.",
+         "parameters": ["time", "offset"],
+         "none": {"label": "Host time", "description": "The clock follows the host."}}
+    ]
+})";
+
+const beebium::ParameterSchema& schema_parameter(const beebium::ExtensionManifest& m,
+                                                 const std::string& key) {
+    for (const auto& p : m.parameters) {
+        if (p.key == key) return p;
+    }
+    FAIL("no parameter " << key);
+    throw;
+}
+
+// Scan a manifest body and return how many manifests survived.
+std::size_t manifests_scanned(const std::string& json) {
+    auto dir = write_manifest(json);
+    beebium::PluginLoader loader;
+    auto count = loader.scan_manifests(dir).size();
+    std::filesystem::remove_all(dir);
+    return count;
+}
+
+}  // namespace
+
+TEST_CASE("Manifest groups: a group is parsed with its none state",
+          "[extension][plugin][groups]") {
+    auto dir = write_manifest(kClockManifest);
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    REQUIRE(manifests[0].groups.size() == 1);
+    const auto& g = manifests[0].groups[0];
+    CHECK(g.key == "start");
+    CHECK(g.label == "Start");
+    CHECK(g.description == "Where the clock starts.");
+    CHECK(g.parameters == std::vector<std::string>{"time", "offset"});
+    REQUIRE(g.none);
+    CHECK(g.none->label == "Host time");
+    CHECK(g.none->description == "The clock follows the host.");
+}
+
+TEST_CASE("Manifest groups: a group need not name a none state",
+          "[extension][plugin][groups]") {
+    auto dir = write_manifest(R"({
+        "name": "c", "library": "c",
+        "parameters": [{"key": "a", "type": "string"}, {"key": "b", "type": "string"}],
+        "groups": [{"key": "g", "label": "G", "parameters": ["a", "b"]}]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    REQUIRE(manifests[0].groups.size() == 1);
+    CHECK_FALSE(manifests[0].groups[0].none);
+}
+
+TEST_CASE("Manifest groups: each member of a group excludes the others",
+          "[extension][plugin][groups]") {
+    auto dir = write_manifest(kClockManifest);
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    const auto& m = manifests[0];
+    CHECK(schema_parameter(m, "time").excludes == std::vector<std::string>{"offset"});
+    CHECK(schema_parameter(m, "offset").excludes == std::vector<std::string>{"time"});
+    CHECK(schema_parameter(m, "layout").excludes.empty());
+
+    auto both = beebium::normalise_extension_config(
+        "clock", {{"time", "1985-01-01T0000"}, {"offset", "-1y"}}, {}, m.parameters);
+    CHECK_FALSE(both.ok);
+    CHECK(both.error.find("cannot be combined") != std::string::npos);
+    CHECK(beebium::normalise_extension_config("clock", {{"offset", "-1y"}}, {}, m.parameters).ok);
+    CHECK(beebium::normalise_extension_config("clock", {}, {}, m.parameters).ok);
+}
+
+TEST_CASE("Manifest groups: a group's excludes are not repeated when also declared",
+          "[extension][plugin][groups]") {
+    auto dir = write_manifest(R"({
+        "name": "c", "library": "c",
+        "parameters": [{"key": "a", "type": "string", "excludes": ["b"]},
+                       {"key": "b", "type": "string"}],
+        "groups": [{"key": "g", "label": "G", "parameters": ["a", "b"]}]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    CHECK(schema_parameter(manifests[0], "a").excludes == std::vector<std::string>{"b"});
+}
+
+TEST_CASE("Manifest groups: a malformed group refuses the manifest",
+          "[extension][plugin][groups]") {
+    SECTION("a member that is not a parameter") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "a", "type": "string"}],
+            "groups": [{"key": "g", "label": "G", "parameters": ["a", "nope"]}]
+        })") == 0);
+    }
+    SECTION("a parameter in two groups") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "a", "type": "string"}, {"key": "b", "type": "string"},
+                           {"key": "d", "type": "string"}],
+            "groups": [{"key": "g", "label": "G", "parameters": ["a", "b"]},
+                       {"key": "h", "label": "H", "parameters": ["b", "d"]}]
+        })") == 0);
+    }
+    SECTION("a member with a default") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "a", "type": "string", "default": "x"},
+                           {"key": "b", "type": "string"}],
+            "groups": [{"key": "g", "label": "G", "parameters": ["a", "b"]}]
+        })") == 0);
+    }
+    SECTION("a required member") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "a", "type": "string", "required": true},
+                           {"key": "b", "type": "string"}],
+            "groups": [{"key": "g", "label": "G", "parameters": ["a", "b"]}]
+        })") == 0);
+    }
+    SECTION("a group without a key") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "a", "type": "string"}, {"key": "b", "type": "string"}],
+            "groups": [{"label": "G", "parameters": ["a", "b"]}]
+        })") == 0);
+    }
+    SECTION("two groups with one key") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "a", "type": "string"}, {"key": "b", "type": "string"},
+                           {"key": "d", "type": "string"}, {"key": "e", "type": "string"}],
+            "groups": [{"key": "g", "label": "G", "parameters": ["a", "b"]},
+                       {"key": "g", "label": "H", "parameters": ["d", "e"]}]
+        })") == 0);
+    }
+}
+
 TEST_CASE("PluginLoader load_extension fails naming the plugin and path when a "
           "declared ROM is absent", "[extension][plugin][rom]") {
     // The presence check runs before dlopen, so no real library is needed: a

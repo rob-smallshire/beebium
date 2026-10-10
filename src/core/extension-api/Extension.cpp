@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -98,6 +99,49 @@ void Extension::load_rom(std::string_view key, std::span<std::uint8_t> dest) con
             + " bytes but the manifest declares " + std::to_string(entry->size));
     }
     read_rom_image(rom_filepath(key), dest);
+}
+
+std::optional<std::string> apply_parameter_groups(ExtensionManifest& manifest) {
+    auto find_parameter = [&](const std::string& key) -> ParameterSchema* {
+        for (auto& p : manifest.parameters) {
+            if (p.key == key) return &p;
+        }
+        return nullptr;
+    };
+    std::vector<std::string> group_keys;
+    std::vector<std::string> grouped;
+    for (const auto& group : manifest.groups) {
+        const std::string what = "group '" + group.key + "'";
+        if (group.key.empty()) return std::string("a group has no key");
+        if (std::find(group_keys.begin(), group_keys.end(), group.key) != group_keys.end()) {
+            return "two groups have the key '" + group.key + "'";
+        }
+        group_keys.push_back(group.key);
+        for (const auto& key : group.parameters) {
+            const auto* p = find_parameter(key);
+            if (!p) return what + " names '" + key + "', which is not a parameter";
+            if (std::find(grouped.begin(), grouped.end(), key) != grouped.end()) {
+                return "parameter '" + key + "' is in more than one group";
+            }
+            grouped.push_back(key);
+            if (p->required || !p->default_value.empty()) {
+                return what + " member '" + key + "' is required or has a default, so it "
+                       "could not be left out";
+            }
+        }
+    }
+    for (const auto& group : manifest.groups) {
+        for (const auto& key : group.parameters) {
+            auto& excludes = find_parameter(key)->excludes;
+            for (const auto& other : group.parameters) {
+                if (other != key &&
+                    std::find(excludes.begin(), excludes.end(), other) == excludes.end()) {
+                    excludes.push_back(other);
+                }
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 std::string make_extension_id(

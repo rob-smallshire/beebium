@@ -229,6 +229,32 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
         }
     }
 
+    // Parse the groups of alternative parameters; a malformed group refuses
+    // the manifest, since its members' exclusions would be wrong.
+    if (j.contains("groups") && j["groups"].is_array()) {
+        for (const auto& g : j["groups"]) {
+            if (!g.is_object()) continue;
+            ParameterGroup group;
+            group.key = g.value("key", "");
+            group.label = g.value("label", "");
+            group.description = g.value("description", "");
+            if (g.contains("parameters") && g["parameters"].is_array()) {
+                for (const auto& key : g["parameters"]) {
+                    if (key.is_string()) group.parameters.push_back(key.get<std::string>());
+                }
+            }
+            if (g.contains("none") && g["none"].is_object()) {
+                group.none = ParameterGroupNone{g["none"].value("label", ""),
+                                                g["none"].value("description", "")};
+            }
+            manifest.groups.push_back(std::move(group));
+        }
+    }
+    if (auto err = apply_parameter_groups(manifest)) {
+        throw std::runtime_error(
+            "Manifest " + manifest_filepath.string() + ": " + *err);
+    }
+
     return manifest;
 }
 

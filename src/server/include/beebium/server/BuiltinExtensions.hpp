@@ -33,6 +33,7 @@
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <stdexcept>
 #include <vector>
 
 namespace beebium::builtin_extensions {
@@ -172,6 +173,14 @@ inline std::vector<Entry> make_entries() {
         result.push_back({std::move(m),
                           [] { return std::unique_ptr<Extension>(
                               new HostSerialExtension()); }});
+    }
+
+    // Every manifest passes through apply_parameter_groups, as a plugin's
+    // does when it is read; a malformed built-in is a programming error.
+    for (auto& e : result) {
+        if (auto err = apply_parameter_groups(e.manifest)) {
+            throw std::logic_error("built-in extension '" + e.manifest.name + "': " + *err);
+        }
     }
 
     return result;

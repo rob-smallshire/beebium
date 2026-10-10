@@ -145,6 +145,8 @@ Fields:
 - `provides` -- new extension points this extension creates for others to attach
   to (e.g. the SCSI adapter's `["scsi"]`); omit if none.
 - `parameters` -- schema for CLI/preset/gRPC configuration (see below)
+- `groups` -- parameters that are alternatives to one another (see below); omit
+  if none
 
 Listing `attaches_to` in the manifest (not only in code) lets tools enumerate
 "what can plug in here" without loading any plugin -- the basis of the
@@ -180,6 +182,39 @@ Parameter schema fields:
 - `provider_of` -- the value is the `id` of the instance providing the named
   attachment point to attach to (empty: the last one)
 - `unique` -- the value must differ among the instances on the same attachment
+
+A group gathers parameters that are alternatives to one another, so that at
+most one of them may be given. The Acorn real-time clock's start time and offset
+from host time are one:
+
+```json
+"groups": [
+    {"key": "start", "label": "Clock start",
+     "description": "Where the clock starts when the machine is switched on.",
+     "parameters": ["time", "offset"],
+     "none": {"label": "Host time",
+              "description": "The clock follows this computer's clock."}}
+]
+```
+
+Group fields:
+- `key` -- the group's name, unique within the manifest
+- `label`, `description` -- what a configuration UI shows for the group
+- `parameters` -- the member keys, in the order a UI offers them
+- `none` -- optional: the `label` and `description` of the state in which no
+  member is given (the common case, where there is one, so a UI offers it
+  first)
+
+A configuration UI presents a group as one choice -- `none` first, if the group
+names it, then each member -- and shows the chosen member's field. The group is
+the one place the alternatives are declared: when the manifest is read, each
+member's `excludes` gains the other members, so giving two of them is the
+`excludes` error and a parameter's `excludes` (in `describe-extension --json`)
+lists them. Keep `excludes` for a pair of parameters that are not alternatives
+in a group. A parameter belongs to at most one group, and a member is neither
+`required` nor given a `default`, since leaving every member out must stay
+possible; a manifest that breaks these rules, or whose group names a key that is
+not a parameter, is refused.
 
 `min`/`max`, `choices`, `excludes` and `required` are enforced for the command
 line and presets alike;

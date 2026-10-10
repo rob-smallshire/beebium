@@ -2838,6 +2838,17 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
         roms.push_back({{"key", r.key}, {"filename", r.filename}, {"size", r.size},
                         {"display_name", r.display_name}});
     }
+    nlohmann::ordered_json groups = nlohmann::ordered_json::array();
+    for (const auto& g : m.groups) {
+        nlohmann::ordered_json group = {{"key", g.key},
+                                        {"label", g.label},
+                                        {"description", g.description},
+                                        {"parameters", g.parameters}};
+        if (g.none) {
+            group["none"] = {{"label", g.none->label}, {"description", g.none->description}};
+        }
+        groups.push_back(std::move(group));
+    }
     return {
         {"name", m.name},
         {"display_name", m.display_name},
@@ -2848,6 +2859,7 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
         {"attaches_to", m.attaches_to},
         {"provides", m.provides},
         {"parameters", parameters},
+        {"groups", groups},
         {"roms", roms},
     };
 }
@@ -2872,7 +2884,9 @@ public:
                   << "name, display_name, description, cli_name, kind, source,\n"
                   << "attaches_to, provides, parameters (key, label, description,\n"
                   << "type, required, is_list, position, default, min, max, choices,\n"
-                  << "bundled, unique, provider_of) and roms.\n";
+                  << "bundled, unique, provider_of), groups (key, label, description,\n"
+                  << "parameters, and none when the group names the state with no member\n"
+                  << "given) and roms.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -3028,6 +3042,12 @@ public:
                                       << p.description << "\n";
                         }
                     }
+                }
+                for (const auto& g : manifest->groups) {
+                    std::cout << "  " << g.label << " (" << g.key << "), one of:";
+                    if (g.none) std::cout << " none (" << g.none->label << ")";
+                    for (const auto& k : g.parameters) std::cout << " " << k;
+                    std::cout << "\n";
                 }
                 if (!manifest->roms.empty()) {
                     std::cout << "  ROMs:\n";

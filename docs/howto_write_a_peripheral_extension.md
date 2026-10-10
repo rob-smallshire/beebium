@@ -308,8 +308,8 @@ reports the extension ABI version (`kExtensionAbiVersion`,
 refuses a plugin whose version differs from its own, naming both, so after any
 change to the shared extension types rebuild the plugins with the server (the
 `beebium-servers` target does). If you change the layout of a type that crosses
-the plugin boundary (`ExtensionManifest`, `ParameterSchema`, the `Extension`
-classes), increment `kExtensionAbiVersion` (#176).
+the plugin boundary (`ExtensionManifest`, `ParameterSchema`, `ParameterGroup`,
+the `Extension` classes), increment `kExtensionAbiVersion` (#176).
 
 > **ODR caveat (this one bites).** If your extension's *public header* gates a
 > member on `#ifdef BEEBIUM_BUILD_SERVICE` (e.g. `unique_ptr<MyDispatcher>
