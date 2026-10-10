@@ -73,10 +73,18 @@ struct KeyboardSectionView: View {
                 .labelsHidden()
                 .frame(width: 70)
             }
-            Toggle("Auto-boot (BREAK boots; SHIFT+BREAK does not)", isOn: Binding(
+            Toggle(isOn: Binding(
                 get: { autoBoot },
-                set: { setByte(layout.byte(currentByte, settingAutoBoot: $0)) }))
-                .toggleStyle(.checkbox)
+                set: { setByte(layout.byte(currentByte, settingAutoBoot: $0)) })) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Auto-boot")
+                    Text(Self.autoBootBehaviour(layout: layout))
+                        .font(.caption2).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.checkbox)
+            .help(Self.autoBootBehaviour(layout: layout))
         }
     }
 
@@ -174,6 +182,18 @@ struct KeyboardSectionView: View {
     }
 
     static func formatHexByte(_ byte: Int) -> String { String(format: "&%02X", byte) }
+
+    /// The explanatory text shown beneath the friendly auto-boot toggle. It comes
+    /// from the schema's auto_boot link entry, so the toggle and that bit's own
+    /// link check box describe the bit from one source; a built-in sentence
+    /// stands in only when the schema gives no description. Either way it names
+    /// the power-on reset as well as BREAK, which the link also governs.
+    static func autoBootBehaviour(layout: StartupSchemaSection.LinksLayout) -> String {
+        let behaviour = layout.autoBootBitEntry?.description ?? ""
+        return behaviour.isEmpty
+            ? "reset or BREAK boots; SHIFT+reset or SHIFT+BREAK does not"
+            : behaviour
+    }
 }
 
 /// A text field editing the links byte in one radix. Invalid input leaves the

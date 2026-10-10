@@ -138,6 +138,15 @@ extension StartupSchemaSection.LinksLayout {
         return wantSet ? (byte | (1 << autoBootBit)) : (byte & ~(1 << autoBootBit))
     }
 
+    /// The link entry describing the auto_boot bit, if the layout names one. The
+    /// friendly auto-boot control takes its explanatory text from here, so the
+    /// control and the bit's own link check box describe the same bit from one
+    /// source.
+    var autoBootBitEntry: StartupSchemaSection.LinkBit? {
+        guard let autoBootBit = autoBootBit else { return nil }
+        return bits.first { $0.bit == autoBootBit }
+    }
+
     /// The bits that are neither screen mode nor auto_boot.
     var otherBitsMask: Int {
         var mask = 0xFF

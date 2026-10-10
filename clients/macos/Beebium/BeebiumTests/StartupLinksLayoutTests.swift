@@ -118,6 +118,32 @@ final class StartupLinksLayoutTests: XCTestCase {
         XCTAssertEqual(backToFriendly.autoBoot, true)
     }
 
+    // MARK: - Auto-boot label
+
+    /// The friendly auto-boot toggle takes its explanatory text verbatim from the
+    /// schema's auto_boot link entry, so there is one source for the bit's
+    /// description (here, core-dev's reworded wording that covers reset).
+    func testAutoBootBehaviourFromSchema() throws {
+        let json = """
+        { "min": 0, "max": 255, "default": 255,
+          "link_made_when": "clear", "screen_mode_bits": [0, 1, 2],
+          "auto_boot_bit": 3, "auto_boot_true_when": "clear",
+          "bits": [ {"bit":3,"link":"Link 5","label":"Filing system / auto-boot",
+                     "description":"When this link is made, a reset or BREAK boots the disc and SHIFT+reset or SHIFT+BREAK does not; when it is open, SHIFT+reset or SHIFT+BREAK boots as usual."} ] }
+        """
+        let l = try JSONDecoder().decode(StartupSchemaSection.LinksLayout.self, from: Data(json.utf8))
+        XCTAssertEqual(KeyboardSectionView.autoBootBehaviour(layout: l),
+                       "When this link is made, a reset or BREAK boots the disc and SHIFT+reset or SHIFT+BREAK does not; when it is open, SHIFT+reset or SHIFT+BREAK boots as usual.")
+    }
+
+    /// With no schema description, a built-in sentence stands in -- and it names
+    /// the power-on reset as well as BREAK.
+    func testAutoBootBehaviourFallback() throws {
+        let l = try layout()   // bit 3 here has no description
+        XCTAssertEqual(KeyboardSectionView.autoBootBehaviour(layout: l),
+                       "reset or BREAK boots; SHIFT+reset or SHIFT+BREAK does not")
+    }
+
     // MARK: - Byte field parsing
 
     func testParseHexByte() {
