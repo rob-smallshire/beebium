@@ -34,6 +34,12 @@ inline constexpr Term kPeerStation{
     "Econet station",
     "The station's number on its net, from 1 to 254; 254 is the usual file server."};
 
+inline constexpr Term kPeerHost{
+    "AUN host (IP address or name)",
+    "The IPv4 address or DNS name of the computer running the AUN station. A name is looked "
+    "up on the computer running this emulator; one that does not resolve shows the peer as "
+    "unreachable."};
+
 inline constexpr Term kPeerPort{
     "AUN UDP port",
     "The UDP port the station listens on. Real AUN machines and bridges use 32768. Several "

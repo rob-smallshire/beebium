@@ -109,7 +109,7 @@ To load the file server from the `FS3v126.ssd` floppy instead
 Startup Sequence" below).
 
 The `map=` entries map Econet station addresses to UDP endpoints, as
-`net.stn@ip@port`; `@` is the inner separator because the extension argument
+`net.stn@host@port` (the host an IPv4 address or a name); `@` is the inner separator because the extension argument
 parser tokenises on `:`. Static `map=` entries are needed only where mDNS
 discovery cannot reach (another subnet, discovery turned off, or a non-Beebium
 peer); the per-user map file and subnet rules are the persistent alternatives.

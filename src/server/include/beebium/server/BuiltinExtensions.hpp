@@ -26,15 +26,12 @@
 // appears in this table.
 
 #include "AunEconetTransportExtension.hpp"
-#include "AunTerms.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/ExtensionManifest.hpp"
 
 #include <functional>
 #include <memory>
-#include <optional>
-#include <string>
 #include <string_view>
 #include <stdexcept>
 #include <vector>
@@ -79,21 +76,15 @@ inline std::vector<Entry> make_entries() {
             {"net", "integer",
              "Local Econet net number this station belongs to (0..255)",
              -1, false, false, "0"});
-        m.parameters.push_back(
-            {"map", "string",
-             "Peer entry 'net.stn@ip@port', IPv4 ip; a bare stn means net 0 "
-             "(repeatable)",
-             -1, false, /*is_list=*/true, ""});
+        // map and subnet come from the extension, with the fields and item
+        // formats it reads their entries by (map_parameter, subnet_parameter).
+        m.parameters.push_back(AunEconetTransportExtension::map_parameter());
         m.parameters.push_back(
             {"map-file", "filepath",
              "Path to the AUN map file (default: BEEBIUM_AUN_MAP_FILEPATH, else the "
              "per-user aun-map.json), or 'none' to disable it",
              -1, false, false, ""});
-        m.parameters.push_back(
-            {"subnet", "string",
-             "Subnet rule 'net@a.b.c.0/24' (RISC OS convention: station is the "
-             "last octet, port 32768; repeatable)",
-             -1, false, /*is_list=*/true, ""});
+        m.parameters.push_back(AunEconetTransportExtension::subnet_parameter());
         m.parameters.push_back(
             {"discovery", "string",
              "mDNS discovery: on (announce+browse), announce, browse, or off",
@@ -111,46 +102,8 @@ inline std::vector<Entry> make_entries() {
                 p.max = 255;
             }
         }
-        label("map", "Peers");
         label("map-file", "Map file");
-        label("subnet", "Subnet rules");
         label("discovery", "Discovery");
-        // A peer and a subnet rule have parts, which a preset may give as an
-        // object and a configuration UI edits one by one, in the words the
-        // Network sidebar uses (aun_terms).
-        auto field = [](const aun_terms::Term& term, std::string key, std::string type,
-                        bool required, std::optional<long long> min = std::nullopt,
-                        std::optional<long long> max = std::nullopt) {
-            ParameterField f;
-            f.key = std::move(key);
-            f.label = term.label;
-            f.description = term.description;
-            f.type = std::move(type);
-            f.required = required;
-            f.min = min;
-            f.max = max;
-            return f;
-        };
-        // The command line's map takes an IPv4 address only; the map file and
-        // the sidebar also take a name.
-        constexpr aun_terms::Term kLaunchPeerHost{
-            "AUN host (IPv4 address)",
-            "The IPv4 address of the computer running the AUN station."};
-        for (auto& p : m.parameters) {
-            if (p.key == "map") {
-                auto net = field(aun_terms::kPeerNet, "net", "integer", false, 0, 255);
-                net.default_value = "0";
-                p.fields = {net,
-                            field(aun_terms::kPeerStation, "station", "integer", true, 1, 254),
-                            field(kLaunchPeerHost, "host", "string", true),
-                            field(aun_terms::kPeerPort, "port", "integer", true, 1, 65535)};
-                p.item_format = "{net}.{station}@{host}@{port}";
-            } else if (p.key == "subnet") {
-                p.fields = {field(aun_terms::kSubnetNet, "net", "integer", true, 1, 255),
-                            field(aun_terms::kSubnetAddress, "address", "string", true)};
-                p.item_format = "{net}@{address}";
-            }
-        }
         for (auto& p : m.parameters) {
             if (p.key == "discovery") {
                 p.choices = {{"on", "Announce and browse"},

@@ -23,7 +23,7 @@ Beebium decouples the emulated ADLC from the underlying transport via the `Netwo
 
 | Backend | CLI flag | Transport | Use case |
 |---|---|---|---|
-| `AunBackend` (built-in `aun` extension) | `--aun [port=<n>\|none][:net=<n>][:map=<net.stn@ip@port>]...[:map-file=<path>\|none][:subnet=<net@a.b.c.0/24>]...[:discovery=on\|announce\|browse\|off]` (defaults `port=32768`, `net=0`, `discovery=on`; see "The `--aun` parameters") | UDP/IP, AUN-encapsulated | Talk to other Beebium instances, BeebEm, PiEconetBridge, or any AUN-speaking peer over IP. Discovers other `_aun._udp` peers on the LAN, so `map=` is not needed between Beebium instances on the same network. |
+| `AunBackend` (built-in `aun` extension) | `--aun [port=<n>\|none][:net=<n>][:map=<net.stn@host@port>]...[:map-file=<path>\|none][:subnet=<net@a.b.c.0/24>]...[:discovery=on\|announce\|browse\|off]` (defaults `port=32768`, `net=0`, `discovery=on`; see "The `--aun` parameters") | UDP/IP, AUN-encapsulated | Talk to other Beebium instances, BeebEm, PiEconetBridge, or any AUN-speaking peer over IP. Discovers other `_aun._udp` peers on the LAN, so `map=` is not needed between Beebium instances on the same network. |
 | `PiconetBackend` (`piconet` plugin extension) | `--piconet [device_path=<path>\|auto]` (omitted or `auto`: find a connected Piconet by its USB vendor id and a STATUS probe) | USB-CDC serial to a Piconet board | Talk to real BBCs / Acorn fileservers / printers over a real Econet wire (macOS, Linux and Windows) |
 | `TestBackend` | selected automatically by `--aun port=none`, by a transport that fails to start (e.g. the UDP port is in use), or by passing `--station <n>` with no transport flag | In-process; no I/O | Hardware fitted, no transport — NFS ROM sees "No Clock". Also the test double for unit tests. |
 
@@ -57,9 +57,9 @@ A transport's typed RPCs — `AunService` for AUN, `PiconetService` for Piconet 
 |---|---|---|
 | `port` | `32768` | UDP port to bind. `0` binds an ephemeral port (the bundled AUN presets use this; the real port is what is announced over mDNS). `none` disables the transport (a disconnected `TestBackend` is fitted). A malformed value falls back to 32768 with a warning. |
 | `net` | `0` | This station's Econet net number, 0..255. See "Local Econet net number". |
-| `map` | — | A launch peer `[net.]stn@ip@port` (repeatable). `ip` must be an IPv4 literal; the port is required. A bare station means net 0. The net must be 0..255, the station 1..254 and the port 1..65535; an entry out of range, or not in this form, is refused when the configuration is read (exit 64 on the command line, 78 from a preset). A host that is not an IPv4 literal is skipped at launch with a warning on stderr. |
+| `map` | — | A launch peer `[net.]stn@host@port` (repeatable). `host` is an IPv4 literal or a DNS name, resolved as a map-file peer's is: bounded (3 s), off the emulation thread, when the transport starts; a name that does not resolve leaves the peer shown as unreachable rather than routed. The port is required. A bare station means net 0. The net must be 0..255, the station 1..254 and the port 1..65535; an entry out of range, or not in this form, is refused when the configuration is read (exit 64 on the command line, 78 from a preset). |
 | `map-file` | per-user `aun-map.json` | Path of the map file, or `none` to disable it. See "The AUN map file". |
-| `subnet` | — | A launch subnet rule `net@a.b.c.0/24` (repeatable; only `/24`). The net must be 1..255: net 0 is this machine's own. See "The AUN map file". |
+| `subnet` | — | A launch subnet rule `net@a.b.c.0/24` (repeatable). The net must be 1..255: net 0 is this machine's own; that and the form are refused when the configuration is read. Only an IPv4 `/24` is supported: another address is skipped at launch with a warning on stderr. See "The AUN map file". |
 | `discovery` | `on` | `on`, `announce`, `browse` or `off`. See "Discovery mode". An invalid value is a launch error. |
 
 ### Inner separators in `--aun map=`
@@ -200,9 +200,9 @@ A running instance picks the change up on its next reload. To bring a BeebEm `Ec
 
 The Network sidebar edits the map file directly, so a GUI with no JSON gives the same standing world as a hand-edited `aun-map.json`. The panel is a **Peers** list, a **Subnet rules** list, and a line for the map file itself.
 
-The **Peers** list shows one row per station: `net.stn  ip:port` as the primary line, the provenance (`map file`, `launch`, `API`, `mDNS` or `subnet`) as a right-aligned caption, and, for a `map file` entry, its label beneath; an unreachable map-file peer (a host that did not resolve) is flagged. The list title carries the row count — "Peers (3)" — and an information affordance explains what the list is. The list's own add control opens a form for a new peer. Only `map file` rows are editable and removable in place; editing opens a prefilled editor, with the `net.station` fixed because it identifies the entry. Rows of the other provenances are read-only, but each offers a **Save to map file** action that opens the *same* form as add, prefilled with that row's endpoint, so the user can adjust it and confirm; on an mDNS-discovered Beebium peer the ephemeral-port warning sits on the port field of that form, where it matters, rather than on the row. The **Subnet rules** list works the same way, with add/edit/remove over the file's `subnets`.
+The **Peers** list shows one row per station: `net.stn  ip:port` as the primary line, the provenance (`map file`, `launch`, `API`, `mDNS` or `subnet`) as a right-aligned caption, and, for a `map file` entry, its label beneath; an unreachable map-file or launch peer (a host that did not resolve) is flagged. The list title carries the row count — "Peers (3)" — and an information affordance explains what the list is. The list's own add control opens a form for a new peer. Only `map file` rows are editable and removable in place; editing opens a prefilled editor, with the `net.station` fixed because it identifies the entry. Rows of the other provenances are read-only, but each offers a **Save to map file** action that opens the *same* form as add, prefilled with that row's endpoint, so the user can adjust it and confirm; on an mDNS-discovered Beebium peer the ephemeral-port warning sits on the port field of that form, where it matters, rather than on the row. The **Subnet rules** list works the same way, with add/edit/remove over the file's `subnets`.
 
-Every form field is written for a newcomer — "Econet net", "Econet station", "AUN host (IP address or name)", "AUN UDP port", "Remark" — and carries an information affordance explaining it (that net 0 means this machine's own network, that the station is 1–254, that a host name is resolved on the server's host, that 32768 is the AUN convention). An empty net is net 0. The subnet form reads the same way. The net, station and port fields, and the subnet form's net and subnet, take their words from `AunTerms.hpp`, as the transport's `map` and `subnet` fields do, so the Configurator and the sidebar say the same.
+Every form field is written for a newcomer — "Econet net", "Econet station", "AUN host (IP address or name)", "AUN UDP port", "Remark" — and carries an information affordance explaining it (that net 0 means this machine's own network, that the station is 1–254, that a host name is resolved on the server's host, that 32768 is the AUN convention). An empty net is net 0. The subnet form reads the same way. The net, station, host and port fields, and the subnet form's net and subnet, take their words from `AunTerms.hpp`, as the transport's `map` and `subnet` fields do, so the Configurator and the sidebar say the same.
 
 The map file is shown as a file reference named **Shared AUN map** (the one file every instance on the host reads; its actual path is in the tooltip and in Reveal/Copy Path), with a state on its own line beneath — "loaded", "not found" (the file does not exist yet, or the map is disabled), or the load error — and a **Reload** action; the renderer adds its own "Reveal in Finder" (only when the server shares this host's filesystem; see [`docs/frontend-local-server-gating.md`](frontend-local-server-gating.md)) and "Copy Path". A failed edit is reported by a single error indicator naming the offending field.
 
@@ -286,7 +286,7 @@ beebium-model-b --station 80 \
     --sideways slot=9:type=rom:image=acorn-anfs_4_18.rom
 ```
 
-`map=` takes an IPv4 literal for the bridge; a DNS name is accepted only in the map file. Then, at the BBC prompt, `*NET` and `*I AM 1.254 SYST` log in, and `*CAT` lists the fileserver's disc. If the map entry is missing, the login fails with the filing system's no-reply error: "No reply" from NFS 3.34, "Station 1.254 not present" from ANFS 4.18.
+`map=` takes the bridge's IPv4 address or DNS name. Then, at the BBC prompt, `*NET` and `*I AM 1.254 SYST` log in, and `*CAT` lists the fileserver's disc. If the map entry is missing, the login fails with the filing system's no-reply error: "No reply" from NFS 3.34, "Station 1.254 not present" from ANFS 4.18.
 
 The bridge matches Beebium's datagrams against its `AUN MAP HOST` line by source address and port, so the path between them must not rewrite either. Two consequences:
 
@@ -405,7 +405,7 @@ Every extension carries a manifest declaring its CLI name, parameter schema, and
      "description": "Local Econet net number this station belongs to (0..255)",
      "default_value": "0"},
     {"key": "map", "type": "string", "is_list": true,
-     "description": "Peer entry 'net.stn@ip@port' (repeatable)"},
+     "description": "Peer entry 'net.stn@host@port' (repeatable)"},
     {"key": "map-file", "type": "string",
      "description": "Path to the per-user aun-map.json, or 'none' to disable it"},
     {"key": "subnet", "type": "string", "is_list": true,
@@ -1789,7 +1789,7 @@ The flag fill and idle detection are also in `FourWayHandshake` (via `is_receivi
 2. **Local subnet discovery** — built as mDNS / DNS-SD peer discovery under `_aun._udp`, rather than the AUN broadcast announcement originally sketched; see "AUN peer discovery via mDNS" above. No configuration is needed for same-LAN Beebium peers.
 
 3. **Explicit address mapping** (for cross-subnet / bridge / non-announcing peers)
-   - `--aun map=<net.stn@ip@port>` (repeatable; the port is required), the per-user `aun-map.json`, and `AunService.AddPeer`
+   - `--aun map=<net.stn@host@port>` (repeatable; the port is required), the per-user `aun-map.json`, and `AunService.AddPeer`
    - Operator mappings take precedence over discovered peers; see "Peer provenance and precedence"
 
 4. **Pi Econet Bridge compatibility** — not a dedicated extension: PiEconetBridge speaks AUN, so `AunBackend` talks to it directly. `integration_tests/pieb-aun/` runs a real bridge — with no Pi, no Econet HAT and no kernel module — and drives login and catalogue operations against its emulated fileserver (see `docs/discussion/pieconetbridge-aun-interop-testing.md`); the published recipe is in "Connecting to a PiEconetBridge".
@@ -1800,7 +1800,7 @@ The flag fill and idle detection are also in `FourWayHandshake` (via `is_receivi
 
 1. **Command-line options**:
    - `--station <n>|auto[:lo-hi]` - Enable Econet hardware and set (or automatically choose) the station number (no flag = no Econet)
-   - `--aun [port=<n>|none][:net=<n>][:map=<net.stn@ip@port>]...[:map-file=<path>|none][:subnet=<net@a.b.c.0/24>]...[:discovery=<mode>]` - AUN UDP transport; see "The `--aun` parameters"
+   - `--aun [port=<n>|none][:net=<n>][:map=<net.stn@host@port>]...[:map-file=<path>|none][:subnet=<net@a.b.c.0/24>]...[:discovery=<mode>]` - AUN UDP transport; see "The `--aun` parameters"
    - `--piconet [device_path=<path>|auto]` - Piconet USB-CDC bridge to a real Econet wire
    - Both transports flow through the generic extension dispatch (see "Econet Transport Extensions" above).
 

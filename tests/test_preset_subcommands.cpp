@@ -2567,3 +2567,13 @@ TEST_CASE("describe-extension: the AUN map and subnet describe their items' fiel
         CHECK(p.at("item_format") == "");
     }
 }
+
+TEST_CASE("start: a malformed AUN map item on the command line is refused before launch",
+          "[integration][list-item]") {
+    auto result = run_command(EXECUTABLE + " start --aun map=broken@entry --station 32"
+                              " --port 0");
+    CHECK(result.exit_code == 64);
+    INFO(result.stderr_output);
+    CHECK(result.stderr_output.find("map item 0") != std::string::npos);
+    CHECK(result.stderr_output.find("{net}.{station}@{host}@{port}") != std::string::npos);
+}

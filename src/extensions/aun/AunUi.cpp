@@ -50,10 +50,6 @@ constexpr const char* ACTION_RELOAD      = "reload";
 // Newcomer-readable help, written for someone who does not already know
 // Econet/AUN. Shown as an information affordance, never inline. The words
 // the manifest's map and subnet fields share are in AunTerms.hpp.
-constexpr const char* HELP_HOST =
-    "The IPv4 address or DNS name of the computer running the AUN station. A "
-    "name is looked up on the computer running this emulator, each time the "
-    "map is loaded.";
 constexpr const char* HELP_REMARK =
     "A note for you, such as the machine's name or location. Beebium does not "
     "use it.";
@@ -137,8 +133,8 @@ void build_peer_editor(Control* editor, const std::string& editor_id,
         add_text_field(group, "station", aun_terms::kPeerStation.label, station,
                        aun_terms::kPeerStation.description);
     }
-    add_text_field(group, "host", "AUN host (IP address or name)", host,
-                   HELP_HOST);
+    add_text_field(group, "host", aun_terms::kPeerHost.label, host,
+                   aun_terms::kPeerHost.description);
     add_text_field(group, "port", aun_terms::kPeerPort.label, port,
                    aun_terms::kPeerPort.description, port_note);
     add_text_field(group, "label", "Remark", label, HELP_REMARK);
@@ -256,11 +252,13 @@ void AunUi::build_view(View* out) const {
     // shows them all -- live peers plus unreachable map-file peers).
     auto live_peers = ext_.peer_set().list_peers();
     auto unreachable = ext_.unreachable_map_peers();
+    auto unreachable_launch = ext_.unreachable_launch_peers();
     auto* peers_control = root_group->add_controls();
     peers_control->set_id(CONTROL_PEERS_LIST);
     auto* peers = peers_control->mutable_editable_list();
     peers->set_title("Peers (" +
-                     std::to_string(live_peers.size() + unreachable.size()) +
+                     std::to_string(live_peers.size() + unreachable.size() +
+                                    unreachable_launch.size()) +
                      ")");
     peers->set_help(LIST_HELP_PEERS);
     peers->set_can_add(true);
@@ -323,6 +321,25 @@ void AunUi::build_view(View* out) const {
         build_peer_editor(item->mutable_editor(), id + ".editor",
                           /*is_add=*/false, "", "", peer.host,
                           std::to_string(peer.port), peer.label);
+    }
+
+    // Launch peers whose host did not resolve: shown as unreachable (WARN),
+    // and, as a reachable launch peer, offered for saving to the map file.
+    for (const auto& peer : unreachable_launch) {
+        const std::string id = net_stn_text(peer.net, peer.stn);
+        auto* item = peers->add_items();
+        item->set_id(id);
+        item->set_primary(id + "  " + peer.host + ":" +
+                          std::to_string(peer.port) + "  (unreachable)");
+        item->set_secondary(provenance_caption(AunPeerProvenance::Launch));
+        item->set_state(Indicator_State_WARN);
+        auto* action = item->add_actions();
+        action->set_id(ACTION_SAVE_TO_MAP);
+        action->set_title("Save to map file");
+        build_peer_editor(action->mutable_editor(), id + ".save_editor",
+                          /*is_add=*/true, std::to_string(peer.net),
+                          std::to_string(peer.stn), peer.host,
+                          std::to_string(peer.port), "");
     }
 
     // Subnet rules list.

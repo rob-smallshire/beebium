@@ -203,7 +203,7 @@ separators. The AUN transport's `map` and `subnet` are the examples:
       "default": "0", "min": 0, "max": 255, "description": "..."},
      {"key": "station", "label": "Econet station", "type": "integer",
       "required": true, "min": 1, "max": 254, "description": "..."},
-     {"key": "host", "label": "AUN host (IPv4 address)", "required": true,
+     {"key": "host", "label": "AUN host (IP address or name)", "required": true,
       "description": "..."},
      {"key": "port", "label": "AUN UDP port", "type": "integer",
       "required": true, "min": 1, "max": 65535, "description": "..."}]}

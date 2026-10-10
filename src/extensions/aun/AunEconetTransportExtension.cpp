@@ -15,6 +15,7 @@
 #include "AunDiscoveryAnnouncer.hpp"
 #include "AunDiscoverySubscriber.hpp"
 #include "AunMapWriter.hpp"
+#include "AunTerms.hpp"
 #include "beebium/econet/AunPacket.hpp"
 #include "beebium/econet/AutoStationState.hpp"
 #include "beebium/net/SocketPlatform.hpp"
@@ -48,6 +49,7 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <sstream>
 #include <string_view>
 #include <thread>
@@ -56,24 +58,6 @@
 namespace beebium {
 
 namespace {
-
-// Split s on a single delimiter character. Empty trailing fields are
-// preserved so callers can reliably tell a missing field from a malformed
-// one.
-std::vector<std::string> split_on(std::string_view s, char delim) {
-    std::vector<std::string> result;
-    std::string current;
-    for (char c : s) {
-        if (c == delim) {
-            result.push_back(std::move(current));
-            current.clear();
-        } else {
-            current += c;
-        }
-    }
-    result.push_back(std::move(current));
-    return result;
-}
 
 bool parse_uint(std::string_view s, unsigned long& out) {
     auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), out);
@@ -200,72 +184,82 @@ std::optional<std::string> AunEconetTransportExtension::config_error() const {
     return std::nullopt;
 }
 
+namespace {
+
+ParameterField entry_field(const aun_terms::Term& term, std::string key, std::string type,
+                           bool required, std::optional<long long> min = std::nullopt,
+                           std::optional<long long> max = std::nullopt) {
+    ParameterField f;
+    f.key = std::move(key);
+    f.label = term.label;
+    f.description = term.description;
+    f.type = std::move(type);
+    f.required = required;
+    f.min = min;
+    f.max = max;
+    return f;
+}
+
+// The fields of a map or subnet entry, which the framework has checked
+// against the parameter; one not in its form is a caller's error.
+ListItemFields entry_fields(const ParameterSchema& parameter, const std::string& entry) {
+    auto parsed = parse_list_item(parameter, entry);
+    if (!parsed.fields) {
+        throw std::invalid_argument("AUN " + parameter.key + " entry " + parsed.error.message);
+    }
+    if (auto problem = check_list_item_fields(parameter, *parsed.fields)) {
+        throw std::invalid_argument("AUN " + parameter.key + " entry '" + entry + "': " +
+                                    problem->message);
+    }
+    return std::move(*parsed.fields);
+}
+
+// A checked integer field's value, or 0 when it is absent.
+unsigned long entry_number(const ListItemFields& fields, const std::string& key) {
+    auto it = fields.find(key);
+    return it == fields.end() ? 0 : std::stoul(it->second);
+}
+
+}  // namespace
+
+ParameterSchema AunEconetTransportExtension::map_parameter() {
+    ParameterSchema p{"map", "string",
+                      "Peer entry 'net.stn@host@port', host an IPv4 address or a name; a bare "
+                      "stn means net 0 (repeatable)",
+                      -1, false, /*is_list=*/true, ""};
+    p.label = "Peers";
+    auto net = entry_field(aun_terms::kPeerNet, "net", "integer", false, 0, 255);
+    net.default_value = "0";
+    p.fields = {net, entry_field(aun_terms::kPeerStation, "station", "integer", true, 1, 254),
+                entry_field(aun_terms::kPeerHost, "host", "string", true),
+                entry_field(aun_terms::kPeerPort, "port", "integer", true, 1, 65535)};
+    p.item_format = "{net}.{station}@{host}@{port}";
+    return p;
+}
+
+ParameterSchema AunEconetTransportExtension::subnet_parameter() {
+    ParameterSchema p{"subnet", "string",
+                      "Subnet rule 'net@a.b.c.0/24' (RISC OS convention: station is the "
+                      "last octet, port 32768; repeatable)",
+                      -1, false, /*is_list=*/true, ""};
+    p.label = "Subnet rules";
+    p.fields = {entry_field(aun_terms::kSubnetNet, "net", "integer", true, 1, 255),
+                entry_field(aun_terms::kSubnetAddress, "address", "string", true)};
+    p.item_format = "{net}@{address}";
+    return p;
+}
+
 std::vector<AunEconetTransportExtension::PeerSpec>
 AunEconetTransportExtension::parse_map(std::span<const std::string> entries) {
+    static const ParameterSchema parameter = map_parameter();
     std::vector<PeerSpec> peers;
-
-    // Each entry encodes one peer as "[net.]stn@ip@port". The framework
-    // has already split the repeated map= tokens into separate entries;
-    // here we just split each entry on '@'.
     for (const auto& entry : entries) {
-        if (entry.empty()) continue;
-        auto fields = split_on(entry, '@');
-        if (fields.size() != 3) {
-            std::cerr << "AUN extension: malformed map entry '" << entry
-                      << "' (expected [net.]stn@ip@port, "
-                         "e.g. 0.254@127.0.0.1@32768) -- skipping\n";
-            continue;
-        }
-
-        // net may be either a bare station (e.g. "254", net implicit 0)
-        // or "net.stn" (e.g. "0.254"). Match the legacy --aun-map format.
-        std::uint8_t net = 0;
-        std::uint8_t stn = 0;
-        auto net_dot_stn = split_on(fields[0], '.');
-        if (net_dot_stn.size() == 2) {
-            unsigned long n = 0, s = 0;
-            if (!parse_uint(net_dot_stn[0], n) || !parse_uint(net_dot_stn[1], s)
-                || n > 0xFF || s > 0xFF) {
-                std::cerr << "AUN extension: invalid net.stn '" << fields[0]
-                          << "' in map entry -- skipping\n";
-                continue;
-            }
-            net = static_cast<std::uint8_t>(n);
-            stn = static_cast<std::uint8_t>(s);
-        } else if (net_dot_stn.size() == 1) {
-            unsigned long s = 0;
-            if (!parse_uint(net_dot_stn[0], s) || s > 0xFF) {
-                std::cerr << "AUN extension: invalid station '" << fields[0]
-                          << "' in map entry -- skipping\n";
-                continue;
-            }
-            stn = static_cast<std::uint8_t>(s);
-        } else {
-            std::cerr << "AUN extension: malformed net.stn '" << fields[0]
-                      << "' in map entry -- skipping\n";
-            continue;
-        }
-
-        // IP address: dotted-quad, parse via inet_pton.
-        in_addr addr{};
-        if (inet_pton(AF_INET, fields[1].c_str(), &addr) != 1) {
-            std::cerr << "AUN extension: invalid IP address '" << fields[1]
-                      << "' in map entry -- skipping\n";
-            continue;
-        }
-
-        // Port: decimal uint16.
-        unsigned long port = 0;
-        if (!parse_uint(fields[2], port) || port == 0 || port > 0xFFFF) {
-            std::cerr << "AUN extension: invalid port '" << fields[2]
-                      << "' in map entry -- skipping\n";
-            continue;
-        }
-
-        peers.push_back(PeerSpec{
-            net, stn, addr.s_addr, static_cast<std::uint16_t>(port)});
+        auto fields = entry_fields(parameter, entry);
+        peers.push_back(PeerSpec{static_cast<std::uint8_t>(entry_number(fields, "net")),
+                                 static_cast<std::uint8_t>(entry_number(fields, "station")),
+                                 fields.at("host"),
+                                 static_cast<std::uint16_t>(entry_number(fields, "port"))});
     }
-
     return peers;
 }
 
@@ -276,40 +270,29 @@ struct SubnetSpec {
     std::uint32_t base_ip;  // network byte order, /24 network address
 };
 
-// Parse --aun subnet= entries of the form "net@a.b.c.0/24". Only /24 is
-// supported. Malformed entries are dropped with a warning to stderr.
-std::vector<SubnetSpec> parse_subnet_specs(
-        std::span<const std::string> entries) {
+// Read --aun subnet= entries "net@a.b.c.0/24", which the framework has checked
+// against subnet_parameter(). Only an IPv4 /24 is supported, which the fields
+// do not say: another address is dropped with a warning to stderr.
+std::vector<SubnetSpec> parse_subnet_specs(std::span<const std::string> entries) {
+    static const ParameterSchema parameter = AunEconetTransportExtension::subnet_parameter();
     std::vector<SubnetSpec> specs;
     for (const auto& entry : entries) {
-        if (entry.empty()) continue;
-        auto fields = split_on(entry, '@');
-        if (fields.size() != 2) {
-            std::cerr << "AUN extension: malformed subnet entry '" << entry
-                      << "' (expected net@a.b.c.0/24) -- skipping\n";
-            continue;
-        }
-        unsigned long net = 0;
-        if (!parse_uint(fields[0], net) || net > 255) {
-            std::cerr << "AUN extension: invalid net '" << fields[0]
-                      << "' in subnet entry -- skipping\n";
-            continue;
-        }
-        auto slash = fields[1].find('/');
-        if (slash == std::string::npos || fields[1].substr(slash + 1) != "24") {
-            std::cerr << "AUN extension: subnet '" << fields[1]
+        auto fields = entry_fields(parameter, entry);
+        const auto& address = fields.at("address");
+        auto slash = address.find('/');
+        if (slash == std::string::npos || address.substr(slash + 1) != "24") {
+            std::cerr << "AUN extension: subnet '" << address
                       << "' must be a /24 -- skipping\n";
             continue;
         }
         in_addr addr{};
-        if (inet_pton(AF_INET, fields[1].substr(0, slash).c_str(), &addr) != 1) {
-            std::cerr << "AUN extension: invalid subnet address '" << fields[1]
+        if (inet_pton(AF_INET, address.substr(0, slash).c_str(), &addr) != 1) {
+            std::cerr << "AUN extension: invalid subnet address '" << address
                       << "' -- skipping\n";
             continue;
         }
-        specs.push_back(
-            SubnetSpec{static_cast<std::uint8_t>(net),
-                       addr.s_addr & htonl(0xFFFFFF00u)});
+        specs.push_back(SubnetSpec{static_cast<std::uint8_t>(entry_number(fields, "net")),
+                                   addr.s_addr & htonl(0xFFFFFF00u)});
     }
     return specs;
 }
@@ -528,11 +511,21 @@ void AunEconetTransportExtension::seed_operator_layers(std::uint8_t local_net) {
     peer_set_.clear_provenance(AunPeerProvenance::Discovered);
     peer_set_.clear_provenance(AunPeerProvenance::Subnet);
     peer_set_.clear_subnet_rules(AunPeerProvenance::Launch);
+    // A launch peer's host is resolved as a map-file peer's is: bounded, and
+    // one that does not resolve is kept for display as unreachable.
     auto map_entries = config_list("map");
+    std::vector<AunMapPeer> unreachable;
     for (const auto& p :
          parse_map(map_entries ? *map_entries : std::span<const std::string>{})) {
-        peer_set_.set_peer(p.net, p.stn, p.ip_addr_net_byte_order, p.port,
-                           AunPeerProvenance::Launch);
+        if (auto ip = resolve_host_bounded(p.host, std::chrono::seconds(3))) {
+            peer_set_.set_peer(p.net, p.stn, *ip, p.port, AunPeerProvenance::Launch);
+        } else {
+            unreachable.push_back(AunMapPeer{p.net, p.stn, p.host, p.port, {}});
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(map_file_mutex_);
+        unreachable_launch_peers_ = std::move(unreachable);
     }
     auto subnet_entries = config_list("subnet");
     for (const auto& s : parse_subnet_specs(
@@ -992,6 +985,11 @@ std::string AunEconetTransportExtension::map_file_error() const {
 std::vector<AunMapPeer> AunEconetTransportExtension::unreachable_map_peers() const {
     std::lock_guard<std::mutex> lock(map_file_mutex_);
     return unreachable_map_peers_;
+}
+
+std::vector<AunMapPeer> AunEconetTransportExtension::unreachable_launch_peers() const {
+    std::lock_guard<std::mutex> lock(map_file_mutex_);
+    return unreachable_launch_peers_;
 }
 
 std::vector<AunMapPeer> AunEconetTransportExtension::map_peers() const {

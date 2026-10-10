@@ -112,8 +112,18 @@ TEST_CASE("AunEconetTransportExtension::parse_map: single net.stn entry",
     REQUIRE(peers.size() == 1);
     CHECK(peers[0].net == 0);
     CHECK(peers[0].stn == 254);
-    CHECK(peers[0].ip_addr_net_byte_order == htonl(INADDR_LOOPBACK));
+    CHECK(peers[0].host == "127.0.0.1");
     CHECK(peers[0].port == 32768);
+}
+
+TEST_CASE("AunEconetTransportExtension::parse_map: a host may be a name",
+          "[econet][aun][extension]") {
+    std::vector<std::string> entries = {"1.254@fs.example@32768"};
+    auto peers = AunEconetTransportExtension::parse_map(entries);
+    REQUIRE(peers.size() == 1);
+    CHECK(peers[0].net == 1);
+    CHECK(peers[0].stn == 254);
+    CHECK(peers[0].host == "fs.example");
 }
 
 TEST_CASE("AunEconetTransportExtension::parse_map: bare station defaults net to 0",
@@ -137,17 +147,6 @@ TEST_CASE("AunEconetTransportExtension::parse_map: multiple entries",
     CHECK(peers[0].port == 32768);
     CHECK(peers[1].stn == 253);
     CHECK(peers[1].port == 32769);
-}
-
-TEST_CASE("AunEconetTransportExtension::parse_map: malformed entries are skipped",
-          "[econet][aun][extension]") {
-    std::vector<std::string> entries = {
-        "broken@entry",                // only 2 fields -> dropped
-        "0.254@127.0.0.1@32768",
-    };
-    auto peers = AunEconetTransportExtension::parse_map(entries);
-    REQUIRE(peers.size() == 1);
-    CHECK(peers[0].stn == 254);
 }
 
 TEST_CASE("AunEconetTransportExtension::create_backend: port=none returns nullptr",
@@ -184,6 +183,40 @@ TEST_CASE("AunEconetTransportExtension::create_backend: applies map peers",
     auto* aun = dynamic_cast<AunBackend*>(backend.get());
     REQUIRE(aun != nullptr);
     REQUIRE(aun->peer_count() == 2);
+}
+
+TEST_CASE("AunEconetTransportExtension::create_backend: a map peer's host name is resolved",
+          "[econet][aun][extension]") {
+    AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
+    ext.set_list_config({{"map", {"0.254@localhost@32768"}}});
+    auto backend = ext.create_backend(/*station=*/32);
+    REQUIRE(backend != nullptr);
+    auto* aun = dynamic_cast<AunBackend*>(backend.get());
+    REQUIRE(aun != nullptr);
+    CHECK(aun->peer_count() == 1);
+    CHECK(ext.unreachable_launch_peers().empty());
+}
+
+TEST_CASE("AunEconetTransportExtension::create_backend: a map peer whose host does not "
+          "resolve is kept as unreachable, not routed",
+          "[econet][aun][extension]") {
+    AunEconetTransportExtension ext;
+    ext.set_discovery_service_type(aun_unique_service_type());
+    ext.set_config({{"port", "0"}, {"map-file", "none"}});
+    ext.set_list_config({{"map", {"0.254@127.0.0.1@32768", "3@nonexistent.invalid@32769"}}});
+    auto backend = ext.create_backend(/*station=*/32);
+    REQUIRE(backend != nullptr);
+    auto* aun = dynamic_cast<AunBackend*>(backend.get());
+    REQUIRE(aun != nullptr);
+    CHECK(aun->peer_count() == 1);
+    auto unreachable = ext.unreachable_launch_peers();
+    REQUIRE(unreachable.size() == 1);
+    CHECK(unreachable[0].net == 0);
+    CHECK(unreachable[0].stn == 3);
+    CHECK(unreachable[0].host == "nonexistent.invalid");
+    CHECK(unreachable[0].port == 32769);
 }
 
 TEST_CASE("AunEconetTransportExtension::create_backend: defaults local_net to 0",

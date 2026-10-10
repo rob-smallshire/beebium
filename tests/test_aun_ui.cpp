@@ -48,7 +48,9 @@ namespace {
 
 class AunUiFixture {
 public:
-    AunUiFixture() {
+    // `launch_map` is the transport's map= entries, as the framework hands
+    // them over.
+    explicit AunUiFixture(std::vector<std::string> launch_map = {}) {
         std::random_device rd;
         map_filepath_ = std::filesystem::temp_directory_path() /
                         ("beebium-aun-ui-map-" + std::to_string(rd()) + ".json");
@@ -57,6 +59,7 @@ public:
         // into the peer set and perturb the view under test (#145).
         ext_->set_discovery_service_type(aun_unique_service_type());
         ext_->set_config({{"port", "0"}, {"map-file", map_filepath_.string()}});
+        if (!launch_map.empty()) ext_->set_list_config({{"map", std::move(launch_map)}});
         backend_owner_ = ext_->create_backend(/*station=*/1);
         REQUIRE(backend_owner_ != nullptr);
     }
@@ -336,6 +339,28 @@ TEST_CASE("AunUi: a map-file load error shows on the file reference",
     // defines ERROR as a macro, which breaks the scoped-enum spelling.
     CHECK(file->file_reference().state() == beebium::Indicator_State_ERROR);
     CHECK(file->file_reference().state_text().find("JSON") != std::string::npos);
+}
+
+TEST_CASE("AunUi: a launch peer whose host does not resolve is shown unreachable",
+          "[aun][ui]") {
+    AunUiFixture fixture({"3@nonexistent.invalid@32769"});
+    auto view = fixture.view();
+    const auto* peers = list_of(view, "peers");
+    REQUIRE(peers != nullptr);
+    CHECK(peers->title() == "Peers (1)");
+    const auto* item = item_of(*peers, "0.3");
+    REQUIRE(item != nullptr);
+    CHECK(item->primary().find("nonexistent.invalid") != std::string::npos);
+    CHECK(item->primary().find("(unreachable)") != std::string::npos);
+    CHECK(item->secondary() == "launch");
+    CHECK(item->state() == beebium::Indicator_State_WARN);
+    CHECK_FALSE(item->editable());
+    CHECK_FALSE(item->removable());
+    // As a reachable launch peer, it may be saved to the map file.
+    REQUIRE(item->actions_size() == 1);
+    CHECK(item->actions(0).id() == "save_to_map");
+    CHECK(editor_field(item->actions(0).editor(), "host") == "nonexistent.invalid");
+    CHECK(editor_field(item->actions(0).editor(), "station") == "3");
 }
 
 TEST_CASE("AunUi: ADD peer commit writes the map file", "[aun][ui]") {

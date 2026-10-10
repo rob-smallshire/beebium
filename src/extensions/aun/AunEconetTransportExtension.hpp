@@ -19,18 +19,18 @@
 // econet.transport.parameters (preset). Constructs and returns an
 // AunBackend on demand; owns no machine state of its own.
 //
-// Manifest is constructed by builtin_extensions::entries() and includes
-// two parameters:
+// Manifest is constructed by builtin_extensions::entries(); among its
+// parameters:
 //   port (string, default "32768"): UDP port to bind. Special value
 //                                   "none" disables the network (no
 //                                   socket bound; create_backend returns
 //                                   nullptr).
 //   map  (string, is_list):         Repeated peer entries of the form
-//                                   "net.stn@ip@port". Each --aun
-//                                   map=... or preset JSON array element
-//                                   contributes one PeerSpec. '@' is used
-//                                   as the inner separator because it is
-//                                   shell-safe across bash/zsh/fish/cmd/
+//                                   "net.stn@host@port" (map_parameter()).
+//                                   Each --aun map=... or preset array
+//                                   item contributes one PeerSpec. '@' is
+//                                   used as the inner separator because it
+//                                   is shell-safe across bash/zsh/fish/cmd/
 //                                   PowerShell and does not collide with
 //                                   '.' (inside net.stn and IPv4) or ':'
 //                                   (the top-level arg separator).
@@ -40,6 +40,7 @@
 #include "AunUi.hpp"
 #include "beebium/econet/AunBackend.hpp"
 #include "beebium/extension/EconetTransportExtension.hpp"
+#include "beebium/extension/ExtensionArgParser.hpp"
 
 #include <chrono>
 #include <condition_variable>
@@ -61,13 +62,21 @@ class AunDiscoverySubscriber;  // forward; defined in this dir
 
 class AunEconetTransportExtension : public EconetTransportExtension {
 public:
-    // Parameter parsing for an individual map= entry.
+    // One map= entry: a peer whose host, an IPv4 address or a name, is
+    // resolved when the peer is seeded.
     struct PeerSpec {
         std::uint8_t net;
         std::uint8_t stn;
-        std::uint32_t ip_addr_net_byte_order;
+        std::string host;
         std::uint16_t port;
     };
+
+    // The map and subnet parameters, with the fields and item formats that
+    // describe their entries. The manifest declares them, so the framework
+    // checks every entry against them before the extension sees it, and
+    // parse_map and parse_subnet_specs read the entries by them.
+    static ParameterSchema map_parameter();
+    static ParameterSchema subnet_parameter();
 
     // What the transport does on `_aun._udp` (issue #158, the `discovery=`
     // parameter). On = announce AND browse (the default, today's behaviour);
@@ -189,6 +198,10 @@ public:
     // as unreachable rather than routed. Copied out under the lock.
     std::vector<AunMapPeer> unreachable_map_peers() const;
 
+    // The same for the launch peers (map=), as of the last seeding: those
+    // whose host did not resolve. Copied out under the lock.
+    std::vector<AunMapPeer> unreachable_launch_peers() const;
+
     // The map file's peers and subnets (with their labels) as of the last load,
     // cached so the sidebar can show labels and the subnet-rules group without
     // re-reading or re-resolving the file on every view build.
@@ -267,9 +280,9 @@ public:
     // can address. Invalid input falls back to 0 with a warning to stderr.
     static std::uint8_t parse_net(const std::string& value);
 
-    // Parse a list of "map" entries. Each element is one peer of the
-    // form "[net.]stn@ip@port". Entries that can't be parsed are
-    // dropped with a warning to stderr.
+    // Read a list of "map" entries, each one peer "[net.]stn@host@port", which
+    // the framework has checked against map_parameter(). Throws
+    // std::invalid_argument for an entry not in that form.
     static std::vector<PeerSpec> parse_map(std::span<const std::string> entries);
 
     // Parse the "discovery" config value. Empty/missing -> On (the default).
@@ -332,6 +345,7 @@ private:
     std::uint32_t map_file_entry_count_ = 0;
     std::string map_file_error_;
     std::vector<AunMapPeer> unreachable_map_peers_;
+    std::vector<AunMapPeer> unreachable_launch_peers_;  // map= hosts, same rule
     std::vector<AunMapPeer> map_peers_;      // the file's peers (with labels)
     std::vector<AunMapSubnet> map_subnets_;  // the file's subnets (with labels)
     // The map file's modification time at the last load, so the poll can
