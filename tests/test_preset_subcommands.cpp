@@ -2457,3 +2457,113 @@ TEST_CASE("describe-preset-schema output is stable",
         CHECK(actual.dump(2) == expected.dump(2));
     }
 }
+
+// ============================================================================
+// A list parameter with fields: items as objects or strings
+// ============================================================================
+
+namespace {
+
+// Every error path resolving `body` gives.
+std::vector<std::string> error_paths(const std::string& body) {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "items.preset.beebium";
+    std::ofstream(preset_filepath) << body;
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+    std::vector<std::string> paths;
+    for (const auto& d : out.at("diagnostics")) {
+        if (d.at("severity") == "error") paths.push_back(d.at("path").get<std::string>());
+    }
+    return paths;
+}
+
+bool has_path(const std::vector<std::string>& paths, const std::string& path) {
+    INFO("paths: " << nlohmann::json(paths).dump());
+    return std::find(paths.begin(), paths.end(), path) != paths.end();
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: AUN peers and subnet rules come back in the form given",
+          "[integration][preset][resolve-preset][list-item]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "peers.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b",
+        "econet": {"station": 32, "transport": {"name": "aun", "parameters": {
+            "port": 0, "discovery": "off", "map-file": "none",
+            "map": [{"net": 0, "station": 254, "host": "127.0.0.1", "port": 32769},
+                    "253@127.0.0.1@32770",
+                    {"station": 252, "host": "127.0.0.1", "port": 32771}],
+            "subnet": [{"net": 128, "address": "192.168.5.0/24"}]}}}})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string());
+
+    INFO(out.dump(2));
+    CHECK(out.at("diagnostics").empty());
+    const auto& parameters = out.at("preset").at("econet").at("transport").at("parameters");
+    CHECK(parameters.at("map") ==
+          nlohmann::json::parse(R"([
+              {"net": 0, "station": 254, "host": "127.0.0.1", "port": 32769},
+              "253@127.0.0.1@32770",
+              {"station": 252, "host": "127.0.0.1", "port": 32771}])"));
+    CHECK(parameters.at("subnet") ==
+          nlohmann::json::parse(R"([{"net": 128, "address": "192.168.5.0/24"}])"));
+}
+
+TEST_CASE("resolve-preset: a bad field of an object item is located at the field",
+          "[integration][preset][resolve-preset][list-item][pointers]") {
+    CHECK(has_path(error_paths(R"({"model": "model-b",
+        "econet": {"station": 32, "transport": {"name": "aun", "parameters": {
+            "map": ["1@127.0.0.1@32769",
+                    {"station": 300, "host": "127.0.0.1", "port": 32770}]}}}})"),
+                   "/econet/transport/parameters/map/1/station"));
+    CHECK(has_path(error_paths(R"({"model": "model-b", "extensions": [
+        {"name": "aun", "config": {"subnet": [{"net": 0, "address": "10.0.0.0/24"}]}}]})"),
+                   "/extensions/0/config/subnet/0/net"));
+}
+
+TEST_CASE("resolve-preset: a malformed string item is located at the item",
+          "[integration][preset][resolve-preset][list-item][pointers]") {
+    CHECK(has_path(error_paths(R"({"model": "model-b",
+        "econet": {"station": 32, "transport": {"name": "aun", "parameters": {
+            "map": ["0.254@127.0.0.1"]}}}})"),
+                   "/econet/transport/parameters/map/0"));
+}
+
+TEST_CASE("describe-extension: the AUN map and subnet describe their items' fields",
+          "[integration][extension][describe-extension][list-item]") {
+    auto result = run_command(EXECUTABLE + " describe-extension aun --json");
+    REQUIRE(result.exit_code == 0);
+    auto manifest = nlohmann::json::parse(result.stdout_output);
+    nlohmann::json map, subnet;
+    for (const auto& p : manifest.at("parameters")) {
+        if (p.at("key") == "map") map = p;
+        if (p.at("key") == "subnet") subnet = p;
+    }
+    CHECK(map.at("item_format") == "{net}.{station}@{host}@{port}");
+    REQUIRE(map.at("fields").size() == 4);
+    const auto& net = map.at("fields")[0];
+    CHECK(net.at("key") == "net");
+    CHECK(net.at("type") == "integer");
+    CHECK(net.at("required") == false);
+    CHECK(net.at("default") == "0");
+    CHECK(net.at("min") == 0);
+    CHECK(net.at("max") == 255);
+    CHECK(net.at("choices") == nlohmann::json::array());
+    CHECK(map.at("fields")[1].at("key") == "station");
+    CHECK(map.at("fields")[1].at("min") == 1);
+    CHECK(map.at("fields")[1].at("max") == 254);
+    CHECK(map.at("fields")[2].at("key") == "host");
+    CHECK(map.at("fields")[3].at("key") == "port");
+    CHECK(map.at("fields")[3].at("label") == "AUN UDP port");
+    CHECK(subnet.at("item_format") == "{net}@{address}");
+    REQUIRE(subnet.at("fields").size() == 2);
+    CHECK(subnet.at("fields")[0].at("min") == 1);
+    CHECK(subnet.at("fields")[1].at("key") == "address");
+    CHECK(subnet.at("fields")[1].at("label") == "IPv4 subnet (a.b.c.0/24)");
+    for (const auto& p : manifest.at("parameters")) {
+        if (p.at("key") == "map" || p.at("key") == "subnet") continue;
+        CHECK(p.at("fields") == nlohmann::json::array());
+        CHECK(p.at("item_format") == "");
+    }
+}

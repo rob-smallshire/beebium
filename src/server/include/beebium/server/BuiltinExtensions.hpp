@@ -26,12 +26,15 @@
 // appears in this table.
 
 #include "AunEconetTransportExtension.hpp"
+#include "AunTerms.hpp"
 #include "HostSerialExtension.hpp"
 #include "beebium/extension/Extension.hpp"
 #include "beebium/extension/ExtensionManifest.hpp"
 
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <stdexcept>
 #include <vector>
@@ -112,6 +115,42 @@ inline std::vector<Entry> make_entries() {
         label("map-file", "Map file");
         label("subnet", "Subnet rules");
         label("discovery", "Discovery");
+        // A peer and a subnet rule have parts, which a preset may give as an
+        // object and a configuration UI edits one by one, in the words the
+        // Network sidebar uses (aun_terms).
+        auto field = [](const aun_terms::Term& term, std::string key, std::string type,
+                        bool required, std::optional<long long> min = std::nullopt,
+                        std::optional<long long> max = std::nullopt) {
+            ParameterField f;
+            f.key = std::move(key);
+            f.label = term.label;
+            f.description = term.description;
+            f.type = std::move(type);
+            f.required = required;
+            f.min = min;
+            f.max = max;
+            return f;
+        };
+        // The command line's map takes an IPv4 address only; the map file and
+        // the sidebar also take a name.
+        constexpr aun_terms::Term kLaunchPeerHost{
+            "AUN host (IPv4 address)",
+            "The IPv4 address of the computer running the AUN station."};
+        for (auto& p : m.parameters) {
+            if (p.key == "map") {
+                auto net = field(aun_terms::kPeerNet, "net", "integer", false, 0, 255);
+                net.default_value = "0";
+                p.fields = {net,
+                            field(aun_terms::kPeerStation, "station", "integer", true, 1, 254),
+                            field(kLaunchPeerHost, "host", "string", true),
+                            field(aun_terms::kPeerPort, "port", "integer", true, 1, 65535)};
+                p.item_format = "{net}.{station}@{host}@{port}";
+            } else if (p.key == "subnet") {
+                p.fields = {field(aun_terms::kSubnetNet, "net", "integer", true, 1, 255),
+                            field(aun_terms::kSubnetAddress, "address", "string", true)};
+                p.item_format = "{net}@{address}";
+            }
+        }
         for (auto& p : m.parameters) {
             if (p.key == "discovery") {
                 p.choices = {{"on", "Announce and browse"},
@@ -175,9 +214,14 @@ inline std::vector<Entry> make_entries() {
                               new HostSerialExtension()); }});
     }
 
-    // Every manifest passes through apply_parameter_groups, as a plugin's
-    // does when it is read; a malformed built-in is a programming error.
+    // Every manifest passes the checks a plugin's does when it is read; a
+    // malformed built-in is a programming error.
     for (auto& e : result) {
+        for (const auto& p : e.manifest.parameters) {
+            if (auto err = check_item_format(p)) {
+                throw std::logic_error("built-in extension '" + e.manifest.name + "': " + *err);
+            }
+        }
         if (auto err = apply_parameter_groups(e.manifest)) {
             throw std::logic_error("built-in extension '" + e.manifest.name + "': " + *err);
         }

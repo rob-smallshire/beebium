@@ -29,7 +29,7 @@ namespace beebium {
 //
 // Increment this whenever such a type changes layout: a member added,
 // removed or reordered, a virtual function added or reordered.
-inline constexpr std::uint32_t kExtensionAbiVersion = 4;
+inline constexpr std::uint32_t kExtensionAbiVersion = 5;
 
 // The name of the exported function that returns a plugin's ABI version.
 inline constexpr const char* kPluginAbiVersionSymbol = "beebium_plugin_abi_version";

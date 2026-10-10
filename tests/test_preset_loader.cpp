@@ -411,10 +411,47 @@ TEST_CASE("load_preset: AUN map as JSON array lands in list_parameters",
     const auto& transport = *result.config->econet->transport;
     CHECK(transport.parameters.at("port") == "32768");
     CHECK(transport.parameters.count("map") == 0);
-    REQUIRE(transport.list_parameters.at("map") == std::vector<std::string>{
+    REQUIRE(transport.list_parameters.at("map") == std::vector<beebium::ConfigListItem>{
         "0.254@127.0.0.1@32769", "0.253@127.0.0.1@32770"});
 
     std::filesystem::remove(temp_filepath);
+}
+
+TEST_CASE("load_preset: an object item of a list keeps its fields, as text",
+          "[preset][load_preset][econet]") {
+    beebium::test::ScopedTempDir temp_dir("beebium_preset_loader_");
+    std::filesystem::path temp_filepath = temp_dir / "econet_aun_map_objects.preset.beebium";
+    {
+        std::ofstream file(temp_filepath);
+        file << R"({
+            "name": "AUN object peers",
+            "econet": {
+                "station": 32,
+                "transport": {
+                    "name": "aun",
+                    "parameters": {
+                        "map": [
+                            {"net": 0, "station": 254, "host": "127.0.0.1", "port": 32769},
+                            "0.253@127.0.0.1@32770",
+                            {"station": 1.5, "host": "h", "port": null}
+                        ]
+                    }
+                }
+            }
+        })";
+    }
+
+    auto result = load_preset(temp_filepath);
+    REQUIRE(result.success());
+    const auto& items = result.config->econet->transport->list_parameters.at("map");
+    REQUIRE(items.size() == 3);
+    CHECK(items[0].fields == beebium::ListItemFields{
+        {"net", "0"}, {"station", "254"}, {"host", "127.0.0.1"}, {"port", "32769"}});
+    CHECK(items[1].text == "0.253@127.0.0.1@32770");
+    CHECK_FALSE(items[1].fields);
+    // A null field is absent; another JSON type keeps its text for the
+    // field's type check to refuse.
+    CHECK(items[2].fields == beebium::ListItemFields{{"station", "1.5"}, {"host", "h"}});
 }
 
 TEST_CASE("load_preset: AUN map as single string stays as scalar parameter",

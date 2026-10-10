@@ -13,6 +13,7 @@
 #include "AunUi.hpp"
 
 #include "AunEconetTransportExtension.hpp"
+#include "AunTerms.hpp"
 #include "beebium/econet/AunBackend.hpp"
 
 #include "extension_ui.pb.h"
@@ -47,7 +48,8 @@ constexpr const char* ACTION_SAVE_TO_MAP = "save_to_map";
 constexpr const char* ACTION_RELOAD      = "reload";
 
 // Newcomer-readable help, written for someone who does not already know
-// Econet/AUN. Shown as an information affordance, never inline.
+// Econet/AUN. Shown as an information affordance, never inline. The words
+// the manifest's map and subnet fields share are in AunTerms.hpp.
 constexpr const char* HELP_NET_STN =
     "The station's Econet address: net number and station number, written "
     "net.station. Net 0 means this machine's own net. Station numbers run "
@@ -56,20 +58,9 @@ constexpr const char* HELP_HOST =
     "The IPv4 address or DNS name of the computer running the AUN station. A "
     "name is looked up on the computer running this emulator, each time the "
     "map is loaded.";
-constexpr const char* HELP_PORT =
-    "The UDP port the station listens on. Real AUN machines and bridges use "
-    "32768. Several Beebium instances on one computer each need a different "
-    "port.";
 constexpr const char* HELP_REMARK =
     "A note for you, such as the machine's name or location. Beebium does not "
     "use it.";
-constexpr const char* HELP_SUBNET_NET =
-    "The Econet net number this subnet stands for. AUN convention numbers "
-    "these from 128 upwards; net 0 is this machine's own net and cannot be a "
-    "subnet rule.";
-constexpr const char* HELP_SUBNET_CIDR =
-    "The subnet whose addresses are the stations of this net: the machine at "
-    "a.b.c.40 is station 40.";
 
 // Inline note on the port field when saving an mDNS peer: the discovered
 // port is ephemeral and may differ next time.
@@ -150,7 +141,8 @@ void build_peer_editor(Control* editor, const std::string& editor_id,
     }
     add_text_field(group, "host", "AUN host (IP address or name)", host,
                    HELP_HOST);
-    add_text_field(group, "port", "AUN UDP port", port, HELP_PORT, port_note);
+    add_text_field(group, "port", aun_terms::kPeerPort.label, port,
+                   aun_terms::kPeerPort.description, port_note);
     add_text_field(group, "label", "Remark", label, HELP_REMARK);
 }
 
@@ -160,10 +152,11 @@ void build_subnet_editor(Control* editor, const std::string& editor_id,
     editor->set_id(editor_id);
     auto* group = editor->mutable_group();
     if (is_add) {
-        add_text_field(group, "net", "Econet net", net, HELP_SUBNET_NET);
+        add_text_field(group, "net", aun_terms::kSubnetNet.label, net,
+                       aun_terms::kSubnetNet.description);
     }
-    add_text_field(group, "subnet", "IPv4 subnet (a.b.c.0/24)", subnet,
-                   HELP_SUBNET_CIDR);
+    add_text_field(group, "subnet", aun_terms::kSubnetAddress.label, subnet,
+                   aun_terms::kSubnetAddress.description);
     add_text_field(group, "label", "Remark", label, HELP_REMARK);
 }
 

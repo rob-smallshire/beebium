@@ -255,8 +255,12 @@ types and defaults are the extension's manifest's, given by
 `describe-extension <name>` (`--json` for every property: label, bounds,
 choices and the attachment properties below; the manifest format is in
 [peripheral-extension-framework.md](peripheral-extension-framework.md#extension-manifest)). Values may be JSON strings, integers, booleans,
-or for a repeatable (`is_list`) parameter an array; `id` and `label` are
-framework keys every extension accepts. `id` names the instance; one not
+or for a repeatable (`is_list`) parameter an array. An item of a list
+parameter that declares `fields` (the AUN transport's `map` and `subnet`) may
+be an object of those fields, `{"station": 254, "host": "10.0.0.5", "port":
+32768}`, or its string form, `"254@10.0.0.5@32768"`, given by the parameter's
+`item_format`; the extension receives the string form either way. `id` and
+`label` are framework keys every extension accepts. `id` names the instance; one not
 given an `id` takes its extension's name, or `name-1`, `name-2`, ... when
 that is taken (never an `id` given explicitly), so the same preset always
 names its instances the same way, and `resolve-preset` writes the ids out.
@@ -269,7 +273,15 @@ manifest says exclude each other (`excludes`, or two members of one of its
 `groups` of alternatives, e.g. the RTC's `time` and `offset`) stops the launch with `CONFIG` (78), and the manifest's defaults are filled in for the
 parameters left out. An empty value (`""`, or `[]` for a list) is the same as
 leaving the parameter out, so the default applies. A single value for a list
-parameter is a one-element list. A `filepath` parameter is resolved as in
+parameter is a one-element list. Each item of a list parameter with `fields`
+is checked field by field, an object for unknown fields too; a field must not
+contain the separator that ends it in the item's string form. A bad field of an
+object item is located at the field
+(`/extensions/<index>/config/<key>/<item>/<field>`); a malformed or bad string
+item is located at the item (`/extensions/<index>/config/<key>/<item>`), since
+a string has no field to point into. An Econet transport's are under
+`/econet/transport/parameters/` instead. `resolve-preset` writes each item in
+the form the preset gave it. A `filepath` parameter is resolved as in
 [Paths](#paths).
 
 ### Attachment

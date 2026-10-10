@@ -57,9 +57,9 @@ A transport's typed RPCs — `AunService` for AUN, `PiconetService` for Piconet 
 |---|---|---|
 | `port` | `32768` | UDP port to bind. `0` binds an ephemeral port (the bundled AUN presets use this; the real port is what is announced over mDNS). `none` disables the transport (a disconnected `TestBackend` is fitted). A malformed value falls back to 32768 with a warning. |
 | `net` | `0` | This station's Econet net number, 0..255. See "Local Econet net number". |
-| `map` | — | A launch peer `[net.]stn@ip@port` (repeatable). `ip` must be an IPv4 literal; the port is required. A bare station means net 0. Malformed entries are skipped with a warning on stderr. |
+| `map` | — | A launch peer `[net.]stn@ip@port` (repeatable). `ip` must be an IPv4 literal; the port is required. A bare station means net 0. The net must be 0..255, the station 1..254 and the port 1..65535; an entry out of range, or not in this form, is refused when the configuration is read (exit 64 on the command line, 78 from a preset). A host that is not an IPv4 literal is skipped at launch with a warning on stderr. |
 | `map-file` | per-user `aun-map.json` | Path of the map file, or `none` to disable it. See "The AUN map file". |
-| `subnet` | — | A launch subnet rule `net@a.b.c.0/24` (repeatable; only `/24`). See "The AUN map file". |
+| `subnet` | — | A launch subnet rule `net@a.b.c.0/24` (repeatable; only `/24`). The net must be 1..255: net 0 is this machine's own. See "The AUN map file". |
 | `discovery` | `on` | `on`, `announce`, `browse` or `off`. See "Discovery mode". An invalid value is a launch error. |
 
 ### Inner separators in `--aun map=`
@@ -74,16 +74,21 @@ The extension argument parser tokenises `--<extension> a:b:c` on `:`, which conf
 
 One embedded colon is rejoined automatically: a Windows drive letter in a value, such as `map-file=C:\Users\me\aun-map.json` (or with forward slashes). The parser tears it at the drive colon and then puts it back when a `key=value`'s value is a single letter and the next token begins with `\` or `/` -- so a map file path on Windows needs no quoting. Any *other* value that must contain a `:` (a URL, say) still has to be double-quoted, e.g. `key="scheme://host:port"`; a `//` continuation is treated as a split URL, not a drive path.
 
-In preset files, `map` (and `subnet`) accepts either a single string or a JSON array of strings:
+In preset files, `map` and `subnet` are JSON arrays whose items are objects of the entry's parts, the form the Configurator writes, or the strings the command line takes:
 
 ```json
 "parameters": {
   "port": "32768",
-  "map": ["0.254@127.0.0.1@32769", "0.253@127.0.0.1@32770"]
+  "map": [
+    {"net": 0, "station": 254, "host": "127.0.0.1", "port": 32769},
+    {"station": 253, "host": "127.0.0.1", "port": 32770},
+    "0.252@127.0.0.1@32771"
+  ],
+  "subnet": [{"net": 128, "address": "192.168.5.0/24"}]
 }
 ```
 
-A single string (`"map": "0.254@127.0.0.1@32769"`) is normalised to a one-element list at load time.
+A peer's parts are `net` (optional, net 0 when absent), `station`, `host` and `port`; a subnet rule's are `net` and `address`. The manifest declares them (`fields`, with the `item_format` `{net}.{station}@{host}@{port}` or `{net}@{address}`; see [peripheral-extension-framework.md](peripheral-extension-framework.md#extension-manifest)), so the Configurator edits a peer the way the Network sidebar does, in the same words: the sidebar's editors and the manifest's fields take their labels and descriptions from one place (`AunTerms.hpp`). The extension receives every item as its string form. A single string (`"map": "0.254@127.0.0.1@32769"`) is normalised to a one-element list at load time. `resolve-preset` writes each item back in the form given, and locates a bad field of an object item at the field, e.g. `/econet/transport/parameters/map/1/station`.
 
 ### Local Econet net number (`--aun net=N`)
 

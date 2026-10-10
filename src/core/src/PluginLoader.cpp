@@ -16,6 +16,8 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <tuple>
+#include <utility>
 
 // Platform-specific dynamic loading
 #ifdef _WIN32
@@ -115,6 +117,32 @@ std::string platform_dlerror() {
 #endif
 }
 
+// A parameter's or a field's choices: each a bare value, or {"value": ...,
+// "label": ..., "description": ...}.
+std::vector<ParameterChoice> parse_choices(const nlohmann::json& j) {
+    std::vector<ParameterChoice> choices;
+    if (!j.contains("choices") || !j["choices"].is_array()) return choices;
+    for (const auto& c : j["choices"]) {
+        if (c.is_string()) {
+            choices.push_back({c.get<std::string>(), c.get<std::string>()});
+        } else if (c.is_object() && c.contains("value")) {
+            auto value = c.value("value", "");
+            choices.push_back({value, c.value("label", value), c.value("description", "")});
+        }
+    }
+    return choices;
+}
+
+// A parameter's or a field's integer bounds, min and max.
+std::pair<std::optional<long long>, std::optional<long long>> parse_bounds(
+        const nlohmann::json& j) {
+    auto bound = [&](const char* key) -> std::optional<long long> {
+        if (j.contains(key) && j[key].is_number_integer()) return j[key].get<long long>();
+        return std::nullopt;
+    };
+    return {bound("min"), bound("max")};
+}
+
 ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath) {
     std::ifstream file(manifest_filepath);
     if (!file) {
@@ -201,29 +229,35 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.bundled = p.value("bundled", "");
             param.label = p.value("label", "");
             param.choices_from = p.value("choices_from", "");
-            if (p.contains("min") && p["min"].is_number_integer()) {
-                param.min = p["min"].get<long long>();
-            }
-            if (p.contains("max") && p["max"].is_number_integer()) {
-                param.max = p["max"].get<long long>();
-            }
+            std::tie(param.min, param.max) = parse_bounds(p);
             if (p.contains("excludes") && p["excludes"].is_array()) {
                 for (const auto& key : p["excludes"]) {
                     if (key.is_string()) param.excludes.push_back(key.get<std::string>());
                 }
             }
-            // A choice is a bare value, or {"value": ..., "label": ...,
-            // "description": ...}.
-            if (p.contains("choices") && p["choices"].is_array()) {
-                for (const auto& c : p["choices"]) {
-                    if (c.is_string()) {
-                        param.choices.push_back({c.get<std::string>(), c.get<std::string>()});
-                    } else if (c.is_object() && c.contains("value")) {
-                        auto value = c.value("value", "");
-                        param.choices.push_back(
-                            {value, c.value("label", value), c.value("description", "")});
-                    }
+            param.choices = parse_choices(p);
+            // A list parameter's items may have fields; the template giving
+            // their string form must describe them, or the manifest is
+            // refused.
+            param.item_format = p.value("item_format", "");
+            if (p.contains("fields") && p["fields"].is_array()) {
+                for (const auto& f : p["fields"]) {
+                    if (!f.is_object()) continue;
+                    ParameterField field;
+                    field.key = f.value("key", "");
+                    field.label = f.value("label", "");
+                    field.description = f.value("description", "");
+                    field.type = f.value("type", "string");
+                    field.required = f.value("required", false);
+                    field.default_value = f.value("default", "");
+                    std::tie(field.min, field.max) = parse_bounds(f);
+                    field.choices = parse_choices(f);
+                    param.fields.push_back(std::move(field));
                 }
+            }
+            if (auto err = check_item_format(param)) {
+                throw std::runtime_error(
+                    "Manifest " + manifest_filepath.string() + ": " + *err);
             }
             if (!param.key.empty()) {
                 manifest.parameters.push_back(std::move(param));

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <charconv>
 #include <iterator>
+#include <optional>
 #include <sstream>
 
 namespace beebium {
@@ -88,7 +89,245 @@ std::string type_description(std::string_view type) {
     return "a string";
 }
 
+// What is wrong with a non-empty value of a parameter or a field, as the end
+// of a sentence naming it ("must be an integer, got 'x'"), or nullopt. A value
+// that matches a choice ignoring case is rewritten as the choice declares it.
+std::optional<std::string> value_problem(std::string_view type,
+                                         const std::optional<long long>& min,
+                                         const std::optional<long long>& max,
+                                         const std::vector<ParameterChoice>& choices,
+                                         std::string& value) {
+    if (!validate_type(type, value)) {
+        return "must be " + type_description(type) + ", got '" + value + "'";
+    }
+    if (type == "integer" && (min || max)) {
+        const long long v = std::stoll(value);
+        if ((min && v < *min) || (max && v > *max)) {
+            std::string range = min && max ? std::to_string(*min) + "-" + std::to_string(*max)
+                                : min      ? "at least " + std::to_string(*min)
+                                           : "at most " + std::to_string(*max);
+            return "must be " + range + ", got '" + value + "'";
+        }
+    }
+    if (!choices.empty()) {
+        auto match = std::find_if(choices.begin(), choices.end(), [&](const ParameterChoice& c) {
+            return equal_ignoring_case(c.value, value);
+        });
+        if (match == choices.end()) {
+            std::string values;
+            for (const auto& c : choices) {
+                values += (values.empty() ? "" : ", ") + c.value;
+            }
+            return "must be one of: " + values + ", got '" + value + "'";
+        }
+        value = match->value;
+    }
+    return std::nullopt;
+}
+
+// One part of an item template: a placeholder naming a field, or a literal.
+struct TemplatePart {
+    bool is_field = false;
+    std::string text;  // the field's key, or the literal
+};
+
+// The parts of an item template, or nullopt with `error` set when a brace is
+// unmatched or a placeholder is empty.
+std::optional<std::vector<TemplatePart>> template_parts(std::string_view item_format,
+                                                        std::string& error) {
+    std::vector<TemplatePart> parts;
+    std::string literal;
+    for (std::size_t i = 0; i < item_format.size(); ++i) {
+        const char c = item_format[i];
+        if (c == '}') {
+            error = "item_format '" + std::string(item_format) + "' has a '}' with no '{'";
+            return std::nullopt;
+        }
+        if (c != '{') {
+            literal += c;
+            continue;
+        }
+        const auto close = item_format.find('}', i + 1);
+        const auto key = item_format.substr(i + 1, close == std::string_view::npos
+                                                       ? std::string_view::npos
+                                                       : close - i - 1);
+        if (close == std::string_view::npos || key.empty() ||
+            key.find('{') != std::string_view::npos) {
+            error = "item_format '" + std::string(item_format) +
+                    "' has a '{' that does not open a placeholder";
+            return std::nullopt;
+        }
+        if (!literal.empty()) parts.push_back({false, std::move(literal)});
+        literal.clear();
+        parts.push_back({true, std::string(key)});
+        i = close;
+    }
+    if (!literal.empty()) parts.push_back({false, std::move(literal)});
+    return parts;
+}
+
+// The parts of a parameter's template, which check_item_format has accepted.
+std::vector<TemplatePart> item_parts(const ParameterSchema& p) {
+    std::string error;
+    return template_parts(p.item_format, error).value_or(std::vector<TemplatePart>{});
+}
+
+const ParameterField* find_field(const ParameterSchema& p, std::string_view key) {
+    for (const auto& f : p.fields) {
+        if (f.key == key) return &f;
+    }
+    return nullptr;
+}
+
+std::string field_keys(const ParameterSchema& p) {
+    std::string keys;
+    for (const auto& f : p.fields) {
+        keys += (keys.empty() ? "" : ", ") + f.key;
+    }
+    return keys;
+}
+
+// A field's value, or empty when it is absent.
+std::string field_value(const ListItemFields& fields, const std::string& key) {
+    auto it = fields.find(key);
+    return it == fields.end() ? std::string{} : it->second;
+}
+
 }  // namespace
+
+std::optional<std::string> check_item_format(const ParameterSchema& p) {
+    if (p.fields.empty()) {
+        if (p.item_format.empty()) return std::nullopt;
+        return "parameter '" + p.key + "' has an item_format but no fields";
+    }
+    const std::string where = "parameter '" + p.key + "'";
+    if (!p.is_list) return where + " has fields but is not a list";
+    if (p.item_format.empty()) return where + " has fields but no item_format";
+    for (std::size_t i = 0; i < p.fields.size(); ++i) {
+        const auto& f = p.fields[i];
+        if (f.key.empty()) return where + " has a field with no key";
+        if (f.type != "string" && f.type != "integer" && f.type != "boolean") {
+            return where + " field '" + f.key + "' has type '" + f.type +
+                   "'; a field is a string, an integer or a boolean";
+        }
+        for (std::size_t j = 0; j < i; ++j) {
+            if (p.fields[j].key == f.key) return where + " has two fields '" + f.key + "'";
+        }
+    }
+    std::string error;
+    auto parts = template_parts(p.item_format, error);
+    if (!parts) return where + ": " + error;
+    std::vector<std::string> named;
+    for (std::size_t i = 0; i < parts->size(); ++i) {
+        const auto& part = (*parts)[i];
+        if (!part.is_field) continue;
+        const auto* f = find_field(p, part.text);
+        if (!f) return where + " item_format names '" + part.text + "', which is not a field";
+        if (std::find(named.begin(), named.end(), part.text) != named.end()) {
+            return where + " item_format names '" + part.text + "' twice";
+        }
+        named.push_back(part.text);
+        if (i + 1 < parts->size() && (*parts)[i + 1].is_field) {
+            return where + " item_format needs a separator between {" + part.text + "} and {" +
+                   (*parts)[i + 1].text + "}";
+        }
+        if (!f->required && (i != 0 || i + 1 == parts->size())) {
+            return where + " field '" + f->key +
+                   "' is optional, but only a first field followed by a separator may be";
+        }
+    }
+    for (const auto& f : p.fields) {
+        if (std::find(named.begin(), named.end(), f.key) == named.end()) {
+            return where + " item_format does not name field '" + f.key + "'";
+        }
+    }
+    return std::nullopt;
+}
+
+std::string format_list_item(const ParameterSchema& p, const ListItemFields& fields) {
+    auto parts = item_parts(p);
+    std::size_t first = 0;
+    if (parts.size() > 1 && parts[0].is_field && field_value(fields, parts[0].text).empty()) {
+        first = 2;  // the absent optional field and its separator
+    }
+    std::string text;
+    for (std::size_t i = first; i < parts.size(); ++i) {
+        text += parts[i].is_field ? field_value(fields, parts[i].text) : parts[i].text;
+    }
+    return text;
+}
+
+ListItemParse parse_list_item(const ParameterSchema& p, std::string_view text) {
+    auto parts = item_parts(p);
+    auto malformed = [&]() {
+        return ListItemParse{std::nullopt,
+                             {"", "'" + std::string(text) + "' is not in the form " +
+                                      p.item_format}};
+    };
+    // An optional first field is present when its separator comes before the
+    // next one the template has (or, with no next one, at all).
+    std::size_t first = 0;
+    if (parts.size() > 1 && parts[0].is_field) {
+        const auto* f = find_field(p, parts[0].text);
+        if (f && !f->required) {
+            const auto own = text.find(parts[1].text);
+            const auto next = parts.size() > 3 ? text.find(parts[3].text)
+                                               : std::string_view::npos;
+            if (own == std::string_view::npos || (next != std::string_view::npos && next < own)) {
+                first = 2;
+            }
+        }
+    }
+    ListItemFields fields;
+    std::size_t pos = 0;
+    for (std::size_t i = first; i < parts.size(); ++i) {
+        const auto& part = parts[i];
+        if (!part.is_field) {
+            if (text.compare(pos, part.text.size(), part.text) != 0) return malformed();
+            pos += part.text.size();
+            continue;
+        }
+        const auto end = i + 1 < parts.size() ? text.find(parts[i + 1].text, pos) : text.size();
+        if (end == std::string_view::npos) return malformed();
+        fields[part.text] = std::string(text.substr(pos, end - pos));
+        pos = end;
+    }
+    if (pos != text.size()) return malformed();
+    return {std::move(fields), {}};
+}
+
+std::optional<ListItemError> check_list_item_fields(const ParameterSchema& p,
+                                                    const ListItemFields& fields) {
+    for (const auto& [key, value] : fields) {
+        if (!find_field(p, key)) {
+            return ListItemError{key, "has no field '" + key + "' (fields: " + field_keys(p) +
+                                          ")"};
+        }
+    }
+    const auto parts = item_parts(p);
+    for (const auto& f : p.fields) {
+        std::string value = field_value(fields, f.key);
+        if (value.empty()) {
+            if (f.required) {
+                return ListItemError{f.key, "field '" + f.key + "' is required (" +
+                                                (f.description.empty() ? f.label : f.description) +
+                                                ")"};
+            }
+            continue;
+        }
+        if (auto problem = value_problem(f.type, f.min, f.max, f.choices, value)) {
+            return ListItemError{f.key, "field '" + f.key + "' " + *problem};
+        }
+        for (std::size_t i = 0; i + 1 < parts.size(); ++i) {
+            if (parts[i].is_field && parts[i].text == f.key &&
+                value.find(parts[i + 1].text) != std::string::npos) {
+                return ListItemError{f.key, "field '" + f.key + "' may not contain '" +
+                                                parts[i + 1].text + "', got '" + value + "'"};
+            }
+        }
+    }
+    return std::nullopt;
+}
 
 // split_colon_args now lives in beebium/CliArgSplit.hpp (a neutral home; it is
 // not extension-specific). It is used below via the header.
@@ -211,34 +450,26 @@ ParseResult complete_config(ParseResult result,
         if (it == result.config.end() || it->second.empty()) {
             continue;
         }
-        if (!validate_type(p.type, it->second)) {
-            return err("parameter '" + p.key + "' must be "
-                       + type_description(p.type)
-                       + ", got '" + it->second + "'");
+        if (auto problem = value_problem(p.type, p.min, p.max, p.choices, it->second)) {
+            return err("parameter '" + p.key + "' " + *problem);
         }
-        if (p.type == "integer" && (p.min || p.max)) {
-            const long long v = std::stoll(it->second);
-            if ((p.min && v < *p.min) || (p.max && v > *p.max)) {
-                std::string range = p.min && p.max
-                    ? std::to_string(*p.min) + "-" + std::to_string(*p.max)
-                    : p.min ? "at least " + std::to_string(*p.min)
-                            : "at most " + std::to_string(*p.max);
-                return err("parameter '" + p.key + "' must be " + range
-                           + ", got '" + it->second + "'");
+    }
+
+    // Check each item of a list parameter with fields, as its string form;
+    // a string has no field to point into, so an error points at the item.
+    for (const auto& p : schema) {
+        auto it = result.list_config.find(p.key);
+        if (p.fields.empty() || it == result.list_config.end()) continue;
+        for (std::size_t i = 0; i < it->second.size(); ++i) {
+            const std::string where = p.key + " item " + std::to_string(i) + ": ";
+            const std::string pointer = p.key + "/" + std::to_string(i);
+            auto parsed = parse_list_item(p, it->second[i]);
+            if (!parsed.fields) {
+                return err(where + parsed.error.message, pointer);
             }
-        }
-        if (!p.choices.empty()) {
-            auto match = std::find_if(p.choices.begin(), p.choices.end(),
-                [&](const ParameterChoice& c) { return equal_ignoring_case(c.value, it->second); });
-            if (match == p.choices.end()) {
-                std::string values;
-                for (const auto& c : p.choices) {
-                    values += (values.empty() ? "" : ", ") + c.value;
-                }
-                return err("parameter '" + p.key + "' must be one of: " + values
-                           + ", got '" + it->second + "'");
+            if (auto problem = check_list_item_fields(p, *parsed.fields)) {
+                return err(where + problem->message, pointer);
             }
-            it->second = match->value;
         }
     }
 
@@ -255,10 +486,11 @@ ParseResult parse_extension_args(
     ParseResult result;
     result.ok = true;
 
-    auto err = [&](const std::string& msg) -> ParseResult {
+    auto err = [&](const std::string& msg, std::string pointer = {}) -> ParseResult {
         ParseResult r;
         r.ok = false;
         r.error = std::string("--") + std::string(cli_name) + ": " + msg;
+        r.error_pointer = std::move(pointer);
         return r;
     };
 
@@ -407,13 +639,14 @@ ParseResult parse_extension_args(
 ParseResult normalise_extension_config(
         std::string_view source,
         std::map<std::string, std::string> config,
-        std::map<std::string, std::vector<std::string>> list_config,
+        std::map<std::string, std::vector<ConfigListItem>> list_config,
         const std::vector<ParameterSchema>& schema) {
 
-    auto err = [&](const std::string& msg) -> ParseResult {
+    auto err = [&](const std::string& msg, std::string pointer = {}) -> ParseResult {
         ParseResult r;
         r.ok = false;
         r.error = std::string(source) + ": " + msg;
+        r.error_pointer = std::move(pointer);
         return r;
     };
 
@@ -442,16 +675,37 @@ ParseResult normalise_extension_config(
         }
         result.config[key] = std::move(value);
     }
-    for (auto& [key, values] : list_config) {
+    for (auto& [key, items] : list_config) {
         auto it = by_key.find(key);
         if (it == by_key.end()) {
             return err("unknown parameter '" + key
                        + "' (valid parameters: " + format_valid_keys(schema) + ")");
         }
-        if (!it->second->is_list) {
+        const auto& p = *it->second;
+        if (!p.is_list) {
             return err("parameter '" + key + "' takes one value, not a list");
         }
-        result.list_config[key] = std::move(values);
+        // An object item is checked here, where its fields can be pointed
+        // at, and goes on as its string form.
+        auto& values = result.list_config[key];
+        values.clear();
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            auto& item = items[i];
+            if (!item.fields) {
+                values.push_back(std::move(item.text));
+                continue;
+            }
+            const std::string where = key + " item " + std::to_string(i) + ": ";
+            const std::string pointer = key + "/" + std::to_string(i);
+            if (p.fields.empty()) {
+                return err(where + "parameter '" + key + "' has no fields, so an item is a string",
+                           pointer);
+            }
+            if (auto problem = check_list_item_fields(p, *item.fields)) {
+                return err(where + problem->message, pointer + "/" + problem->field);
+            }
+            values.push_back(format_list_item(p, *item.fields));
+        }
     }
 
     return complete_config(std::move(result), schema, err);

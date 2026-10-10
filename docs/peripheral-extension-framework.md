@@ -185,6 +185,47 @@ Parameter schema fields:
 - `provider_of` -- the value is the `id` of the instance providing the named
   attachment point to attach to (empty: the last one)
 - `unique` -- the value must differ among the instances on the same attachment
+- `fields`, `item_format` -- for an `is_list` parameter whose items have parts,
+  the parts and the item's string form (below)
+
+A list parameter's items may have parts: an AUN peer is a net, a station, a host
+and a port. `fields` names them, each with `key`, `label`, `description`, `type`
+(`string`, `integer` or `boolean`), `required`, `default`, `min`, `max` and
+`choices`, which mean what a parameter's do. `item_format` is the item's string
+form, the one the command line takes: `{key}` placeholders between literal
+separators. The AUN transport's `map` and `subnet` are the examples:
+
+```json
+{"key": "map", "type": "string", "is_list": true,
+ "item_format": "{net}.{station}@{host}@{port}",
+ "fields": [
+     {"key": "net", "label": "Econet net", "type": "integer",
+      "default": "0", "min": 0, "max": 255, "description": "..."},
+     {"key": "station", "label": "Econet station", "type": "integer",
+      "required": true, "min": 1, "max": 254, "description": "..."},
+     {"key": "host", "label": "AUN host (IPv4 address)", "required": true,
+      "description": "..."},
+     {"key": "port", "label": "AUN UDP port", "type": "integer",
+      "required": true, "min": 1, "max": 65535, "description": "..."}]}
+```
+
+A preset may give an item as an object of its fields
+(`{"station": 254, "host": "10.0.0.5", "port": 32768}`), as a configuration UI
+writes it, or in its string form (`"254@10.0.0.5@32768"`), as the command line
+and older presets do. Either way the framework checks each field and hands the
+extension the string form, so the extension reads its list as it always has.
+`resolve-preset` writes each item back in the form it was given.
+
+The framework formats an object by replacing each placeholder with its field's
+value, and parses a string by splitting it on the separators from left to
+right, each at its first occurrence, so a field may not contain the separator
+that ends it. The template must name every field once and put a separator
+between two placeholders; a separator may repeat (`@` does in `map`). Only the
+first field may be optional, and then a separator must follow it: the field may
+be absent together with its separator, so `254@10.0.0.5@32768` is station 254
+with no net. Such a field is present when its separator comes before the next
+separator in the template. A manifest whose `fields` have no `item_format`, or
+whose `item_format` cannot describe them, is refused.
 
 A group gathers parameters that are alternatives to one another, so that at
 most one of them may be given. The Acorn real-time clock's start time and offset
@@ -219,8 +260,8 @@ in a group. A parameter belongs to at most one group, and a member is neither
 possible; a manifest that breaks these rules, or whose group names a key that is
 not a parameter, is refused.
 
-`min`/`max`, `choices`, `excludes` and `required` are enforced for the command
-line and presets alike;
+`min`/`max`, `choices`, `excludes` and `required`, and a list item's
+`fields`, are enforced for the command line and presets alike;
 `provider_of`, `unique` and the attachment points are checked before the
 machine is built ([preset-schema.md](preset-schema.md#attachment)). Only add a
 bound or a choice list the code really enforces, so that the form, the

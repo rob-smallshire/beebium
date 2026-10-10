@@ -14,6 +14,7 @@
 
 #include <beebium/disc/DiscUrl.hpp>
 #include <beebium/econet/StationSelection.hpp>
+#include <beebium/extension/ExtensionArgParser.hpp>
 #include <beebium/server/CliArgParsers.hpp>
 
 #include <nlohmann/json.hpp>
@@ -41,13 +42,14 @@ struct PresetStorageConfig {
 // key/value map. AUN, Piconet, and any future transport flow through
 // this single shape.
 //
-// is_list schema params may be given as a JSON array of strings; these
-// land in list_parameters. Scalar values land in parameters and are
-// normalised downstream against the manifest schema.
+// is_list schema params may be given as a JSON array, each item a string or,
+// for a parameter with fields, an object; these land in list_parameters.
+// Scalar values land in parameters. Both are normalised downstream against
+// the manifest schema.
 struct PresetTransportConfig {
     std::string name;                            // e.g. "aun" or "piconet"
     std::map<std::string, std::string> parameters;
-    std::map<std::string, std::vector<std::string>> list_parameters;
+    std::map<std::string, std::vector<beebium::ConfigListItem>> list_parameters;
 };
 
 // Preset Econet configuration
@@ -64,7 +66,7 @@ struct PresetEconetConfig {
 struct PresetExtensionConfig {
     std::string name;                                              // canonical extension name
     std::map<std::string, std::string> config;                     // scalar key-value configuration
-    std::map<std::string, std::vector<std::string>> list_config;   // is_list params (JSON arrays)
+    std::map<std::string, std::vector<beebium::ConfigListItem>> list_config;  // is_list params (JSON arrays)
 };
 
 // The startup keyboard links (the options byte read at power-up), in one of
@@ -356,6 +358,46 @@ inline std::optional<PresetStorageConfig> parse_storage_section(
     return storage;
 }
 
+// A preset config value as a parameter's value is written: a string as it is,
+// an integer in decimal, a boolean as true or false; nullopt for anything else.
+inline std::optional<std::string> preset_config_text(const nlohmann::json& value) {
+    if (value.is_string()) return value.get<std::string>();
+    if (value.is_number_integer()) return std::to_string(value.get<int64_t>());
+    if (value.is_boolean()) return value.get<bool>() ? "true" : "false";
+    return std::nullopt;
+}
+
+// An extension's config object, or an Econet transport's parameters, read into
+// scalar values and list items: an array is a list parameter's items, each a
+// string (or a number or boolean, as text) or an object of fields. The
+// manifest checks them downstream (normalise_preset_extensions).
+inline void read_preset_extension_config(
+        const nlohmann::json& object, std::map<std::string, std::string>& config,
+        std::map<std::string, std::vector<beebium::ConfigListItem>>& list_config) {
+    for (const auto& [key, value] : object.items()) {
+        if (auto text = preset_config_text(value)) {
+            config[key] = std::move(*text);
+        } else if (value.is_array()) {
+            auto& items = list_config[key];
+            for (const auto& element : value) {
+                if (auto item_text = preset_config_text(element)) {
+                    items.emplace_back(std::move(*item_text));
+                } else if (element.is_object()) {
+                    // A field of any other JSON type keeps its JSON text, which
+                    // the field's type check then refuses.
+                    beebium::ListItemFields fields;
+                    for (const auto& [field, field_value] : element.items()) {
+                        if (field_value.is_null()) continue;
+                        fields[field] =
+                            preset_config_text(field_value).value_or(field_value.dump());
+                    }
+                    items.emplace_back(std::move(fields));
+                }
+            }
+        }
+    }
+}
+
 // Parse the econet section from JSON.
 // Returns the parsed config on success, or nullopt with error message on failure.
 inline std::pair<std::optional<PresetEconetConfig>, Diagnostic> parse_econet_section(
@@ -407,29 +449,8 @@ inline std::pair<std::optional<PresetEconetConfig>, Diagnostic> parse_econet_sec
             return {std::nullopt, {"/econet/transport/name", "Econet 'transport.name' must not be empty"}};
         }
         if (transport_json.contains("parameters") && transport_json["parameters"].is_object()) {
-            for (auto& [key, value] : transport_json["parameters"].items()) {
-                if (value.is_string()) {
-                    transport.parameters[key] = value.get<std::string>();
-                } else if (value.is_number_integer()) {
-                    transport.parameters[key] = std::to_string(value.get<int64_t>());
-                } else if (value.is_boolean()) {
-                    transport.parameters[key] = value.get<bool>() ? "true" : "false";
-                } else if (value.is_array()) {
-                    // Array form for is_list schema params. Schema validation
-                    // happens downstream; here we just collect string elements.
-                    std::vector<std::string> items;
-                    for (const auto& elt : value) {
-                        if (elt.is_string()) {
-                            items.push_back(elt.get<std::string>());
-                        } else if (elt.is_number_integer()) {
-                            items.push_back(std::to_string(elt.get<int64_t>()));
-                        } else if (elt.is_boolean()) {
-                            items.push_back(elt.get<bool>() ? "true" : "false");
-                        }
-                    }
-                    transport.list_parameters[key] = std::move(items);
-                }
-            }
+            read_preset_extension_config(transport_json["parameters"], transport.parameters,
+                                         transport.list_parameters);
         }
         econet.transport = std::move(transport);
     }
@@ -697,31 +718,11 @@ inline PresetLoadResult load_preset(const std::filesystem::path& filepath) {
                     ext_config.name = ext_json["name"].get<std::string>();
 
                     if (ext_json.contains("config") && ext_json["config"].is_object()) {
-                        for (auto& [key, item] : ext_json["config"].items()) {
-                            if (item.is_string()) {
-                                // A relative file path is resolved against the
-                                // preset's directory once the manifest says which
-                                // parameters are file paths
-                                // (normalise_preset_extensions).
-                                ext_config.config[key] = item.get<std::string>();
-                            } else if (item.is_number_integer()) {
-                                ext_config.config[key] = std::to_string(item.get<int64_t>());
-                            } else if (item.is_boolean()) {
-                                ext_config.config[key] = item.get<bool>() ? "true" : "false";
-                            } else if (item.is_array()) {
-                                std::vector<std::string> items;
-                                for (const auto& elt : item) {
-                                    if (elt.is_string()) {
-                                        items.push_back(elt.get<std::string>());
-                                    } else if (elt.is_number_integer()) {
-                                        items.push_back(std::to_string(elt.get<int64_t>()));
-                                    } else if (elt.is_boolean()) {
-                                        items.push_back(elt.get<bool>() ? "true" : "false");
-                                    }
-                                }
-                                ext_config.list_config[key] = std::move(items);
-                            }
-                        }
+                        // A relative file path is resolved against the
+                        // preset's directory once the manifest says which
+                        // parameters are file paths (normalise_preset_extensions).
+                        read_preset_extension_config(ext_json["config"], ext_config.config,
+                                                     ext_config.list_config);
                     }
 
                     config.extensions.push_back(std::move(ext_config));

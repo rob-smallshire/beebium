@@ -2804,11 +2804,32 @@ public:
 // DescribeExtension subcommand - parameter detail for a single extension
 // One manifest parameter as describe-extension's JSON forms give it: every
 // property a configuration UI needs to build a field for it.
+inline nlohmann::ordered_json choices_json(const std::vector<beebium::ParameterChoice>& choices) {
+    nlohmann::ordered_json out = nlohmann::ordered_json::array();
+    for (const auto& c : choices) {
+        out.push_back({{"value", c.value}, {"label", c.label}, {"description", c.description}});
+    }
+    return out;
+}
+
+inline nlohmann::ordered_json bound_json(const std::optional<long long>& bound) {
+    return bound ? nlohmann::ordered_json(*bound) : nlohmann::ordered_json(nullptr);
+}
+
 inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSchema& p) {
-    nlohmann::ordered_json choices = nlohmann::ordered_json::array();
-    for (const auto& c : p.choices) {
-        choices.push_back(
-            {{"value", c.value}, {"label", c.label}, {"description", c.description}});
+    nlohmann::ordered_json fields = nlohmann::ordered_json::array();
+    for (const auto& f : p.fields) {
+        fields.push_back({
+            {"key", f.key},
+            {"label", f.label},
+            {"description", f.description},
+            {"type", f.type},
+            {"required", f.required},
+            {"default", f.default_value},
+            {"min", bound_json(f.min)},
+            {"max", bound_json(f.max)},
+            {"choices", choices_json(f.choices)},
+        });
     }
     return {
         {"key", p.key},
@@ -2820,14 +2841,16 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"position", p.position >= 0 ? nlohmann::ordered_json(p.position)
                                      : nlohmann::ordered_json(nullptr)},
         {"default", p.default_value},
-        {"min", p.min ? nlohmann::ordered_json(*p.min) : nlohmann::ordered_json(nullptr)},
-        {"max", p.max ? nlohmann::ordered_json(*p.max) : nlohmann::ordered_json(nullptr)},
-        {"choices", choices},
+        {"min", bound_json(p.min)},
+        {"max", bound_json(p.max)},
+        {"choices", choices_json(p.choices)},
         {"choices_from", p.choices_from},
         {"excludes", p.excludes},
         {"bundled", p.bundled},
         {"unique", p.unique},
         {"provider_of", p.provider_of},
+        {"item_format", p.item_format},
+        {"fields", fields},
     };
 }
 
@@ -3043,6 +3066,23 @@ public:
                             std::cout << "        " << p.label
                                       << (p.label.empty() || p.description.empty() ? "" : ": ")
                                       << p.description << "\n";
+                        }
+                        if (!p.item_format.empty()) {
+                            std::cout << "        each item: " << p.item_format << "\n";
+                        }
+                        for (const auto& f : p.fields) {
+                            std::cout << "          " << f.key << " : " << f.type;
+                            if (f.required) std::cout << " (required)";
+                            if (f.min || f.max) {
+                                std::cout << " (" << (f.min ? std::to_string(*f.min) : "")
+                                          << ".." << (f.max ? std::to_string(*f.max) : "")
+                                          << ")";
+                            }
+                            if (!f.default_value.empty()) {
+                                std::cout << " [default: " << f.default_value << "]";
+                            }
+                            if (!f.label.empty()) std::cout << " -- " << f.label;
+                            std::cout << "\n";
                         }
                     }
                 }

@@ -176,6 +176,10 @@ struct ServerConfig {
         bool from_preset = false;                                       // supplied by a preset, overridable by the CLI
         std::set<std::string> explicit_keys{};                          // keys the source gave (not defaulted) (#166)
         std::string preset_pointer{};                                   // JSON pointer of the preset entry it came from
+        // A preset instance's list items as the preset gave them, each a
+        // string or an object of fields: normalised into list_config, and
+        // written back in the form given.
+        std::map<std::string, std::vector<beebium::ConfigListItem>> preset_list_items{};
     };
     std::vector<ExtensionInstance> extension_instances;
 };

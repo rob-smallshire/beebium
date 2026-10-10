@@ -608,3 +608,75 @@ TEST_CASE("PluginLoader refuses a plugin that carries no extension ABI version",
     }
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// A list parameter's fields and item_format
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Manifest fields: a list parameter's fields and item format are parsed",
+          "[extension][plugin][fields]") {
+    auto dir = write_manifest(R"({
+        "name": "net", "library": "net",
+        "parameters": [{
+            "key": "peer", "type": "string", "is_list": true,
+            "item_format": "{net}.{station}@{host}",
+            "fields": [
+                {"key": "net", "label": "Net", "description": "The net.",
+                 "type": "integer", "default": "0", "min": 0, "max": 255},
+                {"key": "station", "label": "Station", "type": "integer",
+                 "required": true, "min": 1, "max": 254},
+                {"key": "host", "label": "Host", "required": true,
+                 "choices": [{"value": "a", "label": "A", "description": "The a."}, "b"]}
+            ]
+        }]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    const auto& p = schema_parameter(manifests[0], "peer");
+    CHECK(p.item_format == "{net}.{station}@{host}");
+    REQUIRE(p.fields.size() == 3);
+    CHECK(p.fields[0].key == "net");
+    CHECK(p.fields[0].label == "Net");
+    CHECK(p.fields[0].description == "The net.");
+    CHECK(p.fields[0].type == "integer");
+    CHECK_FALSE(p.fields[0].required);
+    CHECK(p.fields[0].default_value == "0");
+    CHECK(p.fields[0].min == 0);
+    CHECK(p.fields[0].max == 255);
+    CHECK(p.fields[1].required);
+    CHECK(p.fields[2].type == "string");
+    REQUIRE(p.fields[2].choices.size() == 2);
+    CHECK(p.fields[2].choices[0].description == "The a.");
+    CHECK(p.fields[2].choices[1].label == "b");
+}
+
+TEST_CASE("Manifest fields: fields that cannot describe their items refuse the manifest",
+          "[extension][plugin][fields]") {
+    SECTION("fields without an item format") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "p", "type": "string", "is_list": true,
+                            "fields": [{"key": "a", "required": true}]}]
+        })") == 0);
+    }
+    SECTION("an item format that does not name a required field") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "p", "type": "string", "is_list": true,
+                            "item_format": "{a}",
+                            "fields": [{"key": "a", "required": true},
+                                       {"key": "b", "required": true}]}]
+        })") == 0);
+    }
+    SECTION("well formed") {
+        CHECK(manifests_scanned(R"({
+            "name": "c", "library": "c",
+            "parameters": [{"key": "p", "type": "string", "is_list": true,
+                            "item_format": "{a}@{b}",
+                            "fields": [{"key": "a", "required": true},
+                                       {"key": "b", "required": true}]}]
+        })") == 1);
+    }
+}

@@ -64,6 +64,10 @@ add_executable(test_extension_arg_parser test_extension_arg_parser.cpp)
 target_link_libraries(test_extension_arg_parser PRIVATE beebium_core Catch2::Catch2WithMain)
 catch_discover_tests(test_extension_arg_parser)
 
+add_executable(test_list_item_format test_list_item_format.cpp)
+target_link_libraries(test_list_item_format PRIVATE beebium_core Catch2::Catch2WithMain)
+catch_discover_tests(test_list_item_format)
+
 # Serial port enumeration tests (POSIX-only; Windows enumerator uses
 # QueryDosDeviceW which has no injection seam -- covered by the manual
 # Slioch verification described in the plan)

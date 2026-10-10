@@ -713,3 +713,97 @@ TEST_CASE("an excluded parameter left out, or empty, does not count",
     CHECK(normalise_extension_config("preset", {{"url", "x"}, {"host", ""}}, {},
                                      exclusive_schema()).ok);
 }
+
+// ---------------------------------------------------------------------------
+// A list parameter with fields: an item may be an object of field values or
+// its string form, and every item is checked against the fields.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::vector<ParameterSchema> peer_schema() {
+    ParameterSchema map{"map", "string", "Peers", -1, false, /*is_list=*/true, ""};
+    ParameterField net;
+    net.key = "net";
+    net.type = "integer";
+    net.min = 0;
+    net.max = 255;
+    net.default_value = "0";
+    ParameterField station;
+    station.key = "station";
+    station.type = "integer";
+    station.required = true;
+    station.min = 1;
+    station.max = 254;
+    ParameterField host;
+    host.key = "host";
+    host.required = true;
+    map.fields = {net, station, host};
+    map.item_format = "{net}.{station}@{host}";
+    return {map};
+}
+
+}  // namespace
+
+TEST_CASE("normalise_extension_config gives an object item to the extension as its string form",
+          "[extension][arg-parser][normalise][list-item]") {
+    auto result = normalise_extension_config(
+        "preset", {},
+        {{"map", {ListItemFields{{"net", "1"}, {"station", "254"}, {"host", "10.0.0.5"}},
+                  "3@10.0.0.6",
+                  ListItemFields{{"station", "4"}, {"host", "h"}}}}},
+        peer_schema());
+    INFO(result.error);
+    REQUIRE(result.ok);
+    CHECK(result.list_config.at("map") ==
+          std::vector<std::string>{"1.254@10.0.0.5", "3@10.0.0.6", "4@h"});
+}
+
+TEST_CASE("a bad field of an object item is located at the field",
+          "[extension][arg-parser][normalise][list-item]") {
+    auto result = normalise_extension_config(
+        "preset", {},
+        {{"map", {"3@10.0.0.6", ListItemFields{{"station", "300"}, {"host", "h"}}}}},
+        peer_schema());
+    REQUIRE_FALSE(result.ok);
+    CHECK(result.error_pointer == "map/1/station");
+    CHECK_THAT(result.error, ContainsSubstring("1-254"));
+
+    auto unknown = normalise_extension_config(
+        "preset", {}, {{"map", {ListItemFields{{"station", "3"}, {"host", "h"}, {"port", "1"}}}}},
+        peer_schema());
+    REQUIRE_FALSE(unknown.ok);
+    CHECK(unknown.error_pointer == "map/0/port");
+}
+
+TEST_CASE("a bad string item is located at the item",
+          "[extension][arg-parser][normalise][list-item]") {
+    auto malformed = normalise_extension_config("preset", {}, {{"map", {"3@h", "nonsense"}}},
+                                                peer_schema());
+    REQUIRE_FALSE(malformed.ok);
+    CHECK(malformed.error_pointer == "map/1");
+    CHECK_THAT(malformed.error, ContainsSubstring("{net}.{station}@{host}"));
+
+    // A string has no field to point into, so its bad field is the item's.
+    auto range = normalise_extension_config("preset", {}, {{"map", {"0.300@h"}}}, peer_schema());
+    REQUIRE_FALSE(range.ok);
+    CHECK(range.error_pointer == "map/0");
+    CHECK_THAT(range.error, ContainsSubstring("station"));
+}
+
+TEST_CASE("the command line's items are checked against the fields",
+          "[extension][arg-parser][list-item]") {
+    CHECK(parse_extension_args("aun", "map=1.2@h:map=3@h", peer_schema()).ok);
+    auto result = parse_extension_args("aun", "map=1.2@h:map=0.300@h", peer_schema());
+    REQUIRE_FALSE(result.ok);
+    CHECK_THAT(result.error, ContainsSubstring("--aun"));
+    CHECK_THAT(result.error, ContainsSubstring("station"));
+}
+
+TEST_CASE("an object item for a list parameter without fields is an error",
+          "[extension][arg-parser][normalise][list-item]") {
+    auto result = normalise_extension_config(
+        "preset", {}, {{"map", {ListItemFields{{"station", "1"}}}}}, kListSchema);
+    REQUIRE_FALSE(result.ok);
+    CHECK(result.error_pointer == "map/0");
+}

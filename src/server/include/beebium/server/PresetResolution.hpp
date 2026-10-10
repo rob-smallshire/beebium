@@ -117,21 +117,29 @@ inline std::string path_for_preset(const std::string& value) {
 // An extension instance's config as a preset writes it: each value typed by
 // its manifest parameter (an integer parameter as a JSON number, a boolean as
 // true/false, anything else a string) and each list parameter as an array.
-// With every_parameter, a parameter with no value is written too ("" or []),
-// so the object names every parameter the manifest declares; without it,
-// empty values are left out. A null manifest types everything as a string.
+// A list parameter in `given_items` is written as those items, each in the
+// form it was given: a string, or an object whose fields are typed by the
+// manifest's. With every_parameter, a parameter with no value is written too
+// ("" or []), so the object names every parameter the manifest declares;
+// without it, empty values are left out. A null manifest types everything as
+// a string.
 inline nlohmann::ordered_json extension_config_json(
         const beebium::ExtensionManifest* manifest,
         const std::map<std::string, std::string>& config,
         const std::map<std::string, std::vector<std::string>>& list_config,
-        bool every_parameter) {
-    auto param_type = [&](const std::string& key) -> std::string {
+        bool every_parameter,
+        const std::map<std::string, std::vector<beebium::ConfigListItem>>& given_items = {}) {
+    auto find_param = [&](const std::string& key) -> const beebium::ParameterSchema* {
         if (manifest) {
             for (const auto& p : manifest->parameters) {
-                if (p.key == key) return p.type;
+                if (p.key == key) return &p;
             }
         }
-        return "string";
+        return nullptr;
+    };
+    auto param_type = [&](const std::string& key) -> std::string {
+        const auto* p = find_param(key);
+        return p ? p->type : "string";
     };
     auto to_value = [](const std::string& type, const std::string& v) -> nlohmann::ordered_json {
         if (type == "integer") {
@@ -151,8 +159,29 @@ inline nlohmann::ordered_json extension_config_json(
         if (value.empty() && !every_parameter) continue;
         out[key] = to_value(param_type(key), value);
     }
+    auto item_json = [&](const beebium::ParameterSchema* p,
+                         const beebium::ConfigListItem& item) -> nlohmann::ordered_json {
+        if (!item.fields) return item.text;
+        nlohmann::ordered_json object = nlohmann::ordered_json::object();
+        if (p) {
+            for (const auto& f : p->fields) {
+                auto it = item.fields->find(f.key);
+                if (it != item.fields->end()) object[f.key] = to_value(f.type, it->second);
+            }
+        }
+        for (const auto& [field, value] : *item.fields) {
+            if (!object.contains(field)) object[field] = value;
+        }
+        return object;
+    };
     for (const auto& [key, values] : list_config) {
-        out[key] = values;
+        if (given_items.count(key) == 0) out[key] = values;
+    }
+    for (const auto& [key, items] : given_items) {
+        const auto* p = find_param(key);
+        nlohmann::ordered_json array = nlohmann::ordered_json::array();
+        for (const auto& item : items) array.push_back(item_json(p, item));
+        out[key] = std::move(array);
     }
     if (every_parameter && manifest) {
         for (const auto& p : manifest->parameters) {
@@ -234,7 +263,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                     Instance inst;
                     inst.name = econet.transport->name;
                     inst.config = econet.transport->parameters;
-                    inst.list_config = econet.transport->list_parameters;
+                    inst.preset_list_items = econet.transport->list_parameters;
                     inst.from_preset = true;
                     inst.preset_pointer = "/econet/transport";
                     config.extension_instances.push_back(std::move(inst));
@@ -247,7 +276,7 @@ void apply_preset(ServerConfig<MachineType>& config, const PresetConfig& preset)
                     Instance inst;
                     inst.name = ext.name;
                     inst.config = ext.config;
-                    inst.list_config = ext.list_config;
+                    inst.preset_list_items = ext.list_config;
                     inst.from_preset = true;
                     inst.preset_pointer = "/extensions/" + std::to_string(i);
                     config.extension_instances.push_back(std::move(inst));
@@ -319,6 +348,17 @@ void merge_preset_startup(ServerConfig<MachineType>& config) {
     }
 }
 
+// The JSON pointer of one of a preset extension instance's parameters: under
+// config/ for an extensions[] entry, under parameters/ for the Econet
+// transport. "" names the entry itself; a key may go on into the value, as
+// "map/1/station" does into a list item.
+template<typename Instance>
+std::string instance_parameter_pointer(const Instance& inst, const std::string& key) {
+    if (key.empty()) return inst.preset_pointer;
+    const bool transport = inst.preset_pointer == "/econet/transport";
+    return inst.preset_pointer + (transport ? "/parameters/" : "/config/") + key;
+}
+
 // Normalise the preset's extension instances (its extensions[] and its
 // econet.transport) against their manifests, exactly as parse_extension_args
 // normalises a CLI flag's: unknown parameters are rejected, defaults filled,
@@ -330,7 +370,8 @@ void merge_preset_startup(ServerConfig<MachineType>& config) {
 // floppy images are; a bare name is left for the extension's own search.
 //
 // Runs after CLI parsing, when the resolver is populated.
-// Returns one error per instance that fails, located by its preset entry.
+// Returns one error per instance that fails, located by its preset entry, or
+// by the parameter, list item or field at fault when the error names one.
 template<typename MachineType>
 std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& config) {
     std::vector<Diagnostic> errors;
@@ -350,9 +391,10 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
         // Copies: on failure the instance keeps what the preset said, so
         // resolve-preset can still show it.
         auto normalised = beebium::normalise_extension_config(
-            source, inst.config, inst.list_config, manifest->parameters);
+            source, inst.config, inst.preset_list_items, manifest->parameters);
         if (!normalised.ok) {
-            errors.push_back({inst.preset_pointer, normalised.error});
+            errors.push_back(
+                {instance_parameter_pointer(inst, normalised.error_pointer), normalised.error});
             continue;
         }
         inst.config = std::move(normalised.config);
@@ -458,16 +500,6 @@ std::vector<std::string> machine_attachment_points() {
     if constexpr (beebium::HasTubeSocket<Memory>) points.push_back("tube");
     if constexpr (beebium::HasSerialPort<Memory>) points.push_back("serial-port");
     return points;
-}
-
-// The JSON pointer of one of a preset extension instance's parameters: under
-// config/ for an extensions[] entry, under parameters/ for the Econet
-// transport. "" names the entry itself.
-template<typename Instance>
-std::string instance_parameter_pointer(const Instance& inst, const std::string& key) {
-    if (key.empty()) return inst.preset_pointer;
-    const bool transport = inst.preset_pointer == "/econet/transport";
-    return inst.preset_pointer + (transport ? "/parameters/" : "/config/") + key;
 }
 
 // Ask each extension instance's plugin to check its configuration (the
@@ -586,6 +618,10 @@ void merge_preset_extensions(ServerConfig<MachineType>& config) {
         for (const auto& [key, values] : preset.list_config) {
             if (cli.explicit_keys.count(key) == 0) {
                 cli.list_config[key] = values;
+                if (auto it = preset.preset_list_items.find(key);
+                    it != preset.preset_list_items.end()) {
+                    cli.preset_list_items[key] = it->second;
+                }
             }
         }
         // The merged instance was given what either source gave.
@@ -885,7 +921,7 @@ nlohmann::ordered_json document_config_json(const beebium::ExtensionManifest* ma
                                             const Instance& inst, DocumentKeys keys) {
     if (keys == DocumentKeys::Every) {
         return extension_config_json(manifest, inst.config, inst.list_config,
-                                     /*every_parameter=*/true);
+                                     /*every_parameter=*/true, inst.preset_list_items);
     }
     std::map<std::string, std::string> config;
     std::map<std::string, std::vector<std::string>> list_config;
@@ -899,10 +935,16 @@ nlohmann::ordered_json document_config_json(const beebium::ExtensionManifest* ma
         }
         config[key] = filepath ? path_for_preset(value) : value;
     }
+    std::map<std::string, std::vector<beebium::ConfigListItem>> given_items;
     for (const auto& [key, values] : inst.list_config) {
-        if (inst.explicit_keys.count(key) != 0) list_config[key] = values;
+        if (inst.explicit_keys.count(key) == 0) continue;
+        list_config[key] = values;
+        if (auto it = inst.preset_list_items.find(key); it != inst.preset_list_items.end()) {
+            given_items[key] = it->second;
+        }
     }
-    return extension_config_json(manifest, config, list_config, /*every_parameter=*/false);
+    return extension_config_json(manifest, config, list_config, /*every_parameter=*/false,
+                                 given_items);
 }
 
 // The preset document describing the machine `config` holds, in the one key
