@@ -145,6 +145,39 @@ final class ExtensionCatalogueTests: XCTestCase {
         XCTAssertNil(points["tube"]?.description)
     }
 
+    private func parameter(_ json: String) throws -> ExtensionParameter {
+        try JSONDecoder().decode(ExtensionParameter.self, from: Data(json.utf8))
+    }
+
+    /// A parameter whose bundled default names a ROM shows that ROM's friendly
+    /// name as the default; a parameter with no default has none.
+    func testDefaultImageLabel() throws {
+        let roms = [
+            BundledImage(image: "acorn-tube-65c102_1_20.rom", sizeBytes: 4096,
+                         extensionName: "acorn-65c102-coprocessor",
+                         schemaDisplayName: "Acorn 65C102 Tube ROM 1.20"),
+        ]
+        let romParam = try parameter(
+            #"{"key":"rom","type":"filepath","default":"acorn-tube-65c102_1_20.rom","bundled":"rom"}"#)
+        XCTAssertEqual(
+            ExtensionParameterForm.defaultImageLabel(forParameter: romParam, masters: roms),
+            "Acorn 65C102 Tube ROM 1.20")
+        XCTAssertEqual(ExtensionParameterForm.bundledSectionTitle(romParam), "Bundled ROMs")
+
+        // A disc image parameter defaults to empty: no bundled default.
+        let imageParam = try parameter(
+            #"{"key":"image","type":"filepath","default":"","bundled":"hard-disc"}"#)
+        XCTAssertNil(ExtensionParameterForm.defaultImageLabel(forParameter: imageParam, masters: []))
+        XCTAssertEqual(ExtensionParameterForm.bundledSectionTitle(imageParam), "Bundled discs")
+
+        // A default not among the masters falls back to the raw default name.
+        let unknownDefault = try parameter(
+            #"{"key":"rom","type":"filepath","default":"mystery.rom","bundled":"rom"}"#)
+        XCTAssertEqual(
+            ExtensionParameterForm.defaultImageLabel(forParameter: unknownDefault, masters: roms),
+            "mystery.rom")
+    }
+
     func testParsesSerialPortPaths() {
         let jsonl = """
         {"path":"/dev/cu.usbserial-1","usb_vendor_id":1027,"usb_product_id":24577,"manufacturer":"FTDI","product":"","serial_number":""}

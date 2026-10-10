@@ -188,31 +188,54 @@ struct ExtensionParameterForm: View {
         let value = stringValue(parameter.key)
         let masters = parameter.bundled.isEmpty ? [] : (bundledImages[parameter.bundled] ?? [])
             .filter { $0.availableTo(extensionName: manifest.name) }
+        // A parameter with a bundled default (a coprocessor's client ROM) comes
+        // with a working choice already made. An empty value means "use that
+        // default", which resolve-preset fills in -- so show the default by name
+        // rather than "No file", and make picking something else the by-exception
+        // path.
+        let defaultLabel = Self.defaultImageLabel(forParameter: parameter, masters: masters)
+        let usingDefault = value.isEmpty && defaultLabel != nil
         // A bare name is a bundled master (per-machine working copy); a path is a file.
         let isBare = !value.isEmpty && !value.contains("/")
-        let display = value.isEmpty ? "No file"
-            : (isBare ? value : URL(fileURLWithPath: value).lastPathComponent)
+        let display: String
+        if usingDefault {
+            display = "Default: \(defaultLabel ?? "")"
+        } else if value.isEmpty {
+            display = "No file"
+        } else if isBare {
+            display = masters.first(where: { $0.image == value })?.displayName ?? value
+        } else {
+            display = URL(fileURLWithPath: value).lastPathComponent
+        }
         return HStack(spacing: 8) {
             Text(display)
                 .font(.subheadline)
-                .foregroundColor(value.isEmpty ? .secondary : .primary)
+                .foregroundColor(value.isEmpty && !usingDefault ? .secondary : .primary)
                 .lineLimit(1).truncationMode(.middle)
                 .help(value)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Menu {
+                // The way back to the default, when something else is chosen.
+                if let defaultLabel = defaultLabel, !usingDefault {
+                    Button("Use default (\(defaultLabel))") { setValue(parameter.key, .string("")) }
+                    Divider()
+                }
                 if !masters.isEmpty {
-                    Section("Bundled discs") {
+                    Section(Self.bundledSectionTitle(parameter)) {
                         ForEach(masters, id: \.image) { master in
                             Button(master.displayName) { setValue(parameter.key, .string(master.image)) }
                         }
                     }
                 }
                 Button("Choose File…") { browse(parameter.key) }
-                if !value.isEmpty {
+                // With a default, clearing IS "use default"; offer Clear only when
+                // there is no default to fall back to.
+                if !value.isEmpty && defaultLabel == nil {
                     Button("Clear") { setValue(parameter.key, .string("")) }
                 }
             } label: {
-                Text(value.isEmpty ? "Choose…" : "Change…")
+                Text(usingDefault ? "Use a different \(Self.bundledNoun(parameter))…"
+                                  : (value.isEmpty ? "Choose…" : "Change…"))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -220,6 +243,33 @@ struct ExtensionParameterForm: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             loadDroppedFile(providers) { url in setValue(parameter.key, .string(url.path)) }
         }
+    }
+
+    // MARK: - Bundled default (ROM) helpers
+
+    /// The friendly name of a parameter's bundled default, or nil when it has
+    /// none. The default value names a bundled image (a coprocessor's client
+    /// ROM); resolve it to that image's display name, falling back to the raw
+    /// default when it is not among the offered masters.
+    static func defaultImageLabel(forParameter parameter: ExtensionParameter,
+                                  masters: [BundledImage]) -> String? {
+        guard !parameter.defaultValue.isEmpty else { return nil }
+        return masters.first(where: { $0.image == parameter.defaultValue })?.displayName
+            ?? parameter.defaultValue
+    }
+
+    /// The noun for a bundled kind, for menu wording ("ROM", "disc", "image").
+    static func bundledNoun(_ parameter: ExtensionParameter) -> String {
+        switch parameter.bundled {
+        case "rom": return "ROM"
+        case "hard-disc": return "disc"
+        default: return "image"
+        }
+    }
+
+    /// The bundled-section heading in the chooser menu.
+    static func bundledSectionTitle(_ parameter: ExtensionParameter) -> String {
+        "Bundled \(bundledNoun(parameter))s"
     }
 
     // MARK: - Value helpers

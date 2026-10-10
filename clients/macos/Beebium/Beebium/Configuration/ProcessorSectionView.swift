@@ -34,12 +34,11 @@ struct ProcessorSectionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let tubePoint = tubePoint {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Coprocessor").font(.headline)
-                        AttachmentPointGroup(
-                            draft: $draft, schema: extensionsSchema, point: tubePoint,
-                            diagnostics: diagnostics, serialPorts: serialPorts)
-                    }
+                    // The Tube attachment-point node heads this itself (its name
+                    // and description), so no separate "Coprocessor" label.
+                    AttachmentPointGroup(
+                        draft: $draft, schema: extensionsSchema, point: tubePoint,
+                        diagnostics: diagnostics, serialPorts: serialPorts)
                     Divider()
                 }
                 speedControl
