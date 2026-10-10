@@ -196,7 +196,9 @@ the ROMs and presets:
 Masters are committed compressed (`discs/bundled/<id>.tar.xz`, tiny because the
 images are almost entirely empty) and decompressed at build time. Beside each,
 `discs/bundled/<id>.json` gives the name a user sees (`{"display_name": "Acorn
-Level 3 File Server 1.26"}`), which `describe-preset-schema` reports. They are
+Level 3 File Server 1.26"}`), which `describe-preset-schema` reports. It is
+required: configuration fails naming a missing one, and a master directory's
+`.dat` and `.dsc` without it are not a master. They are
 **immutable**: the emulated filing system writes to disc, so the server never
 opens a master; instead, on first use of a bundled image it copies the master
 to a **per-user working copy** and opens that. This keeps a shipped image (or a

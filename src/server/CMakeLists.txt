@@ -28,6 +28,12 @@ set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
 set(BUNDLED_DISC_IDS l3fs-v1_26b)
 set(_bundled_disc_outputs "")
 foreach(_disc_id ${BUNDLED_DISC_IDS})
+    if(NOT EXISTS "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json")
+        message(FATAL_ERROR
+            "Bundled disc ${_disc_id} has no display name: "
+            "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json must give one as "
+            "{\"display_name\": \"...\"}")
+    endif()
     set(_tarball "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.tar.xz")
     set(_dat "${DISCS_OUTPUT_DIR}/${_disc_id}.dat")
     set(_dsc "${DISCS_OUTPUT_DIR}/${_disc_id}.dsc")

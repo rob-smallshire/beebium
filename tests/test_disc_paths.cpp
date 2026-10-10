@@ -75,12 +75,13 @@ std::string read_file(const fs::path& p) {
                        std::istreambuf_iterator<char>());
 }
 
-// Build a master l3fs-v1_26.dat + .dsc in master_dir, marked read-only (as
-// shipped). Returns nothing; asserts creation.
+// Build a master l3fs-v1_26.dat + .dsc + .json in master_dir, the image
+// files marked read-only (as shipped). Returns nothing; asserts creation.
 void make_master(const fs::path& master_dir, const std::string& dat,
                  const std::string& dsc) {
     write_file(master_dir / "l3fs-v1_26.dat", dat);
     write_file(master_dir / "l3fs-v1_26.dsc", dsc);
+    write_file(master_dir / "l3fs-v1_26.json", R"({"display_name": "L3FS"})");
     fs::permissions(master_dir / "l3fs-v1_26.dat",
                     fs::perms::owner_read | fs::perms::group_read |
                         fs::perms::others_read);
@@ -288,14 +289,18 @@ TEST_CASE("resolve_disc_image passes explicit paths through untouched",
 // bundled_hard_disc_images: the masters a bare hard-disc name can refer to
 // ---------------------------------------------------------------------------
 
-TEST_CASE("bundled_hard_disc_images lists each .dat with its .dsc sidecar, by name",
+TEST_CASE("bundled_hard_disc_images lists each .dat with its .dsc and .json, by name",
           "[disc_paths][bundled]") {
     beebium::test::ScopedTempDir master_dir("beebium_bundled_");
     write_file(master_dir / "zeta.dat", "0123456789");
     write_file(master_dir / "zeta.dsc", "g");
+    write_file(master_dir / "zeta.json", R"({"display_name": "Zeta"})");
     write_file(master_dir / "alpha.dat", "01234");
     write_file(master_dir / "alpha.dsc", "g");
-    write_file(master_dir / "orphan.dat", "x");     // no sidecar: not a master
+    write_file(master_dir / "alpha.json", R"({"display_name": "Alpha"})");
+    write_file(master_dir / "orphan.dat", "x");     // no sidecars: not a master
+    write_file(master_dir / "unnamed.dat", "x");    // no .json: not a master
+    write_file(master_dir / "unnamed.dsc", "g");
     write_file(master_dir / "notes.txt", "x");
 
     auto images = DiscPaths::bundled_hard_disc_images(master_dir.path());
@@ -313,14 +318,51 @@ TEST_CASE("bundled_hard_disc_images takes a master's display name from its .json
     write_file(master_dir / "named.dat", "0");
     write_file(master_dir / "named.dsc", "g");
     write_file(master_dir / "named.json", R"({"display_name": "A Named Disc"})");
-    write_file(master_dir / "plain.dat", "0");
-    write_file(master_dir / "plain.dsc", "g");
+    write_file(master_dir / "nameless.dat", "0");
+    write_file(master_dir / "nameless.dsc", "g");
+    write_file(master_dir / "nameless.json", R"({"title": "no display_name"})");
 
     auto images = DiscPaths::bundled_hard_disc_images(master_dir.path());
 
-    REQUIRE(images.size() == 2);
+    REQUIRE(images.size() == 1);
+    CHECK(images[0].image == "named.dat");
     CHECK(images[0].display_name == "A Named Disc");
-    CHECK(images[1].display_name == "plain");  // no .json: the name's stem
+}
+
+TEST_CASE("prepare_working_image refuses a master with no display name",
+          "[disc][discpaths]") {
+    TmpTree tmp;
+    auto master = tmp.subdir("master");
+    auto work = tmp.subdir("work");
+    make_master(master, "DATA-A", "DSC-A");
+    fs::remove(master / "l3fs-v1_26.json");
+
+    try {
+        DiscPaths::prepare_working_image("l3fs-v1_26.dat", master, work,
+                                         DiscWorkMode::Persistent);
+        FAIL("a master with no .json was used");
+    } catch (const std::runtime_error& e) {
+        CHECK(std::string(e.what()).find("l3fs-v1_26.json") != std::string::npos);
+    }
+}
+
+TEST_CASE("every committed disc master has a .json giving its display name",
+          "[disc_paths][bundled]") {
+    const fs::path bundled_dirpath(BEEBIUM_BUNDLED_DISCS_SRC_DIRPATH);
+    int tarballs = 0;
+    for (const auto& entry : fs::directory_iterator(bundled_dirpath)) {
+        const auto filename = entry.path().filename().string();
+        const std::string suffix = ".tar.xz";
+        if (filename.size() <= suffix.size() ||
+            filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            continue;
+        }
+        ++tarballs;
+        const auto id = filename.substr(0, filename.size() - suffix.size());
+        INFO(id);
+        CHECK(DiscPaths::master_display_name(bundled_dirpath / (id + ".dat")).has_value());
+    }
+    CHECK(tarballs > 0);
 }
 
 TEST_CASE("bundled_hard_disc_images of a missing directory is empty",

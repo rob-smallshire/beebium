@@ -296,8 +296,8 @@ coprocessor's `rom`): one of the ROMs that extension itself ships in its
 `roms/` directory; a bare name it does not ship is an error (write `./name`
 for a file of that name in the working directory). `describe-preset-schema`
 lists the bundled images of both kinds, each with a `display_name`: a ROM's
-from its manifest `roms` entry, a disc master's from the `<name>.json` beside
-it (else the file's stem). No floppy images are bundled.
+from its manifest `roms` entry, a disc master's from the `<name>.json` it
+must have beside it (a `.dat` and `.dsc` without one are not a master). No floppy images are bundled.
 
 A parameter may declare `choices_from` `"serial-ports"` (`host-serial`'s
 `path`, Piconet's `device_path`): a UI may offer the host's serial ports,

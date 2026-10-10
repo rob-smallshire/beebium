@@ -116,6 +116,9 @@ add_executable(test_disc_paths test_disc_paths.cpp)
 target_include_directories(test_disc_paths PRIVATE
     ${CMAKE_SOURCE_DIR}/src/server/include
 )
+target_compile_definitions(test_disc_paths PRIVATE
+    BEEBIUM_BUNDLED_DISCS_SRC_DIRPATH="${CMAKE_SOURCE_DIR}/discs/bundled"
+)
 target_link_libraries(test_disc_paths PRIVATE
     beebium_core
     Catch2::Catch2WithMain

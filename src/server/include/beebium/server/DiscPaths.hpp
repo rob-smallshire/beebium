@@ -131,9 +131,8 @@ public:
     };
 
     // The hard-disc masters in a master directory: every <name>.dat that has
-    // its <name>.dsc sidecar, sorted by name. These are the bare names
-    // resolve_disc_image accepts. A master's display name is the
-    // "display_name" of its <name>.json, or <name> when it has none. An absent
+    // its <name>.dsc and a <name>.json giving its display name, sorted by
+    // name. These are the bare names resolve_disc_image accepts. An absent
     // directory has none.
     static std::vector<BundledImage> bundled_hard_disc_images(
         const std::filesystem::path& master_dir) {
@@ -148,26 +147,29 @@ public:
             auto dsc = path;
             dsc.replace_extension(".dsc");
             if (!std::filesystem::exists(dsc, ec)) continue;
+            auto display_name = master_display_name(path);
+            if (!display_name) continue;
             images.push_back({path.filename().string(), entry.file_size(ec),
-                              master_display_name(path)});
+                              std::move(*display_name)});
         }
         std::sort(images.begin(), images.end(),
                   [](const BundledImage& a, const BundledImage& b) { return a.image < b.image; });
         return images;
     }
 
-    // The display name a master's <name>.json gives, or <name>.
-    static std::string master_display_name(const std::filesystem::path& dat_filepath) {
+    // The display name a master's <name>.json gives (its "display_name"), or
+    // nullopt when the file is missing or gives none.
+    static std::optional<std::string> master_display_name(
+        const std::filesystem::path& dat_filepath) {
         auto json_filepath = dat_filepath;
         json_filepath.replace_extension(".json");
         std::ifstream in(json_filepath);
-        if (in) {
-            const auto j = nlohmann::json::parse(in, nullptr, false);
-            if (j.is_object() && j.contains("display_name") && j["display_name"].is_string()) {
-                return j["display_name"].get<std::string>();
-            }
+        if (!in) return std::nullopt;
+        const auto j = nlohmann::json::parse(in, nullptr, false);
+        if (!j.is_object() || !j.contains("display_name") || !j["display_name"].is_string()) {
+            return std::nullopt;
         }
-        return dat_filepath.stem().string();
+        return j["display_name"].get<std::string>();
     }
 
     // The hard-disc masters this server ships (find_disc_directory), or none
@@ -249,6 +251,12 @@ public:
             throw std::runtime_error(
                 "Bundled disc image not found: " + master_dat.string() +
                 " (with its .dsc sidecar)");
+        }
+        if (!master_display_name(master_dat)) {
+            throw std::runtime_error(
+                "Bundled disc image " + master_dat.string() + " has no display name: " +
+                std::filesystem::path(master_dat).replace_extension(".json").string() +
+                " must give one as {\"display_name\": \"...\"}");
         }
 
         const auto working_dat = work_dir / dat_name;
