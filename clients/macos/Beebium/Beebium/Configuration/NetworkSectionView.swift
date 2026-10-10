@@ -163,7 +163,10 @@ struct NetworkSectionView: View {
                     // param diagnostics still show in the section summary below.
                     diagnostics: diagnostics.withPrefix("/econet/transport/parameters"),
                     serialPortSuggestions: serialPorts,
-                    setValue: setTransportParameter)
+                    setValue: setTransportParameter,
+                    // Share the section's focus so the station field, the port/net
+                    // fields and a background click all release one another.
+                    hostFocusedField: $focusedField)
                     .padding(.leading, 8)
             }
 
