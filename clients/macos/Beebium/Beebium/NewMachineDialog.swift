@@ -24,7 +24,6 @@ struct NewMachineDialog: View {
     @State private var selectedPreset: MachinePreset?
 
     // Configuration state
-    @State private var showConfiguration = false
     /// The draft preset document being edited: the single source of truth for
     /// every configuration section, launched and saved as-is.
     @State private var draft = MachineDraft()
@@ -58,22 +57,16 @@ struct NewMachineDialog: View {
     @State private var isLaunching = false
     @State private var launchError: String?
 
-    // The hosting NSWindow, captured via WindowAccessor so we can resize
-    // it programmatically when the Configuration disclosure toggles. The
-    // window stays user-resizable; we just adjust the height to fit each
-    // mode so a previously-expanded window doesn't leave a sea of empty
-    // space after the user collapses Configuration.
+    // The hosting NSWindow, captured via WindowAccessor so we can give a
+    // freshly-opened dialog its natural height. The window stays
+    // user-resizable; we just set a sensible baseline on each open.
     @State private var hostingWindow: NSWindow?
 
-    private var dialogWidth: CGFloat {
-        showConfiguration ? 520 : 380
-    }
+    private let dialogWidth: CGFloat = 520
 
-    // Empirical natural content heights for the two modes. Tuned so the
-    // dialog fits cleanly with no scrollbar and no large gap below the
-    // button bar.
-    private let collapsedContentHeight: CGFloat = 200
-    private let expandedContentHeight: CGFloat = 560
+    // The dialog's natural content height: tuned so it fits cleanly with no
+    // scrollbar and no large gap below the button bar.
+    private let contentHeight: CGFloat = 560
 
     var body: some View {
         VStack(spacing: 0) {
@@ -82,10 +75,8 @@ struct NewMachineDialog: View {
                 presetPickerSection
                 descriptionSection
                 configurationSection
-                if showConfiguration {
-                    saveAsPresetSection
-                }
-                PresetDiagnosticsView(diagnostics: visibleDiagnostics)
+                saveAsPresetSection
+                PresetDiagnosticsView(diagnostics: diagnostics)
                 errorSection
             }
             .padding(20)
@@ -96,11 +87,7 @@ struct NewMachineDialog: View {
             buttonBar
         }
         .frame(minWidth: dialogWidth, maxWidth: .infinity)
-        .animation(.easeInOut(duration: 0.2), value: showConfiguration)
         .background(WindowAccessor(window: $hostingWindow))
-        .onChange(of: showConfiguration) { isExpanded in
-            resizeWindowForMode(expanded: isExpanded)
-        }
         .task {
             // First-open initial setup. The dialog window is a singleton:
             // SwiftUI doesn't re-fire .task when the window is re-shown
@@ -133,13 +120,6 @@ struct NewMachineDialog: View {
         .onChange(of: draft) { _ in
             scheduleValidation()
         }
-    }
-
-    /// Diagnostics to show: all while the configuration is open; only errors
-    /// when it is collapsed (so a blocked Create is still explained without
-    /// surfacing warnings about options the user cannot see).
-    private var visibleDiagnostics: [PresetManager.PresetDiagnostic] {
-        showConfiguration ? diagnostics : diagnostics.filter(\.isError)
     }
 
     /// Whether an error diagnostic blocks launching/saving.
@@ -236,62 +216,38 @@ struct NewMachineDialog: View {
 
     // MARK: - Configuration Section
 
+    /// The configuration editor. This dialog has one job -- configure a preset,
+    /// then Create -- so the editor is always shown (the Welcome window handles
+    /// launching an existing preset unaltered). While the schema loads, a
+    /// spinner stands in its place.
+    @ViewBuilder
     private var configurationSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Disclosure button
-            Button {
-                withAnimation {
-                    showConfiguration.toggle()
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: showConfiguration ? "chevron.down" : "chevron.right")
-                        .font(.caption)
-                        .frame(width: 12)
-                    Text("Configuration")
-                        .font(.subheadline)
-                }
-                .foregroundColor(.primary)
+        if isLoadingSchema {
+            HStack {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Loading configuration...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain)
-            .disabled(selectedPreset == nil)
-            // SwiftUI names this from the Text in its label, so it reads as
-            // "Configuration"; what a chevron toggle cannot convey is which
-            // way it is about to go.
-            .accessibilityHint(showConfiguration
-                               ? "Hides the configuration options"
-                               : "Shows the configuration options")
-
-            // Configuration editor (shown when expanded)
-            if showConfiguration {
-                if isLoadingSchema {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                        Text("Loading configuration...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(height: 200)
-                } else {
-                    ConfigurationEditor(
-                        draft: $draft,
-                        originalDraft: originalDraft,
-                        storageSchema: storageSchema,
-                        memorySchema: memorySchema,
-                        hardDiscCapability: hardDiscCapability,
-                        extensionsSchema: extensionsSchema,
-                        econetSchema: econetSchema,
-                        startupSchema: startupSchema,
-                        romResolver: romResolver(for: selectedPreset),
-                        serialPorts: serialPorts,
-                        diagnostics: diagnostics
-                    )
-                    // Grow with the window (resizable) so the sideways list can
-                    // show more rows; 220 is the floor.
-                    .frame(minHeight: 220, maxHeight: .infinity)
-                }
-            }
+            .frame(height: 200)
+        } else {
+            ConfigurationEditor(
+                draft: $draft,
+                originalDraft: originalDraft,
+                storageSchema: storageSchema,
+                memorySchema: memorySchema,
+                hardDiscCapability: hardDiscCapability,
+                extensionsSchema: extensionsSchema,
+                econetSchema: econetSchema,
+                startupSchema: startupSchema,
+                romResolver: romResolver(for: selectedPreset),
+                serialPorts: serialPorts,
+                diagnostics: diagnostics
+            )
+            // Grow with the window (resizable) so the sideways list can
+            // show more rows; 220 is the floor.
+            .frame(minHeight: 220, maxHeight: .infinity)
         }
     }
 
@@ -351,11 +307,9 @@ struct NewMachineDialog: View {
     /// (Cancel, Create-success, red close button, Cmd-W) without us
     /// having to instrument each one.
     ///
-    /// The window is also resized back to the collapsed content height
-    /// so AppKit remembers a small frame and the next open doesn't
-    /// reappear at the previously-expanded size.
+    /// The window is also resized back to the natural content height
+    /// so AppKit doesn't reopen at whatever size the user had stretched to.
     private func resetForNewSession(in window: NSWindow) {
-        showConfiguration = false
         saveAsNewPreset = false
         newPresetName = ""
         isLaunching = false
@@ -381,31 +335,13 @@ struct NewMachineDialog: View {
             loadDraftForPreset(preset)
         }
         // AppKit remembers the window's frame across hide/show. Resize
-        // to the collapsed content height so the next open isn't
-        // stuck at whatever size the user had stretched to. The user
-        // can still resize manually after opening.
+        // to the natural content height so the next open isn't stuck at
+        // whatever size the user had stretched to. The user can still
+        // resize manually after opening.
         let width = window.frame.size.width
         // setContentSize takes the content rect; the actual frame
         // includes title bar etc. Use setContentSize for accuracy.
-        window.setContentSize(NSSize(width: width, height: collapsedContentHeight))
-    }
-
-    /// Resize the hosting window when the Configuration disclosure toggles.
-    /// Collapse: shrink to the natural collapsed height regardless of
-    /// whatever larger size the user had stretched to - the collapsed
-    /// dialog has nothing to fill the extra space and looks broken.
-    /// Expand: grow to the expanded height only if the window is
-    /// currently smaller than that. If the user has already manually
-    /// stretched it taller, leave their choice alone.
-    private func resizeWindowForMode(expanded: Bool) {
-        guard let window = hostingWindow else { return }
-        let currentSize = window.contentLayoutRect.size
-        let targetHeight = expanded ? expandedContentHeight : collapsedContentHeight
-        let newHeight = expanded
-            ? max(currentSize.height, targetHeight)
-            : targetHeight
-        if abs(newHeight - currentSize.height) < 0.5 { return }
-        window.setContentSize(NSSize(width: currentSize.width, height: newHeight))
+        window.setContentSize(NSSize(width: width, height: contentHeight))
     }
 
     private func restoreLastSelection() {
