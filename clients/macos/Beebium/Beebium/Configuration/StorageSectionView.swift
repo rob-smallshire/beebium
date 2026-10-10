@@ -36,7 +36,13 @@ struct StorageSectionView: View {
                 if let fdcSchema = schema?.fdcSocket {
                     fdcSocketSection(schema: fdcSchema)
                 }
-                floppyDrivesSection
+                // Floppy drives attach to a controller. With none fitted there
+                // is nothing to show, so omit the rows (as the live Storage
+                // sidebar does). The drives stay in the draft untouched, so
+                // fitting a controller brings them -- and any images -- back.
+                if schema?.hasActiveFdc(in: draft) ?? false {
+                    floppyDrivesSection
+                }
                 if let capability = hardDiscCapability {
                     Divider()
                     HardDiscsSectionView(draft: $draft, capability: capability, diagnostics: diagnostics)

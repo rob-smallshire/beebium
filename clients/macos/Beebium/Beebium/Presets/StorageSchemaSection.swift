@@ -18,14 +18,46 @@ import Foundation
 /// FDC socket options (Model B) and floppy drive configuration.
 struct StorageSchemaSection: Codable {
     let type: String  // "storage"
+    /// Fixed fittings of the model: a cassette port, and a built-in floppy disc
+    /// controller on models that have one soldered in (e.g. the B+). A model
+    /// with no built-in FDC instead offers an `fdc_socket` the user can fit a
+    /// controller into.
+    let builtin: StorageBuiltin?
     let fdcSocket: FDCSocketSchema?
     let floppyDrives: [FloppyDriveSchema]?
 
     enum CodingKeys: String, CodingKey {
         case type
+        case builtin
         case fdcSocket = "fdc_socket"
         case floppyDrives = "floppy_drives"
     }
+
+    /// Whether this model has an active floppy disc controller given `draft`:
+    /// a soldered-in controller, or a controller fitted into the FDC socket.
+    /// When false there is nothing for floppy drives to attach to, so the
+    /// Storage section shows none -- matching the live Storage sidebar.
+    func hasActiveFdc(in draft: MachineDraft) -> Bool {
+        if builtin?.fdc != nil { return true }
+        guard let fdcSocket = fdcSocket else { return false }
+        let selectedId = draft.storage?.fdcSocket?.id ?? "none"
+        // The empty socket's option carries no device; any real controller does.
+        return fdcSocket.options.first(where: { $0.id == selectedId })?.device != nil
+    }
+}
+
+/// A model's fixed storage fittings, as reported by the schema's `builtin` block.
+struct StorageBuiltin: Codable {
+    let cassette: Bool?
+    /// The soldered-in floppy disc controller, if the model has one; nil when
+    /// the model instead offers a user-fittable FDC socket (or has no FDC).
+    let fdc: BuiltinFdc?
+}
+
+/// A soldered-in floppy disc controller described by the schema.
+struct BuiltinFdc: Codable {
+    let device: String?
+    let label: String?
 }
 
 /// Schema for the FDC socket (Model B only).
