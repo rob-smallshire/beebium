@@ -356,6 +356,21 @@ TEST_CASE("describe-extension --json lists a parameter's choices",
     CHECK(values == std::vector<std::string>{"on", "announce", "browse", "off"});
 }
 
+TEST_CASE("describe-extension --json gives each choice a description",
+          "[integration][extension][describe-extension][json][choices]") {
+    const auto aun = describe_extension_json("aun");
+    for (const auto& c : parameter(aun, "discovery").at("choices")) {
+        CHECK(c.at("description").is_string());
+    }
+    const auto rtc = describe_extension_json("acorn-rtc");
+    const auto& layouts = parameter(rtc, "layout").at("choices");
+    REQUIRE(layouts.size() == 3);
+    for (const auto& c : layouts) {
+        INFO(c.at("value"));
+        CHECK(c.at("description").get<std::string>().find("Years 1981 to ") == 0);
+    }
+}
+
 TEST_CASE("every parameter of every shipped extension has a label and a description",
           "[integration][extension][describe-extension][json]") {
     auto list = run_command(EXECUTABLE + " --format jsonl list-extensions");

@@ -56,27 +56,19 @@ void AcornRtcExtension::init(ExtensionContext& ctx) {
     // Parse register layout
     auto layout_val = config_value("layout");
     if (layout_val) {
-        if (*layout_val == "4bit-year-in-r1") {
-            chip_.set_layout(RegisterLayout::FourBitYearInR1);
-        } else if (*layout_val == "7bit-year-in-r7") {
-            chip_.set_layout(RegisterLayout::SevenBitYearInR7);
-        } else if (*layout_val == "7bit-year-in-r1r5") {
-            chip_.set_layout(RegisterLayout::SevenBitYearInR1R5);
-        } else {
+        const auto layout = register_layout_from_name(*layout_val);
+        if (!layout) {
             throw std::runtime_error(
                 "Acorn RTC: unknown layout '" + std::string(*layout_val) +
                 "' (valid: '4bit-year-in-r1', '7bit-year-in-r7', '7bit-year-in-r1r5')");
         }
+        chip_.set_layout(*layout);
     }
 
     // Initialise the chip (validates year range for the layout)
     if (!chip_.initialise(target_dt)) {
-        std::string range;
-        switch (chip_.layout()) {
-            case RegisterLayout::FourBitYearInR1: range = "1981-1996"; break;
-            case RegisterLayout::SevenBitYearInR7: range = "1981-2099"; break;
-            case RegisterLayout::SevenBitYearInR1R5: range = "1981-2108"; break;
-        }
+        const auto [first_year, last_year] = Saf3019p::year_range(chip_.layout());
+        const std::string range = std::to_string(first_year) + "-" + std::to_string(last_year);
         throw std::runtime_error(
             "Acorn RTC: year " + std::to_string(target_dt.year) +
             " cannot be represented (valid range: " + range + " for layout '" +

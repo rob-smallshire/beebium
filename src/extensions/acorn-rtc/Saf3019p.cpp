@@ -174,6 +174,13 @@ int Saf3019p::days_in_current_month() const {
 // Initialisation
 //////////////////////////////////////////////////////////////////////////////
 
+std::optional<RegisterLayout> register_layout_from_name(std::string_view name) {
+    if (name == "4bit-year-in-r1") return RegisterLayout::FourBitYearInR1;
+    if (name == "7bit-year-in-r7") return RegisterLayout::SevenBitYearInR7;
+    if (name == "7bit-year-in-r1r5") return RegisterLayout::SevenBitYearInR1R5;
+    return std::nullopt;
+}
+
 std::pair<int, int> Saf3019p::year_range(RegisterLayout layout) {
     // Ranges follow the year-storage width of each software convention:
     //   4-bit year offset in R1  -> 1981..1996

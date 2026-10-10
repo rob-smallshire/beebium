@@ -257,6 +257,28 @@ TEST_CASE("Manifest roms: a well-formed array is parsed", "[extension][plugin][r
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("Manifest choices: a choice may describe itself", "[extension][plugin][choices]") {
+    auto dir = write_manifest(R"({
+        "name": "c", "library": "c",
+        "parameters": [{"key": "mode", "type": "string", "choices": [
+            "bare",
+            {"value": "labelled", "label": "Labelled"},
+            {"value": "described", "label": "Described", "description": "Says what it is."}
+        ]}]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    const auto& choices = manifests[0].parameters.at(0).choices;
+    REQUIRE(choices.size() == 3);
+    CHECK(choices[0].label == "bare");
+    CHECK(choices[0].description.empty());
+    CHECK(choices[1].description.empty());
+    CHECK(choices[2].label == "Described");
+    CHECK(choices[2].description == "Says what it is.");
+}
+
 TEST_CASE("Manifest roms: absent means an empty list", "[extension][plugin][rom]") {
     auto dir = write_manifest(R"({"name": "cop", "library": "cop"})");
     beebium::PluginLoader loader;

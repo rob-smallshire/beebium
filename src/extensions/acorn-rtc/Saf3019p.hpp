@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 namespace beebium {
@@ -45,6 +47,10 @@ enum class RegisterLayout {
     // Used by BeebMaster Y2KFIX. Range: 1981-2108.
     SevenBitYearInR1R5,
 };
+
+// The layout a manifest `layout` value names ("4bit-year-in-r1",
+// "7bit-year-in-r7", "7bit-year-in-r1r5"), or nullopt for any other value.
+std::optional<RegisterLayout> register_layout_from_name(std::string_view name);
 
 // Faithful emulation of the Signetics/Philips SAF3019P CMOS clock/timer IC.
 //

@@ -2805,7 +2805,8 @@ public:
 inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSchema& p) {
     nlohmann::ordered_json choices = nlohmann::ordered_json::array();
     for (const auto& c : p.choices) {
-        choices.push_back({{"value", c.value}, {"label", c.label}});
+        choices.push_back(
+            {{"value", c.value}, {"label", c.label}, {"description", c.description}});
     }
     return {
         {"key", p.key},

@@ -24,20 +24,23 @@
             "key": "layout",
             "label": "Register layout",
             "type": "string",
-            "description": "Register layout: '4bit-year-in-r1' (Acorn original), '7bit-year-in-r7' (L3 v1.26), '7bit-year-in-r1r5' (BeebMaster Y2KFIX)",
+            "description": "How the file server software stores the year in the clock, which sets the years the clock can hold.",
             "default": "4bit-year-in-r1",
             "choices": [
                 {
                     "value": "4bit-year-in-r1",
-                    "label": "Acorn original (4-bit year in R1)"
+                    "label": "Acorn original (4-bit year in R1)",
+                    "description": "Years 1981 to 1996, as the original Acorn file servers expect. Not Y2K compliant."
                 },
                 {
                     "value": "7bit-year-in-r7",
-                    "label": "Level 3 File Server 1.26 (7-bit year in R7)"
+                    "label": "Level 3 File Server 1.26 (7-bit year in R7)",
+                    "description": "Years 1981 to 2099, as the Level 3 File Server 1.26 expects."
                 },
                 {
                     "value": "7bit-year-in-r1r5",
-                    "label": "BeebMaster Y2KFIX (7-bit year in R1/R5)"
+                    "label": "BeebMaster Y2KFIX (7-bit year in R1/R5)",
+                    "description": "Years 1981 to 2108, as file servers patched with BeebMaster's Y2KFIX expect."
                 }
             ]
         }

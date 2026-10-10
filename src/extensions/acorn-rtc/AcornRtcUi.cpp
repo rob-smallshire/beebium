@@ -56,13 +56,15 @@ std::string AcornRtcUi::format_datetime(int year, int month, int day,
 }
 
 std::string AcornRtcUi::format_layout(RegisterLayout layout) {
+    const auto [first_year, last_year] = Saf3019p::year_range(layout);
+    const std::string years = std::to_string(first_year) + "-" + std::to_string(last_year);
     switch (layout) {
         case RegisterLayout::FourBitYearInR1:
-            return "4-bit year in R1 (Acorn original, 1981-1996)";
+            return "4-bit year in R1 (Acorn original, " + years + ")";
         case RegisterLayout::SevenBitYearInR7:
-            return "7-bit year in R7 (L3 v1.26, 1981-2099)";
+            return "7-bit year in R7 (L3 v1.26, " + years + ")";
         case RegisterLayout::SevenBitYearInR1R5:
-            return "7-bit year in R1+R5 (BeebMaster Y2KFIX, 1981-2108)";
+            return "7-bit year in R1+R5 (BeebMaster Y2KFIX, " + years + ")";
     }
     return "";  // unreachable; switch above is exhaustive
 }

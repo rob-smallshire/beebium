@@ -212,14 +212,16 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
                     if (key.is_string()) param.excludes.push_back(key.get<std::string>());
                 }
             }
-            // A choice is a bare value, or {"value": ..., "label": ...}.
+            // A choice is a bare value, or {"value": ..., "label": ...,
+            // "description": ...}.
             if (p.contains("choices") && p["choices"].is_array()) {
                 for (const auto& c : p["choices"]) {
                     if (c.is_string()) {
                         param.choices.push_back({c.get<std::string>(), c.get<std::string>()});
                     } else if (c.is_object() && c.contains("value")) {
                         auto value = c.value("value", "");
-                        param.choices.push_back({value, c.value("label", value)});
+                        param.choices.push_back(
+                            {value, c.value("label", value), c.value("description", "")});
                     }
                 }
             }

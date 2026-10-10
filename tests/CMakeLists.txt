@@ -793,6 +793,14 @@ add_executable(test_time_parser test_time_parser.cpp)
 target_link_libraries(test_time_parser PRIVATE beebium_rtc_core Catch2::Catch2WithMain)
 catch_discover_tests(test_time_parser)
 
+# The Acorn RTC manifest against the chip's code
+add_executable(test_acorn_rtc_manifest test_acorn_rtc_manifest.cpp)
+target_link_libraries(test_acorn_rtc_manifest PRIVATE
+    beebium_rtc_core beebium_extension_api Catch2::Catch2WithMain)
+target_compile_definitions(test_acorn_rtc_manifest PRIVATE
+    BEEBIUM_ACORN_RTC_MANIFEST_DIRPATH="${CMAKE_SOURCE_DIR}/src/extensions/acorn-rtc")
+catch_discover_tests(test_acorn_rtc_manifest)
+
 # SAF3019P v1.26 protocol conformance tests
 add_executable(test_saf3019p_v126 test_saf3019p_v126.cpp)
 target_link_libraries(test_saf3019p_v126 PRIVATE beebium_rtc_core Catch2::Catch2WithMain)

@@ -30,6 +30,8 @@ namespace beebium {
 struct ParameterChoice {
     std::string value;          // as written in a preset or on the command line
     std::string label;          // human-readable, for a configuration UI
+    std::string description;    // what choosing it means, for a configuration
+                                // UI; empty when the label says enough
 };
 
 // Schema for one extension parameter.

@@ -168,8 +168,11 @@ Parameter schema fields:
 - `is_list` -- the parameter may be given several times; its values form a list
 - `min`, `max` -- for an `integer`, the least and greatest values allowed
 - `choices` -- the only values allowed, each a bare string or
-  `{"value": ..., "label": ...}`; matched without regard to case and stored as
-  declared
+  `{"value": ..., "label": ..., "description": ...}`; matched without regard to
+  case and stored as declared. A choice's optional `description` is a sentence
+  saying what choosing it means, for a UI to show beside the selected choice
+  (e.g. the RTC's register layouts each state the years they hold; a test holds
+  those years to the code's)
 - `choices_from` -- the values a UI may offer come from a host enumeration
   (today `serial-ports`, as `list-serial-ports` lists them); the value stays
   free text
