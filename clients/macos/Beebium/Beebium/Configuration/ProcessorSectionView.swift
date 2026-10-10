@@ -21,6 +21,10 @@ struct ProcessorSectionView: View {
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
 
+    /// The Configurator's shared focus, passed to the coprocessor form; the speed
+    /// picker releases a focused field too.
+    @FocusState.Binding var focusedField: String?
+
     /// The attachment point coprocessors plug into. "tube" is the fixed BBC
     /// second-processor bus; the Processor section owns it (Peripherals excludes
     /// it) and presents it as a single-occupancy picker via AttachmentPointGroup.
@@ -38,7 +42,8 @@ struct ProcessorSectionView: View {
                     // and description), so no separate "Coprocessor" label.
                     AttachmentPointGroup(
                         draft: $draft, schema: extensionsSchema, point: tubePoint,
-                        diagnostics: diagnostics, serialPorts: serialPorts)
+                        diagnostics: diagnostics, serialPorts: serialPorts,
+                        focusedField: $focusedField)
                     Divider()
                 }
                 speedControl
@@ -92,6 +97,7 @@ struct ProcessorSectionView: View {
     }
 
     private func setChoice(_ choice: SpeedChoice) {
+        focusedField = nil
         switch choice {
         case .unlimited:         draft.speed = .string(SpeedPresentation.unlimitedToken)
         case .multiplier(let m): draft.speed = .double(m)

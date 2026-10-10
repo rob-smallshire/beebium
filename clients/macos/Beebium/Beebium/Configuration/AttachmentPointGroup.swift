@@ -32,6 +32,9 @@ struct AttachmentPointGroup: View {
     let point: AttachmentPoint
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
+    /// The Configurator's shared focus, passed to each instance's parameter form
+    /// and to nested points; Add/Change/Remove release a focused field first.
+    @FocusState.Binding var focusedField: String?
 
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
     private var instances: [ExtensionInstanceModel.Instance] {
@@ -98,6 +101,7 @@ struct AttachmentPointGroup: View {
         Menu {
             ForEach(addable, id: \.self) { name in
                 Button(schema.displayName(forExtension: name)) {
+                    focusedField = nil
                     draft = model.draft(adding: name, to: draft)
                 }
             }
@@ -130,6 +134,7 @@ struct AttachmentPointGroup: View {
                     changeMenu(instance)
                 }
                 Button {
+                    focusedField = nil
                     draft = model.draft(removingInstanceAt: instance.index, from: draft)
                 } label: {
                     Image(systemName: "trash")
@@ -159,6 +164,7 @@ struct AttachmentPointGroup: View {
         Menu {
             ForEach(changeAlternatives(for: instance), id: \.self) { name in
                 Button(schema.displayName(forExtension: name)) {
+                    focusedField = nil
                     draft = model.draft(settingSoleInstance: name, onPoint: point.id, in: draft)
                 }
             }
@@ -179,14 +185,16 @@ struct AttachmentPointGroup: View {
                 diagnostics: diagnostics.forExtension(index: instance.index),
                 bundledImages: schema.bundledImages ?? [:],
                 serialPortSuggestions: serialPorts,
-                setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) })
+                setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) },
+                hostFocusedField: $focusedField)
                 .padding(.leading, 8)
             // Points this instance provides (e.g. the SCSI bus) nest beneath it
             // as further child nodes.
             ForEach(model.pointsProvided(by: instance)) { provided in
                 AttachmentPointGroup(
                     draft: $draft, schema: schema, point: provided,
-                    diagnostics: diagnostics, serialPorts: serialPorts)
+                    diagnostics: diagnostics, serialPorts: serialPorts,
+                    focusedField: $focusedField)
             }
         }
     }

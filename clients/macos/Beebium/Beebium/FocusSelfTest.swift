@@ -439,9 +439,10 @@ final class FocusSelfTest {
 private struct ConfiguratorKeyboardHarness: View {
     let schema: StartupSchemaSection
     @State private var draft = MachineDraft()
+    @FocusState private var focusedField: String?
 
     var body: some View {
-        KeyboardSectionView(draft: $draft, schema: schema)
+        KeyboardSectionView(draft: $draft, schema: schema, focusedField: $focusedField)
             .frame(width: 400, height: 470)
     }
 }

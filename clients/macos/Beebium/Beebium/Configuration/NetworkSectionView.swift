@@ -29,9 +29,10 @@ struct NetworkSectionView: View {
     var diagnostics: [PresetManager.PresetDiagnostic] = []
     var serialPorts: [String] = []
 
-    /// Shared focus for the station number and range fields, so a picker, the
-    /// Econet switch or a background click releases whichever is focused.
-    @FocusState private var focusedField: String?
+    /// The Configurator's shared focus (owned by ConfigurationEditor), so a
+    /// picker, the Econet switch or a background click releases whichever of the
+    /// station, port or net fields is focused.
+    @FocusState.Binding var focusedField: String?
 
     private enum StationMode: Hashable { case number, auto, range }
 
@@ -66,8 +67,6 @@ struct NetworkSectionView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture { focusedField = nil }
         }
     }
 

@@ -73,6 +73,15 @@ struct ConfigurationEditor: View {
     /// `effectiveSection` resolves that).
     @State private var selectedSection: ConfigSection = .storage
 
+    /// The one focus owner for every section's text fields. Owning it here, rather
+    /// than one per section, means a new section cannot forget to coordinate focus:
+    /// it takes this binding, and a background click on the content area (below)
+    /// releases whichever field is focused. (Release on another control stays
+    /// explicit in each control: a central draft-watch would wrongly release a
+    /// field the moment the user clicked from one field to another, because
+    /// committing the first changes the draft.)
+    @FocusState private var focusedField: String?
+
     /// A configuration section the dialog can show.
     enum ConfigSection: String, Identifiable, CaseIterable {
         case storage = "Storage"
@@ -150,9 +159,12 @@ struct ConfigurationEditor: View {
 
             Divider()
 
-            // Content area
+            // Content area. A tap on the content background (empty space not
+            // consumed by a control or field) releases the focused field.
             contentView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { focusedField = nil }
         }
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(6)
@@ -232,7 +244,8 @@ struct ConfigurationEditor: View {
                     schema: extensionsSchema,
                     diagnostics: diagnostics,
                     serialPorts: serialPorts,
-                    excludedPointIds: [ProcessorSectionView.tubePointId]))
+                    excludedPointIds: [ProcessorSectionView.tubePointId],
+                    focusedField: $focusedField))
             }
             return AnyView(EmptyView())
         case .network:
@@ -242,7 +255,8 @@ struct ConfigurationEditor: View {
                     schema: econetSchema,
                     extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
-                    serialPorts: serialPorts))
+                    serialPorts: serialPorts,
+                    focusedField: $focusedField))
             }
             return AnyView(EmptyView())
         case .processor:
@@ -251,7 +265,8 @@ struct ConfigurationEditor: View {
                     draft: $draft,
                     extensionsSchema: extensionsSchema,
                     diagnostics: diagnostics,
-                    serialPorts: serialPorts))
+                    serialPorts: serialPorts,
+                    focusedField: $focusedField))
             }
             return AnyView(EmptyView())
         case .keyboard:
@@ -259,7 +274,8 @@ struct ConfigurationEditor: View {
                 return AnyView(KeyboardSectionView(
                     draft: $draft,
                     schema: startupSchema,
-                    diagnostics: diagnostics))
+                    diagnostics: diagnostics,
+                    focusedField: $focusedField))
             }
             return AnyView(EmptyView())
         case nil:

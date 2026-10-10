@@ -36,11 +36,11 @@ struct KeyboardSectionView: View {
     let schema: StartupSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
-    /// Shared focus for the hex and decimal fields, so a check box, the picker or
-    /// a background click releases whichever is focused (it then commits or
-    /// refreshes). Without this SwiftUI leaves a byte field focused and stale when
+    /// The Configurator's shared focus (owned by ConfigurationEditor), so a check
+    /// box, the picker or a background click releases whichever byte field is
+    /// focused. Without this SwiftUI leaves a byte field focused and stale when
     /// another control changes the byte.
-    @FocusState private var focusedField: String?
+    @FocusState.Binding var focusedField: String?
 
     private var layout: StartupSchemaSection.LinksLayout { schema.links }
 
@@ -61,9 +61,6 @@ struct KeyboardSectionView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            // A click on the section background releases a focused byte field.
-            .contentShape(Rectangle())
-            .onTapGesture { focusedField = nil }
         }
     }
 

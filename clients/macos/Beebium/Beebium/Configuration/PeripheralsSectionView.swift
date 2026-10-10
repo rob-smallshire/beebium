@@ -33,6 +33,10 @@ struct PeripheralsSectionView: View {
     /// (e.g. the tube), which it passes to exclude.
     var excludedPointIds: Set<String> = []
 
+    /// The Configurator's shared focus, passed down to each extension form so a
+    /// control or a background click releases a focused parameter field.
+    @FocusState.Binding var focusedField: String?
+
     private var shownPoints: [AttachmentPoint] {
         model.modelPoints.filter { !excludedPointIds.contains($0.id) }
     }
@@ -43,7 +47,8 @@ struct PeripheralsSectionView: View {
                 ForEach(shownPoints) { point in
                     AttachmentPointGroup(
                         draft: $draft, schema: schema, point: point,
-                        diagnostics: diagnostics, serialPorts: serialPorts)
+                        diagnostics: diagnostics, serialPorts: serialPorts,
+                        focusedField: $focusedField)
                 }
             }
             .padding(12)
