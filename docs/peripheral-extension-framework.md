@@ -114,7 +114,7 @@ Each extension has a `manifest.json` file alongside its shared library. The mani
 ```json
 {
     "name": "scsi-hard-disc",
-    "description": "SCSI hard disc target (DAT+DSC image)",
+    "description": "A SCSI hard disc, kept in a pair of image files (.dat and .dsc).",
     "library": "scsi-hard-disc",
     "cli": "scsi-hdd",
     "attaches_to": ["scsi"],
@@ -132,6 +132,10 @@ Each extension has a `manifest.json` file alongside its shared library. The mani
 
 Fields:
 - `name` -- canonical extension type name (used in presets, gRPC, dependency resolution)
+- `display_name` -- what a user calls it (e.g. "SCSI Hard Disc")
+- `description` -- one sentence a user understands, saying what it is or does;
+  a configuration UI shows it beside the display name (`describe-preset-schema`
+  carries both, and a test holds every shipped description to a sentence)
 - `cli` -- short CLI flag name (e.g. `--scsi-hdd`); defaults to `name` if omitted
 - `library` -- shared library filename stem (platform adds `.dylib`/`.so`/`.dll`)
 - `attaches_to` -- the attachment point(s) this extension plugs into (e.g.

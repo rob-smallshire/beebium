@@ -316,6 +316,7 @@
         {
           "id": "1mhz-bus",
           "display_name": "1 MHz Bus",
+          "description": "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.",
           "min_occupancy": 0,
           "max_occupancy": null,
           "provided_by": null,
@@ -327,6 +328,7 @@
         {
           "id": "user-port",
           "display_name": "User Port",
+          "description": "The user port, a parallel connector for add-ons such as a real-time clock.",
           "min_occupancy": 0,
           "max_occupancy": 1,
           "provided_by": null,
@@ -337,6 +339,7 @@
         {
           "id": "tube",
           "display_name": "Tube",
+          "description": "The Tube, the connector for a second processor.",
           "min_occupancy": 0,
           "max_occupancy": 1,
           "provided_by": null,
@@ -348,6 +351,7 @@
         {
           "id": "serial-port",
           "display_name": "Serial Port",
+          "description": "The RS423 serial port, for modems, printers and other computers.",
           "min_occupancy": 0,
           "max_occupancy": 1,
           "provided_by": null,
@@ -363,6 +367,7 @@
         {
           "id": "scsi",
           "display_name": "SCSI Bus",
+          "description": "The SCSI bus of a host adapter, which holds up to seven hard discs.",
           "min_occupancy": 0,
           "max_occupancy": 7,
           "provided_by": [
@@ -373,10 +378,12 @@
           ]
         }
       ],
+      "catalogue": [],
       "bundled_images": {
         "hard-disc": [
           {
             "image": "l3fs-v1_26b.dat",
+            "display_name": "Acorn Level 3 File Server 1.26",
             "size_bytes": 10002432,
             "extension": null
           }
@@ -384,11 +391,13 @@
         "rom": [
           {
             "image": "acorn-tube-65c102_1_20.rom",
+            "display_name": "Acorn 65C102 Tube ROM 1.20",
             "size_bytes": 4096,
             "extension": "acorn-65c102-coprocessor"
           },
           {
             "image": "acorn-tube-6502_1_10.rom",
+            "display_name": "Acorn 6502 Tube ROM 1.10",
             "size_bytes": 4096,
             "extension": "acorn-65c02-coprocessor"
           }

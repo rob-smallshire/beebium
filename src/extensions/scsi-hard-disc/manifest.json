@@ -1,7 +1,7 @@
 {
     "name": "scsi-hard-disc",
     "display_name": "SCSI Hard Disc",
-    "description": "SCSI hard disc target (DAT+DSC image)",
+    "description": "A SCSI hard disc, kept in a pair of image files (.dat and .dsc).",
     "library": "scsi-hard-disc",
     "attaches_to": [
         "scsi"

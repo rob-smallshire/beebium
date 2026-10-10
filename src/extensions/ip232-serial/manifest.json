@@ -1,7 +1,7 @@
 {
     "name": "ip232-serial",
     "display_name": "IP232 Serial",
-    "description": "Connect the BBC serial port (RS423) to a tcpser-style IP232 server over TCP",
+    "description": "Connects the serial port to an IP232 modem emulator, such as tcpser, over the network.",
     "library": "ip232-serial",
     "attaches_to": [
         "serial-port"

@@ -1,7 +1,7 @@
 {
     "name": "rpc-serial",
     "display_name": "RPC Serial",
-    "description": "Client-driven serial peer: inject/collect bytes via the RpcSerial service",
+    "description": "A serial peer that a client program drives, sending and receiving bytes through the RpcSerial service; used by automated tests.",
     "library": "rpc-serial",
     "attaches_to": [
         "serial-port"

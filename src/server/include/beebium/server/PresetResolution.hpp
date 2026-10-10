@@ -402,6 +402,7 @@ struct BundledImage {
     std::string kind;
     std::string image;            // the bare name, e.g. "l3fs-v1_26b.dat"
     std::uintmax_t size_bytes = 0;
+    std::string display_name;     // the name a user sees
     std::string extension;        // the extension it belongs to; "" = any
     std::filesystem::path filepath;  // the shipped file
 };
@@ -411,11 +412,13 @@ struct BundledImage {
 inline std::vector<BundledImage> bundled_images(const beebium::ExtensionResolver& resolver) {
     std::vector<BundledImage> images;
     for (const auto& disc : beebium::server::DiscPaths::bundled_hard_disc_images()) {
-        images.push_back({"hard-disc", disc.image, disc.size_bytes, "", {}});
+        images.push_back({"hard-disc", disc.image, disc.size_bytes, disc.display_name, "", {}});
     }
     for (const auto& e : resolver.entries()) {
         for (const auto& rom : e.manifest->roms) {
-            images.push_back({"rom", rom.filename, rom.size, e.manifest->name,
+            images.push_back({"rom", rom.filename, rom.size,
+                              rom.display_name.empty() ? rom.filename : rom.display_name,
+                              e.manifest->name,
                               e.manifest->manifest_dirpath / "roms" / rom.filename});
         }
     }

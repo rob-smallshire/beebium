@@ -295,7 +295,9 @@ working copy, never the master
 coprocessor's `rom`): one of the ROMs that extension itself ships in its
 `roms/` directory; a bare name it does not ship is an error (write `./name`
 for a file of that name in the working directory). `describe-preset-schema`
-lists the bundled images of both kinds. No floppy images are bundled.
+lists the bundled images of both kinds, each with a `display_name`: a ROM's
+from its manifest `roms` entry, a disc master's from the `<name>.json` beside
+it (else the file's stem). No floppy images are bundled.
 
 A parameter may declare `choices_from` `"serial-ports"` (`host-serial`'s
 `path`, Piconet's `device_path`): a UI may offer the host's serial ports,
@@ -434,13 +436,13 @@ There is one section per preset key, its `type` being the key:
 | `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives` with their geometry and image types |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
-| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}` |
+| `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `description`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `catalogue`: every extension that can attach to one of those points, and on a model with Econet every transport, each exactly as `describe-extension <name> --json` gives it (`name`, `display_name`, `description`, `cli_name`, `kind`, `source`, `attaches_to`, `provides`, `parameters`, `roms`). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `display_name`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "display_name": "Acorn Level 3 File Server 1.26", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "display_name": "Acorn 6502 Tube ROM 1.10", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}` |
 
-The split is deliberate: `describe-preset-schema` says where things go on this
-model, `describe-extension` what each extension takes. Extensions and
-transports are named, not described: their parameters come from
-`describe-extension`, an attachment point's occupancy from
-`list-attachment-points`, and the controller and image-format catalogues from
+So one call gives a front-end everything it shows about extensions: what each
+one is called and does, in a sentence a user understands, and what it takes.
+A bundled parameter's `default` is a bare name, so the image it names, and its
+`display_name`, are in `bundled_images` (a coprocessor's `rom` defaults to the
+ROM it ships). The controller and image-format catalogues come from
 `list-fdcs` and `list-floppy-formats`.
 
 ## Not in a preset

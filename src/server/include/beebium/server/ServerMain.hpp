@@ -2835,7 +2835,7 @@ inline nlohmann::ordered_json extension_manifest_json(const beebium::ExtensionMa
     nlohmann::ordered_json roms = nlohmann::ordered_json::array();
     for (const auto& r : m.roms) {
         roms.push_back({{"key", r.key}, {"filename", r.filename}, {"size", r.size},
-                        {"description", r.description}});
+                        {"display_name", r.display_name}});
     }
     return {
         {"name", m.name},
@@ -3033,8 +3033,8 @@ public:
                     for (const auto& r : manifest->roms) {
                         std::cout << "    " << r.key << " : " << r.filename
                                   << " (" << r.size << " bytes)";
-                        if (!r.description.empty()) {
-                            std::cout << " -- " << r.description;
+                        if (!r.display_name.empty()) {
+                            std::cout << " -- " << r.display_name;
                         }
                         std::cout << "\n";
                     }
@@ -3276,10 +3276,10 @@ public:
                   << "    that key: speed, startup, mos_image_uri, storage, sideways_bank,\n"
                   << "    econet, extensions\n"
                   << "\n"
-                  << "Extensions and transports are named, not described: describe-extension\n"
-                  << "gives each one's parameters, list-attachment-points each point's\n"
-                  << "occupancy, list-fdcs and list-floppy-formats the controller and image\n"
-                  << "catalogues. resolve-preset shows what a given preset resolves to.\n"
+                  << "The extensions section's catalogue describes each extension this\n"
+                  << "model can take as describe-extension --json does; list-fdcs and\n"
+                  << "list-floppy-formats give the controller and image catalogues.\n"
+                  << "resolve-preset shows what a given preset resolves to.\n"
                   << "\n"
                   << "Output is always JSON regardless of --format option.\n";
     }
@@ -3485,7 +3485,9 @@ public:
         // The attachment points a preset's extensions may use on this model:
         // the machine's own connectors, then any point an extension provides
         // (a SCSI bus from a host adapter), each with the extensions that
-        // attach to it.
+        // attach to it; and the catalogue describing each of those
+        // extensions, and each Econet transport, as describe-extension --json
+        // does.
         {
             const auto machine_points = machine_attachment_points<Memory>();
 
@@ -3520,10 +3522,27 @@ public:
                 attachment_points.push_back(ojson{
                     {"id", id},
                     {"display_name", std::string(attachment_point_display_name(id))},
+                    {"description", catalogued ? catalogued->description : std::string()},
                     {"min_occupancy", catalogued ? catalogued->min_occupancy : 0},
                     {"max_occupancy", max_occupancy},
                     {"provided_by", providers.empty() ? ojson(nullptr) : ojson(providers)},
                     {"extensions", attaching}});
+            }
+            ojson catalogue = ojson::array();
+            for (const auto& e : extension_entries) {
+                const auto& at = e.manifest->attaches_to;
+                const bool attachable =
+                    std::any_of(at.begin(), at.end(), [&](const std::string& point) {
+                        return std::any_of(points.begin(), points.end(),
+                                           [&](const auto& p) { return p.first == point; });
+                    });
+                bool transport = false;
+                if constexpr (HasEconetSocket<Memory>) {
+                    transport = e.manifest->extension_kind == "econet-transport";
+                }
+                if (attachable || transport) {
+                    catalogue.push_back(extension_manifest_json(*e.manifest, e.source_label));
+                }
             }
             // The images a parameter declared bundled may name by bare name,
             // by kind (bundled_images): the hard-disc masters the server ships,
@@ -3532,12 +3551,14 @@ public:
             for (const auto& image : bundled_images(resolver_cfg.extension_resolver)) {
                 by_kind[image.kind].push_back(ojson{
                     {"image", image.image},
+                    {"display_name", image.display_name},
                     {"size_bytes", image.size_bytes},
                     {"extension", image.extension.empty() ? ojson(nullptr)
                                                           : ojson(image.extension)}});
             }
             section_for[PresetKey::Extensions] = ojson{{"type", "extensions"},
                                                        {"attachment_points", attachment_points},
+                                                       {"catalogue", catalogue},
                                                        {"bundled_images", by_kind}};
         }
 

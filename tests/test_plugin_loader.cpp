@@ -243,7 +243,7 @@ TEST_CASE("Manifest roms: a well-formed array is parsed", "[extension][plugin][r
     auto dir = write_manifest(R"({
         "name": "cop", "library": "cop",
         "roms": [
-            {"key": "client", "filename": "fw.rom", "size": 2048, "description": "d"}
+            {"key": "client", "filename": "fw.rom", "size": 2048, "display_name": "d"}
         ]
     })");
     beebium::PluginLoader loader;
@@ -253,7 +253,7 @@ TEST_CASE("Manifest roms: a well-formed array is parsed", "[extension][plugin][r
     CHECK(manifests[0].roms[0].key == "client");
     CHECK(manifests[0].roms[0].filename == "fw.rom");
     CHECK(manifests[0].roms[0].size == 2048);
-    CHECK(manifests[0].roms[0].description == "d");
+    CHECK(manifests[0].roms[0].display_name == "d");
     std::filesystem::remove_all(dir);
 }
 

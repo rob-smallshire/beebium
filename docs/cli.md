@@ -493,17 +493,17 @@ beebium-model-b list-extensions --attaches-to serial-port
 ```
 Available extensions:
   --tube-65c02 (acorn-65c02-coprocessor) [built-in]
-      Acorn 65C02 3 MHz second processor
+      An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.
   --acorn-rtc [/install/path/extensions]
-      Acorn User Port Real Time Clock Module (SAF3019P)
+      The Acorn real-time clock module, which plugs into the user port and keeps the date and time.
   ...
 ```
 
 **`--format tsv`** (default for non-TTY):
 ```
 cli_name	name	kind	source	attaches_to	description
-tube-65c02	acorn-65c02-coprocessor	peripheral	built-in	tube	Acorn 65C02 3 MHz second processor
-acorn-rtc	acorn-rtc	peripheral	/install/path/extensions	user-port	Acorn User Port Real Time Clock Module (SAF3019P)
+tube-65c02	acorn-65c02-coprocessor	peripheral	built-in	tube	An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.
+acorn-rtc	acorn-rtc	peripheral	/install/path/extensions	user-port	The Acorn real-time clock module, which plugs into the user port and keeps the date and time.
 ```
 
 **`--format jsonl`** — one JSON object per extension, with the same fields as the TSV form (`attaches_to` is a JSON array).
@@ -548,9 +548,9 @@ beebium-model-b list-attachment-points
 ```
 Attachment points:
   serial-port (Serial Port) [0..1]
-      The BBC RS423 serial port (MC6850 ACIA + Serial ULA).
+      The RS423 serial port, for modems, printers and other computers.
   1mhz-bus (1 MHz Bus) [0..N]
-      The 1 MHz bus expansion connector (FRED/JIM paged I/O).
+      The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.
   ...
 ```
 

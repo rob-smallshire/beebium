@@ -61,7 +61,9 @@ inline std::vector<Entry> make_entries() {
         ExtensionManifest m;
         m.name = "aun";
         m.display_name = "AUN";
-        m.description = "AUN (Acorn Universal Networking) UDP econet transport";
+        m.description =
+            "Connects the Econet port to other machines over the network using AUN "
+            "(Acorn Universal Networking).";
         m.cli_name = "aun";
         m.extension_kind = "econet-transport";
         m.parameters.push_back(
@@ -133,7 +135,7 @@ inline std::vector<Entry> make_entries() {
         m.name = "host-serial";
         m.display_name = "Host Serial";
         m.description =
-            "Connect the BBC serial port (RS423) to a host PTY or serial device";
+            "Connects the serial port to a serial device or pseudo-terminal on this computer.";
         m.cli_name = "host-serial";
         m.extension_kind = "peripheral";
         m.attaches_to = {"serial-port"};

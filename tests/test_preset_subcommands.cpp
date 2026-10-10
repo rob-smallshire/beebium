@@ -21,6 +21,7 @@
 #include "stb_image.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -1717,6 +1718,112 @@ TEST_CASE("describe-preset-schema: the attachment points and what plugs into eac
     CHECK(points["scsi"].at("max_occupancy") == 7);            // per adapter
 }
 
+namespace {
+
+// Whether `text` reads as a sentence: a capital first, a full stop last, and
+// nothing outside 7-bit ASCII.
+bool is_a_sentence(const std::string& text) {
+    if (text.size() < 2) return false;
+    if (std::any_of(text.begin(), text.end(),
+                    [](char c) { return static_cast<unsigned char>(c) > 0x7F; })) {
+        return false;
+    }
+    return std::isupper(static_cast<unsigned char>(text.front())) && text.back() == '.';
+}
+
+// The extensions section's catalogue, by extension name.
+std::map<std::string, nlohmann::json> catalogue_by_name(const nlohmann::json& extensions) {
+    std::map<std::string, nlohmann::json> by_name;
+    for (const auto& e : extensions.at("catalogue")) {
+        by_name[e.at("name").get<std::string>()] = e;
+    }
+    return by_name;
+}
+
+}  // namespace
+
+TEST_CASE("describe-preset-schema: each attachment point says what it is",
+          "[integration][preset][describe-preset-schema]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    for (const auto& point : extensions.at("attachment_points")) {
+        INFO(point.at("id"));
+        CHECK(is_a_sentence(point.at("description").get<std::string>()));
+    }
+}
+
+TEST_CASE("describe-preset-schema: a catalogue of the extensions the model can take",
+          "[integration][preset][describe-preset-schema][catalogue]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    auto catalogue = catalogue_by_name(extensions);
+
+    // Built in and plugin alike, peripherals and transports alike.
+    REQUIRE(catalogue.count("host-serial") == 1);
+    CHECK(catalogue["host-serial"].at("display_name") == "Host Serial");
+    CHECK(catalogue["host-serial"].at("attaches_to") == nlohmann::json::array({"serial-port"}));
+    REQUIRE(catalogue.count("acorn-scsi") == 1);
+    CHECK(catalogue["acorn-scsi"].at("provides") == nlohmann::json::array({"scsi"}));
+    REQUIRE(catalogue.count("aun") == 1);
+    CHECK(catalogue["aun"].at("kind") == "econet-transport");
+
+    // Every extension an attachment point lists is described.
+    for (const auto& point : extensions.at("attachment_points")) {
+        for (const auto& name : point.at("extensions")) {
+            CHECK(catalogue.count(name.get<std::string>()) == 1);
+        }
+    }
+
+    // Each entry is exactly what describe-extension --json gives.
+    for (const char* name : {"host-serial", "acorn-scsi", "acorn-65c02-coprocessor"}) {
+        INFO(name);
+        auto result = run_command(EXECUTABLE + " describe-extension " + name + " --json");
+        REQUIRE(result.exit_code == 0);
+        CHECK(catalogue[name] == nlohmann::json::parse(result.stdout_output));
+    }
+}
+
+TEST_CASE("describe-preset-schema: every extension describes itself in a sentence",
+          "[integration][preset][describe-preset-schema][catalogue]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    for (const auto& [name, entry] : catalogue_by_name(extensions)) {
+        INFO(name);
+        CHECK_FALSE(entry.at("display_name").get<std::string>().empty());
+        CHECK(is_a_sentence(entry.at("description").get<std::string>()));
+    }
+}
+
+TEST_CASE("describe-preset-schema: every bundled image has a display name",
+          "[integration][preset][describe-preset-schema][bundled]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    std::map<std::string, std::string> display_names;
+    for (const auto& [kind, images] : extensions.at("bundled_images").items()) {
+        for (const auto& image : images) {
+            display_names[image.at("image").get<std::string>()] =
+                image.at("display_name").get<std::string>();
+        }
+    }
+    CHECK(display_names.at("acorn-tube-6502_1_10.rom") == "Acorn 6502 Tube ROM 1.10");
+    CHECK(display_names.at("acorn-tube-65c102_1_20.rom") == "Acorn 65C102 Tube ROM 1.20");
+    CHECK(display_names.at("l3fs-v1_26b.dat") == "Acorn Level 3 File Server 1.26");
+}
+
+TEST_CASE("describe-preset-schema: a coprocessor's ROM defaults to the one it ships",
+          "[integration][preset][describe-preset-schema][bundled]") {
+    auto extensions = schema_section(describe_schema(EXECUTABLE), "extensions");
+    auto catalogue = catalogue_by_name(extensions);
+    for (const char* name : {"acorn-65c02-coprocessor", "acorn-65c102-coprocessor"}) {
+        INFO(name);
+        std::string rom_default;
+        for (const auto& p : catalogue.at(name).at("parameters")) {
+            if (p.at("key") == "rom") rom_default = p.at("default").get<std::string>();
+        }
+        bool shipped = false;
+        for (const auto& rom : extensions.at("bundled_images").at("rom")) {
+            if (rom.at("image") == rom_default && rom.at("extension") == name) shipped = true;
+        }
+        CHECK(shipped);
+    }
+}
+
 TEST_CASE("describe-preset-schema: an expansion board's own ROM is a default ROM",
           "[integration][preset][describe-preset-schema][sideways]") {
     auto sideways =
@@ -2169,8 +2276,9 @@ TEST_CASE("resolve-preset --json output for an unloadable preset is stable",
 // describe-preset-schema's output, pinned per model: front-ends build their
 // configuration UI from it. What depends on the build -- which plugins it
 // built (the extensions at each point, the points they provide, the Econet
-// transports) and the bundled images it decompressed -- is normalised out of
-// both sides; everything else is compared byte for byte.
+// transports, the catalogue describing them) and the bundled images it
+// decompressed -- is normalised out of both sides; everything else is
+// compared byte for byte.
 // ============================================================================
 
 namespace {
@@ -2190,6 +2298,7 @@ nlohmann::ordered_json without_build_dependent_parts(nlohmann::ordered_json sche
                 points.push_back(std::move(point));
             }
             section["attachment_points"] = std::move(points);
+            section["catalogue"] = nlohmann::ordered_json::array();
             section.erase("bundled_images");
         }
     }

@@ -41,7 +41,7 @@ namespace beebium {
 struct AttachmentPoint {
     std::string id;            // e.g. "serial-port" (matches attaches_to() ids)
     std::string display_name;  // e.g. "Serial Port"
-    std::string description;   // one-line human-readable summary
+    std::string description;   // one sentence a user understands
     int min_occupancy = 0;     // fewest extensions that may attach (0 = optional)
     std::optional<int> max_occupancy;  // most that may attach; nullopt = unbounded
 };
@@ -50,15 +50,15 @@ struct AttachmentPoint {
 inline const std::vector<AttachmentPoint>& attachment_point_catalogue() {
     static const std::vector<AttachmentPoint> kPoints = {
         {"serial-port", "Serial Port",
-         "The BBC RS423 serial port (MC6850 ACIA + Serial ULA).", 0, 1},
+         "The RS423 serial port, for modems, printers and other computers.", 0, 1},
         {"user-port", "User Port",
-         "The 6522 VIA user port (8-bit parallel + handshake lines).", 0, 1},
+         "The user port, a parallel connector for add-ons such as a real-time clock.", 0, 1},
         {"1mhz-bus", "1 MHz Bus",
-         "The 1 MHz bus expansion connector (FRED/JIM paged I/O).", 0, std::nullopt},
+         "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.", 0, std::nullopt},
         {"tube", "Tube",
-         "The Tube interface for a second processor / coprocessor.", 0, 1},
+         "The Tube, the connector for a second processor.", 0, 1},
         {"scsi", "SCSI Bus",
-         "The SCSI bus exposed by a host adapter; holds several targets.", 0, 7},
+         "The SCSI bus of a host adapter, which holds up to seven hard discs.", 0, 7},
     };
     return kPoints;
 }

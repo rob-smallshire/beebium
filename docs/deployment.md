@@ -73,7 +73,7 @@ build/
 │   ├── acorn-mos_2_0.rom
 │   └── bbc-basic_2.rom, ...
 └── discs/
-    └── l3fs-v1_26b.dat, l3fs-v1_26b.dsc
+    └── l3fs-v1_26b.dat, l3fs-v1_26b.dsc, l3fs-v1_26b.json
 ```
 
 The executable finds ROMs in the nearest `roms/` directory at or above its own
@@ -166,7 +166,7 @@ The CMake install rules handle:
 - The extension ABI libraries to `lib/`
 - ROM files (`.rom`) to `share/beebium/roms/`
 - System presets and their thumbnails to `share/beebium/presets/`
-- Bundled disc masters (`.dat`, `.dsc`), read-only, to `share/beebium/discs/`
+- Bundled disc masters (`.dat`, `.dsc`, and the `.json` naming each), read-only, to `share/beebium/discs/`
 
 ## Preset Discovery
 
@@ -194,7 +194,9 @@ the ROMs and presets:
 - Installed: `<prefix>/share/beebium/discs/`
 
 Masters are committed compressed (`discs/bundled/<id>.tar.xz`, tiny because the
-images are almost entirely empty) and decompressed at build time. They are
+images are almost entirely empty) and decompressed at build time. Beside each,
+`discs/bundled/<id>.json` gives the name a user sees (`{"display_name": "Acorn
+Level 3 File Server 1.26"}`), which `describe-preset-schema` reports. They are
 **immutable**: the emulated filing system writes to disc, so the server never
 opens a master; instead, on first use of a bundled image it copies the master
 to a **per-user working copy** and opens that. This keeps a shipped image (or a

@@ -31,7 +31,7 @@ struct RomImage {
     std::string key;          // stable identifier used by the extension (e.g. "client")
     std::string filename;     // basename within the plugin's roms/ directory
     std::uint64_t size = 0;   // expected image size in bytes
-    std::string description;  // human-readable, shown by describe-extension
+    std::string display_name; // human-readable name, e.g. "Acorn 6502 Tube ROM 1.10"
 };
 
 // Metadata describing a peripheral extension.

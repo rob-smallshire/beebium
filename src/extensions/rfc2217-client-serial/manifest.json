@@ -1,7 +1,7 @@
 {
     "name": "rfc2217-client-serial",
     "display_name": "RFC 2217 Serial (client)",
-    "description": "Connect the BBC serial port (RS423) to a remote RFC 2217 access server over TCP",
+    "description": "Connects the serial port to a serial port server elsewhere on the network, using RFC 2217.",
     "library": "rfc2217-client-serial",
     "attaches_to": [
         "serial-port"

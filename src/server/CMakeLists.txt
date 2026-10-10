@@ -22,7 +22,8 @@ file(MAKE_DIRECTORY ${PRESETS_OUTPUT_DIR})
 set(DISCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/discs")
 set(BUNDLED_DISCS_SRC_DIR "${CMAKE_SOURCE_DIR}/discs/bundled")
 
-# Each bundled master ships as <id>.tar.xz carrying <id>.dat + <id>.dsc.
+# Each bundled master ships as <id>.tar.xz carrying <id>.dat + <id>.dsc, and
+# <id>.json beside it giving the name a user sees (see DiscPaths).
 # l3fs-v1_26b is the auto-starting revision (see packaging/discs/build-l3fs-image.sh).
 set(BUNDLED_DISC_IDS l3fs-v1_26b)
 set(_bundled_disc_outputs "")
@@ -39,7 +40,14 @@ foreach(_disc_id ${BUNDLED_DISC_IDS})
         DEPENDS "${_tarball}" ${CMAKE_SOURCE_DIR}/cmake/DecompressBundledDisc.cmake
         COMMENT "Decompressing bundled disc master ${_disc_id}"
         VERBATIM)
-    list(APPEND _bundled_disc_outputs "${_dat}" "${_dsc}")
+    set(_json "${DISCS_OUTPUT_DIR}/${_disc_id}.json")
+    add_custom_command(
+        OUTPUT "${_json}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json" "${_json}"
+        DEPENDS "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json"
+        VERBATIM)
+    list(APPEND _bundled_disc_outputs "${_dat}" "${_dsc}" "${_json}")
 endforeach()
 add_custom_target(bundled_discs ALL DEPENDS ${_bundled_disc_outputs})
 
@@ -512,4 +520,5 @@ install(DIRECTORY ${DISCS_OUTPUT_DIR}/
     FILES_MATCHING
         PATTERN "*.dat"
         PATTERN "*.dsc"
+        PATTERN "*.json"
 )

@@ -15,9 +15,12 @@
 
 #include <beebium/PlatformUtils.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <optional>
 #include <random>
@@ -120,15 +123,18 @@ public:
     }
 
     // A bundled hard-disc master: the bare name a preset or --scsi-hdd uses
-    // to refer to it, and its size.
+    // to refer to it, its size, and the name a user sees.
     struct BundledImage {
         std::string image;            // e.g. "l3fs-v1_26b.dat"
         std::uintmax_t size_bytes = 0;
+        std::string display_name;     // e.g. "Acorn Level 3 File Server 1.26"
     };
 
     // The hard-disc masters in a master directory: every <name>.dat that has
     // its <name>.dsc sidecar, sorted by name. These are the bare names
-    // resolve_disc_image accepts. An absent directory has none.
+    // resolve_disc_image accepts. A master's display name is the
+    // "display_name" of its <name>.json, or <name> when it has none. An absent
+    // directory has none.
     static std::vector<BundledImage> bundled_hard_disc_images(
         const std::filesystem::path& master_dir) {
         std::vector<BundledImage> images;
@@ -142,11 +148,26 @@ public:
             auto dsc = path;
             dsc.replace_extension(".dsc");
             if (!std::filesystem::exists(dsc, ec)) continue;
-            images.push_back({path.filename().string(), entry.file_size(ec)});
+            images.push_back({path.filename().string(), entry.file_size(ec),
+                              master_display_name(path)});
         }
         std::sort(images.begin(), images.end(),
                   [](const BundledImage& a, const BundledImage& b) { return a.image < b.image; });
         return images;
+    }
+
+    // The display name a master's <name>.json gives, or <name>.
+    static std::string master_display_name(const std::filesystem::path& dat_filepath) {
+        auto json_filepath = dat_filepath;
+        json_filepath.replace_extension(".json");
+        std::ifstream in(json_filepath);
+        if (in) {
+            const auto j = nlohmann::json::parse(in, nullptr, false);
+            if (j.is_object() && j.contains("display_name") && j["display_name"].is_string()) {
+                return j["display_name"].get<std::string>();
+            }
+        }
+        return dat_filepath.stem().string();
     }
 
     // The hard-disc masters this server ships (find_disc_directory), or none

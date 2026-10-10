@@ -1,7 +1,7 @@
 {
     "name": "acorn-65c02-coprocessor",
     "display_name": "Acorn 65C02 Co-processor",
-    "description": "Acorn 65C02 3 MHz second processor",
+    "description": "An Acorn 6502 Second Processor: a 3 MHz 65C02 with 64K of its own memory, connected through the Tube.",
     "library": "acorn-65c02-coprocessor",
     "attaches_to": [
         "tube"
@@ -12,7 +12,7 @@
             "key": "client",
             "filename": "acorn-tube-6502_1_10.rom",
             "size": 4096,
-            "description": "Acorn Tube 6502 client ROM v1.10"
+            "display_name": "Acorn 6502 Tube ROM 1.10"
         }
     ],
     "parameters": [
@@ -21,7 +21,8 @@
             "label": "Client ROM",
             "type": "filepath",
             "bundled": "rom",
-            "description": "Path to the full 4KB Tube client ROM image (the 2732 device contents, F000-FFFF)",
+            "description": "The Tube client ROM: a full 4 KB image of the 2732 (F000-FFFF), as a path, or the name of a ROM this co-processor ships",
+            "default": "acorn-tube-6502_1_10.rom",
             "required": false
         }
     ]

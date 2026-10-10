@@ -178,7 +178,7 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             rom.key = r.value("key", "");
             rom.filename = r.value("filename", "");
             rom.size = r.value("size", static_cast<std::uint64_t>(0));
-            rom.description = r.value("description", "");
+            rom.display_name = r.value("display_name", "");
             if (!rom.key.empty() && !rom.filename.empty()) {
                 manifest.roms.push_back(std::move(rom));
             }

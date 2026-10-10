@@ -307,6 +307,22 @@ TEST_CASE("bundled_hard_disc_images lists each .dat with its .dsc sidecar, by na
     CHECK(images[1].size_bytes == 10);
 }
 
+TEST_CASE("bundled_hard_disc_images takes a master's display name from its .json",
+          "[disc_paths][bundled]") {
+    beebium::test::ScopedTempDir master_dir("beebium_bundled_");
+    write_file(master_dir / "named.dat", "0");
+    write_file(master_dir / "named.dsc", "g");
+    write_file(master_dir / "named.json", R"({"display_name": "A Named Disc"})");
+    write_file(master_dir / "plain.dat", "0");
+    write_file(master_dir / "plain.dsc", "g");
+
+    auto images = DiscPaths::bundled_hard_disc_images(master_dir.path());
+
+    REQUIRE(images.size() == 2);
+    CHECK(images[0].display_name == "A Named Disc");
+    CHECK(images[1].display_name == "plain");  // no .json: the name's stem
+}
+
 TEST_CASE("bundled_hard_disc_images of a missing directory is empty",
           "[disc_paths][bundled]") {
     beebium::test::ScopedTempDir dir("beebium_bundled_");

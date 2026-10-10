@@ -1,7 +1,7 @@
 {
     "name": "loopback-serial",
     "display_name": "Loopback Serial",
-    "description": "Echo bytes the BBC transmits straight back to its serial receiver",
+    "description": "Sends every byte the BBC transmits on its serial port straight back to it, for testing serial software.",
     "library": "loopback-serial",
     "attaches_to": ["serial-port"],
     "cli": "loopback-serial"

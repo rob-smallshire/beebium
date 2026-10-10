@@ -176,7 +176,7 @@ Declare the firmware in `manifest.json` and put it in `roms/` beside it:
         "key": "client",
         "filename": "acorn-tube-z80_1_20.rom",
         "size": 4096,
-        "description": "Acorn Tube Z80 client ROM v1.20"
+        "display_name": "Acorn Z80 Tube ROM 1.20"
     }
 ]
 ```
