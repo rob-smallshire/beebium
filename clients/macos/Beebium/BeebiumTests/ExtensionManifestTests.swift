@@ -178,6 +178,33 @@ final class ExtensionCatalogueTests: XCTestCase {
             "mystery.rom")
     }
 
+    func testDecodesHostResolvedDefaultKeys() throws {
+        // A host-resolved default (the AUN map file): "default" stays empty so an
+        // exact-record preset writes nothing, while effective_default carries the
+        // value in force and default_from names the resolver.
+        let mapFile = try parameter("""
+        {"key":"map-file","type":"string","default":"",\
+        "default_from":"aun-map-file",\
+        "effective_default":"/Users/x/Library/Application Support/Beebium/aun-map.json"}
+        """)
+        XCTAssertEqual(mapFile.defaultValue, "")
+        XCTAssertEqual(mapFile.defaultFrom, "aun-map-file")
+        XCTAssertEqual(mapFile.defaultInForce,
+                       "/Users/x/Library/Application Support/Beebium/aun-map.json")
+
+        // A plain parameter: effective_default equals default, so defaultInForce
+        // is that value and it shows as a real value in the field.
+        let port = try parameter(
+            #"{"key":"port","type":"integer","default":"32768","effective_default":"32768"}"#)
+        XCTAssertEqual(port.defaultFrom, "")
+        XCTAssertEqual(port.defaultInForce, "32768")
+
+        // An older server reports neither key: defaultInForce falls back to default.
+        let legacy = try parameter(#"{"key":"net","type":"integer","default":"0"}"#)
+        XCTAssertEqual(legacy.effectiveDefault, "")
+        XCTAssertEqual(legacy.defaultInForce, "0")
+    }
+
     func testParsesSerialPortPaths() {
         let jsonl = """
         {"path":"/dev/cu.usbserial-1","usb_vendor_id":1027,"usb_product_id":24577,"manufacturer":"FTDI","product":"","serial_number":""}

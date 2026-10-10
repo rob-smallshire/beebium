@@ -15,8 +15,10 @@ import UniformTypeIdentifiers
 
 /// A generic editor over one extension instance's config, driven by its
 /// manifest (describe-extension). A control per parameter by type, with the
-/// label/description, the default shown as a placeholder, required marked, and
-/// each edit written straight through to the instance's config.
+/// label/description, the default in force shown as a real value (not a greyed
+/// placeholder, which read as disabled), required marked, and each edit written
+/// straight through to the instance's config -- recording a value only when it
+/// differs from the default, so an untouched field leaves the preset exact.
 ///
 /// It does not reuse the server-driven ExtensionViewRenderer controls: those are
 /// bound to the runtime Beebium_Control proto tree and a gRPC dispatch model
@@ -169,38 +171,46 @@ struct ExtensionParameterForm: View {
             if parameter.choicesFrom == "serial-ports" {
                 return AnyView(serialPortCombo(parameter))
             }
-            return AnyView(CommittingField(
-                value: stringValue(parameter.key),
-                format: { $0 },
-                parse: { $0 },
-                placeholder: parameter.defaultValue,
-                width: 260,
-                onCommit: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) }))
+            return AnyView(VStack(alignment: .leading, spacing: 2) {
+                CommittingField(
+                    value: displayText(parameter),
+                    format: { $0 },
+                    parse: { $0 },
+                    width: 260,
+                    onCommit: { text in
+                        setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
+                    })
+                defaultAffordance(parameter)
+            })
         }
     }
 
     /// A free-text field with a menu of host serial ports to fill it in.
     private func serialPortCombo(_ parameter: ExtensionParameter) -> some View {
-        HStack(spacing: 6) {
-            CommittingField(
-                value: stringValue(parameter.key),
-                format: { $0 },
-                parse: { $0 },
-                placeholder: parameter.defaultValue,
-                width: 220,
-                onCommit: { setValue(parameter.key, $0.isEmpty ? .string("") : .string($0)) })
-            if !serialPortSuggestions.isEmpty {
-                Menu {
-                    ForEach(serialPortSuggestions, id: \.self) { path in
-                        Button(path) { setValue(parameter.key, .string(path)) }
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                CommittingField(
+                    value: displayText(parameter),
+                    format: { $0 },
+                    parse: { $0 },
+                    width: 220,
+                    onCommit: { text in
+                        setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
+                    })
+                if !serialPortSuggestions.isEmpty {
+                    Menu {
+                        ForEach(serialPortSuggestions, id: \.self) { path in
+                            Button(path) { setValue(parameter.key, .string(path)) }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
                     }
-                } label: {
-                    Image(systemName: "chevron.down")
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Choose a detected serial port")
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Choose a detected serial port")
             }
+            defaultAffordance(parameter)
         }
     }
 
@@ -283,19 +293,53 @@ struct ExtensionParameterForm: View {
     }
 
     private func integerField(_ parameter: ExtensionParameter) -> some View {
-        HStack(spacing: 6) {
-            CommittingField(
-                value: stringValue(parameter.key),
-                format: { $0 },
-                parse: { Self.parseIntegerEntry($0, parameter: parameter) },
-                placeholder: parameter.defaultValue,
-                width: 120,
-                onCommit: { setValue(parameter.key, $0.isEmpty ? nil : .int(Int($0) ?? 0)) })
-            if let min = parameter.minimum, let max = parameter.maximum {
-                Text("(\(min)-\(max))")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                CommittingField(
+                    value: displayText(parameter),
+                    format: { $0 },
+                    parse: { Self.parseIntegerEntry($0, parameter: parameter) },
+                    width: 120,
+                    onCommit: { text in
+                        // Exact record: a blank or the default clears the key; a
+                        // different number is recorded.
+                        if text.isEmpty || text == parameter.defaultInForce {
+                            setValue(parameter.key, nil)
+                        } else {
+                            setValue(parameter.key, .int(Int(text) ?? 0))
+                        }
+                    })
+                if let min = parameter.minimum, let max = parameter.maximum {
+                    Text("(\(min)-\(max))")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
+            defaultAffordance(parameter)
+        }
+    }
+
+    /// The string a scalar field shows: the recorded value when the draft has
+    /// one, otherwise the default in force as a real value (not a greyed
+    /// placeholder), so a defaulted field does not read as disabled.
+    private func displayText(_ parameter: ExtensionParameter) -> String {
+        config[parameter.key] != nil ? stringValue(parameter.key) : parameter.defaultInForce
+    }
+
+    /// Below a scalar field: a quiet "Default" caption while the field shows the
+    /// default in force (the draft records nothing), or a "Reset to default" link
+    /// once a different value is recorded. Nothing when there is no default to
+    /// fall back to.
+    @ViewBuilder
+    private func defaultAffordance(_ parameter: ExtensionParameter) -> some View {
+        if config[parameter.key] == nil {
+            if !parameter.defaultInForce.isEmpty {
+                Text("Default").font(.caption2).foregroundColor(.secondary)
+            }
+        } else {
+            Button("Reset to default") { setValue(parameter.key, nil) }
+                .buttonStyle(.link)
+                .font(.caption2)
         }
     }
 

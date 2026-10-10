@@ -54,8 +54,21 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     let type: String
     let isList: Bool
     let required: Bool
-    /// The default, always as a string (e.g. "19200", "" for none).
+    /// The default, always as a string (e.g. "19200", "" for none). For a
+    /// host-resolved default (see `defaultFrom`) this stays "" so an exact-record
+    /// preset writes nothing; `effectiveDefault` carries the value in force.
     let defaultValue: String
+    /// Names a host-resolved default, the way `choicesFrom` names a host
+    /// enumeration (e.g. "aun-map-file" for the AUN map file); "" when the
+    /// default is the plain `defaultValue`. A name this client does not know is
+    /// treated as none.
+    var defaultFrom: String = ""
+    /// The value the server would use on this host when none is given. Equals
+    /// `defaultValue` for every parameter except a host-resolved one (where it is
+    /// the resolved value, e.g. the per-user map file path). Empty only on an
+    /// older server that does not report it; use `defaultInForce`, which falls
+    /// back to `defaultValue`.
+    var effectiveDefault: String = ""
     /// Non-empty when this parameter names a bundled-image kind (e.g. the SCSI
     /// disc image's "hard-disc").
     let bundled: String
@@ -100,6 +113,8 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
         case key, type, required, bundled, unique, description, label, choices, position, excludes, fields
         case isList = "is_list"
         case defaultValue = "default"
+        case defaultFrom = "default_from"
+        case effectiveDefault = "effective_default"
         case providerOf = "provider_of"
         case minimum = "min"
         case maximum = "max"
@@ -119,6 +134,8 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
         isList = try c.decodeIfPresent(Bool.self, forKey: .isList) ?? false
         required = try c.decodeIfPresent(Bool.self, forKey: .required) ?? false
         defaultValue = try c.decodeIfPresent(String.self, forKey: .defaultValue) ?? ""
+        defaultFrom = try c.decodeIfPresent(String.self, forKey: .defaultFrom) ?? ""
+        effectiveDefault = try c.decodeIfPresent(String.self, forKey: .effectiveDefault) ?? ""
         bundled = try c.decodeIfPresent(String.self, forKey: .bundled) ?? ""
         unique = try c.decodeIfPresent(Bool.self, forKey: .unique) ?? false
         providerOf = try c.decodeIfPresent(String.self, forKey: .providerOf) ?? ""
@@ -137,6 +154,12 @@ struct ExtensionParameter: Codable, Identifiable, Equatable {
     /// Whether this parameter is a list of structured records (an `is_list`
     /// parameter that declares `fields`), as opposed to a plain list of strings.
     var isStructuredList: Bool { isList && !fields.isEmpty }
+
+    /// The default value to show as a real value in a field that has none given:
+    /// the server's effective default when reported (equal to `defaultValue`
+    /// except for a host-resolved default), falling back to `defaultValue` on an
+    /// older server that does not report it.
+    var defaultInForce: String { effectiveDefault.isEmpty ? defaultValue : effectiveDefault }
 }
 
 /// One field of a structured `is_list` item (e.g. a peer's net, station, host,
