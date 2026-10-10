@@ -2816,6 +2816,15 @@ inline nlohmann::ordered_json bound_json(const std::optional<long long>& bound) 
     return bound ? nlohmann::ordered_json(*bound) : nlohmann::ordered_json(nullptr);
 }
 
+// The value an extension uses for a parameter when none is given, on this
+// host: the default, or, for a parameter naming a host-resolved default in
+// default_from, what that resolves to here. A default_from this server does
+// not know leaves the default.
+inline std::string effective_default(const beebium::ParameterSchema& p) {
+    if (p.default_from == "aun-map-file") return beebium::default_aun_map_filepath().string();
+    return p.default_value;
+}
+
 inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSchema& p) {
     nlohmann::ordered_json fields = nlohmann::ordered_json::array();
     for (const auto& f : p.fields) {
@@ -2841,6 +2850,8 @@ inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSche
         {"position", p.position >= 0 ? nlohmann::ordered_json(p.position)
                                      : nlohmann::ordered_json(nullptr)},
         {"default", p.default_value},
+        {"default_from", p.default_from},
+        {"effective_default", effective_default(p)},
         {"min", bound_json(p.min)},
         {"max", bound_json(p.max)},
         {"choices", choices_json(p.choices)},
@@ -2909,8 +2920,10 @@ public:
                   << "parameter). --json prints the whole extension as one object:\n"
                   << "name, display_name, description, cli_name, kind, source,\n"
                   << "attaches_to, provides, parameters (key, label, description,\n"
-                  << "type, required, is_list, position, default, min, max, choices,\n"
-                  << "bundled, unique, provider_of), groups (key, label, description,\n"
+                  << "type, required, is_list, position, default, default_from,\n"
+                  << "effective_default, min, max, choices, choices_from, excludes,\n"
+                  << "bundled, unique, provider_of, item_format, fields), groups (key,\n"
+                  << "label, description,\n"
                   << "parameters, and none when the group names the state with no member\n"
                   << "given) and roms.\n";
     }
@@ -3051,8 +3064,8 @@ public:
                             }
                             std::cout << "}";
                         }
-                        if (!p.default_value.empty()) {
-                            std::cout << " [default: " << p.default_value << "]";
+                        if (auto value = effective_default(p); !value.empty()) {
+                            std::cout << " [default: " << value << "]";
                         }
                         if (!p.bundled.empty()) {
                             std::cout << " (or a bundled " << p.bundled << " image)";
@@ -4008,15 +4021,7 @@ inline AunMapArgs parse_aun_map_args(int argc, char* argv[],
             out.positional.push_back(std::string(arg));
         }
     }
-    if (!have_mapfile) {
-        if (auto env = beebium::platform::get_env("BEEBIUM_AUN_MAP_FILEPATH");
-            env && !env->empty()) {
-            out.filepath = std::filesystem::path(*env);
-        } else {
-            out.filepath =
-                beebium::platform::user_state_base_dirpath() / "aun-map.json";
-        }
-    }
+    if (!have_mapfile) out.filepath = beebium::default_aun_map_filepath();
     return out;
 }
 

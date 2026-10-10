@@ -283,10 +283,10 @@ ships as a discoverable plugin under `src/extensions/piconet/`.
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `port=<n>\|none` | `32768` | UDP port to bind. `0` lets the OS choose a free port (the announcement and `AunService.GetStatus` report the real one). `none` fits the hardware with no network. A value that is not a number in 0-65535 is reported on stderr and the default 32768 is used. |
-| `net=<0-255>` | `0` | The local Econet net number. An invalid value is reported on stderr and 0 is used. |
+| `net=<0-255>` | `0` | The local Econet net number. A value that is not a number in 0-255 is refused before launch (exit 64). |
 | `map=<net.stn@host@port>` | — | A peer for this launch (repeatable; provenance Launch). The inner separator is `@` (shell-safe in every common shell, and non-colliding with the `.` inside IPv4 / `net.stn`); `host` is an IPv4 literal or a DNS name, resolved as a map-file peer's is (a name that does not resolve leaves the peer unreachable); a bare `stn` means net 0. A malformed or out-of-range entry is refused before launch (exit 64). |
-| `subnet=<net@a.b.c.0/24>` | — | A subnet rule for this launch (repeatable; the RISC OS convention: station is the last octet, port 32768). Only `/24`; the last octet of the address is ignored. A malformed entry is reported and skipped. |
-| `map-file=<path>\|none` | the per-user `aun-map.json` | The map file to load and edit. Precedence: this key, then `BEEBIUM_AUN_MAP_FILEPATH`, then the per-user default (`report-aun-map-filepath` prints it). `none` disables the map file. |
+| `subnet=<net@a.b.c.0/24>` | — | A subnet rule for this launch (repeatable; the RISC OS convention: station is the last octet, port 32768). Only `/24`; the last octet of the address is ignored. A malformed or out-of-range entry is refused before launch (exit 64). |
+| `map-file=<path>\|none` | the per-user `aun-map.json` | The map file to load and edit. Precedence: this key, then `BEEBIUM_AUN_MAP_FILEPATH`, then the per-user default (`report-aun-map-filepath` prints it). `none` disables the map file. The file is shared by every Beebium instance on the computer; `describe-extension aun --json` gives its path as the parameter's `effective_default`. |
 | `discovery=on\|announce\|browse\|off` | `on` | mDNS on `_aun._udp`: `announce` publishes without adopting, `browse` adopts without publishing, `off` neither -- see **Discovery mode** below. Any other value is a launch error (exit 64). |
 
 **Transport selection:**

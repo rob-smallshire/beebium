@@ -229,6 +229,7 @@ ExtensionManifest parse_manifest(const std::filesystem::path& manifest_filepath)
             param.bundled = p.value("bundled", "");
             param.label = p.value("label", "");
             param.choices_from = p.value("choices_from", "");
+            param.default_from = p.value("default_from", "");
             std::tie(param.min, param.max) = parse_bounds(p);
             if (p.contains("excludes") && p["excludes"].is_array()) {
                 for (const auto& key : p["excludes"]) {

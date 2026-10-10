@@ -12,6 +12,8 @@
 
 #include "AunMapFile.hpp"
 
+#include "beebium/PlatformUtils.hpp"
+
 #include <nlohmann/json.hpp>
 
 #ifdef _WIN32
@@ -251,6 +253,13 @@ AunMapLoadResult load_aun_map(const std::filesystem::path& filepath) {
     std::ostringstream buffer;
     buffer << file.rdbuf();
     return parse_aun_map(buffer.str(), filepath.string());
+}
+
+std::filesystem::path default_aun_map_filepath() {
+    if (auto env = platform::get_env("BEEBIUM_AUN_MAP_FILEPATH"); env && !env->empty()) {
+        return std::filesystem::path(*env);
+    }
+    return platform::user_state_base_dirpath() / "aun-map.json";
 }
 
 }  // namespace beebium

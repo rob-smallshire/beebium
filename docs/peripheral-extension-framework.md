@@ -176,6 +176,12 @@ Parameter schema fields:
 - `choices_from` -- the values a UI may offer come from a host enumeration
   (today `serial-ports`, as `list-serial-ports` lists them); the value stays
   free text
+- `default_from` -- the value used when none is given is worked out on the
+  host the server runs on (today `aun-map-file`: `BEEBIUM_AUN_MAP_FILEPATH`
+  when set, else the per-user `aun-map.json`). `default` stays empty, so an
+  exact-record preset writes nothing for it; `describe-extension --json` gives
+  the resolved value as `effective_default`, which for any other parameter is
+  its `default`. A name this server does not know leaves the `default`
 - `excludes` -- keys that may not be given together with this one (declaring
   it on either side is enough; a default or an empty value does not count)
 - `bundled` -- for a `filepath`, a kind of image that ships with Beebium: a

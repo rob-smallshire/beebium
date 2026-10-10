@@ -99,6 +99,16 @@ struct ParameterSchema {
                                            // "serial-ports", as
                                            // list-serial-ports lists them);
                                            // the value stays free text
+    std::string default_from;              // non-empty: the value the
+                                           // extension uses when none is
+                                           // given is worked out on the host
+                                           // the server runs on, by the means
+                                           // this names (today
+                                           // "aun-map-file"); default_value
+                                           // stays empty so a preset records
+                                           // nothing, and describe-extension
+                                           // gives the resolved value as
+                                           // effective_default
     std::vector<std::string> excludes;     // keys that may not be given with
                                            // this one (either side declaring
                                            // it is enough)

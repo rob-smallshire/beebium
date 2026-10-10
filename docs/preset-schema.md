@@ -327,6 +327,14 @@ A parameter may declare `choices_from` `"serial-ports"` (`host-serial`'s
 `path`, Piconet's `device_path`): a UI may offer the host's serial ports,
 which `list-serial-ports` lists, and the value stays free text.
 
+A parameter may declare `default_from` `"aun-map-file"` (AUN's `map-file`):
+the value used when none is given is the map file shared by every Beebium
+instance on the computer the server runs on (`BEEBIUM_AUN_MAP_FILEPATH` when
+set, else the per-user `aun-map.json`). Its `default` stays empty, so a
+preset that does not name a map file records nothing; the catalogue's
+`effective_default` gives the path, for a UI to show as the value in force.
+For a parameter without `default_from`, `effective_default` is its `default`.
+
 A SCSI hard disc, then, is two entries: the adapter and the disc.
 
 ```json

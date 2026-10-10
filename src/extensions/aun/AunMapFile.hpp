@@ -76,6 +76,11 @@ AunMapLoadResult parse_aun_map(std::string_view json_text,
 // or malformed file yields an error.
 AunMapLoadResult load_aun_map(const std::filesystem::path& filepath);
 
+// The map file used when none is named: BEEBIUM_AUN_MAP_FILEPATH when set and
+// not empty, else the per-user aun-map.json, which every Beebium instance on
+// this computer shares.
+std::filesystem::path default_aun_map_filepath();
+
 }  // namespace beebium
 
 #endif  // BEEBIUM_EXTENSIONS_AUN_AUN_MAP_FILE_HPP

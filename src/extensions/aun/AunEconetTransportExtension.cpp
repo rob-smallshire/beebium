@@ -14,6 +14,7 @@
 
 #include "AunDiscoveryAnnouncer.hpp"
 #include "AunDiscoverySubscriber.hpp"
+#include "AunMapFile.hpp"
 #include "AunMapWriter.hpp"
 #include "AunTerms.hpp"
 #include "beebium/econet/AunPacket.hpp"
@@ -224,8 +225,9 @@ unsigned long entry_number(const ListItemFields& fields, const std::string& key)
 
 ParameterSchema AunEconetTransportExtension::map_parameter() {
     ParameterSchema p{"map", "string",
-                      "Peer entry 'net.stn@host@port', host an IPv4 address or a name; a bare "
-                      "stn means net 0 (repeatable)",
+                      "The stations this machine can reach over AUN, each with the address and "
+                      "port of the computer that runs it. Stations found by discovery and those "
+                      "in the map file need no entry here.",
                       -1, false, /*is_list=*/true, ""};
     p.label = "Peers";
     auto net = entry_field(aun_terms::kPeerNet, "net", "integer", false, 0, 255);
@@ -239,8 +241,9 @@ ParameterSchema AunEconetTransportExtension::map_parameter() {
 
 ParameterSchema AunEconetTransportExtension::subnet_parameter() {
     ParameterSchema p{"subnet", "string",
-                      "Subnet rule 'net@a.b.c.0/24' (RISC OS convention: station is the "
-                      "last octet, port 32768; repeatable)",
+                      "Econet nets that are whole IPv4 subnets, as RISC OS machines on AUN "
+                      "arrange them: each computer on the subnet is a station of the net, "
+                      "numbered by the last part of its address and reached on port 32768.",
                       -1, false, /*is_list=*/true, ""};
     p.label = "Subnet rules";
     p.fields = {entry_field(aun_terms::kSubnetNet, "net", "integer", true, 1, 255),
@@ -805,14 +808,7 @@ void AunEconetTransportExtension::resolve_map_file_path() {
         }
     }
     if (enabled && path.empty()) {
-        if (auto env = beebium::platform::get_env("BEEBIUM_AUN_MAP_FILEPATH");
-            env && !env->empty()) {
-            path = *env;
-        }
-    }
-    if (enabled && path.empty()) {
-        path = (beebium::platform::user_state_base_dirpath() / "aun-map.json")
-                   .string();
+        path = default_aun_map_filepath().string();
     }
     std::lock_guard<std::mutex> lock(map_file_mutex_);
     map_file_enabled_ = enabled;

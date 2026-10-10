@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -420,6 +421,89 @@ TEST_CASE("the AUN net number is an integer 0-255",
     auto r = run_command(EXECUTABLE + " start --station 80 --aun net=256:port=0:discovery=off --port 0");
     CHECK(r.exit_code == 64);
     CHECK(r.stderr_output.find("must be 0-255") != std::string::npos);
+}
+
+namespace {
+
+// Sets an environment variable for the life of the scope, for the commands it
+// runs, and restores the previous value afterwards.
+class ScopedEnv {
+public:
+    ScopedEnv(const char* name, const std::string& value) : name_(name) {
+        previous_ = beebium::platform::get_env(name);
+        set(value);
+    }
+    ~ScopedEnv() { set(previous_.value_or("")); }
+    ScopedEnv(const ScopedEnv&) = delete;
+    ScopedEnv& operator=(const ScopedEnv&) = delete;
+
+private:
+    void set(const std::string& value) {
+#ifdef _WIN32
+        _putenv_s(name_, value.c_str());
+#else
+        if (value.empty()) {
+            ::unsetenv(name_);
+        } else {
+            ::setenv(name_, value.c_str(), 1);
+        }
+#endif
+    }
+    const char* name_;
+    std::optional<std::string> previous_;
+};
+
+}  // namespace
+
+TEST_CASE("the AUN map file's default is the one this computer's instances share",
+          "[integration][extension][describe-extension][json][default-from]") {
+    const auto override_filepath =
+        beebium::test::unique_temp_path("beebium_aun_map_default_", ".json");
+    ScopedEnv env("BEEBIUM_AUN_MAP_FILEPATH", override_filepath.string());
+
+    const auto aun = describe_extension_json("aun");
+    const auto& map_file = parameter(aun, "map-file");
+    // An exact-record preset writes nothing for it, so the default stays empty;
+    // the path the server would use on this host is given beside it.
+    CHECK(map_file.at("default") == "");
+    CHECK(map_file.at("default_from") == "aun-map-file");
+    CHECK(map_file.at("effective_default") == override_filepath.string());
+    CHECK(map_file.at("description").get<std::string>().find("every Beebium instance") !=
+          std::string::npos);
+
+    // Without a host-resolved default, the effective default is the default.
+    CHECK(parameter(aun, "port").at("default_from") == "");
+    CHECK(parameter(aun, "port").at("effective_default") == "32768");
+    CHECK(parameter(aun, "map").at("effective_default") == "");
+
+    auto r = run_command(EXECUTABLE + " --format pretty describe-extension aun");
+    CHECK(r.stdout_output.find("[default: " + override_filepath.string() + "]") !=
+          std::string::npos);
+}
+
+TEST_CASE("the AUN map file's default is the per-user file without the environment",
+          "[integration][extension][describe-extension][json][default-from]") {
+    ScopedEnv env("BEEBIUM_AUN_MAP_FILEPATH", "");
+    const auto effective =
+        parameter(describe_extension_json("aun"), "map-file").at("effective_default");
+    CHECK(effective ==
+          (beebium::platform::user_state_base_dirpath() / "aun-map.json").string());
+}
+
+TEST_CASE("AUN peers and subnet rules are described in a user's words, not their syntax",
+          "[integration][extension][describe-extension][json][list-item]") {
+    const auto aun = describe_extension_json("aun");
+    for (const char* key : {"map", "subnet"}) {
+        INFO(key);
+        const auto description = parameter(aun, key).at("description").get<std::string>();
+        CHECK_FALSE(description.empty());
+        CHECK(description.find('@') == std::string::npos);
+        CHECK(description.find("repeatable") == std::string::npos);
+    }
+    // The syntax is still in the help, from the template.
+    auto r = run_command(EXECUTABLE + " --format pretty describe-extension aun");
+    CHECK(r.stdout_output.find("each item: {net}.{station}@{host}@{port}") != std::string::npos);
+    CHECK(r.stdout_output.find("each item: {net}@{address}") != std::string::npos);
 }
 
 TEST_CASE("describe-extension --json lists the parameters each one excludes",

@@ -69,25 +69,29 @@ inline std::vector<Entry> make_entries() {
         m.extension_kind = "econet-transport";
         m.parameters.push_back(
             {"port", "string",
-             "UDP port to bind (decimal; 0 for an OS-chosen port, or 'none' to "
-             "disable the network)",
+             "The UDP port this machine listens on for other AUN stations. Real AUN "
+             "machines use 32768; several Beebium instances on one computer each need "
+             "a different port. 0 lets the computer choose one, and 'none' keeps this "
+             "machine off the network.",
              -1, false, false, "32768"});
         m.parameters.push_back(
             {"net", "integer",
-             "Local Econet net number this station belongs to (0..255)",
+             "The Econet net this machine is on. Leave it at 0 unless it joins an AUN "
+             "network whose nets are numbered.",
              -1, false, false, "0"});
         // map and subnet come from the extension, with the fields and item
         // formats it reads their entries by (map_parameter, subnet_parameter).
         m.parameters.push_back(AunEconetTransportExtension::map_parameter());
         m.parameters.push_back(
             {"map-file", "filepath",
-             "Path to the AUN map file (default: BEEBIUM_AUN_MAP_FILEPATH, else the "
-             "per-user aun-map.json), or 'none' to disable it",
+             "The file of AUN stations shared by every Beebium instance on this computer, "
+             "which the Network sidebar edits. 'none' uses no map file.",
              -1, false, false, ""});
         m.parameters.push_back(AunEconetTransportExtension::subnet_parameter());
         m.parameters.push_back(
             {"discovery", "string",
-             "mDNS discovery: on (announce+browse), announce, browse, or off",
+             "Whether this machine finds other Beebium machines on the local network, "
+             "and lets them find it, by mDNS.",
              -1, false, false, "on"});
         auto label = [&](std::string_view key, std::string text) {
             for (auto& p : m.parameters) {
@@ -103,6 +107,9 @@ inline std::vector<Entry> make_entries() {
             }
         }
         label("map-file", "Map file");
+        for (auto& p : m.parameters) {
+            if (p.key == "map-file") p.default_from = "aun-map-file";
+        }
         label("discovery", "Discovery");
         for (auto& p : m.parameters) {
             if (p.key == "discovery") {

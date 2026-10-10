@@ -281,6 +281,22 @@ TEST_CASE("Manifest choices: a choice may describe itself", "[extension][plugin]
     CHECK(choices[2].description == "Says what it is.");
 }
 
+TEST_CASE("Manifest default_from: a parameter may name a host-resolved default",
+          "[extension][plugin][default-from]") {
+    auto dir = write_manifest(R"({
+        "name": "c", "library": "c",
+        "parameters": [{"key": "map-file", "type": "filepath", "default_from": "aun-map-file"},
+                       {"key": "other", "type": "string"}]
+    })");
+    beebium::PluginLoader loader;
+    auto manifests = loader.scan_manifests(dir);
+    std::filesystem::remove_all(dir);
+    REQUIRE(manifests.size() == 1);
+    CHECK(manifests[0].parameters.at(0).default_from == "aun-map-file");
+    CHECK(manifests[0].parameters.at(0).default_value.empty());
+    CHECK(manifests[0].parameters.at(1).default_from.empty());
+}
+
 TEST_CASE("Manifest roms: absent means an empty list", "[extension][plugin][rom]") {
     auto dir = write_manifest(R"({"name": "cop", "library": "cop"})");
     beebium::PluginLoader loader;

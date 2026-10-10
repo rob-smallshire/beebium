@@ -394,28 +394,41 @@ Every extension carries a manifest declaring its CLI name, parameter schema, and
 ```json
 {
   "name": "aun",
-  "description": "AUN (Acorn Universal Networking) UDP econet transport",
+  "display_name": "AUN",
   "cli": "aun",
   "extension_kind": "econet-transport",
   "parameters": [
-    {"key": "port", "type": "string",
-     "description": "UDP port to bind (decimal, or 'none' to disable)",
-     "default_value": "32768"},
-    {"key": "net", "type": "string",
-     "description": "Local Econet net number this station belongs to (0..255)",
-     "default_value": "0"},
-    {"key": "map", "type": "string", "is_list": true,
-     "description": "Peer entry 'net.stn@host@port' (repeatable)"},
-    {"key": "map-file", "type": "string",
-     "description": "Path to the per-user aun-map.json, or 'none' to disable it"},
-    {"key": "subnet", "type": "string", "is_list": true,
-     "description": "Subnet rule 'net@a.b.c.0/24' (RISC OS convention; repeatable)"},
-    {"key": "discovery", "type": "string",
-     "description": "mDNS discovery: on (announce+browse), announce, browse, or off",
-     "default_value": "on"}
+    {"key": "port", "type": "string", "label": "UDP port", "default": "32768",
+     "description": "The UDP port this machine listens on for other AUN stations. ..."},
+    {"key": "net", "type": "integer", "label": "Net number", "default": "0",
+     "min": 0, "max": 255,
+     "description": "The Econet net this machine is on. ..."},
+    {"key": "map", "type": "string", "is_list": true, "label": "Peers",
+     "description": "The stations this machine can reach over AUN, ...",
+     "item_format": "{net}.{station}@{host}@{port}",
+     "fields": [{"key": "net", "type": "integer", "default": "0", "min": 0, "max": 255},
+                {"key": "station", "type": "integer", "required": true, "min": 1, "max": 254},
+                {"key": "host", "type": "string", "required": true},
+                {"key": "port", "type": "integer", "required": true, "min": 1, "max": 65535}]},
+    {"key": "map-file", "type": "filepath", "label": "Map file",
+     "default_from": "aun-map-file",
+     "description": "The file of AUN stations shared by every Beebium instance on this computer, ..."},
+    {"key": "subnet", "type": "string", "is_list": true, "label": "Subnet rules",
+     "description": "Econet nets that are whole IPv4 subnets, ...",
+     "item_format": "{net}@{address}",
+     "fields": [{"key": "net", "type": "integer", "required": true, "min": 1, "max": 255},
+                {"key": "address", "type": "string", "required": true}]},
+    {"key": "discovery", "type": "string", "label": "Discovery", "default": "on",
+     "choices": ["on", "announce", "browse", "off"],
+     "description": "Whether this machine finds other Beebium machines on the local network, ..."}
   ]
 }
 ```
+
+(Abridged: the fields' labels and descriptions, and the choices' labels, are
+left out; `describe-extension aun --json` gives them all.) The descriptions say
+what each parameter is for; the command-line form of a list item is its
+`item_format`, which `describe-extension aun` prints as `each item:`.
 
 The CLI parser uses the manifest's CLI name (`cli` in `manifest.json`, `cli_name` in C++) to recognise `--aun ...`; the parameter schema drives validation of the colon-separated argument string. `parameters[*].is_list = true` accumulates repeated `key=value` tokens into a `std::vector<std::string>` of raw values; the parser does not tokenise their contents, so each extension picks whatever inner separator suits its data.
 
