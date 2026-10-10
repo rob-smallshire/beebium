@@ -381,7 +381,7 @@ The `--wait` option allows clients to connect and set up before emulation begins
 | Option | Description |
 |--------|-------------|
 | `--screen-mode <0-7>` | Startup screen mode (default: 7) |
-| `--auto-boot` | Reverse SHIFT-BREAK behavior (SHIFT-BREAK boots disc) |
+| `--auto-boot` | A reset or BREAK boots the disc and SHIFT+reset or SHIFT+BREAK does not (the reverse of usual) |
 | `--links <0-255>` | Raw startup options byte |
 
 `--links` is mutually exclusive with `--screen-mode` and `--auto-boot`.

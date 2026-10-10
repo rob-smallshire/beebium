@@ -140,7 +140,7 @@ The keyboard links the MOS reads at power-up, in one of two forms:
 | Key | Type | Meaning |
 |-----|------|---------|
 | `screen_mode` | integer 0-7 | The screen mode at power-up. Default 7 |
-| `auto_boot` | bool | Reverse the SHIFT-BREAK action, so BREAK boots the disc's `!BOOT`. Default `false` |
+| `auto_boot` | bool | Reverse the boot action: a reset or BREAK boots the disc's `!BOOT` and SHIFT+reset or SHIFT+BREAK does not. Default `false` |
 | `links` | integer 0-255 | The whole links byte. Cannot be combined with `screen_mode` or `auto_boot` |
 
 These are the preset forms of `--screen-mode`, `--auto-boot` and `--links`. A
@@ -150,8 +150,8 @@ a top-level `auto_boot` and a `startup` that sets the links is an error.
 `links` is the byte the machine reads: the eight start-up option links on the
 keyboard circuit board (SW2 in the Advanced User Guide's Appendix J), Link 1
 being bit 7 and Link 8 bit 0, a set bit an open link and a clear bit a made
-one. Bits 0-2 are the screen mode; bit 3 clear reverses SHIFT-BREAK
-(`auto_boot`); bits 4 and 5 (links 4 and 3) set the disc drive timings, which
+one. Bits 0-2 are the screen mode; bit 3 clear reverses the boot
+action of reset and BREAK (`auto_boot`); bits 4 and 5 (links 4 and 3) set the disc drive timings, which
 depend on the disc controller and filing system ROM; bit 6 is unused by the
 MOS; bit 7 clear makes DNFS start in NFS rather than DFS. `screen_mode` and
 `auto_boot` write their bits into 255, so `{"screen_mode": 3, "auto_boot":

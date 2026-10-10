@@ -67,7 +67,7 @@
             "bit": 3,
             "link": "Link 5",
             "label": "SHIFT+BREAK action",
-            "description": "When this link is made, BREAK alone boots the disc and SHIFT+BREAK does not; when it is open, SHIFT+BREAK boots as usual."
+            "description": "When this link is made, a reset or BREAK boots the disc and SHIFT+reset or SHIFT+BREAK does not; when it is open, SHIFT+reset or SHIFT+BREAK boots as usual."
           },
           {
             "bit": 2,

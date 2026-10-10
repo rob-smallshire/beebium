@@ -477,7 +477,8 @@ void print_usage(const char* program_name) {
 
 
     std::cerr << "  --screen-mode <0-7>      Startup screen mode (default: 7)\n"
-              << "  --auto-boot              Reverse SHIFT-BREAK action (SHIFT-BREAK boots)\n"
+              << "  --auto-boot              A reset or BREAK boots the disc and SHIFT+reset\n"
+              << "                           or SHIFT+BREAK does not (the reverse of usual)\n"
               << "  --links <0-255>          Raw startup options byte (mutually exclusive\n"
               << "                           with --screen-mode and --auto-boot)\n";
 
@@ -3603,8 +3604,9 @@ private:
              "With link 3, sets the disc drive step and settle times; the times depend "
              "on the disc controller and the filing system ROM fitted."},
             {3, "SHIFT+BREAK action",
-             "When this link is made, BREAK alone boots the disc and SHIFT+BREAK does "
-             "not; when it is open, SHIFT+BREAK boots as usual."},
+             "When this link is made, a reset or BREAK boots the disc and SHIFT+reset or "
+             "SHIFT+BREAK does not; when it is open, SHIFT+reset or SHIFT+BREAK boots as "
+             "usual."},
             {2, "Screen mode bit 2",
              "Bit 2 of the screen mode the MOS selects at power-up and after BREAK."},
             {1, "Screen mode bit 1",
