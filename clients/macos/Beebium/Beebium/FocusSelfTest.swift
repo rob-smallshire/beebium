@@ -77,6 +77,16 @@ final class FocusSelfTest {
         // focused and stale) when another control changes the byte.
         await captureConfiguratorKeyboard(name: "cfg_kbd")
 
+        // The regression that keeps coming back (#153): a CommittingField shown
+        // again (the New Machine dialog is a reused window) must show its caret on
+        // EVERY presentation, not just the first. Present one in a popover three
+        // times, clicking the field each time; a healthy field shows a caret in
+        // some frames of every open. If open 2 or 3 never shows one, the shared
+        // field editor regression is back.
+        for open in 1...3 {
+            await captureCommittingField(name: "cfg_field_open\(open)")
+        }
+
         // With a server port, also capture the rename popover's chips and preview.
         if let port = ProcessInfo.processInfo.environment["BEEBIUM_DEBUG_FOCUS_SELFTEST_PORT"],
            let portNumber = Int(port) {
@@ -214,6 +224,22 @@ final class FocusSelfTest {
         }
         """
         return try! JSONDecoder().decode(StartupSchemaSection.self, from: Data(json.utf8))
+    }
+
+    /// Present a CommittingField in a popover anchored to the host window, click
+    /// it, and photograph across the caret blink. Called repeatedly (open 1..3) to
+    /// catch the shared-field-editor regression: an NSTextField shows no caret on
+    /// the second and later opens; CommittingField, backed by PopoverTextField's
+    /// NSTextView, shows one every time.
+    private func captureCommittingField(name: String) async {
+        bringHostToFront()
+        let popover = present(RepeatedFieldHarness(), appearance: .aqua)
+        await sleep(0.4)
+        clickFirstField(in: popover)
+        await sleep(0.1)
+        await captureFrames(popover, prefix: name, count: framesPerOpen)
+        popover.performClose(nil)
+        await sleep(0.4)
     }
 
     // MARK: - Host window
@@ -444,5 +470,19 @@ private struct ConfiguratorKeyboardHarness: View {
     var body: some View {
         KeyboardSectionView(draft: $draft, schema: schema, focusedField: $focusedField)
             .frame(width: 400, height: 470)
+    }
+}
+
+/// One CommittingField in a popover, for the repeated-presentation caret check.
+private struct RepeatedFieldHarness: View {
+    @State private var value = 42
+    @FocusState private var focusedField: String?
+
+    var body: some View {
+        CommittingField(value: value, format: { String($0) }, parse: { Int($0) },
+                        width: 120, focusedField: $focusedField, fieldID: "field",
+                        onCommit: { value = $0 })
+            .padding()
+            .frame(width: 200)
     }
 }

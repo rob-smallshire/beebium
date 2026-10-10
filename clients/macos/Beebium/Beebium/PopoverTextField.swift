@@ -65,6 +65,19 @@ struct PopoverTextField: NSViewRepresentable {
     var controller: TemplateFieldController?
     /// When set and BEEBIUM_DEBUG_FOCUS=1, logs focus transitions.
     var diagnosticsLabel: String?
+    /// Called when the text view becomes first responder (the user clicked in, or
+    /// Tab reached it). Lets a host (CommittingField) record which field is focused.
+    var onFocus: (() -> Void)?
+    /// Called when the text view resigns first responder (clicked away, Tab out, or
+    /// released by another control). Lets a host commit the edit on focus loss.
+    var onBlur: (() -> Void)?
+    /// When true, the bound value is re-applied to the text view whenever the field
+    /// is not first responder, not only before the first keystroke. A long-lived
+    /// field (CommittingField) uses this so an external change refreshes it after
+    /// an earlier edit; a one-shot popover leaves it false.
+    var reappliesWhenUnfocused: Bool = false
+    /// Draw the bezel red (a rejected commit). The host clears it on the next edit.
+    var isInvalid: Bool = false
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
@@ -99,6 +112,8 @@ struct PopoverTextField: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.onSubmit = onSubmit
         textView.onCancel = onCancel
+        textView.onFocus = onFocus
+        textView.onBlur = onBlur
 
         let scroll = BezelTextFieldScrollView()
         scroll.documentView = textView
@@ -127,10 +142,16 @@ struct PopoverTextField: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView else { return }
         // Apply the model value until the user starts typing, so the initial value
         // lands even though the view already has focus; after that their text wins
-        // so a parent re-render cannot clobber it or move the caret.
-        if !context.coordinator.userBeganEditing && textView.string != text {
+        // so a parent re-render cannot clobber it or move the caret. A long-lived
+        // field also re-applies the value whenever it is not first responder, so an
+        // external change refreshes it after an earlier edit.
+        let isFirstResponder = (textView.window?.firstResponder === textView)
+        let shouldApply = !context.coordinator.userBeganEditing
+            || (reappliesWhenUnfocused && !isFirstResponder)
+        if shouldApply && textView.string != text {
             textView.string = text
         }
+        (nsView as? BezelTextFieldScrollView)?.isInvalid = isInvalid
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -229,6 +250,8 @@ final class SingleLineTextView: NSTextView {
     var placeholder: String = ""
     var onSubmit: (() -> Void)?
     var onCancel: (() -> Void)?
+    var onFocus: (() -> Void)?
+    var onBlur: (() -> Void)?
 
     private var bezel: BezelTextFieldScrollView? {
         enclosingScrollView as? BezelTextFieldScrollView
@@ -236,13 +259,21 @@ final class SingleLineTextView: NSTextView {
 
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
-        if became { bezel?.isEditing = true }
+        if became {
+            bezel?.isEditing = true
+            // Defer so a SwiftUI @FocusState write does not land inside an AppKit
+            // responder transition / view update.
+            if let onFocus { DispatchQueue.main.async(execute: onFocus) }
+        }
         return became
     }
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
-        if resigned { bezel?.isEditing = false }
+        if resigned {
+            bezel?.isEditing = false
+            if let onBlur { DispatchQueue.main.async(execute: onBlur) }
+        }
         return resigned
     }
 
@@ -267,6 +298,13 @@ final class BezelTextFieldScrollView: NSScrollView {
     var isEditing = false {
         didSet {
             guard isEditing != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+    /// Draw the bezel in the error colour (a rejected commit). Set by the host.
+    var isInvalid = false {
+        didSet {
+            guard isInvalid != oldValue else { return }
             needsDisplay = true
         }
     }
@@ -296,7 +334,10 @@ final class BezelTextFieldScrollView: NSScrollView {
             layer.cornerRadius = 5
             layer.masksToBounds = true
             layer.backgroundColor = NSColor.textBackgroundColor.cgColor
-            if isEditing {
+            if isInvalid {
+                layer.borderWidth = 2
+                layer.borderColor = NSColor.systemRed.cgColor
+            } else if isEditing {
                 layer.borderWidth = 2
                 layer.borderColor = NSColor.controlAccentColor.cgColor
             } else {

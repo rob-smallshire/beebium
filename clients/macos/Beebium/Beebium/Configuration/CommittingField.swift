@@ -118,24 +118,26 @@ struct EditableFieldModel<Value: Equatable>: Equatable {
 }
 
 /// A text field that edits a local string and commits only on Return or focus
-/// loss -- never on each keystroke. Because typing does not write back to the
-/// draft, the view that owns the field is not re-rendered mid-edit, so the AppKit
-/// field editor keeps first responder and the insertion caret stays put.
+/// loss -- never on each keystroke. Typing does not write back to the draft, so
+/// the owning view is not re-rendered mid-edit.
 ///
-/// It shares one `@FocusState` with its section (keyed by `fieldID`), so another
-/// control can release it: clicking a check box, a picker, or the background sets
-/// the shared focus to nil, which resigns the field. On resign the field commits
-/// the user's edit when they changed it, or refreshes to the current value when
-/// they did not -- so it never leaves a stale value on screen (the bug where the
-/// hex byte stayed at its old text after a check box changed the byte) and never
-/// stays focused with a caret after the user has moved on. Committing a value the
-/// user did not type is avoided, so a refresh cannot clobber another control's
-/// change.
+/// It is backed by the shared `PopoverTextField` (an `NSTextView` with its own
+/// insertion point), not a SwiftUI `TextField` (an `NSTextField` that borrows the
+/// window's one shared field editor). In the New Machine dialog -- a singleton
+/// window hidden and re-shown -- that shared editor goes stale after the first
+/// presentation, so an `NSTextField` shows no caret on the second and later opens
+/// even though value, focus ring and colours look right (#153,
+/// docs/frontend-popover-text-fields.md). An `NSTextView` behaves like the first
+/// open every time. There is now one text field implementation in the app:
+/// PopoverTextField, used by the sidebar popovers/sheets and by this field.
 ///
-/// This is the Configurator's counterpart to the sidebar's `TextInputField`,
-/// which edits locally and dispatches only on commit. Invalid input at commit
-/// reverts to the current value and is marked briefly; a valid entry is
-/// canonicalised through `format` and handed to `onCommit`.
+/// It still shares one `@FocusState` with its section (keyed by `fieldID`), so
+/// another control can release it by setting the shared focus to nil; this field
+/// bridges that SwiftUI focus to the NSTextView's first-responder state. On resign
+/// it commits the user's edit when they changed it, or refreshes to the current
+/// value when they did not -- so it never leaves a stale value and never commits a
+/// value the user did not type over another control's change. Tab moves to the
+/// next field, Return commits, Escape reverts.
 struct CommittingField<Value: Equatable>: View {
     /// The committed value the field reflects (the draft's, or a default in
     /// force). The field shows `format(value)` whenever it is not being edited.
@@ -152,6 +154,8 @@ struct CommittingField<Value: Equatable>: View {
     let fieldID: String
 
     @State private var model: EditableFieldModel<Value>
+    /// Holds the backing NSTextView so shared-focus changes can focus or resign it.
+    @StateObject private var controller = TemplateFieldController()
 
     init(value: Value, format: @escaping (Value) -> String, parse: @escaping (String) -> Value?,
          placeholder: String = "", width: CGFloat? = 120,
@@ -169,29 +173,52 @@ struct CommittingField<Value: Equatable>: View {
     }
 
     private var currentDisplay: String { format(value) }
-    private var isFocused: Bool { focusedField == fieldID }
 
     var body: some View {
-        TextField(placeholder, text: Binding(get: { model.text }, set: { model.type($0) }))
-            .frame(maxWidth: width)
-            .foregroundColor(model.invalid ? .red : .primary)
-            .overlay(RoundedRectangle(cornerRadius: 4)
-                .stroke(model.invalid ? Color.red : Color.clear, lineWidth: 1))
-            .focused($focusedField, equals: fieldID)
-            .onSubmit { commitEdit() }
-            .onChange(of: focusedField) { newFocus in
-                if newFocus == fieldID {
-                    model.noteFocusGain()
-                } else {
-                    // Resigned (moved to another field, or released by another
-                    // control / the background): commit what the user typed, else
-                    // refresh to the current value without committing a stale one.
-                    resign()
-                }
+        PopoverTextField(
+            text: Binding(get: { model.text }, set: { model.type($0) }),
+            placeholder: placeholder,
+            autofocus: false,
+            controller: controller,
+            onFocus: { focusGained() },
+            onBlur: { resign() },
+            reappliesWhenUnfocused: true,
+            isInvalid: model.invalid,
+            onSubmit: { commitEdit() },
+            onCancel: { cancelEdit() })
+        .frame(maxWidth: width)
+        .onChange(of: focusedField) { newFocus in
+            applySharedFocus(newFocus)
+        }
+        .onChange(of: currentDisplay) { newDisplay in
+            if focusedField != fieldID {
+                model.syncExternal(display: newDisplay, focused: false)
             }
-            .onChange(of: currentDisplay) { newDisplay in
-                model.syncExternal(display: newDisplay, focused: isFocused)
+        }
+    }
+
+    /// The NSTextView became first responder (click or Tab): record the baseline
+    /// for "edited" and point the section's shared focus at this field.
+    private func focusGained() {
+        model.noteFocusGain()
+        if focusedField != fieldID { focusedField = fieldID }
+    }
+
+    /// Follow a shared-focus change: make the text view first responder when this
+    /// field is selected, or resign it (which triggers onBlur -> resign()) when the
+    /// focus moved elsewhere or a control cleared it.
+    private func applySharedFocus(_ newFocus: String?) {
+        guard let textView = controller.textView, let window = textView.window else { return }
+        let isFirstResponder = (window.firstResponder === textView)
+        if newFocus == fieldID {
+            if !isFirstResponder {
+                window.makeFirstResponder(textView)
+                textView.selectedRange = NSRange(location: 0,
+                                                 length: (textView.string as NSString).length)
             }
+        } else if isFirstResponder {
+            window.makeFirstResponder(nil)
+        }
     }
 
     private func commitEdit() {
@@ -200,6 +227,15 @@ struct CommittingField<Value: Equatable>: View {
         }
     }
 
+    /// Escape: revert to the current value and give up focus.
+    private func cancelEdit() {
+        model.syncExternal(display: currentDisplay, focused: false)
+        if focusedField == fieldID { focusedField = nil }
+    }
+
+    /// Focus lost (blur, or a shared-focus release): commit the user's edit when
+    /// they changed it, else refresh to the current value without committing a
+    /// stale one over another control's change.
     private func resign() {
         if model.isEdited {
             commitEdit()
