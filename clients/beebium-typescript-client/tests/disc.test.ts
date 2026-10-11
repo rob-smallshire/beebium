@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Disc, Drive, DriveState, DiscErrorKind } from "../src/disc.js";
 import { DiscError } from "../src/exceptions.js";
 
@@ -220,6 +222,29 @@ describe("Drive", () => {
             const callArgs = stub.insertDisc.mock.calls[0]![0];
             expect(callArgs.url).toContain("game.ssd");
         });
+
+        it("spells a path as node's file URL, percent-encoded", async () => {
+            const stub = makeDiscStub();
+            const disc = new Disc(stub as any);
+            const d = disc.drive(0);
+            await d.insert("/tmp/my game.ssd");
+            const callArgs = stub.insertDisc.mock.calls[0]![0];
+            expect(callArgs.url).toBe(pathToFileURL(resolve("/tmp/my game.ssd")).href);
+            expect(callArgs.url).toMatch(/^file:\/\/\//);
+            expect(callArgs.url).toContain("my%20game.ssd");
+        });
+
+        it.runIf(process.platform === "win32")(
+            "spells a Windows drive path file:///C:/...",
+            async () => {
+                const stub = makeDiscStub();
+                const disc = new Disc(stub as any);
+                const d = disc.drive(0);
+                await d.insert("C:\\discs\\game.ssd");
+                const callArgs = stub.insertDisc.mock.calls[0]![0];
+                expect(callArgs.url).toBe("file:///C:/discs/game.ssd");
+            },
+        );
 
         it("passes URL as-is when it has a scheme", async () => {
             const stub = makeDiscStub();

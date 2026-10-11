@@ -6,6 +6,7 @@
  */
 
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type {
     DiscServiceClient,
     InsertDiscResponse as ProtoInsertDiscResponse,
@@ -207,14 +208,15 @@ function toDiscControllerInfo(proto: ProtoDiscControllerTypeInfo): DiscControlle
  * Resolves a path or URL to a disc image URL.
  *
  * If the input starts with "file://" or "http", it is used as-is.
- * Otherwise it is resolved to an absolute filesystem path and
- * prepended with "file://".
+ * Otherwise it is resolved to an absolute filesystem path and spelled as
+ * node's file URL: percent-encoded, and file:///C:/... for a Windows drive
+ * path.
  */
 function toDiscUrl(pathOrUrl: string): string {
     if (pathOrUrl.startsWith("file://") || pathOrUrl.startsWith("http")) {
         return pathOrUrl;
     }
-    return "file://" + resolve(pathOrUrl);
+    return pathToFileURL(resolve(pathOrUrl)).href;
 }
 
 /**

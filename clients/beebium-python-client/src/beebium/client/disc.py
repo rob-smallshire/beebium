@@ -20,7 +20,6 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlparse
 
 from beebium.client._proto import disc_pb2, disc_pb2_grpc
 from beebium.client.exceptions import DiscError
@@ -205,16 +204,18 @@ def _proto_metadata_to_disc_metadata(proto: disc_pb2.DiscMetadata) -> DiscMetada
 
 
 def _path_to_url(path_or_url: str | Path) -> str:
-    """Convert a path or URL to a file:// URL."""
+    """Convert a path or URL to a file:// URL.
+
+    A string is a URL only if it has "://", as the server reads it: a Windows
+    drive path such as C:\\discs\\game.ssd parses with the scheme "c" but is a
+    path, and becomes file:///C:/discs/game.ssd.
+    """
     if isinstance(path_or_url, Path):
         return path_or_url.resolve().as_uri()
 
-    # Check if it's already a URL
-    parsed = urlparse(path_or_url)
-    if parsed.scheme:
+    if "://" in path_or_url:
         return path_or_url
 
-    # It's a path, convert to URL
     return Path(path_or_url).resolve().as_uri()
 
 
