@@ -437,8 +437,8 @@ Without `--json` the document goes to stdout and diagnostics to stderr. With
 {
   "preset": { ... } ,
   "diagnostics": [
-    { "severity": "warning", "path": "/colour", "message": "unknown key 'colour' is ignored" },
-    { "severity": "error", "path": "/extensions/1", "message": "preset extension 'host-serial': parameter 'baud' must be an integer, got 'fast'" }
+    { "severity": "warning", "path": "/colour", "location": "colour", "message": "unknown key 'colour' is ignored" },
+    { "severity": "error", "path": "/extensions/1", "location": "Host Serial", "message": "preset extension 'host-serial': parameter 'baud' must be an integer, got 'fast'" }
   ]
 }
 ```
@@ -448,7 +448,15 @@ Without `--json` the document goes to stdout and diagnostics to stderr. With
 shape), `/sideways_bank/slots/1` (a slot the model's sockets refuse, or the
 later of two that conflict), `/sideways_bank` (the bank as a whole),
 `/storage/fdc_socket/id`, `/model`, an extension's entry or parameter. It is
-`""` only when the file itself cannot be found or read. The exit status is 0
+`""` only when the file itself cannot be found or read.
+
+`location` says where that is as a user calls it, in the schema's words, so a
+front-end shows it as given: the extension or Econet transport the path is in,
+by its manifest `display_name` (`Host Serial`); a floppy drive by its schema
+`label` (`Floppy drive 1`); a sideways slot by its slot number, not its index
+in the array (`Sideways slot 4`); otherwise the top-level key's section `label`
+(`Econet`, `Keyboard links`), or the key itself when the preset has no such
+key (`colour`). It is `""` when `path` is. The exit status is 0
 with no errors, 78 when the preset does not describe a valid machine for this
 model, and 66 when it cannot be found or read as a JSON object. When the
 preset cannot be loaded at all (66, or a 78 from its shape, such as a station
@@ -475,14 +483,14 @@ a configuration UI before a machine is launched:
 }
 ```
 
-There is one section per preset key, its `type` being the key:
+There is one section per preset key, its `type` being the key and its `label` what a user calls it (`Speed`, `Keyboard links`, `MOS ROM`, `Storage`, `Sideways ROM / RAM`, `Econet`, `Extensions`), the same words a `resolve-preset` diagnostic's `location` uses:
 
 | `type` | Contents |
 |--------|----------|
 | `speed` | `default`, and the `unlimited` keyword |
 | `startup` | `screen_mode` and `links` with `min`, `max` and `default`, `auto_boot` with `default`, and `links.excludes`. `links` also lays out the byte: `link_made_when` (`clear`), `screen_mode_bits` (least significant first), `auto_boot_bit` with `auto_boot_true_when` (`clear`), and `bits`, one per bit from 7 down, each with `bit`, `link` (`Link 1` to `Link 8`), `label` and a one-sentence `description` |
 | `mos_image_uri` | `default`: the model's MOS |
-| `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives` with their geometry and image types |
+| `storage` | `builtin` hardware; `fdc_socket.options` (socketed models: `none` and each controller); `floppy_drives`, each with `drive`, `label` (`Floppy drive 0`), its geometry and image types |
 | `sideways_bank` | `sockets` (label, `slots`, `capabilities`, `runtime_configurable`), `has_aliasing`, and `default_roms` (`slot`, `image`, `role`: `language`, `filing` or `board`) |
 | `econet` | `station`: `min`, `max`, `auto`, `auto_default_range`; `transports`: the transport extensions' names |
 | `extensions` | `attachment_points`: each point on this model (its own connectors, then points an extension provides) with `display_name`, `description`, `min_occupancy`, `max_occupancy` (`null` for no fixed bound; for a provided point, per provider), `provided_by` (`null` or the providing extensions) and `extensions` (the names of those that attach to it). `catalogue`: every extension that can attach to one of those points, and on a model with Econet every transport, each exactly as `describe-extension <name> --json` gives it (`name`, `display_name`, `description`, `cli_name`, `kind`, `source`, `attaches_to`, `provides`, `parameters`, `roms`). `bundled_images`: by kind, the bundled images a `bundled` parameter may name, each with `image`, `display_name`, `size_bytes` and `extension` (the extension it belongs to, or `null` for any), e.g. `{"hard-disc": [{"image": "l3fs-v1_26b.dat", "display_name": "Acorn Level 3 File Server 1.26", "size_bytes": 10002432, "extension": null}], "rom": [{"image": "acorn-tube-6502_1_10.rom", "display_name": "Acorn 6502 Tube ROM 1.10", "size_bytes": 4096, "extension": "acorn-65c02-coprocessor"}, ...]}` |

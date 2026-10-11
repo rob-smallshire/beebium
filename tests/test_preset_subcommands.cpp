@@ -1568,6 +1568,88 @@ TEST_CASE("resolve-preset: errors are reported with a JSON pointer and a non-zer
     CHECK(std::find(seen.begin(), seen.end(), P{"error", "/extensions/1"}) != seen.end());
 }
 
+namespace {
+
+// Each diagnostic's location, by its path.
+std::map<std::string, std::string> locations_by_path(const nlohmann::json& out) {
+    std::map<std::string, std::string> locations;
+    for (const auto& d : out.at("diagnostics")) {
+        locations[d.at("path").get<std::string>()] = d.at("location").get<std::string>();
+    }
+    return locations;
+}
+
+}  // namespace
+
+TEST_CASE("resolve-preset: a diagnostic says where it is in the words the schema uses",
+          "[integration][preset][resolve-preset]") {
+    TempDirectory temp_dir;
+
+    SECTION("an extension by its display name, an unknown key by itself") {
+        auto preset_filepath = temp_dir.path() / "bad.preset.beebium";
+        std::ofstream(preset_filepath) << R"({"model": "model-b", "colour": "beige",
+            "extensions": [{"name": "host-serial", "config": {"baud": "fast"}}]})";
+        const auto locations =
+            locations_by_path(resolve_json(EXECUTABLE, preset_filepath.string(), 78));
+        INFO(nlohmann::json(locations).dump());
+        CHECK(locations.at("/colour") == "colour");
+        bool extension_located = false;
+        for (const auto& [path, location] : locations) {
+            if (path.starts_with("/extensions/0")) {
+                CHECK(location == "Host Serial");
+                extension_located = true;
+            }
+        }
+        CHECK(extension_located);
+    }
+
+    SECTION("a sideways slot by its slot number and a floppy drive by its number") {
+        auto preset_filepath = temp_dir.path() / "missing.preset.beebium";
+        std::ofstream(preset_filepath) << R"({"model": "model-b",
+            "storage": {"floppy_drives": [{"drive": 1,
+                                           "image_uri": "file:///nonexistent/beebium.ssd"}]},
+            "sideways_bank": {"slots": [{"slot": 4, "type": "rom",
+                                         "image_uri": "no-such-beebium.rom"}]}})";
+        const auto locations =
+            locations_by_path(resolve_json(EXECUTABLE, preset_filepath.string()));
+        INFO(nlohmann::json(locations).dump());
+        CHECK(locations.at("/storage/floppy_drives/1/image_uri") == "Floppy drive 1");
+        CHECK(locations.at("/sideways_bank/slots/0/image_uri") == "Sideways slot 4");
+    }
+
+    SECTION("a section by its schema label") {
+        auto preset_filepath = temp_dir.path() / "station.preset.beebium";
+        std::ofstream(preset_filepath) << R"({"model": "model-b", "econet": {"station": 300}})";
+        const auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+        const auto locations = locations_by_path(out);
+        INFO(nlohmann::json(locations).dump());
+        REQUIRE(locations.contains("/econet/station"));
+        CHECK(locations.at("/econet/station") == "Econet");
+    }
+
+    SECTION("the whole document nowhere") {
+        const auto out = resolve_json(
+            EXECUTABLE, (temp_dir.path() / "absent.preset.beebium").string(), 66);
+        REQUIRE(out.at("diagnostics").size() == 1);
+        CHECK(out.at("diagnostics")[0].at("location") == "");
+    }
+}
+
+TEST_CASE("describe-preset-schema labels each section and floppy drive",
+          "[integration][preset][describe-preset-schema]") {
+    auto result = run_command(std::string(EXECUTABLE) + " describe-preset-schema");
+    REQUIRE(result.exit_code == 0);
+    const auto schema = nlohmann::json::parse(result.stdout_output);
+    std::map<std::string, nlohmann::json> sections;
+    for (const auto& section : schema.at("sections")) {
+        CHECK_FALSE(section.at("label").get<std::string>().empty());
+        sections[section.at("type").get<std::string>()] = section;
+    }
+    CHECK(sections.at("sideways_bank").at("label") == "Sideways ROM / RAM");
+    CHECK(sections.at("startup").at("label") == "Keyboard links");
+    CHECK(sections.at("storage").at("floppy_drives")[1].at("label") == "Floppy drive 1");
+}
+
 TEST_CASE("resolve-preset: an unreadable preset reports a null preset",
           "[integration][preset][resolve-preset]") {
     TempDirectory temp_dir;
@@ -2367,16 +2449,19 @@ TEST_CASE("resolve-preset --json output is stable, diagnostics included",
     {
       "severity": "warning",
       "path": "/colour",
+      "location": "colour",
       "message": "unknown key 'colour' is ignored"
     },
     {
       "severity": "warning",
       "path": "/auto_boot",
+      "location": "Auto boot",
       "message": "a top-level 'auto_boot' is read as 'startup.auto_boot'; write it there instead"
     },
     {
       "severity": "error",
       "path": "/extensions/0",
+      "location": "Host Serial",
       "message": "preset extension 'host-serial': parameter 'baud' must be an integer, got 'fast'"
     }
   ]
@@ -2400,6 +2485,7 @@ TEST_CASE("resolve-preset --json output for an unloadable preset is stable",
          nlohmann::ordered_json::array(
              {{{"severity", "error"},
                {"path", "/econet/station"},
+               {"location", "Econet"},
                {"message", "Econet station number must be between 1 and 254, got 300: " +
                                preset_filepath.string()}}})}};
     CHECK(result.stdout_output == expected.dump(2) + "\n");

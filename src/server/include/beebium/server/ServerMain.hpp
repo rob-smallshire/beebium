@@ -3443,10 +3443,14 @@ public:
                     image_types.push_back(std::string(ext_no_dot));
                 }
             }
-            storage["floppy_drives"] = ojson::array({
-                ojson{{"drive", 0}, {"tracks", {40, 80}}, {"sides", 2}, {"image_types", image_types}},
-                ojson{{"drive", 1}, {"tracks", {40, 80}}, {"sides", 2}, {"image_types", image_types}}
-            });
+            storage["floppy_drives"] = ojson::array();
+            for (std::size_t drive : {0, 1}) {
+                storage["floppy_drives"].push_back(ojson{{"drive", drive},
+                                                         {"label", floppy_drive_label(drive)},
+                                                         {"tracks", {40, 80}},
+                                                         {"sides", 2},
+                                                         {"image_types", image_types}});
+            }
         }
 
         ServerConfig<MachineType> resolver_cfg;
@@ -3642,7 +3646,12 @@ public:
         for (const auto& info : kPresetKeys) {
             if (!describes(info.key)) continue;
             if (auto it = section_for.find(info.key); it != section_for.end()) {
-                sections.push_back(std::move(it->second));
+                // Each section names its key as a user calls it, after its type.
+                ojson section{{"type", it->second.at("type")}, {"label", std::string(info.label)}};
+                for (auto& [key, value] : it->second.items()) {
+                    if (key != "type") section[key] = std::move(value);
+                }
+                sections.push_back(std::move(section));
             }
         }
         output["sections"] = sections;
@@ -4635,6 +4644,7 @@ public:
                   << "  {\"preset\": <document, or null if none could be loaded>,\n"
                   << "   \"diagnostics\": [{\"severity\": \"error\"|\"warning\",\n"
                   << "                    \"path\": <JSON pointer into the preset>,\n"
+                  << "                    \"location\": <where that is, as a user calls it>,\n"
                   << "                    \"message\": <text>}, ...]}\n"
                   << "\n"
                   << "Exits 0 when there are no errors, 66 when the preset cannot be found or\n"
@@ -4680,7 +4690,8 @@ public:
         };
 
         std::optional<nlohmann::ordered_json> document;
-        int exit_code = resolve(argv[0], preset_arg, document, error, warning);
+        PresetLocations locations;
+        int exit_code = resolve(argv[0], preset_arg, document, locations, error, warning);
 
         if (json_output) {
             nlohmann::ordered_json out;
@@ -4689,6 +4700,7 @@ public:
             for (const auto& d : diagnostics) {
                 out["diagnostics"].push_back({{"severity", std::string(d.severity_name())},
                                               {"path", d.path},
+                                              {"location", locations.describe(d.path)},
                                               {"message", d.message}});
             }
             std::cout << out.dump(2) << "\n";
@@ -4706,10 +4718,49 @@ public:
     }
 
 private:
+    // What the preset's entries are called, as far as resolving got: enough
+    // to say where a diagnostic's path is in the words the schema uses.
+    struct PresetLocations {
+        std::vector<int> sideways_slots;                  // slot of sideways_bank.slots[i]
+        std::map<std::string, std::string> instance_names;  // preset pointer -> name
+
+        // Where `path` is, as a user calls it: the extension or transport
+        // instance it is in, the floppy drive or sideways slot, else the
+        // top-level key's label; empty for the whole document.
+        std::string describe(const std::string& path) const {
+            if (path.empty()) return {};
+            std::vector<std::string> parts;
+            for (std::size_t start = 1; start <= path.size();) {
+                const auto end = std::min(path.find('/', start), path.size());
+                parts.push_back(path.substr(start, end - start));
+                start = end + 1;
+            }
+            auto index = [&](std::size_t i) -> std::optional<std::size_t> {
+                if (i >= parts.size() || parts[i].empty() ||
+                    parts[i].find_first_not_of("0123456789") != std::string::npos) {
+                    return std::nullopt;
+                }
+                return std::stoul(parts[i]);
+            };
+            for (const auto& [pointer, name] : instance_names) {
+                if (path == pointer || path.starts_with(pointer + "/")) return name;
+            }
+            if (parts[0] == "storage" && parts.size() > 1 && parts[1] == "floppy_drives") {
+                if (auto drive = index(2)) return floppy_drive_label(*drive);
+            }
+            if (parts[0] == "sideways_bank" && parts.size() > 1 && parts[1] == "slots") {
+                if (auto i = index(2); i && *i < sideways_slots.size()) {
+                    return sideways_slot_label(sideways_slots[*i]);
+                }
+            }
+            return preset_key_label(parts[0]);
+        }
+    };
+
     template<typename Error, typename Warning>
     static int resolve(const char* argv0, const std::string& preset_arg,
                        std::optional<nlohmann::ordered_json>& document,
-                       Error error, Warning warning) {
+                       PresetLocations& locations, Error error, Warning warning) {
         using Memory = typename MachineType::Memory;
 
         // Find and load the preset as `start --preset` does.
@@ -4728,6 +4779,7 @@ private:
             return loaded.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
         }
         const PresetConfig& preset = *loaded.config;
+        for (const auto& slot : preset.sideways) locations.sideways_slots.push_back(slot.slot);
         if (auto err = preset_model_error<Memory>(preset)) {
             error("/model", *err);
             return ExitCode::CONFIG;
@@ -4741,6 +4793,14 @@ private:
         if (auto err = populate_extension_resolver(argv0, {}, config)) {
             error("", "cannot scan the extension directories");
             return *err;
+        }
+        // Each extension instance from the preset, and its transport, by the
+        // name its manifest gives it.
+        for (const auto& inst : config.extension_instances) {
+            if (!inst.from_preset || inst.preset_pointer.empty()) continue;
+            const auto* m = config.extension_resolver.find_by_name(inst.name);
+            locations.instance_names[inst.preset_pointer] =
+                m && !m->display_name.empty() ? m->display_name : inst.name;
         }
         bool failed = false;
         for (const auto& d : fold_in_preset(config)) {

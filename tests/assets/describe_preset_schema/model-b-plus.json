@@ -8,12 +8,14 @@
   "sections": [
     {
       "type": "speed",
+      "label": "Speed",
       "default": 1.0,
       "unlimited": "unlimited",
       "description": "Emulation speed as a positive multiple of real time, or \"unlimited\" to run flat out"
     },
     {
       "type": "startup",
+      "label": "Keyboard links",
       "screen_mode": {
         "min": 0,
         "max": 7,
@@ -93,11 +95,13 @@
     },
     {
       "type": "mos_image_uri",
+      "label": "MOS ROM",
       "default": "acorn-mos_2_0.rom",
       "description": "The MOS ROM: a ROM name (found on the ROM search path) or a path"
     },
     {
       "type": "storage",
+      "label": "Storage",
       "builtin": {
         "cassette": true,
         "fdc": {
@@ -108,6 +112,7 @@
       "floppy_drives": [
         {
           "drive": 0,
+          "label": "Floppy drive 0",
           "tracks": [
             40,
             80
@@ -125,6 +130,7 @@
         },
         {
           "drive": 1,
+          "label": "Floppy drive 1",
           "tracks": [
             40,
             80
@@ -144,6 +150,7 @@
     },
     {
       "type": "sideways_bank",
+      "label": "Sideways ROM / RAM",
       "has_aliasing": true,
       "sockets": [
         {
@@ -293,6 +300,7 @@
     },
     {
       "type": "econet",
+      "label": "Econet",
       "station": {
         "min": 1,
         "max": 254,
@@ -309,6 +317,7 @@
     },
     {
       "type": "extensions",
+      "label": "Extensions",
       "attachment_points": [
         {
           "id": "1mhz-bus",

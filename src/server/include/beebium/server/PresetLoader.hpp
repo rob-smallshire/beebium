@@ -169,31 +169,55 @@ struct PresetKeyInfo {
     std::string_view cli;     // the start options that set the same thing
     std::string_view config;  // the ServerConfig fields it lands in
     bool written;             // preset_document writes it
+    std::string_view label;   // what a user calls it: describe-preset-schema's
+                              // section label and a diagnostic's location
 };
 
 inline constexpr std::array<PresetKeyInfo, 14> kPresetKeys{{
-    {PresetKey::Model, "model", "string", "", "(checked against the executable)", true},
-    {PresetKey::Name, "name", "string", "", "preset_name", true},
-    {PresetKey::ReleaseDate, "release_date", "string", "", "", true},
-    {PresetKey::Description, "description", "string", "", "", true},
-    {PresetKey::MachineName, "machine_name", "string", "--machine-name", "machine_name", true},
+    {PresetKey::Model, "model", "string", "", "(checked against the executable)", true, "Model"},
+    {PresetKey::Name, "name", "string", "", "preset_name", true, "Name"},
+    {PresetKey::ReleaseDate, "release_date", "string", "", "", true, "Release date"},
+    {PresetKey::Description, "description", "string", "", "", true, "Description"},
+    {PresetKey::MachineName, "machine_name", "string", "--machine-name", "machine_name", true,
+     "Machine name"},
     {PresetKey::Speed, "speed", "number or \"unlimited\"", "--speed",
-     "speed_multiplier_override", true},
+     "speed_multiplier_override", true, "Speed"},
     {PresetKey::Startup, "startup", "object", "--screen-mode, --auto-boot, --links",
-     "screen_mode, auto_boot, raw_links", true},
-    {PresetKey::MosImageUri, "mos_image_uri", "string", "--mos", "mos_filepath", true},
+     "screen_mode, auto_boot, raw_links", true, "Keyboard links"},
+    {PresetKey::MosImageUri, "mos_image_uri", "string", "--mos", "mos_filepath", true,
+     "MOS ROM"},
     {PresetKey::Storage, "storage", "object", "--fdc, --floppy", "fdc_type, floppy_filepaths",
-     true},
+     true, "Storage"},
     {PresetKey::SidewaysBank, "sideways_bank", "object", "--sideways, --language-rom",
-     "sideways_configs, rom_slots", true},
+     "sideways_configs, rom_slots", true, "Sideways ROM / RAM"},
     {PresetKey::Econet, "econet", "object", "--station, an Econet transport (--aun, ...)",
-     "station_number, station_auto_range, extension_instances", true},
+     "station_number, station_auto_range, extension_instances", true, "Econet"},
     {PresetKey::Extensions, "extensions", "array", "--<extension>", "extension_instances",
-     true},
+     true, "Extensions"},
     {PresetKey::ThumbnailCaptureDelaySeconds, "thumbnail_capture_delay_seconds", "number", "",
-     "", true},
-    {PresetKey::AutoBoot, "auto_boot", "bool", "", "(read as startup.auto_boot)", false},
+     "", true, "Thumbnail delay"},
+    {PresetKey::AutoBoot, "auto_boot", "bool", "", "(read as startup.auto_boot)", false,
+     "Auto boot"},
 }};
+
+// What a user calls a preset's top-level key, or the key itself when it is
+// not one of the preset's keys.
+inline std::string preset_key_label(std::string_view name) {
+    for (const auto& info : kPresetKeys) {
+        if (info.name == name) return std::string(info.label);
+    }
+    return std::string(name);
+}
+
+// What a user calls floppy drive `drive`.
+inline std::string floppy_drive_label(std::size_t drive) {
+    return "Floppy drive " + std::to_string(drive);
+}
+
+// What a user calls sideways slot `slot`.
+inline std::string sideways_slot_label(int slot) {
+    return "Sideways slot " + std::to_string(slot);
+}
 
 // One entry per key, in PresetKey's order.
 static_assert([] {
