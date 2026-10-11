@@ -472,7 +472,7 @@ jobs:
     # native aarch64 coverage comes from our own box.
     runs-on: [self-hosted, Linux, ARM64]
     needs: preflight
-    # A from-scratch build on the Pi still takes a while even at -j4 (see
+    # A from-scratch build on the Pi takes a while at -j2 (see
     # CMAKE_BUILD_PARALLEL_LEVEL below); bound it generously.
     timeout-minutes: 180
 
@@ -483,12 +483,17 @@ jobs:
       # (every gRPC service, subcommand and the extension framework) lives in
       # the header-only, machine-templated server_main<> in ServerMain.hpp, so
       # it is compiled in full once per machine variant. At -j4 all four
-      # compile at once; measured 2026-07-15 that peaked at ~7.5 GiB used
-      # (522 MiB RAM free, swap barely touched) and built in ~27 min -- it
-      # fits, but only just, so do not raise past 4. (History: the previous
-      # 2 GiB Pi 4 could only manage -j1 -- even two of those TUs exhausted RAM
-      # + swap and the kernel OOM-killed cc1plus.)
-      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+      # compile at once; measured 2026-07-15 (ServerMain.hpp then ~4300 lines)
+      # that peaked at ~7.5 GiB used (522 MiB RAM free) and built in ~27 min.
+      # Since then each server TU has grown with the subcommand surface
+      # (ServerMain.hpp ~6000 lines), and four at once no longer fit in 8 GiB:
+      # the job died mid-build with no log, the runner process itself killed
+      # (2026-10-11, inferred; the Pi's OOM log was not reachable). -j2 keeps
+      # two heavy TUs in flight. Revisit once ServerMain.hpp is split and the
+      # server is no longer instantiated in full per machine variant.
+      # (History: the previous 2 GiB Pi 4 could only manage -j1 -- even two of
+      # those TUs exhausted RAM + swap and the kernel OOM-killed cc1plus.)
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
 
     steps:
       - name: Checkout
