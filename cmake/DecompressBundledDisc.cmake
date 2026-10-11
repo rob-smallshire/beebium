@@ -32,6 +32,16 @@ if(NOT _extract_rc EQUAL 0)
     message(FATAL_ERROR "DecompressBundledDisc: failed to extract ${TARBALL}")
 endif()
 
+# The tarball records a fixed, historical mtime for reproducibility, which
+# would leave the extracted masters older than the tarball forever: the build
+# would extract again, and regenerate every preset naming the disc, each time.
+# Stamp them with the extraction time so they are up to date until the tarball
+# changes.
+file(GLOB _extracted "${OUTDIR}/*.dat" "${OUTDIR}/*.dsc")
+foreach(_f ${_extracted})
+    file(TOUCH_NOCREATE "${_f}")
+endforeach()
+
 # Defense-in-depth: make the extracted masters read-only (version-gated;
 # the structural guarantee in DiscPaths is the real protection).
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.19)

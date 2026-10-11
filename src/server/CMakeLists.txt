@@ -53,9 +53,29 @@ foreach(_disc_id ${BUNDLED_DISC_IDS})
             "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json" "${_json}"
         DEPENDS "${BUNDLED_DISCS_SRC_DIR}/${_disc_id}.json"
         VERBATIM)
-    list(APPEND _bundled_disc_outputs "${_dat}" "${_dsc}" "${_json}")
+    set(BUNDLED_DISC_OUTPUTS_${_disc_id} "${_dat}" "${_dsc}" "${_json}")
+    list(APPEND _bundled_disc_outputs ${BUNDLED_DISC_OUTPUTS_${_disc_id}})
 endforeach()
 add_custom_target(bundled_discs ALL DEPENDS ${_bundled_disc_outputs})
+
+# Set OUT_VAR to every build-tree output (master, descriptor and display-name
+# sidecar) of each bundled disc that a preset's create-preset arguments name.
+# create-preset resolves a named disc, and capture boots it, so the preset
+# depends on all of the disc's outputs -- derived from the arguments, not
+# listed by hand, so no preset can name a disc yet miss one of its files.
+function(bundled_disc_outputs_named OUT_VAR)
+    set(outputs "")
+    foreach(disc_id ${BUNDLED_DISC_IDS})
+        foreach(arg ${ARGN})
+            string(FIND "${arg}" "${disc_id}." position)
+            if(NOT position EQUAL -1)
+                list(APPEND outputs ${BUNDLED_DISC_OUTPUTS_${disc_id}})
+                break()
+            endif()
+        endforeach()
+    endforeach()
+    set(${OUT_VAR} "${outputs}" PARENT_SCOPE)
+endfunction()
 
 # Generate a system preset and its thumbnail at build time, using the same
 # create-preset code path that users create their own presets with. Extra
@@ -68,6 +88,12 @@ function(add_system_preset EXECUTABLE PRESET_ID PRESET_NAME RELEASE_DATE)
     set(description_args "")
     if(DEFINED PRESET_DESCRIPTION)
         set(description_args --description "${PRESET_DESCRIPTION}")
+    endif()
+    # A POST_BUILD step has no file dependencies of its own: build the bundled
+    # discs it names before the executable, so they exist when it runs.
+    bundled_disc_outputs_named(disc_outputs ${PRESET_UNPARSED_ARGUMENTS})
+    if(disc_outputs)
+        add_dependencies(${EXECUTABLE} bundled_discs)
     endif()
     # Generate into the config-independent PRESETS_OUTPUT_DIR that install()
     # reads. (Writing to $<TARGET_FILE_DIR:...>/presets instead put the presets
@@ -128,9 +154,9 @@ endfunction()
 # capture-screenshot as --duration (the parasite's "Acorn TUBE ..." banner
 # settles after the 2.0s default); the rest of ARGN goes to create-preset.
 function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEASE_DATE)
-    # EXTRA_DEPENDS: additional targets/files this preset needs before create-
-    # preset/capture run -- further coprocessor/peripheral plugins beyond the
-    # primary PLUGIN_TARGET, and any bundled-disc outputs the boot resolves.
+    # EXTRA_DEPENDS: further coprocessor/peripheral plugin targets, beyond the
+    # primary PLUGIN_TARGET, that create-preset/capture need. Bundled discs the
+    # arguments name are found by bundled_disc_outputs_named.
     cmake_parse_arguments(PRESET "" "THUMBNAIL_DELAY;DESCRIPTION" "EXTRA_DEPENDS" ${ARGN})
     set(capture_duration_args "")
     if(DEFINED PRESET_THUMBNAIL_DELAY)
@@ -140,6 +166,7 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
     if(DEFINED PRESET_DESCRIPTION)
         set(description_args --description "${PRESET_DESCRIPTION}")
     endif()
+    bundled_disc_outputs_named(disc_outputs ${PRESET_UNPARSED_ARGUMENTS})
     set(preset_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.preset.beebium")
     set(thumbnail_filepath "${PRESETS_OUTPUT_DIR}/${PRESET_ID}.thumbnail.png")
     set(copy_commands "")
@@ -172,12 +199,17 @@ function(add_plugin_preset EXECUTABLE PLUGIN_TARGET PRESET_ID PRESET_NAME RELEAS
             --crop auto
             ${capture_duration_args}
         ${copy_commands}
-        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS}
+        DEPENDS ${EXECUTABLE} ${PLUGIN_TARGET} ${PRESET_EXTRA_DEPENDS} ${disc_outputs}
         COMMENT "Generating plugin preset ${PRESET_ID} and its thumbnail"
         VERBATIM
     )
     add_custom_target(preset_${PRESET_ID} ALL
         DEPENDS "${preset_filepath}" "${thumbnail_filepath}")
+    # The disc outputs are bundled_discs' commands; build that target first so
+    # the two never run them concurrently and this one finds them up to date.
+    if(disc_outputs)
+        add_dependencies(preset_${PRESET_ID} bundled_discs)
+    endif()
     # Unlike add_system_preset (whose POST_BUILD runs when beebium-servers builds
     # the executable), this preset is its own target, so wire it into the
     # beebium-servers aggregate that CI and the release build actually build --
@@ -458,9 +490,10 @@ endif()
 # for date/time. The disc image is referenced by its bare, version-named
 # filename and copied to a per-user working copy on first use (see DiscPaths);
 # the shipped master is never modified. Needs the SCSI adapter + hard-disc + RTC
-# plugins deployed and the disc master decompressed before create-preset/capture
-# run, hence EXTRA_DEPENDS. Advertising (--advertise) is a launch-time flag, not
-# preset config, so the launcher enables mDNS advertisement, not the preset.
+# plugins deployed before create-preset/capture run, hence EXTRA_DEPENDS; the
+# disc it names is depended on automatically. Advertising (--advertise) is a
+# launch-time flag, not preset config, so the launcher enables mDNS
+# advertisement, not the preset.
 if(TARGET beebium_ext_acorn_65c02_plugin
    AND TARGET beebium_ext_acorn_scsi_plugin
    AND TARGET beebium_ext_scsi_hard_disc_plugin
@@ -490,9 +523,7 @@ if(TARGET beebium_ext_acorn_65c02_plugin
         EXTRA_DEPENDS
             beebium_ext_acorn_scsi_plugin
             beebium_ext_scsi_hard_disc_plugin
-            beebium_ext_acorn_rtc_plugin
-            "${DISCS_OUTPUT_DIR}/l3fs-v1_26b.dat"
-            "${DISCS_OUTPUT_DIR}/l3fs-v1_26b.dsc")
+            beebium_ext_acorn_rtc_plugin)
 endif()
 
 # Install rules
