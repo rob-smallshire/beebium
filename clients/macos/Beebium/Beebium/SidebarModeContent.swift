@@ -777,7 +777,7 @@ struct StationIdPopover: View {
             // shows reliably, and it survives the Network sidebar re-rendering on
             // every status event (#153 caret fix).
             PopoverTextField(text: $stationIdText,
-                             placeholder: "1\u{2013}254",
+                             placeholder: "\(econetClient.stationMin)\u{2013}\(econetClient.stationMax)",
                              diagnosticsLabel: "station",
                              onSubmit: { save() },
                              onCancel: { isPresented = false })
@@ -823,8 +823,9 @@ struct StationIdPopover: View {
 
     private func save() {
         guard let value = UInt32(stationIdText),
-              value >= 1, value <= 254 else {
-            validationError = "Station number must be between 1 and 254."
+              value >= econetClient.stationMin, value <= econetClient.stationMax else {
+            validationError =
+                "Station number must be between \(econetClient.stationMin) and \(econetClient.stationMax)."
             return
         }
         validationError = nil

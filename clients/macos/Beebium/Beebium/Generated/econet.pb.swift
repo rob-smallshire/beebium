@@ -254,6 +254,19 @@ struct Beebium_GetEconetStatusResponse: @unchecked Sendable {
     set {_uniqueStorage()._stationInForce = newValue}
   }
 
+  /// The station numbers a station may have, inclusive (1 and 254): what
+  /// EnableEconet and SetStationId accept. Set whenever has_econet_socket,
+  /// so a frontend can bound a station field before Econet is fitted.
+  var stationMin: UInt32 {
+    get {return _storage._stationMin}
+    set {_uniqueStorage()._stationMin = newValue}
+  }
+
+  var stationMax: UInt32 {
+    get {return _storage._stationMax}
+    set {_uniqueStorage()._stationMax = newValue}
+  }
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -561,7 +574,7 @@ extension Beebium_GetEconetStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".GetEconetStatusResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_econet_socket\0\u{1}enabled\0\u{3}station_id\0\u{3}aun_mode\0\u{1}connected\0\u{2}\u{5}adlc\0\u{1}handshake\0\u{3}tick_count\0\u{3}cr1_0x82_write_count\0\u{3}rx_frames_received_count\0\u{3}rx_blocked_by_reset_count\0\u{3}scout_ack_generated_count\0\u{3}tx_frames_from_beeb_count\0\u{3}unexpected_tx_reset_count\0\u{3}tx_from_idle_count\0\u{3}max_handshake_timer_seen\0\u{3}watchdog_timeout_count\0\u{3}send_stage_log\0\u{3}ticks_with_timer_active\0\u{4}\u{3}requires_real_time\0\u{3}gated_by_speed\0\u{3}aun_station_collision_count\0\u{3}aun_last_station_collision\0\u{3}station_in_force\0\u{b}aun_port\0\u{b}peer_count\0\u{b}read_stretch_coprocessor_ticks\0\u{b}piconet\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}\u{c}\u{18}\u{1}\u{c}\u{19}\u{1}")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}has_econet_socket\0\u{1}enabled\0\u{3}station_id\0\u{3}aun_mode\0\u{1}connected\0\u{2}\u{5}adlc\0\u{1}handshake\0\u{3}tick_count\0\u{3}cr1_0x82_write_count\0\u{3}rx_frames_received_count\0\u{3}rx_blocked_by_reset_count\0\u{3}scout_ack_generated_count\0\u{3}tx_frames_from_beeb_count\0\u{3}unexpected_tx_reset_count\0\u{3}tx_from_idle_count\0\u{3}max_handshake_timer_seen\0\u{3}watchdog_timeout_count\0\u{3}send_stage_log\0\u{3}ticks_with_timer_active\0\u{4}\u{3}requires_real_time\0\u{3}gated_by_speed\0\u{3}aun_station_collision_count\0\u{3}aun_last_station_collision\0\u{3}station_in_force\0\u{3}station_min\0\u{3}station_max\0\u{b}aun_port\0\u{b}peer_count\0\u{b}read_stretch_coprocessor_ticks\0\u{b}piconet\0\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}\u{c}\u{18}\u{1}\u{c}\u{19}\u{1}")
 
   fileprivate class _StorageClass {
     var _hasEconetSocket_p: Bool = false
@@ -588,6 +601,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
     var _aunStationCollisionCount: UInt32 = 0
     var _aunLastStationCollision: String = String()
     var _stationInForce: UInt32 = 0
+    var _stationMin: UInt32 = 0
+    var _stationMax: UInt32 = 0
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -622,6 +637,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
       _aunStationCollisionCount = source._aunStationCollisionCount
       _aunLastStationCollision = source._aunLastStationCollision
       _stationInForce = source._stationInForce
+      _stationMin = source._stationMin
+      _stationMax = source._stationMax
     }
   }
 
@@ -664,6 +681,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
         case 28: try { try decoder.decodeSingularUInt32Field(value: &_storage._aunStationCollisionCount) }()
         case 29: try { try decoder.decodeSingularStringField(value: &_storage._aunLastStationCollision) }()
         case 30: try { try decoder.decodeSingularUInt32Field(value: &_storage._stationInForce) }()
+        case 31: try { try decoder.decodeSingularUInt32Field(value: &_storage._stationMin) }()
+        case 32: try { try decoder.decodeSingularUInt32Field(value: &_storage._stationMax) }()
         default: break
         }
       }
@@ -748,6 +767,12 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
       if _storage._stationInForce != 0 {
         try visitor.visitSingularUInt32Field(value: _storage._stationInForce, fieldNumber: 30)
       }
+      if _storage._stationMin != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._stationMin, fieldNumber: 31)
+      }
+      if _storage._stationMax != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._stationMax, fieldNumber: 32)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -781,6 +806,8 @@ extension Beebium_GetEconetStatusResponse: SwiftProtobuf.Message, SwiftProtobuf.
         if _storage._aunStationCollisionCount != rhs_storage._aunStationCollisionCount {return false}
         if _storage._aunLastStationCollision != rhs_storage._aunLastStationCollision {return false}
         if _storage._stationInForce != rhs_storage._stationInForce {return false}
+        if _storage._stationMin != rhs_storage._stationMin {return false}
+        if _storage._stationMax != rhs_storage._stationMax {return false}
         return true
       }
       if !storagesAreEqual {return false}

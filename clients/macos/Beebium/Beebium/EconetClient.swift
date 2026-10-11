@@ -39,6 +39,12 @@ final class EconetClient: ObservableObject, Disconnectable {
     /// is configured and then differs until the next Break adopts it (#172).
     /// Zero before the first report, or from a server too old to carry it.
     @Published private(set) var stationInForce: UInt32 = 0
+    /// The permitted station-number range, reported by the server (the same bounds
+    /// EnableEconet/SetStationId enforce). Seeded with the universal BBC range so
+    /// the field is sensible before the first status arrives; the server's values
+    /// replace it as soon as one does.
+    @Published private(set) var stationMin: UInt32 = 1
+    @Published private(set) var stationMax: UInt32 = 254
     @Published private(set) var aunMode: Bool = false
     @Published private(set) var connected: Bool = false
     /// The active transport requires real-time (1x) emulation (e.g. Piconet).
@@ -207,6 +213,8 @@ final class EconetClient: ObservableObject, Disconnectable {
         enabled = response.enabled
         stationId = response.stationID
         stationInForce = response.stationInForce
+        if response.stationMin != 0 { stationMin = response.stationMin }
+        if response.stationMax != 0 { stationMax = response.stationMax }
         aunMode = response.aunMode
         connected = response.connected
         requiresRealTime = response.requiresRealTime
