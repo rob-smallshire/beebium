@@ -2525,17 +2525,22 @@ public:
     }
 };
 
-// ListFloppyFormats subcommand - list supported floppy disc image formats
+// ListDiscFormats subcommand - list the disc image formats, floppy and hard disc
 template<typename MachineType>
-class ListFloppyFormatsSubcommand : public Subcommand<MachineType> {
+class ListDiscFormatsSubcommand : public Subcommand<MachineType> {
 public:
-    std::string_view name() const override { return "list-floppy-formats"; }
-    std::string_view description() const override { return "List supported floppy disc image formats"; }
+    std::string_view name() const override { return "list-disc-formats"; }
+    std::string_view description() const override {
+        return "List supported disc image formats, floppy and hard disc";
+    }
 
     void help(const char* program_name) const override {
-        std::cerr << "Usage: " << program_name << " list-floppy-formats\n"
+        std::cerr << "Usage: " << program_name << " list-disc-formats\n"
                   << "\n"
-                  << "Lists all floppy disc image formats that can be loaded.\n";
+                  << "Lists every disc image format that can be loaded: the floppy formats,\n"
+                  << "then the hard-disc formats. Each has a name, a kind (floppy or\n"
+                  << "hard-disc), a description, the file extensions it is named by, and\n"
+                  << "whether it can be written.\n";
     }
 
     int invoke(int argc, char* argv[], const GlobalConfig& global) const override {
@@ -2555,52 +2560,72 @@ public:
             return ExitCode::USAGE;
         }
 
-        OutputFormat format = resolve_output_format(global.output_format);
-        const auto& registry = default_format_registry();
+        // Every format, floppy then hard disc, as one list.
+        struct Format {
+            std::string name;
+            std::string kind;
+            std::string description;
+            std::vector<std::string> extensions;
+            bool write_support;
+        };
+        std::vector<Format> formats;
+        for (const auto& handler : default_format_registry().handlers()) {
+            Format f{std::string(handler->format_name()), "floppy",
+                     std::string(handler->format_description()), {},
+                     handler->supports_write()};
+            for (auto ext : handler->file_extensions()) f.extensions.emplace_back(ext);
+            formats.push_back(std::move(f));
+        }
+        for (const auto& hd : kHardDiscImageFormats) {
+            formats.push_back({std::string(hd.name), "hard-disc", std::string(hd.description),
+                               {std::string(hd.extension)}, hd.write_support});
+        }
 
-        switch (format) {
-            case OutputFormat::Pretty:
-                std::cout << "Supported floppy disc image formats:\n";
-                for (const auto& handler : registry.handlers()) {
-                    std::cout << "  " << handler->format_name() << "\n"
-                              << "      " << handler->format_description() << "\n"
-                              << "      Extensions:";
-                    for (auto ext : handler->file_extensions()) {
-                        std::cout << " " << ext;
+        auto joined = [](const std::vector<std::string>& items, std::string_view separator) {
+            std::string out;
+            for (const auto& item : items) {
+                if (!out.empty()) out += separator;
+                out += item;
+            }
+            return out;
+        };
+
+        switch (resolve_output_format(global.output_format)) {
+            case OutputFormat::Pretty: {
+                std::string kind;
+                for (const auto& f : formats) {
+                    if (f.kind != kind) {
+                        kind = f.kind;
+                        std::cout << (kind == "floppy" ? "Floppy disc image formats:\n"
+                                                       : "Hard disc image formats:\n");
                     }
-                    std::cout << "\n";
-                    std::cout << "      Write support: " << (handler->supports_write() ? "yes" : "no") << "\n";
+                    std::cout << "  " << f.name << "\n"
+                              << "      " << f.description << "\n"
+                              << "      Extensions: " << joined(f.extensions, " ") << "\n"
+                              << "      Write support: " << (f.write_support ? "yes" : "no")
+                              << "\n";
                 }
                 break;
+            }
 
             case OutputFormat::Tsv:
-                std::cout << "name\tdescription\textensions\twrite_support\n";
-                for (const auto& handler : registry.handlers()) {
-                    std::cout << handler->format_name() << "\t"
-                              << handler->format_description() << "\t";
-                    bool first = true;
-                    for (auto ext : handler->file_extensions()) {
-                        if (!first) std::cout << ",";
-                        std::cout << ext;
-                        first = false;
-                    }
-                    std::cout << "\t" << (handler->supports_write() ? "yes" : "no") << "\n";
+                std::cout << "name\tkind\tdescription\textensions\twrite_support\n";
+                for (const auto& f : formats) {
+                    std::cout << f.name << "\t" << f.kind << "\t" << f.description << "\t"
+                              << joined(f.extensions, ",") << "\t"
+                              << (f.write_support ? "yes" : "no") << "\n";
                 }
                 break;
 
             case OutputFormat::Jsonl:
-                for (const auto& handler : registry.handlers()) {
-                    std::cout << "{\"name\":\"" << handler->format_name()
-                              << "\",\"description\":\"" << handler->format_description()
-                              << "\",\"extensions\":[";
-                    bool first = true;
-                    for (auto ext : handler->file_extensions()) {
-                        if (!first) std::cout << ",";
-                        std::cout << "\"" << ext << "\"";
-                        first = false;
-                    }
-                    std::cout << "],\"write_support\":" << (handler->supports_write() ? "true" : "false")
-                              << "}\n";
+                for (const auto& f : formats) {
+                    std::cout << nlohmann::ordered_json{{"name", f.name},
+                                                        {"kind", f.kind},
+                                                        {"description", f.description},
+                                                        {"extensions", f.extensions},
+                                                        {"write_support", f.write_support}}
+                                     .dump()
+                              << "\n";
                 }
                 break;
 
@@ -3355,7 +3380,7 @@ public:
                   << "\n"
                   << "The extensions section's catalogue describes each extension this\n"
                   << "model can take as describe-extension --json does; list-fdcs and\n"
-                  << "list-floppy-formats give the controller and image catalogues.\n"
+                  << "list-disc-formats give the controller and image catalogues.\n"
                   << "resolve-preset shows what a given preset resolves to.\n"
                   << "\n"
                   << "Output is always JSON regardless of --format option.\n";
@@ -5850,7 +5875,7 @@ const std::vector<std::unique_ptr<Subcommand<MachineType>>>& get_subcommands() {
         std::vector<std::unique_ptr<Subcommand<MachineType>>> v;
         v.push_back(std::make_unique<StartSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListFdcsSubcommand<MachineType>>());
-        v.push_back(std::make_unique<ListFloppyFormatsSubcommand<MachineType>>());
+        v.push_back(std::make_unique<ListDiscFormatsSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListExtensionsSubcommand<MachineType>>());
         v.push_back(std::make_unique<DescribeExtensionSubcommand<MachineType>>());
         v.push_back(std::make_unique<ListAttachmentPointsSubcommand<MachineType>>());

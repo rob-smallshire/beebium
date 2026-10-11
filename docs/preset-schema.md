@@ -181,7 +181,7 @@ The MOS ROM, a name or path as for `--mos`. Default: the model's MOS
 | `fdc_socket.id` | string | The disc controller in the socket: an id from `list-fdcs` (today `acorn-1770`), or `none` for an empty socket. Only models with a disc controller socket; a model with a built-in controller (the B+ family) ignores it with a warning. Default: empty socket |
 | `floppy_drives[]` | array | `{ "drive": 0 or 1, "image_uri": path, URI or null }`. `null` leaves the drive empty. Default: both empty |
 
-Accepted image types are those `list-floppy-formats` lists.
+Accepted image types are the floppy formats `list-disc-formats` lists.
 
 ## Sideways ROM/RAM bank
 
@@ -500,7 +500,7 @@ one is called and does, in a sentence a user understands, and what it takes.
 A bundled parameter's `default` is a bare name, so the image it names, and its
 `display_name`, are in `bundled_images` (a coprocessor's `rom` defaults to the
 ROM it ships). The controller and image-format catalogues come from
-`list-fdcs` and `list-floppy-formats`.
+`list-fdcs` and `list-disc-formats`.
 
 ## Not in a preset
 

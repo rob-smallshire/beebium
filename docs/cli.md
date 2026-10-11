@@ -478,6 +478,31 @@ none	No controller	-	Leave socket empty (no disc)
 {"id":"none","display_name":"No controller","fdc_chip":"-","description":"Leave socket empty (no disc)"}
 ```
 
+### list-disc-formats
+
+List the disc image formats the server loads: the floppy formats, then the hard-disc formats. Each has a `name`, a `kind` (`floppy` or `hard-disc`), a `description`, the file `extensions` it is named by, and whether it can be written. A front-end's file pickers take their accepted types from here: a floppy drive's from the `floppy` formats, a hard disc's from the `hard-disc` ones.
+
+```bash
+beebium-model-b list-disc-formats
+```
+
+**`--format tsv`** (default for non-TTY):
+```
+name	kind	description	extensions	write_support
+SSD/DSD (DFS)	floppy	Acorn Disc Filing System sector image	.ssd,.dsd	yes
+ADFS (ADF/ADL/ADM/ADS)	floppy	Advanced Disc Filing System sector image	.adf,.adl,.adm,.ads	yes
+HFE (HxC Floppy Emulator)	floppy	HxC Floppy Emulator flux-level disc image	.hfe	yes
+Acorn SCSI	hard-disc	Acorn SCSI hard disc image: the sectors in a .dat file, with the drive's geometry in a .dsc file beside it	.dat	yes
+```
+
+**`--format jsonl`**:
+```
+{"name":"SSD/DSD (DFS)","kind":"floppy","description":"Acorn Disc Filing System sector image","extensions":[".ssd",".dsd"],"write_support":true}
+{"name":"Acorn SCSI","kind":"hard-disc","description":"Acorn SCSI hard disc image: the sectors in a .dat file, with the drive's geometry in a .dsc file beside it","extensions":[".dat"],"write_support":true}
+```
+
+A hard disc is a pair of files; `extensions` names the one a user picks (`.dat`), and the `.dsc` beside it goes with it.
+
 ### list-extensions
 
 List every peripheral or transport extension that the server can recognise via a `--<cli-name>` flag, in the same priority order that `start` would resolve. See [Extension Search Paths](peripheral-extension-framework.md#extension-search-paths) in the extension framework doc for the full ordering rules.

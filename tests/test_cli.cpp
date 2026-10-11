@@ -19,6 +19,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
 #include "test_temp_paths.hpp"
@@ -331,10 +332,10 @@ TEST_CASE("dispatch_subcommand: list-fdcs returns OK", "[cli][dispatch_subcomman
     REQUIRE(result == ExitCode::OK);
 }
 
-TEST_CASE("dispatch_subcommand: list-floppy-formats returns OK", "[cli][dispatch_subcommand][list-floppy-formats]") {
-    ArgvHelper args{"beebium", "list-floppy-formats"};
+TEST_CASE("dispatch_subcommand: list-disc-formats returns OK", "[cli][dispatch_subcommand][list-disc-formats]") {
+    ArgvHelper args{"beebium", "list-disc-formats"};
     GlobalConfig global;
-    global.subcommand_name = "list-floppy-formats";
+    global.subcommand_name = "list-disc-formats";
     global.subcommand_argv_start = 2;
 
     auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
@@ -342,10 +343,10 @@ TEST_CASE("dispatch_subcommand: list-floppy-formats returns OK", "[cli][dispatch
     REQUIRE(result == ExitCode::OK);
 }
 
-TEST_CASE("dispatch_subcommand: list-floppy-formats --help returns OK", "[cli][dispatch_subcommand][list-floppy-formats]") {
-    ArgvHelper args{"beebium", "list-floppy-formats", "--help"};
+TEST_CASE("dispatch_subcommand: list-disc-formats --help returns OK", "[cli][dispatch_subcommand][list-disc-formats]") {
+    ArgvHelper args{"beebium", "list-disc-formats", "--help"};
     GlobalConfig global;
-    global.subcommand_name = "list-floppy-formats";
+    global.subcommand_name = "list-disc-formats";
     global.subcommand_argv_start = 2;
 
     auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
@@ -353,10 +354,10 @@ TEST_CASE("dispatch_subcommand: list-floppy-formats --help returns OK", "[cli][d
     REQUIRE(result == ExitCode::OK);
 }
 
-TEST_CASE("dispatch_subcommand: list-floppy-formats with unknown arg returns USAGE", "[cli][dispatch_subcommand][list-floppy-formats]") {
-    ArgvHelper args{"beebium", "list-floppy-formats", "--bogus"};
+TEST_CASE("dispatch_subcommand: list-disc-formats with unknown arg returns USAGE", "[cli][dispatch_subcommand][list-disc-formats]") {
+    ArgvHelper args{"beebium", "list-disc-formats", "--bogus"};
     GlobalConfig global;
-    global.subcommand_name = "list-floppy-formats";
+    global.subcommand_name = "list-disc-formats";
     global.subcommand_argv_start = 2;
 
     auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
@@ -364,10 +365,10 @@ TEST_CASE("dispatch_subcommand: list-floppy-formats with unknown arg returns USA
     REQUIRE(result == ExitCode::USAGE);
 }
 
-TEST_CASE("dispatch_subcommand: list-floppy-formats output contains all registered formats", "[cli][dispatch_subcommand][list-floppy-formats]") {
-    ArgvHelper args{"beebium", "--format", "tsv", "list-floppy-formats"};
+TEST_CASE("dispatch_subcommand: list-disc-formats output contains all registered formats", "[cli][dispatch_subcommand][list-disc-formats]") {
+    ArgvHelper args{"beebium", "--format", "tsv", "list-disc-formats"};
     GlobalConfig global;
-    global.subcommand_name = "list-floppy-formats";
+    global.subcommand_name = "list-disc-formats";
     global.subcommand_argv_start = 4;
     global.output_format = OutputFormat::Tsv;
 
@@ -383,7 +384,7 @@ TEST_CASE("dispatch_subcommand: list-floppy-formats output contains all register
 
     std::string output = capture.str();
     // Header row
-    CHECK(output.find("name\t") != std::string::npos);
+    CHECK(output.find("name\tkind\tdescription\textensions\twrite_support\n") == 0);
     // All three registered format handlers should appear
     CHECK(output.find("SSD/DSD") != std::string::npos);
     CHECK(output.find("ADFS") != std::string::npos);
@@ -392,16 +393,57 @@ TEST_CASE("dispatch_subcommand: list-floppy-formats output contains all register
     CHECK(output.find(".ssd") != std::string::npos);
     CHECK(output.find(".adl") != std::string::npos);
     CHECK(output.find(".hfe") != std::string::npos);
+    // Each floppy format is of its kind
+    CHECK(output.find("SSD/DSD (DFS)\tfloppy\t") != std::string::npos);
 }
 
-TEST_CASE("parse_global_arguments: list-floppy-formats subcommand", "[cli][parse_global_arguments]") {
-    ArgvHelper args{"beebium", "list-floppy-formats"};
+TEST_CASE("dispatch_subcommand: list-disc-formats gives the hard-disc format beside the floppy ones",
+          "[cli][dispatch_subcommand][list-disc-formats]") {
+    ArgvHelper args{"beebium", "--format", "jsonl", "list-disc-formats"};
+    GlobalConfig global;
+    global.subcommand_name = "list-disc-formats";
+    global.subcommand_argv_start = 4;
+    global.output_format = OutputFormat::Jsonl;
+
+    std::ostringstream capture;
+    auto* old_buf = std::cout.rdbuf(capture.rdbuf());
+    auto result = dispatch_subcommand<MachineType>(args.argc(), args.data(), global);
+    std::cout.rdbuf(old_buf);
+    REQUIRE(result == ExitCode::OK);
+
+    std::vector<nlohmann::json> formats;
+    std::istringstream lines(capture.str());
+    for (std::string line; std::getline(lines, line);) {
+        formats.push_back(nlohmann::json::parse(line));
+    }
+    std::map<std::string, std::vector<std::string>> names_by_kind;
+    for (const auto& f : formats) {
+        CHECK_FALSE(f.at("description").get<std::string>().empty());
+        CHECK_FALSE(f.at("extensions").empty());
+        CHECK(f.at("write_support").is_boolean());
+        names_by_kind[f.at("kind").get<std::string>()].push_back(f.at("name").get<std::string>());
+    }
+    CHECK(names_by_kind.size() == 2);
+    CHECK(names_by_kind.at("floppy").size() >= 3);
+
+    const nlohmann::json* hard_disc = nullptr;
+    for (const auto& f : formats) {
+        if (f.at("kind") == "hard-disc") hard_disc = &f;
+    }
+    REQUIRE(hard_disc != nullptr);
+    CHECK(hard_disc->at("extensions") == nlohmann::json::array({".dat"}));
+    CHECK(hard_disc->at("write_support") == true);
+    CHECK(hard_disc->at("description").get<std::string>().find(".dsc") != std::string::npos);
+}
+
+TEST_CASE("parse_global_arguments: list-disc-formats subcommand", "[cli][parse_global_arguments]") {
+    ArgvHelper args{"beebium", "list-disc-formats"};
     GlobalConfig global;
 
     auto result = parse_global_arguments(args.argc(), args.data(), global);
 
     REQUIRE_FALSE(result.has_value());
-    REQUIRE(global.subcommand_name == "list-floppy-formats");
+    REQUIRE(global.subcommand_name == "list-disc-formats");
 }
 
 TEST_CASE("dispatch_subcommand: resolve-preset without a preset returns USAGE", "[cli][dispatch_subcommand]") {

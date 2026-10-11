@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -68,6 +69,27 @@ namespace beebium::server {
 //     never touches user state or the master.
 //
 // The .dsc geometry sidecar sits beside the .dat and is copied with it.
+
+// A hard-disc image format: the pair of files an Acorn SCSI hard disc is kept
+// in. Floppy formats are DiscFormatRegistry's; this is their hard-disc
+// counterpart, which list-disc-formats lists beside them.
+struct HardDiscImageFormat {
+    std::string_view name;
+    std::string_view description;
+    std::string_view extension;          // the file a user names, e.g. ".dat"
+    std::string_view sidecar_extension;  // the file beside it, e.g. ".dsc"
+    bool write_support;
+};
+
+inline constexpr HardDiscImageFormat kAcornScsiHardDiscFormat{
+    "Acorn SCSI",
+    "Acorn SCSI hard disc image: the sectors in a .dat file, with the drive's "
+    "geometry in a .dsc file beside it",
+    ".dat", ".dsc", true};
+
+// Every hard-disc image format, in the order list-disc-formats gives them.
+inline constexpr std::array<HardDiscImageFormat, 1> kHardDiscImageFormats{
+    kAcornScsiHardDiscFormat};
 
 enum class DiscWorkMode {
     Persistent,  // per-user working copy, copy-if-absent, kept
@@ -143,9 +165,12 @@ public:
         }
         for (const auto& entry : std::filesystem::directory_iterator(master_dir, ec)) {
             const auto& path = entry.path();
-            if (path.extension() != ".dat" || !entry.is_regular_file(ec)) continue;
+            if (path.extension() != kAcornScsiHardDiscFormat.extension ||
+                !entry.is_regular_file(ec)) {
+                continue;
+            }
             auto dsc = path;
-            dsc.replace_extension(".dsc");
+            dsc.replace_extension(kAcornScsiHardDiscFormat.sidecar_extension);
             if (!std::filesystem::exists(dsc, ec)) continue;
             auto display_name = master_display_name(path);
             if (!display_name) continue;
@@ -242,7 +267,8 @@ public:
                 std::string(image));
         }
         std::filesystem::path dsc_name =
-            std::filesystem::path(dat_name).replace_extension(".dsc");
+            std::filesystem::path(dat_name).replace_extension(
+                kAcornScsiHardDiscFormat.sidecar_extension);
 
         const auto master_dat = master_dir / dat_name;
         const auto master_dsc = master_dir / dsc_name;
