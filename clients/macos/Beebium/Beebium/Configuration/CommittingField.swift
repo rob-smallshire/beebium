@@ -191,15 +191,25 @@ struct CommittingField<Value: Equatable>: View {
             applySharedFocus(newFocus)
         }
         .onChange(of: currentDisplay) { newDisplay in
-            if focusedField != fieldID {
+            // Refresh to the external value unless the user is mid-edit here --
+            // focused AND has typed an uncommitted change. Guarding on focus alone
+            // was racy: a field that gains focus just as the byte changes (Tab from
+            // the other view of the same byte) would see focusedField already point
+            // at itself and skip the refresh, keeping its pre-change text. Keying on
+            // an actual uncommitted edit is timing-independent.
+            let midEdit = focusedField == fieldID && model.isEdited
+            if !midEdit {
                 model.syncExternal(display: newDisplay, focused: false)
             }
         }
     }
 
-    /// The NSTextView became first responder (click or Tab): record the baseline
-    /// for "edited" and point the section's shared focus at this field.
+    /// The NSTextView became first responder (click or Tab): a field gaining focus
+    /// has no in-flight edit yet, so refresh it to the current value first (it may
+    /// have gained focus just as the byte changed under it), then record the
+    /// baseline for "edited" and point the section's shared focus at this field.
     private func focusGained() {
+        model.syncExternal(display: currentDisplay, focused: false)
         model.noteFocusGain()
         if focusedField != fieldID { focusedField = fieldID }
     }

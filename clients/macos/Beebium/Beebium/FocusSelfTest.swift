@@ -77,6 +77,13 @@ final class FocusSelfTest {
         // focused and stale) when another control changes the byte.
         await captureConfiguratorKeyboard(name: "cfg_kbd")
 
+        // The Tab-cycle regression: after editing the hex byte and tabbing round
+        // the two fields, the hex field must keep its new value, not revert to the
+        // pre-edit text. Pre-fix it reverted (the NSTextView's blur callback was a
+        // stale closure capturing the old value); this logs the hex text after
+        // three tabs so a regression is visible.
+        await captureKeyboardTabCycle(name: "cfg_kbd_tab")
+
         // The regression that keeps coming back (#153): a CommittingField shown
         // again (the New Machine dialog is a reused window) must show its caret on
         // EVERY presentation, not just the first. Present one in a popover three
@@ -240,6 +247,51 @@ final class FocusSelfTest {
         await captureFrames(popover, prefix: name, count: framesPerOpen)
         popover.performClose(nil)
         await sleep(0.4)
+    }
+
+    /// Drive the real Keyboard hex/decimal pair: focus the hex field, replace its
+    /// value with "8", then Tab three times (hex -> decimal -> hex -> decimal).
+    /// After the tabs the hex field must read "08" (the committed byte), not the
+    /// pre-edit "FF". Logs the hex text and photographs each step.
+    private func captureKeyboardTabCycle(name: String) async {
+        bringHostToFront()
+        let content = ConfiguratorKeyboardHarness(schema: Self.startupSchemaFixture())
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.styleMask = [.titled, .closable]
+        window.title = "Keyboard Tab Cycle"
+        window.setContentSize(NSSize(width: 400, height: 470))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        await sleep(0.6)
+        guard let root = window.contentView else { window.orderOut(nil); return }
+        let fields = Self.allTextViews(in: root)
+        guard fields.count >= 2 else {
+            NSLog("[SELFTEST] %@ FAIL: expected 2 fields, found %d", name, fields.count)
+            window.orderOut(nil); return
+        }
+        let hex = fields[0]
+        let dec = fields[1]
+        // Edit hex to "8" through the delegate (so the model sees the change).
+        window.makeFirstResponder(hex)
+        await sleep(0.2)
+        hex.setSelectedRange(NSRange(location: 0, length: (hex.string as NSString).length))
+        hex.insertText("8", replacementRange: hex.selectedRange())
+        await sleep(0.2)
+        NSLog("[SELFTEST] %@ after type8: hex='%@' dec='%@'", name, hex.string, dec.string)
+        capture(window: window, name: "\(name)_1_typed8")
+        for step in 1...3 {
+            window.selectNextKeyView(nil)   // Tab
+            await sleep(0.4)
+            NSLog("[SELFTEST] %@ after tab%d: hex='%@' dec='%@' (hexFR=%d decFR=%d)",
+                  name, step, hex.string, dec.string,
+                  window.firstResponder === hex ? 1 : 0, window.firstResponder === dec ? 1 : 0)
+            capture(window: window, name: "\(name)_tab\(step)")
+        }
+        let hexAfter = hex.string
+        NSLog("[SELFTEST] %@ hex after 3 tabs = '%@' (expect '08'); %@",
+              name, hexAfter, hexAfter == "08" ? "PASS" : "FAIL")
+        window.orderOut(nil)
+        await sleep(0.3)
     }
 
     // MARK: - Host window

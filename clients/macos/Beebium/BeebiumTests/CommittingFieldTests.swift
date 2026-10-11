@@ -206,6 +206,123 @@ final class CommittingFieldTests: XCTestCase {
         XCTAssertNil(ExtensionParameterForm.parseIntegerEntry("abc", parameter: parameter))
     }
 
+    // MARK: - Focus-cycle invariants (Tab between two fields over one byte)
+
+    /// Two fields (hex + decimal) over one byte, driven through the exact
+    /// focus/blur/commit sequence CommittingField's bridge produces. Used to lock
+    /// the invariants a Tab cycle must hold.
+    private struct ByteFieldPair {
+        var byte: Int
+        var hex: EditableFieldModel<Int>
+        var dec: EditableFieldModel<Int>
+
+        init(byte: Int) {
+            self.byte = byte
+            hex = EditableFieldModel(display: Self.hexFmt(byte))
+            dec = EditableFieldModel(display: Self.decFmt(byte))
+        }
+
+        static func hexFmt(_ b: Int) -> String { String(format: "%02X", b) }
+        static func decFmt(_ b: Int) -> String { String(b) }
+        static func hexParse(_ s: String) -> Int? {
+            guard let v = Int(s.trimmingCharacters(in: .whitespaces), radix: 16),
+                  (0...255).contains(v) else { return nil }
+            return v
+        }
+        static func decParse(_ s: String) -> Int? {
+            guard let v = Int(s.trimmingCharacters(in: .whitespaces)), (0...255).contains(v) else { return nil }
+            return v
+        }
+
+        mutating func focusHex() { hex.noteFocusGain() }
+        mutating func focusDec() { dec.noteFocusGain() }
+        mutating func typeHex(_ s: String) { hex.type(s) }
+        mutating func typeDec(_ s: String) { dec.type(s) }
+
+        mutating func blurHex() {
+            if hex.isEdited {
+                if let v = hex.commit(currentDisplay: Self.hexFmt(byte),
+                                      parse: Self.hexParse, format: Self.hexFmt) {
+                    byte = v
+                    dec.syncExternal(display: Self.decFmt(byte), focused: false)
+                }
+            } else {
+                hex.syncExternal(display: Self.hexFmt(byte), focused: false)
+            }
+        }
+        mutating func blurDec() {
+            if dec.isEdited {
+                if let v = dec.commit(currentDisplay: Self.decFmt(byte),
+                                      parse: Self.decParse, format: Self.decFmt) {
+                    byte = v
+                    hex.syncExternal(display: Self.hexFmt(byte), focused: false)
+                }
+            } else {
+                dec.syncExternal(display: Self.decFmt(byte), focused: false)
+            }
+        }
+    }
+
+    func testHexDecimalTabCyclePreservesEdit() {
+        // The user's exact sequence: edit hex to 8, then Tab round the pair.
+        var p = ByteFieldPair(byte: 255)
+        XCTAssertEqual(p.hex.text, "FF")
+        XCTAssertEqual(p.dec.text, "255")
+        p.focusHex(); p.typeHex("8")
+        p.blurHex(); p.focusDec()               // Tab 1
+        XCTAssertEqual(p.byte, 8)
+        XCTAssertEqual(p.hex.text, "08")
+        XCTAssertEqual(p.dec.text, "8")
+        p.blurDec(); p.focusHex()               // Tab 2
+        XCTAssertEqual(p.hex.text, "08")
+        XCTAssertEqual(p.dec.text, "8")
+        p.blurHex(); p.focusDec()               // Tab 3 -- the one that regressed to FF
+        XCTAssertEqual(p.hex.text, "08", "hex must stay 08, not revert to the pre-edit FF")
+        XCTAssertEqual(p.dec.text, "8")
+        XCTAssertEqual(p.byte, 8)
+        // The edit survives any number of further cycles.
+        for _ in 0..<6 { p.blurDec(); p.focusHex(); p.blurHex(); p.focusDec() }
+        XCTAssertEqual(p.byte, 8)
+        XCTAssertEqual(p.hex.text, "08")
+        XCTAssertEqual(p.dec.text, "8")
+    }
+
+    func testFocusMovementWithoutEditNeverChangesByte() {
+        // Tabbing round the pair without typing must not change the byte or either
+        // field's text (no spurious commit on focus movement).
+        var p = ByteFieldPair(byte: 0x73)
+        for _ in 0..<10 {
+            p.focusHex(); p.blurHex()
+            p.focusDec(); p.blurDec()
+            XCTAssertEqual(p.byte, 0x73)
+            XCTAssertEqual(p.hex.text, "73")
+            XCTAssertEqual(p.dec.text, "115")
+        }
+    }
+
+    func testEditThenFocusCyclesSurvive_singleField() {
+        // An independent field (e.g. Econet port/net/station): an edit commits on
+        // blur and survives repeated focus/blur with no further edit.
+        var model = EditableFieldModel<Int>(display: "32768")
+        var committed = 32768
+        let parse: (String) -> Int? = { Int($0.trimmingCharacters(in: .whitespaces)) }  // a port: wide range
+        func blur() {
+            if model.isEdited {
+                if let v = model.commit(currentDisplay: String(committed), parse: parse, format: { String($0) }) {
+                    committed = v
+                }
+            } else {
+                model.syncExternal(display: String(committed), focused: false)
+            }
+        }
+        model.noteFocusGain(); model.type("40000"); blur()
+        XCTAssertEqual(committed, 40000)
+        XCTAssertEqual(model.text, "40000")
+        for _ in 0..<8 { model.noteFocusGain(); blur() }
+        XCTAssertEqual(committed, 40000)
+        XCTAssertEqual(model.text, "40000")
+    }
+
     // MARK: - Fixtures
 
     private static func integerParameter(key: String, min: Int?, max: Int?) -> ExtensionParameter {

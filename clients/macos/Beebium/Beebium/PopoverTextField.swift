@@ -140,6 +140,20 @@ struct PopoverTextField: NSViewRepresentable {
         context.coordinator.parent = self
         Self.updateCountForTesting += 1
         guard let textView = nsView.documentView as? NSTextView else { return }
+        // Refresh the callbacks every update, not only at makeNSView. They capture
+        // the host view (CommittingField), whose `value` changes as the draft
+        // changes; a long-lived field left with the first render's closures would
+        // resign through a stale `currentDisplay` and restore the pre-edit text (the
+        // hex-reverts-to-FF after Tab bug). onSubmit/onCancel are called through the
+        // coordinator (already refreshed via parent), but the text view's own
+        // focus/blur hooks are not, so refresh them here.
+        if let line = textView as? SingleLineTextView {
+            line.onSubmit = onSubmit
+            line.onCancel = onCancel
+            line.onFocus = onFocus
+            line.onBlur = onBlur
+            line.placeholder = placeholder
+        }
         // Apply the model value until the user starts typing, so the initial value
         // lands even though the view already has focus; after that their text wins
         // so a parent re-render cannot clobber it or move the caret. A long-lived
