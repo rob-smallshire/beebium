@@ -51,20 +51,111 @@ class ListExtensionsResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     EXTENSIONS_FIELD_NUMBER: _builtins.int
+    ATTACHMENT_POINTS_FIELD_NUMBER: _builtins.int
     @_builtins.property
-    def extensions(self) -> _containers.RepeatedCompositeFieldContainer[Global___ExtensionInfo]: ...
+    def extensions(self) -> _containers.RepeatedCompositeFieldContainer[Global___ExtensionInfo]:
+        """in load order: providers first"""
+
+    @_builtins.property
+    def attachment_points(self) -> _containers.RepeatedCompositeFieldContainer[Global___AttachmentPointInfo]:
+        """The attachment points of this machine: its own connectors, then any an
+        extension provides (a SCSI bus from a host adapter), in the catalogue's
+        presentation order.
+        """
+
     def __init__(
         self,
         *,
         extensions: _abc.Iterable[Global___ExtensionInfo] | None = ...,
+        attachment_points: _abc.Iterable[Global___AttachmentPointInfo] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["extensions", b"extensions"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["attachment_points", b"attachment_points", "extensions", b"extensions"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
 Global___ListExtensionsResponse: _TypeAlias = ListExtensionsResponse  # noqa: Y015
+
+@_typing.final
+class AttachmentPointInfo(_message.Message):
+    """A place extensions plug in, as AttachmentPointCatalogue and
+    describe-preset-schema describe it.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    DISPLAY_NAME_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    MIN_OCCUPANCY_FIELD_NUMBER: _builtins.int
+    MAX_OCCUPANCY_FIELD_NUMBER: _builtins.int
+    PROVIDED_BY_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    """e.g. "tube"; what attaches_to names"""
+    display_name: _builtins.str
+    """e.g. "Coprocessor" """
+    description: _builtins.str
+    """one sentence a user understands"""
+    min_occupancy: _builtins.int
+    """fewest extensions that may attach"""
+    max_occupancy: _builtins.int
+    """most that may attach, per provider;"""
+    @_builtins.property
+    def provided_by(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """absent when unbounded
+        The ids of the extension instances that provide this point, in load
+        order; empty for one of the machine's own connectors.
+        """
+
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+        display_name: _builtins.str = ...,
+        description: _builtins.str = ...,
+        min_occupancy: _builtins.int = ...,
+        max_occupancy: _builtins.int | None = ...,
+        provided_by: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_max_occupancy", b"_max_occupancy", "max_occupancy", b"max_occupancy"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_max_occupancy", b"_max_occupancy", "description", b"description", "display_name", b"display_name", "id", b"id", "max_occupancy", b"max_occupancy", "min_occupancy", b"min_occupancy", "provided_by", b"provided_by"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__max_occupancy: _TypeAlias = _typing.Literal["max_occupancy"]  # noqa: Y015
+    _WhichOneofArgType__max_occupancy: _TypeAlias = _typing.Literal["_max_occupancy", b"_max_occupancy"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__max_occupancy) -> _WhichOneofReturnType__max_occupancy | None: ...
+
+Global___AttachmentPointInfo: _TypeAlias = AttachmentPointInfo  # noqa: Y015
+
+@_typing.final
+class Attachment(_message.Message):
+    """Where an extension is attached at one of the points it attaches_to."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    POINT_FIELD_NUMBER: _builtins.int
+    PROVIDER_ID_FIELD_NUMBER: _builtins.int
+    point: _builtins.str
+    """an AttachmentPointInfo id"""
+    provider_id: _builtins.str
+    """The id of the instance providing the point the extension is attached
+    to, chosen as the server chose it (by a provider_of parameter, else the
+    last provider loaded); empty when it is the machine's own connector.
+    """
+    def __init__(
+        self,
+        *,
+        point: _builtins.str = ...,
+        provider_id: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["point", b"point", "provider_id", b"provider_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___Attachment: _TypeAlias = Attachment  # noqa: Y015
 
 @_typing.final
 class ExtensionInfo(_message.Message):
@@ -100,12 +191,15 @@ class ExtensionInfo(_message.Message):
     DESCRIPTION_FIELD_NUMBER: _builtins.int
     HAS_UI_FIELD_NUMBER: _builtins.int
     STORAGE_DEVICES_FIELD_NUMBER: _builtins.int
+    DISPLAY_NAME_FIELD_NUMBER: _builtins.int
+    ATTACHMENTS_FIELD_NUMBER: _builtins.int
+    GROUPS_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """extension type (from manifest)"""
     id: _builtins.str
     """instance identity (UUID or user-provided)"""
     label: _builtins.str
-    """display name (falls back to id)"""
+    """this instance's name: its label, else"""
     description: _builtins.str
     """from manifest"""
     has_ui: _builtins.bool
@@ -114,8 +208,14 @@ class ExtensionInfo(_message.Message):
     worth opening an ExtensionUiService.SubscribeView stream to; ones
     without a UI would just return NOT_FOUND.
     """
+    display_name: _builtins.str
+    """the extension's name, from its manifest"""
     @_builtins.property
-    def attaches_to(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    def attaches_to(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """one composed from the manifest (e.g.
+        "Hard Disc (SCSI ID 0)"), else the id
+        """
+
     @_builtins.property
     def provides(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
     @_builtins.property
@@ -135,6 +235,16 @@ class ExtensionInfo(_message.Message):
         disc as two entries here.
         """
 
+    @_builtins.property
+    def attachments(self) -> _containers.RepeatedCompositeFieldContainer[Global___Attachment]:
+        """Where the extension is attached, one entry per attaches_to point, in
+        the same order.
+        """
+
+    @_builtins.property
+    def groups(self) -> _containers.RepeatedCompositeFieldContainer[Global___ParameterGroupInfo]:
+        """Parameters that are alternatives to one another, from the manifest."""
+
     def __init__(
         self,
         *,
@@ -148,10 +258,13 @@ class ExtensionInfo(_message.Message):
         description: _builtins.str = ...,
         has_ui: _builtins.bool = ...,
         storage_devices: _abc.Iterable[Global___StorageDevice] | None = ...,
+        display_name: _builtins.str = ...,
+        attachments: _abc.Iterable[Global___Attachment] | None = ...,
+        groups: _abc.Iterable[Global___ParameterGroupInfo] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["attaches_to", b"attaches_to", "config", b"config", "description", b"description", "has_ui", b"has_ui", "id", b"id", "label", b"label", "name", b"name", "parameters", b"parameters", "provides", b"provides", "storage_devices", b"storage_devices"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["attaches_to", b"attaches_to", "attachments", b"attachments", "config", b"config", "description", b"description", "display_name", b"display_name", "groups", b"groups", "has_ui", b"has_ui", "id", b"id", "label", b"label", "name", b"name", "parameters", b"parameters", "provides", b"provides", "storage_devices", b"storage_devices"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -258,6 +371,10 @@ Global___StorageDevice: _TypeAlias = StorageDevice  # noqa: Y015
 
 @_typing.final
 class ParameterSchemaInfo(_message.Message):
+    """One manifest parameter, with every property describe-extension --json
+    gives it.
+    """
+
     DESCRIPTOR: _descriptor.Descriptor
 
     KEY_FIELD_NUMBER: _builtins.int
@@ -266,6 +383,20 @@ class ParameterSchemaInfo(_message.Message):
     POSITION_FIELD_NUMBER: _builtins.int
     REQUIRED_FIELD_NUMBER: _builtins.int
     DEFAULT_VALUE_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    IS_LIST_FIELD_NUMBER: _builtins.int
+    DEFAULT_FROM_FIELD_NUMBER: _builtins.int
+    EFFECTIVE_DEFAULT_FIELD_NUMBER: _builtins.int
+    MIN_FIELD_NUMBER: _builtins.int
+    MAX_FIELD_NUMBER: _builtins.int
+    CHOICES_FIELD_NUMBER: _builtins.int
+    CHOICES_FROM_FIELD_NUMBER: _builtins.int
+    EXCLUDES_FIELD_NUMBER: _builtins.int
+    BUNDLED_FIELD_NUMBER: _builtins.int
+    UNIQUE_FIELD_NUMBER: _builtins.int
+    PROVIDER_OF_FIELD_NUMBER: _builtins.int
+    ITEM_FORMAT_FIELD_NUMBER: _builtins.int
+    FIELDS_FIELD_NUMBER: _builtins.int
     key: _builtins.str
     type: _builtins.str
     """"string", "integer", "boolean", "filepath" """
@@ -274,6 +405,52 @@ class ParameterSchemaInfo(_message.Message):
     """-1 = keyword-only"""
     required: _builtins.bool
     default_value: _builtins.str
+    label: _builtins.str
+    """short human-readable name, for a form"""
+    is_list: _builtins.bool
+    """the key may be given repeatedly"""
+    default_from: _builtins.str
+    """Non-empty: the default is worked out on the host the server runs on, by
+    the means this names (e.g. "aun-map-file").
+    """
+    effective_default: _builtins.str
+    """The value the extension uses when none is given, on this server's host:
+    default_value, or what default_from resolves to.
+    """
+    min: _builtins.int
+    """"integer" only: least value allowed"""
+    max: _builtins.int
+    """"integer" only: greatest value allowed"""
+    choices_from: _builtins.str
+    """Non-empty: a host enumeration a UI may offer values from (e.g.
+    "serial-ports"); the value stays free text.
+    """
+    bundled: _builtins.str
+    """Non-empty: a bare-name value refers to a bundled image of this kind
+    (e.g. "hard-disc").
+    """
+    unique: _builtins.bool
+    """must differ among siblings on one provider"""
+    provider_of: _builtins.str
+    """Non-empty: the value is the id of the instance providing this point
+    that the extension attaches to.
+    """
+    item_format: _builtins.str
+    """is_list with fields: an item's string form, {key} placeholders between
+    literal separators, e.g. "{net}.{station}@{host}@{port}".
+    """
+    @_builtins.property
+    def choices(self) -> _containers.RepeatedCompositeFieldContainer[Global___ParameterChoiceInfo]:
+        """non-empty: the only values allowed"""
+
+    @_builtins.property
+    def excludes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """keys that may not be given with this one"""
+
+    @_builtins.property
+    def fields(self) -> _containers.RepeatedCompositeFieldContainer[Global___ParameterFieldInfo]:
+        """is_list only: each item's parts"""
+
     def __init__(
         self,
         *,
@@ -283,11 +460,183 @@ class ParameterSchemaInfo(_message.Message):
         position: _builtins.int = ...,
         required: _builtins.bool = ...,
         default_value: _builtins.str = ...,
+        label: _builtins.str = ...,
+        is_list: _builtins.bool = ...,
+        default_from: _builtins.str = ...,
+        effective_default: _builtins.str = ...,
+        min: _builtins.int | None = ...,
+        max: _builtins.int | None = ...,
+        choices: _abc.Iterable[Global___ParameterChoiceInfo] | None = ...,
+        choices_from: _builtins.str = ...,
+        excludes: _abc.Iterable[_builtins.str] | None = ...,
+        bundled: _builtins.str = ...,
+        unique: _builtins.bool = ...,
+        provider_of: _builtins.str = ...,
+        item_format: _builtins.str = ...,
+        fields: _abc.Iterable[Global___ParameterFieldInfo] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "max", b"max", "min", b"min"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "bundled", b"bundled", "choices", b"choices", "choices_from", b"choices_from", "default_from", b"default_from", "default_value", b"default_value", "description", b"description", "effective_default", b"effective_default", "excludes", b"excludes", "fields", b"fields", "is_list", b"is_list", "item_format", b"item_format", "key", b"key", "label", b"label", "max", b"max", "min", b"min", "position", b"position", "provider_of", b"provider_of", "required", b"required", "type", b"type", "unique", b"unique"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__max: _TypeAlias = _typing.Literal["max"]  # noqa: Y015
+    _WhichOneofArgType__max: _TypeAlias = _typing.Literal["_max", b"_max"]  # noqa: Y015
+    _WhichOneofReturnType__min: _TypeAlias = _typing.Literal["min"]  # noqa: Y015
+    _WhichOneofArgType__min: _TypeAlias = _typing.Literal["_min", b"_min"]  # noqa: Y015
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__max) -> _WhichOneofReturnType__max | None: ...
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__min) -> _WhichOneofReturnType__min | None: ...
+
+Global___ParameterSchemaInfo: _TypeAlias = ParameterSchemaInfo  # noqa: Y015
+
+@_typing.final
+class ParameterChoiceInfo(_message.Message):
+    """One of the values a parameter or field allows."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    VALUE_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    value: _builtins.str
+    """as written in a preset or on the command line"""
+    label: _builtins.str
+    """human-readable"""
+    description: _builtins.str
+    """what choosing it means; may be empty"""
+    def __init__(
+        self,
+        *,
+        value: _builtins.str = ...,
+        label: _builtins.str = ...,
+        description: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["default_value", b"default_value", "description", b"description", "key", b"key", "position", b"position", "required", b"required", "type", b"type"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "label", b"label", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
-Global___ParameterSchemaInfo: _TypeAlias = ParameterSchemaInfo  # noqa: Y015
+Global___ParameterChoiceInfo: _TypeAlias = ParameterChoiceInfo  # noqa: Y015
+
+@_typing.final
+class ParameterFieldInfo(_message.Message):
+    """One part of the items of a list parameter (an AUN peer's net, station,
+    host and port). The members mean what a parameter's do.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    TYPE_FIELD_NUMBER: _builtins.int
+    REQUIRED_FIELD_NUMBER: _builtins.int
+    DEFAULT_VALUE_FIELD_NUMBER: _builtins.int
+    MIN_FIELD_NUMBER: _builtins.int
+    MAX_FIELD_NUMBER: _builtins.int
+    CHOICES_FIELD_NUMBER: _builtins.int
+    key: _builtins.str
+    label: _builtins.str
+    description: _builtins.str
+    type: _builtins.str
+    """"string", "integer" or "boolean" """
+    required: _builtins.bool
+    default_value: _builtins.str
+    min: _builtins.int
+    max: _builtins.int
+    @_builtins.property
+    def choices(self) -> _containers.RepeatedCompositeFieldContainer[Global___ParameterChoiceInfo]: ...
+    def __init__(
+        self,
+        *,
+        key: _builtins.str = ...,
+        label: _builtins.str = ...,
+        description: _builtins.str = ...,
+        type: _builtins.str = ...,
+        required: _builtins.bool = ...,
+        default_value: _builtins.str = ...,
+        min: _builtins.int | None = ...,
+        max: _builtins.int | None = ...,
+        choices: _abc.Iterable[Global___ParameterChoiceInfo] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "max", b"max", "min", b"min"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_max", b"_max", "_min", b"_min", "choices", b"choices", "default_value", b"default_value", "description", b"description", "key", b"key", "label", b"label", "max", b"max", "min", b"min", "required", b"required", "type", b"type"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__max: _TypeAlias = _typing.Literal["max"]  # noqa: Y015
+    _WhichOneofArgType__max: _TypeAlias = _typing.Literal["_max", b"_max"]  # noqa: Y015
+    _WhichOneofReturnType__min: _TypeAlias = _typing.Literal["min"]  # noqa: Y015
+    _WhichOneofArgType__min: _TypeAlias = _typing.Literal["_min", b"_min"]  # noqa: Y015
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__max) -> _WhichOneofReturnType__max | None: ...
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__min) -> _WhichOneofReturnType__min | None: ...
+
+Global___ParameterFieldInfo: _TypeAlias = ParameterFieldInfo  # noqa: Y015
+
+@_typing.final
+class ParameterGroupInfo(_message.Message):
+    """Parameters that are alternatives to one another (e.g. the ways of setting
+    a clock's start time).
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: _builtins.int
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    PARAMETERS_FIELD_NUMBER: _builtins.int
+    NONE_FIELD_NUMBER: _builtins.int
+    key: _builtins.str
+    label: _builtins.str
+    description: _builtins.str
+    @_builtins.property
+    def parameters(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """member parameter keys, in display order"""
+
+    @_builtins.property
+    def none(self) -> Global___ParameterGroupNoneInfo:
+        """How a UI names the state where none of the members is given; absent
+        when that state is not named.
+        """
+
+    def __init__(
+        self,
+        *,
+        key: _builtins.str = ...,
+        label: _builtins.str = ...,
+        description: _builtins.str = ...,
+        parameters: _abc.Iterable[_builtins.str] | None = ...,
+        none: Global___ParameterGroupNoneInfo | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["none", b"none"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "key", b"key", "label", b"label", "none", b"none", "parameters", b"parameters"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ParameterGroupInfo: _TypeAlias = ParameterGroupInfo  # noqa: Y015
+
+@_typing.final
+class ParameterGroupNoneInfo(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    LABEL_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    label: _builtins.str
+    description: _builtins.str
+    def __init__(
+        self,
+        *,
+        label: _builtins.str = ...,
+        description: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "label", b"label"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ParameterGroupNoneInfo: _TypeAlias = ParameterGroupNoneInfo  # noqa: Y015

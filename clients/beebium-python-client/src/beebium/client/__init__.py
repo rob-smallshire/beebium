@@ -99,8 +99,13 @@ from beebium.client.extension_ui import (
     View,
 )
 from beebium.client.extensions import (
+    Attachment,
+    AttachmentPointInfo,
     ExtensionInfo,
     Extensions,
+    ParameterChoiceInfo,
+    ParameterFieldInfo,
+    ParameterGroupInfo,
     ParameterSchemaInfo,
     StorageDevice,
     StorageKind,
@@ -133,6 +138,8 @@ DEFAULT_GRPC_PORT = 0xBEEB
 __all__ = [
     "AdlcStatus",
     "AdvertisementState",
+    "Attachment",
+    "AttachmentPointInfo",
     "AudioChunk",
     "AudioFormat",
     "AudioSource",
@@ -178,6 +185,9 @@ __all__ = [
     "NameTemplateReport",
     "MemoryAccessError",
     "NamePlaceholder",
+    "ParameterChoiceInfo",
+    "ParameterFieldInfo",
+    "ParameterGroupInfo",
     "ParameterSchemaInfo",
     "Provenance",
     "ServerNotFoundError",

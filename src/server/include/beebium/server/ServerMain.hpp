@@ -1830,6 +1830,15 @@ struct AssemblyOutcome {
     int exit_code = ExitCode::OK;
 };
 
+// The value an extension uses for a parameter when none is given, on this
+// host: the default, or, for a parameter naming a host-resolved default in
+// default_from, what that resolves to here. A default_from this server does
+// not know leaves the default.
+inline std::string effective_default(const beebium::ParameterSchema& p) {
+    if (p.default_from == "aun-map-file") return beebium::default_aun_map_filepath().string();
+    return p.default_value;
+}
+
 // Build the machine from `config`: ROMs, disc controller, Econet (with its
 // transport registry), disc images, output enablement, startup options,
 // extension registration + resolve_and_init, the server-supplied quiescer
@@ -2215,7 +2224,7 @@ public:
             // an ExtensionUi -- it reads from both registries so a single
             // SubscribeView call can target a peripheral or a transport.
             beebium::service::PeripheralExtensionServiceImpl peripheral_extension_service(
-                extension_registry);
+                extension_registry, effective_default);
             beebium::service::EconetTransportServiceImpl econet_transport_service(
                 transport_registry);
             beebium::service::ExtensionUiServiceImpl extension_ui_service(
@@ -2814,15 +2823,6 @@ inline nlohmann::ordered_json choices_json(const std::vector<beebium::ParameterC
 
 inline nlohmann::ordered_json bound_json(const std::optional<long long>& bound) {
     return bound ? nlohmann::ordered_json(*bound) : nlohmann::ordered_json(nullptr);
-}
-
-// The value an extension uses for a parameter when none is given, on this
-// host: the default, or, for a parameter naming a host-resolved default in
-// default_from, what that resolves to here. A default_from this server does
-// not know leaves the default.
-inline std::string effective_default(const beebium::ParameterSchema& p) {
-    if (p.default_from == "aun-map-file") return beebium::default_aun_map_filepath().string();
-    return p.default_value;
 }
 
 inline nlohmann::ordered_json parameter_schema_json(const beebium::ParameterSchema& p) {

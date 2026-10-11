@@ -42,6 +42,9 @@ class PeripheralExtensionServiceStub:
     """Service for discovering loaded peripheral extensions.
     This is a core service (always present), not an extension-provided service.
     Frontends use it to enumerate what extensions are loaded and what they provide.
+    Everything a frontend shows about them -- the names of the attachment points,
+    where each extension is attached, each parameter's label and choices -- comes
+    from here, so a frontend need not know any of it itself.
     """
 
     @_typing.overload
@@ -56,6 +59,9 @@ class PeripheralExtensionServiceAsyncStub(PeripheralExtensionServiceStub):
     """Service for discovering loaded peripheral extensions.
     This is a core service (always present), not an extension-provided service.
     Frontends use it to enumerate what extensions are loaded and what they provide.
+    Everything a frontend shows about them -- the names of the attachment points,
+    where each extension is attached, each parameter's label and choices -- comes
+    from here, so a frontend need not know any of it itself.
     """
 
     def __init__(self, channel: _aio.Channel) -> None: ...
@@ -66,6 +72,9 @@ class PeripheralExtensionServiceServicer(metaclass=_abc_1.ABCMeta):
     """Service for discovering loaded peripheral extensions.
     This is a core service (always present), not an extension-provided service.
     Frontends use it to enumerate what extensions are loaded and what they provide.
+    Everything a frontend shows about them -- the names of the attachment points,
+    where each extension is attached, each parameter's label and choices -- comes
+    from here, so a frontend need not know any of it itself.
     """
 
     @_abc_1.abstractmethod

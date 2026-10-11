@@ -118,6 +118,11 @@ public:
         return init_order_;
     }
 
+    // The machine's own extension points, as registered.
+    const std::set<std::string, std::less<>>& extension_points() const {
+        return extension_points_;
+    }
+
     // Query the number of registered extensions.
     size_t extension_count() const { return extensions_.size(); }
 

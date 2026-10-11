@@ -41,6 +41,9 @@ class PeripheralExtensionServiceStub(object):
     """Service for discovering loaded peripheral extensions.
     This is a core service (always present), not an extension-provided service.
     Frontends use it to enumerate what extensions are loaded and what they provide.
+    Everything a frontend shows about them -- the names of the attachment points,
+    where each extension is attached, each parameter's label and choices -- comes
+    from here, so a frontend need not know any of it itself.
     """
 
     def __init__(self, channel):
@@ -60,6 +63,9 @@ class PeripheralExtensionServiceServicer(object):
     """Service for discovering loaded peripheral extensions.
     This is a core service (always present), not an extension-provided service.
     Frontends use it to enumerate what extensions are loaded and what they provide.
+    Everything a frontend shows about them -- the names of the attachment points,
+    where each extension is attached, each parameter's label and choices -- comes
+    from here, so a frontend need not know any of it itself.
     """
 
     def ListExtensions(self, request, context):
@@ -89,6 +95,9 @@ class PeripheralExtensionService(object):
     """Service for discovering loaded peripheral extensions.
     This is a core service (always present), not an extension-provided service.
     Frontends use it to enumerate what extensions are loaded and what they provide.
+    Everything a frontend shows about them -- the names of the attachment points,
+    where each extension is attached, each parameter's label and choices -- comes
+    from here, so a frontend need not know any of it itself.
     """
 
     @staticmethod

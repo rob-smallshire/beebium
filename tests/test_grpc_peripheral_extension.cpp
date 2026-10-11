@@ -28,6 +28,11 @@
 #include "extension_ui.pb.h"
 #include <grpcpp/grpcpp.h>
 
+#include <map>
+#include <string>
+#include <string_view>
+#include <vector>
+
 namespace {
 
 // A no-op ExtensionUi just to make ui() non-null. ListExtensions only
@@ -337,6 +342,238 @@ TEST_CASE("PeripheralExtensionService ListExtensions empty when no extensions lo
     auto status = stub->ListExtensions(&grpc_ctx, request, &response);
     REQUIRE(status.ok());
     REQUIRE(response.extensions_size() == 0);
+
+    server.stop();
+    registry.shutdown();
+}
+
+namespace {
+
+// A peripheral described entirely by its manifest and config: what it
+// attaches to and provides, and its parameters. Used to assert that
+// ListExtensions carries what a frontend shows about extensions.
+class ManifestOnlyExtension : public beebium::PeripheralExtension {
+public:
+    ManifestOnlyExtension(beebium::ExtensionManifest m,
+                          std::map<std::string, std::string> config) {
+        for (const auto& p : m.attaches_to) attaches_.emplace_back(p);
+        for (const auto& p : m.provides) provides_.emplace_back(p);
+        set_manifest(std::move(m));
+        set_config(std::move(config));
+        for (const auto& s : attaches_) attaches_views_.push_back(s);
+        for (const auto& s : provides_) provides_views_.push_back(s);
+    }
+
+    std::span<const std::string_view> attaches_to() const override { return attaches_views_; }
+    std::span<const std::string_view> provides() const override { return provides_views_; }
+
+    void init(beebium::ExtensionContext&) override {}
+    void shutdown() override {}
+
+private:
+    std::vector<std::string> attaches_;
+    std::vector<std::string> provides_;
+    std::vector<std::string_view> attaches_views_;
+    std::vector<std::string_view> provides_views_;
+};
+
+beebium::ExtensionManifest adapter_manifest() {
+    beebium::ExtensionManifest m;
+    m.name = "test-adapter";
+    m.display_name = "Test Adapter";
+    m.attaches_to = {"1mhz-bus"};
+    m.provides = {"scsi"};
+    return m;
+}
+
+beebium::ExtensionManifest drive_manifest() {
+    beebium::ExtensionManifest m;
+    m.name = "test-drive";
+    m.display_name = "Test Drive";
+    m.attaches_to = {"scsi"};
+
+    beebium::ParameterSchema adapter("adapter", "string", "The adapter the drive is on.");
+    adapter.provider_of = "scsi";
+    m.parameters.push_back(adapter);
+
+    beebium::ParameterSchema target("target", "integer", "The drive's SCSI target ID.");
+    target.label = "Target ID";
+    target.min = 0;
+    target.max = 6;
+    target.unique = true;
+    m.parameters.push_back(target);
+
+    beebium::ParameterSchema speed("speed", "string", "How fast the drive answers.");
+    speed.choices = {{"slow", "Slow", "As the original drive."}, {"fast", "Fast"}};
+    m.parameters.push_back(speed);
+
+    beebium::ParameterSchema map("map", "string", "Where the drive's map is kept.");
+    map.default_from = "test-host-default";
+    m.parameters.push_back(map);
+
+    beebium::ParameterSchema peer("peer", "string", "Peers the drive knows.", -1, false, true);
+    peer.item_format = "{station}@{host}";
+    beebium::ParameterField station;
+    station.key = "station";
+    station.label = "Station";
+    station.type = "integer";
+    station.required = true;
+    station.min = 1;
+    station.max = 254;
+    beebium::ParameterField host;
+    host.key = "host";
+    host.label = "Host";
+    peer.fields = {station, host};
+    m.parameters.push_back(peer);
+
+    beebium::ParameterGroup group;
+    group.key = "start";
+    group.label = "Start";
+    group.description = "How the drive starts.";
+    group.parameters = {"speed", "map"};
+    group.none = beebium::ParameterGroupNone{"Unchanged", "The drive starts as it was."};
+    m.groups.push_back(group);
+    return m;
+}
+
+}  // namespace
+
+TEST_CASE("PeripheralExtensionService ListExtensions names the attachment points and "
+          "where each extension is attached",
+          "[grpc][extension][discovery]") {
+    beebium::ModelB machine;
+    machine.reset();
+
+    beebium::ExtensionRegistry registry;
+    registry.register_extension_point("1mhz-bus");
+    registry.register_extension_point("tube");
+    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
+        adapter_manifest(), std::map<std::string, std::string>{{"id", "bus-a"}}));
+    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
+        adapter_manifest(), std::map<std::string, std::string>{{"id", "bus-b"}}));
+    // One drive names its adapter; the other takes the last one loaded.
+    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
+        drive_manifest(),
+        std::map<std::string, std::string>{{"id", "named"}, {"adapter", "bus-a"}}));
+    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
+        drive_manifest(), std::map<std::string, std::string>{{"id", "unnamed"}}));
+
+    beebium::ExtensionContext ctx(&machine.state().memory.one_mhz_bus());
+    registry.resolve_and_init(ctx);
+
+    beebium::service::PeripheralExtensionServiceImpl peripheral_ext_service(
+        registry, [](const beebium::ParameterSchema& p) {
+            return p.default_from == "test-host-default" ? std::string("/host/map.json")
+                                                         : p.default_value;
+        });
+    std::vector<grpc::Service*> ext_services;
+    ext_services.push_back(&peripheral_ext_service);
+
+    beebium::service::Server<beebium::ModelB> server(machine, "127.0.0.1", 0);
+    server.start({}, {}, false, {}, nullptr, ext_services);
+
+    auto channel = grpc::CreateChannel(
+        "127.0.0.1:" + std::to_string(server.port()),
+        grpc::InsecureChannelCredentials());
+    auto stub = beebium::PeripheralExtensionService::NewStub(channel);
+
+    grpc::ClientContext grpc_ctx;
+    beebium::ListExtensionsRequest request;
+    beebium::ListExtensionsResponse response;
+    REQUIRE(stub->ListExtensions(&grpc_ctx, request, &response).ok());
+
+    SECTION("the points come in the catalogue's order, with its names") {
+        REQUIRE(response.attachment_points_size() == 3);
+        const auto& bus = response.attachment_points(0);
+        const auto& tube = response.attachment_points(1);
+        const auto& scsi = response.attachment_points(2);
+
+        CHECK(bus.id() == "1mhz-bus");
+        CHECK(bus.display_name() == "1 MHz Bus");
+        CHECK_FALSE(bus.has_max_occupancy());  // unbounded
+        CHECK(bus.provided_by_size() == 0);    // the machine's own
+
+        CHECK(tube.id() == "tube");
+        CHECK(tube.display_name() == "Coprocessor");
+        CHECK(tube.description() == "The Tube connector, which takes a second processor.");
+        CHECK(tube.min_occupancy() == 0);
+        REQUIRE(tube.has_max_occupancy());
+        CHECK(tube.max_occupancy() == 1);
+
+        CHECK(scsi.id() == "scsi");
+        CHECK(scsi.display_name() == "SCSI Bus");
+        REQUIRE(scsi.provided_by_size() == 2);
+        CHECK(scsi.provided_by(0) == "bus-a");
+        CHECK(scsi.provided_by(1) == "bus-b");
+    }
+
+    SECTION("each extension says where it is attached, as the server chose") {
+        std::map<std::string, const beebium::ExtensionInfo*> by_id;
+        for (const auto& info : response.extensions()) by_id[info.id()] = &info;
+
+        const auto& adapter = *by_id.at("bus-a");
+        CHECK(adapter.display_name() == "Test Adapter");
+        REQUIRE(adapter.attachments_size() == 1);
+        CHECK(adapter.attachments(0).point() == "1mhz-bus");
+        CHECK(adapter.attachments(0).provider_id().empty());
+
+        REQUIRE(by_id.at("named")->attachments_size() == 1);
+        CHECK(by_id.at("named")->attachments(0).point() == "scsi");
+        CHECK(by_id.at("named")->attachments(0).provider_id() == "bus-a");
+        REQUIRE(by_id.at("unnamed")->attachments_size() == 1);
+        CHECK(by_id.at("unnamed")->attachments(0).provider_id() == "bus-b");
+    }
+
+    SECTION("each parameter carries its full schema") {
+        const beebium::ExtensionInfo* drive = nullptr;
+        for (const auto& info : response.extensions()) {
+            if (info.id() == "named") drive = &info;
+        }
+        REQUIRE(drive != nullptr);
+        std::map<std::string, const beebium::ParameterSchemaInfo*> params;
+        for (const auto& p : drive->parameters()) params[p.key()] = &p;
+
+        CHECK(params.at("adapter")->provider_of() == "scsi");
+
+        const auto& target = *params.at("target");
+        CHECK(target.label() == "Target ID");
+        REQUIRE(target.has_min());
+        CHECK(target.min() == 0);
+        REQUIRE(target.has_max());
+        CHECK(target.max() == 6);
+        CHECK(target.unique());
+        CHECK_FALSE(params.at("speed")->has_min());
+
+        const auto& speed = *params.at("speed");
+        REQUIRE(speed.choices_size() == 2);
+        CHECK(speed.choices(0).value() == "slow");
+        CHECK(speed.choices(0).label() == "Slow");
+        CHECK(speed.choices(0).description() == "As the original drive.");
+
+        const auto& map = *params.at("map");
+        CHECK(map.default_value().empty());
+        CHECK(map.default_from() == "test-host-default");
+        CHECK(map.effective_default() == "/host/map.json");
+
+        const auto& peer = *params.at("peer");
+        CHECK(peer.is_list());
+        CHECK(peer.item_format() == "{station}@{host}");
+        REQUIRE(peer.fields_size() == 2);
+        CHECK(peer.fields(0).key() == "station");
+        CHECK(peer.fields(0).label() == "Station");
+        CHECK(peer.fields(0).type() == "integer");
+        CHECK(peer.fields(0).required());
+        CHECK(peer.fields(0).max() == 254);
+
+        REQUIRE(drive->groups_size() == 1);
+        const auto& group = drive->groups(0);
+        CHECK(group.key() == "start");
+        CHECK(group.label() == "Start");
+        REQUIRE(group.parameters_size() == 2);
+        CHECK(group.parameters(1) == "map");
+        REQUIRE(group.has_none());
+        CHECK(group.none().label() == "Unchanged");
+    }
 
     server.stop();
     registry.shutdown();

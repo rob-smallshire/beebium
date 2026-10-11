@@ -4,6 +4,9 @@ package beebium;
 // Service for discovering loaded peripheral extensions.
 // This is a core service (always present), not an extension-provided service.
 // Frontends use it to enumerate what extensions are loaded and what they provide.
+// Everything a frontend shows about them -- the names of the attachment points,
+// where each extension is attached, each parameter's label and choices -- comes
+// from here, so a frontend need not know any of it itself.
 service PeripheralExtensionService {
     // List all loaded and initialised extensions.
     rpc ListExtensions(ListExtensionsRequest) returns (ListExtensionsResponse);
@@ -12,13 +15,42 @@ service PeripheralExtensionService {
 message ListExtensionsRequest {}
 
 message ListExtensionsResponse {
-    repeated ExtensionInfo extensions = 1;
+    repeated ExtensionInfo extensions = 1;     // in load order: providers first
+    // The attachment points of this machine: its own connectors, then any an
+    // extension provides (a SCSI bus from a host adapter), in the catalogue's
+    // presentation order.
+    repeated AttachmentPointInfo attachment_points = 2;
+}
+
+// A place extensions plug in, as AttachmentPointCatalogue and
+// describe-preset-schema describe it.
+message AttachmentPointInfo {
+    string id = 1;                          // e.g. "tube"; what attaches_to names
+    string display_name = 2;                // e.g. "Coprocessor"
+    string description = 3;                 // one sentence a user understands
+    int32 min_occupancy = 4;                // fewest extensions that may attach
+    optional int32 max_occupancy = 5;       // most that may attach, per provider;
+                                            // absent when unbounded
+    // The ids of the extension instances that provide this point, in load
+    // order; empty for one of the machine's own connectors.
+    repeated string provided_by = 6;
+}
+
+// Where an extension is attached at one of the points it attaches_to.
+message Attachment {
+    string point = 1;                       // an AttachmentPointInfo id
+    // The id of the instance providing the point the extension is attached
+    // to, chosen as the server chose it (by a provider_of parameter, else the
+    // last provider loaded); empty when it is the machine's own connector.
+    string provider_id = 2;
 }
 
 message ExtensionInfo {
     string name = 1;                        // extension type (from manifest)
     string id = 2;                          // instance identity (UUID or user-provided)
-    string label = 3;                       // display name (falls back to id)
+    string label = 3;                       // this instance's name: its label, else
+                                            // one composed from the manifest (e.g.
+                                            // "Hard Disc (SCSI ID 0)"), else the id
     repeated string attaches_to = 4;
     repeated string provides = 5;
     map<string, string> config = 6;         // current instance configuration
@@ -35,6 +67,12 @@ message ExtensionInfo {
     // future Opus Challenger would expose its floppy drive and RAM
     // disc as two entries here.
     repeated StorageDevice storage_devices = 10;
+    string display_name = 11;               // the extension's name, from its manifest
+    // Where the extension is attached, one entry per attaches_to point, in
+    // the same order.
+    repeated Attachment attachments = 12;
+    // Parameters that are alternatives to one another, from the manifest.
+    repeated ParameterGroupInfo groups = 13;
 }
 
 // A storage device published by a peripheral extension. Surfaced in
@@ -91,6 +129,8 @@ message StorageDevice {
     string activity_indicator_name = 6;
 }
 
+// One manifest parameter, with every property describe-extension --json
+// gives it.
 message ParameterSchemaInfo {
     string key = 1;
     string type = 2;                        // "string", "integer", "boolean", "filepath"
@@ -98,4 +138,68 @@ message ParameterSchemaInfo {
     int32 position = 4;                     // -1 = keyword-only
     bool required = 5;
     string default_value = 6;
+    string label = 7;                       // short human-readable name, for a form
+    bool is_list = 8;                       // the key may be given repeatedly
+    // Non-empty: the default is worked out on the host the server runs on, by
+    // the means this names (e.g. "aun-map-file").
+    string default_from = 9;
+    // The value the extension uses when none is given, on this server's host:
+    // default_value, or what default_from resolves to.
+    string effective_default = 10;
+    optional int64 min = 11;                // "integer" only: least value allowed
+    optional int64 max = 12;                // "integer" only: greatest value allowed
+    repeated ParameterChoiceInfo choices = 13;  // non-empty: the only values allowed
+    // Non-empty: a host enumeration a UI may offer values from (e.g.
+    // "serial-ports"); the value stays free text.
+    string choices_from = 14;
+    repeated string excludes = 15;          // keys that may not be given with this one
+    // Non-empty: a bare-name value refers to a bundled image of this kind
+    // (e.g. "hard-disc").
+    string bundled = 16;
+    bool unique = 17;                       // must differ among siblings on one provider
+    // Non-empty: the value is the id of the instance providing this point
+    // that the extension attaches to.
+    string provider_of = 18;
+    // is_list with fields: an item's string form, {key} placeholders between
+    // literal separators, e.g. "{net}.{station}@{host}@{port}".
+    string item_format = 19;
+    repeated ParameterFieldInfo fields = 20;  // is_list only: each item's parts
+}
+
+// One of the values a parameter or field allows.
+message ParameterChoiceInfo {
+    string value = 1;                       // as written in a preset or on the command line
+    string label = 2;                       // human-readable
+    string description = 3;                 // what choosing it means; may be empty
+}
+
+// One part of the items of a list parameter (an AUN peer's net, station,
+// host and port). The members mean what a parameter's do.
+message ParameterFieldInfo {
+    string key = 1;
+    string label = 2;
+    string description = 3;
+    string type = 4;                        // "string", "integer" or "boolean"
+    bool required = 5;
+    string default_value = 6;
+    optional int64 min = 7;
+    optional int64 max = 8;
+    repeated ParameterChoiceInfo choices = 9;
+}
+
+// Parameters that are alternatives to one another (e.g. the ways of setting
+// a clock's start time).
+message ParameterGroupInfo {
+    string key = 1;
+    string label = 2;
+    string description = 3;
+    repeated string parameters = 4;         // member parameter keys, in display order
+    // How a UI names the state where none of the members is given; absent
+    // when that state is not named.
+    ParameterGroupNoneInfo none = 5;
+}
+
+message ParameterGroupNoneInfo {
+    string label = 1;
+    string description = 2;
 }

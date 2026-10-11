@@ -76,7 +76,7 @@ See [deployment.md](deployment.md) for ROM discovery and installation details.
 
 ## gRPC Services
 
-All core services are defined in `src/service/proto/`. The major services are documented below. Additional services (AudioService, DiscService, IndicatorService, SidewaysService, TubeService, SerialService, PeripheralExtensionService, CoprocessorDebuggerControl) are defined in their respective proto files; ExtensionUiService, which serves extensions' control panels, is in `src/core/extension-api/proto/extension_ui.proto`. Extension-provided APIs (e.g. `AunService`) are not gRPC services of their own: they are reached through [ExtensionRpc](#extensionrpc).
+All core services are defined in `src/service/proto/`. The major services are documented below. Additional services (AudioService, DiscService, IndicatorService, SidewaysService, TubeService, SerialService, CoprocessorDebuggerControl) are defined in their respective proto files; ExtensionUiService, which serves extensions' control panels, is in `src/core/extension-api/proto/extension_ui.proto`. Extension-provided APIs (e.g. `AunService`) are not gRPC services of their own: they are reached through [ExtensionRpc](#extensionrpc).
 
 ### VideoService
 
@@ -685,6 +685,43 @@ grpcurl -plaintext -import-path src/service/proto -proto econet_transport.proto 
     }
   ]
 }
+```
+
+### PeripheralExtensionService
+
+Lists the peripheral extensions the running server loaded, and the machine's
+attachment points. Everything a frontend shows about them comes from here -- the
+points' names, where each extension is attached, each parameter's label, choices
+and fields -- so a frontend needs no table of its own.
+
+**Proto file:** `src/service/proto/peripheral_extension.proto`
+
+| RPC | Behaviour |
+|-----|-----------|
+| `ListExtensions` | `extensions`: one `ExtensionInfo` per loaded instance, providers first. `attachment_points`: the machine's own connectors, then any an extension provides, in the catalogue's presentation order. |
+
+`ExtensionInfo` carries the instance's `name` (type), `id`, `label` (the
+instance's name), `display_name` (the manifest's), `description`, `has_ui`,
+`config`, `storage_devices`, `attaches_to` and `provides`, and:
+
+- `attachments`: one per `attaches_to` point, in that order, with the
+  `provider_id` of the instance the extension is attached to there -- as the
+  server chose it, by a `provider_of` parameter or else the last provider
+  loaded -- or empty for the machine's own connector.
+- `parameters`: each manifest parameter with every property
+  `describe-extension --json` gives it (`label`, `is_list`, `default_value`,
+  `default_from`, `effective_default`, `min`/`max`, `choices`, `choices_from`,
+  `excludes`, `bundled`, `unique`, `provider_of`, `item_format`, `fields`).
+- `groups`: the manifest's groups of alternative parameters.
+
+`AttachmentPointInfo` gives `id`, `display_name`, `description`,
+`min_occupancy`, `max_occupancy` (absent when unbounded) and `provided_by` (the
+providing instances' ids; empty for the machine's own), the same names and
+descriptions `list-attachment-points` and `describe-preset-schema` give.
+
+```bash
+grpcurl -plaintext -import-path src/service/proto -proto peripheral_extension.proto \
+  localhost:48875 beebium.PeripheralExtensionService/ListExtensions
 ```
 
 ### ExtensionRpc

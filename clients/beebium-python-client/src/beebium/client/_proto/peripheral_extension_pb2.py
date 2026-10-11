@@ -36,7 +36,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aperipheral_extension.proto\x12\x07\x62\x65\x65\x62ium\"\x17\n\x15ListExtensionsRequest\"D\n\x16ListExtensionsResponse\x12*\n\nextensions\x18\x01 \x03(\x0b\x32\x16.beebium.ExtensionInfo\"\xca\x02\n\rExtensionInfo\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\t\x12\r\n\x05label\x18\x03 \x01(\t\x12\x13\n\x0b\x61ttaches_to\x18\x04 \x03(\t\x12\x10\n\x08provides\x18\x05 \x03(\t\x12\x32\n\x06\x63onfig\x18\x06 \x03(\x0b\x32\".beebium.ExtensionInfo.ConfigEntry\x12\x30\n\nparameters\x18\x07 \x03(\x0b\x32\x1c.beebium.ParameterSchemaInfo\x12\x13\n\x0b\x64\x65scription\x18\x08 \x01(\t\x12\x0e\n\x06has_ui\x18\t \x01(\x08\x12/\n\x0fstorage_devices\x18\n \x03(\x0b\x32\x16.beebium.StorageDevice\x1a-\n\x0b\x43onfigEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xc1\x01\n\rStorageDevice\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12)\n\x04kind\x18\x03 \x01(\x0e\x32\x1b.beebium.StorageDevice.Kind\x12\x12\n\nmedia_type\x18\x04 \x01(\t\x12\x14\n\x0c\x62\x61\x63king_path\x18\x05 \x01(\t\x12\x1f\n\x17\x61\x63tivity_indicator_name\x18\x06 \x01(\t\" \n\x04Kind\x12\t\n\x05\x46IXED\x10\x00\x12\r\n\tREMOVABLE\x10\x01\"\x80\x01\n\x13ParameterSchemaInfo\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x10\n\x08position\x18\x04 \x01(\x05\x12\x10\n\x08required\x18\x05 \x01(\x08\x12\x15\n\rdefault_value\x18\x06 \x01(\t2o\n\x1aPeripheralExtensionService\x12Q\n\x0eListExtensions\x12\x1e.beebium.ListExtensionsRequest\x1a\x1f.beebium.ListExtensionsResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aperipheral_extension.proto\x12\x07\x62\x65\x65\x62ium\"\x17\n\x15ListExtensionsRequest\"}\n\x16ListExtensionsResponse\x12*\n\nextensions\x18\x01 \x03(\x0b\x32\x16.beebium.ExtensionInfo\x12\x37\n\x11\x61ttachment_points\x18\x02 \x03(\x0b\x32\x1c.beebium.AttachmentPointInfo\"\xa6\x01\n\x13\x41ttachmentPointInfo\x12\n\n\x02id\x18\x01 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x15\n\rmin_occupancy\x18\x04 \x01(\x05\x12\x1a\n\rmax_occupancy\x18\x05 \x01(\x05H\x00\x88\x01\x01\x12\x13\n\x0bprovided_by\x18\x06 \x03(\tB\x10\n\x0e_max_occupancy\"0\n\nAttachment\x12\r\n\x05point\x18\x01 \x01(\t\x12\x13\n\x0bprovider_id\x18\x02 \x01(\t\"\xb7\x03\n\rExtensionInfo\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\t\x12\r\n\x05label\x18\x03 \x01(\t\x12\x13\n\x0b\x61ttaches_to\x18\x04 \x03(\t\x12\x10\n\x08provides\x18\x05 \x03(\t\x12\x32\n\x06\x63onfig\x18\x06 \x03(\x0b\x32\".beebium.ExtensionInfo.ConfigEntry\x12\x30\n\nparameters\x18\x07 \x03(\x0b\x32\x1c.beebium.ParameterSchemaInfo\x12\x13\n\x0b\x64\x65scription\x18\x08 \x01(\t\x12\x0e\n\x06has_ui\x18\t \x01(\x08\x12/\n\x0fstorage_devices\x18\n \x03(\x0b\x32\x16.beebium.StorageDevice\x12\x14\n\x0c\x64isplay_name\x18\x0b \x01(\t\x12(\n\x0b\x61ttachments\x18\x0c \x03(\x0b\x32\x13.beebium.Attachment\x12+\n\x06groups\x18\r \x03(\x0b\x32\x1b.beebium.ParameterGroupInfo\x1a-\n\x0b\x43onfigEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xc1\x01\n\rStorageDevice\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12)\n\x04kind\x18\x03 \x01(\x0e\x32\x1b.beebium.StorageDevice.Kind\x12\x12\n\nmedia_type\x18\x04 \x01(\t\x12\x14\n\x0c\x62\x61\x63king_path\x18\x05 \x01(\t\x12\x1f\n\x17\x61\x63tivity_indicator_name\x18\x06 \x01(\t\" \n\x04Kind\x12\t\n\x05\x46IXED\x10\x00\x12\r\n\tREMOVABLE\x10\x01\"\xd4\x03\n\x13ParameterSchemaInfo\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x10\n\x08position\x18\x04 \x01(\x05\x12\x10\n\x08required\x18\x05 \x01(\x08\x12\x15\n\rdefault_value\x18\x06 \x01(\t\x12\r\n\x05label\x18\x07 \x01(\t\x12\x0f\n\x07is_list\x18\x08 \x01(\x08\x12\x14\n\x0c\x64\x65\x66\x61ult_from\x18\t \x01(\t\x12\x19\n\x11\x65\x66\x66\x65\x63tive_default\x18\n \x01(\t\x12\x10\n\x03min\x18\x0b \x01(\x03H\x00\x88\x01\x01\x12\x10\n\x03max\x18\x0c \x01(\x03H\x01\x88\x01\x01\x12-\n\x07\x63hoices\x18\r \x03(\x0b\x32\x1c.beebium.ParameterChoiceInfo\x12\x14\n\x0c\x63hoices_from\x18\x0e \x01(\t\x12\x10\n\x08\x65xcludes\x18\x0f \x03(\t\x12\x0f\n\x07\x62undled\x18\x10 \x01(\t\x12\x0e\n\x06unique\x18\x11 \x01(\x08\x12\x13\n\x0bprovider_of\x18\x12 \x01(\t\x12\x13\n\x0bitem_format\x18\x13 \x01(\t\x12+\n\x06\x66ields\x18\x14 \x03(\x0b\x32\x1b.beebium.ParameterFieldInfoB\x06\n\x04_minB\x06\n\x04_max\"H\n\x13ParameterChoiceInfo\x12\r\n\x05value\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\"\xdf\x01\n\x12ParameterFieldInfo\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0c\n\x04type\x18\x04 \x01(\t\x12\x10\n\x08required\x18\x05 \x01(\x08\x12\x15\n\rdefault_value\x18\x06 \x01(\t\x12\x10\n\x03min\x18\x07 \x01(\x03H\x00\x88\x01\x01\x12\x10\n\x03max\x18\x08 \x01(\x03H\x01\x88\x01\x01\x12-\n\x07\x63hoices\x18\t \x03(\x0b\x32\x1c.beebium.ParameterChoiceInfoB\x06\n\x04_minB\x06\n\x04_max\"\x88\x01\n\x12ParameterGroupInfo\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x12\n\nparameters\x18\x04 \x03(\t\x12-\n\x04none\x18\x05 \x01(\x0b\x32\x1f.beebium.ParameterGroupNoneInfo\"<\n\x16ParameterGroupNoneInfo\x12\r\n\x05label\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t2o\n\x1aPeripheralExtensionService\x12Q\n\x0eListExtensions\x12\x1e.beebium.ListExtensionsRequest\x1a\x1f.beebium.ListExtensionsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -48,17 +48,29 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_LISTEXTENSIONSREQUEST']._serialized_start=39
   _globals['_LISTEXTENSIONSREQUEST']._serialized_end=62
   _globals['_LISTEXTENSIONSRESPONSE']._serialized_start=64
-  _globals['_LISTEXTENSIONSRESPONSE']._serialized_end=132
-  _globals['_EXTENSIONINFO']._serialized_start=135
-  _globals['_EXTENSIONINFO']._serialized_end=465
-  _globals['_EXTENSIONINFO_CONFIGENTRY']._serialized_start=420
-  _globals['_EXTENSIONINFO_CONFIGENTRY']._serialized_end=465
-  _globals['_STORAGEDEVICE']._serialized_start=468
-  _globals['_STORAGEDEVICE']._serialized_end=661
-  _globals['_STORAGEDEVICE_KIND']._serialized_start=629
-  _globals['_STORAGEDEVICE_KIND']._serialized_end=661
-  _globals['_PARAMETERSCHEMAINFO']._serialized_start=664
-  _globals['_PARAMETERSCHEMAINFO']._serialized_end=792
-  _globals['_PERIPHERALEXTENSIONSERVICE']._serialized_start=794
-  _globals['_PERIPHERALEXTENSIONSERVICE']._serialized_end=905
+  _globals['_LISTEXTENSIONSRESPONSE']._serialized_end=189
+  _globals['_ATTACHMENTPOINTINFO']._serialized_start=192
+  _globals['_ATTACHMENTPOINTINFO']._serialized_end=358
+  _globals['_ATTACHMENT']._serialized_start=360
+  _globals['_ATTACHMENT']._serialized_end=408
+  _globals['_EXTENSIONINFO']._serialized_start=411
+  _globals['_EXTENSIONINFO']._serialized_end=850
+  _globals['_EXTENSIONINFO_CONFIGENTRY']._serialized_start=805
+  _globals['_EXTENSIONINFO_CONFIGENTRY']._serialized_end=850
+  _globals['_STORAGEDEVICE']._serialized_start=853
+  _globals['_STORAGEDEVICE']._serialized_end=1046
+  _globals['_STORAGEDEVICE_KIND']._serialized_start=1014
+  _globals['_STORAGEDEVICE_KIND']._serialized_end=1046
+  _globals['_PARAMETERSCHEMAINFO']._serialized_start=1049
+  _globals['_PARAMETERSCHEMAINFO']._serialized_end=1517
+  _globals['_PARAMETERCHOICEINFO']._serialized_start=1519
+  _globals['_PARAMETERCHOICEINFO']._serialized_end=1591
+  _globals['_PARAMETERFIELDINFO']._serialized_start=1594
+  _globals['_PARAMETERFIELDINFO']._serialized_end=1817
+  _globals['_PARAMETERGROUPINFO']._serialized_start=1820
+  _globals['_PARAMETERGROUPINFO']._serialized_end=1956
+  _globals['_PARAMETERGROUPNONEINFO']._serialized_start=1958
+  _globals['_PARAMETERGROUPNONEINFO']._serialized_end=2018
+  _globals['_PERIPHERALEXTENSIONSERVICE']._serialized_start=2020
+  _globals['_PERIPHERALEXTENSIONSERVICE']._serialized_end=2131
 # @@protoc_insertion_point(module_scope)

@@ -334,22 +334,32 @@ Extensions from presets are applied as baseline configuration; CLI flags can add
 
 ### gRPC Discovery
 
-The `PeripheralExtensionService.ListExtensions` RPC returns loaded extensions with their full configuration:
+The `PeripheralExtensionService.ListExtensions` RPC returns the loaded extensions with their full configuration, and the machine's attachment points:
 
 ```protobuf
+message ListExtensionsResponse {
+    repeated ExtensionInfo extensions = 1;              // providers first
+    repeated AttachmentPointInfo attachment_points = 2; // catalogue order
+}
+
 message ExtensionInfo {
     string name = 1;                        // extension type
     string id = 2;                          // instance identity
-    string label = 3;                       // display name
+    string label = 3;                       // this instance's name
     repeated string attaches_to = 4;
     repeated string provides = 5;
     map<string, string> config = 6;         // current configuration
-    repeated ParameterSchemaInfo parameters = 7;  // from manifest
+    repeated ParameterSchemaInfo parameters = 7;  // the manifest's full schema
     string description = 8;
+    bool has_ui = 9;
+    repeated StorageDevice storage_devices = 10;
+    string display_name = 11;               // the manifest's display name
+    repeated Attachment attachments = 12;   // point + provider_id, per attaches_to
+    repeated ParameterGroupInfo groups = 13;
 }
 ```
 
-GUI frontends can call `ListExtensions()` to discover loaded extensions, inspect their configuration, and present available parameters for editing.
+The server is the single source of truth for what a frontend shows: an `AttachmentPointInfo` gives a point's `display_name`, `description` and occupancy from the [catalogue](#attachment-points) (the `tube` point is shown as "Coprocessor"), with the ids of the instances providing it; an `Attachment` names the instance an extension is attached to, as `ExtensionContext` chose it (a `provider_of` parameter, else the last provider loaded), so a frontend nesting a hard disc under its SCSI adapter never repeats that rule; and a `ParameterSchemaInfo` has every property `describe-extension --json` gives, `effective_default` included. A frontend can build its peripheral sidebar from this response alone.
 
 ### Built-in vs Plugin
 
