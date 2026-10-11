@@ -25,6 +25,12 @@ import UniformTypeIdentifiers
 /// (the server owns the value and the client posts events), whereas this form
 /// binds directly to the draft the client owns. It reuses the generic
 /// primitives instead (plain fields, a file picker).
+///
+/// The control for each parameter kind is its own small view (ScalarParameterControl,
+/// FilepathParameterControl, MapFileParameterControl, StructuredListParameterView,
+/// StringListEditor, GroupControl). This form classifies a parameter with the pure
+/// `kind(of:)` and `control(_:)` is a switch that hands off to the matching view, so
+/// no one view carries every kind's rendering.
 struct ExtensionParameterForm: View {
     let manifest: ExtensionManifest
     /// The instance's current config.
@@ -155,89 +161,76 @@ struct ExtensionParameterForm: View {
         }
     }
 
+    // MARK: - Dispatch
+
+    /// The kinds of control a parameter maps to, in the precedence `kind(of:)`
+    /// applies. Pure, so the classification is testable apart from the views.
+    enum ParameterKind: Equatable {
+        case choice
+        case structuredList
+        case stringList
+        case mapFile
+        case boolean
+        case integer
+        case filepath
+        case serialPort
+        case string
+    }
+
+    /// Classify a parameter to the control it is drawn with. The order is the one
+    /// the form has always applied: an explicit choice list wins, then a
+    /// structured list, then a plain string list, then the host-resolved map
+    /// file, then the declared type (a serial-port string being distinguished
+    /// from a plain string by its `choices_from`).
+    static func kind(of parameter: ExtensionParameter) -> ParameterKind {
+        if !parameter.choices.isEmpty { return .choice }
+        if parameter.isStructuredList { return .structuredList }
+        if parameter.isList { return .stringList }
+        if parameter.defaultFrom == "aun-map-file" { return .mapFile }
+        switch parameter.type {
+        case "boolean": return .boolean
+        case "integer": return .integer
+        case "filepath": return .filepath
+        default:
+            return parameter.choicesFrom == "serial-ports" ? .serialPort : .string
+        }
+    }
+
     // Returns AnyView (type-erased): a @ViewBuilder returning this many distinct
     // concrete View types crashes the Release whole-module optimiser with no
     // diagnostic (see ExtensionViewRenderer). Type-erasure avoids it.
     private func control(_ parameter: ExtensionParameter) -> AnyView {
-        if !parameter.choices.isEmpty {
-            return AnyView(choicePicker(parameter))
-        }
-        if parameter.isStructuredList {
+        switch Self.kind(of: parameter) {
+        case .structuredList:
             return AnyView(StructuredListParameterView(
                 parameter: parameter,
-                items: arrayItems(parameter.key),
+                items: Self.arrayItems(parameter.key, in: config),
                 diagnostics: diagnostics,
                 setValue: setValue))
-        }
-        if parameter.isList {
+        case .stringList:
             return AnyView(StringListEditor(
-                values: listValue(parameter.key),
+                values: Self.listValue(parameter.key, in: config),
                 placeholder: parameter.defaultValue,
                 focusedField: focus,
                 idBase: parameter.key,
                 setValues: { setValue(parameter.key, $0.isEmpty ? nil : .array($0.map(JSONValue.string))) }))
-        }
-        if parameter.defaultFrom == "aun-map-file" {
-            return AnyView(mapFileControl(parameter))
-        }
-        switch parameter.type {
-        case "boolean":
-            return AnyView(Toggle("", isOn: Binding(
-                get: { boolValue(parameter.key) },
-                set: { focus.wrappedValue = nil; setValue(parameter.key, .bool($0)) }))
-                .labelsHidden())
-        case "integer":
-            return AnyView(integerField(parameter))
-        case "filepath":
-            return AnyView(filepathControl(parameter))
-        default: // "string"
-            if parameter.choicesFrom == "serial-ports" {
-                return AnyView(serialPortCombo(parameter))
-            }
-            return AnyView(VStack(alignment: .leading, spacing: 2) {
-                CommittingField(
-                    value: displayText(parameter),
-                    format: { $0 },
-                    parse: { $0 },
-                    width: 260,
-                    focusedField: focus, fieldID: parameter.key,
-                    onCommit: { text in
-                        setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
-                    })
-                defaultAffordance(parameter)
-            })
+        case .mapFile:
+            return AnyView(MapFileParameterControl(
+                parameter: parameter, config: config, setValue: setValue))
+        case .filepath:
+            return AnyView(FilepathParameterControl(
+                parameter: parameter, config: config, manifestName: manifest.name,
+                bundledImages: bundledImages, bundledKindNames: bundledKindNames,
+                setValue: setValue))
+        case .choice, .boolean, .integer, .serialPort, .string:
+            return AnyView(ScalarParameterControl(
+                parameter: parameter, config: config,
+                serialPortSuggestions: serialPortSuggestions,
+                focusedField: focus, setValue: setValue))
         }
     }
 
-    /// A free-text field with a menu of host serial ports to fill it in.
-    private func serialPortCombo(_ parameter: ExtensionParameter) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                CommittingField(
-                    value: displayText(parameter),
-                    format: { $0 },
-                    parse: { $0 },
-                    width: 220,
-                    focusedField: focus, fieldID: parameter.key,
-                    onCommit: { text in
-                        setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
-                    })
-                if !serialPortSuggestions.isEmpty {
-                    Menu {
-                        ForEach(serialPortSuggestions, id: \.self) { path in
-                            Button(path) { setValue(parameter.key, .string(path)) }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help("Choose a detected serial port")
-                }
-            }
-            defaultAffordance(parameter)
-        }
-    }
+    // MARK: - Exclusion (mutually-exclusive scalar pairs)
 
     /// Whether `parameter` is disabled because a parameter it excludes has a
     /// value (the mutually-exclusive pairs, e.g. time vs offset).
@@ -293,13 +286,158 @@ struct ExtensionParameterForm: View {
         group.parameters.filter { $0 != picked && valueIsPresent(config[$0]) }
     }
 
-    private func choicePicker(_ parameter: ExtensionParameter) -> some View {
-        let current = stringValue(parameter.key).isEmpty ? parameter.defaultValue : stringValue(parameter.key)
+    // MARK: - Integer entry (pure, testable)
+
+    /// Parse an integer field entry to its canonical string, clamped to the
+    /// parameter's bounds: "" for a blank (which clears the key, as before), nil
+    /// for a non-numeric entry (a marked revert), else the clamped number.
+    static func parseIntegerEntry(_ text: String, parameter: ExtensionParameter) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return "" }
+        guard var value = Int(trimmed) else { return nil }
+        if let lower = parameter.minimum { value = Swift.max(value, lower) }
+        if let upper = parameter.maximum { value = Swift.min(value, upper) }
+        return String(value)
+    }
+
+    // MARK: - Map file selection (pure, testable)
+
+    /// Which map file the draft selects: the shared per-user default (nothing
+    /// recorded), a specific file the user chose, or none. Pure, so the state
+    /// mapping is tested apart from the view.
+    enum MapFileChoice: Equatable {
+        case sharedDefault
+        case custom(String)
+        case none
+    }
+
+    static func mapFileChoice(recorded: String?) -> MapFileChoice {
+        guard let recorded = recorded, !recorded.isEmpty else { return .sharedDefault }
+        return recorded == "none" ? .none : .custom(recorded)
+    }
+
+    // MARK: - Bundled default (ROM) helpers (pure, testable)
+
+    /// The friendly name of a parameter's bundled default, or nil when it has
+    /// none. The default value names a bundled image (a coprocessor's client
+    /// ROM); resolve it to that image's display name, falling back to the raw
+    /// default when it is not among the offered masters.
+    static func defaultImageLabel(forParameter parameter: ExtensionParameter,
+                                  masters: [BundledImage]) -> String? {
+        guard !parameter.defaultValue.isEmpty else { return nil }
+        return masters.first(where: { $0.image == parameter.defaultValue })?.displayName
+            ?? parameter.defaultValue
+    }
+
+    /// The noun for a filepath parameter's affordance, taken from the parameter,
+    /// not the extension: a bundled-image parameter says its kind in the server's
+    /// words (e.g. "hard disc", "ROM"), a `choices_from: serial-ports` parameter
+    /// says "device", and a plain filepath says "file". The bundled-kind nouns
+    /// come from the schema (`kinds`: kind id -> display noun), so there is no
+    /// per-extension wording in the client.
+    static func fileNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
+        if !parameter.bundled.isEmpty { return bundledNoun(parameter, kinds: kinds) }
+        if parameter.choicesFrom == "serial-ports" { return "device" }
+        return "file"
+    }
+
+    static func bundledNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
+        kinds[parameter.bundled] ?? "image"
+    }
+
+    /// The bundled-section heading in the chooser menu, e.g. "Bundled hard discs".
+    static func bundledSectionTitle(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
+        "Bundled \(bundledNoun(parameter, kinds: kinds))s"
+    }
+
+    // MARK: - Value helpers (pure)
+
+    static func stringValue(_ key: String, in config: [String: JSONValue]) -> String {
+        if case .string(let s)? = config[key] { return s }
+        if case .int(let i)? = config[key] { return String(i) }
+        return ""
+    }
+
+    static func boolValue(_ key: String, in config: [String: JSONValue]) -> Bool {
+        if case .bool(let b)? = config[key] { return b }
+        return false
+    }
+
+    static func listValue(_ key: String, in config: [String: JSONValue]) -> [String] {
+        guard case .array(let items)? = config[key] else { return [] }
+        return items.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
+    }
+
+    /// The raw items of a list parameter (objects or legacy strings), for a
+    /// structured list.
+    static func arrayItems(_ key: String, in config: [String: JSONValue]) -> [JSONValue] {
+        if case .array(let items)? = config[key] { return items }
+        return []
+    }
+
+    /// The string a scalar field shows: the recorded value when the draft has
+    /// one, otherwise the default in force as a real value (not a greyed
+    /// placeholder), so a defaulted field does not read as disabled.
+    static func displayText(_ parameter: ExtensionParameter, in config: [String: JSONValue]) -> String {
+        config[parameter.key] != nil ? stringValue(parameter.key, in: config) : parameter.defaultInForce
+    }
+}
+
+// MARK: - Default affordance
+
+/// Below a scalar field: a quiet "Default" caption while the field shows the
+/// default in force (the draft records nothing), or a "Reset to default" link
+/// once a different value is recorded. Nothing when there is no default to
+/// fall back to.
+private struct DefaultAffordance: View {
+    let parameter: ExtensionParameter
+    let config: [String: JSONValue]
+    let setValue: (String, JSONValue?) -> Void
+
+    var body: some View {
+        if config[parameter.key] == nil {
+            if !parameter.defaultInForce.isEmpty {
+                Text("Default").font(.caption2).foregroundColor(.secondary)
+            }
+        } else {
+            Button("Reset to default") { setValue(parameter.key, nil) }
+                .buttonStyle(.link)
+                .font(.caption2)
+        }
+    }
+}
+
+// MARK: - Scalar controls (choice, boolean, integer, serial port, string)
+
+/// The control for a scalar parameter: a choice picker, a check box, an integer
+/// field, a serial-port combo or a plain string field, chosen by the form's
+/// `kind(of:)`. Each writes straight through to the draft and records a value
+/// only when it differs from the default (via the shared value helpers).
+private struct ScalarParameterControl: View {
+    let parameter: ExtensionParameter
+    let config: [String: JSONValue]
+    var serialPortSuggestions: [String] = []
+    @FocusState.Binding var focusedField: String?
+    let setValue: (String, JSONValue?) -> Void
+
+    var body: some View {
+        switch ExtensionParameterForm.kind(of: parameter) {
+        case .choice:     return AnyView(choicePicker)
+        case .boolean:    return AnyView(booleanToggle)
+        case .integer:    return AnyView(integerField)
+        case .serialPort: return AnyView(serialPortCombo)
+        default:          return AnyView(stringField)
+        }
+    }
+
+    private var choicePicker: some View {
+        let recorded = ExtensionParameterForm.stringValue(parameter.key, in: config)
+        let current = recorded.isEmpty ? parameter.defaultValue : recorded
         let selectedDescription = parameter.choices.first { $0.value == current }?.description ?? ""
         return VStack(alignment: .leading, spacing: 2) {
             Picker("", selection: Binding(
                 get: { current },
-                set: { focus.wrappedValue = nil; setValue(parameter.key, .string($0)) }
+                set: { focusedField = nil; setValue(parameter.key, .string($0)) }
             )) {
                 ForEach(parameter.choices) { choice in
                     Text(choice.label).tag(choice.value)
@@ -317,15 +455,22 @@ struct ExtensionParameterForm: View {
         }
     }
 
-    private func integerField(_ parameter: ExtensionParameter) -> some View {
+    private var booleanToggle: some View {
+        Toggle("", isOn: Binding(
+            get: { ExtensionParameterForm.boolValue(parameter.key, in: config) },
+            set: { focusedField = nil; setValue(parameter.key, .bool($0)) }))
+            .labelsHidden()
+    }
+
+    private var integerField: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 CommittingField(
-                    value: displayText(parameter),
+                    value: ExtensionParameterForm.displayText(parameter, in: config),
                     format: { $0 },
-                    parse: { Self.parseIntegerEntry($0, parameter: parameter) },
+                    parse: { ExtensionParameterForm.parseIntegerEntry($0, parameter: parameter) },
                     width: 120,
-                    focusedField: focus, fieldID: parameter.key,
+                    focusedField: $focusedField, fieldID: parameter.key,
                     onCommit: { text in
                         // Exact record: a blank or the default clears the key; a
                         // different number is recorded.
@@ -341,56 +486,81 @@ struct ExtensionParameterForm: View {
                         .foregroundColor(.secondary)
                 }
             }
-            defaultAffordance(parameter)
+            DefaultAffordance(parameter: parameter, config: config, setValue: setValue)
         }
     }
 
-    /// The string a scalar field shows: the recorded value when the draft has
-    /// one, otherwise the default in force as a real value (not a greyed
-    /// placeholder), so a defaulted field does not read as disabled.
-    private func displayText(_ parameter: ExtensionParameter) -> String {
-        config[parameter.key] != nil ? stringValue(parameter.key) : parameter.defaultInForce
-    }
-
-    /// Below a scalar field: a quiet "Default" caption while the field shows the
-    /// default in force (the draft records nothing), or a "Reset to default" link
-    /// once a different value is recorded. Nothing when there is no default to
-    /// fall back to.
-    @ViewBuilder
-    private func defaultAffordance(_ parameter: ExtensionParameter) -> some View {
-        if config[parameter.key] == nil {
-            if !parameter.defaultInForce.isEmpty {
-                Text("Default").font(.caption2).foregroundColor(.secondary)
+    /// A free-text field with a menu of host serial ports to fill it in.
+    private var serialPortCombo: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                CommittingField(
+                    value: ExtensionParameterForm.displayText(parameter, in: config),
+                    format: { $0 },
+                    parse: { $0 },
+                    width: 220,
+                    focusedField: $focusedField, fieldID: parameter.key,
+                    onCommit: { text in
+                        setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
+                    })
+                if !serialPortSuggestions.isEmpty {
+                    Menu {
+                        ForEach(serialPortSuggestions, id: \.self) { path in
+                            Button(path) { setValue(parameter.key, .string(path)) }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Choose a detected serial port")
+                }
             }
-        } else {
-            Button("Reset to default") { setValue(parameter.key, nil) }
-                .buttonStyle(.link)
-                .font(.caption2)
+            DefaultAffordance(parameter: parameter, config: config, setValue: setValue)
         }
     }
 
-    /// Parse an integer field entry to its canonical string, clamped to the
-    /// parameter's bounds: "" for a blank (which clears the key, as before), nil
-    /// for a non-numeric entry (a marked revert), else the clamped number.
-    static func parseIntegerEntry(_ text: String, parameter: ExtensionParameter) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return "" }
-        guard var value = Int(trimmed) else { return nil }
-        if let lower = parameter.minimum { value = Swift.max(value, lower) }
-        if let upper = parameter.maximum { value = Swift.min(value, upper) }
-        return String(value)
+    private var stringField: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            CommittingField(
+                value: ExtensionParameterForm.displayText(parameter, in: config),
+                format: { $0 },
+                parse: { $0 },
+                width: 260,
+                focusedField: $focusedField, fieldID: parameter.key,
+                onCommit: { text in
+                    setValue(parameter.key, text == parameter.defaultInForce ? nil : .string(text))
+                })
+            DefaultAffordance(parameter: parameter, config: config, setValue: setValue)
+        }
     }
+}
 
-    private func filepathControl(_ parameter: ExtensionParameter) -> some View {
-        let value = stringValue(parameter.key)
+// MARK: - Filepath control (plain file + bundled masters)
+
+/// The control for a filepath parameter: it shows the chosen file (or the
+/// bundled default by name when none is chosen and a default exists) and a menu
+/// of bundled masters, a file chooser, and the way back to the default. A
+/// parameter with a bundled default comes with a working choice already made, so
+/// an empty value means "use that default" (which resolve-preset fills in).
+private struct FilepathParameterControl: View {
+    let parameter: ExtensionParameter
+    let config: [String: JSONValue]
+    let manifestName: String
+    var bundledImages: [String: [BundledImage]] = [:]
+    var bundledKindNames: [String: String] = [:]
+    let setValue: (String, JSONValue?) -> Void
+
+    var body: some View {
+        let value = ExtensionParameterForm.stringValue(parameter.key, in: config)
         let masters = parameter.bundled.isEmpty ? [] : (bundledImages[parameter.bundled] ?? [])
-            .filter { $0.availableTo(extensionName: manifest.name) }
+            .filter { $0.availableTo(extensionName: manifestName) }
         // A parameter with a bundled default (a coprocessor's client ROM) comes
         // with a working choice already made. An empty value means "use that
         // default", which resolve-preset fills in -- so show the default by name
         // rather than "No file", and make picking something else the by-exception
         // path.
-        let defaultLabel = Self.defaultImageLabel(forParameter: parameter, masters: masters)
+        let defaultLabel = ExtensionParameterForm.defaultImageLabel(forParameter: parameter, masters: masters)
         let usingDefault = value.isEmpty && defaultLabel != nil
         // A bare name is a bundled master (per-machine working copy); a path is a file.
         let isBare = !value.isEmpty && !value.contains("/")
@@ -398,7 +568,7 @@ struct ExtensionParameterForm: View {
         if usingDefault {
             display = "Default: \(defaultLabel ?? "")"
         } else if value.isEmpty {
-            display = "No \(Self.fileNoun(parameter, kinds: bundledKindNames))"
+            display = "No \(ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames))"
         } else if isBare {
             display = masters.first(where: { $0.image == value })?.displayName ?? value
         } else {
@@ -418,20 +588,20 @@ struct ExtensionParameterForm: View {
                     Divider()
                 }
                 if !masters.isEmpty {
-                    Section(Self.bundledSectionTitle(parameter, kinds: bundledKindNames)) {
+                    Section(ExtensionParameterForm.bundledSectionTitle(parameter, kinds: bundledKindNames)) {
                         ForEach(masters, id: \.image) { master in
                             Button(master.displayName) { setValue(parameter.key, .string(master.image)) }
                         }
                     }
                 }
-                Button("Choose \(Self.fileNoun(parameter, kinds: bundledKindNames).localizedCapitalized)…") { browse(parameter.key) }
+                Button("Choose \(ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames).localizedCapitalized)…") { browse(parameter.key) }
                 // With a default, clearing IS "use default"; offer Clear only when
                 // there is no default to fall back to.
                 if !value.isEmpty && defaultLabel == nil {
                     Button("Clear") { setValue(parameter.key, .string("")) }
                 }
             } label: {
-                Text(usingDefault ? "Use a different \(Self.fileNoun(parameter, kinds: bundledKindNames))…"
+                Text(usingDefault ? "Use a different \(ExtensionParameterForm.fileNoun(parameter, kinds: bundledKindNames))…"
                                   : (value.isEmpty ? "Choose…" : "Change…"))
             }
             .menuStyle(.borderlessButton)
@@ -442,33 +612,43 @@ struct ExtensionParameterForm: View {
         }
     }
 
-    // MARK: - Map file (a shared, host-resolved default)
-
-    /// Which map file the draft selects: the shared per-user default (nothing
-    /// recorded), a specific file the user chose, or none. Pure, so the state
-    /// mapping is tested apart from the view.
-    enum MapFileChoice: Equatable {
-        case sharedDefault
-        case custom(String)
-        case none
+    private func browse(_ key: String) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            setValue(key, .string(url.path))
+        }
     }
 
-    static func mapFileChoice(recorded: String?) -> MapFileChoice {
-        guard let recorded = recorded, !recorded.isEmpty else { return .sharedDefault }
-        return recorded == "none" ? .none : .custom(recorded)
+    private func loadDroppedFile(_ providers: [NSItemProvider], _ accept: @escaping (URL) -> Void) -> Bool {
+        guard let provider = providers.first else { return false }
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            guard let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+            Task { @MainActor in accept(url) }
+        }
+        return true
     }
+}
 
-    /// The control for the AUN map file (a parameter whose default_from names the
-    /// per-user "aun-map-file"): it shows the shared file -- the one every
-    /// Beebium instance on this computer uses, which the Network sidebar edits --
-    /// as the default value, with "Use a different file..." and "No map file" as
-    /// the by-exception choices and a way back to the shared file. The default
-    /// state records nothing in the draft, so the preset stays exact; a chosen
-    /// file or "none" is recorded because it differs from the default.
-    private func mapFileControl(_ parameter: ExtensionParameter) -> some View {
+// MARK: - Map file control (a shared, host-resolved default)
+
+/// The control for the AUN map file (a parameter whose default_from names the
+/// per-user "aun-map-file"): it shows the shared file -- the one every Beebium
+/// instance on this computer uses, which the Network sidebar edits -- as the
+/// default value, with "Use a different file..." and "No map file" as the
+/// by-exception choices and a way back to the shared file. The default state
+/// records nothing in the draft, so the preset stays exact; a chosen file or
+/// "none" is recorded because it differs from the default.
+private struct MapFileParameterControl: View {
+    let parameter: ExtensionParameter
+    let config: [String: JSONValue]
+    let setValue: (String, JSONValue?) -> Void
+
+    var body: some View {
         let key = parameter.key
         let recorded: String? = { if case .string(let s)? = config[key] { return s }; return nil }()
-        let choice = Self.mapFileChoice(recorded: recorded)
+        let choice = ExtensionParameterForm.mapFileChoice(recorded: recorded)
         let defaultPath = parameter.defaultInForce
 
         let display: String
@@ -527,84 +707,9 @@ struct ExtensionParameterForm: View {
             setValue(key, .string(url.path))
         }
     }
-
-    // MARK: - Bundled default (ROM) helpers
-
-    /// The friendly name of a parameter's bundled default, or nil when it has
-    /// none. The default value names a bundled image (a coprocessor's client
-    /// ROM); resolve it to that image's display name, falling back to the raw
-    /// default when it is not among the offered masters.
-    static func defaultImageLabel(forParameter parameter: ExtensionParameter,
-                                  masters: [BundledImage]) -> String? {
-        guard !parameter.defaultValue.isEmpty else { return nil }
-        return masters.first(where: { $0.image == parameter.defaultValue })?.displayName
-            ?? parameter.defaultValue
-    }
-
-    /// The noun for a filepath parameter's affordance, taken from the parameter,
-    /// not the extension: a bundled-image parameter says its kind in the server's
-    /// words (e.g. "hard disc", "ROM"), a `choices_from: serial-ports` parameter
-    /// says "device", and a plain filepath says "file". The bundled-kind nouns
-    /// come from the schema (`kinds`: kind id -> display noun), so there is no
-    /// per-extension wording in the client.
-    static func fileNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
-        if !parameter.bundled.isEmpty { return bundledNoun(parameter, kinds: kinds) }
-        if parameter.choicesFrom == "serial-ports" { return "device" }
-        return "file"
-    }
-
-    static func bundledNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
-        kinds[parameter.bundled] ?? "image"
-    }
-
-    /// The bundled-section heading in the chooser menu, e.g. "Bundled hard discs".
-    static func bundledSectionTitle(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
-        "Bundled \(bundledNoun(parameter, kinds: kinds))s"
-    }
-
-    // MARK: - Value helpers
-
-    private func stringValue(_ key: String) -> String {
-        if case .string(let s)? = config[key] { return s }
-        if case .int(let i)? = config[key] { return String(i) }
-        return ""
-    }
-
-    private func boolValue(_ key: String) -> Bool {
-        if case .bool(let b)? = config[key] { return b }
-        return false
-    }
-
-    private func listValue(_ key: String) -> [String] {
-        guard case .array(let items)? = config[key] else { return [] }
-        return items.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
-    }
-
-    /// The raw items of a list parameter (objects or legacy strings), for a
-    /// structured list.
-    private func arrayItems(_ key: String) -> [JSONValue] {
-        if case .array(let items)? = config[key] { return items }
-        return []
-    }
-
-    private func browse(_ key: String) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url {
-            setValue(key, .string(url.path))
-        }
-    }
-
-    private func loadDroppedFile(_ providers: [NSItemProvider], _ accept: @escaping (URL) -> Void) -> Bool {
-        guard let provider = providers.first else { return false }
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-            guard let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-            Task { @MainActor in accept(url) }
-        }
-        return true
-    }
 }
+
+// MARK: - Group control
 
 /// One group of mutually-exclusive parameters, shown as a single choice: the
 /// "none" option (when the group has one) then one option per member, in the
@@ -703,6 +808,8 @@ private struct GroupControl: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 }
+
+// MARK: - String list editor
 
 /// A minimal editable list of strings for an `is_list` parameter: one field per
 /// value, add and remove.
