@@ -445,7 +445,7 @@ void* PluginLoader::open_library(const ExtensionManifest& manifest) {
             + "; rebuild the plugin against this server.");
     }
 
-    loaded_plugins_.push_back({handle, manifest.name, library_filepath});
+    loaded_plugins_.push_back({handle, library_filepath});
     return handle;
 }
 

@@ -91,7 +91,6 @@ private:
 
     struct LoadedPlugin {
         void* handle = nullptr;
-        std::string name;
         std::filesystem::path library_filepath;
     };
     std::vector<LoadedPlugin> loaded_plugins_;
