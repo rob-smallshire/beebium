@@ -579,16 +579,55 @@ target_link_libraries(beebium_ext_my_extension PUBLIC
 
 ### 6. Register as Built-in
 
-In `src/server/include/beebium/server/ServerMain.hpp`, include the header and register the extension alongside other built-ins:
+Most extensions should be plugins (next section). A built-in is for one the
+server must recognise with no plugin directory at all; today that is `aun`
+and `host-serial`, whose rationale `BuiltinExtensions.hpp` records. A
+built-in has no `manifest.json`: it is one entry in the table in
+`src/server/include/beebium/server/BuiltinExtensions.hpp`, a manifest built in
+code and a factory that constructs the extension:
 
 ```cpp
 #include "MyExtension.hpp"
 
-// In StartSubcommand::invoke(), after registry setup:
-extension_registry.register_extension(beebium::MyExtension::create());
+// In builtin_extensions::detail::make_entries():
+{
+    ExtensionManifest m;
+    m.name = "my-extension";
+    m.display_name = "My Extension";
+    m.description = "Description of my extension";
+    m.cli_name = "my-extension";          // --my-extension k=v:...
+    m.extension_kind = "peripheral";
+    m.attaches_to = {"1mhz-bus"};
+    m.parameters.push_back({"base", "integer", "first claimed offset",
+                            -1, false, false, "96"});
+    result.push_back({std::move(m),
+                      [] { return std::unique_ptr<Extension>(new MyExtension()); }});
+}
 ```
 
-Link the server executables against `beebium_ext_my_extension` in `src/server/CMakeLists.txt`.
+The entry needs nothing else. From there the server treats it as it treats a
+plugin's manifest:
+
+- `populate_extension_resolver` (`StartOptions.hpp`) adds every built-in
+  manifest to the `ExtensionResolver` as its lowest-priority source, below
+  `<exe-dir>/extensions` and any `--extension-dir`, so a plugin of the same
+  name replaces the built-in. The resolver is what makes `--my-extension` a
+  start option, what `list-extensions` and `describe-extension` report, and
+  what a preset's `extensions` entry is checked against.
+- `instantiate_extension` (`StartOptions.hpp`) creates each configured
+  instance: from its plugin library when the manifest names one, otherwise
+  from the built-in factory, then gives it its manifest and normalised config
+  (`set_manifest`, `set_config`, `set_list_config`). So the factory only
+  constructs; it does not set the manifest, as the plugin entry point does
+  not either.
+- `assemble_machine` (`MachineAssembly.hpp`) registers the instance by its
+  `extension_kind`: an `econet-transport` with the `EconetTransportRegistry`,
+  a `peripheral` with the `ExtensionRegistry`, whose `resolve_and_init` then
+  attaches it and calls `init()`.
+
+Link the server executables against `beebium_ext_my_extension` in
+`src/server/CMakeLists.txt`, beside `beebium_ext_aun` and
+`beebium_ext_host_serial`.
 
 ## Developer Guide: Creating a Plugin Extension
 
