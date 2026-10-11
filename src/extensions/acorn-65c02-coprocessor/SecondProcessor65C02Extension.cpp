@@ -72,35 +72,33 @@ void SecondProcessor65C02Extension::shutdown()
 
 bool SecondProcessor65C02Extension::load_client_rom(std::array<uint8_t, 4096>& rom) const
 {
-    // The firmware belongs to the plugin: it is declared in the manifest and
-    // ships in the plugin's own roms/ directory, resolved by the extension API
-    // against the manifest directory. No server header, no shared roms/ lookup.
-    // An explicit `rom` config value overrides with a user-supplied client ROM.
-    // The device is a 4 KB 2732; both paths require exactly 4096 bytes -- the
+    // The `rom` parameter names the client ROM. Its default is the image this
+    // plugin ships in its own roms/ directory; the server fills the default in
+    // and resolves a bare name to that file, so `rom` always arrives as a path.
+    // The device is a 4 KB 2732, so the image must be exactly 4096 bytes -- the
     // full device image -- with no assumption about either half's contents (the
     // ReCo6502 client has code in the lower half; the Acorn dumps have &FF).
     try {
         auto rom_config = config_value("rom");
-        if (rom_config) {
-            // Report a wrong-size override in the device's own terms: the 2 KB
-            // images other emulators ship are only the upper half of the 2732.
-            const std::filesystem::path path(*rom_config);
-            std::error_code ec;
-            const auto size = std::filesystem::file_size(path, ec);
-            if (ec) {
-                throw std::runtime_error("Tube client ROM not found at " + path.string());
-            }
-            if (size != rom.size()) {
-                throw std::runtime_error(
-                    "Tube client ROM must be the full " + std::to_string(rom.size())
-                    + "-byte 2732 image (F000-FFFF); got " + std::to_string(size)
-                    + " bytes. The 2 kB images shipped by other emulators are the "
-                      "upper half only.");
-            }
-            read_rom_image(path, std::span<std::uint8_t>(rom));
-        } else {
-            load_rom("client", std::span<std::uint8_t>(rom));
+        if (!rom_config) {
+            throw std::runtime_error("no Tube client ROM configured (the rom parameter)");
         }
+        // Report a wrong size in the device's own terms: the 2 KB images other
+        // emulators ship are only the upper half of the 2732.
+        const std::filesystem::path path(*rom_config);
+        std::error_code ec;
+        const auto size = std::filesystem::file_size(path, ec);
+        if (ec) {
+            throw std::runtime_error("Tube client ROM not found at " + path.string());
+        }
+        if (size != rom.size()) {
+            throw std::runtime_error(
+                "Tube client ROM must be the full " + std::to_string(rom.size())
+                + "-byte 2732 image (F000-FFFF); got " + std::to_string(size)
+                + " bytes. The 2 kB images shipped by other emulators are the "
+                  "upper half only.");
+        }
+        read_rom_image(path, std::span<std::uint8_t>(rom));
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error loading Tube client ROM: " << e.what() << "\n";

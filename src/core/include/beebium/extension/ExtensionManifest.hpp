@@ -25,11 +25,12 @@
 namespace beebium {
 
 // A firmware ROM image a plugin ships in its own directory and declares in its
-// manifest's `roms` array. The file lives at <manifest_dirpath>/roms/<filename>
-// and is resolved through Extension::rom_filepath()/load_rom(). Coprocessor
-// firmware belongs to the coprocessor, not the shared host ROM set.
+// manifest's `roms` array. The file lives at <manifest_dirpath>/roms/<filename>;
+// the plugin loader checks it is there before loading the library, and a bare
+// name in a parameter the manifest declares `"bundled": "rom"` resolves to it.
+// Coprocessor firmware belongs to the coprocessor, not the shared host ROM set.
 struct RomImage {
-    std::string key;          // stable identifier used by the extension (e.g. "client")
+    std::string key;          // stable identifier, as describe-extension lists it (e.g. "client")
     std::string filename;     // basename within the plugin's roms/ directory
     std::uint64_t size = 0;   // expected image size in bytes
     std::string display_name; // human-readable name, e.g. "Acorn 6502 Tube ROM 1.10"

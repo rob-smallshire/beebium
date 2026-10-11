@@ -125,3 +125,16 @@ TEST_CASE("The extension rejects a wrong-size client ROM naming the device",
 
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("SecondProcessor65C02Extension refuses to start with no rom configured",
+          "[tube][rom]") {
+    // The server always supplies `rom` (its default names the shipped image), so
+    // an extension configured without one has no ROM to fall back on.
+    ModelB machine;
+    ExtensionContext ctx(nullptr, nullptr, &machine.state().memory.tube_socket);
+    SecondProcessor65C02Extension ext;
+    ext.set_config({{"id", "norom"}});
+
+    CHECK_THROWS(ext.init(ctx));
+    CHECK_FALSE(ext.running());
+}

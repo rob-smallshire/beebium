@@ -68,39 +68,6 @@ void read_rom_image(const std::filesystem::path& path,
               << std::to_string(dest.size()) << "-byte image\n";
 }
 
-std::filesystem::path Extension::rom_filepath(std::string_view key) const {
-    for (const auto& rom : manifest_.roms) {
-        if (rom.key == key) {
-            return manifest_.manifest_dirpath / "roms" / rom.filename;
-        }
-    }
-    throw std::runtime_error(
-        "Extension '" + manifest_.name + "' declares no ROM with key '"
-        + std::string(key) + "'");
-}
-
-void Extension::load_rom(std::string_view key, std::span<std::uint8_t> dest) const {
-    const RomImage* entry = nullptr;
-    for (const auto& rom : manifest_.roms) {
-        if (rom.key == key) {
-            entry = &rom;
-            break;
-        }
-    }
-    if (!entry) {
-        throw std::runtime_error(
-            "Extension '" + manifest_.name + "' declares no ROM with key '"
-            + std::string(key) + "'");
-    }
-    if (dest.size() != entry->size) {
-        throw std::runtime_error(
-            "Extension '" + manifest_.name + "' ROM '" + std::string(key)
-            + "': buffer is " + std::to_string(dest.size())
-            + " bytes but the manifest declares " + std::to_string(entry->size));
-    }
-    read_rom_image(rom_filepath(key), dest);
-}
-
 std::optional<std::string> apply_parameter_groups(ExtensionManifest& manifest) {
     auto find_parameter = [&](const std::string& key) -> ParameterSchema* {
         for (auto& p : manifest.parameters) {

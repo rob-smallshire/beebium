@@ -381,9 +381,10 @@ shared library, `manifest.json` and a `roms/` directory. The manifest's
 `roms` array declares each firmware image with a key, filename, size and
 description; the loader checks every declared image is present and valid
 before loading the library, and `describe-extension` lists them. The
-extension loads its firmware with `Extension::load_rom(key, span)`, which
-resolves beside the manifest; the `rom` parameter overrides it with a
-user-supplied path. The shared `roms/` directory holds host ROMs only.
+extension's `rom` parameter defaults to the shipped image, declared
+`"bundled": "rom"`, and the server resolves that name to the file beside the
+manifest, so the extension reads whatever path `rom` holds -- the shipped
+image or a user-supplied one. The shared `roms/` directory holds host ROMs only.
 
 The plugin links `beebium_core` and the 6502 library into its shared object
 with hidden visibility, so its private copies of the ULA and runner never

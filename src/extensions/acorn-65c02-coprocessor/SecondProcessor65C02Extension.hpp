@@ -102,8 +102,7 @@ public:
     bool running() const { return runner_ != nullptr; }
 
 private:
-    // Load the Tube client ROM into `rom`: an explicit `rom` config override,
-    // else the "client" ROM declared in the manifest (Extension::load_rom).
+    // Load the Tube client ROM the `rom` parameter names into `rom`.
     bool load_client_rom(std::array<uint8_t, 4096>& rom) const;
 
     BoardTiming board_timing_;

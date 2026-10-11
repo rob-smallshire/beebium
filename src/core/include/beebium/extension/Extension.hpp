@@ -119,26 +119,6 @@ public:
         return std::nullopt;
     }
 
-    // --- Packaged ROM images (manifest `roms`) ---
-    //
-    // A plugin ships its firmware in its own directory and declares each image
-    // in the manifest; these resolve and load it. Coprocessor firmware belongs
-    // to the coprocessor, not the shared host ROM set, and no extension needs a
-    // server header to find its own files.
-
-    // Resolve a declared ROM (by key) to its path beside the manifest:
-    // <manifest_dirpath>/roms/<filename>. Throws std::runtime_error naming the
-    // key if it is not declared. Does not consult config; an explicit override
-    // is the extension's own concern.
-    BEEBIUM_EXT_API std::filesystem::path rom_filepath(std::string_view key) const;
-
-    // Load the ROM declared under `key` into `dest`, whose size must equal the
-    // declared size. The image must be exactly that size -- the device's
-    // contents, with no content rule for any part of it. Throws
-    // std::runtime_error naming the resolved path for a missing file, a
-    // dest/manifest size mismatch, or a file of any other size.
-    BEEBIUM_EXT_API void load_rom(std::string_view key, std::span<std::uint8_t> dest) const;
-
     // Access all config values.
     const std::map<std::string, std::string>& config() const { return config_; }
 

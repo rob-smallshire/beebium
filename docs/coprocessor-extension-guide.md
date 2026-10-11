@@ -63,12 +63,10 @@ public:
     void init(ExtensionContext& ctx) override {
         tube_socket_ = &ctx.get<TubeSocket>();
 
+        // The server fills in the rom parameter's default and resolves a
+        // bundled image's name to its file, so `rom` is always a path here.
         std::array<uint8_t, ROM_SIZE> rom{};
-        if (auto path = config_value("rom")) {
-            read_rom_image(std::filesystem::path(*path), rom);   // user override
-        } else {
-            load_rom("client", rom);                             // packaged firmware
-        }
+        read_rom_image(std::filesystem::path(*config_value("rom")), rom);
 
         bridge_ = std::make_unique<TubeUla>();
         runner_ = std::make_unique<MyRunner>(*bridge_, rom, ratio_);
@@ -181,17 +179,36 @@ Declare the firmware in `manifest.json` and put it in `roms/` beside it:
 ]
 ```
 
+and give the extension a `rom` parameter whose default is that image, declared
+`"bundled": "rom"`:
+
+```json
+"parameters": [
+    {
+        "key": "rom",
+        "label": "Client ROM",
+        "type": "filepath",
+        "bundled": "rom",
+        "description": "The Tube client ROM, as a path, or the name of a ROM this co-processor ships",
+        "default": "acorn-tube-z80_1_20.rom",
+        "required": false
+    }
+]
+```
+
 The loader refuses to load the plugin if a declared image is missing or the
-wrong size, naming the plugin and the path. `Extension::load_rom(key, span)`
-loads it. `size` is the device's size and the image must match it exactly:
+wrong size, naming the plugin and the path. The server fills in the `rom`
+default and turns a bare name into the path of the image the plugin ships, so
+the extension always receives a path, which `read_rom_image(path, span)`
+loads; a user may name another file instead. `size` is the device's size and
+the image must match it exactly:
 a ROM image is the chip's contents, with no content rule for any part of it
 and no half-size or padded-dump acceptance -- synthesising a missing part would
 be a guess. (The Acorn 6502/65C102 clients are the full 4 KB 2732: the lower
 2 KB is `&FF` in Acorn's firmware but is genuine ROM space a client may use,
 so the shipped image and any `rom=` override are the whole 4096 bytes; a 2 KB
-upper-half-only file is refused.) Keep a `rom` parameter so users can supply
-another image, and if you reject a wrong size say what the device is and what
-you expected in one sentence.
+upper-half-only file is refused.) If you reject a wrong size, say what the
+device is and what you expected in one sentence.
 
 Hash any firmware you are given against another emulator's copy (B2 and
 B-Em ship most of Acorn's client ROMs) or Toby Lobster's ROM library before
