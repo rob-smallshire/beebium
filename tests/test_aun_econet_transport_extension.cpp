@@ -31,6 +31,8 @@
 #include <netinet/in.h>
 #endif
 
+#include <stdexcept>
+
 using namespace beebium;
 
 TEST_CASE("AunEconetTransportExtension::parse_port: empty -> default",
@@ -60,11 +62,6 @@ TEST_CASE("AunEconetTransportExtension::parse_port: invalid falls back to defaul
     REQUIRE(*p == AUN_DEFAULT_PORT);
 }
 
-TEST_CASE("AunEconetTransportExtension::parse_net: empty -> 0",
-          "[econet][aun][extension]") {
-    CHECK(AunEconetTransportExtension::parse_net("") == 0);
-}
-
 TEST_CASE("AunEconetTransportExtension::parse_net: zero",
           "[econet][aun][extension]") {
     CHECK(AunEconetTransportExtension::parse_net("0") == 0);
@@ -86,16 +83,11 @@ TEST_CASE("AunEconetTransportExtension::parse_net: full 0..255 byte",
     CHECK(AunEconetTransportExtension::parse_net("255") == 255);
 }
 
-TEST_CASE("AunEconetTransportExtension::parse_net: rejects above 255",
+TEST_CASE("AunEconetTransportExtension::parse_net: refuses what the framework would",
           "[econet][aun][extension]") {
-    CHECK(AunEconetTransportExtension::parse_net("256") == 0);
-    CHECK(AunEconetTransportExtension::parse_net("9999") == 0);
-}
-
-TEST_CASE("AunEconetTransportExtension::parse_net: non-numeric falls back to 0",
-          "[econet][aun][extension]") {
-    CHECK(AunEconetTransportExtension::parse_net("abc") == 0);
-    CHECK(AunEconetTransportExtension::parse_net("none") == 0);
+    CHECK_THROWS_AS(AunEconetTransportExtension::parse_net(""), std::invalid_argument);
+    CHECK_THROWS_AS(AunEconetTransportExtension::parse_net("256"), std::invalid_argument);
+    CHECK_THROWS_AS(AunEconetTransportExtension::parse_net("abc"), std::invalid_argument);
 }
 
 TEST_CASE("AunEconetTransportExtension::parse_map: empty -> empty list",
@@ -162,7 +154,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: port=0 binds an ephemera
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}, {"map-file", "none"}});  // OS-chosen port
+    ext.set_config({{"port", "0"}, {"net", "0"}, {"map-file", "none"}});  // OS-chosen port
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
     REQUIRE(backend->is_connected());
@@ -175,7 +167,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: applies map peers",
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}, {"map-file", "none"}});
+    ext.set_config({{"port", "0"}, {"net", "0"}, {"map-file", "none"}});
     ext.set_list_config({{"map", {"0.254@127.0.0.1@32768",
                                   "0.253@127.0.0.1@32769"}}});
     auto backend = ext.create_backend(/*station=*/32);
@@ -189,7 +181,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: a map peer's host name i
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}, {"map-file", "none"}});
+    ext.set_config({{"port", "0"}, {"net", "0"}, {"map-file", "none"}});
     ext.set_list_config({{"map", {"0.254@localhost@32768"}}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
@@ -204,7 +196,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: a map peer whose host do
           "[econet][aun][extension]") {
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", "0"}, {"map-file", "none"}});
+    ext.set_config({{"port", "0"}, {"net", "0"}, {"map-file", "none"}});
     ext.set_list_config({{"map", {"0.254@127.0.0.1@32768", "3@nonexistent.invalid@32769"}}});
     auto backend = ext.create_backend(/*station=*/32);
     REQUIRE(backend != nullptr);
@@ -219,16 +211,14 @@ TEST_CASE("AunEconetTransportExtension::create_backend: a map peer whose host do
     CHECK(unreachable[0].port == 32769);
 }
 
-TEST_CASE("AunEconetTransportExtension::create_backend: defaults local_net to 0",
+TEST_CASE("AunEconetTransportExtension::create_backend: refuses a config with no net",
           "[econet][aun][extension]") {
+    // The framework always passes net (the manifest default is 0), so the
+    // extension keeps no default of its own.
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
     ext.set_config({{"port", "0"}, {"map-file", "none"}});
-    auto backend = ext.create_backend(/*station=*/32);
-    REQUIRE(backend != nullptr);
-    auto* aun = dynamic_cast<AunBackend*>(backend.get());
-    REQUIRE(aun != nullptr);
-    CHECK(aun->local_net() == 0);
+    CHECK_THROWS_AS(ext.create_backend(/*station=*/32), std::invalid_argument);
 }
 
 TEST_CASE("AunEconetTransportExtension::create_backend: honours net config",
@@ -258,7 +248,7 @@ TEST_CASE("AunEconetTransportExtension::create_backend: bind failure records a "
 
     AunEconetTransportExtension ext;
     ext.set_discovery_service_type(aun_unique_service_type());
-    ext.set_config({{"port", std::to_string(held)}});
+    ext.set_config({{"port", std::to_string(held)}, {"net", "0"}});
     auto backend = ext.create_backend(/*station=*/32);
     if (backend == nullptr) {
         CHECK_FALSE(ext.unavailable_reason().empty());

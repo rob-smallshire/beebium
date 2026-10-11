@@ -138,14 +138,9 @@ std::optional<std::uint16_t> AunEconetTransportExtension::parse_port(
 }
 
 std::uint8_t AunEconetTransportExtension::parse_net(const std::string& value) {
-    if (value.empty()) {
-        return 0;
-    }
     unsigned long parsed = 0;
     if (!parse_uint(value, parsed) || parsed > 255) {
-        std::cerr << "AUN extension: invalid net '" << value
-                  << "' (expected 0..255) -- using default 0\n";
-        return 0;
+        throw std::invalid_argument("AUN net '" + value + "' is not a number in 0..255");
     }
     return static_cast<std::uint8_t>(parsed);
 }
@@ -318,8 +313,7 @@ AunEconetTransportExtension::create_backend(std::uint8_t station) {
         return nullptr;
     }
 
-    auto net_value = config_value("net");
-    auto local_net = parse_net(net_value ? std::string(*net_value) : std::string{});
+    auto local_net = parse_net(std::string(config_value("net").value_or("")));
     auto backend = std::make_unique<AunBackend>(local_net, station, *port);
     if (!backend->is_connected()) {
         // Keep the specific reason (port + OS cause) so AunUi can show it in
@@ -574,9 +568,7 @@ AunEconetTransportExtension::select_auto_station(econet::StationRange range) {
         return out;
     }
 
-    auto net_value = config_value("net");
-    std::uint8_t local_net =
-        parse_net(net_value ? std::string(*net_value) : std::string{});
+    std::uint8_t local_net = parse_net(std::string(config_value("net").value_or("")));
 
     // Seed the operator layers so map= and map-file peers count as occupied,
     // then browse briefly so discovered peers do too.

@@ -58,7 +58,7 @@ public:
         // Unique discovery type so a real _aun._udp announcer cannot be adopted
         // into the peer set and perturb the view under test (#145).
         ext_->set_discovery_service_type(aun_unique_service_type());
-        ext_->set_config({{"port", "0"}, {"map-file", map_filepath_.string()}});
+        ext_->set_config({{"port", "0"}, {"net", "0"}, {"map-file", map_filepath_.string()}});
         if (!launch_map.empty()) ext_->set_list_config({{"map", std::move(launch_map)}});
         backend_owner_ = ext_->create_backend(/*station=*/1);
         REQUIRE(backend_owner_ != nullptr);
