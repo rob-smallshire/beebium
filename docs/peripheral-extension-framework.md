@@ -218,8 +218,8 @@ separators. The AUN transport's `map` and `subnet` are the examples:
 A preset may give an item as an object of its fields
 (`{"station": 254, "host": "10.0.0.5", "port": 32768}`), as a configuration UI
 writes it, or in its string form (`"254@10.0.0.5@32768"`), as the command line
-and older presets do. Either way the framework checks each field and hands the
-extension the string form, so the extension reads its list as it always has.
+takes it. Either way the framework checks each field and hands the extension
+the string form, so an extension reads a list the same way whatever its source.
 `resolve-preset` writes each item back in the form it was given.
 
 The framework formats an object by replacing each placeholder with its field's
@@ -276,7 +276,7 @@ every property.
 
 Two framework-managed parameters are accepted by every extension and do not appear in the manifest:
 - `id` -- instance identity (see below; overridable via `id=<value>`)
-- `label` -- display name for GUIs (falls back to `id` if not set)
+- `label` -- display name for GUIs (when not set, one composed from the manifest's `display_name`, else the `id`)
 
 ### Instance Identity
 
