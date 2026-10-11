@@ -926,3 +926,75 @@ TEST_CASE("load_preset: a ROM path with a directory resolves from the preset",
           (roms_dirpath / "forth.rom").lexically_normal().string());
     CHECK(result.config->sideways[1].image_filepath == "acorn-dfs_2_26.rom");  // bare: ROM search
 }
+
+// ============================================================================
+// load_preset collects every error, not the first
+// ============================================================================
+
+namespace {
+
+std::vector<std::string> error_paths(const PresetLoadResult& result) {
+    std::vector<std::string> paths;
+    for (const auto& d : result.errors()) paths.push_back(d.path);
+    return paths;
+}
+
+}  // namespace
+
+TEST_CASE("load_preset: three independent errors are three diagnostics",
+          "[preset][load_preset][diagnostics]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({
+        "speed": "fast",
+        "startup": { "screen_mode": 9 },
+        "econet": { "station": 0 },
+        "colour": "beige"
+    })");
+    REQUIRE_FALSE(result.success());
+    CHECK(error_paths(result) ==
+          std::vector<std::string>{"/speed", "/startup/screen_mode", "/econet/station"});
+    // The first is still the one error() names, and warnings are kept.
+    CHECK(result.error()->path == "/speed");
+    REQUIRE(result.warnings().size() == 1);
+    CHECK(result.warnings()[0].path == "/colour");
+}
+
+TEST_CASE("load_preset: independent errors within the startup section are all reported",
+          "[preset][load_preset][diagnostics]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(
+        dir, R"({"startup": { "screen_mode": 9, "links": 300, "auto_boot": "yes" }})");
+    REQUIRE_FALSE(result.success());
+    CHECK(error_paths(result) == std::vector<std::string>{"/startup/screen_mode",
+                                                          "/startup/links",
+                                                          "/startup/auto_boot"});
+}
+
+TEST_CASE("load_preset: independent errors within the econet section are all reported",
+          "[preset][load_preset][diagnostics][econet]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"econet": {
+        "station": 300,
+        "transport": { "name": "" },
+        "aun_port": 32768
+    }})");
+    REQUIRE_FALSE(result.success());
+    CHECK(error_paths(result) == std::vector<std::string>{"/econet/station",
+                                                          "/econet/transport/name",
+                                                          "/econet/aun_port"});
+}
+
+TEST_CASE("load_preset: every faulty sideways slot is reported",
+          "[preset][load_preset][diagnostics][sideways]") {
+    beebium::test::ScopedTempDir dir("beebium_preset_loader_");
+    auto result = load_preset_text(dir, R"({"sideways_bank": { "slots": [
+        { "slot": 16, "type": "rom", "image_uri": "a.rom" },
+        { "slot": 14, "type": "rom" },
+        { "slot": 13, "type": "ram" },
+        "not an object"
+    ]}})");
+    REQUIRE_FALSE(result.success());
+    CHECK(error_paths(result) == std::vector<std::string>{"/sideways_bank/slots/0/slot",
+                                                          "/sideways_bank/slots/1/image_uri",
+                                                          "/sideways_bank/slots/3"});
+}

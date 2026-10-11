@@ -382,8 +382,11 @@ override; parameters the command line fills from manifest defaults do not
 
 A preset that cannot be read, or whose JSON is invalid, stops a launch with
 `NOINPUT` (66). One whose content is invalid stops it with `CONFIG` (78) and a
-message naming the problem: among them every [attachment](#attachment)
-problem, and every error an extension's own configuration check finds. Problems
+message naming each problem: every one the preset holds, not just the first, so
+a speed that is not a number, a screen mode out of range and an Econet station
+out of range are three errors reported together. Among them are every
+[attachment](#attachment) problem and every error an extension's own
+configuration check finds. Problems
 that do not stop a launch are warnings: an unknown top-level key, the older
 top-level `auto_boot`, an extension check's warnings (for what the launch may
 still accept), and (from
@@ -460,7 +463,11 @@ key (`colour`). It is `""` when `path` is. The exit status is 0
 with no errors, 78 when the preset does not describe a valid machine for this
 model, and 66 when it cannot be found or read as a JSON object. When the
 preset cannot be loaded at all (66, or a 78 from its shape, such as a station
-out of range) `preset` is `null`; the error's path still says where.
+out of range) `preset` is `null`; each error's path still says where. A preset
+whose shape is wrong in several places has one diagnostic for each, wherever
+they are in the file; the checks that need a loaded preset (its model, the
+extensions' configurations, the sideways topology) report once the shape is
+sound.
 
 The document is itself a preset: saving it (with `create-preset --from`, or by
 writing it to a file) and resolving it again gives the same document. A test

@@ -736,7 +736,9 @@ std::optional<int> parse_start_arguments(int argc, char* argv[], int start_index
             }
             auto result = load_preset(*config.preset_filepath);
             if (!result) {
-                std::cerr << "Error: " << result.error()->message << "\n";
+                for (const auto& e : result.errors()) {
+                    std::cerr << "Error: " << e.message << "\n";
+                }
                 return result.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
             }
 
@@ -4799,7 +4801,7 @@ private:
             warning(w.path, w.message);
         }
         if (!loaded) {
-            error(loaded.error()->path, loaded.error()->message);
+            for (const auto& e : loaded.errors()) error(e.path, e.message);
             return loaded.unreadable ? ExitCode::NOINPUT : ExitCode::CONFIG;
         }
         const PresetConfig& preset = *loaded.config;

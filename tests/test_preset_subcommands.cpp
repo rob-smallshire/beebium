@@ -1706,6 +1706,40 @@ TEST_CASE("resolve-preset: a preset for another model is an error",
     CHECK(out.at("diagnostics")[0].at("path") == "/model");
 }
 
+TEST_CASE("resolve-preset: a preset with three independent errors reports all three",
+          "[integration][preset][resolve-preset][diagnostics]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "faulty.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "speed": "fast",
+        "startup": {"screen_mode": 9}, "econet": {"station": 0}})";
+
+    auto out = resolve_json(EXECUTABLE, preset_filepath.string(), 78);
+
+    CHECK(out.at("preset").is_null());
+    std::vector<std::string> paths;
+    for (const auto& d : out.at("diagnostics")) {
+        CHECK(d.at("severity") == "error");
+        paths.push_back(d.at("path").get<std::string>());
+    }
+    CHECK(paths == std::vector<std::string>{"/speed", "/startup/screen_mode", "/econet/station"});
+    CHECK(out.at("diagnostics")[1].at("location") == "Keyboard links");
+}
+
+TEST_CASE("start: a preset with three independent errors names all three and exits CONFIG",
+          "[integration][preset][diagnostics]") {
+    TempDirectory temp_dir;
+    auto preset_filepath = temp_dir.path() / "faulty.preset.beebium";
+    std::ofstream(preset_filepath) << R"({"model": "model-b", "speed": "fast",
+        "startup": {"screen_mode": 9}, "econet": {"station": 0}})";
+    auto result = run_command(EXECUTABLE + " start --preset \"" + preset_filepath.string() +
+                              "\" --port 0");
+    INFO(result.stderr_output);
+    CHECK(result.exit_code == 78);
+    CHECK(result.stderr_output.find("'speed'") != std::string::npos);
+    CHECK(result.stderr_output.find("'screen_mode'") != std::string::npos);
+    CHECK(result.stderr_output.find("between 1 and 254") != std::string::npos);
+}
+
 // The save-as round trip: a resolved preset, saved through create-preset,
 // resolves to itself. Run over every shipped preset.
 TEST_CASE("resolve-preset: every shipped preset resolves and round-trips through create-preset",
