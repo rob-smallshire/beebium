@@ -154,9 +154,8 @@ public:
     // distinct in the sidebar).
     //
     // The base implementation returns the manifest display_name, or
-    // the instance id if no display_name is set -- preserving the
-    // pre-override fallback chain for extensions that need no
-    // composition.
+    // the instance id if no display_name is set; an extension that
+    // needs no composition keeps it.
     virtual std::string default_label() const {
         if (!manifest_.display_name.empty()) {
             return manifest_.display_name;

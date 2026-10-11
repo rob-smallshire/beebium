@@ -240,10 +240,6 @@ BEEBIUM_EXT_API ParseResult normalise_extension_config(
     std::map<std::string, std::vector<ConfigListItem>> list_config,
     const std::vector<ParameterSchema>& schema);
 
-// The colon-separated CLI tokenizer split_colon_args() moved to a neutral home
-// (beebium/CliArgSplit.hpp) - it is not extension-specific. Included here so
-// existing users of this header keep compiling.
-
 }  // namespace beebium
 
 #endif  // BEEBIUM_EXTENSION_ARG_PARSER_HPP

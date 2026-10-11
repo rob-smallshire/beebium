@@ -146,8 +146,8 @@ inline std::pair<std::uint8_t, std::string> parse_floppy_arg(const std::string& 
 //   4:ram:preload.bin         - RAM with pre-loaded image
 //   2:empty                   - Empty slot
 // The colon-separated key=value tokenizer is shared with the extension-args
-// parser (beebium::split_colon_args in ExtensionArgParser.hpp): the same
-// convention -- and now the same code -- backs `--<ext> key=value:...` and
+// parser (beebium::split_colon_args in beebium/CliArgSplit.hpp): the same
+// convention and the same code back `--<ext> key=value:...` and
 // `--sideways slot=...:type=...`. It honours double quotes so a value may
 // contain a ':' (a URL or a Windows path); the caller strips the quotes.
 
@@ -160,7 +160,7 @@ inline std::string strip_quotes(const std::string& s) {
 
 // Parse a --sideways slot specification. Colon-separated key=value pairs,
 // matching the extension-args convention (see split_colon_args in
-// ExtensionArgParser.cpp / `--<ext> key=value:...`):
+// beebium/CliArgSplit.hpp / `--<ext> key=value:...`):
 //
 //   slot=<0-15>:type=<rom|ram|empty>[:image=<path>][:write-protect]
 //

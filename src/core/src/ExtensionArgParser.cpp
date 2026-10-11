@@ -329,9 +329,6 @@ std::optional<ListItemError> check_list_item_fields(const ParameterSchema& p,
     return std::nullopt;
 }
 
-// split_colon_args now lives in beebium/CliArgSplit.hpp (a neutral home; it is
-// not extension-specific). It is used below via the header.
-
 namespace {
 
 // Strip a single matched pair of surrounding double quotes from a value.

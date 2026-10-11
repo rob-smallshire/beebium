@@ -121,8 +121,8 @@ public:
         reset();
     }
 
-    // Note: VideoBinding is now explicitly constructed, taking Hardware by reference.
-    // It internally owns a VideoRenderer for pixel generation.
+    // VideoBinding is constructed explicitly, taking Hardware by reference, and
+    // owns a VideoRenderer for pixel generation.
 
     ~Machine() {
         M6502_Destroy(&state_.cpu);
@@ -570,7 +570,8 @@ public:
         ++sequence_;
     }
 
-    // Call before stepping cycles (no-op now, retained for interface compatibility).
+    // Called by the debugger before a single-step batch, the partner of
+    // finish_step(). The host has nothing to resync before stepping.
     void prepare_for_step() {}
 
     // Wait until the emulation thread is idle: neither inside run() (in_run_)
