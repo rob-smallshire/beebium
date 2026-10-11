@@ -141,6 +141,7 @@
 		8E648F53A0DD1B04A0E1F08E /* StorageModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A0228B7AD63C2E38A63080 /* StorageModeView.swift */; };
 		8F602AC748C18A556729FE2A /* serial.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC51B6CDDCA00180CC81969A /* serial.grpc.swift */; };
 		934D31B17454BE2697B2463D /* PeripheralTreeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB04E0AE6339BFE2928C6B1 /* PeripheralTreeTests.swift */; };
+		93E61C793B693E3E32EFA953 /* CoreCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D5A2AE88C148E2DBEC585C6 /* CoreCLI.swift */; };
 		93E6F6272FEF5A7A766806B8 /* ExtensionInstanceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF361B039A144431294C9141 /* ExtensionInstanceModel.swift */; };
 		94C93812FC0975970E7C7230 /* KeyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6041795434C164F849A27B /* KeyInput.swift */; };
 		95B33A93F1C85A115681CA0D /* FailurePopoverDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C227E77662BB0306D67158 /* FailurePopoverDecisionTests.swift */; };
@@ -284,6 +285,7 @@
 		0A9849250F602C15283E458A /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
 		0ABF4358E2083C3EFF42FC02 /* SpeedPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedPresentation.swift; sourceTree = "<group>"; };
 		0C19550BD759DAA9DFA9A015 /* extension_ui.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = extension_ui.pb.swift; sourceTree = "<group>"; };
+		0D5A2AE88C148E2DBEC585C6 /* CoreCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreCLI.swift; sourceTree = "<group>"; };
 		0FA112A053333004DAE316F9 /* BeebiumTouchBarLEDs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeebiumTouchBarLEDs.swift; sourceTree = "<group>"; };
 		1031975F4050BF5875549DFA /* FileCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCommands.swift; sourceTree = "<group>"; };
 		10DDDBA41F04259ED4E39CF0 /* DisplayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayStyle.swift; sourceTree = "<group>"; };
@@ -640,6 +642,7 @@
 			isa = PBXGroup;
 			children = (
 				5B3B8600BFD63BD1D99FFB60 /* ConfigurationSchema.swift */,
+				0D5A2AE88C148E2DBEC585C6 /* CoreCLI.swift */,
 				80EC3C1B36F0B3BFDEEDD1A1 /* DiscImageInfo.swift */,
 				93B1DA3FC38049588E00A6C7 /* EconetSchemaSection.swift */,
 				BED1E4790F731F56410D335E /* ExtensionManifest.swift */,
@@ -1118,6 +1121,7 @@
 				E0AAE22F2367681330BC0EC2 /* ConnectDialog.swift in Sources */,
 				EEC1DCADCCF584AB8BC8DD01 /* ConnectionRegistry.swift in Sources */,
 				627C3A63E155268D81CFFA47 /* ContentView.swift in Sources */,
+				93E61C793B693E3E32EFA953 /* CoreCLI.swift in Sources */,
 				5EF39565CAF128FD1974E0BF /* DebugDisplayStyle.swift in Sources */,
 				345AA9A186D7CA962B5D31A1 /* DebuggerClient.swift in Sources */,
 				C22E6469F7B458EED56A7DBC /* DeepLink.swift in Sources */,
