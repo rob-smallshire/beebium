@@ -13,21 +13,10 @@
 import XCTest
 @testable import Beebium
 
-/// Tests the mapping from a resolve-preset diagnostic's JSON-pointer path to a
-/// human location and to the configuration section it belongs to.
+/// Tests the structural routing of a resolve-preset diagnostic's JSON-pointer
+/// path to the configuration section it belongs to. The human location text is
+/// now produced by resolve-preset (PresetDiagnostic.location), not the client.
 final class PresetDiagnosticLocationTests: XCTestCase {
-
-    func testDescribesSectionsAndRows() {
-        XCTAssertEqual(PresetDiagnosticLocation.describe(path: "/storage/floppy_drives/0/image_uri"), "Floppy 0")
-        XCTAssertEqual(PresetDiagnosticLocation.describe(path: "/storage/fdc_socket/id"), "Storage")
-        XCTAssertEqual(PresetDiagnosticLocation.describe(path: "/sideways_bank/slots/2/image_uri"), "Sideways slot 2")
-        XCTAssertEqual(PresetDiagnosticLocation.describe(path: "/extensions/1/config/scsi-id"), "Extension 1")
-        XCTAssertEqual(PresetDiagnosticLocation.describe(path: "/econet/transport"), "Econet")
-    }
-
-    func testWholeDocumentPathHasNoLocation() {
-        XCTAssertNil(PresetDiagnosticLocation.describe(path: ""))
-    }
 
     func testExtensionIndex() {
         XCTAssertEqual(PresetDiagnosticLocation.extensionIndex(path: "/extensions/2"), 2)

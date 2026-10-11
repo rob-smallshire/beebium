@@ -174,11 +174,11 @@ final class ExtensionGroupTests: XCTestCase {
     func testPluginDiagnosticsRouteByPointerAndBlockBySeverity() {
         typealias D = PresetManager.PresetDiagnostic
         let timeError = D(severity: "error", path: "/extensions/0/config/time",
-                          message: "year 2001 is outside 1981-1996")
+                          message: "year 2001 is outside 1981-1996", location: "Acorn RTC")
         let offsetWarning = D(severity: "warning", path: "/extensions/0/config/offset",
-                              message: "offset lands outside the range today")
+                              message: "offset lands outside the range today", location: "Acorn RTC")
         let instanceError = D(severity: "error", path: "/extensions/0",
-                              message: "host time cannot be held by this layout")
+                              message: "host time cannot be held by this layout", location: "Acorn RTC")
 
         let diags = [timeError, offsetWarning]
 

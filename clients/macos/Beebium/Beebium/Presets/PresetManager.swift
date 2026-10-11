@@ -825,6 +825,10 @@ class PresetManager: ObservableObject {
         let severity: String   // "error" | "warning"
         let path: String
         let message: String
+        /// A human description of where the diagnostic points, in the schema's own
+        /// words (e.g. "Floppy drive 0", "Sideways slot 13", an extension's display
+        /// name), produced by resolve-preset. Empty for a whole-document diagnostic.
+        let location: String
         var isError: Bool { severity == "error" }
     }
 

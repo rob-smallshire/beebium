@@ -174,9 +174,9 @@ final class StructuredListAdapterTests: XCTestCase {
                      peer(net: nil, station: 2, host: "bad-host", port: 2)]
         let diagnostics = [
             D(severity: "error", path: "/extensions/0/config/map/1/host",
-              message: "host must be an IPv4 address"),
+              message: "host must be an IPv4 address", location: "AUN"),
             D(severity: "warning", path: "/extensions/0/config/map/0",
-              message: "peer unreachable")]
+              message: "peer unreachable", location: "AUN")]
         let list = StructuredListParameterView.editableList(parameter: map, items: items,
                                                             diagnostics: diagnostics)
         // Row 0: an item-level warning marks the row.
@@ -221,9 +221,9 @@ final class StructuredListAdapterTests: XCTestCase {
     func testForListItemArrayHelpers() {
         typealias D = PresetManager.PresetDiagnostic
         let diagnostics = [
-            D(severity: "error", path: "/extensions/0/config/map/1/host", message: "a"),
-            D(severity: "warning", path: "/extensions/0/config/map/0", message: "b"),
-            D(severity: "error", path: "/extensions/0/config/baud", message: "c")]
+            D(severity: "error", path: "/extensions/0/config/map/1/host", message: "a", location: "AUN"),
+            D(severity: "warning", path: "/extensions/0/config/map/0", message: "b", location: "AUN"),
+            D(severity: "error", path: "/extensions/0/config/baud", message: "c", location: "AUN")]
         XCTAssertEqual(diagnostics.forListItem(key: "map", index: 1).map(\.message), ["a"])
         XCTAssertEqual(diagnostics.forListItemField(key: "map", index: 1, field: "host").map(\.message), ["a"])
         XCTAssertTrue(diagnostics.forListItemField(key: "map", index: 1, field: "port").isEmpty)

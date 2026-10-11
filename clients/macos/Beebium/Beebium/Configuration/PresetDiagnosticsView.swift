@@ -47,8 +47,8 @@ struct PresetDiagnosticsView: View {
                     .font(.caption)
                     .foregroundColor(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let location = PresetDiagnosticLocation.describe(path: diagnostic.path) {
-                    Text(location)
+                if !diagnostic.location.isEmpty {
+                    Text(diagnostic.location)
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -111,38 +111,12 @@ extension Array where Element == PresetManager.PresetDiagnostic {
     }
 }
 
-/// Maps a diagnostic's JSON-pointer path to a human location, and classifies it
-/// to the configuration section it belongs to, so a section can show (or
-/// highlight) only its own problems. One place, since every section needs it.
+/// Classifies a diagnostic's JSON-pointer path to the configuration section it
+/// belongs to, so a section can show (or highlight) only its own problems. These
+/// are structural routing helpers over the path; the human description of where a
+/// diagnostic points comes from resolve-preset (PresetDiagnostic.location), not
+/// from the client. One place, since every section needs the routing.
 enum PresetDiagnosticLocation {
-    /// A human description of where a diagnostic points, or nil for a
-    /// whole-document diagnostic (path "").
-    static func describe(path: String) -> String? {
-        let components = path.split(separator: "/").map(String.init)
-        guard let first = components.first else { return nil }
-        switch first {
-        case "storage":
-            if components.count >= 3, components[1] == "floppy_drives", let n = Int(components[2]) {
-                return "Floppy \(n)"
-            }
-            return "Storage"
-        case "sideways_bank":
-            if components.count >= 3, components[1] == "slots", let n = Int(components[2]) {
-                return "Sideways slot \(n)"
-            }
-            return "Sideways ROM / RAM"
-        case "extensions":
-            if components.count >= 2, let n = Int(components[1]) {
-                return "Extension \(n)"
-            }
-            return "Extensions"
-        case "econet":
-            return "Econet"
-        default:
-            return first
-        }
-    }
-
     /// The top-level preset key a diagnostic belongs to (first path component),
     /// or nil for a whole-document diagnostic. Lets a section filter the
     /// diagnostics it is responsible for.
