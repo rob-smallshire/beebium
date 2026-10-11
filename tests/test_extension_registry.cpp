@@ -16,6 +16,7 @@
 #include <TestScratchRam.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 using namespace beebium;
 
@@ -62,39 +63,19 @@ int TrackingExtension::init_counter = 0;
 
 }  // namespace
 
-// MARK: - Auto-assignment of instance ids
+// MARK: - Instance ids
 
-TEST_CASE("ExtensionRegistry assigns id == name for the first instance",
+TEST_CASE("ExtensionRegistry refuses an extension with no id",
           "[extension][registry][identity]") {
+    // The server names every instance before registering it
+    // (assign_extension_ids); the registry names none itself.
     ExtensionRegistry registry;
-    auto ext = std::make_unique<TrackingExtension>("acorn-scsi");
-    auto* ptr = ext.get();
-    registry.register_extension(std::move(ext));
-
-    REQUIRE(ptr->id() == "acorn-scsi");
+    CHECK_THROWS_AS(registry.register_extension(std::make_unique<TrackingExtension>("acorn-scsi")),
+                    std::invalid_argument);
+    CHECK(registry.extension_count() == 0);
 }
 
-TEST_CASE("ExtensionRegistry disambiguates multiple instances of the same type",
-          "[extension][registry][identity]") {
-    ExtensionRegistry registry;
-
-    auto a = std::make_unique<TrackingExtension>("scsi-hard-disc");
-    auto b = std::make_unique<TrackingExtension>("scsi-hard-disc");
-    auto c = std::make_unique<TrackingExtension>("scsi-hard-disc");
-    auto* pa = a.get();
-    auto* pb = b.get();
-    auto* pc = c.get();
-
-    registry.register_extension(std::move(a));
-    registry.register_extension(std::move(b));
-    registry.register_extension(std::move(c));
-
-    REQUIRE(pa->id() == "scsi-hard-disc");
-    REQUIRE(pb->id() == "scsi-hard-disc-1");
-    REQUIRE(pc->id() == "scsi-hard-disc-2");
-}
-
-TEST_CASE("ExtensionRegistry preserves an explicit user-set id",
+TEST_CASE("ExtensionRegistry keeps the id an extension is given",
           "[extension][registry][identity]") {
     ExtensionRegistry registry;
     auto ext = std::make_unique<TrackingExtension>("scsi-hard-disc");
@@ -106,28 +87,6 @@ TEST_CASE("ExtensionRegistry preserves an explicit user-set id",
     REQUIRE(ptr->id() == "boot-disc");
 }
 
-TEST_CASE("ExtensionRegistry auto-id routes around an explicit collision",
-          "[extension][registry][identity]") {
-    ExtensionRegistry registry;
-
-    auto a = std::make_unique<TrackingExtension>("scsi-hard-disc");
-    a->set_config({{"id", "scsi-hard-disc-1"}});  // explicit reservation
-
-    auto b = std::make_unique<TrackingExtension>("scsi-hard-disc");
-    auto c = std::make_unique<TrackingExtension>("scsi-hard-disc");
-    auto* pa = a.get();
-    auto* pb = b.get();
-    auto* pc = c.get();
-
-    registry.register_extension(std::move(a));
-    registry.register_extension(std::move(b));
-    registry.register_extension(std::move(c));
-
-    REQUIRE(pa->id() == "scsi-hard-disc-1");
-    REQUIRE(pb->id() == "scsi-hard-disc");  // bare name is free
-    REQUIRE(pc->id() == "scsi-hard-disc-2");  // steps past the explicit -1
-}
-
 TEST_CASE("ExtensionRegistry inits extension with satisfied dependency",
           "[extension][registry]") {
     ExtensionRegistry registry;
@@ -137,7 +96,7 @@ TEST_CASE("ExtensionRegistry inits extension with satisfied dependency",
     registry.register_extension_point("1mhz-bus");
     auto ext = std::make_unique<TrackingExtension>("test", std::vector<std::string_view>{"1mhz-bus"});
     auto* ptr = ext.get();
-    registry.register_extension(std::move(ext));
+    registry.register_extension(with_default_id(std::move(ext)));
 
     registry.resolve_and_init(ctx);
 
@@ -152,8 +111,8 @@ TEST_CASE("ExtensionRegistry fails on unsatisfied dependency",
     ExtensionContext ctx(&port);
 
     // No extension point registered -- dependency unsatisfied
-    registry.register_extension(
-        std::make_unique<TrackingExtension>("test", std::vector<std::string_view>{"1mhz-bus"}));
+    registry.register_extension(with_default_id(
+        std::make_unique<TrackingExtension>("test", std::vector<std::string_view>{"1mhz-bus"})));
 
     REQUIRE_THROWS_AS(registry.resolve_and_init(ctx), std::runtime_error);
 }
@@ -177,8 +136,8 @@ TEST_CASE("ExtensionRegistry inits provider before consumer",
         "provider", std::vector<std::string_view>{"1mhz-bus"}, std::vector<std::string_view>{"scsi"});
     auto* provider_ptr = provider.get();
 
-    registry.register_extension(std::move(consumer));
-    registry.register_extension(std::move(provider));
+    registry.register_extension(with_default_id(std::move(consumer)));
+    registry.register_extension(with_default_id(std::move(provider)));
 
     registry.resolve_and_init(ctx);
 
@@ -193,10 +152,10 @@ TEST_CASE("ExtensionRegistry detects cycle", "[extension][registry]") {
     ExtensionContext ctx(&port);
 
     // A needs B, B needs A
-    registry.register_extension(std::make_unique<TrackingExtension>(
-        "ext-a", std::vector<std::string_view>{"ext-b-bus"}, std::vector<std::string_view>{"ext-a-bus"}));
-    registry.register_extension(std::make_unique<TrackingExtension>(
-        "ext-b", std::vector<std::string_view>{"ext-a-bus"}, std::vector<std::string_view>{"ext-b-bus"}));
+    registry.register_extension(with_default_id(std::make_unique<TrackingExtension>(
+        "ext-a", std::vector<std::string_view>{"ext-b-bus"}, std::vector<std::string_view>{"ext-a-bus"})));
+    registry.register_extension(with_default_id(std::make_unique<TrackingExtension>(
+        "ext-b", std::vector<std::string_view>{"ext-a-bus"}, std::vector<std::string_view>{"ext-b-bus"})));
 
     REQUIRE_THROWS_AS(registry.resolve_and_init(ctx), std::runtime_error);
 }
@@ -218,8 +177,8 @@ TEST_CASE("ExtensionRegistry shutdown in reverse init order",
     auto* ptr1 = ext1.get();
     auto* ptr2 = ext2.get();
 
-    registry.register_extension(std::move(ext1));
-    registry.register_extension(std::move(ext2));
+    registry.register_extension(with_default_id(std::move(ext1)));
+    registry.register_extension(with_default_id(std::move(ext2)));
 
     registry.resolve_and_init(ctx);
     REQUIRE(ptr1->init_order == 0);
@@ -238,7 +197,7 @@ TEST_CASE("ExtensionRegistry extension with no dependencies inits",
 
     auto ext = std::make_unique<TrackingExtension>("standalone");
     auto* ptr = ext.get();
-    registry.register_extension(std::move(ext));
+    registry.register_extension(with_default_id(std::move(ext)));
 
     registry.resolve_and_init(ctx);
     REQUIRE(ptr->inited);
@@ -250,7 +209,7 @@ TEST_CASE("ExtensionRegistry with TestScratchRam", "[extension][registry]") {
     ExtensionContext ctx(&port);
 
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(TestScratchRam::create());
+    registry.register_extension(with_default_id(TestScratchRam::create()));
 
     registry.resolve_and_init(ctx);
 

@@ -179,10 +179,8 @@ Extension* ExtensionUiServiceImpl::find_extension(
     // Lookup is by Extension::id(), not manifest name, so that
     // multi-instance extensions (e.g. three SCSI hard discs on the
     // same adapter) are each individually addressable. For
-    // single-instance extensions (AUN, Piconet) the auto-assigned id
-    // equals the manifest name, so existing clients are unaffected
-    // by the wire-level rename of the field from extension_name to
-    // extension_id.
+    // single-instance extensions (AUN, Piconet) the id the server
+    // assigns equals the manifest name.
     for (const auto& ext : transport_registry_.extensions()) {
         if (ext->id() == id) {
             return ext.get();

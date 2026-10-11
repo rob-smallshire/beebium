@@ -16,6 +16,7 @@
 // to disc image file I/O.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include <beebium/Machines.hpp>
 #include <beebium/FrameAllocator.hpp>
@@ -120,14 +121,14 @@ TEST_CASE("ScsiHardDiscExtension registers hdd-N-activity-led when indicators ar
 
     ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(AcornScsiHostAdapter::create());
+    registry.register_extension(with_default_id(AcornScsiHostAdapter::create()));
     auto hdd_ext = ScsiHardDiscExtension::create();
     hdd_ext->set_config({
         {"scsi-id", "0"},
         {"image", (kAssetsDir / "scsi" / "scsi0.dat").string()},
         {"id", "test-hdd"},
     });
-    registry.register_extension(std::move(hdd_ext));
+    registry.register_extension(with_default_id(std::move(hdd_ext)));
 
     ExtensionContext ctx(
         &machine.memory().one_mhz_bus(), nullptr, nullptr, &machine.memory().indicators);
@@ -150,14 +151,14 @@ TEST_CASE("ScsiHardDiscExtension uses configured scsi-id in indicator name",
 
     ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(AcornScsiHostAdapter::create());
+    registry.register_extension(with_default_id(AcornScsiHostAdapter::create()));
     auto hdd_ext = ScsiHardDiscExtension::create();
     hdd_ext->set_config({
         {"scsi-id", "5"},
         {"image", (kAssetsDir / "scsi" / "scsi0.dat").string()},
         {"id", "test-hdd"},
     });
-    registry.register_extension(std::move(hdd_ext));
+    registry.register_extension(with_default_id(std::move(hdd_ext)));
 
     ExtensionContext ctx(
         &machine.memory().one_mhz_bus(), nullptr, nullptr, &machine.memory().indicators);
@@ -176,14 +177,14 @@ TEST_CASE("ScsiHardDiscExtension init without indicators does not throw",
 
     ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(AcornScsiHostAdapter::create());
+    registry.register_extension(with_default_id(AcornScsiHostAdapter::create()));
     auto hdd_ext = ScsiHardDiscExtension::create();
     hdd_ext->set_config({
         {"scsi-id", "0"},
         {"image", (kAssetsDir / "scsi" / "scsi0.dat").string()},
         {"id", "test-hdd"},
     });
-    registry.register_extension(std::move(hdd_ext));
+    registry.register_extension(with_default_id(std::move(hdd_ext)));
 
     // Construct the context WITHOUT indicators (4th arg defaulted to nullptr).
     ExtensionContext ctx(&machine.memory().one_mhz_bus());
@@ -213,7 +214,7 @@ TEST_CASE("ADFS SCSI boot and *CAT on Model B+", "[scsi][adfs][e2e]") {
     registry.register_extension_point("1mhz-bus");
 
     // SCSI adapter: attaches to "1mhz-bus", provides "scsi"
-    registry.register_extension(AcornScsiHostAdapter::create());
+    registry.register_extension(with_default_id(AcornScsiHostAdapter::create()));
 
     // Hard disc: attaches to "scsi" (dependency resolved by registry)
     // Configure via the config map, just as the CLI/preset path would
@@ -223,7 +224,7 @@ TEST_CASE("ADFS SCSI boot and *CAT on Model B+", "[scsi][adfs][e2e]") {
         {"image", (kAssetsDir / "scsi" / "scsi0.dat").string()},
         {"id", "boot-disc"},
     });
-    registry.register_extension(std::move(hdd_ext));
+    registry.register_extension(with_default_id(std::move(hdd_ext)));
 
     // Resolve dependencies and init: adapter first (provides "scsi"), then HDD
     ExtensionContext ctx(&machine.memory().one_mhz_bus());

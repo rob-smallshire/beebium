@@ -35,23 +35,15 @@ public:
         extension_points_.emplace(name);
     }
 
-    // Register an extension for later initialisation.
-    //
-    // If the extension has no explicit `id` in its config (the usual
-    // case for any extension the user didn't tag with a CLI/preset
-    // `id=`), fill one in via make_extension_id() so that every
-    // registered extension is addressable by a unique, stable id.
-    // First instance of a type gets `id == manifest.name`; subsequent
-    // get the `name-N` suffix scheme.
+    // Register an extension for later initialisation. It must have an `id`:
+    // the server names every instance once its configuration is resolved
+    // (assign_extension_ids), so the registry never names one itself. Throws
+    // std::invalid_argument for an extension with none.
     void register_extension(std::unique_ptr<PeripheralExtension> ext) {
         if (ext->id().empty()) {
-            std::vector<std::string> existing;
-            existing.reserve(extensions_.size());
-            for (const auto& e : extensions_) {
-                existing.emplace_back(e->id());
-            }
-            ext->set_config_value(
-                "id", make_extension_id(ext->name(), existing));
+            throw std::invalid_argument(
+                "ExtensionRegistry: extension '" + std::string(ext->name()) +
+                "' has no id");
         }
         extensions_.push_back(std::move(ext));
     }

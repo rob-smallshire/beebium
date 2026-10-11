@@ -13,6 +13,7 @@
 // Test PluginLoader: manifest scanning, opt-in loading, and extension registration.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <beebium/extension/PeripheralExtension.hpp>
@@ -132,7 +133,7 @@ TEST_CASE("PluginLoader load_extension loads and registers extension",
     auto* peripheral = dynamic_cast<beebium::PeripheralExtension*>(loaded.get());
     REQUIRE(peripheral != nullptr);
     (void)loaded.release();
-    registry.register_extension(std::unique_ptr<beebium::PeripheralExtension>(peripheral));
+    registry.register_extension(with_default_id(std::unique_ptr<beebium::PeripheralExtension>(peripheral)));
     REQUIRE(registry.extension_count() == 1);
 
     beebium::OneMHzBusPort port;
@@ -169,7 +170,7 @@ TEST_CASE("PluginLoader loaded extension provides an RPC dispatcher",
     auto* peripheral = dynamic_cast<beebium::PeripheralExtension*>(loaded.get());
     REQUIRE(peripheral != nullptr);
     (void)loaded.release();
-    registry.register_extension(std::unique_ptr<beebium::PeripheralExtension>(peripheral));
+    registry.register_extension(with_default_id(std::unique_ptr<beebium::PeripheralExtension>(peripheral)));
 
     beebium::OneMHzBusPort port;
     beebium::ExtensionContext ctx(&port);

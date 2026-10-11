@@ -13,6 +13,7 @@
 // Test gRPC PeripheralExtensionService for frontend discovery of loaded extensions.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include "beebium/Machines.hpp"
 #include "beebium/service/Server.hpp"
@@ -122,7 +123,7 @@ public:
         machine_.reset();
 
         registry_.register_extension_point("1mhz-bus");
-        registry_.register_extension(beebium::TestScratchRam::create());
+        registry_.register_extension(with_default_id(beebium::TestScratchRam::create()));
 
         beebium::ExtensionContext ctx(&machine_.state().memory.one_mhz_bus());
         registry_.resolve_and_init(ctx);
@@ -192,8 +193,8 @@ TEST_CASE("PeripheralExtensionService ListExtensions reports has_ui correctly",
 
     beebium::ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(beebium::TestScratchRam::create());
-    registry.register_extension(std::make_unique<UiBearingTestExtension>());
+    registry.register_extension(with_default_id(beebium::TestScratchRam::create()));
+    registry.register_extension(with_default_id(std::make_unique<UiBearingTestExtension>()));
 
     beebium::ExtensionContext ctx(&machine.state().memory.one_mhz_bus());
     registry.resolve_and_init(ctx);
@@ -248,8 +249,8 @@ TEST_CASE("PeripheralExtensionService ListExtensions serialises storage devices"
 
     beebium::ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(beebium::TestScratchRam::create());
-    registry.register_extension(std::make_unique<StorageBearingTestExtension>());
+    registry.register_extension(with_default_id(beebium::TestScratchRam::create()));
+    registry.register_extension(with_default_id(std::make_unique<StorageBearingTestExtension>()));
 
     beebium::ExtensionContext ctx(&machine.state().memory.one_mhz_bus());
     registry.resolve_and_init(ctx);
@@ -447,16 +448,16 @@ TEST_CASE("PeripheralExtensionService ListExtensions names the attachment points
     beebium::ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
     registry.register_extension_point("tube");
-    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
-        adapter_manifest(), std::map<std::string, std::string>{{"id", "bus-a"}}));
-    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
-        adapter_manifest(), std::map<std::string, std::string>{{"id", "bus-b"}}));
+    registry.register_extension(with_default_id(std::make_unique<ManifestOnlyExtension>(
+        adapter_manifest(), std::map<std::string, std::string>{{"id", "bus-a"}})));
+    registry.register_extension(with_default_id(std::make_unique<ManifestOnlyExtension>(
+        adapter_manifest(), std::map<std::string, std::string>{{"id", "bus-b"}})));
     // One drive names its adapter; the other takes the last one loaded.
-    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
+    registry.register_extension(with_default_id(std::make_unique<ManifestOnlyExtension>(
         drive_manifest(),
-        std::map<std::string, std::string>{{"id", "named"}, {"adapter", "bus-a"}}));
-    registry.register_extension(std::make_unique<ManifestOnlyExtension>(
-        drive_manifest(), std::map<std::string, std::string>{{"id", "unnamed"}}));
+        std::map<std::string, std::string>{{"id", "named"}, {"adapter", "bus-a"}})));
+    registry.register_extension(with_default_id(std::make_unique<ManifestOnlyExtension>(
+        drive_manifest(), std::map<std::string, std::string>{{"id", "unnamed"}})));
 
     beebium::ExtensionContext ctx(&machine.state().memory.one_mhz_bus());
     registry.resolve_and_init(ctx);

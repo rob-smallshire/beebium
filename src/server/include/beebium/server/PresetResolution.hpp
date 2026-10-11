@@ -417,12 +417,13 @@ std::vector<Diagnostic> normalise_preset_extensions(ServerConfig<MachineType>& c
 }
 
 // Give every extension instance without a framework `id` one: its extension's
-// name, or name-1, name-2, ... when that is taken (make_extension_id, the
-// registries' scheme), never an id another instance was given explicitly.
-// This is the one place an instance is named, so the same configuration
-// always names its instances the same way: a provider_of parameter can name
-// an instance whose author gave it no id, and resolve-preset writes the ids
-// into the document so a saved preset stays addressable.
+// name, or name-1, name-2, ... when that is taken (make_extension_id), never
+// an id another instance was given explicitly. This is the one place an
+// instance is named -- the registries refuse an instance without an id -- so
+// the same configuration always names its instances the same way: a
+// provider_of parameter can name an instance whose author gave it no id, and
+// resolve-preset writes the ids into the document so a saved preset stays
+// addressable.
 template<typename MachineType>
 void assign_extension_ids(ServerConfig<MachineType>& config) {
     std::vector<std::string> taken;

@@ -35,6 +35,7 @@
 // directly so the failure can be observed without having to spawn the server.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 #include "test_temp_paths.hpp"
 
 #include <beebium/extension/ExtensionContext.hpp>
@@ -121,8 +122,8 @@ TEST_CASE("SCSI plugin dlclose followed by Indicators destruction does not crash
             dynamic_cast<beebium::PeripheralExtension*>(adapter_loaded.get());
         REQUIRE(adapter_peripheral != nullptr);
         (void)adapter_loaded.release();
-        registry.register_extension(
-            std::unique_ptr<beebium::PeripheralExtension>(adapter_peripheral));
+        registry.register_extension(with_default_id(
+            std::unique_ptr<beebium::PeripheralExtension>(adapter_peripheral)));
 
         std::map<std::string, std::string> hdd_config{
             {"scsi-id", "0"},
@@ -134,8 +135,8 @@ TEST_CASE("SCSI plugin dlclose followed by Indicators destruction does not crash
             dynamic_cast<beebium::PeripheralExtension*>(hdd_loaded.get());
         REQUIRE(hdd_peripheral != nullptr);
         (void)hdd_loaded.release();
-        registry.register_extension(
-            std::unique_ptr<beebium::PeripheralExtension>(hdd_peripheral));
+        registry.register_extension(with_default_id(
+            std::unique_ptr<beebium::PeripheralExtension>(hdd_peripheral)));
 
         beebium::ExtensionContext ctx(&bus_port, nullptr, nullptr, &indicators);
         registry.resolve_and_init(ctx);

@@ -68,7 +68,8 @@ public:
         // Unique discovery type so a real _aun._udp announcer on this host or
         // the LAN cannot be adopted as a peer and fail these tests (#145).
         ext->set_discovery_service_type(aun_unique_service_type());
-        ext->set_config({{"port", "0"}, {"net", "0"}, {"map-file", map_filepath_.string()}});
+        ext->set_config({{"id", "aun"}, {"port", "0"}, {"net", "0"},
+                         {"map-file", map_filepath_.string()}});
         auto backend = ext->create_backend(/*station=*/1);
         REQUIRE(backend != nullptr);
         machine_.state().memory.econet_socket.enable(

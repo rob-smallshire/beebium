@@ -18,6 +18,7 @@
 // SubscribeView path with mark_dirty triggering a second push.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include "beebium/Machines.hpp"
 #include "beebium/econet/NetworkBackend.hpp"
@@ -375,7 +376,7 @@ TEST_CASE("SubscribeView pushes initial View, then a second after mark_dirty",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeUiTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -411,11 +412,13 @@ TEST_CASE("SubscribeView distinguishes two instances of the same extension type 
     // than by manifest name, so multi-instance extensions (most
     // obviously, multiple SCSI hard discs on the same adapter) are
     // each addressable. Two FakeUiTransports with the same manifest
-    // name "fake" go in; the registry's Step-1 auto-id machinery
-    // hands them "fake" and "fake-1"; the service uses those.
+    // name "fake" go in, named "fake" and "fake-1" as the server names
+    // them (assign_extension_ids); the service uses those.
     beebium::EconetTransportRegistry registry;
     auto a = std::make_unique<FakeUiTransport>("fake");
     auto b = std::make_unique<FakeUiTransport>("fake");
+    a->set_config_value("id", "fake");
+    b->set_config_value("id", "fake-1");
     auto* a_ptr = a.get();
     auto* b_ptr = b.get();
     registry.add(std::move(a));
@@ -466,7 +469,7 @@ TEST_CASE("Dispatch on current revision with matching payload runs handle_event"
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeUiTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -490,7 +493,7 @@ TEST_CASE("Dispatch with stale view_revision is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeUiTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     // Bump the revision so the request below is stale by construction.
@@ -518,7 +521,7 @@ TEST_CASE("Dispatch with unknown control id is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeUiTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -540,7 +543,7 @@ TEST_CASE("Dispatch with wrong payload type for the addressed control is rejecte
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeUiTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -563,7 +566,7 @@ TEST_CASE("Dispatch EditorCommit to a ModalEditor runs handle_event",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeModalTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -596,7 +599,7 @@ TEST_CASE("Dispatch EditorCommit rejected when the ModalEditor is not editable",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeModalTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
     fake_ptr->fake_ui().set_editable(false);
 
@@ -622,7 +625,7 @@ TEST_CASE("Dispatch EditorCommit with unknown field_id is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeModalTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -647,7 +650,7 @@ TEST_CASE("Dispatch EditorCommit with wrong value variant for a sub-control is r
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeModalTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -715,7 +718,7 @@ TEST_CASE("Dispatch with string_value targets an EditableChoice",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeEditableTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -776,7 +779,7 @@ TEST_CASE("Dispatch with index_value to an EditableChoice is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeEditableTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -796,7 +799,7 @@ TEST_CASE("Dispatch with index_value to an EditableChoice is rejected",
 TEST_CASE("Cancelling the SubscribeView context exits the server poll loop cleanly",
           "[grpc][extension-ui]") {
     beebium::EconetTransportRegistry registry;
-    registry.add(std::make_unique<FakeUiTransport>());
+    registry.add(with_default_id(std::make_unique<FakeUiTransport>()));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -831,7 +834,7 @@ TEST_CASE("Dispatch ADD to an EditableList runs handle_event",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -859,7 +862,7 @@ TEST_CASE("Dispatch ADD is rejected when the list does not allow adding",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     fake_ptr->fake_ui().set_can_add(false);
@@ -884,7 +887,7 @@ TEST_CASE("Dispatch EDIT to an editable item runs handle_event",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -911,7 +914,7 @@ TEST_CASE("Dispatch EDIT with an unknown item id is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -935,7 +938,7 @@ TEST_CASE("Dispatch EDIT to a non-editable item is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -959,7 +962,7 @@ TEST_CASE("Dispatch EDIT commit with an unknown field id is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -986,7 +989,7 @@ TEST_CASE("Dispatch REMOVE of a removable item runs handle_event",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1009,7 +1012,7 @@ TEST_CASE("Dispatch REMOVE of a non-removable item is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1033,7 +1036,7 @@ TEST_CASE("Dispatch ACTION with a known action id runs handle_event",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1064,7 +1067,7 @@ TEST_CASE("Dispatch ACTION whose editor commit has an unknown field is rejected"
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1092,7 +1095,7 @@ TEST_CASE("Dispatch ACTION with an unknown action id is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1117,7 +1120,7 @@ TEST_CASE("Dispatch with wrong payload type for an EditableList is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1141,7 +1144,7 @@ TEST_CASE("Dispatch a known file action runs handle_event",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;
@@ -1163,7 +1166,7 @@ TEST_CASE("Dispatch an unknown file action is rejected",
     beebium::EconetTransportRegistry registry;
     auto fake = std::make_unique<FakeListTransport>();
     auto* fake_ptr = fake.get();
-    registry.add(std::move(fake));
+    registry.add(with_default_id(std::move(fake)));
     ExtensionUiFixture fixture(registry);
 
     grpc::ClientContext ctx;

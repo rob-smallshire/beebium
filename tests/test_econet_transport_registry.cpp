@@ -20,6 +20,9 @@
 #include <beebium/extension/EconetTransportRegistry.hpp>
 #include <beebium/econet/NetworkBackend.hpp>
 
+#include <stdexcept>
+#include <string>
+
 using namespace beebium;
 
 namespace {
@@ -34,7 +37,9 @@ public:
 
 class StubTransport : public EconetTransportExtension {
 public:
-    explicit StubTransport(int marker = 0) : marker_(marker) {}
+    explicit StubTransport(int marker = 0) : marker_(marker) {
+        set_config_value("id", "stub-" + std::to_string(marker));
+    }
     int marker() const { return marker_; }
     std::unique_ptr<NetworkBackend> create_backend(uint8_t) override {
         return std::make_unique<StubBackend>();
@@ -44,11 +49,11 @@ private:
     int marker_;
 };
 
-// Helper: produce a StubTransport with a manifest whose name is set,
-// so the registry's id auto-assignment has something to base its
-// candidate id on.
+// Helper: produce a StubTransport with a manifest whose name is set and
+// no id.
 std::unique_ptr<StubTransport> make_named_stub(std::string_view manifest_name) {
     auto t = std::make_unique<StubTransport>();
+    t->set_config({});
     ExtensionManifest m;
     m.name = std::string(manifest_name);
     t->set_manifest(std::move(m));
@@ -88,31 +93,16 @@ TEST_CASE("EconetTransportRegistry: preserves insertion order",
     REQUIRE(static_cast<StubTransport*>(exts[2].get())->marker() == 30);
 }
 
-TEST_CASE("EconetTransportRegistry: assigns id == manifest name for the first instance",
+TEST_CASE("EconetTransportRegistry: refuses a transport with no id",
           "[econet][transport][registry][identity]") {
+    // The server names every instance before registering it
+    // (assign_extension_ids); the registry names none itself.
     EconetTransportRegistry registry;
-    auto t = make_named_stub("aun");
-    auto* ptr = t.get();
-    registry.add(std::move(t));
-    REQUIRE(ptr->id() == "aun");
+    CHECK_THROWS_AS(registry.add(make_named_stub("aun")), std::invalid_argument);
+    CHECK(registry.empty());
 }
 
-TEST_CASE("EconetTransportRegistry: disambiguates multiple instances of the same type",
-          "[econet][transport][registry][identity]") {
-    // Future Acorn Econet Bridge machines will hold multiple
-    // transports; this test makes sure their auto-ids stay distinct.
-    EconetTransportRegistry registry;
-    auto a = make_named_stub("aun");
-    auto b = make_named_stub("aun");
-    auto* pa = a.get();
-    auto* pb = b.get();
-    registry.add(std::move(a));
-    registry.add(std::move(b));
-    REQUIRE(pa->id() == "aun");
-    REQUIRE(pb->id() == "aun-1");
-}
-
-TEST_CASE("EconetTransportRegistry: preserves an explicit user-set id",
+TEST_CASE("EconetTransportRegistry: keeps the id a transport is given",
           "[econet][transport][registry][identity]") {
     EconetTransportRegistry registry;
     auto t = make_named_stub("aun");

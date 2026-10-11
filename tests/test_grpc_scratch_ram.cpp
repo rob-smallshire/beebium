@@ -18,6 +18,7 @@
 // the channel and round-trip-consistent with 6502-side memory access.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include "beebium/Machines.hpp"
 #include "beebium/service/Server.hpp"
@@ -42,7 +43,7 @@ public:
         machine_.reset();
 
         registry_.register_extension_point("1mhz-bus");
-        registry_.register_extension(beebium::TestScratchRam::create());
+        registry_.register_extension(with_default_id(beebium::TestScratchRam::create()));
 
         beebium::ExtensionContext ctx(&machine_.state().memory.one_mhz_bus());
         registry_.resolve_and_init(ctx);

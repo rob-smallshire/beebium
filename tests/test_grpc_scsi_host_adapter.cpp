@@ -17,6 +17,7 @@
 // parsing the reply -- exactly as the Python/TS clients do over the wire.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include "beebium/Machines.hpp"
 #include "beebium/service/Server.hpp"
@@ -44,7 +45,7 @@ public:
         registry_.register_extension_point("1mhz-bus");
         auto ext = beebium::AcornScsiHostAdapter::create();
         adapter_ = ext.get();
-        registry_.register_extension(std::move(ext));
+        registry_.register_extension(with_default_id(std::move(ext)));
 
         beebium::ExtensionContext ctx(&machine_.state().memory.one_mhz_bus());
         registry_.resolve_and_init(ctx);

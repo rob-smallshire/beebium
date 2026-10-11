@@ -25,6 +25,7 @@
 // either of those suites noticing.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include "PiconetEconetTransportExtension.hpp"
 #include "beebium/Machines.hpp"
@@ -87,7 +88,7 @@ public:
         machine_.state().memory.econet_socket.enable(
             /*station=*/1, std::move(backend_owner), /*aun_mode=*/true);
 
-        registry_.add(std::move(ext));
+        registry_.add(with_default_id(std::move(ext)));
 
         service_ = std::make_unique<beebium::service::ExtensionUiServiceImpl>(
             registry_, peripheral_registry_);
@@ -319,7 +320,7 @@ public:
         machine_.state().memory.econet_socket.enable(
             /*station=*/1, std::move(backend_owner), /*aun_mode=*/true);
 
-        registry_.add(std::move(ext));
+        registry_.add(with_default_id(std::move(ext)));
 
         service_ = std::make_unique<beebium::service::ExtensionUiServiceImpl>(
             registry_, peripheral_registry_);

@@ -265,20 +265,17 @@ TEST_CASE("ExtensionRpc server-stream reaches the transport instance named by id
     }
 }
 
-TEST_CASE("ExtensionRpc addresses registry-assigned transport ids",
+TEST_CASE("ExtensionRpc addresses two instances of one transport by their ids",
           "[grpc][extension-rpc]") {
-    // No explicit id: the registry assigns each instance a unique one, the
-    // same id EconetTransportService reports, and ExtensionRpc routes by it.
+    // Two instances of one type, named as the server names them
+    // (assign_extension_ids) -- the ids EconetTransportService reports --
+    // and ExtensionRpc routes by each.
     beebium::EconetTransportRegistry transports;
-    transports.add(std::make_unique<FakeRpcTransport>("", "Echo"));
-    transports.add(std::make_unique<FakeRpcTransport>("", "Echo"));
-    const std::string first_id(transports.extensions()[0]->id());
-    const std::string second_id(transports.extensions()[1]->id());
-    REQUIRE_FALSE(first_id.empty());
-    REQUIRE(first_id != second_id);
+    transports.add(std::make_unique<FakeRpcTransport>("echo", "Echo"));
+    transports.add(std::make_unique<FakeRpcTransport>("echo-1", "Echo"));
     ExtensionRpcFixture fix(transports);
 
-    for (const std::string& id : {first_id, second_id}) {
+    for (const std::string id : {"echo", "echo-1"}) {
         grpc::ClientContext ctx;
         beebium::InvokeResponse resp;
         auto status =

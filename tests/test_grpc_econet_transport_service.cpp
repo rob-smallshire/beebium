@@ -18,6 +18,7 @@
 //   - AUN extension in the registry -- both RPCs report it as active.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include "AunEconetTransportExtension.hpp"
 #include "beebium/Machines.hpp"
@@ -110,7 +111,7 @@ TEST_CASE("EconetTransportService: AUN extension shows up as active",
     manifest.cli_name = "aun";
     manifest.extension_kind = "econet-transport";
     aun->set_manifest(std::move(manifest));
-    registry.add(std::move(aun));
+    registry.add(with_default_id(std::move(aun)));
 
     TransportDiscoveryFixture fixture(registry);
 
@@ -167,7 +168,7 @@ TEST_CASE("Discovered transport id resolves via ExtensionUiService; "
     // Mimic ServerMain: assign an explicit (UUID) id before registering,
     // so registry.add() keeps it rather than deriving one from the name.
     aun->set_config_value("id", kInstanceId);
-    transport_registry.add(std::move(aun));
+    transport_registry.add(with_default_id(std::move(aun)));
 
     beebium::ExtensionRegistry peripheral_registry;  // empty
     beebium::service::EconetTransportServiceImpl transport_service(transport_registry);

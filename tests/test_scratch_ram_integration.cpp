@@ -16,6 +16,7 @@
 #include <TestScratchRam.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 using namespace beebium;
 
@@ -25,7 +26,7 @@ TEST_CASE("TestScratchRam accessible through ModelBHardware memory map",
 
     ExtensionRegistry registry;
     registry.register_extension_point("1mhz-bus");
-    registry.register_extension(TestScratchRam::create());
+    registry.register_extension(with_default_id(TestScratchRam::create()));
 
     ExtensionContext ctx(&hw.one_mhz_bus());
     registry.resolve_and_init(ctx);

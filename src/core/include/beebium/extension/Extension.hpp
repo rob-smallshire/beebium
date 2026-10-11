@@ -68,9 +68,9 @@ public:
     void set_config(std::map<std::string, std::string> config) { config_ = std::move(config); }
 
     // Set or replace a single config entry. Intended for framework use
-    // (the registries call this to auto-assign a default `id` when the
-    // user didn't supply one); extensions themselves should configure
-    // via set_config() with the full map.
+    // (e.g. EconetService recording the port a transport bound);
+    // extensions themselves should configure via set_config() with the
+    // full map.
     void set_config_value(std::string key, std::string value) {
         config_[std::move(key)] = std::move(value);
     }
@@ -209,9 +209,9 @@ protected:
 };
 
 // Compose a stable, unique instance id for an extension of the given
-// type. Used by both ExtensionRegistry::register_extension and
-// EconetTransportRegistry::add to fill in config["id"] when the user
-// didn't supply one.
+// type. The server's assign_extension_ids uses it to fill in
+// config["id"] for every instance the user gave none, before any
+// registry sees the instance.
 //
 // Algorithm: try `manifest_name` first; if that's in `existing_ids`,
 // try `manifest_name-1`, `-2`, ... until a free candidate is found.

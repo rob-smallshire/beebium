@@ -16,6 +16,7 @@
 // They create a local server, connect to it, and verify indicator operations work correctly.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 #include <catch2/matchers/catch_matchers.hpp>
 
 #include "beebium/Machines.hpp"
@@ -975,7 +976,7 @@ public:
 
         // SCSI extensions
         registry_.register_extension_point("1mhz-bus");
-        registry_.register_extension(beebium::AcornScsiHostAdapter::create());
+        registry_.register_extension(with_default_id(beebium::AcornScsiHostAdapter::create()));
         auto hdd_ext = beebium::ScsiHardDiscExtension::create();
         std::filesystem::path image =
             std::filesystem::path(BEEBIUM_TEST_ASSETS_DIR) / "scsi" / "scsi0.dat";
@@ -984,7 +985,7 @@ public:
             {"image", image.string()},
             {"id", "test-hdd"},
         });
-        registry_.register_extension(std::move(hdd_ext));
+        registry_.register_extension(with_default_id(std::move(hdd_ext)));
 
         beebium::ExtensionContext ctx(
             &machine_.state().memory.one_mhz_bus(), nullptr, nullptr,

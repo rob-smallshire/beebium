@@ -15,6 +15,7 @@
 // with the SCSI bus protocol.
 
 #include <catch2/catch_test_macros.hpp>
+#include "test_extension_ids.hpp"
 
 #include <beebium/ModelBHardware.hpp>
 #include <beebium/extension/ExtensionContext.hpp>
@@ -42,7 +43,7 @@ struct ScsiIntegrationFixture {
         registry.register_extension_point("1mhz-bus");
         auto ext = AcornScsiHostAdapter::create();
         adapter = ext.get();
-        registry.register_extension(std::move(ext));
+        registry.register_extension(with_default_id(std::move(ext)));
 
         ExtensionContext ctx(&hw.one_mhz_bus(), nullptr, nullptr, &hw.indicators);
         registry.resolve_and_init(ctx);
