@@ -466,8 +466,6 @@ public:
     MyExtension();
     ~MyExtension() override;
 
-    static std::unique_ptr<MyExtension> create();
-
     std::span<const std::string_view> attaches_to() const override {
         static constexpr std::string_view deps[] = {"1mhz-bus"};
         return deps;
@@ -503,17 +501,6 @@ namespace beebium {
 MyExtension::MyExtension() = default;
 MyExtension::~MyExtension() = default;
 
-std::unique_ptr<MyExtension> MyExtension::create() {
-    auto ext = std::unique_ptr<MyExtension>(new MyExtension());
-    ext->set_manifest(ExtensionManifest{
-        "my-extension",
-        "Description of my extension",
-        "my-extension",
-        {}  // empty path for built-in
-    });
-    return ext;
-}
-
 void MyExtension::init(ExtensionContext& ctx) {
     ctx.get<OneMHzBusPort>().claim_addresses(0x60, 0x63, *this);
     // Create gRPC service here if needed
@@ -536,7 +523,9 @@ void MyExtension::write(uint16_t offset, uint8_t value) {
 ```
 
 **Key points:**
-- Use `create()` factory method to set the manifest programmatically
+- The extension does not set its own manifest or config: whoever creates it
+  does -- the built-in table's factory through `instantiate_extension` (step 6),
+  or a plugin's entry point (see Creating a Plugin Extension)
 - In `init()`, claim addresses on the bus port via `ExtensionContext`
 - Addresses are offsets relative to 0xFC00, not absolute 16-bit addresses
 - `claim_addresses()` throws if the range overlaps with another device
@@ -618,8 +607,8 @@ plugin's manifest:
   instance: from its plugin library when the manifest names one, otherwise
   from the built-in factory, then gives it its manifest and normalised config
   (`set_manifest`, `set_config`, `set_list_config`). So the factory only
-  constructs; it does not set the manifest, as the plugin entry point does
-  not either.
+  constructs; unlike a plugin's entry point, which is handed the manifest and
+  sets it, it is given nothing.
 - `assemble_machine` (`MachineAssembly.hpp`) registers the instance by its
   `extension_kind`: an `econet-transport` with the `EconetTransportRegistry`,
   a `peripheral` with the `ExtensionRegistry`, whose `resolve_and_init` then
