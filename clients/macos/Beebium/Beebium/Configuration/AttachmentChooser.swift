@@ -126,6 +126,12 @@ struct AttachmentChooserView: View {
     }
 
     private var candidateList: some View {
+        // Single click selects a row (native List selection), arrows move it, and
+        // Return or the commit button chooses it. Do NOT add an .onTapGesture to a
+        // row to get double-click-to-commit: a tap gesture on a List row -- even a
+        // simultaneous count:2 one -- suppresses the List's own single-click
+        // selection, so clicks stop selecting (verified in the real popover). The
+        // row needs only its tag and a full-row hit area.
         List(candidates, selection: $selection) { candidate in
             VStack(alignment: .leading, spacing: 1) {
                 Text(candidate.displayName)
@@ -136,8 +142,6 @@ struct AttachmentChooserView: View {
             }
             .tag(candidate.id)
             .contentShape(Rectangle())
-            // Double-click a row to choose it, as a native list does.
-            .onTapGesture(count: 2) { onCommit(candidate.id) }
         }
         .listStyle(.bordered(alternatesRowBackgrounds: true))
     }
