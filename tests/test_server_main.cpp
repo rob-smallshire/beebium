@@ -20,6 +20,8 @@
 #include <beebium/TeletextText.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "test_temp_paths.hpp"
+
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -1077,4 +1079,47 @@ TEST_CASE("ServerMain constructs a MachineType in exactly one place",
     }
     INFO("occurrences of 'MachineType machine;' in ServerMain.hpp: " << count);
     CHECK(count == 1);
+}
+
+// ============================================================================
+// load_single_disc: the URL a drive records for a disc loaded by path
+// ============================================================================
+
+TEST_CASE("load_single_disc records a path as the file URL DiscUrl spells",
+          "[server_main][disc]") {
+    beebium::test::ScopedTempDir temp_dir("beebium_load_disc_");
+    // A space in the name shows the URL is DiscUrl's (percent-encoded), not
+    // "file://" pasted onto the path.
+    const auto image_filepath = temp_dir / "my game.ssd";
+    {
+        std::ofstream image(image_filepath, std::ios::binary);
+        image << std::string(80 * 10 * 256, '\0');
+    }
+
+    beebium::DiscDrive drive;
+    REQUIRE_FALSE(load_single_disc(drive, 0, image_filepath.string()).has_value());
+
+    const auto& url = drive.source_url();
+    CHECK(url == beebium::DiscUrl::from_filepath(image_filepath).url());
+    // file:///path on Unix, file:///C:/path on Windows: never file://C:\path.
+    CHECK(url.rfind("file:///", 0) == 0);
+    CHECK(url.find('\\') == std::string::npos);
+    CHECK(url.find(' ') == std::string::npos);
+    const auto parsed = beebium::DiscUrl::parse(url);
+    REQUIRE(parsed.has_value());
+    CHECK(parsed->to_filepath() == image_filepath);
+}
+
+TEST_CASE("load_single_disc records a URL as given", "[server_main][disc]") {
+    beebium::test::ScopedTempDir temp_dir("beebium_load_disc_");
+    const auto image_filepath = temp_dir / "game.ssd";
+    {
+        std::ofstream image(image_filepath, std::ios::binary);
+        image << std::string(80 * 10 * 256, '\0');
+    }
+    const auto url = beebium::DiscUrl::from_filepath(image_filepath).url();
+
+    beebium::DiscDrive drive;
+    REQUIRE_FALSE(load_single_disc(drive, 0, url).has_value());
+    CHECK(drive.source_url() == url);
 }

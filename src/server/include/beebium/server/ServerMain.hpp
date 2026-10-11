@@ -38,6 +38,7 @@
 #include "beebium/PacingClock.hpp"
 #include "beebium/SleepQuantum.hpp"
 #include "beebium/disc/DiscLoader.hpp"
+#include "beebium/disc/DiscUrl.hpp"
 #include "beebium/disc/DiscDrive.hpp"
 #include "beebium/disc/DiscControllerRegistry.hpp"
 #include "beebium/disc/DiscConcepts.hpp"
@@ -337,19 +338,6 @@ inline void complete_colon_arg(std::string& value, int& i, int argc, char* argv[
 } // anonymous namespace
 
 namespace {
-
-// Convert a URL or filepath to a canonical file:// URL.
-// If the input is already a URL, returns it unchanged.
-// If it's a filepath, resolves to canonical absolute path (no . or ..) and prepends file://
-inline std::string to_absolute_file_url(const std::string& url_or_filepath) {
-    // If it's already a URL, return as-is
-    if (url_or_filepath.find("://") != std::string::npos) {
-        return url_or_filepath;
-    }
-    // Convert filepath to canonical absolute path (resolves . and .. and symlinks)
-    auto canonical_path = std::filesystem::canonical(url_or_filepath);
-    return "file://" + canonical_path.string();
-}
 
 // Resolve Auto format to actual format based on TTY detection
 inline OutputFormat resolve_output_format(OutputFormat format) {
@@ -1348,7 +1336,8 @@ inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
                                             const std::string& filepath_or_url) {
     // Resolve filepath to canonical path, checking existence
     std::filesystem::path filepath(filepath_or_url);
-    if (filepath_or_url.find("://") == std::string::npos) {
+    const bool is_url = filepath_or_url.find("://") != std::string::npos;
+    if (!is_url) {
         // Bare filepath: check existence before trying to canonicalize
         std::error_code ec;
         if (!std::filesystem::exists(filepath, ec)) {
@@ -1363,7 +1352,10 @@ inline std::optional<int> load_single_disc(DiscDrive& drive, int drive_num,
         }
     }
 
-    auto source_url = "file://" + filepath.string();
+    // The drive records the image by URL; a path becomes the file:// URL
+    // DiscUrl spells (file:///C:/... for a Windows drive path).
+    const auto source_url =
+        is_url ? filepath_or_url : beebium::DiscUrl::from_filepath(filepath).url();
     std::cout << "Loading disc into floppy " << drive_num << ": " << filepath.string() << "\n";
 
     auto result = load_disc_from_url_or_filepath(filepath.string());
