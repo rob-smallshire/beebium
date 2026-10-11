@@ -36,10 +36,10 @@ struct KeyboardSectionView: View {
     let schema: StartupSchemaSection
     var diagnostics: [PresetManager.PresetDiagnostic] = []
 
-    /// The Configurator's shared focus (owned by ConfigurationEditor), so a check
-    /// box, the picker or a background click releases whichever byte field is
-    /// focused. Without this SwiftUI leaves a byte field focused and stale when
-    /// another control changes the byte.
+    /// The Configurator's shared focus (owned by ConfigurationEditor), identifying
+    /// which byte field holds focus. A check box, the picker or a background click
+    /// commits and releases it first (via `fieldEditCoordinator`) before changing the
+    /// byte, so the change never lands on a stale value and no field is left focused.
     @FocusState.Binding var focusedField: String?
 
     /// Commits a focused byte field before this page's controls change the byte, so

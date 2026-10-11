@@ -73,13 +73,11 @@ struct ConfigurationEditor: View {
     /// `effectiveSection` resolves that).
     @State private var selectedSection: ConfigSection = .storage
 
-    /// The one focus owner for every section's text fields. Owning it here, rather
-    /// than one per section, means a new section cannot forget to coordinate focus:
-    /// it takes this binding, and a background click on the content area (below)
-    /// releases whichever field is focused. (Release on another control stays
-    /// explicit in each control: a central draft-watch would wrongly release a
-    /// field the moment the user clicked from one field to another, because
-    /// committing the first changes the draft.)
+    /// The one focus owner for every section's text fields, identifying which field
+    /// holds focus. Owning it here, rather than one per section, means a new section
+    /// cannot forget to coordinate focus. Committing and releasing a focused field
+    /// before another control (or the background click) acts is handled by
+    /// `fieldEditCoordinator` below, not by each control clearing this binding.
     @FocusState private var focusedField: String?
 
     /// Commits whichever field is being edited before another control acts, so the

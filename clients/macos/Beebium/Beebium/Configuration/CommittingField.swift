@@ -180,13 +180,16 @@ struct EditableFieldModel<Value: Equatable>: Equatable {
 /// open every time. There is now one text field implementation in the app:
 /// PopoverTextField, used by the sidebar popovers/sheets and by this field.
 ///
-/// It still shares one `@FocusState` with its section (keyed by `fieldID`), so
-/// another control can release it by setting the shared focus to nil; this field
-/// bridges that SwiftUI focus to the NSTextView's first-responder state. On resign
-/// it commits the user's edit when they changed it, or refreshes to the current
-/// value when they did not -- so it never leaves a stale value and never commits a
-/// value the user did not type over another control's change. Tab moves to the
-/// next field, Return commits, Escape reverts.
+/// It shares one `@FocusState` with its section (keyed by `fieldID`) to identify
+/// which field holds focus and to bridge SwiftUI focus to the NSTextView's
+/// first-responder state (Tab, Escape, programmatic focus changes). Another control
+/// commits and releases this field synchronously through the shared
+/// `FieldEditCoordinator` before it acts (see `commitActiveEdit`), so a pending edit
+/// lands first and nothing is left focused. On resign it commits the user's edit
+/// when they changed it, or refreshes to the current value when they did not -- so
+/// it never leaves a stale value and never commits a value the user did not type
+/// over another control's change. Tab moves to the next field, Return commits,
+/// Escape reverts.
 struct CommittingField<Value: Equatable>: View {
     /// The committed value the field reflects (the draft's, or a default in
     /// force). The field shows `format(value)` whenever it is not being edited.
