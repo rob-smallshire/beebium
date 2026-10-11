@@ -36,6 +36,10 @@ struct AttachmentPointGroup: View {
     /// and to nested points; Add/Change/Remove release a focused field first.
     @FocusState.Binding var focusedField: String?
 
+    /// Whether the Add / Change chooser popover is open.
+    @State private var showingAdd = false
+    @State private var showingChange = false
+
     private var model: ExtensionInstanceModel { ExtensionInstanceModel(schema: schema) }
     private var instances: [ExtensionInstanceModel.Instance] {
         model.instances(onPoint: point.id, in: draft)
@@ -86,7 +90,7 @@ struct AttachmentPointGroup: View {
                 .foregroundColor(.secondary)
             Spacer()
             if !addable.isEmpty {
-                addMenu
+                addButton
             }
         }
     }
@@ -97,19 +101,28 @@ struct AttachmentPointGroup: View {
         return "\(occ.count)"
     }
 
-    private var addMenu: some View {
-        Menu {
-            ForEach(addable, id: \.self) { name in
-                Button(schema.displayName(forExtension: name)) {
-                    focusedField = nil
-                    draft = model.draft(adding: name, to: draft)
-                }
-            }
+    /// Add opens the chooser so the user can read about each candidate before
+    /// attaching it, rather than picking blind from a menu of names.
+    private var addButton: some View {
+        Button {
+            focusedField = nil
+            showingAdd = true
         } label: {
             Label("Add", systemImage: "plus")
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .buttonStyle(.borderless)
+        .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
+            AttachmentChooserView(
+                title: "Add to \(point.displayName ?? point.id)",
+                candidates: AttachmentChooser.candidates(names: addable, schema: schema),
+                commitTitle: "Add",
+                onCommit: { name in
+                    focusedField = nil
+                    draft = model.draft(adding: name, to: draft)
+                    showingAdd = false
+                },
+                onCancel: { showingAdd = false })
+        }
     }
 
     // MARK: - Instance node (a child of the point)
@@ -131,7 +144,7 @@ struct AttachmentPointGroup: View {
                 // On a single-occupancy point, Change swaps the one instance for
                 // another extension the point hosts (a tree replace).
                 if isSingleOccupancy, !changeAlternatives(for: instance).isEmpty {
-                    changeMenu(instance)
+                    changeButton(instance)
                 }
                 Button {
                     focusedField = nil
@@ -160,19 +173,27 @@ struct AttachmentPointGroup: View {
         point.extensions.filter { $0 != instance.name }
     }
 
-    private func changeMenu(_ instance: ExtensionInstanceModel.Instance) -> some View {
-        Menu {
-            ForEach(changeAlternatives(for: instance), id: \.self) { name in
-                Button(schema.displayName(forExtension: name)) {
+    /// Change opens the same chooser, offering the extensions this single-occupancy
+    /// point could swap the instance for (the current one excepted).
+    private func changeButton(_ instance: ExtensionInstanceModel.Instance) -> some View {
+        Button("Change") {
+            focusedField = nil
+            showingChange = true
+        }
+        .buttonStyle(.borderless)
+        .popover(isPresented: $showingChange, arrowEdge: .bottom) {
+            AttachmentChooserView(
+                title: "Change \(point.displayName ?? point.id)",
+                candidates: AttachmentChooser.candidates(
+                    names: changeAlternatives(for: instance), schema: schema),
+                commitTitle: "Change",
+                onCommit: { name in
                     focusedField = nil
                     draft = model.draft(settingSoleInstance: name, onPoint: point.id, in: draft)
-                }
-            }
-        } label: {
-            Text("Change")
+                    showingChange = false
+                },
+                onCancel: { showingChange = false })
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
     }
 
     // MARK: - Instance detail (form + nested provided points)
