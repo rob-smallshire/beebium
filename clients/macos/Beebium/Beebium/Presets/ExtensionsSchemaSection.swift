@@ -21,6 +21,10 @@ struct ExtensionsSchemaSection: Codable {
     /// Bundled disc-image masters by storage kind (e.g. "hard-disc"), offered in
     /// the image chooser. Absent when the model ships none.
     var bundledImages: [String: [BundledImage]]? = nil
+    /// The human noun for each bundled-image kind a catalogue parameter can
+    /// reference (e.g. "hard-disc" -> "hard disc", "rom" -> "ROM"), so a file
+    /// affordance names the kind in the server's words. Absent on an older server.
+    var bundledImageKinds: [BundledImageKind]? = nil
     /// Every extension this model can host, each describing itself: its friendly
     /// name, its description, the parameters it takes and the ROMs it ships. The
     /// one place the Configurator reads an extension's metadata from, so it needs
@@ -31,7 +35,15 @@ struct ExtensionsSchemaSection: Codable {
         case type
         case attachmentPoints = "attachment_points"
         case bundledImages = "bundled_images"
+        case bundledImageKinds = "bundled_image_kinds"
         case catalogue
+    }
+
+    /// The display noun for each bundled-image kind, by kind id, from the server.
+    var bundledKindNames: [String: String] {
+        Dictionary(
+            (bundledImageKinds ?? []).map { ($0.kind, $0.displayName) },
+            uniquingKeysWith: { first, _ in first })
     }
 
     /// The catalogue entry for an extension, or nil if the model does not host it.
@@ -128,6 +140,19 @@ struct CatalogueRom: Codable, Equatable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case key, filename, size
+        case displayName = "display_name"
+    }
+}
+
+/// The human noun for a bundled-image kind (e.g. kind "hard-disc" ->
+/// "hard disc"), as describe-preset-schema reports it. Used to name a file
+/// affordance in the server's words rather than a client-side table.
+struct BundledImageKind: Codable, Equatable {
+    let kind: String
+    let displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case kind
         case displayName = "display_name"
     }
 }

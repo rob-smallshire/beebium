@@ -23,6 +23,10 @@ final class ExtensionCatalogueTests: XCTestCase {
         try JSONDecoder().decode(ExtensionsSchemaSection.self, from: Data(json.utf8))
     }
 
+    /// The bundled-kind nouns as the server reports them, for the file-affordance
+    /// wording tests (the client no longer carries this table).
+    private let bundledKindNames = ["rom": "ROM", "hard-disc": "hard disc"]
+
     private func byKey(_ manifest: ExtensionManifest) -> [String: ExtensionParameter] {
         Dictionary(uniqueKeysWithValues: manifest.parameters.map { ($0.key, $0) })
     }
@@ -162,13 +166,15 @@ final class ExtensionCatalogueTests: XCTestCase {
         XCTAssertEqual(
             ExtensionParameterForm.defaultImageLabel(forParameter: romParam, masters: roms),
             "Acorn 65C102 Tube ROM 1.20")
-        XCTAssertEqual(ExtensionParameterForm.bundledSectionTitle(romParam), "Bundled ROMs")
+        XCTAssertEqual(ExtensionParameterForm.bundledSectionTitle(romParam, kinds: bundledKindNames),
+                       "Bundled ROMs")
 
         // A disc image parameter defaults to empty: no bundled default.
         let imageParam = try parameter(
             #"{"key":"image","type":"filepath","default":"","bundled":"hard-disc"}"#)
         XCTAssertNil(ExtensionParameterForm.defaultImageLabel(forParameter: imageParam, masters: []))
-        XCTAssertEqual(ExtensionParameterForm.bundledSectionTitle(imageParam), "Bundled discs")
+        XCTAssertEqual(ExtensionParameterForm.bundledSectionTitle(imageParam, kinds: bundledKindNames),
+                       "Bundled hard discs")
 
         // A default not among the masters falls back to the raw default name.
         let unknownDefault = try parameter(
@@ -182,15 +188,33 @@ final class ExtensionCatalogueTests: XCTestCase {
         // A serial-device filepath (Piconet's device_path) says "device", not "image".
         let device = try parameter(
             #"{"key":"device_path","type":"filepath","choices_from":"serial-ports"}"#)
-        XCTAssertEqual(ExtensionParameterForm.fileNoun(device), "device")
-        // A bundled image parameter says its kind.
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(device, kinds: bundledKindNames), "device")
+        // A bundled image parameter says its kind, in the server's words.
         let rom = try parameter(#"{"key":"rom","type":"filepath","bundled":"rom"}"#)
-        XCTAssertEqual(ExtensionParameterForm.fileNoun(rom), "ROM")
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(rom, kinds: bundledKindNames), "ROM")
         let disc = try parameter(#"{"key":"image","type":"filepath","bundled":"hard-disc"}"#)
-        XCTAssertEqual(ExtensionParameterForm.fileNoun(disc), "disc")
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(disc, kinds: bundledKindNames), "hard disc")
         // A plain filepath says "file".
         let plain = try parameter(#"{"key":"path","type":"filepath"}"#)
-        XCTAssertEqual(ExtensionParameterForm.fileNoun(plain), "file")
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(plain, kinds: bundledKindNames), "file")
+    }
+
+    func testBundledImageKindNounsComeFromSchema() throws {
+        let withKinds = try schema(from: """
+        { "type": "extensions", "attachment_points": [],
+          "bundled_image_kinds": [
+            {"kind":"hard-disc","display_name":"hard disc"},
+            {"kind":"rom","display_name":"ROM"}
+          ] }
+        """)
+        XCTAssertEqual(withKinds.bundledKindNames,
+                       ["hard-disc": "hard disc", "rom": "ROM"])
+        // An older server without the key yields an empty map, and a parameter
+        // then falls back to the generic "image".
+        let bare = try schema(from: #"{ "type": "extensions", "attachment_points": [] }"#)
+        XCTAssertTrue(bare.bundledKindNames.isEmpty)
+        let disc = try parameter(#"{"key":"image","type":"filepath","bundled":"hard-disc"}"#)
+        XCTAssertEqual(ExtensionParameterForm.fileNoun(disc, kinds: bare.bundledKindNames), "image")
     }
 
     func testDecodesHostResolvedDefaultKeys() throws {

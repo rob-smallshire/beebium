@@ -34,6 +34,10 @@ struct ExtensionParameterForm: View {
     /// Bundled disc-image masters by kind, for a filepath parameter that draws
     /// from a catalogue (its `bundled` kind).
     var bundledImages: [String: [BundledImage]] = [:]
+    /// The display noun for each bundled-image kind (kind id -> noun, e.g.
+    /// "hard-disc" -> "hard disc"), from the schema, for a file affordance's
+    /// wording.
+    var bundledKindNames: [String: String] = [:]
     /// Host serial-port paths, offered as suggestions for a choices_from
     /// "serial-ports" parameter.
     var serialPortSuggestions: [String] = []
@@ -394,7 +398,7 @@ struct ExtensionParameterForm: View {
         if usingDefault {
             display = "Default: \(defaultLabel ?? "")"
         } else if value.isEmpty {
-            display = "No \(Self.fileNoun(parameter))"
+            display = "No \(Self.fileNoun(parameter, kinds: bundledKindNames))"
         } else if isBare {
             display = masters.first(where: { $0.image == value })?.displayName ?? value
         } else {
@@ -414,20 +418,20 @@ struct ExtensionParameterForm: View {
                     Divider()
                 }
                 if !masters.isEmpty {
-                    Section(Self.bundledSectionTitle(parameter)) {
+                    Section(Self.bundledSectionTitle(parameter, kinds: bundledKindNames)) {
                         ForEach(masters, id: \.image) { master in
                             Button(master.displayName) { setValue(parameter.key, .string(master.image)) }
                         }
                     }
                 }
-                Button("Choose \(Self.fileNoun(parameter).localizedCapitalized)…") { browse(parameter.key) }
+                Button("Choose \(Self.fileNoun(parameter, kinds: bundledKindNames).localizedCapitalized)…") { browse(parameter.key) }
                 // With a default, clearing IS "use default"; offer Clear only when
                 // there is no default to fall back to.
                 if !value.isEmpty && defaultLabel == nil {
                     Button("Clear") { setValue(parameter.key, .string("")) }
                 }
             } label: {
-                Text(usingDefault ? "Use a different \(Self.fileNoun(parameter))…"
+                Text(usingDefault ? "Use a different \(Self.fileNoun(parameter, kinds: bundledKindNames))…"
                                   : (value.isEmpty ? "Choose…" : "Change…"))
             }
             .menuStyle(.borderlessButton)
@@ -537,28 +541,25 @@ struct ExtensionParameterForm: View {
             ?? parameter.defaultValue
     }
 
-    /// The noun for a bundled kind, for menu wording ("ROM", "disc", "image").
     /// The noun for a filepath parameter's affordance, taken from the parameter,
-    /// not the extension: a bundled-image parameter says its kind (ROM/disc/image),
-    /// a `choices_from: serial-ports` parameter says "device", and a plain filepath
-    /// says "file". One source, so no per-extension wording.
-    static func fileNoun(_ parameter: ExtensionParameter) -> String {
-        if !parameter.bundled.isEmpty { return bundledNoun(parameter) }
+    /// not the extension: a bundled-image parameter says its kind in the server's
+    /// words (e.g. "hard disc", "ROM"), a `choices_from: serial-ports` parameter
+    /// says "device", and a plain filepath says "file". The bundled-kind nouns
+    /// come from the schema (`kinds`: kind id -> display noun), so there is no
+    /// per-extension wording in the client.
+    static func fileNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
+        if !parameter.bundled.isEmpty { return bundledNoun(parameter, kinds: kinds) }
         if parameter.choicesFrom == "serial-ports" { return "device" }
         return "file"
     }
 
-    static func bundledNoun(_ parameter: ExtensionParameter) -> String {
-        switch parameter.bundled {
-        case "rom": return "ROM"
-        case "hard-disc": return "disc"
-        default: return "image"
-        }
+    static func bundledNoun(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
+        kinds[parameter.bundled] ?? "image"
     }
 
-    /// The bundled-section heading in the chooser menu.
-    static func bundledSectionTitle(_ parameter: ExtensionParameter) -> String {
-        "Bundled \(bundledNoun(parameter))s"
+    /// The bundled-section heading in the chooser menu, e.g. "Bundled hard discs".
+    static func bundledSectionTitle(_ parameter: ExtensionParameter, kinds: [String: String]) -> String {
+        "Bundled \(bundledNoun(parameter, kinds: kinds))s"
     }
 
     // MARK: - Value helpers

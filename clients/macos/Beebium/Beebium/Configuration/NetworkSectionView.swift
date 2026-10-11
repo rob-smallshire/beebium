@@ -154,6 +154,7 @@ struct NetworkSectionView: View {
                     // diagnostics to their own rows and fields; scalar transport
                     // param diagnostics still show in the section summary below.
                     diagnostics: diagnostics.withPrefix("/econet/transport/parameters"),
+                    bundledKindNames: extensionsSchema?.bundledKindNames ?? [:],
                     serialPortSuggestions: serialPorts,
                     setValue: setTransportParameter,
                     // Share the section's focus so the station field, the port/net

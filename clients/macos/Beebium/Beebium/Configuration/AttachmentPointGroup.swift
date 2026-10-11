@@ -205,6 +205,7 @@ struct AttachmentPointGroup: View {
                 config: config(forInstanceAt: instance.index),
                 diagnostics: diagnostics.forExtension(index: instance.index),
                 bundledImages: schema.bundledImages ?? [:],
+                bundledKindNames: schema.bundledKindNames,
                 serialPortSuggestions: serialPorts,
                 setValue: { key, value in setConfig(key, value, forInstanceAt: instance.index) },
                 hostFocusedField: $focusedField)
