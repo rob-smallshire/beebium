@@ -87,7 +87,8 @@ TEST_CASE("the manifest's default layout is Level 3 File Server 1.26's",
 
 TEST_CASE("the layout that ends before 2000 says it is not Y2K compliant",
           "[acorn-rtc][manifest]") {
-    for (const auto& choice : layout_parameter(acorn_rtc_manifest()).choices) {
+    const auto manifest = acorn_rtc_manifest();
+    for (const auto& choice : layout_parameter(manifest).choices) {
         INFO(choice.value);
         const auto [first, last] = Saf3019p::year_range(*register_layout_from_name(choice.value));
         const bool says_not_y2k = choice.description.find("Not Y2K compliant") != std::string::npos;
