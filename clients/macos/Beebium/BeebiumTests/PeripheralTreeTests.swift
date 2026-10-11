@@ -25,7 +25,9 @@ final class PeripheralTreeTests: XCTestCase {
                       label: String? = nil,
                       description: String = "",
                       hasUI: Bool = false,
-                      storageDevices: [Beebium_StorageDevice] = []) -> Beebium_ExtensionInfo {
+                      storageDevices: [Beebium_StorageDevice] = [],
+                      attachments: [(point: String, provider: String)]? = nil)
+                     -> Beebium_ExtensionInfo {
         var info = Beebium_ExtensionInfo()
         info.name = name
         info.id = id
@@ -36,6 +38,23 @@ final class PeripheralTreeTests: XCTestCase {
         info.config = config
         info.hasUi_p = hasUI
         info.storageDevices = storageDevices
+        // The server sends one Attachment per attaches_to, naming the provider it
+        // chose (empty for a machine connector). Tests that nest under a provider
+        // pass them explicitly; otherwise default to connector attachments.
+        let pairs = attachments ?? attachesTo.map { (point: $0, provider: "") }
+        info.attachments = pairs.map { pair in
+            var a = Beebium_Attachment()
+            a.point = pair.point
+            a.providerID = pair.provider
+            return a
+        }
+        return info
+    }
+
+    private func point(_ id: String, _ displayName: String) -> Beebium_AttachmentPointInfo {
+        var info = Beebium_AttachmentPointInfo()
+        info.id = id
+        info.displayName = displayName
         return info
     }
 
@@ -90,7 +109,8 @@ final class PeripheralTreeTests: XCTestCase {
         let hdd = info(name: "scsi-hard-disc",
                        id: "scsi-hdd#0",
                        attachesTo: ["scsi"],
-                       config: ["scsi-id": "0", "image": "/foo.dat"])
+                       config: ["scsi-id": "0", "image": "/foo.dat"],
+                       attachments: [(point: "scsi", provider: "acorn-scsi#1")])
 
         let tree = PeripheralTree.build(from: [scsi, hdd])
 
@@ -114,11 +134,13 @@ final class PeripheralTreeTests: XCTestCase {
         let hdd0 = info(name: "scsi-hard-disc",
                         id: "scsi-hdd#0",
                         attachesTo: ["scsi"],
-                        config: ["scsi-id": "0"])
+                        config: ["scsi-id": "0"],
+                        attachments: [(point: "scsi", provider: "acorn-scsi#1")])
         let hdd1 = info(name: "scsi-hard-disc",
                         id: "scsi-hdd#1",
                         attachesTo: ["scsi"],
-                        config: ["scsi-id": "1"])
+                        config: ["scsi-id": "1"],
+                        attachments: [(point: "scsi", provider: "acorn-scsi#1")])
 
         let tree = PeripheralTree.build(from: [scsi, hdd0, hdd1])
         let children = tree.groups[0].nodes[0].children
@@ -131,7 +153,8 @@ final class PeripheralTreeTests: XCTestCase {
         // SCSI host adapter should still nest correctly.
         let hdd = info(name: "scsi-hard-disc",
                        id: "scsi-hdd#0",
-                       attachesTo: ["scsi"])
+                       attachesTo: ["scsi"],
+                       attachments: [(point: "scsi", provider: "acorn-scsi#1")])
         let scsi = info(name: "acorn-scsi",
                         id: "acorn-scsi#1",
                         attachesTo: ["1mhz-bus"],
@@ -170,7 +193,9 @@ final class PeripheralTreeTests: XCTestCase {
 
     // MARK: - multiple roots
 
-    func testMultipleRootsAtDifferentExtensionPointsSortedAlphabetically() {
+    func testMultipleRootsFallBackToAlphabeticalWhenNoPointOrderGiven() {
+        // With no attachment-point list from the server (the defensive path),
+        // groups sort by id so the order is at least deterministic.
         let scsi = info(name: "acorn-scsi",
                         id: "acorn-scsi#1",
                         attachesTo: ["1mhz-bus"],
@@ -183,6 +208,74 @@ final class PeripheralTreeTests: XCTestCase {
 
         XCTAssertEqual(tree.groups.map { $0.extensionPoint },
                        ["1mhz-bus", "user-port"])
+    }
+
+    func testGroupsFollowServerPresentationOrder() {
+        // The server returns attachment points in catalogue order (not
+        // alphabetical); the tree must preserve it. Here user-port precedes
+        // 1mhz-bus, the reverse of alphabetical.
+        let rtc = info(name: "acorn-rtc", id: "acorn-rtc#1", attachesTo: ["user-port"])
+        let scsi = info(name: "acorn-scsi", id: "acorn-scsi#1",
+                        attachesTo: ["1mhz-bus"], provides: ["scsi"])
+
+        let tree = PeripheralTree.build(from: [scsi, rtc], attachmentPoints: [
+            point("user-port", "User Port"),
+            point("1mhz-bus", "1 MHz Bus"),
+        ])
+
+        XCTAssertEqual(tree.groups.map { $0.extensionPoint },
+                       ["user-port", "1mhz-bus"])
+    }
+
+    func testGroupTakesDisplayNameFromServer() {
+        let tube = info(name: "acorn-65c102", id: "acorn-65c102#1", attachesTo: ["tube"])
+        let tree = PeripheralTree.build(from: [tube], attachmentPoints: [
+            point("tube", "Coprocessor"),
+        ])
+        XCTAssertEqual(tree.groups[0].extensionPoint, "tube")
+        XCTAssertEqual(tree.groups[0].displayName, "Coprocessor")
+    }
+
+    func testGroupDisplayNameFallsBackToSlugWhenServerUnnamed() {
+        // A point the server did not describe still renders, named by its slug.
+        let gadget = info(name: "gadget", id: "gadget#1", attachesTo: ["mystery-bus"])
+        let tree = PeripheralTree.build(from: [gadget])
+        XCTAssertEqual(tree.groups[0].displayName, "mystery-bus")
+    }
+
+    func testTwoAdaptersNestEachDiscUnderItsOwnProvider() {
+        // The motivating bug: two SCSI host adapters each provide a "scsi" point.
+        // Nesting by "whoever last provides scsi" put both discs under the second
+        // adapter; using the server's per-attachment provider_id nests each disc
+        // under the adapter the server actually attached it to.
+        let adapterA = info(name: "acorn-scsi", id: "scsi-a",
+                            attachesTo: ["1mhz-bus"], provides: ["scsi"])
+        let adapterB = info(name: "acorn-scsi", id: "scsi-b",
+                            attachesTo: ["1mhz-bus"], provides: ["scsi"])
+        let discA = info(name: "scsi-hard-disc", id: "hdd-a", attachesTo: ["scsi"],
+                         attachments: [(point: "scsi", provider: "scsi-a")])
+        let discB = info(name: "scsi-hard-disc", id: "hdd-b", attachesTo: ["scsi"],
+                         attachments: [(point: "scsi", provider: "scsi-b")])
+
+        let tree = PeripheralTree.build(from: [adapterA, adapterB, discA, discB],
+                                        attachmentPoints: [point("1mhz-bus", "1 MHz Bus")])
+
+        let roots = tree.groups[0].nodes
+        XCTAssertEqual(roots.map { $0.id }, ["scsi-a", "scsi-b"])
+        XCTAssertEqual(roots[0].children.map { $0.id }, ["hdd-a"])
+        XCTAssertEqual(roots[1].children.map { $0.id }, ["hdd-b"])
+    }
+
+    func testSecondaryAttachmentLabelsComeFromServer() {
+        let voltmace = info(name: "voltmace-delta-14b1", id: "voltmace#1",
+                            attachesTo: ["user-port", "analogue-port"])
+        let tree = PeripheralTree.build(from: [voltmace], attachmentPoints: [
+            point("user-port", "User Port"),
+            point("analogue-port", "Analogue Port"),
+        ])
+        let node = tree.groups[0].nodes[0]
+        XCTAssertEqual(node.secondaryAttachments, ["analogue-port"])
+        XCTAssertEqual(node.secondaryAttachmentLabels, ["Analogue Port"])
     }
 
     // MARK: - defensive
@@ -333,7 +426,8 @@ final class PeripheralTreeTests: XCTestCase {
                                          mediaType: "hard-disc",
                                          backingPath: "/discs/boot.dat",
                                          activityIndicator: "hdd-0-activity-led")
-                       ])
+                       ],
+                       attachments: [(point: "scsi", provider: "acorn-scsi")])
         let scsi = info(name: "acorn-scsi",
                         id: "acorn-scsi",
                         attachesTo: ["1mhz-bus"],

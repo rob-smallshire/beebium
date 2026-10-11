@@ -25,7 +25,7 @@ import GRPC
 final class PeripheralsClient: ObservableObject, Disconnectable {
 
     @Published private(set) var tree: PeripheralTree =
-        PeripheralTree(groups: [], orphans: [])
+        PeripheralTree(groups: [], orphans: [], pointDisplayNames: [:])
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var errorMessage: String?
 
@@ -40,7 +40,7 @@ final class PeripheralsClient: ObservableObject, Disconnectable {
 
     func disconnect() {
         client = nil
-        tree = PeripheralTree(groups: [], orphans: [])
+        tree = PeripheralTree(groups: [], orphans: [], pointDisplayNames: [:])
         isLoaded = false
         errorMessage = nil
     }
@@ -50,7 +50,8 @@ final class PeripheralsClient: ObservableObject, Disconnectable {
         let request = Beebium_ListExtensionsRequest()
         do {
             let response = try await client.listExtensions(request).response.get()
-            self.tree = PeripheralTree.build(from: response.extensions)
+            self.tree = PeripheralTree.build(from: response.extensions,
+                                             attachmentPoints: response.attachmentPoints)
             self.isLoaded = true
             self.errorMessage = nil
         } catch {

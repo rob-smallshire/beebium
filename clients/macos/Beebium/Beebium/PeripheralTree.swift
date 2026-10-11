@@ -53,7 +53,13 @@ struct PeripheralNode: Identifiable, Hashable {
     let description: String
     let config: [String: String]
     let primaryAttachment: String
+    /// The further attachment-point ids this device also occupies (slugs), e.g.
+    /// "analogue-port" for a device that also plugs into the user port.
     let secondaryAttachments: [String]
+    /// The display names of `secondaryAttachments`, resolved from the server's
+    /// attachment points at build time, so the view names a secondary point
+    /// without re-deriving it (falls back to the slug when unnamed).
+    let secondaryAttachmentLabels: [String]
     let provides: [String]
     /// True when the extension implements an ExtensionUi panel (i.e.
     /// the server's Extension::ui() returned non-null). Drives whether
@@ -83,31 +89,6 @@ struct PeripheralNode: Identifiable, Hashable {
             return label
         }
         return PeripheralNameFormatter.humanise(name)
-    }
-}
-
-/// Display-name lookup for built-in extension points -- the parent
-/// sockets things plug into (1mhz-bus, user-port, ...). Unlike
-/// extension types, these names are not declared in any manifest;
-/// they're framework-level concepts owned by the server core, so it's
-/// appropriate for the client to spell them out.
-///
-/// Returning the slug unchanged for unknown keys keeps the view
-/// honest: a future extension point we haven't named here still
-/// renders, just less prettily.
-enum PeripheralLabels {
-    private static let extensionPointNames: [String: String] = [
-        "1mhz-bus": "1 MHz Bus",
-        "user-port": "User Port",
-        "tube": "Coprocessor",
-        "scsi": "SCSI Bus",
-        "analogue-port": "Analogue Port",
-        "printer-port": "Printer Port",
-        "serial-port": "Serial Port",
-    ]
-
-    static func extensionPoint(_ name: String) -> String {
-        extensionPointNames[name] ?? name
     }
 }
 
@@ -154,12 +135,13 @@ enum PeripheralNameFormatter {
     }
 }
 
-/// Hierarchical view of the configured peripherals, rooted at the built-in
-/// extension points (1mhz-bus, user-port, tube, ...).
+/// Hierarchical view of the configured peripherals, rooted at the machine's own
+/// attachment points (1mhz-bus, user-port, tube, ...).
 ///
-/// `groups` is ordered alphabetically by extension point name for stable
-/// display; nodes within a group preserve the order returned by the server
-/// (which corresponds to command-line / preset configuration order).
+/// `groups` follows the server's attachment-point presentation order (the order
+/// `ListExtensions` returns `attachment_points` in: the machine's own connectors
+/// first, then provided points); nodes within a group preserve the order the
+/// server returned the extensions in (command-line / preset configuration order).
 ///
 /// `orphans` is a defensive bucket for extensions with an empty
 /// `attaches_to`; the server's PeripheralExtension contract requires at
@@ -167,28 +149,33 @@ enum PeripheralNameFormatter {
 struct PeripheralTree: Equatable {
 
     struct ExtensionPointGroup: Equatable, Identifiable {
+        /// The attachment-point id (slug), e.g. "serial-port"; still used where a
+        /// view keys on a specific point.
         let extensionPoint: String
+        /// The point's display name from the server, falling back to the slug.
+        let displayName: String
         let nodes: [PeripheralNode]
         var id: String { extensionPoint }
     }
 
     let groups: [ExtensionPointGroup]
     let orphans: [PeripheralNode]
+    /// Display name for every attachment point the server reported, by id, so a
+    /// node's secondary attachments can be named too; falls back to the slug.
+    let pointDisplayNames: [String: String]
 
-    static func build(from extensions: [Beebium_ExtensionInfo]) -> PeripheralTree {
+    static func build(from extensions: [Beebium_ExtensionInfo],
+                      attachmentPoints: [Beebium_AttachmentPointInfo] = []) -> PeripheralTree {
+        // The display name for each point, by id, and the points' presentation
+        // order -- both straight from the server, replacing a client-side name
+        // table and an alphabetical sort.
+        let pointDisplayNames = Dictionary(
+            attachmentPoints.map { ($0.id, $0.displayName.isEmpty ? $0.id : $0.displayName) },
+            uniquingKeysWith: { first, _ in first })
+        func pointName(_ point: String) -> String { pointDisplayNames[point] ?? point }
+
         if extensions.isEmpty {
-            return PeripheralTree(groups: [], orphans: [])
-        }
-
-        // Map each extension point provided by some loaded extension to
-        // the id of that provider. Used to decide whether a child's
-        // primary attachment resolves to another extension (parent-child
-        // nesting) or to a built-in extension point (root group).
-        var providerIdByPoint: [String: String] = [:]
-        for ext in extensions {
-            for point in ext.provides {
-                providerIdByPoint[point] = ext.id
-            }
+            return PeripheralTree(groups: [], orphans: [], pointDisplayNames: pointDisplayNames)
         }
 
         // Build the leaf-less nodes and index by id so the second pass
@@ -207,6 +194,7 @@ struct PeripheralTree: Equatable {
                 config: ext.config,
                 primaryAttachment: primary,
                 secondaryAttachments: secondary,
+                secondaryAttachmentLabels: secondary.map(pointName),
                 provides: ext.provides,
                 hasUI: ext.hasUi_p,
                 storageDevices: ext.storageDevices.map(makeStorageDevice),
@@ -214,10 +202,16 @@ struct PeripheralTree: Equatable {
             )
         }
 
-        // Classify each extension as either a child of another loaded
-        // extension or a root under some extension point name. Empty
-        // `attaches_to` is treated as orphan rather than indexed under
-        // an empty group name.
+        // Classify each extension as either a child of the instance the SERVER
+        // attached it to, or a root under one of the machine's own connectors.
+        // The provider comes from ExtensionInfo.attachments[].provider_id -- the
+        // instance the server actually chose (by a provider_of parameter, else
+        // the last provider loaded). An empty provider means a machine connector.
+        // This reads the server's decision rather than re-deriving it, which a
+        // previous "whoever last provides this point" guess got wrong when two
+        // adapters provided the same kind of point (e.g. two SCSI host adapters).
+        // Empty `attaches_to` is treated as orphan rather than indexed under an
+        // empty group name.
         var childIdsByParentId: [String: [String]] = [:]
         var rootIdsByPoint: [String: [String]] = [:]
         var orphanIds: [String] = []
@@ -227,8 +221,9 @@ struct PeripheralTree: Equatable {
                 orphanIds.append(ext.id)
                 continue
             }
-            if let parentId = providerIdByPoint[primary] {
-                childIdsByParentId[parentId, default: []].append(ext.id)
+            let providerId = ext.attachments.first { $0.point == primary }?.providerID ?? ""
+            if !providerId.isEmpty {
+                childIdsByParentId[providerId, default: []].append(ext.id)
             } else {
                 rootIdsByPoint[primary, default: []].append(ext.id)
             }
@@ -246,17 +241,27 @@ struct PeripheralTree: Equatable {
             return node
         }
 
-        let sortedPoints = rootIdsByPoint.keys.sorted()
-        let groups = sortedPoints.map { point -> ExtensionPointGroup in
+        // Order the groups by the server's attachment-point order; any point the
+        // server did not describe (shouldn't happen) sorts after, by id, so the
+        // result stays deterministic.
+        let orderByPoint = attachmentPoints.enumerated().reduce(into: [String: Int]()) {
+            $0[$1.element.id] = $1.offset
+        }
+        let orderedPoints = rootIdsByPoint.keys.sorted {
+            (orderByPoint[$0] ?? Int.max, $0) < (orderByPoint[$1] ?? Int.max, $1)
+        }
+        let groups = orderedPoints.map { point -> ExtensionPointGroup in
             let ids = rootIdsByPoint[point] ?? []
             return ExtensionPointGroup(
                 extensionPoint: point,
+                displayName: pointName(point),
                 nodes: ids.map { attachChildren(to: $0) }
             )
         }
 
         let orphans = orphanIds.compactMap { nodesById[$0] }
 
-        return PeripheralTree(groups: groups, orphans: orphans)
+        return PeripheralTree(groups: groups, orphans: orphans,
+                              pointDisplayNames: pointDisplayNames)
     }
 }

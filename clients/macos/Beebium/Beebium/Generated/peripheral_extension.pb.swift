@@ -35,7 +35,73 @@ struct Beebium_ListExtensionsResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  /// in load order: providers first
   var extensions: [Beebium_ExtensionInfo] = []
+
+  /// The attachment points of this machine: its own connectors, then any an
+  /// extension provides (a SCSI bus from a host adapter), in the catalogue's
+  /// presentation order.
+  var attachmentPoints: [Beebium_AttachmentPointInfo] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// A place extensions plug in, as AttachmentPointCatalogue and
+/// describe-preset-schema describe it.
+struct Beebium_AttachmentPointInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// e.g. "tube"; what attaches_to names
+  var id: String = String()
+
+  /// e.g. "Coprocessor"
+  var displayName: String = String()
+
+  /// one sentence a user understands
+  var description_p: String = String()
+
+  /// fewest extensions that may attach
+  var minOccupancy: Int32 = 0
+
+  /// most that may attach, per provider;
+  var maxOccupancy: Int32 {
+    get {return _maxOccupancy ?? 0}
+    set {_maxOccupancy = newValue}
+  }
+  /// Returns true if `maxOccupancy` has been explicitly set.
+  var hasMaxOccupancy: Bool {return self._maxOccupancy != nil}
+  /// Clears the value of `maxOccupancy`. Subsequent reads from it will return its default value.
+  mutating func clearMaxOccupancy() {self._maxOccupancy = nil}
+
+  /// absent when unbounded
+  /// The ids of the extension instances that provide this point, in load
+  /// order; empty for one of the machine's own connectors.
+  var providedBy: [String] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _maxOccupancy: Int32? = nil
+}
+
+/// Where an extension is attached at one of the points it attaches_to.
+struct Beebium_Attachment: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// an AttachmentPointInfo id
+  var point: String = String()
+
+  /// The id of the instance providing the point the extension is attached
+  /// to, chosen as the server chose it (by a provider_of parameter, else the
+  /// last provider loaded); empty when it is the machine's own connector.
+  var providerID: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -53,9 +119,11 @@ struct Beebium_ExtensionInfo: Sendable {
   /// instance identity (UUID or user-provided)
   var id: String = String()
 
-  /// display name (falls back to id)
+  /// this instance's name: its label, else
   var label: String = String()
 
+  /// one composed from the manifest (e.g.
+  /// "Hard Disc (SCSI ID 0)"), else the id
   var attachesTo: [String] = []
 
   var provides: [String] = []
@@ -81,6 +149,16 @@ struct Beebium_ExtensionInfo: Sendable {
   /// future Opus Challenger would expose its floppy drive and RAM
   /// disc as two entries here.
   var storageDevices: [Beebium_StorageDevice] = []
+
+  /// the extension's name, from its manifest
+  var displayName: String = String()
+
+  /// Where the extension is attached, one entry per attaches_to point, in
+  /// the same order.
+  var attachments: [Beebium_Attachment] = []
+
+  /// Parameters that are alternatives to one another, from the manifest.
+  var groups: [Beebium_ParameterGroupInfo] = []
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -181,24 +259,260 @@ struct Beebium_StorageDevice: Sendable {
   init() {}
 }
 
-struct Beebium_ParameterSchemaInfo: Sendable {
+/// One manifest parameter, with every property describe-extension --json
+/// gives it.
+struct Beebium_ParameterSchemaInfo: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var key: String {
+    get {return _storage._key}
+    set {_uniqueStorage()._key = newValue}
+  }
+
+  /// "string", "integer", "boolean", "filepath"
+  var type: String {
+    get {return _storage._type}
+    set {_uniqueStorage()._type = newValue}
+  }
+
+  var description_p: String {
+    get {return _storage._description_p}
+    set {_uniqueStorage()._description_p = newValue}
+  }
+
+  /// -1 = keyword-only
+  var position: Int32 {
+    get {return _storage._position}
+    set {_uniqueStorage()._position = newValue}
+  }
+
+  var required: Bool {
+    get {return _storage._required}
+    set {_uniqueStorage()._required = newValue}
+  }
+
+  var defaultValue: String {
+    get {return _storage._defaultValue}
+    set {_uniqueStorage()._defaultValue = newValue}
+  }
+
+  /// short human-readable name, for a form
+  var label: String {
+    get {return _storage._label}
+    set {_uniqueStorage()._label = newValue}
+  }
+
+  /// the key may be given repeatedly
+  var isList: Bool {
+    get {return _storage._isList}
+    set {_uniqueStorage()._isList = newValue}
+  }
+
+  /// Non-empty: the default is worked out on the host the server runs on, by
+  /// the means this names (e.g. "aun-map-file").
+  var defaultFrom: String {
+    get {return _storage._defaultFrom}
+    set {_uniqueStorage()._defaultFrom = newValue}
+  }
+
+  /// The value the extension uses when none is given, on this server's host:
+  /// default_value, or what default_from resolves to.
+  var effectiveDefault: String {
+    get {return _storage._effectiveDefault}
+    set {_uniqueStorage()._effectiveDefault = newValue}
+  }
+
+  /// "integer" only: least value allowed
+  var min: Int64 {
+    get {return _storage._min ?? 0}
+    set {_uniqueStorage()._min = newValue}
+  }
+  /// Returns true if `min` has been explicitly set.
+  var hasMin: Bool {return _storage._min != nil}
+  /// Clears the value of `min`. Subsequent reads from it will return its default value.
+  mutating func clearMin() {_uniqueStorage()._min = nil}
+
+  /// "integer" only: greatest value allowed
+  var max: Int64 {
+    get {return _storage._max ?? 0}
+    set {_uniqueStorage()._max = newValue}
+  }
+  /// Returns true if `max` has been explicitly set.
+  var hasMax: Bool {return _storage._max != nil}
+  /// Clears the value of `max`. Subsequent reads from it will return its default value.
+  mutating func clearMax() {_uniqueStorage()._max = nil}
+
+  /// non-empty: the only values allowed
+  var choices: [Beebium_ParameterChoiceInfo] {
+    get {return _storage._choices}
+    set {_uniqueStorage()._choices = newValue}
+  }
+
+  /// Non-empty: a host enumeration a UI may offer values from (e.g.
+  /// "serial-ports"); the value stays free text.
+  var choicesFrom: String {
+    get {return _storage._choicesFrom}
+    set {_uniqueStorage()._choicesFrom = newValue}
+  }
+
+  /// keys that may not be given with this one
+  var excludes: [String] {
+    get {return _storage._excludes}
+    set {_uniqueStorage()._excludes = newValue}
+  }
+
+  /// Non-empty: a bare-name value refers to a bundled image of this kind
+  /// (e.g. "hard-disc").
+  var bundled: String {
+    get {return _storage._bundled}
+    set {_uniqueStorage()._bundled = newValue}
+  }
+
+  /// must differ among siblings on one provider
+  var unique: Bool {
+    get {return _storage._unique}
+    set {_uniqueStorage()._unique = newValue}
+  }
+
+  /// Non-empty: the value is the id of the instance providing this point
+  /// that the extension attaches to.
+  var providerOf: String {
+    get {return _storage._providerOf}
+    set {_uniqueStorage()._providerOf = newValue}
+  }
+
+  /// is_list with fields: an item's string form, {key} placeholders between
+  /// literal separators, e.g. "{net}.{station}@{host}@{port}".
+  var itemFormat: String {
+    get {return _storage._itemFormat}
+    set {_uniqueStorage()._itemFormat = newValue}
+  }
+
+  /// is_list only: each item's parts
+  var fields: [Beebium_ParameterFieldInfo] {
+    get {return _storage._fields}
+    set {_uniqueStorage()._fields = newValue}
+  }
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// One of the values a parameter or field allows.
+struct Beebium_ParameterChoiceInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// as written in a preset or on the command line
+  var value: String = String()
+
+  /// human-readable
+  var label: String = String()
+
+  /// what choosing it means; may be empty
+  var description_p: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+/// One part of the items of a list parameter (an AUN peer's net, station,
+/// host and port). The members mean what a parameter's do.
+struct Beebium_ParameterFieldInfo: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   var key: String = String()
 
-  /// "string", "integer", "boolean", "filepath"
-  var type: String = String()
+  var label: String = String()
 
   var description_p: String = String()
 
-  /// -1 = keyword-only
-  var position: Int32 = 0
+  /// "string", "integer" or "boolean"
+  var type: String = String()
 
   var required: Bool = false
 
   var defaultValue: String = String()
+
+  var min: Int64 {
+    get {return _min ?? 0}
+    set {_min = newValue}
+  }
+  /// Returns true if `min` has been explicitly set.
+  var hasMin: Bool {return self._min != nil}
+  /// Clears the value of `min`. Subsequent reads from it will return its default value.
+  mutating func clearMin() {self._min = nil}
+
+  var max: Int64 {
+    get {return _max ?? 0}
+    set {_max = newValue}
+  }
+  /// Returns true if `max` has been explicitly set.
+  var hasMax: Bool {return self._max != nil}
+  /// Clears the value of `max`. Subsequent reads from it will return its default value.
+  mutating func clearMax() {self._max = nil}
+
+  var choices: [Beebium_ParameterChoiceInfo] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _min: Int64? = nil
+  fileprivate var _max: Int64? = nil
+}
+
+/// Parameters that are alternatives to one another (e.g. the ways of setting
+/// a clock's start time).
+struct Beebium_ParameterGroupInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var key: String = String()
+
+  var label: String = String()
+
+  var description_p: String = String()
+
+  /// member parameter keys, in display order
+  var parameters: [String] = []
+
+  /// How a UI names the state where none of the members is given; absent
+  /// when that state is not named.
+  var none: Beebium_ParameterGroupNoneInfo {
+    get {return _none ?? Beebium_ParameterGroupNoneInfo()}
+    set {_none = newValue}
+  }
+  /// Returns true if `none` has been explicitly set.
+  var hasNone: Bool {return self._none != nil}
+  /// Clears the value of `none`. Subsequent reads from it will return its default value.
+  mutating func clearNone() {self._none = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _none: Beebium_ParameterGroupNoneInfo? = nil
+}
+
+struct Beebium_ParameterGroupNoneInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var label: String = String()
+
+  var description_p: String = String()
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -230,7 +544,7 @@ extension Beebium_ListExtensionsRequest: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Beebium_ListExtensionsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ListExtensionsResponse"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}extensions\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}extensions\0\u{3}attachment_points\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -239,6 +553,7 @@ extension Beebium_ListExtensionsResponse: SwiftProtobuf.Message, SwiftProtobuf._
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.extensions) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.attachmentPoints) }()
       default: break
       }
     }
@@ -248,11 +563,109 @@ extension Beebium_ListExtensionsResponse: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.extensions.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.extensions, fieldNumber: 1)
     }
+    if !self.attachmentPoints.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.attachmentPoints, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Beebium_ListExtensionsResponse, rhs: Beebium_ListExtensionsResponse) -> Bool {
     if lhs.extensions != rhs.extensions {return false}
+    if lhs.attachmentPoints != rhs.attachmentPoints {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_AttachmentPointInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".AttachmentPointInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}display_name\0\u{1}description\0\u{3}min_occupancy\0\u{3}max_occupancy\0\u{3}provided_by\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 4: try { try decoder.decodeSingularInt32Field(value: &self.minOccupancy) }()
+      case 5: try { try decoder.decodeSingularInt32Field(value: &self._maxOccupancy) }()
+      case 6: try { try decoder.decodeRepeatedStringField(value: &self.providedBy) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 2)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
+    }
+    if self.minOccupancy != 0 {
+      try visitor.visitSingularInt32Field(value: self.minOccupancy, fieldNumber: 4)
+    }
+    try { if let v = self._maxOccupancy {
+      try visitor.visitSingularInt32Field(value: v, fieldNumber: 5)
+    } }()
+    if !self.providedBy.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.providedBy, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_AttachmentPointInfo, rhs: Beebium_AttachmentPointInfo) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.displayName != rhs.displayName {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.minOccupancy != rhs.minOccupancy {return false}
+    if lhs._maxOccupancy != rhs._maxOccupancy {return false}
+    if lhs.providedBy != rhs.providedBy {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_Attachment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".Attachment"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}point\0\u{3}provider_id\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.point) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.point.isEmpty {
+      try visitor.visitSingularStringField(value: self.point, fieldNumber: 1)
+    }
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_Attachment, rhs: Beebium_Attachment) -> Bool {
+    if lhs.point != rhs.point {return false}
+    if lhs.providerID != rhs.providerID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -260,7 +673,7 @@ extension Beebium_ListExtensionsResponse: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Beebium_ExtensionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ExtensionInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}id\0\u{1}label\0\u{3}attaches_to\0\u{1}provides\0\u{1}config\0\u{1}parameters\0\u{1}description\0\u{3}has_ui\0\u{3}storage_devices\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}id\0\u{1}label\0\u{3}attaches_to\0\u{1}provides\0\u{1}config\0\u{1}parameters\0\u{1}description\0\u{3}has_ui\0\u{3}storage_devices\0\u{3}display_name\0\u{1}attachments\0\u{1}groups\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -278,6 +691,9 @@ extension Beebium_ExtensionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 8: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
       case 9: try { try decoder.decodeSingularBoolField(value: &self.hasUi_p) }()
       case 10: try { try decoder.decodeRepeatedMessageField(value: &self.storageDevices) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      case 12: try { try decoder.decodeRepeatedMessageField(value: &self.attachments) }()
+      case 13: try { try decoder.decodeRepeatedMessageField(value: &self.groups) }()
       default: break
       }
     }
@@ -314,6 +730,15 @@ extension Beebium_ExtensionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if !self.storageDevices.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.storageDevices, fieldNumber: 10)
     }
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 11)
+    }
+    if !self.attachments.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.attachments, fieldNumber: 12)
+    }
+    if !self.groups.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.groups, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -328,6 +753,9 @@ extension Beebium_ExtensionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs.description_p != rhs.description_p {return false}
     if lhs.hasUi_p != rhs.hasUi_p {return false}
     if lhs.storageDevices != rhs.storageDevices {return false}
+    if lhs.displayName != rhs.displayName {return false}
+    if lhs.attachments != rhs.attachments {return false}
+    if lhs.groups != rhs.groups {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -394,7 +822,250 @@ extension Beebium_StorageDevice.Kind: SwiftProtobuf._ProtoNameProviding {
 
 extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ParameterSchemaInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}type\0\u{1}description\0\u{1}position\0\u{1}required\0\u{3}default_value\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}type\0\u{1}description\0\u{1}position\0\u{1}required\0\u{3}default_value\0\u{1}label\0\u{3}is_list\0\u{3}default_from\0\u{3}effective_default\0\u{1}min\0\u{1}max\0\u{1}choices\0\u{3}choices_from\0\u{1}excludes\0\u{1}bundled\0\u{1}unique\0\u{3}provider_of\0\u{3}item_format\0\u{1}fields\0")
+
+  fileprivate class _StorageClass {
+    var _key: String = String()
+    var _type: String = String()
+    var _description_p: String = String()
+    var _position: Int32 = 0
+    var _required: Bool = false
+    var _defaultValue: String = String()
+    var _label: String = String()
+    var _isList: Bool = false
+    var _defaultFrom: String = String()
+    var _effectiveDefault: String = String()
+    var _min: Int64? = nil
+    var _max: Int64? = nil
+    var _choices: [Beebium_ParameterChoiceInfo] = []
+    var _choicesFrom: String = String()
+    var _excludes: [String] = []
+    var _bundled: String = String()
+    var _unique: Bool = false
+    var _providerOf: String = String()
+    var _itemFormat: String = String()
+    var _fields: [Beebium_ParameterFieldInfo] = []
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _key = source._key
+      _type = source._type
+      _description_p = source._description_p
+      _position = source._position
+      _required = source._required
+      _defaultValue = source._defaultValue
+      _label = source._label
+      _isList = source._isList
+      _defaultFrom = source._defaultFrom
+      _effectiveDefault = source._effectiveDefault
+      _min = source._min
+      _max = source._max
+      _choices = source._choices
+      _choicesFrom = source._choicesFrom
+      _excludes = source._excludes
+      _bundled = source._bundled
+      _unique = source._unique
+      _providerOf = source._providerOf
+      _itemFormat = source._itemFormat
+      _fields = source._fields
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._key) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._type) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 4: try { try decoder.decodeSingularInt32Field(value: &_storage._position) }()
+        case 5: try { try decoder.decodeSingularBoolField(value: &_storage._required) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._defaultValue) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._label) }()
+        case 8: try { try decoder.decodeSingularBoolField(value: &_storage._isList) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._defaultFrom) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._effectiveDefault) }()
+        case 11: try { try decoder.decodeSingularInt64Field(value: &_storage._min) }()
+        case 12: try { try decoder.decodeSingularInt64Field(value: &_storage._max) }()
+        case 13: try { try decoder.decodeRepeatedMessageField(value: &_storage._choices) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._choicesFrom) }()
+        case 15: try { try decoder.decodeRepeatedStringField(value: &_storage._excludes) }()
+        case 16: try { try decoder.decodeSingularStringField(value: &_storage._bundled) }()
+        case 17: try { try decoder.decodeSingularBoolField(value: &_storage._unique) }()
+        case 18: try { try decoder.decodeSingularStringField(value: &_storage._providerOf) }()
+        case 19: try { try decoder.decodeSingularStringField(value: &_storage._itemFormat) }()
+        case 20: try { try decoder.decodeRepeatedMessageField(value: &_storage._fields) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._key.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._key, fieldNumber: 1)
+      }
+      if !_storage._type.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._type, fieldNumber: 2)
+      }
+      if !_storage._description_p.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._description_p, fieldNumber: 3)
+      }
+      if _storage._position != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._position, fieldNumber: 4)
+      }
+      if _storage._required != false {
+        try visitor.visitSingularBoolField(value: _storage._required, fieldNumber: 5)
+      }
+      if !_storage._defaultValue.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._defaultValue, fieldNumber: 6)
+      }
+      if !_storage._label.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._label, fieldNumber: 7)
+      }
+      if _storage._isList != false {
+        try visitor.visitSingularBoolField(value: _storage._isList, fieldNumber: 8)
+      }
+      if !_storage._defaultFrom.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._defaultFrom, fieldNumber: 9)
+      }
+      if !_storage._effectiveDefault.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._effectiveDefault, fieldNumber: 10)
+      }
+      try { if let v = _storage._min {
+        try visitor.visitSingularInt64Field(value: v, fieldNumber: 11)
+      } }()
+      try { if let v = _storage._max {
+        try visitor.visitSingularInt64Field(value: v, fieldNumber: 12)
+      } }()
+      if !_storage._choices.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._choices, fieldNumber: 13)
+      }
+      if !_storage._choicesFrom.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._choicesFrom, fieldNumber: 14)
+      }
+      if !_storage._excludes.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._excludes, fieldNumber: 15)
+      }
+      if !_storage._bundled.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._bundled, fieldNumber: 16)
+      }
+      if _storage._unique != false {
+        try visitor.visitSingularBoolField(value: _storage._unique, fieldNumber: 17)
+      }
+      if !_storage._providerOf.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._providerOf, fieldNumber: 18)
+      }
+      if !_storage._itemFormat.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._itemFormat, fieldNumber: 19)
+      }
+      if !_storage._fields.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._fields, fieldNumber: 20)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ParameterSchemaInfo, rhs: Beebium_ParameterSchemaInfo) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._key != rhs_storage._key {return false}
+        if _storage._type != rhs_storage._type {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._position != rhs_storage._position {return false}
+        if _storage._required != rhs_storage._required {return false}
+        if _storage._defaultValue != rhs_storage._defaultValue {return false}
+        if _storage._label != rhs_storage._label {return false}
+        if _storage._isList != rhs_storage._isList {return false}
+        if _storage._defaultFrom != rhs_storage._defaultFrom {return false}
+        if _storage._effectiveDefault != rhs_storage._effectiveDefault {return false}
+        if _storage._min != rhs_storage._min {return false}
+        if _storage._max != rhs_storage._max {return false}
+        if _storage._choices != rhs_storage._choices {return false}
+        if _storage._choicesFrom != rhs_storage._choicesFrom {return false}
+        if _storage._excludes != rhs_storage._excludes {return false}
+        if _storage._bundled != rhs_storage._bundled {return false}
+        if _storage._unique != rhs_storage._unique {return false}
+        if _storage._providerOf != rhs_storage._providerOf {return false}
+        if _storage._itemFormat != rhs_storage._itemFormat {return false}
+        if _storage._fields != rhs_storage._fields {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ParameterChoiceInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ParameterChoiceInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}value\0\u{1}label\0\u{1}description\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.value) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.value.isEmpty {
+      try visitor.visitSingularStringField(value: self.value, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ParameterChoiceInfo, rhs: Beebium_ParameterChoiceInfo) -> Bool {
+    if lhs.value != rhs.value {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ParameterFieldInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ParameterFieldInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}label\0\u{1}description\0\u{1}type\0\u{1}required\0\u{3}default_value\0\u{1}min\0\u{1}max\0\u{1}choices\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -403,28 +1074,35 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.key) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.type) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
-      case 4: try { try decoder.decodeSingularInt32Field(value: &self.position) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.type) }()
       case 5: try { try decoder.decodeSingularBoolField(value: &self.required) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.defaultValue) }()
+      case 7: try { try decoder.decodeSingularInt64Field(value: &self._min) }()
+      case 8: try { try decoder.decodeSingularInt64Field(value: &self._max) }()
+      case 9: try { try decoder.decodeRepeatedMessageField(value: &self.choices) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.key.isEmpty {
       try visitor.visitSingularStringField(value: self.key, fieldNumber: 1)
     }
-    if !self.type.isEmpty {
-      try visitor.visitSingularStringField(value: self.type, fieldNumber: 2)
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
     }
     if !self.description_p.isEmpty {
       try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
     }
-    if self.position != 0 {
-      try visitor.visitSingularInt32Field(value: self.position, fieldNumber: 4)
+    if !self.type.isEmpty {
+      try visitor.visitSingularStringField(value: self.type, fieldNumber: 4)
     }
     if self.required != false {
       try visitor.visitSingularBoolField(value: self.required, fieldNumber: 5)
@@ -432,16 +1110,117 @@ extension Beebium_ParameterSchemaInfo: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if !self.defaultValue.isEmpty {
       try visitor.visitSingularStringField(value: self.defaultValue, fieldNumber: 6)
     }
+    try { if let v = self._min {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 7)
+    } }()
+    try { if let v = self._max {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 8)
+    } }()
+    if !self.choices.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.choices, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  static func ==(lhs: Beebium_ParameterSchemaInfo, rhs: Beebium_ParameterSchemaInfo) -> Bool {
+  static func ==(lhs: Beebium_ParameterFieldInfo, rhs: Beebium_ParameterFieldInfo) -> Bool {
     if lhs.key != rhs.key {return false}
-    if lhs.type != rhs.type {return false}
+    if lhs.label != rhs.label {return false}
     if lhs.description_p != rhs.description_p {return false}
-    if lhs.position != rhs.position {return false}
+    if lhs.type != rhs.type {return false}
     if lhs.required != rhs.required {return false}
     if lhs.defaultValue != rhs.defaultValue {return false}
+    if lhs._min != rhs._min {return false}
+    if lhs._max != rhs._max {return false}
+    if lhs.choices != rhs.choices {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ParameterGroupInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ParameterGroupInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}label\0\u{1}description\0\u{1}parameters\0\u{1}none\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 4: try { try decoder.decodeRepeatedStringField(value: &self.parameters) }()
+      case 5: try { try decoder.decodeSingularMessageField(value: &self._none) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.key.isEmpty {
+      try visitor.visitSingularStringField(value: self.key, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
+    }
+    if !self.parameters.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.parameters, fieldNumber: 4)
+    }
+    try { if let v = self._none {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ParameterGroupInfo, rhs: Beebium_ParameterGroupInfo) -> Bool {
+    if lhs.key != rhs.key {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.parameters != rhs.parameters {return false}
+    if lhs._none != rhs._none {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Beebium_ParameterGroupNoneInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".ParameterGroupNoneInfo"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{1}description\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 1)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Beebium_ParameterGroupNoneInfo, rhs: Beebium_ParameterGroupNoneInfo) -> Bool {
+    if lhs.label != rhs.label {return false}
+    if lhs.description_p != rhs.description_p {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -150,7 +150,7 @@ private struct ExtensionPointSection: View {
         VStack(alignment: .leading, spacing: 4) {
             // Tier 1: the extension point is the section header -- the most
             // prominent element, so the extensions read as nested beneath it.
-            Text(PeripheralLabels.extensionPoint(group.extensionPoint))
+            Text(group.displayName)
                 .font(.headline)
                 .foregroundColor(.primary)
                 .padding(.horizontal, 16)
@@ -239,8 +239,8 @@ private struct PeripheralNodeRow: View {
                 Text(node.displayName)
                     .font(.body.weight(.semibold))
                 Spacer()
-                ForEach(node.secondaryAttachments, id: \.self) { point in
-                    Text("also: \(PeripheralLabels.extensionPoint(point))")
+                ForEach(node.secondaryAttachmentLabels, id: \.self) { pointLabel in
+                    Text("also: \(pointLabel)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 6)
