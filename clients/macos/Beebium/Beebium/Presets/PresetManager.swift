@@ -58,7 +58,7 @@ class PresetManager: ObservableObject {
     /// Disc image picker content types, fetched from the server once and kept
     /// for the session (disc format support does not change while the app
     /// runs).
-    private var cachedDiscImageContentTypes: [UTType]?
+    private var cachedDiscFormats: [DiscFormat]?
 
     private init() {}
 
@@ -394,14 +394,32 @@ class PresetManager: ObservableObject {
     /// The disc image formats the server can load, as content types for a
     /// file picker's filter.
     ///
-    /// Sourced from the server via list-floppy-formats and cached for the
+    /// One disc format the server can load: its kind ("floppy" or "hard-disc")
+    /// and the file extensions it accepts (bare, lowercased, no leading dot).
+    struct DiscFormat: Equatable {
+        let kind: String
+        let extensions: [String]
+    }
+
+    /// The content types to filter a file picker to, for discs of `kind`
+    /// ("floppy" or "hard-disc").
+    ///
+    /// Sourced from the server via list-disc-formats and cached for the
     /// session, so the client keeps no list of its own -- the picker offers
     /// exactly the formats the machine will load, and the two cannot drift.
     /// Empty (an unfiltered picker) if no executable can be asked or its
     /// output cannot be parsed, which is a better failure than a stale
     /// hardcoded list.
-    func discImageContentTypes() async -> [UTType] {
-        if let cached = cachedDiscImageContentTypes {
+    func discImageContentTypes(kind: String) async -> [UTType] {
+        await discFormats()
+            .filter { $0.kind == kind }
+            .flatMap { $0.extensions }
+            .compactMap { UTType(filenameExtension: $0) }
+    }
+
+    /// Every disc format the server reports, cached for the session.
+    private func discFormats() async -> [DiscFormat] {
+        if let cached = cachedDiscFormats {
             return cached
         }
         guard let executablePath = anyCoreExecutablePath else {
@@ -409,33 +427,31 @@ class PresetManager: ObservableObject {
         }
         let (output, error) = await runCli(
             executable: executablePath,
-            arguments: ["--format", "jsonl", "list-floppy-formats"])
+            arguments: ["--format", "jsonl", "list-disc-formats"])
         if error != nil {
             return []
         }
-        let types = Self.parseDiscImageExtensions(fromFormatList: output)
-            .compactMap { UTType(filenameExtension: $0) }
-        cachedDiscImageContentTypes = types
-        return types
+        let formats = Self.parseDiscFormats(fromFormatList: output)
+        cachedDiscFormats = formats
+        return formats
     }
 
-    /// The extensions from list-floppy-formats' JSONL output, without the
-    /// leading dot and lowercased. A pure, side-effect-free seam, so the
-    /// parse can be tested without running a server.
-    nonisolated static func parseDiscImageExtensions(fromFormatList jsonl: String) -> [String] {
-        struct Line: Decodable { let extensions: [String] }
-        var out: [String] = []
+    /// The formats from list-disc-formats' JSONL output: each line's kind and
+    /// its extensions (without the leading dot, lowercased). A pure,
+    /// side-effect-free seam, so the parse can be tested without running a server.
+    nonisolated static func parseDiscFormats(fromFormatList jsonl: String) -> [DiscFormat] {
+        struct Line: Decodable { let kind: String; let extensions: [String] }
+        var out: [DiscFormat] = []
         for raw in jsonl.split(whereSeparator: \.isNewline) {
             guard let data = raw.data(using: .utf8),
                   let line = try? JSONDecoder().decode(Line.self, from: data) else {
                 continue
             }
-            for ext in line.extensions {
+            let exts = line.extensions.compactMap { ext -> String? in
                 let bare = ext.hasPrefix(".") ? String(ext.dropFirst()) : ext
-                if !bare.isEmpty {
-                    out.append(bare.lowercased())
-                }
+                return bare.isEmpty ? nil : bare.lowercased()
             }
+            out.append(DiscFormat(kind: line.kind, extensions: exts))
         }
         return out
     }

@@ -251,12 +251,18 @@ private struct HardDiscRowView: View {
     /// takes an absolute image path as-is); a bundled master is a bare name set
     /// from the menu above.
     private func browseForImage() {
-        let panel = NSOpenPanel()
-        panel.title = "Select Hard Disc Image"
-        panel.allowedContentTypes = [UTType(filenameExtension: "dat") ?? .data]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        setImage(url.path)
+        // The picker filter comes from the server (hard-disc formats), so the
+        // first browse may wait briefly on it (cached thereafter). Running on the
+        // main actor keeps NSOpenPanel where AppKit needs it.
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "Select Hard Disc Image"
+            panel.allowedContentTypes =
+                await PresetManager.shared.discImageContentTypes(kind: "hard-disc")
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            setImage(url.path)
+        }
     }
 }

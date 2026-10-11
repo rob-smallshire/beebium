@@ -155,7 +155,7 @@ struct FloppyDriveConfigView: View {
         Task { @MainActor in
             let panel = NSOpenPanel()
             panel.title = "Select Disc Image"
-            panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes()
+            panel.allowedContentTypes = await PresetManager.shared.discImageContentTypes(kind: "floppy")
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
 
