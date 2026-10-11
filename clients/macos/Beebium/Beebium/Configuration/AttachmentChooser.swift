@@ -77,6 +77,10 @@ struct AttachmentChooserView: View {
     let title: String
     let candidates: [AttachmentCandidate]
     let commitTitle: String
+    /// The candidate to highlight when the chooser opens (the current choice, so
+    /// Change opens on it); nil, or absent from `candidates`, falls back to the
+    /// first row.
+    var initialSelection: String? = nil
     let onCommit: (String) -> Void
     let onCancel: () -> Void
 
@@ -110,7 +114,15 @@ struct AttachmentChooserView: View {
         }
         .padding(16)
         .frame(width: 480)
-        .onAppear { if selection == nil { selection = candidates.first?.id } }
+        .onAppear {
+            if selection == nil {
+                if let initialSelection, candidates.contains(where: { $0.id == initialSelection }) {
+                    selection = initialSelection
+                } else {
+                    selection = candidates.first?.id
+                }
+            }
+        }
     }
 
     private var candidateList: some View {

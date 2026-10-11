@@ -34,6 +34,9 @@ struct NetworkSectionView: View {
     /// station, port or net fields is focused.
     @FocusState.Binding var focusedField: String?
 
+    /// Whether the transport chooser popover is open.
+    @State private var showingTransportChooser = false
+
     private enum StationMode: Hashable { case number, auto, range }
 
     private var transportName: String? { draft.econet?.transport?.name }
@@ -133,17 +136,7 @@ struct NetworkSectionView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Transport")
                 .font(.subheadline).fontWeight(.medium)
-            Picker("", selection: Binding(
-                get: { transportName ?? "" },
-                set: setTransport
-            )) {
-                Text("None").tag("")
-                ForEach(schema.transports, id: \.self) { name in
-                    Text(transportDisplayName(name)).tag(name)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 220)
+            transportRow
 
             if let name = transportName, !transportDescription(name).isEmpty {
                 Text(transportDescription(name))
@@ -171,6 +164,57 @@ struct NetworkSectionView: View {
 
             DiagnosticLabels(diagnostics: transportDiagnostics)
         }
+    }
+
+    /// The current transport shown as a row -- its friendly name (or "None") with
+    /// the identifier beneath -- and a Change button opening the same chooser the
+    /// attachment points use, so the user reads what each transport is before
+    /// switching. The transport is a single choice, so this is Change, not Add.
+    private var transportRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(transportName.map(transportDisplayName) ?? "None")
+                    .font(.subheadline).fontWeight(.medium)
+                if let name = transportName {
+                    Text(name)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+            Button("Change") {
+                focusedField = nil
+                showingTransportChooser = true
+            }
+            .buttonStyle(.borderless)
+            .popover(isPresented: $showingTransportChooser, arrowEdge: .bottom) {
+                AttachmentChooserView(
+                    title: "Change Transport",
+                    candidates: transportCandidates,
+                    commitTitle: "Change",
+                    initialSelection: transportName ?? "",
+                    onCommit: { name in
+                        focusedField = nil
+                        setTransport(name)
+                        showingTransportChooser = false
+                    },
+                    onCancel: { showingTransportChooser = false })
+            }
+        }
+    }
+
+    /// The transports offered in the chooser: a leading "None" (Econet hardware
+    /// fitted but not bridged -- the documented "No Clock" state), then each
+    /// transport described from the catalogue. "None" is a UI affordance, not an
+    /// extension, so its label is the one string here that is not catalogue text.
+    private var transportCandidates: [AttachmentCandidate] {
+        let catalogue = extensionsSchema
+            ?? ExtensionsSchemaSection(type: "extensions", attachmentPoints: [])
+        let none = AttachmentCandidate(
+            name: "", displayName: "None",
+            description: "Econet hardware is fitted but not connected to any network.",
+            needs: "", provides: "")
+        return [none] + AttachmentChooser.candidates(names: schema.transports, schema: catalogue)
     }
 
     // MARK: - Current station reading
