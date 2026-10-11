@@ -55,8 +55,8 @@ inline const std::vector<AttachmentPoint>& attachment_point_catalogue() {
          "The user port, a parallel connector for add-ons such as a real-time clock.", 0, 1},
         {"1mhz-bus", "1 MHz Bus",
          "The 1 MHz bus, the expansion connector for add-ons such as a SCSI host adapter.", 0, std::nullopt},
-        {"tube", "Tube",
-         "The Tube, the connector for a second processor.", 0, 1},
+        {"tube", "Coprocessor",
+         "The Tube connector, which takes a second processor.", 0, 1},
         {"scsi", "SCSI Bus",
          "The SCSI bus of a host adapter, which holds up to seven hard discs.", 0, 7},
     };

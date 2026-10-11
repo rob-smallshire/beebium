@@ -252,7 +252,7 @@ TEST_CASE("starting with both coprocessor flags fails with the single-socket mes
     INFO("stdout: " << r.stdout_output);
     INFO("stderr: " << r.stderr_output);
     REQUIRE(r.exit_code == 78);
-    REQUIRE(r.stderr_output.find("--tube-65c102: Tube holds at most 1 extension") !=
+    REQUIRE(r.stderr_output.find("--tube-65c102: Coprocessor holds at most 1 extension") !=
             std::string::npos);
 }
 

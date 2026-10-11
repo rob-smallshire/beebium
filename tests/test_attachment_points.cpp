@@ -29,7 +29,7 @@ TEST_CASE("attachment-point catalogue gives display names and occupancy",
     CHECK(attachment_point_display_name("serial-port") == "Serial Port");
     CHECK(attachment_point_display_name("user-port") == "User Port");
     CHECK(attachment_point_display_name("1mhz-bus") == "1 MHz Bus");
-    CHECK(attachment_point_display_name("tube") == "Tube");
+    CHECK(attachment_point_display_name("tube") == "Coprocessor");
     CHECK(attachment_point_display_name("scsi") == "SCSI Bus");
 
     // Occupancy is an integer range [min, max]; max is nullopt when unbounded.

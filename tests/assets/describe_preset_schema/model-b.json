@@ -272,8 +272,8 @@
         },
         {
           "id": "tube",
-          "display_name": "Tube",
-          "description": "The Tube, the connector for a second processor.",
+          "display_name": "Coprocessor",
+          "description": "The Tube connector, which takes a second processor.",
           "min_occupancy": 0,
           "max_occupancy": 1,
           "provided_by": null,
