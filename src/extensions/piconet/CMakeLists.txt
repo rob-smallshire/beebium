@@ -139,11 +139,11 @@ endif()
 set_target_properties(beebium_ext_piconet_plugin PROPERTIES
     PREFIX ""
     OUTPUT_NAME "piconet"
-    # On Windows, test binaries (test_grpc_piconet_service, test_piconet_ui)
-    # link against this plugin DLL and directly construct
+    # On Windows, test_piconet_ui links against this plugin DLL and
+    # directly constructs
     # PiconetEconetTransportExtension. That class isn't annotated with
     # __declspec(dllexport), so MSVC normally hides it from the import lib.
-    # Export all function symbols to give the tests access without having
+    # Export all function symbols to give the test access without having
     # to sprinkle annotations through the plugin sources. No effect on POSIX.
     WINDOWS_EXPORT_ALL_SYMBOLS TRUE
 )

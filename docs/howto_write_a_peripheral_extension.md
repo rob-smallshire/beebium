@@ -196,10 +196,6 @@ std::vector<beebium::ExtensionRpcDispatcher*> rpc_dispatchers() override {
 }
 ```
 
-> `rpc_dispatchers()` is the modern hook. The base also still has a legacy
-> `grpc_services()` returning `{}`; it is being retired as extensions move to
-> the channel. New extensions should not override it.
-
 ### 3d. Mutating device state safely: the bus quiescer
 
 Your handlers run on a gRPC worker thread. The emulation thread reads and

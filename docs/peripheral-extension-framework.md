@@ -52,8 +52,8 @@ public:
     virtual void init(ExtensionContext& ctx) = 0;
     virtual void shutdown() = 0;
 
-    // gRPC services (zero or more)
-    virtual std::vector<grpc::Service*> grpc_services() { return {}; }
+    // Typed APIs (zero or more), served over the core's ExtensionRpc channel
+    virtual std::vector<ExtensionRpcDispatcher*> rpc_dispatchers() { return {}; }
 };
 ```
 
@@ -101,9 +101,9 @@ The `ExtensionRegistry` collects extensions and resolves their dependency graph 
 
 Extensions are shut down in reverse initialisation order.
 
-### gRPC Services
+### Typed APIs
 
-Extensions can provide gRPC services by returning them from `grpc_services()`. These are collected after `init()` and registered with the gRPC `ServerBuilder` before the server starts.
+An extension does not host a gRPC service of its own. It returns dispatchers from `rpc_dispatchers()`, and the core's single `ExtensionRpc` service routes each call to the right one by logical service and instance id; only serialized messages cross the plugin boundary. See [howto_write_a_peripheral_extension.md](howto_write_a_peripheral_extension.md), step 3.
 
 A core `PeripheralExtensionService` (always present) lets frontends discover loaded extensions via a `ListExtensions` RPC.
 
@@ -541,55 +541,20 @@ void MyExtension::write(uint16_t offset, uint8_t value) {
 - Addresses are offsets relative to 0xFC00, not absolute 16-bit addresses
 - `claim_addresses()` throws if the range overlaps with another device
 
-### 4. Add a gRPC Service (Optional)
+### 4. Add a Typed API (Optional)
 
-Define a proto file:
-
-```protobuf
-// my_extension.proto
-syntax = "proto3";
-package beebium;
-
-service MyExtensionService {
-    rpc GetStatus(GetMyStatusRequest) returns (GetMyStatusResponse);
-}
-```
-
-Implement the service:
-
-```cpp
-// MyExtensionService.hpp
-#include "my_extension.grpc.pb.h"
-#include <grpcpp/grpcpp.h>
-
-namespace beebium {
-
-class MyExtensionServiceImpl final : public MyExtensionService::Service {
-public:
-    explicit MyExtensionServiceImpl(MyExtension& ext) : ext_(ext) {}
-    // ... implement RPC methods ...
-private:
-    MyExtension& ext_;
-};
-
-}  // namespace beebium
-```
-
-Override `grpc_services()` in the extension to return the service:
-
-```cpp
-std::vector<grpc::Service*> MyExtension::grpc_services() {
-    if (service_) return {service_.get()};
-    return {};
-}
-```
+To let clients drive the device, define its messages in a `.proto` beside the
+extension and return an `ExtensionRpcDispatcher` from `rpc_dispatchers()`; the
+core's `ExtensionRpc` service carries the calls. Step 3 of
+[howto_write_a_peripheral_extension.md](howto_write_a_peripheral_extension.md)
+walks through it.
 
 ### 5. Build Configuration
 
 ```cmake
 # src/extensions/my-extension/CMakeLists.txt
 
-# Compile proto (if providing gRPC services)
+# Compile the proto's messages (if exposing a typed API); never its gRPC stub
 beebium_compile_proto(
     TARGET beebium_ext_my_extension
     PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/my_extension.proto
@@ -600,7 +565,6 @@ beebium_compile_proto(
 add_library(beebium_ext_my_extension STATIC
     MyExtension.cpp
     ${beebium_ext_my_extension_PROTO_SRCS}
-    ${beebium_ext_my_extension_GRPC_SRCS}
 )
 
 target_include_directories(beebium_ext_my_extension PUBLIC
@@ -609,7 +573,7 @@ target_include_directories(beebium_ext_my_extension PUBLIC
 )
 
 target_link_libraries(beebium_ext_my_extension PUBLIC
-    beebium_core gRPC::grpc++ protobuf::libprotobuf
+    beebium_core protobuf::libprotobuf
 )
 ```
 

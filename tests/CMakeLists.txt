@@ -1857,31 +1857,6 @@ if(BEEBIUM_BUILD_SERVICE)
     )
     catch_discover_tests(test_piconet_dispatcher)
 
-    # Piconet gRPC service tests. The plugin DLL no longer carries
-    # PiconetService (gRPC's per-module state caused heap corruption
-    # when piconet.dll linked gRPC alongside the EXE -- see
-    # docs/discussion/grpc-windows-streaming-race.md). Restoring this
-    # test requires re-introducing PiconetService as a STATIC library
-    # linked into the EXE, mirroring the beebium_extension_ui_service
-    # split done for the framework's UI service. Until then the test is
-    # disabled.
-    if(FALSE)
-    add_executable(test_grpc_piconet_service
-        test_grpc_piconet_service.cpp
-        piconet/FakePiconetDevice.cpp
-        ${PICONET_SERIAL_BRIDGE_SRCS})
-    target_link_libraries(test_grpc_piconet_service PRIVATE
-        beebium_service
-        beebium_ext_piconet_plugin
-        beebium_piconet_core
-        Catch2::Catch2WithMain
-    )
-    target_include_directories(test_grpc_piconet_service PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_SOURCE_DIR}/src/extensions/piconet)
-    catch_discover_tests(test_grpc_piconet_service)
-    endif()
-
     # Piconet ModalEditor / EditableChoice end-to-end through the
     # ExtensionUiService gRPC stub: SubscribeView -> Dispatch
     # (EditorCommit) -> emulation tick drains pending reopen ->
